@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/santaclaude/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/spf13/cobra"
 )
 

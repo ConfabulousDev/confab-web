@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/santaclaude/confab/pkg/db"
-	"github.com/santaclaude/confab/pkg/discovery"
-	"github.com/santaclaude/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/db"
+	"github.com/santaclaude2025/confab/pkg/discovery"
+	"github.com/santaclaude2025/confab/pkg/types"
 	"github.com/spf13/cobra"
 )
 

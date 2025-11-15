@@ -9,7 +9,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/santaclaude/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/types"
 )
 
 const (

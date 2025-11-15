@@ -1,7 +1,7 @@
 package upload
 
 import (
-	"github.com/santaclaude/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/types"
 )
 
 // UploadToCloud uploads session data to the cloud (STUB)

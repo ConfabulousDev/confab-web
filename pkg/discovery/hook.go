@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/santaclaude/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/types"
 )
 
 // ReadHookInput reads and parses SessionEnd hook data from stdin

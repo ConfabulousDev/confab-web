@@ -1,4 +1,4 @@
-module github.com/santaclaude/confab
+module github.com/santaclaude2025/confab
 
 go 1.25.4
 

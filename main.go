@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/santaclaude/confab/cmd"
+	"github.com/santaclaude2025/confab/cmd"
 )
 
 func main() {

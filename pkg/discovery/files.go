@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/santaclaude/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/types"
 )
 
 var agentIDPattern = regexp.MustCompile(`agent-([a-f0-9]{8})`)
