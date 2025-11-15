@@ -1,0 +1,29 @@
+# Binaries
+confab
+bin/
+
+# Test files
+test_session/
+test_hook_input.json
+test_hook_with_agents.json
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test files
+*.test
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
