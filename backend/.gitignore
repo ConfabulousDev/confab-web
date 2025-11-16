@@ -27,3 +27,6 @@ go.work
 # OS
 .DS_Store
 Thumbs.db
+cli/confab
+backend/confab-backend
+confab-backend

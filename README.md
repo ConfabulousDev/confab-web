@@ -1,91 +1,146 @@
 # Confab
 
-Archive and query your Claude Code sessions.
+Archive and query your Claude Code sessions locally and in the cloud.
 
-Confab automatically captures Claude Code session transcripts and agent sidechains to local SQLite storage for retrieval, search, and analytics.
+**Monorepo containing:**
+- **[cli/](cli/)** - Command-line tool for local session archiving
+- **[backend/](backend/)** - Cloud backend service for session sync
 
-## Installation
+## Quick Start
+
+### Install CLI
 
 ```bash
-# Clone the repository
 git clone https://github.com/santaclaude2025/confab.git
-cd confab
-
-# Run the install script
+cd confab/cli
 ./install.sh
 ```
 
-This will:
-1. Build the `confab` binary
-2. Install it to `~/.local/bin`
-3. Set up the SessionEnd hook in `~/.claude/settings.json`
-4. Create the SQLite database at `~/.confab/sessions.db`
+See [cli/README.md](cli/README.md) for detailed CLI documentation.
 
-Make sure `~/.local/bin` is in your PATH.
+### Run Backend (Optional)
 
-## Usage
-
-### View Status
+For cloud sync across devices:
 
 ```bash
-confab status
+cd backend
+docker-compose up -d  # Start PostgreSQL + MinIO
+go run cmd/server/main.go
 ```
 
-Shows:
-- Database location and session count
-- Recent captured sessions
-- Hook installation status
+See [backend/README.md](backend/README.md) for backend documentation.
 
-### Manual Capture (Testing)
+## Architecture
 
+```
+┌──────────────────┐
+│   Confab CLI     │ ← Runs on user's machine
+│                  │   - Captures sessions via hook
+│  Local Storage:  │   - Stores in SQLite
+│  ~/.confab/      │   - Optionally uploads to cloud
+└────────┬─────────┘
+         │ HTTPS (optional)
+         ▼
+┌──────────────────┐
+│  Backend Service │ ← Cloud/self-hosted server
+│                  │   - PostgreSQL database
+│  - REST API      │   - MinIO object storage
+│  - Multi-user    │   - API key auth
+│  - S3 Storage    │
+└──────────────────┘
+```
+
+## Features
+
+### CLI
+- ✅ Automatic session capture via SessionEnd hook
+- ✅ Local SQLite storage
+- ✅ Agent sidechain tracking
+- ✅ Session resumption support
+- ✅ Cloud sync (optional)
+- ✅ Structured logging
+
+### Backend
+- ✅ PostgreSQL 18 database
+- ✅ MinIO S3-compatible storage
+- ✅ API key authentication
+- ✅ Multi-user support
+- ✅ Docker Compose for local dev
+
+## Project Structure
+
+```
+confab/
+├── cli/                    # CLI tool (Go)
+│   ├── cmd/               # Commands (init, save, status, cloud, etc.)
+│   ├── pkg/               # Packages (db, discovery, logger, upload)
+│   ├── main.go
+│   ├── install.sh
+│   └── README.md
+│
+├── backend/               # Backend service (Go)
+│   ├── cmd/server/       # Server entry point
+│   ├── internal/         # Internal packages
+│   │   ├── api/         # HTTP handlers
+│   │   ├── auth/        # Authentication
+│   │   ├── db/          # Database layer
+│   │   ├── models/      # Data models
+│   │   └── storage/     # S3/MinIO client
+│   ├── docker-compose.yml
+│   └── README.md
+│
+├── BACKEND_PLAN.md       # Backend architecture docs
+├── NOTES.md              # Development notes
+└── LICENSE
+```
+
+## Use Cases
+
+**Solo Developer (Local Only)**
 ```bash
-# Normally the save command is called automatically by the SessionEnd hook
-echo '{"session_id":"test","transcript_path":"/path/to/transcript.jsonl",...}' | confab save
+cd cli && ./install.sh
+# Sessions stored in ~/.confab/sessions.db
 ```
 
-### Uninstall Hook
-
+**Team / Multi-Device (Cloud Sync)**
 ```bash
-confab uninstall
+# Install CLI on all machines
+cd cli && ./install.sh
+
+# Run backend on server or localhost
+cd backend && docker-compose up -d && go run cmd/server/main.go
+
+# Configure each CLI
+confab cloud configure --backend-url https://your-server.com --api-key <key> --enable
 ```
-
-Removes the SessionEnd hook but preserves your database and sessions.
-
-## How It Works
-
-1. When you end a Claude Code session, the SessionEnd hook fires
-2. Confab reads session metadata from stdin
-3. Discovers the transcript file and any referenced agent sidechains (using regex pattern `agent-[a-f0-9]{8}`)
-4. Stores metadata and file paths in SQLite
-5. Returns success response to Claude Code
-
-## Database
-
-**Location:** `~/.confab/sessions.db`
-
-**Schema:**
-- `sessions` - Session metadata (ID, timestamp, file count, size, working directory, end reason)
-- `files` - Individual files per session (transcript and agent sidechains)
 
 ## Development
 
+Both CLI and backend are independent Go modules:
+
 ```bash
-# Build
-make build
-
-# Clean
-make clean
-
-# Test with sample input
+# CLI development
+cd cli
+go build
 make test
+
+# Backend development
+cd backend
+docker-compose up -d
+go run cmd/server/main.go
 ```
 
-## Future Features
+## Roadmap
 
-- [ ] Cloud upload and sync
-- [ ] Full-text search across sessions
-- [ ] Session analytics and insights
-- [ ] Export to various formats
+- [x] Local SQLite storage
+- [x] SessionEnd hook integration
+- [x] Agent sidechain discovery
+- [x] Cloud backend service
+- [x] API key authentication
+- [ ] Full-text search
+- [ ] Session analytics dashboard
+- [ ] Hosted SaaS version
+- [ ] Export formats (JSON, Markdown)
 - [ ] Compression (tar.zstd)
 
 ## License
