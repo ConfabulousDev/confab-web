@@ -215,9 +215,7 @@ func exchangeGitHubCode(code string, config OAuthConfig) (string, error) {
 		return "", err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Body = io.NopCloser(nil)
 
 	// Build query string
 	q := req.URL.Query()
