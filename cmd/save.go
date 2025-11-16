@@ -10,6 +10,7 @@ import (
 	"github.com/santaclaude2025/confab/pkg/discovery"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/upload"
 	"github.com/spf13/cobra"
 )
 
@@ -105,8 +106,15 @@ called by the Claude Code SessionEnd hook.`,
 		logger.Info("Saved to database: %s", database.Path())
 		fmt.Fprintln(os.Stderr, "✓ Saved to database:", database.Path())
 
-		// TODO: Cloud upload (currently stubbed out)
-		// upload.UploadToCloud(hookInput, files)
+		// Cloud upload (if enabled)
+		if err := upload.UploadToCloud(hookInput, files); err != nil {
+			logger.Error("Failed to upload to cloud: %v", err)
+			fmt.Fprintf(os.Stderr, "Warning: Cloud upload failed: %v\n", err)
+			// Don't fail the whole operation if cloud upload fails
+		} else {
+			logger.Info("Cloud upload completed")
+			fmt.Fprintln(os.Stderr, "✓ Uploaded to cloud")
+		}
 
 		logger.Info("Session capture complete")
 		fmt.Fprintln(os.Stderr)

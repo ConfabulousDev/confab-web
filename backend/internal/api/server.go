@@ -1,0 +1,81 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/santaclaude2025/confab/backend/internal/auth"
+	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/storage"
+)
+
+// Server holds dependencies for API handlers
+type Server struct {
+	db      *db.DB
+	storage *storage.S3Storage
+}
+
+// NewServer creates a new API server
+func NewServer(database *db.DB, store *storage.S3Storage) *Server {
+	return &Server{
+		db:      database,
+		storage: store,
+	}
+}
+
+// SetupRoutes configures HTTP routes
+func (s *Server) SetupRoutes() http.Handler {
+	r := chi.NewRouter()
+
+	// Middleware
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+
+	// Health check
+	r.Get("/health", s.handleHealth)
+	r.Get("/", s.handleRoot)
+
+	// API v1 routes
+	r.Route("/api/v1", func(r chi.Router) {
+		// Protected routes require API key authentication
+		r.Group(func(r chi.Router) {
+			r.Use(auth.Middleware(s.db))
+			r.Post("/sessions/save", s.handleSaveSession)
+		})
+	})
+
+	return r
+}
+
+// handleHealth returns server health status
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+	})
+}
+
+// handleRoot returns API info
+func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "confab-backend",
+		"version": "v1",
+	})
+}
+
+// respondJSON writes a JSON response
+func respondJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
+}
+
+// respondError writes an error JSON response
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{
+		"error": message,
+	})
+}
