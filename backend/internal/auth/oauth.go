@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/santaclaude2025/confab/backend/internal/db"
@@ -110,14 +111,19 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Get user info from GitHub
 		user, err := getGitHubUser(accessToken)
 		if err != nil {
+			fmt.Printf("Error getting GitHub user: %v\n", err)
 			http.Error(w, "Failed to get user info", http.StatusInternalServerError)
 			return
 		}
+
+		// Debug: log user info from GitHub
+		fmt.Printf("GitHub user: ID=%d, Login=%s, Email=%s, Name=%s\n", user.ID, user.Login, user.Email, user.Name)
 
 		// Find or create user in database
 		githubID := fmt.Sprintf("%d", user.ID)
 		dbUser, err := database.FindOrCreateUserByGitHub(ctx, githubID, user.Email, user.Name, user.AvatarURL)
 		if err != nil {
+			fmt.Printf("Error creating user: %v\n", err)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
@@ -146,8 +152,12 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Redirect to home page
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		// Redirect back to frontend
+		frontendURL := os.Getenv("FRONTEND_URL")
+		if frontendURL == "" {
+			frontendURL = "http://localhost:5173"
+		}
+		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
 	}
 }
 
@@ -171,8 +181,12 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 			MaxAge: -1,
 		})
 
-		// Redirect to home
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		// Redirect back to frontend
+		frontendURL := os.Getenv("FRONTEND_URL")
+		if frontendURL == "" {
+			frontendURL = "http://localhost:5173"
+		}
+		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
 	}
 }
 
