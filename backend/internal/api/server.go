@@ -54,12 +54,14 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Post("/sessions/save", s.handleSaveSession)
 		})
 
-		// TODO: Protected routes for web dashboard (require web session)
-		// r.Group(func(r chi.Router) {
-		//     r.Use(auth.SessionMiddleware(s.db))
-		//     r.Get("/sessions", s.handleListSessions)
-		//     r.Get("/sessions/{id}", s.handleGetSession)
-		// })
+		// Protected routes for web dashboard (require web session)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.SessionMiddleware(s.db))
+			r.Get("/me", s.handleGetMe)
+			// TODO: Add more dashboard routes
+			// r.Get("/sessions", s.handleListSessions)
+			// r.Get("/sessions/{id}", s.handleGetSession)
+		})
 	})
 
 	return r

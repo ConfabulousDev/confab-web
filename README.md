@@ -5,6 +5,7 @@ Archive and query your Claude Code sessions locally and in the cloud.
 **Monorepo containing:**
 - **[cli/](cli/)** - Command-line tool for local session archiving
 - **[backend/](backend/)** - Cloud backend service for session sync
+- **[frontend/](frontend/)** - Web dashboard with GitHub OAuth
 
 ## Quick Start
 
@@ -18,17 +19,28 @@ cd confab/cli
 
 See [cli/README.md](cli/README.md) for detailed CLI documentation.
 
-### Run Backend (Optional)
+### Run Backend + Frontend (Optional)
 
-For cloud sync across devices:
+For cloud sync and web dashboard:
 
 ```bash
+# Terminal 1: Start databases
 cd backend
-docker-compose up -d  # Start PostgreSQL + MinIO
+docker-compose up -d
+
+# Terminal 2: Start backend
 go run cmd/server/main.go
+
+# Terminal 3: Start frontend
+cd ../frontend
+npm install
+npm run dev
 ```
 
-See [backend/README.md](backend/README.md) for backend documentation.
+- Backend: `http://localhost:8080`
+- Frontend: `http://localhost:5173`
+
+See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md) for details.
 
 ## Architecture
 
@@ -82,11 +94,17 @@ confab/
 │   ├── cmd/server/       # Server entry point
 │   ├── internal/         # Internal packages
 │   │   ├── api/         # HTTP handlers
-│   │   ├── auth/        # Authentication
+│   │   ├── auth/        # OAuth & sessions
 │   │   ├── db/          # Database layer
 │   │   ├── models/      # Data models
 │   │   └── storage/     # S3/MinIO client
 │   ├── docker-compose.yml
+│   └── README.md
+│
+├── frontend/              # Web dashboard (SvelteKit)
+│   ├── src/routes/       # Pages and routes
+│   ├── src/app.css       # Minimal styling
+│   ├── vite.config.ts    # Vite + backend proxy
 │   └── README.md
 │
 ├── BACKEND_PLAN.md       # Backend architecture docs

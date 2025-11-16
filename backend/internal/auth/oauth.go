@@ -146,8 +146,8 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Redirect to dashboard (or home)
-		http.Redirect(w, r, "/dashboard", http.StatusTemporaryRedirect)
+		// Redirect to home page
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 	}
 }
 
