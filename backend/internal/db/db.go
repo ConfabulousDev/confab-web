@@ -108,11 +108,6 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_runs_user ON runs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_runs_end_timestamp ON runs(end_timestamp);
 	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
-
-	-- Create default user if not exists
-	INSERT INTO users (id, email, created_at)
-	VALUES (1, 'default@confab.local', NOW())
-	ON CONFLICT (id) DO NOTHING;
 	`
 
 	if _, err := db.conn.Exec(schema); err != nil {
