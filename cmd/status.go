@@ -6,6 +6,7 @@ import (
 
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/db"
+	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -14,23 +15,32 @@ var statusCmd = &cobra.Command{
 	Short: "Show confab status and recent sessions",
 	Long:  `Displays hook installation status, database location, and recently captured sessions.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		logger.Init()
+		defer logger.Close()
+
+		logger.Info("Running status command")
+
 		fmt.Println("=== Confab: Status ===")
 		fmt.Println()
 
 		// Open database
 		database, err := db.Open()
 		if err != nil {
+			logger.Error("Failed to open database: %v", err)
 			return fmt.Errorf("failed to open database: %w", err)
 		}
 		defer database.Close()
 
 		// Show database info
+		logger.Info("Database path: %s", database.Path())
 		fmt.Printf("Database: %s\n", database.Path())
 
 		count, err := database.GetSessionCount()
 		if err != nil {
+			logger.Error("Failed to get session count: %v", err)
 			return fmt.Errorf("failed to get session count: %w", err)
 		}
+		logger.Info("Total sessions: %d", count)
 		fmt.Printf("Total Sessions: %d\n", count)
 		fmt.Println()
 
@@ -39,6 +49,7 @@ var statusCmd = &cobra.Command{
 			fmt.Println("Recent Sessions:")
 			sessions, err := database.GetRecentSessions(10)
 			if err != nil {
+				logger.Error("Failed to get recent sessions: %v", err)
 				return fmt.Errorf("failed to get recent sessions: %w", err)
 			}
 
@@ -61,9 +72,11 @@ var statusCmd = &cobra.Command{
 		// Check hook installation
 		hookInstalled, err := config.IsHookInstalled()
 		if err != nil {
+			logger.Error("Failed to check hook status: %v", err)
 			return fmt.Errorf("failed to check hook status: %w", err)
 		}
 
+		logger.Info("Hook installed: %v", hookInstalled)
 		if hookInstalled {
 			fmt.Println("Hook Status: ✓ Installed")
 		} else {

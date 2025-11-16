@@ -70,25 +70,31 @@ func (db *DB) initSchema() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS sessions (
 		session_id TEXT PRIMARY KEY,
+		first_seen DATETIME NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS runs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id TEXT NOT NULL,
 		transcript_path TEXT NOT NULL,
 		cwd TEXT NOT NULL,
 		reason TEXT NOT NULL,
-		timestamp DATETIME NOT NULL,
-		file_count INTEGER NOT NULL,
-		total_size_bytes INTEGER NOT NULL
+		end_timestamp DATETIME NOT NULL,
+		FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 	);
 
 	CREATE TABLE IF NOT EXISTS files (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		session_id TEXT NOT NULL,
+		run_id INTEGER NOT NULL,
 		file_path TEXT NOT NULL,
 		file_type TEXT NOT NULL,
 		size_bytes INTEGER NOT NULL,
-		FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+		FOREIGN KEY (run_id) REFERENCES runs(id)
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_sessions_timestamp ON sessions(timestamp);
-	CREATE INDEX IF NOT EXISTS idx_files_session ON files(session_id);
+	CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id);
+	CREATE INDEX IF NOT EXISTS idx_runs_end_timestamp ON runs(end_timestamp);
+	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
 	`
 
 	if _, err := db.conn.Exec(schema); err != nil {
@@ -98,7 +104,8 @@ func (db *DB) initSchema() error {
 	return nil
 }
 
-// InsertSession stores a session and its files
+// InsertSession stores a session run and its files
+// Creates session if first time, always creates a new run
 func (db *DB) InsertSession(hookInput *types.HookInput, files []types.SessionFile) error {
 	tx, err := db.conn.Begin()
 	if err != nil {
@@ -106,37 +113,43 @@ func (db *DB) InsertSession(hookInput *types.HookInput, files []types.SessionFil
 	}
 	defer tx.Rollback()
 
-	// Calculate total size
-	var totalSize int64
-	for _, f := range files {
-		totalSize += f.SizeBytes
-	}
+	now := time.Now()
 
-	// Insert session
-	sessionSQL := `
-		INSERT INTO sessions (session_id, transcript_path, cwd, reason, timestamp, file_count, total_size_bytes)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`
-	_, err = tx.Exec(sessionSQL,
-		hookInput.SessionID,
-		hookInput.TranscriptPath,
-		hookInput.CWD,
-		hookInput.Reason,
-		time.Now(),
-		len(files),
-		totalSize,
-	)
+	// Insert session if doesn't exist (first time seeing this session_id)
+	sessionSQL := `INSERT OR IGNORE INTO sessions (session_id, first_seen) VALUES (?, ?)`
+	_, err = tx.Exec(sessionSQL, hookInput.SessionID, now)
 	if err != nil {
 		return fmt.Errorf("failed to insert session: %w", err)
 	}
 
-	// Insert files
+	// Always insert a new run
+	runSQL := `
+		INSERT INTO runs (session_id, transcript_path, cwd, reason, end_timestamp)
+		VALUES (?, ?, ?, ?, ?)
+	`
+	result, err := tx.Exec(runSQL,
+		hookInput.SessionID,
+		hookInput.TranscriptPath,
+		hookInput.CWD,
+		hookInput.Reason,
+		now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert run: %w", err)
+	}
+
+	runID, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get run ID: %w", err)
+	}
+
+	// Insert files linked to this run
 	fileSQL := `
-		INSERT INTO files (session_id, file_path, file_type, size_bytes)
+		INSERT INTO files (run_id, file_path, file_type, size_bytes)
 		VALUES (?, ?, ?, ?)
 	`
 	for _, f := range files {
-		_, err = tx.Exec(fileSQL, hookInput.SessionID, f.Path, f.Type, f.SizeBytes)
+		_, err = tx.Exec(fileSQL, runID, f.Path, f.Type, f.SizeBytes)
 		if err != nil {
 			return fmt.Errorf("failed to insert file: %w", err)
 		}
@@ -149,12 +162,21 @@ func (db *DB) InsertSession(hookInput *types.HookInput, files []types.SessionFil
 	return nil
 }
 
-// GetRecentSessions returns the N most recent sessions
+// GetRecentSessions returns the N most recent runs
 func (db *DB) GetRecentSessions(limit int) ([]types.Session, error) {
 	query := `
-		SELECT session_id, transcript_path, cwd, reason, timestamp, file_count, total_size_bytes
-		FROM sessions
-		ORDER BY timestamp DESC
+		SELECT
+			r.session_id,
+			r.transcript_path,
+			r.cwd,
+			r.reason,
+			r.end_timestamp,
+			COUNT(f.id) AS file_count,
+			COALESCE(SUM(f.size_bytes), 0) AS total_size_bytes
+		FROM runs r
+		LEFT JOIN files f ON r.id = f.run_id
+		GROUP BY r.id
+		ORDER BY r.end_timestamp DESC
 		LIMIT ?
 	`
 
