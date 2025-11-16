@@ -2,11 +2,24 @@ package models
 
 import "time"
 
-// User represents a confab user
+// User represents a confab user (OAuth-based)
 type User struct {
-	ID        int64     `json:"id"`
-	Email     string    `json:"email"`
+	ID        int64      `json:"id"`
+	Email     string     `json:"email"`
+	Name      *string    `json:"name,omitempty"`
+	AvatarURL *string    `json:"avatar_url,omitempty"`
+	GitHubID  *string    `json:"github_id,omitempty"`
+	GoogleID  *string    `json:"google_id,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+// WebSession represents a browser session (for OAuth)
+type WebSession struct {
+	ID        string    `json:"id"`
+	UserID    int64     `json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // APIKey represents an API key for authentication

@@ -13,15 +13,17 @@ import (
 
 // Server holds dependencies for API handlers
 type Server struct {
-	db      *db.DB
-	storage *storage.S3Storage
+	db          *db.DB
+	storage     *storage.S3Storage
+	oauthConfig auth.OAuthConfig
 }
 
 // NewServer creates a new API server
-func NewServer(database *db.DB, store *storage.S3Storage) *Server {
+func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuthConfig) *Server {
 	return &Server{
-		db:      database,
-		storage: store,
+		db:          database,
+		storage:     store,
+		oauthConfig: oauthConfig,
 	}
 }
 
@@ -39,13 +41,25 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Get("/health", s.handleHealth)
 	r.Get("/", s.handleRoot)
 
+	// OAuth routes (public)
+	r.Get("/auth/github/login", auth.HandleGitHubLogin(s.oauthConfig))
+	r.Get("/auth/github/callback", auth.HandleGitHubCallback(s.oauthConfig, s.db))
+	r.Get("/auth/logout", auth.HandleLogout(s.db))
+
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
-		// Protected routes require API key authentication
+		// Protected routes require API key authentication (for CLI)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(s.db))
 			r.Post("/sessions/save", s.handleSaveSession)
 		})
+
+		// TODO: Protected routes for web dashboard (require web session)
+		// r.Group(func(r chi.Router) {
+		//     r.Use(auth.SessionMiddleware(s.db))
+		//     r.Get("/sessions", s.handleListSessions)
+		//     r.Get("/sessions/{id}", s.handleGetSession)
+		// })
 	})
 
 	return r

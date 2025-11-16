@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/santaclaude2025/confab/backend/internal/api"
+	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
 )
@@ -38,7 +39,7 @@ func main() {
 	}
 
 	// Create API server
-	server := api.NewServer(database, store)
+	server := api.NewServer(database, store, config.OAuthConfig)
 	router := server.SetupRoutes()
 
 	// HTTP server configuration
@@ -78,6 +79,7 @@ type Config struct {
 	Port        int
 	DatabaseURL string
 	S3Config    storage.S3Config
+	OAuthConfig auth.OAuthConfig
 }
 
 func loadConfig() Config {
@@ -95,6 +97,11 @@ func loadConfig() Config {
 			SecretAccessKey: getEnvOrDefault("S3_SECRET_KEY", "minioadmin"),
 			BucketName:      getEnvOrDefault("S3_BUCKET", "confab"),
 			UseSSL:          os.Getenv("S3_USE_SSL") == "true",
+		},
+		OAuthConfig: auth.OAuthConfig{
+			GitHubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
+			GitHubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+			GitHubRedirectURL:  getEnvOrDefault("GITHUB_REDIRECT_URL", "http://localhost:8080/auth/github/callback"),
 		},
 	}
 }
