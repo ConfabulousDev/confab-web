@@ -2,11 +2,26 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/models"
+)
+
+// Validation limits for session uploads
+const (
+	MaxRequestBodySize   = 50 * 1024 * 1024  // 50MB total request size
+	MaxFileSize          = 10 * 1024 * 1024  // 10MB per file
+	MaxFiles             = 100               // Maximum number of files per session
+	MaxSessionIDLength   = 256               // Max session ID length
+	MaxPathLength        = 1024              // Max file path length
+	MaxReasonLength      = 10000             // Max reason text length
+	MaxCWDLength         = 4096              // Max current working directory length
+	MinSessionIDLength   = 1                 // Min session ID length
 )
 
 // handleSaveSession processes session upload requests
@@ -20,24 +35,25 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit request body size to prevent memory exhaustion
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+
 	// Parse request body
 	var req models.SaveSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Check if error is due to request too large
+		if strings.Contains(err.Error(), "request body too large") {
+			respondError(w, http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("Request body too large (max %d MB)", MaxRequestBodySize/(1024*1024)))
+			return
+		}
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// Validate request
-	if req.SessionID == "" {
-		respondError(w, http.StatusBadRequest, "session_id is required")
-		return
-	}
-	if req.TranscriptPath == "" {
-		respondError(w, http.StatusBadRequest, "transcript_path is required")
-		return
-	}
-	if len(req.Files) == 0 {
-		respondError(w, http.StatusBadRequest, "files array cannot be empty")
+	// Validate request with detailed error messages
+	if err := validateSaveSessionRequest(&req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -79,4 +95,119 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		RunID:     runID,
 		Message:   "Session saved successfully",
 	})
+}
+
+// validateSaveSessionRequest validates session upload request
+func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
+	// Validate session ID
+	if req.SessionID == "" {
+		return fmt.Errorf("session_id is required")
+	}
+	if len(req.SessionID) < MinSessionIDLength || len(req.SessionID) > MaxSessionIDLength {
+		return fmt.Errorf("session_id must be between %d and %d characters", MinSessionIDLength, MaxSessionIDLength)
+	}
+	if !utf8.ValidString(req.SessionID) {
+		return fmt.Errorf("session_id must be valid UTF-8")
+	}
+
+	// Validate transcript path
+	if req.TranscriptPath == "" {
+		return fmt.Errorf("transcript_path is required")
+	}
+	if len(req.TranscriptPath) > MaxPathLength {
+		return fmt.Errorf("transcript_path too long (max %d characters)", MaxPathLength)
+	}
+	if !utf8.ValidString(req.TranscriptPath) {
+		return fmt.Errorf("transcript_path must be valid UTF-8")
+	}
+
+	// Validate CWD (optional but if provided must be valid)
+	if req.CWD != "" {
+		if len(req.CWD) > MaxCWDLength {
+			return fmt.Errorf("cwd too long (max %d characters)", MaxCWDLength)
+		}
+		if !utf8.ValidString(req.CWD) {
+			return fmt.Errorf("cwd must be valid UTF-8")
+		}
+	}
+
+	// Validate reason (optional but if provided must be valid)
+	if req.Reason != "" {
+		if len(req.Reason) > MaxReasonLength {
+			return fmt.Errorf("reason too long (max %d characters)", MaxReasonLength)
+		}
+		if !utf8.ValidString(req.Reason) {
+			return fmt.Errorf("reason must be valid UTF-8")
+		}
+	}
+
+	// Validate files array
+	if len(req.Files) == 0 {
+		return fmt.Errorf("files array cannot be empty")
+	}
+	if len(req.Files) > MaxFiles {
+		return fmt.Errorf("too many files (max %d, got %d)", MaxFiles, len(req.Files))
+	}
+
+	// Validate each file
+	var totalSize int64
+	for i, file := range req.Files {
+		// Validate path
+		if file.Path == "" {
+			return fmt.Errorf("file[%d]: path is required", i)
+		}
+		if len(file.Path) > MaxPathLength {
+			return fmt.Errorf("file[%d]: path too long (max %d characters)", i, MaxPathLength)
+		}
+		if !utf8.ValidString(file.Path) {
+			return fmt.Errorf("file[%d]: path must be valid UTF-8", i)
+		}
+
+		// Check for path traversal attempts
+		if strings.Contains(file.Path, "..") {
+			return fmt.Errorf("file[%d]: path contains invalid sequence '..'", i)
+		}
+
+		// Validate content size
+		contentSize := int64(len(file.Content))
+		if contentSize > MaxFileSize {
+			return fmt.Errorf("file[%d]: content too large (max %d MB, got %d MB)",
+				i, MaxFileSize/(1024*1024), contentSize/(1024*1024))
+		}
+
+		// Track total size
+		totalSize += contentSize
+		if totalSize > MaxRequestBodySize {
+			return fmt.Errorf("total file content too large (max %d MB)", MaxRequestBodySize/(1024*1024))
+		}
+
+		// Validate SizeBytes matches actual content (if provided)
+		if file.SizeBytes > 0 && file.SizeBytes != contentSize {
+			log.Printf("Warning: file[%d] (%s) size_bytes mismatch: declared=%d, actual=%d",
+				i, file.Path, file.SizeBytes, contentSize)
+		}
+	}
+
+	return nil
+}
+
+// sanitizeString sanitizes user input strings
+// Removes null bytes and non-printable characters that could cause issues
+func sanitizeString(s string) string {
+	// Remove null bytes (can cause issues in logs and database)
+	s = strings.ReplaceAll(s, "\x00", "")
+
+	// Keep valid UTF-8 runes only
+	if !utf8.ValidString(s) {
+		// Convert to valid UTF-8 by replacing invalid sequences
+		v := make([]rune, 0, len(s))
+		for _, r := range s {
+			if r != utf8.RuneError {
+				v = append(v, r)
+			}
+		}
+		s = string(v)
+	}
+
+	return s
 }
