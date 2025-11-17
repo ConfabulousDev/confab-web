@@ -145,6 +145,8 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Use(auth.Middleware(s.db))
 			// Apply upload rate limiting to prevent storage abuse
 			r.Use(ratelimit.Middleware(s.uploadLimiter))
+			// Decompress zstd-compressed request bodies
+			r.Use(decompressMiddleware())
 			r.Post("/sessions/save", s.handleSaveSession)
 		})
 
