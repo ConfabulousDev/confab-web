@@ -4,14 +4,15 @@ import "time"
 
 // User represents a confab user (OAuth-based)
 type User struct {
-	ID        int64      `json:"id"`
-	Email     string     `json:"email"`
-	Name      *string    `json:"name,omitempty"`
-	AvatarURL *string    `json:"avatar_url,omitempty"`
-	GitHubID  *string    `json:"github_id,omitempty"`
-	GoogleID  *string    `json:"google_id,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID             int64      `json:"id"`
+	Email          string     `json:"email"`
+	Name           *string    `json:"name,omitempty"`
+	AvatarURL      *string    `json:"avatar_url,omitempty"`
+	GitHubID       *string    `json:"github_id,omitempty"`
+	GitHubUsername *string    `json:"github_username,omitempty"`
+	GoogleID       *string    `json:"google_id,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 // WebSession represents a browser session (for OAuth)

@@ -44,9 +44,10 @@ func main() {
 
 	// HTTP server configuration
 	httpServer := &http.Server{
-		Addr:         fmt.Sprintf(":%d", config.Port),
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
+		Addr:        fmt.Sprintf(":%d", config.Port),
+		Handler:     router,
+		ReadTimeout: 15 * time.Second,
+		// TODO: is 15s enough for uploads?
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}

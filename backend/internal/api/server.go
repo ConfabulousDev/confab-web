@@ -13,14 +13,18 @@ import (
 	"github.com/gorilla/csrf"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/ratelimit"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
 )
 
 // Server holds dependencies for API handlers
 type Server struct {
-	db          *db.DB
-	storage     *storage.S3Storage
-	oauthConfig auth.OAuthConfig
+	db              *db.DB
+	storage         *storage.S3Storage
+	oauthConfig     auth.OAuthConfig
+	globalLimiter   ratelimit.RateLimiter // Global rate limiter for all requests
+	authLimiter     ratelimit.RateLimiter // Stricter limiter for auth endpoints
+	uploadLimiter   ratelimit.RateLimiter // Stricter limiter for uploads
 }
 
 // NewServer creates a new API server
@@ -29,6 +33,15 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		db:          database,
 		storage:     store,
 		oauthConfig: oauthConfig,
+		// Global rate limiter: 100 requests per second, burst of 200
+		// Generous limit to allow normal usage while preventing DoS
+		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
+		// Auth endpoints: 10 requests per minute = 0.167 req/sec, burst of 5
+		// Stricter to prevent brute force attacks on OAuth flow
+		authLimiter: ratelimit.NewInMemoryRateLimiter(0.167, 5),
+		// Upload endpoints: 20 requests per hour = 0.0056 req/sec, burst of 5
+		// Very strict to prevent storage abuse
+		uploadLimiter: ratelimit.NewInMemoryRateLimiter(0.0056, 5),
 	}
 }
 
@@ -42,6 +55,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(securityHeaders)
+	r.Use(ratelimit.Middleware(s.globalLimiter)) // Global rate limiting
 
 	// CORS configuration - CRITICAL SECURITY FIX
 	// Get allowed origins from environment (comma-separated list)
@@ -103,17 +117,17 @@ func (s *Server) SetupRoutes() http.Handler {
 		})),
 	)
 
-	// Health check
+	// Health check (no additional rate limiting needed)
 	r.Get("/health", s.handleHealth)
 	r.Get("/", s.handleRoot)
 
-	// OAuth routes (public)
-	r.Get("/auth/github/login", auth.HandleGitHubLogin(s.oauthConfig))
-	r.Get("/auth/github/callback", auth.HandleGitHubCallback(s.oauthConfig, s.db))
-	r.Get("/auth/logout", auth.HandleLogout(s.db))
+	// OAuth routes (public) - Apply stricter auth rate limiting
+	r.Get("/auth/github/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig)))
+	r.Get("/auth/github/callback", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubCallback(s.oauthConfig, s.db)))
+	r.Get("/auth/logout", ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db)))
 
-	// CLI authorize (requires web session)
-	r.Get("/auth/cli/authorize", auth.HandleCLIAuthorize(s.db))
+	// CLI authorize (requires web session) - Apply auth rate limiting
+	r.Get("/auth/cli/authorize", ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db)))
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -129,6 +143,8 @@ func (s *Server) SetupRoutes() http.Handler {
 		// No CSRF protection for API key routes (CLI doesn't use cookies)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(s.db))
+			// Apply upload rate limiting to prevent storage abuse
+			r.Use(ratelimit.Middleware(s.uploadLimiter))
 			r.Post("/sessions/save", s.handleSaveSession)
 		})
 

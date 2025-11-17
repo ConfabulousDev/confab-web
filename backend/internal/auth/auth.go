@@ -16,7 +16,12 @@ type contextKey string
 
 const userIDContextKey contextKey = "userID"
 
-// GenerateAPIKey generates a new random API key
+// GetUserIDContextKey returns the context key for user ID
+func GetUserIDContextKey() contextKey {
+	return userIDContextKey
+}
+
+// GenerateAPIKey generates a new random API key with cfb_ prefix
 // Returns both the raw key (to give to user) and the hash (to store in DB)
 func GenerateAPIKey() (string, string, error) {
 	// Generate 32 random bytes
@@ -25,20 +30,25 @@ func GenerateAPIKey() (string, string, error) {
 		return "", "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 
-	// Encode as base64 for the raw key
-	rawKey := base64.URLEncoding.EncodeToString(bytes)
+	// Encode as base64 and add cfb_ prefix
+	rawKey := "cfb_" + base64.URLEncoding.EncodeToString(bytes)[:40]
 
 	// Hash the key for storage
 	hash := sha256.Sum256([]byte(rawKey))
-	keyHash := base64.URLEncoding.EncodeToString(hash[:])
+	keyHash := fmt.Sprintf("%x", hash)
 
 	return rawKey, keyHash, nil
+}
+
+// GenerateAndHashAPIKey is an alias for GenerateAPIKey for clarity
+func GenerateAndHashAPIKey() (string, string, error) {
+	return GenerateAPIKey()
 }
 
 // HashAPIKey hashes an API key for validation
 func HashAPIKey(rawKey string) string {
 	hash := sha256.Sum256([]byte(rawKey))
-	return base64.URLEncoding.EncodeToString(hash[:])
+	return fmt.Sprintf("%x", hash)
 }
 
 // Middleware returns an HTTP middleware that validates API keys
