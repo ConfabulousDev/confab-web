@@ -59,15 +59,10 @@ The server will start on `http://localhost:8080`
 | `PORT` | `8080` | Server port |
 | `DATABASE_URL` | `postgres://confab:confab@localhost:5432/confab?sslmode=disable` | PostgreSQL connection string |
 | `S3_ENDPOINT` | `localhost:9000` | MinIO/S3 endpoint |
-| `AWS_ACCESS_KEY_ID` | `minioadmin` | S3 access key (standard AWS name) |
-| `AWS_SECRET_ACCESS_KEY` | `minioadmin` | S3 secret key (standard AWS name) |
-| `BUCKET_NAME` | `confab` | S3 bucket name (standard AWS name) |
+| `AWS_ACCESS_KEY_ID` | `minioadmin` | S3 access key |
+| `AWS_SECRET_ACCESS_KEY` | `minioadmin` | S3 secret key |
+| `BUCKET_NAME` | `confab` | S3 bucket name |
 | `S3_USE_SSL` | `false` | Use SSL for S3 |
-
-**Note:** Legacy environment variable names are still supported for backward compatibility:
-- `S3_ACCESS_KEY` → use `AWS_ACCESS_KEY_ID` instead
-- `S3_SECRET_KEY` → use `AWS_SECRET_ACCESS_KEY` instead
-- `S3_BUCKET` → use `BUCKET_NAME` instead
 
 ## API Endpoints
 

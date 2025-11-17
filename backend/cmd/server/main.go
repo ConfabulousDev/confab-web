@@ -94,9 +94,9 @@ func loadConfig() Config {
 		DatabaseURL: getEnvOrDefault("DATABASE_URL", "postgres://confab:confab@localhost:5432/confab?sslmode=disable"),
 		S3Config: storage.S3Config{
 			Endpoint:        getEnvOrDefault("S3_ENDPOINT", "localhost:9000"),
-			AccessKeyID:     getEnvOrDefault("AWS_ACCESS_KEY_ID", getEnvOrDefault("S3_ACCESS_KEY", "minioadmin")),
-			SecretAccessKey: getEnvOrDefault("AWS_SECRET_ACCESS_KEY", getEnvOrDefault("S3_SECRET_KEY", "minioadmin")),
-			BucketName:      getEnvOrDefault("BUCKET_NAME", getEnvOrDefault("S3_BUCKET", "confab")),
+			AccessKeyID:     getEnvOrDefault("AWS_ACCESS_KEY_ID", "minioadmin"),
+			SecretAccessKey: getEnvOrDefault("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+			BucketName:      getEnvOrDefault("BUCKET_NAME", "confab"),
 			UseSSL:          os.Getenv("S3_USE_SSL") == "true",
 		},
 		OAuthConfig: auth.OAuthConfig{
