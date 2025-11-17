@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -274,6 +275,15 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		return 0, fmt.Errorf("failed to insert session: %w", err)
 	}
 
+	// Marshal GitInfo to JSON for JSONB column
+	var gitInfoJSON []byte
+	if req.GitInfo != nil {
+		gitInfoJSON, err = json.Marshal(req.GitInfo)
+		if err != nil {
+			return 0, fmt.Errorf("failed to marshal git_info: %w", err)
+		}
+	}
+
 	// Always insert a new run
 	runSQL := `
 		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info)
@@ -289,7 +299,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		req.Reason,
 		now,
 		len(s3Keys) > 0,
-		req.GitInfo,
+		gitInfoJSON,
 	).Scan(&runID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert run: %w", err)
@@ -544,8 +554,16 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 
 	for rows.Next() {
 		var run RunDetail
-		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &run.GitInfo); err != nil {
+		var gitInfoBytes []byte
+		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &gitInfoBytes); err != nil {
 			return nil, fmt.Errorf("failed to scan run: %w", err)
+		}
+
+		// Unmarshal git_info JSONB if present
+		if len(gitInfoBytes) > 0 {
+			if err := json.Unmarshal(gitInfoBytes, &run.GitInfo); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
+			}
 		}
 
 		// Get files for this run
@@ -804,8 +822,16 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 
 	for rows.Next() {
 		var run RunDetail
-		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &run.GitInfo); err != nil {
+		var gitInfoBytes []byte
+		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &gitInfoBytes); err != nil {
 			return nil, fmt.Errorf("failed to scan run: %w", err)
+		}
+
+		// Unmarshal git_info JSONB if present
+		if len(gitInfoBytes) > 0 {
+			if err := json.Unmarshal(gitInfoBytes, &run.GitInfo); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
+			}
 		}
 
 		// Get files
