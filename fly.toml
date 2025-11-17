@@ -24,6 +24,8 @@ primary_region = 'sjc'
   S3_ENDPOINT = "fly.storage.tigris.dev"
   S3_USE_SSL = "true"
 
+  ALLOWED_EMAILS = "jackie.tung@gmail.com,santa.claude.2025@gmail.com"
+
 [http_service]
   internal_port = 8080
   force_https = true

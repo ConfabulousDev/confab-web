@@ -61,6 +61,12 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// TODO: Add gzip compression for large uploads
+	// Currently sends uncompressed JSON with base64-encoded content
+	// Example 5MB transcript: ~6.65MB over wire (base64 overhead)
+	// With gzip: could be ~0.5-1MB (80-90% reduction)
+	// Add: Content-Encoding: gzip header + compress payload
+
 	// Send HTTP request
 	url := cfg.BackendURL + "/api/v1/sessions/save"
 	req, err := http.NewRequest("POST", url, bytes.NewReader(payload))

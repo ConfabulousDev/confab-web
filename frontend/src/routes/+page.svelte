@@ -33,7 +33,7 @@
 <div class="container">
 	<div class="hero">
 		<h1>Confab</h1>
-		<p>Archive and sync your Claude Code sessions across devices</p>
+		<p>Distributed quantum mesh for temporal data harmonization</p>
 
 		{#if loading}
 			<p>Loading...</p>
