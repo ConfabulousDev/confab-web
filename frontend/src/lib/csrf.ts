@@ -58,10 +58,18 @@ export async function fetchWithCSRF(
 	// Add CSRF token header for state-changing operations
 	const method = (options.method || 'GET').toUpperCase();
 	if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+		// If token is not initialized, try to fetch it first
+		if (!csrfToken) {
+			console.warn('CSRF token not initialized, fetching now...');
+			await initCSRF();
+		}
+
 		fetchOptions.headers = {
 			...fetchOptions.headers,
 			'X-CSRF-Token': csrfToken
 		};
+
+		console.log('Sending CSRF token:', csrfToken ? 'present' : 'MISSING');
 	}
 
 	return fetch(url, fetchOptions);
