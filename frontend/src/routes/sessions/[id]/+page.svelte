@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { fetchWithCSRF } from '$lib/csrf';
 
 	type FileDetail = {
 		id: number;
@@ -143,10 +144,9 @@
 	async function createShare() {
 		error = '';
 		try {
-			const response = await fetch(`/api/v1/sessions/${sessionId}/share`, {
+			const response = await fetchWithCSRF(`/api/v1/sessions/${sessionId}/share`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify({
 					visibility: shareVisibility,
 					invited_emails: shareVisibility === 'private' ? invitedEmails : [],
@@ -172,9 +172,8 @@
 		}
 
 		try {
-			const response = await fetch(`/api/v1/shares/${shareToken}`, {
-				method: 'DELETE',
-				credentials: 'include'
+			const response = await fetchWithCSRF(`/api/v1/shares/${shareToken}`, {
+				method: 'DELETE'
 			});
 
 			if (!response.ok) {
