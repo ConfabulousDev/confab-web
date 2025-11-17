@@ -12,6 +12,15 @@
 		s3_uploaded_at?: string;
 	};
 
+	type GitInfo = {
+		repo_url?: string;
+		branch?: string;
+		commit_sha?: string;
+		commit_message?: string;
+		author?: string;
+		is_dirty?: boolean;
+	};
+
 	type RunDetail = {
 		id: number;
 		end_timestamp: string;
@@ -19,6 +28,7 @@
 		reason: string;
 		transcript_path: string;
 		s3_uploaded: boolean;
+		git_info?: GitInfo;
 		files: FileDetail[];
 	};
 
@@ -190,6 +200,40 @@
 		navigator.clipboard.writeText(text);
 		alert('Copied to clipboard!');
 	}
+
+	function getRepoWebURL(repoUrl?: string): string | null {
+		if (!repoUrl) return null;
+
+		// Convert SSH URLs to HTTPS
+		// git@github.com:user/repo.git -> https://github.com/user/repo
+		if (repoUrl.startsWith('git@github.com:')) {
+			return repoUrl.replace('git@github.com:', 'https://github.com/').replace(/\.git$/, '');
+		}
+		if (repoUrl.startsWith('git@gitlab.com:')) {
+			return repoUrl.replace('git@gitlab.com:', 'https://gitlab.com/').replace(/\.git$/, '');
+		}
+
+		// HTTPS URLs
+		if (repoUrl.startsWith('https://github.com/') || repoUrl.startsWith('https://gitlab.com/')) {
+			return repoUrl.replace(/\.git$/, '');
+		}
+
+		return null;
+	}
+
+	function getCommitURL(gitInfo?: GitInfo): string | null {
+		const repoUrl = getRepoWebURL(gitInfo?.repo_url);
+		if (!repoUrl || !gitInfo?.commit_sha) return null;
+
+		if (repoUrl.includes('github.com')) {
+			return `${repoUrl}/commit/${gitInfo.commit_sha}`;
+		}
+		if (repoUrl.includes('gitlab.com')) {
+			return `${repoUrl}/-/commit/${gitInfo.commit_sha}`;
+		}
+
+		return null;
+	}
 </script>
 
 <div class="container">
@@ -257,6 +301,63 @@
 						</span>
 					</div>
 				</div>
+
+				{#if run.git_info}
+					<div class="git-info-section">
+						<h4>Git Information</h4>
+						<div class="git-info">
+							{#if run.git_info.repo_url}
+								<div class="info-row">
+									<span class="label">Repository:</span>
+									{#if getRepoWebURL(run.git_info.repo_url)}
+										<a href={getRepoWebURL(run.git_info.repo_url)} target="_blank" rel="noopener" class="value link">
+											{run.git_info.repo_url}
+										</a>
+									{:else}
+										<code class="value">{run.git_info.repo_url}</code>
+									{/if}
+								</div>
+							{/if}
+
+							{#if run.git_info.branch}
+								<div class="info-row">
+									<span class="label">Branch:</span>
+									<code class="value">{run.git_info.branch}</code>
+									{#if run.git_info.is_dirty}
+										<span class="dirty-badge">⚠ Uncommitted changes</span>
+									{/if}
+								</div>
+							{/if}
+
+							{#if run.git_info.commit_sha}
+								<div class="info-row">
+									<span class="label">Commit:</span>
+									{#if getCommitURL(run.git_info)}
+										<a href={getCommitURL(run.git_info)} target="_blank" rel="noopener" class="value link">
+											<code>{run.git_info.commit_sha.substring(0, 7)}</code>
+										</a>
+									{:else}
+										<code class="value">{run.git_info.commit_sha.substring(0, 7)}</code>
+									{/if}
+								</div>
+							{/if}
+
+							{#if run.git_info.commit_message}
+								<div class="info-row">
+									<span class="label">Message:</span>
+									<span class="value">{run.git_info.commit_message}</span>
+								</div>
+							{/if}
+
+							{#if run.git_info.author}
+								<div class="info-row">
+									<span class="label">Author:</span>
+									<span class="value">{run.git_info.author}</span>
+								</div>
+							{/if}
+						</div>
+					</div>
+				{/if}
 
 				{#if run.files && run.files.length > 0}
 					<div class="files-section">
@@ -563,6 +664,50 @@
 
 	.muted {
 		color: #6c757d;
+	}
+
+	.git-info-section {
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid #dee2e6;
+	}
+
+	.git-info-section h4 {
+		font-size: 1rem;
+		color: #495057;
+		margin: 0 0 1rem 0;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.git-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		background: #f8f9fa;
+		padding: 1rem;
+		border-radius: 6px;
+	}
+
+	.value.link {
+		color: #007bff;
+		text-decoration: none;
+	}
+
+	.value.link:hover {
+		text-decoration: underline;
+	}
+
+	.dirty-badge {
+		display: inline-block;
+		font-size: 0.75rem;
+		padding: 0.25rem 0.5rem;
+		background: #fff3cd;
+		color: #856404;
+		border-radius: 4px;
+		margin-left: 0.5rem;
+		font-weight: 600;
 	}
 
 	.files-section {

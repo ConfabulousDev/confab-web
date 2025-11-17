@@ -68,6 +68,7 @@ type SaveSessionRequest struct {
 	TranscriptPath string      `json:"transcript_path"`
 	CWD            string      `json:"cwd"`
 	Reason         string      `json:"reason"`
+	GitInfo        interface{} `json:"git_info,omitempty"`
 	Files          []FileUpload `json:"files"`
 }
 

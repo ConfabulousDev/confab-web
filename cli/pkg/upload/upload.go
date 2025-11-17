@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/git"
 	"github.com/santaclaude2025/confab/pkg/types"
 )
 
@@ -28,6 +29,13 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 	// Validate backend URL
 	if cfg.BackendURL == "" {
 		return fmt.Errorf("backend URL not configured")
+	}
+
+	// Detect git information from current working directory
+	gitInfo, err := git.DetectGitInfo(hookInput.CWD)
+	if err != nil {
+		// Log error but don't fail upload if git detection fails
+		fmt.Fprintf(os.Stderr, "Warning: Failed to detect git info: %v\n", err)
 	}
 
 	// Read file contents
@@ -52,6 +60,7 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 		TranscriptPath: hookInput.TranscriptPath,
 		CWD:            hookInput.CWD,
 		Reason:         hookInput.Reason,
+		GitInfo:        gitInfo,
 		Files:          fileUploads,
 	}
 
@@ -111,6 +120,7 @@ type SaveSessionRequest struct {
 	TranscriptPath string       `json:"transcript_path"`
 	CWD            string       `json:"cwd"`
 	Reason         string       `json:"reason"`
+	GitInfo        *git.GitInfo `json:"git_info,omitempty"`
 	Files          []FileUpload `json:"files"`
 }
 

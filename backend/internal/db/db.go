@@ -84,7 +84,8 @@ func (db *DB) RunMigrations() error {
 		cwd TEXT NOT NULL,
 		reason TEXT NOT NULL,
 		end_timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
-		s3_uploaded BOOLEAN NOT NULL DEFAULT FALSE
+		s3_uploaded BOOLEAN NOT NULL DEFAULT FALSE,
+		git_info JSONB
 	);
 
 	-- Files table
@@ -138,6 +139,12 @@ func (db *DB) RunMigrations() error {
 
 	if _, err := db.conn.Exec(schema); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	// Add git_info column to existing runs table (for databases created before this migration)
+	alterGitInfo := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS git_info JSONB;`
+	if _, err := db.conn.Exec(alterGitInfo); err != nil {
+		return fmt.Errorf("failed to add git_info column: %w", err)
 	}
 
 	return nil
@@ -269,8 +276,8 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 
 	// Always insert a new run
 	runSQL := `
-		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 	`
 	var runID int64
@@ -282,6 +289,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		req.Reason,
 		now,
 		len(s3Keys) > 0,
+		req.GitInfo,
 	).Scan(&runID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert run: %w", err)
@@ -493,6 +501,7 @@ type RunDetail struct {
 	Reason         string      `json:"reason"`
 	TranscriptPath string      `json:"transcript_path"`
 	S3Uploaded     bool        `json:"s3_uploaded"`
+	GitInfo        interface{} `json:"git_info,omitempty"`
 	Files          []FileDetail `json:"files"`
 }
 
@@ -521,7 +530,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 
 	// Get all runs for this session
 	runsQuery := `
-		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded
+		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded, git_info
 		FROM runs
 		WHERE session_id = $1 AND user_id = $2
 		ORDER BY end_timestamp ASC
@@ -535,7 +544,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 
 	for rows.Next() {
 		var run RunDetail
-		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded); err != nil {
+		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &run.GitInfo); err != nil {
 			return nil, fmt.Errorf("failed to scan run: %w", err)
 		}
 
@@ -781,7 +790,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 
 	// Get runs
 	runsQuery := `
-		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded
+		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded, git_info
 		FROM runs
 		WHERE session_id = $1
 		ORDER BY end_timestamp ASC
@@ -795,7 +804,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 
 	for rows.Next() {
 		var run RunDetail
-		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded); err != nil {
+		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &run.GitInfo); err != nil {
 			return nil, fmt.Errorf("failed to scan run: %w", err)
 		}
 
