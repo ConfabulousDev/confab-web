@@ -93,8 +93,8 @@ func (s *Server) SetupRoutes() http.Handler {
 	// This is important because CLI uses API keys, not sessions
 	csrfMiddleware := csrf.Protect(
 		[]byte(csrfSecretKey),
-		csrf.Secure(os.Getenv("ENVIRONMENT") == "production"), // Only require HTTPS in production
-		csrf.SameSite(csrf.SameSiteStrictMode),                // Strict SameSite for maximum protection
+		csrf.Secure(os.Getenv("INSECURE_DEV_MODE") != "true"), // Secure by default (HTTPS-only, set INSECURE_DEV_MODE=true to disable)
+		csrf.SameSite(csrf.SameSiteLaxMode),                   // Lax mode for OAuth compatibility
 		csrf.Path("/"),
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log.Printf("CSRF validation failed for %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)

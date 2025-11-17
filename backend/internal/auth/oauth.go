@@ -19,6 +19,13 @@ const (
 	SessionDuration   = 7 * 24 * time.Hour // 7 days
 )
 
+// cookieSecure returns whether cookies should have Secure flag
+// Secure by default (HTTPS only), can be disabled for local dev
+func cookieSecure() bool {
+	// Only disable in local development - name is intentionally scary
+	return os.Getenv("INSECURE_DEV_MODE") != "true"
+}
+
 // OAuthConfig holds OAuth configuration
 type OAuthConfig struct {
 	GitHubClientID     string
@@ -59,13 +66,14 @@ func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
 			Path:     "/",
 			MaxAge:   300, // 5 minutes
 			HttpOnly: true,
-			Secure:   false, // Set to true in production with HTTPS
+			Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
 			SameSite: http.SameSiteLaxMode,
 		})
 
 		// Redirect to GitHub
+		// Scope: read:user gets profile info, user:email gets email
 		authURL := fmt.Sprintf(
-			"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&state=%s&scope=user:email",
+			"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&state=%s&scope=read:user user:email",
 			config.GitHubClientID,
 			config.GitHubRedirectURL,
 			state,
@@ -119,9 +127,15 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Debug: log user info from GitHub
 		fmt.Printf("GitHub user: ID=%d, Login=%s, Email=%s, Name=%s\n", user.ID, user.Login, user.Email, user.Name)
 
+		// Use login (username) as fallback if name is empty
+		displayName := user.Name
+		if displayName == "" {
+			displayName = user.Login
+		}
+
 		// Find or create user in database
 		githubID := fmt.Sprintf("%d", user.ID)
-		dbUser, err := database.FindOrCreateUserByGitHub(ctx, githubID, user.Email, user.Name, user.AvatarURL)
+		dbUser, err := database.FindOrCreateUserByGitHub(ctx, githubID, user.Login, user.Email, displayName, user.AvatarURL)
 		if err != nil {
 			fmt.Printf("Error creating user: %v\n", err)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
@@ -148,7 +162,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			Path:     "/",
 			Expires:  expiresAt,
 			HttpOnly: true,
-			Secure:   false, // Set to true in production with HTTPS
+			Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
 			SameSite: http.SameSiteLaxMode,
 		})
 
@@ -330,4 +344,85 @@ func generateRandomString(length int) (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
+}
+
+// HandleCLIAuthorize handles CLI API key generation flow
+func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// Get session cookie (user must be logged in via web)
+		cookie, err := r.Cookie(SessionCookieName)
+		if err != nil {
+			// Redirect to GitHub login, then back here
+			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery
+			http.SetCookie(w, &http.Cookie{
+				Name:     "cli_redirect",
+				Value:    redirectURL,
+				Path:     "/",
+				MaxAge:   300, // 5 minutes
+				HttpOnly: true,
+				Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
+				SameSite: http.SameSiteLaxMode,
+			})
+			http.Redirect(w, r, "/auth/github/login", http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Validate session
+		session, err := database.GetWebSession(ctx, cookie.Value)
+		if err != nil {
+			http.Error(w, "Invalid or expired session", http.StatusUnauthorized)
+			return
+		}
+
+		// Get callback URL and key name from query params
+		callback := r.URL.Query().Get("callback")
+		keyName := r.URL.Query().Get("name")
+
+		if callback == "" {
+			http.Error(w, "Missing callback parameter", http.StatusBadRequest)
+			return
+		}
+
+		if keyName == "" {
+			keyName = "CLI Key"
+		}
+
+		// Validate callback is localhost
+		if !isLocalhostURL(callback) {
+			http.Error(w, "Callback must be localhost", http.StatusBadRequest)
+			return
+		}
+
+		// Generate API key
+		apiKey, keyHash, err := GenerateAPIKey()
+		if err != nil {
+			http.Error(w, "Failed to generate API key", http.StatusInternalServerError)
+			return
+		}
+
+		// Store in database
+		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, session.UserID, keyHash, keyName)
+		if err != nil {
+			fmt.Printf("Error creating API key: %v\n", err)
+			http.Error(w, "Failed to create API key", http.StatusInternalServerError)
+			return
+		}
+
+		fmt.Printf("Created API key: ID=%d, Name=%s, UserID=%d, CreatedAt=%v\n", keyID, keyName, session.UserID, createdAt)
+
+		// Redirect to callback with API key
+		redirectURL := fmt.Sprintf("%s?key=%s", callback, apiKey)
+		http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+	}
+}
+
+// isLocalhostURL checks if URL is localhost
+func isLocalhostURL(urlStr string) bool {
+	if urlStr == "" {
+		return false
+	}
+	// Simple check for localhost/127.0.0.1
+	return len(urlStr) >= 16 && (urlStr[:16] == "http://localhost" || urlStr[:16] == "http://127.0.0.1")
 }
