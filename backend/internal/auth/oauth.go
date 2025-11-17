@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/santaclaude2025/confab/backend/internal/db"
@@ -419,10 +421,47 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 }
 
 // isLocalhostURL checks if URL is localhost
+// Properly validates URL to prevent open redirect attacks
 func isLocalhostURL(urlStr string) bool {
 	if urlStr == "" {
 		return false
 	}
-	// Simple check for localhost/127.0.0.1
-	return len(urlStr) >= 16 && (urlStr[:16] == "http://localhost" || urlStr[:16] == "http://127.0.0.1")
+
+	// Parse URL properly using net/url
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return false
+	}
+
+	// Only allow http scheme (localhost doesn't need https)
+	if u.Scheme != "http" {
+		return false
+	}
+
+	// Get hostname without port
+	hostname := u.Hostname()
+
+	// Only allow localhost or 127.0.0.1
+	if hostname != "localhost" && hostname != "127.0.0.1" {
+		return false
+	}
+
+	// Reject URLs with username/password (e.g., http://localhost@evil.com)
+	if u.User != nil {
+		return false
+	}
+
+	// Validate port if present (optional but good practice)
+	if port := u.Port(); port != "" {
+		portNum, err := strconv.Atoi(port)
+		if err != nil {
+			return false
+		}
+		// Port must be in valid range
+		if portNum < 1 || portNum > 65535 {
+			return false
+		}
+	}
+
+	return true
 }
