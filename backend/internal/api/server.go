@@ -139,14 +139,6 @@ func (s *Server) SetupRoutes() http.Handler {
 		// Validate Content-Type for POST/PUT/PATCH requests
 		r.Use(validateContentType)
 
-		// CSRF token endpoint - publicly accessible to get token for subsequent requests
-		r.Get("/csrf-token", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-CSRF-Token", csrf.Token(r))
-			respondJSON(w, http.StatusOK, map[string]string{
-				"csrf_token": csrf.Token(r),
-			})
-		})
-
 		// Protected routes require API key authentication (for CLI)
 		// No CSRF protection for API key routes (CLI doesn't use cookies)
 		r.Group(func(r chi.Router) {
@@ -161,6 +153,14 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(csrfMiddleware)
 			r.Use(auth.SessionMiddleware(s.db))
+
+			// CSRF token endpoint - must be inside CSRF middleware to set cookie
+			r.Get("/csrf-token", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-CSRF-Token", csrf.Token(r))
+				respondJSON(w, http.StatusOK, map[string]string{
+					"csrf_token": csrf.Token(r),
+				})
+			})
 			r.Get("/me", s.handleGetMe)
 
 			// API key management
