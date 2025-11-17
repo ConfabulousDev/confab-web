@@ -41,6 +41,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(securityHeaders)
 
 	// CORS configuration - CRITICAL SECURITY FIX
 	// Get allowed origins from environment (comma-separated list)
@@ -190,5 +191,47 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, map[string]string{
 		"error": message,
+	})
+}
+
+// securityHeaders adds security headers to all responses
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Content-Security-Policy: Prevents XSS attacks
+		// - default-src 'self': Only load resources from same origin
+		// - script-src 'self': Only execute scripts from same origin
+		// - style-src 'self' 'unsafe-inline': Allow same-origin styles + inline styles (needed for some frameworks)
+		// - img-src 'self' data: https:: Allow images from same origin, data URIs, and HTTPS
+		// - font-src 'self': Only load fonts from same origin
+		// - connect-src 'self': Only connect to same origin for AJAX/WebSocket
+		// - frame-ancestors 'none': Prevent embedding in iframes (defense in depth with X-Frame-Options)
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+
+		// X-Frame-Options: Prevents clickjacking attacks
+		// DENY: Page cannot be embedded in any iframe
+		w.Header().Set("X-Frame-Options", "DENY")
+
+		// X-Content-Type-Options: Prevents MIME sniffing attacks
+		// nosniff: Browser must respect Content-Type header, not try to guess
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		// Strict-Transport-Security (HSTS): Forces HTTPS
+		// max-age=31536000: Remember for 1 year
+		// includeSubDomains: Apply to all subdomains
+		// Only set in production (when cookies are secure)
+		if os.Getenv("INSECURE_DEV_MODE") != "true" {
+			w.Header().Set("Strict-Transport-Security",
+				"max-age=31536000; includeSubDomains")
+		}
+
+		// Referrer-Policy: Controls referrer information leakage
+		// strict-origin-when-cross-origin: Send full URL for same-origin, only origin for cross-origin
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		// X-Permitted-Cross-Domain-Policies: Restricts Flash/PDF cross-domain access
+		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+
+		next.ServeHTTP(w, r)
 	})
 }
