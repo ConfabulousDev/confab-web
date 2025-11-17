@@ -131,6 +131,9 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
+		// Validate Content-Type for POST/PUT/PATCH requests
+		r.Use(validateContentType)
+
 		// CSRF token endpoint - publicly accessible to get token for subsequent requests
 		r.Get("/csrf-token", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-CSRF-Token", csrf.Token(r))
