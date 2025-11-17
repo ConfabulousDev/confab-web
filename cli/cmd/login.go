@@ -32,6 +32,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	keyName, _ := cmd.Flags().GetString("name")
 
 	// Default backend URL
+	// TODO: Change default to production (https://confab.fly.dev) once stable
 	if backendURL == "" {
 		backendURL = "http://localhost:8080"
 	}
