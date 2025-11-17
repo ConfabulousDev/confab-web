@@ -96,7 +96,7 @@ func loadConfig() Config {
 			Endpoint:        getEnvOrDefault("S3_ENDPOINT", "localhost:9000"),
 			AccessKeyID:     getEnvOrDefault("AWS_ACCESS_KEY_ID", getEnvOrDefault("S3_ACCESS_KEY", "minioadmin")),
 			SecretAccessKey: getEnvOrDefault("AWS_SECRET_ACCESS_KEY", getEnvOrDefault("S3_SECRET_KEY", "minioadmin")),
-			BucketName:      getEnvOrDefault("S3_BUCKET", getEnvOrDefault("BUCKET_NAME", "confab")),
+			BucketName:      getEnvOrDefault("BUCKET_NAME", getEnvOrDefault("S3_BUCKET", "confab")),
 			UseSSL:          os.Getenv("S3_USE_SSL") == "true",
 		},
 		OAuthConfig: auth.OAuthConfig{

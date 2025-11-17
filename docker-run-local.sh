@@ -12,7 +12,7 @@ docker run -it --rm \
   -e AWS_ACCESS_KEY_ID=minioadmin \
   -e AWS_SECRET_ACCESS_KEY=minioadmin \
   -e S3_ENDPOINT=host.docker.internal:9000 \
-  -e S3_BUCKET=confab \
+  -e BUCKET_NAME=confab \
   -e S3_USE_SSL=false \
   -e GITHUB_CLIENT_ID="${GITHUB_CLIENT_ID:-Ov23liYet9NvnMG52g7k}" \
   -e GITHUB_CLIENT_SECRET="${GITHUB_CLIENT_SECRET:-35f979cfbecb1f4f77604f2f465715748fe84ed1}" \

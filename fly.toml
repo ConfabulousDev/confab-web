@@ -19,9 +19,8 @@ primary_region = 'sjc'
   GITHUB_REDIRECT_URL = "https://confab.fly.dev/auth/github/callback"
 
   # S3/Tigris Configuration (Fly Object Storage)
-  # Note: Fly secrets already set: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+  # Note: Fly secrets already set: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, BUCKET_NAME
   S3_ENDPOINT = "https://fly.storage.tigris.dev"
-  S3_BUCKET = "winter-resonance-5820"
   S3_USE_SSL = "true"
 
 [http_service]

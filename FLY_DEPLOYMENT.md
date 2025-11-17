@@ -148,22 +148,27 @@ open https://confab.fly.dev
   FRONTEND_URL = "https://confab.fly.dev"       # OAuth redirect target
   ALLOWED_ORIGINS = "https://confab.fly.dev"    # CORS whitelist
   GITHUB_REDIRECT_URL = "https://confab.fly.dev/auth/github/callback"
-  AWS_REGION = "auto"                           # Tigris region
   S3_ENDPOINT = "https://fly.storage.tigris.dev"
-  S3_BUCKET = "confab-sessions"
   S3_USE_SSL = "true"
 ```
 
 ### Secret (via fly secrets set)
 
+**Note:** `fly launch` automatically sets Tigris secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `BUCKET_NAME`
+
 ```bash
+# Already set by fly launch:
+# AWS_ACCESS_KEY_ID            # Tigris access key (tid_...)
+# AWS_SECRET_ACCESS_KEY        # Tigris secret key (tsec_...)
+# AWS_REGION                   # auto
+# BUCKET_NAME                  # winter-resonance-5820 (or your bucket name)
+
+# You need to set these:
 DATABASE_URL                 # Neon Postgres connection string
 GITHUB_CLIENT_ID             # GitHub OAuth client ID
 GITHUB_CLIENT_SECRET         # GitHub OAuth client secret
 SESSION_SECRET_KEY           # 32+ random bytes for session encryption
 CSRF_SECRET_KEY              # 32+ random bytes for CSRF tokens
-AWS_ACCESS_KEY_ID            # Tigris access key (tid_...)
-AWS_SECRET_ACCESS_KEY        # Tigris secret key (tsec_...)
 ALLOWED_EMAILS               # Optional: comma-separated email whitelist
 ```
 
