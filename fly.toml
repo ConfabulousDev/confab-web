@@ -1,0 +1,38 @@
+# fly.toml app configuration file generated for confab on 2025-11-16T22:38:33-08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'confab'
+primary_region = 'sjc'
+
+[build]
+
+# Non-secret environment variables
+[env]
+  # Static file serving (enables frontend)
+  STATIC_FILES_DIR = "/app/static"
+
+  # Frontend/Backend URLs (update if using custom domain)
+  FRONTEND_URL = "https://confab.fly.dev"
+  ALLOWED_ORIGINS = "https://confab.fly.dev"
+  GITHUB_REDIRECT_URL = "https://confab.fly.dev/auth/github/callback"
+
+  # S3/Tigris Configuration (Fly Object Storage)
+  # Note: Fly secrets already set: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+  S3_ENDPOINT = "https://fly.storage.tigris.dev"
+  S3_BUCKET = "winter-resonance-5820"
+  S3_USE_SSL = "true"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1

@@ -27,3 +27,9 @@ vendor/
 *.swp
 *.swo
 *~
+
+# Secrets (DO NOT commit filled-in secrets!)
+fly-secrets.sh
+.env
+.env.local
+.env.production
