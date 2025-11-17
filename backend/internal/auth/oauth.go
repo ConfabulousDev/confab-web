@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/santaclaude2025/confab/backend/internal/db"
@@ -128,6 +130,13 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 
 		// Debug: log user info from GitHub
 		fmt.Printf("GitHub user: ID=%d, Login=%s, Email=%s, Name=%s\n", user.ID, user.Login, user.Email, user.Name)
+
+		// Check email whitelist (if configured)
+		if !isEmailAllowed(user.Email) {
+			log.Printf("Email not in whitelist: %s", user.Email)
+			http.Error(w, "Access denied: Your email is not authorized to use this application. Please contact the administrator.", http.StatusForbidden)
+			return
+		}
 
 		// Use login (username) as fallback if name is empty
 		displayName := user.Name
@@ -296,11 +305,13 @@ func getGitHubUser(accessToken string) (*GitHubUser, error) {
 		return nil, err
 	}
 
-	// Get email if not provided
-	if user.Email == "" {
-		email, _ := getGitHubPrimaryEmail(accessToken)
-		user.Email = email
+	// Always fetch verified email from GitHub
+	// Don't trust the public email from /user endpoint (may not be verified)
+	email, err := getGitHubPrimaryEmail(accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verified email: %w", err)
 	}
+	user.Email = email
 
 	return &user, nil
 }
@@ -326,17 +337,16 @@ func getGitHubPrimaryEmail(accessToken string) (string, error) {
 		return "", err
 	}
 
+	// SECURITY: Only return PRIMARY + VERIFIED email
+	// Never return unverified emails (user-controlled, not trustworthy)
 	for _, email := range emails {
 		if email.Primary && email.Verified {
 			return email.Email, nil
 		}
 	}
 
-	if len(emails) > 0 {
-		return emails[0].Email, nil
-	}
-
-	return "", fmt.Errorf("no email found")
+	// If no verified email, reject the login
+	return "", fmt.Errorf("no verified email found - please verify your email on GitHub")
 }
 
 // generateRandomString generates a random string for sessions/state
@@ -464,4 +474,35 @@ func isLocalhostURL(urlStr string) bool {
 	}
 
 	return true
+}
+
+// isEmailAllowed checks if an email is in the whitelist
+// If ALLOWED_EMAILS is not set, all emails are allowed (open registration)
+// If ALLOWED_EMAILS is set, only those emails can sign up/login
+func isEmailAllowed(email string) bool {
+	allowedEmailsEnv := os.Getenv("ALLOWED_EMAILS")
+
+	// If no whitelist configured, allow all emails
+	if allowedEmailsEnv == "" {
+		return true
+	}
+
+	// Empty email never allowed
+	if email == "" {
+		return false
+	}
+
+	// Parse comma-separated list
+	allowedEmails := strings.Split(allowedEmailsEnv, ",")
+
+	// Check if email is in whitelist (case-insensitive)
+	emailLower := strings.ToLower(strings.TrimSpace(email))
+	for _, allowed := range allowedEmails {
+		allowedLower := strings.ToLower(strings.TrimSpace(allowed))
+		if allowedLower == emailLower {
+			return true
+		}
+	}
+
+	return false
 }

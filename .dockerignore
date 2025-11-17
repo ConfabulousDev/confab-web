@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+
+# Frontend
+frontend/node_modules
+frontend/.svelte-kit
+frontend/build
+frontend/.env
+frontend/.env.*
+
+# Backend
+backend/confab
+backend/*.md
+
+# CLI (not needed in web deployment)
+cli
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+tmp
+temp

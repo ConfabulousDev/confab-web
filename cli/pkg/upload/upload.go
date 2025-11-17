@@ -20,17 +20,14 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 		return fmt.Errorf("failed to get upload config: %w", err)
 	}
 
-	// Skip if upload is disabled
-	if !cfg.Enabled {
+	// Skip if API key not configured
+	if cfg.APIKey == "" {
 		return nil
 	}
 
-	// Validate configuration
+	// Validate backend URL
 	if cfg.BackendURL == "" {
 		return fmt.Errorf("backend URL not configured")
-	}
-	if cfg.APIKey == "" {
-		return fmt.Errorf("API key not configured")
 	}
 
 	// Read file contents

@@ -45,7 +45,11 @@
 				{/if}
 				<p><strong>Name:</strong> {user.name || 'N/A'}</p>
 				<p><strong>Email:</strong> {user.email}</p>
-				<button class="btn logout" on:click={handleLogout}>Logout</button>
+				<div class="actions">
+					<a href="/sessions" class="btn btn-primary">View Sessions</a>
+					<a href="/keys" class="btn btn-primary">Manage API Keys</a>
+					<button class="btn logout" on:click={handleLogout}>Logout</button>
+				</div>
 			</div>
 		{:else}
 			<button class="btn btn-github" on:click={handleLogin}>

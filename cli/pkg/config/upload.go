@@ -9,7 +9,6 @@ import (
 
 // UploadConfig holds cloud upload configuration
 type UploadConfig struct {
-	Enabled    bool   `json:"enabled"`
 	BackendURL string `json:"backend_url"`
 	APIKey     string `json:"api_key"`
 }
@@ -21,10 +20,9 @@ func GetUploadConfig() (*UploadConfig, error) {
 		return nil, err
 	}
 
-	// Return default disabled config if file doesn't exist
+	// Return default config if file doesn't exist
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return &UploadConfig{
-			Enabled:    false,
 			BackendURL: "",
 			APIKey:     "",
 		}, nil

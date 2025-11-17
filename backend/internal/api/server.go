@@ -54,7 +54,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(securityHeaders)
+	r.Use(securityHeadersMiddleware())
 	r.Use(ratelimit.Middleware(s.globalLimiter)) // Global rate limiting
 
 	// CORS configuration - CRITICAL SECURITY FIX
@@ -119,7 +119,12 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// Health check (no additional rate limiting needed)
 	r.Get("/health", s.handleHealth)
-	r.Get("/", s.handleRoot)
+
+	// Root endpoint - only serve API info if not serving static frontend
+	staticDir := os.Getenv("STATIC_FILES_DIR")
+	if staticDir == "" {
+		r.Get("/", s.handleRoot)
+	}
 
 	// OAuth routes (public) - Apply stricter auth rate limiting
 	r.Get("/auth/github/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig)))
@@ -181,6 +186,13 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Get("/sessions/{sessionId}/shared/{shareToken}", HandleGetSharedSession(s.db))
 	})
 
+	// Static file serving (production mode when frontend is bundled with backend)
+	if staticDir != "" {
+		log.Printf("Serving static files from: %s", staticDir)
+		// Serve static assets (JS, CSS, images, etc.)
+		r.Get("/*", s.serveSPA(staticDir))
+	}
+
 	return r
 }
 
@@ -199,6 +211,26 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// serveSPA serves the SvelteKit static files with SPA fallback
+func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
+	fileServer := http.FileServer(http.Dir(staticDir))
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Try to serve the requested file
+		path := r.URL.Path
+
+		// Check if file exists
+		if _, err := os.Stat(staticDir + path); os.IsNotExist(err) {
+			// File doesn't exist, serve index.html for SPA routing
+			http.ServeFile(w, r, staticDir+"/index.html")
+			return
+		}
+
+		// File exists, serve it
+		fileServer.ServeHTTP(w, r)
+	}
+}
+
 // respondJSON writes a JSON response
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -213,44 +245,53 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	})
 }
 
-// securityHeaders adds security headers to all responses
-func securityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Content-Security-Policy: Prevents XSS attacks
-		// - default-src 'self': Only load resources from same origin
-		// - script-src 'self': Only execute scripts from same origin
-		// - style-src 'self' 'unsafe-inline': Allow same-origin styles + inline styles (needed for some frameworks)
-		// - img-src 'self' data: https:: Allow images from same origin, data URIs, and HTTPS
-		// - font-src 'self': Only load fonts from same origin
-		// - connect-src 'self': Only connect to same origin for AJAX/WebSocket
-		// - frame-ancestors 'none': Prevent embedding in iframes (defense in depth with X-Frame-Options)
-		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+// securityHeadersMiddleware creates middleware that adds appropriate security headers
+func securityHeadersMiddleware() func(http.Handler) http.Handler {
+	staticDir := os.Getenv("STATIC_FILES_DIR")
+	servingStatic := staticDir != ""
 
-		// X-Frame-Options: Prevents clickjacking attacks
-		// DENY: Page cannot be embedded in any iframe
-		w.Header().Set("X-Frame-Options", "DENY")
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Content-Security-Policy: Prevents XSS attacks
+			// Different policies for static frontend vs API-only mode
+			if servingStatic {
+				// Relaxed CSP for SvelteKit: allows inline scripts needed for SPA bootstrap
+				// - script-src 'self' 'unsafe-inline': Allow inline scripts (SvelteKit needs this)
+				// - style-src 'self' 'unsafe-inline': Allow inline styles
+				w.Header().Set("Content-Security-Policy",
+					"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+			} else {
+				// Strict CSP for API-only mode
+				// - script-src 'self': Only execute scripts from same origin
+				w.Header().Set("Content-Security-Policy",
+					"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+			}
 
-		// X-Content-Type-Options: Prevents MIME sniffing attacks
-		// nosniff: Browser must respect Content-Type header, not try to guess
-		w.Header().Set("X-Content-Type-Options", "nosniff")
+			// X-Frame-Options: Prevents clickjacking attacks
+			// DENY: Page cannot be embedded in any iframe
+			w.Header().Set("X-Frame-Options", "DENY")
 
-		// Strict-Transport-Security (HSTS): Forces HTTPS
-		// max-age=31536000: Remember for 1 year
-		// includeSubDomains: Apply to all subdomains
-		// Only set in production (when cookies are secure)
-		if os.Getenv("INSECURE_DEV_MODE") != "true" {
-			w.Header().Set("Strict-Transport-Security",
-				"max-age=31536000; includeSubDomains")
-		}
+			// X-Content-Type-Options: Prevents MIME sniffing attacks
+			// nosniff: Browser must respect Content-Type header, not try to guess
+			w.Header().Set("X-Content-Type-Options", "nosniff")
 
-		// Referrer-Policy: Controls referrer information leakage
-		// strict-origin-when-cross-origin: Send full URL for same-origin, only origin for cross-origin
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			// Strict-Transport-Security (HSTS): Forces HTTPS
+			// max-age=31536000: Remember for 1 year
+			// includeSubDomains: Apply to all subdomains
+			// Only set in production (when cookies are secure)
+			if os.Getenv("INSECURE_DEV_MODE") != "true" {
+				w.Header().Set("Strict-Transport-Security",
+					"max-age=31536000; includeSubDomains")
+			}
 
-		// X-Permitted-Cross-Domain-Policies: Restricts Flash/PDF cross-domain access
-		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+			// Referrer-Policy: Controls referrer information leakage
+			// strict-origin-when-cross-origin: Send full URL for same-origin, only origin for cross-origin
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 
-		next.ServeHTTP(w, r)
-	})
+			// X-Permitted-Cross-Domain-Policies: Restricts Flash/PDF cross-domain access
+			w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

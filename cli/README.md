@@ -38,20 +38,22 @@ Shows:
 
 ### Cloud Sync
 
-Configure cloud backend for syncing sessions across devices:
+Authenticate and sync sessions across devices:
 
 ```bash
-# Configure and enable cloud sync
-confab cloud configure \
+# Interactive login (recommended)
+confab login
+
+# Or manually configure with API key
+confab configure \
   --backend-url http://localhost:8080 \
-  --api-key <your-api-key> \
-  --enable
+  --api-key <your-api-key>
 
 # Check cloud sync status
-confab cloud status
+confab status
 
-# Disable cloud sync
-confab cloud configure --disable
+# Logout and disable cloud sync (clears API key)
+confab logout
 ```
 
 ### Manual Capture (Testing)

@@ -84,6 +84,24 @@ var statusCmd = &cobra.Command{
 			fmt.Println("Run 'confab init' to install the SessionEnd hook.")
 		}
 
+		fmt.Println()
+
+		// Check cloud sync status
+		cfg, err := config.GetUploadConfig()
+		if err != nil {
+			logger.Error("Failed to get cloud config: %v", err)
+		} else {
+			fmt.Println("Cloud Sync:")
+			if cfg.APIKey != "" {
+				fmt.Println("  Status: ✓ Enabled")
+				fmt.Printf("  Backend: %s\n", cfg.BackendURL)
+				fmt.Printf("  API Key: %s...%s\n", cfg.APIKey[:12], cfg.APIKey[len(cfg.APIKey)-4:])
+			} else {
+				fmt.Println("  Status: ✗ Not configured")
+				fmt.Println("  Run 'confab login' to authenticate")
+			}
+		}
+
 		return nil
 	},
 }

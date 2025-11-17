@@ -81,11 +81,26 @@ body {
 	margin: 0.5rem 0;
 }
 
+.user-info .actions {
+	display: flex;
+	gap: 1rem;
+	justify-content: center;
+	margin-top: 1.5rem;
+	flex-wrap: wrap;
+}
+
 .user-info .logout {
-	margin-top: 1rem;
 	background: #dc3545;
 }
 
 .user-info .logout:hover {
 	background: #c82333;
+}
+
+.btn-primary {
+	background: #28a745;
+}
+
+.btn-primary:hover {
+	background: #218838;
 }

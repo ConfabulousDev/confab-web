@@ -128,8 +128,8 @@ cd cli && ./install.sh
 # Run backend on server or localhost
 cd backend && docker-compose up -d && go run cmd/server/main.go
 
-# Configure each CLI
-confab cloud configure --backend-url https://your-server.com --api-key <key> --enable
+# Configure each CLI (or use 'confab login' for interactive auth)
+confab configure --backend-url https://your-server.com --api-key <key>
 ```
 
 ## Development
