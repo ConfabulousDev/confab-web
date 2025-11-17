@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -46,6 +47,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Get("/auth/github/callback", auth.HandleGitHubCallback(s.oauthConfig, s.db))
 	r.Get("/auth/logout", auth.HandleLogout(s.db))
 
+	// CLI authorize (requires web session)
+	r.Get("/auth/cli/authorize", auth.HandleCLIAuthorize(s.db))
+
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Protected routes require API key authentication (for CLI)
@@ -58,10 +62,28 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.SessionMiddleware(s.db))
 			r.Get("/me", s.handleGetMe)
-			// TODO: Add more dashboard routes
-			// r.Get("/sessions", s.handleListSessions)
-			// r.Get("/sessions/{id}", s.handleGetSession)
+
+			// API key management
+			r.Post("/keys", HandleCreateAPIKey(s.db))
+			r.Get("/keys", HandleListAPIKeys(s.db))
+			r.Delete("/keys/{id}", HandleDeleteAPIKey(s.db))
+
+			// Session viewing
+			r.Get("/sessions", HandleListSessions(s.db))
+			r.Get("/sessions/{sessionId}", HandleGetSession(s.db))
+
+			// Session sharing
+			frontendURL := os.Getenv("FRONTEND_URL")
+			if frontendURL == "" {
+				frontendURL = "http://localhost:5173"
+			}
+			r.Post("/sessions/{sessionId}/share", HandleCreateShare(s.db, frontendURL))
+			r.Get("/sessions/{sessionId}/shares", HandleListShares(s.db))
+			r.Delete("/shares/{shareToken}", HandleRevokeShare(s.db))
 		})
+
+		// Public shared session access (no auth for public, optional auth for private)
+		r.Get("/sessions/{sessionId}/shared/{shareToken}", HandleGetSharedSession(s.db))
 	})
 
 	return r

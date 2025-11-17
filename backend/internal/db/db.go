@@ -45,6 +45,7 @@ func (db *DB) RunMigrations() error {
 		name TEXT,
 		avatar_url TEXT,
 		github_id TEXT UNIQUE,
+		github_username TEXT,
 		google_id TEXT UNIQUE,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -97,6 +98,27 @@ func (db *DB) RunMigrations() error {
 		s3_uploaded_at TIMESTAMP
 	);
 
+	-- Session shares table
+	CREATE TABLE IF NOT EXISTS session_shares (
+		id BIGSERIAL PRIMARY KEY,
+		session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		share_token TEXT NOT NULL UNIQUE,
+		visibility TEXT NOT NULL,
+		expires_at TIMESTAMP,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		last_accessed_at TIMESTAMP
+	);
+
+	-- Session share invites table (for private shares)
+	CREATE TABLE IF NOT EXISTS session_share_invites (
+		id BIGSERIAL PRIMARY KEY,
+		share_id BIGINT NOT NULL REFERENCES session_shares(id) ON DELETE CASCADE,
+		email TEXT NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		UNIQUE(share_id, email)
+	);
+
 	-- Indexes
 	CREATE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id);
 	CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
@@ -108,6 +130,10 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_runs_user ON runs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_runs_end_timestamp ON runs(end_timestamp);
 	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
+	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
+	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id, user_id);
+	CREATE INDEX IF NOT EXISTS idx_session_share_invites_share ON session_share_invites(share_id);
+	CREATE INDEX IF NOT EXISTS idx_session_share_invites_email ON session_share_invites(email);
 	`
 
 	if _, err := db.conn.Exec(schema); err != nil {
@@ -119,13 +145,19 @@ func (db *DB) RunMigrations() error {
 
 // GetUserByID retrieves a user by ID
 func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
-	query := `SELECT id, email, created_at FROM users WHERE id = $1`
+	query := `SELECT id, email, name, avatar_url, github_id, github_username, google_id, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
 	err := db.conn.QueryRowContext(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Email,
+		&user.Name,
+		&user.AvatarURL,
+		&user.GitHubID,
+		&user.GitHubUsername,
+		&user.GoogleID,
 		&user.CreatedAt,
+		&user.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -160,6 +192,59 @@ func (db *DB) CreateAPIKey(ctx context.Context, userID int64, keyHash, name stri
 	_, err := db.conn.ExecContext(ctx, query, userID, keyHash, name)
 	if err != nil {
 		return fmt.Errorf("failed to create API key: %w", err)
+	}
+
+	return nil
+}
+
+// CreateAPIKeyWithReturn creates a new API key and returns the key ID and created_at
+func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
+	query := `INSERT INTO api_keys (user_id, key_hash, name) VALUES ($1, $2, $3) RETURNING id, created_at`
+
+	var keyID int64
+	var createdAt time.Time
+	err := db.conn.QueryRowContext(ctx, query, userID, keyHash, name).Scan(&keyID, &createdAt)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("failed to create API key: %w", err)
+	}
+
+	return keyID, createdAt, nil
+}
+
+// ListAPIKeys returns all API keys for a user (without hashes)
+func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
+	query := `SELECT id, user_id, name, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`
+
+	rows, err := db.conn.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list API keys: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []models.APIKey
+	for rows.Next() {
+		var key models.APIKey
+		if err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan API key: %w", err)
+		}
+		keys = append(keys, key)
+	}
+
+	return keys, nil
+}
+
+// DeleteAPIKey deletes an API key
+func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
+	query := `DELETE FROM api_keys WHERE id = $1 AND user_id = $2`
+
+	result, err := db.conn.ExecContext(ctx, query, keyID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete API key: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("API key not found")
 	}
 
 	return nil
@@ -230,7 +315,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 }
 
 // FindOrCreateUserByGitHub finds or creates a user by GitHub ID
-func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, email, name, avatarURL string) (*models.User, error) {
+func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, githubUsername, email, name, avatarURL string) (*models.User, error) {
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -238,7 +323,7 @@ func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, email, nam
 	defer tx.Rollback()
 
 	// Try to find existing user by GitHub ID
-	query := `SELECT id, email, name, avatar_url, github_id, google_id, created_at, updated_at
+	query := `SELECT id, email, name, avatar_url, github_id, github_username, google_id, created_at, updated_at
 	          FROM users WHERE github_id = $1`
 
 	var user models.User
@@ -248,6 +333,7 @@ func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, email, nam
 		&user.Name,
 		&user.AvatarURL,
 		&user.GitHubID,
+		&user.GitHubUsername,
 		&user.GoogleID,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -255,8 +341,8 @@ func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, email, nam
 
 	if err == nil {
 		// User exists, update their info
-		updateSQL := `UPDATE users SET email = $1, name = $2, avatar_url = $3, updated_at = NOW() WHERE id = $4`
-		_, err = tx.ExecContext(ctx, updateSQL, email, name, avatarURL, user.ID)
+		updateSQL := `UPDATE users SET email = $1, name = $2, avatar_url = $3, github_username = $4, updated_at = NOW() WHERE id = $5`
+		_, err = tx.ExecContext(ctx, updateSQL, email, name, avatarURL, githubUsername, user.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update user: %w", err)
 		}
@@ -271,16 +357,17 @@ func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, email, nam
 	}
 
 	// User doesn't exist, create new one
-	insertSQL := `INSERT INTO users (email, name, avatar_url, github_id, created_at, updated_at)
-	              VALUES ($1, $2, $3, $4, NOW(), NOW())
-	              RETURNING id, email, name, avatar_url, github_id, google_id, created_at, updated_at`
+	insertSQL := `INSERT INTO users (email, name, avatar_url, github_id, github_username, created_at, updated_at)
+	              VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+	              RETURNING id, email, name, avatar_url, github_id, github_username, google_id, created_at, updated_at`
 
-	err = tx.QueryRowContext(ctx, insertSQL, email, name, avatarURL, githubID).Scan(
+	err = tx.QueryRowContext(ctx, insertSQL, email, name, avatarURL, githubID, githubUsername).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Name,
 		&user.AvatarURL,
 		&user.GitHubID,
+		&user.GitHubUsername,
 		&user.GoogleID,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -348,4 +435,395 @@ func (db *DB) CleanupExpiredSessions(ctx context.Context) (int64, error) {
 	}
 	count, _ := result.RowsAffected()
 	return count, nil
+}
+
+// SessionListItem represents a session in the list view
+type SessionListItem struct {
+	SessionID       string    `json:"session_id"`
+	FirstSeen       time.Time `json:"first_seen"`
+	RunCount        int       `json:"run_count"`
+	LastRunTime     time.Time `json:"last_run_time"`
+}
+
+// ListUserSessions returns all sessions for a user
+func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionListItem, error) {
+	query := `
+		SELECT
+			s.session_id,
+			s.first_seen,
+			COUNT(r.id) as run_count,
+			COALESCE(MAX(r.end_timestamp), s.first_seen) as last_run_time
+		FROM sessions s
+		LEFT JOIN runs r ON s.session_id = r.session_id
+		WHERE s.user_id = $1
+		GROUP BY s.session_id, s.first_seen
+		ORDER BY last_run_time DESC
+	`
+
+	rows, err := db.conn.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []SessionListItem
+	for rows.Next() {
+		var session SessionListItem
+		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime); err != nil {
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
+}
+
+// SessionDetail represents detailed session information
+type SessionDetail struct {
+	SessionID string    `json:"session_id"`
+	FirstSeen time.Time `json:"first_seen"`
+	Runs      []RunDetail `json:"runs"`
+}
+
+// RunDetail represents a run with its files
+type RunDetail struct {
+	ID             int64       `json:"id"`
+	EndTimestamp   time.Time   `json:"end_timestamp"`
+	CWD            string      `json:"cwd"`
+	Reason         string      `json:"reason"`
+	TranscriptPath string      `json:"transcript_path"`
+	S3Uploaded     bool        `json:"s3_uploaded"`
+	Files          []FileDetail `json:"files"`
+}
+
+// FileDetail represents a file in a run
+type FileDetail struct {
+	ID           int64      `json:"id"`
+	FilePath     string     `json:"file_path"`
+	FileType     string     `json:"file_type"`
+	SizeBytes    int64      `json:"size_bytes"`
+	S3Key        *string    `json:"s3_key,omitempty"`
+	S3UploadedAt *time.Time `json:"s3_uploaded_at,omitempty"`
+}
+
+// GetSessionDetail returns detailed information about a session
+func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int64) (*SessionDetail, error) {
+	// First, get the session and verify ownership
+	var session SessionDetail
+	sessionQuery := `SELECT session_id, first_seen FROM sessions WHERE session_id = $1 AND user_id = $2`
+	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(&session.SessionID, &session.FirstSeen)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("session not found")
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Get all runs for this session
+	runsQuery := `
+		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded
+		FROM runs
+		WHERE session_id = $1 AND user_id = $2
+		ORDER BY end_timestamp ASC
+	`
+
+	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query runs: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var run RunDetail
+		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded); err != nil {
+			return nil, fmt.Errorf("failed to scan run: %w", err)
+		}
+
+		// Get files for this run
+		filesQuery := `
+			SELECT id, file_path, file_type, size_bytes, s3_key, s3_uploaded_at
+			FROM files
+			WHERE run_id = $1
+			ORDER BY file_type DESC, file_path ASC
+		`
+
+		fileRows, err := db.conn.QueryContext(ctx, filesQuery, run.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query files: %w", err)
+		}
+
+		for fileRows.Next() {
+			var file FileDetail
+			if err := fileRows.Scan(&file.ID, &file.FilePath, &file.FileType, &file.SizeBytes, &file.S3Key, &file.S3UploadedAt); err != nil {
+				fileRows.Close()
+				return nil, fmt.Errorf("failed to scan file: %w", err)
+			}
+			run.Files = append(run.Files, file)
+		}
+		fileRows.Close()
+
+		session.Runs = append(session.Runs, run)
+	}
+
+	return &session, nil
+}
+
+// SessionShare represents a share link
+type SessionShare struct {
+	ID             int64      `json:"id"`
+	SessionID      string     `json:"session_id"`
+	UserID         int64      `json:"user_id"`
+	ShareToken     string     `json:"share_token"`
+	Visibility     string     `json:"visibility"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
+	InvitedEmails  []string   `json:"invited_emails,omitempty"`
+}
+
+// CreateShare creates a new share link
+func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) (*SessionShare, error) {
+	// Verify session ownership
+	var ownerID int64
+	err := db.conn.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE session_id = $1`, sessionID).Scan(&ownerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("session not found")
+		}
+		return nil, fmt.Errorf("failed to verify ownership: %w", err)
+	}
+
+	if ownerID != userID {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	// Insert share
+	query := `INSERT INTO session_shares (session_id, user_id, share_token, visibility, expires_at)
+	          VALUES ($1, $2, $3, $4, $5)
+	          RETURNING id, created_at`
+
+	var share SessionShare
+	share.SessionID = sessionID
+	share.UserID = userID
+	share.ShareToken = shareToken
+	share.Visibility = visibility
+	share.ExpiresAt = expiresAt
+
+	err = db.conn.QueryRowContext(ctx, query, sessionID, userID, shareToken, visibility, expiresAt).Scan(&share.ID, &share.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create share: %w", err)
+	}
+
+	// Insert invites for private shares
+	if visibility == "private" && len(invitedEmails) > 0 {
+		for _, email := range invitedEmails {
+			_, err := db.conn.ExecContext(ctx,
+				`INSERT INTO session_share_invites (share_id, email) VALUES ($1, $2)`,
+				share.ID, email)
+			if err != nil {
+				// Rollback share if invite fails
+				db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
+				return nil, fmt.Errorf("failed to create invite: %w", err)
+			}
+		}
+		share.InvitedEmails = invitedEmails
+	}
+
+	return &share, nil
+}
+
+// ListShares returns all shares for a session
+func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([]SessionShare, error) {
+	// Verify ownership
+	var ownerID int64
+	err := db.conn.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE session_id = $1`, sessionID).Scan(&ownerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("session not found")
+		}
+		return nil, fmt.Errorf("failed to verify ownership: %w", err)
+	}
+
+	if ownerID != userID {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	// Get shares
+	query := `SELECT id, session_id, user_id, share_token, visibility, expires_at, created_at, last_accessed_at
+	          FROM session_shares
+	          WHERE session_id = $1 AND user_id = $2
+	          ORDER BY created_at DESC`
+
+	rows, err := db.conn.QueryContext(ctx, query, sessionID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list shares: %w", err)
+	}
+	defer rows.Close()
+
+	var shares []SessionShare
+	for rows.Next() {
+		var share SessionShare
+		err := rows.Scan(&share.ID, &share.SessionID, &share.UserID, &share.ShareToken,
+			&share.Visibility, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan share: %w", err)
+		}
+
+		// Get invited emails for private shares
+		if share.Visibility == "private" {
+			emailRows, err := db.conn.QueryContext(ctx,
+				`SELECT email FROM session_share_invites WHERE share_id = $1 ORDER BY email`,
+				share.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get invites: %w", err)
+			}
+
+			var emails []string
+			for emailRows.Next() {
+				var email string
+				if err := emailRows.Scan(&email); err != nil {
+					emailRows.Close()
+					return nil, fmt.Errorf("failed to scan email: %w", err)
+				}
+				emails = append(emails, email)
+			}
+			emailRows.Close()
+			share.InvitedEmails = emails
+		}
+
+		shares = append(shares, share)
+	}
+
+	return shares, nil
+}
+
+// RevokeShare deletes a share
+func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) error {
+	// Verify ownership and delete
+	result, err := db.conn.ExecContext(ctx,
+		`DELETE FROM session_shares WHERE share_token = $1 AND user_id = $2`,
+		shareToken, userID)
+	if err != nil {
+		return fmt.Errorf("failed to revoke share: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("share not found or unauthorized")
+	}
+
+	return nil
+}
+
+// GetSharedSession returns session detail via share token
+func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string, viewerEmail *string) (*SessionDetail, error) {
+	// Get share
+	var share SessionShare
+	query := `SELECT id, session_id, user_id, visibility, expires_at, last_accessed_at
+	          FROM session_shares
+	          WHERE share_token = $1`
+
+	err := db.conn.QueryRowContext(ctx, query, shareToken).Scan(
+		&share.ID, &share.SessionID, &share.UserID, &share.Visibility,
+		&share.ExpiresAt, &share.LastAccessedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("share not found")
+		}
+		return nil, fmt.Errorf("failed to get share: %w", err)
+	}
+
+	// Verify token belongs to this session
+	if share.SessionID != sessionID {
+		return nil, fmt.Errorf("share not found")
+	}
+
+	// Check expiration
+	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now()) {
+		return nil, fmt.Errorf("share expired")
+	}
+
+	// Check authorization for private shares
+	if share.Visibility == "private" {
+		if viewerEmail == nil {
+			return nil, fmt.Errorf("unauthorized")
+		}
+
+		// Check if email is invited
+		var count int
+		err := db.conn.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM session_share_invites WHERE share_id = $1 AND LOWER(email) = LOWER($2)`,
+			share.ID, *viewerEmail).Scan(&count)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check authorization: %w", err)
+		}
+
+		if count == 0 {
+			return nil, fmt.Errorf("forbidden")
+		}
+	}
+
+	// Update last accessed
+	db.conn.ExecContext(ctx,
+		`UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`,
+		share.ID)
+
+	// Get session detail (no ownership check since share verified)
+	var session SessionDetail
+	sessionQuery := `SELECT session_id, first_seen FROM sessions WHERE session_id = $1`
+	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(&session.SessionID, &session.FirstSeen)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("session not found")
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Get runs
+	runsQuery := `
+		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded
+		FROM runs
+		WHERE session_id = $1
+		ORDER BY end_timestamp ASC
+	`
+
+	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query runs: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var run RunDetail
+		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded); err != nil {
+			return nil, fmt.Errorf("failed to scan run: %w", err)
+		}
+
+		// Get files
+		filesQuery := `
+			SELECT id, file_path, file_type, size_bytes, s3_key, s3_uploaded_at
+			FROM files
+			WHERE run_id = $1
+			ORDER BY file_type DESC, file_path ASC
+		`
+
+		fileRows, err := db.conn.QueryContext(ctx, filesQuery, run.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query files: %w", err)
+		}
+
+		for fileRows.Next() {
+			var file FileDetail
+			if err := fileRows.Scan(&file.ID, &file.FilePath, &file.FileType, &file.SizeBytes, &file.S3Key, &file.S3UploadedAt); err != nil {
+				fileRows.Close()
+				return nil, fmt.Errorf("failed to scan file: %w", err)
+			}
+			run.Files = append(run.Files, file)
+		}
+		fileRows.Close()
+
+		session.Runs = append(session.Runs, run)
+	}
+
+	return &session, nil
 }
