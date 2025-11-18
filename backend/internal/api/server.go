@@ -143,11 +143,18 @@ func (s *Server) SetupRoutes() http.Handler {
 		// No CSRF protection for API key routes (CLI doesn't use cookies)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(s.db))
-			// Apply upload rate limiting to prevent storage abuse
-			r.Use(ratelimit.Middleware(s.uploadLimiter))
-			// Decompress zstd-compressed request bodies
-			r.Use(decompressMiddleware())
-			r.Post("/sessions/save", s.handleSaveSession)
+
+			// API key validation endpoint (lightweight, no rate limiting)
+			r.Get("/auth/validate", s.handleValidateAPIKey)
+
+			// Upload endpoints with stricter rate limiting
+			r.Group(func(r chi.Router) {
+				// Apply upload rate limiting to prevent storage abuse
+				r.Use(ratelimit.Middleware(s.uploadLimiter))
+				// Decompress zstd-compressed request bodies
+				r.Use(decompressMiddleware())
+				r.Post("/sessions/save", s.handleSaveSession)
+			})
 		})
 
 		// Protected routes for web dashboard (require web session)
@@ -202,6 +209,32 @@ func (s *Server) SetupRoutes() http.Handler {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
+	})
+}
+
+// handleValidateAPIKey validates the API key and returns user info
+func (s *Server) handleValidateAPIKey(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get authenticated user ID (already validated by auth.Middleware)
+	userID, ok := auth.GetUserID(ctx)
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	// Get user details
+	user, err := s.db.GetUserByID(ctx, userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get user details")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"valid":  true,
+		"user_id": user.ID,
+		"email":  user.Email,
+		"name":   user.Name,
 	})
 }
 

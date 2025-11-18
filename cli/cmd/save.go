@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/santaclaude2025/confab/pkg/db"
 	"github.com/santaclaude2025/confab/pkg/discovery"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/types"
@@ -16,10 +15,10 @@ import (
 
 var saveCmd = &cobra.Command{
 	Use:   "save",
-	Short: "Save session data (called by SessionEnd hook)",
+	Short: "Save session data to cloud (called by SessionEnd hook)",
 	Long: `Reads session metadata from stdin, discovers associated files,
-and stores them in the local database. This command is automatically
-called by the Claude Code SessionEnd hook.`,
+and uploads them to the cloud backend. This command is automatically
+called by the Claude Code SessionEnd hook. Requires authentication.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Initialize logger
 		logger.Init()
@@ -88,33 +87,18 @@ called by the Claude Code SessionEnd hook.`,
 		}
 		fmt.Fprintln(os.Stderr)
 
-		// Store in database
-		database, err := db.Open()
-		if err != nil {
-			logger.Error("Failed to open database: %v", err)
-			fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
-			return nil
-		}
-		defer database.Close()
-
-		if err := database.InsertSession(hookInput, files); err != nil {
-			logger.Error("Failed to save to database: %v", err)
-			fmt.Fprintf(os.Stderr, "Error saving to database: %v\n", err)
-			return nil
-		}
-
-		logger.Info("Saved to database: %s", database.Path())
-		fmt.Fprintln(os.Stderr, "✓ Saved to database:", database.Path())
-
-		// Cloud upload (if enabled)
+		// Cloud upload (required)
+		logger.Info("Uploading to cloud...")
 		if err := upload.UploadToCloud(hookInput, files); err != nil {
 			logger.Error("Failed to upload to cloud: %v", err)
-			fmt.Fprintf(os.Stderr, "Warning: Cloud upload failed: %v\n", err)
-			// Don't fail the whole operation if cloud upload fails
-		} else {
-			logger.Info("Cloud upload completed")
-			fmt.Fprintln(os.Stderr, "✓ Uploaded to cloud")
+			fmt.Fprintf(os.Stderr, "Error: Cloud upload failed: %v\n", err)
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Cloud upload is required. Please run 'confab login' to authenticate.")
+			return nil
 		}
+
+		logger.Info("Cloud upload completed")
+		fmt.Fprintln(os.Stderr, "✓ Uploaded to cloud")
 
 		logger.Info("Session capture complete")
 		fmt.Fprintln(os.Stderr)

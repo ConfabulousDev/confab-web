@@ -1,19 +1,19 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"time"
+	"net/http"
 
 	"github.com/santaclaude2025/confab/pkg/config"
-	"github.com/santaclaude2025/confab/pkg/db"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/spf13/cobra"
 )
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show confab status and recent sessions",
-	Long:  `Displays hook installation status, database location, and recently captured sessions.`,
+	Short: "Show confab status",
+	Long:  `Displays hook installation status and cloud authentication status.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger.Init()
 		defer logger.Close()
@@ -21,52 +21,6 @@ var statusCmd = &cobra.Command{
 		logger.Info("Running status command")
 
 		fmt.Println("=== Confab: Status ===")
-		fmt.Println()
-
-		// Open database
-		database, err := db.Open()
-		if err != nil {
-			logger.Error("Failed to open database: %v", err)
-			return fmt.Errorf("failed to open database: %w", err)
-		}
-		defer database.Close()
-
-		// Show database info
-		logger.Info("Database path: %s", database.Path())
-		fmt.Printf("Database: %s\n", database.Path())
-
-		count, err := database.GetSessionCount()
-		if err != nil {
-			logger.Error("Failed to get session count: %v", err)
-			return fmt.Errorf("failed to get session count: %w", err)
-		}
-		logger.Info("Total sessions: %d", count)
-		fmt.Printf("Total Sessions: %d\n", count)
-		fmt.Println()
-
-		// Show recent sessions
-		if count > 0 {
-			fmt.Println("Recent Sessions:")
-			sessions, err := database.GetRecentSessions(10)
-			if err != nil {
-				logger.Error("Failed to get recent sessions: %v", err)
-				return fmt.Errorf("failed to get recent sessions: %w", err)
-			}
-
-			for _, s := range sessions {
-				age := time.Since(s.Timestamp)
-				sizeMB := float64(s.TotalSizeBytes) / (1024 * 1024)
-				fmt.Printf("  %s - %s ago (%.2f MB, %d files)\n",
-					s.SessionID[:8],
-					formatDuration(age),
-					sizeMB,
-					s.FileCount,
-				)
-			}
-		} else {
-			fmt.Println("No sessions captured yet.")
-		}
-
 		fmt.Println()
 
 		// Check hook installation
@@ -90,33 +44,68 @@ var statusCmd = &cobra.Command{
 		cfg, err := config.GetUploadConfig()
 		if err != nil {
 			logger.Error("Failed to get cloud config: %v", err)
+			fmt.Println("Cloud Sync: ✗ Configuration error")
 		} else {
 			fmt.Println("Cloud Sync:")
 			if cfg.APIKey != "" {
-				fmt.Println("  Status: ✓ Enabled")
 				fmt.Printf("  Backend: %s\n", cfg.BackendURL)
 				fmt.Printf("  API Key: %s...%s\n", cfg.APIKey[:12], cfg.APIKey[len(cfg.APIKey)-4:])
+
+				// Validate API key
+				fmt.Print("  Validating API key... ")
+				if err := validateAPIKey(cfg.BackendURL, cfg.APIKey); err != nil {
+					logger.Error("API key validation failed: %v", err)
+					fmt.Println("✗ Invalid")
+					fmt.Printf("  Error: %v\n", err)
+					fmt.Println("  Run 'confab login' to re-authenticate")
+				} else {
+					logger.Info("API key is valid")
+					fmt.Println("✓ Valid")
+					fmt.Println("  Status: ✓ Authenticated and ready")
+				}
 			} else {
 				fmt.Println("  Status: ✗ Not configured")
 				fmt.Println("  Run 'confab login' to authenticate")
 			}
 		}
 
+		fmt.Println()
+
 		return nil
 	},
 }
 
-// formatDuration formats a duration in a human-readable way
-func formatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%.0fs", d.Seconds())
-	} else if d < time.Hour {
-		return fmt.Sprintf("%.0fm", d.Minutes())
-	} else if d < 24*time.Hour {
-		return fmt.Sprintf("%.1fh", d.Hours())
-	} else {
-		return fmt.Sprintf("%.1fd", d.Hours()/24)
+// validateAPIKey checks if the API key is valid by calling the backend
+func validateAPIKey(backendURL, apiKey string) error {
+	url := backendURL + "/api/v1/auth/validate"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
 	}
+
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to connect to backend: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("authentication failed (HTTP %d)", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if valid, ok := result["valid"].(bool); !ok || !valid {
+		return fmt.Errorf("API key is not valid")
+	}
+
+	return nil
 }
 
 func init() {

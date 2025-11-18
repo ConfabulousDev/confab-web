@@ -11,8 +11,7 @@ import (
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Remove SessionEnd hook from Claude Code settings",
-	Long: `Removes the confab SessionEnd hook from ~/.claude/settings.json.
-Your database and stored sessions are preserved.`,
+	Long:  `Removes the confab SessionEnd hook from ~/.claude/settings.json.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger.Init()
 		defer logger.Close()
@@ -33,8 +32,9 @@ Your database and stored sessions are preserved.`,
 		logger.Info("Hook removed from %s", settingsPath)
 		fmt.Printf("✓ Hook removed from %s\n", settingsPath)
 		fmt.Println()
-		fmt.Println("Database and sessions preserved at ~/.confab/")
-		fmt.Println("To completely remove confab, delete ~/.confab/ and the confab binary.")
+		fmt.Println("Hook removed. Confab will no longer capture sessions.")
+		fmt.Println("Your sessions remain accessible in the cloud backend.")
+		fmt.Println("To completely remove confab, delete the confab binary and run 'confab logout'.")
 
 		logger.Info("Uninstall complete")
 
