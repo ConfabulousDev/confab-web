@@ -1,12 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-
-	type Session = {
-		session_id: string;
-		first_seen: string;
-		run_count: number;
-		last_run_time: string;
-	};
+	import type { Session } from '$lib/types';
+	import { formatDate, formatRelativeTime } from '$lib/utils';
 
 	let sessions: Session[] = [];
 	let loading = true;
@@ -39,27 +34,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	function formatDate(dateStr: string): string {
-		const date = new Date(dateStr);
-		return date.toLocaleString();
-	}
-
-	function formatRelativeTime(dateStr: string): string {
-		const date = new Date(dateStr);
-		const now = new Date();
-		const diff = now.getTime() - date.getTime();
-
-		const seconds = Math.floor(diff / 1000);
-		const minutes = Math.floor(seconds / 60);
-		const hours = Math.floor(minutes / 60);
-		const days = Math.floor(hours / 24);
-
-		if (days > 0) return `${days}d ago`;
-		if (hours > 0) return `${hours}h ago`;
-		if (minutes > 0) return `${minutes}m ago`;
-		return `${seconds}s ago`;
 	}
 </script>
 
@@ -116,10 +90,9 @@
 </div>
 
 <style>
+	/* Override container width for sessions list */
 	.container {
 		max-width: 1200px;
-		margin: 0 auto;
-		padding: 2rem;
 	}
 
 	.header {
@@ -132,41 +105,6 @@
 	.header h1 {
 		font-size: 2rem;
 		color: #222;
-	}
-
-	.btn-link {
-		color: #666;
-		text-decoration: none;
-	}
-
-	.btn-link:hover {
-		color: #222;
-	}
-
-	.card {
-		background: white;
-		border-radius: 8px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		padding: 2rem;
-	}
-
-	.loading,
-	.empty {
-		text-align: center;
-		padding: 2rem;
-		color: #666;
-	}
-
-	.alert {
-		padding: 1rem;
-		border-radius: 6px;
-		margin-bottom: 1.5rem;
-	}
-
-	.alert-error {
-		background: #f8d7da;
-		border: 1px solid #f5c6cb;
-		color: #721c24;
 	}
 
 	.sessions-table {
@@ -211,28 +149,5 @@
 	.relative-time {
 		color: #6c757d;
 		font-size: 0.9rem;
-	}
-
-	.btn {
-		display: inline-block;
-		padding: 0.5rem 1rem;
-		background: #24292e;
-		color: white;
-		text-decoration: none;
-		border-radius: 6px;
-		font-weight: 500;
-		transition: background 0.2s;
-		border: none;
-		cursor: pointer;
-		font-size: 0.9rem;
-	}
-
-	.btn:hover {
-		background: #444;
-	}
-
-	.btn-sm {
-		padding: 0.25rem 0.75rem;
-		font-size: 0.85rem;
 	}
 </style>

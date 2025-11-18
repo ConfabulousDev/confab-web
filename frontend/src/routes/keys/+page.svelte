@@ -1,12 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fetchWithCSRF } from '$lib/csrf';
-
-	type APIKey = {
-		id: number;
-		name: string;
-		created_at: string;
-	};
+	import type { APIKey } from '$lib/types';
+	import { formatDate } from '$lib/utils';
 
 	let keys: APIKey[] = [];
 	let loading = true;
@@ -99,11 +95,6 @@
 		navigator.clipboard.writeText(text);
 		alert('API key copied to clipboard!');
 	}
-
-	function formatDate(dateStr: string): string {
-		const date = new Date(dateStr);
-		return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-	}
 </script>
 
 <div class="container">
@@ -193,10 +184,9 @@
 </div>
 
 <style>
+	/* Override container width for keys page */
 	.container {
 		max-width: 900px;
-		margin: 0 auto;
-		padding: 2rem;
 	}
 
 	.header {
@@ -211,20 +201,8 @@
 		color: #222;
 	}
 
-	.btn-link {
-		color: #666;
-		text-decoration: none;
-	}
-
-	.btn-link:hover {
-		color: #222;
-	}
-
+	/* Override card margin for this page */
 	.card {
-		background: white;
-		border-radius: 8px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		padding: 2rem;
 		margin-bottom: 2rem;
 	}
 
@@ -239,53 +217,6 @@
 		font-size: 1.5rem;
 		color: #222;
 		margin: 0;
-	}
-
-	.btn {
-		display: inline-block;
-		padding: 0.5rem 1rem;
-		background: #24292e;
-		color: white;
-		text-decoration: none;
-		border-radius: 6px;
-		font-weight: 500;
-		transition: background 0.2s;
-		border: none;
-		cursor: pointer;
-		font-size: 0.9rem;
-	}
-
-	.btn:hover {
-		background: #444;
-	}
-
-	.btn-primary {
-		background: #28a745;
-	}
-
-	.btn-primary:hover {
-		background: #218838;
-	}
-
-	.btn-secondary {
-		background: #6c757d;
-	}
-
-	.btn-secondary:hover {
-		background: #5a6268;
-	}
-
-	.btn-danger {
-		background: #dc3545;
-	}
-
-	.btn-danger:hover {
-		background: #c82333;
-	}
-
-	.btn-sm {
-		padding: 0.25rem 0.75rem;
-		font-size: 0.85rem;
 	}
 
 	.create-form {
@@ -319,13 +250,6 @@
 		gap: 0.5rem;
 	}
 
-	.loading,
-	.empty {
-		text-align: center;
-		padding: 2rem;
-		color: #666;
-	}
-
 	.keys-list {
 		display: flex;
 		flex-direction: column;
@@ -353,22 +277,10 @@
 		margin: 0;
 	}
 
+	/* Override alert padding for this page */
 	.alert {
 		padding: 1.5rem;
-		border-radius: 6px;
 		margin-bottom: 2rem;
-	}
-
-	.alert-success {
-		background: #d4edda;
-		border: 1px solid #c3e6cb;
-		color: #155724;
-	}
-
-	.alert-error {
-		background: #f8d7da;
-		border: 1px solid #f5c6cb;
-		color: #721c24;
 	}
 
 	.alert h3 {

@@ -178,10 +178,8 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		})
 
 		// Redirect back to frontend
+		// Note: FRONTEND_URL is validated at startup in main.go
 		frontendURL := os.Getenv("FRONTEND_URL")
-		if frontendURL == "" {
-			frontendURL = "http://localhost:5173"
-		}
 		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
 	}
 }
@@ -207,10 +205,8 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 		})
 
 		// Redirect back to frontend
+		// Note: FRONTEND_URL is validated at startup in main.go
 		frontendURL := os.Getenv("FRONTEND_URL")
-		if frontendURL == "" {
-			frontendURL = "http://localhost:5173"
-		}
 		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
 	}
 }

@@ -15,17 +15,17 @@ import (
 
 // CreateShareRequest is the request body for creating a share
 type CreateShareRequest struct {
-	Visibility     string   `json:"visibility"`      // "public" or "private"
-	InvitedEmails  []string `json:"invited_emails"`  // required for private
-	ExpiresInDays  *int     `json:"expires_in_days"` // null = never expires
+	Visibility    string   `json:"visibility"`      // "public" or "private"
+	InvitedEmails []string `json:"invited_emails"`  // required for private
+	ExpiresInDays *int     `json:"expires_in_days"` // null = never expires
 }
 
 // CreateShareResponse is the response for creating a share
 type CreateShareResponse struct {
-	ShareToken    string    `json:"share_token"`
-	ShareURL      string    `json:"share_url"`
-	Visibility    string    `json:"visibility"`
-	InvitedEmails []string  `json:"invited_emails,omitempty"`
+	ShareToken    string     `json:"share_token"`
+	ShareURL      string     `json:"share_url"`
+	Visibility    string     `json:"visibility"`
+	InvitedEmails []string   `json:"invited_emails,omitempty"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 }
 
@@ -35,7 +35,7 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		ctx := r.Context()
 
 		// Get user ID from context
-		userID, ok := ctx.Value(auth.GetUserIDContextKey()).(int64)
+		userID, ok := auth.GetUserID(ctx)
 		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -133,7 +133,7 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		ctx := r.Context()
 
 		// Get user ID from context
-		userID, ok := ctx.Value(auth.GetUserIDContextKey()).(int64)
+		userID, ok := auth.GetUserID(ctx)
 		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -177,7 +177,7 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		ctx := r.Context()
 
 		// Get user ID from context
-		userID, ok := ctx.Value(auth.GetUserIDContextKey()).(int64)
+		userID, ok := auth.GetUserID(ctx)
 		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return

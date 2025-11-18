@@ -15,7 +15,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		ctx := r.Context()
 
 		// Get user ID from context (set by SessionMiddleware)
-		userID, ok := ctx.Value(auth.GetUserIDContextKey()).(int64)
+		userID, ok := auth.GetUserID(ctx)
 		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -44,7 +44,7 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		ctx := r.Context()
 
 		// Get user ID from context
-		userID, ok := ctx.Value(auth.GetUserIDContextKey()).(int64)
+		userID, ok := auth.GetUserID(ctx)
 		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return

@@ -19,12 +19,13 @@ import (
 
 // Server holds dependencies for API handlers
 type Server struct {
-	db              *db.DB
-	storage         *storage.S3Storage
-	oauthConfig     auth.OAuthConfig
-	globalLimiter   ratelimit.RateLimiter // Global rate limiter for all requests
-	authLimiter     ratelimit.RateLimiter // Stricter limiter for auth endpoints
-	uploadLimiter   ratelimit.RateLimiter // Stricter limiter for uploads
+	db                *db.DB
+	storage           *storage.S3Storage
+	oauthConfig       auth.OAuthConfig
+	globalLimiter     ratelimit.RateLimiter // Global rate limiter for all requests
+	authLimiter       ratelimit.RateLimiter // Stricter limiter for auth endpoints
+	uploadLimiter     ratelimit.RateLimiter // Stricter limiter for uploads
+	validationLimiter ratelimit.RateLimiter // Moderate limiter for API key validation
 }
 
 // NewServer creates a new API server
@@ -42,6 +43,9 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		// Upload endpoints: 20 requests per hour = 0.0056 req/sec, burst of 5
 		// Very strict to prevent storage abuse
 		uploadLimiter: ratelimit.NewInMemoryRateLimiter(0.0056, 5),
+		// Validation endpoint: 30 requests per minute = 0.5 req/sec, burst of 10
+		// Moderate limit for CLI validation checks while preventing abuse
+		validationLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 10),
 	}
 }
 
@@ -59,26 +63,22 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// CORS configuration - CRITICAL SECURITY FIX
 	// Get allowed origins from environment (comma-separated list)
+	// Note: ALLOWED_ORIGINS is validated at startup in main.go
 	allowedOrigins := []string{}
+	trustedOrigins := []string{} // For CSRF - just host:port without scheme
 	originsEnv := os.Getenv("ALLOWED_ORIGINS")
-	if originsEnv != "" {
-		// Split by comma and trim whitespace
-		for _, origin := range strings.Split(originsEnv, ",") {
-			trimmed := strings.TrimSpace(origin)
-			if trimmed != "" {
-				allowedOrigins = append(allowedOrigins, trimmed)
-			}
+	for _, origin := range strings.Split(originsEnv, ",") {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed != "" {
+			allowedOrigins = append(allowedOrigins, trimmed)
+			// Extract host for CSRF TrustedOrigins (expects "host:port" not "http://host:port")
+			host := strings.TrimPrefix(trimmed, "https://")
+			host = strings.TrimPrefix(host, "http://")
+			trustedOrigins = append(trustedOrigins, host)
 		}
 	}
-
-	// Fallback to FRONTEND_URL for development
-	if len(allowedOrigins) == 0 {
-		frontendURL := os.Getenv("FRONTEND_URL")
-		if frontendURL == "" {
-			frontendURL = "http://localhost:5173"
-		}
-		allowedOrigins = []string{frontendURL}
-	}
+	log.Printf("CORS allowed origins: %v", allowedOrigins)
+	log.Printf("CSRF trusted origins: %v", trustedOrigins)
 
 	r.Use(cors.Handler(cors.Options{
 		// AllowedOrigins: Only requests from these domains are allowed
@@ -97,12 +97,8 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// CSRF protection - CRITICAL SECURITY FIX
 	// Protects against Cross-Site Request Forgery attacks
+	// Note: CSRF_SECRET_KEY is validated at startup in main.go
 	csrfSecretKey := os.Getenv("CSRF_SECRET_KEY")
-	if csrfSecretKey == "" {
-		// Generate a warning but use a default for development
-		log.Println("WARNING: CSRF_SECRET_KEY not set, using default (INSECURE for production)")
-		csrfSecretKey = "development-secret-key-minimum-32-characters-long-change-me"
-	}
 
 	// Only enforce CSRF on session-based routes (not API key routes)
 	// This is important because CLI uses API keys, not sessions
@@ -111,8 +107,14 @@ func (s *Server) SetupRoutes() http.Handler {
 		csrf.Secure(os.Getenv("INSECURE_DEV_MODE") != "true"), // Secure by default (HTTPS-only, set INSECURE_DEV_MODE=true to disable)
 		csrf.SameSite(csrf.SameSiteLaxMode),                   // Lax mode for OAuth compatibility
 		csrf.Path("/"),
+		csrf.TrustedOrigins(trustedOrigins), // Trust the frontend origin(s)
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Debug: log all relevant info
 			log.Printf("CSRF validation failed for %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+			log.Printf("  X-CSRF-Token header: %s", r.Header.Get("X-CSRF-Token"))
+			log.Printf("  Cookie header: %s", r.Header.Get("Cookie"))
+			log.Printf("  Origin: %s", r.Header.Get("Origin"))
+			log.Printf("  Referer: %s", r.Header.Get("Referer"))
 			respondError(w, http.StatusForbidden, "CSRF token validation failed")
 		})),
 	)
@@ -144,8 +146,8 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(s.db))
 
-			// API key validation endpoint (lightweight, no rate limiting)
-			r.Get("/auth/validate", s.handleValidateAPIKey)
+			// API key validation endpoint with rate limiting to prevent abuse
+			r.Get("/auth/validate", ratelimit.HandlerFunc(s.validationLimiter, s.handleValidateAPIKey))
 
 			// Upload endpoints with stricter rate limiting
 			r.Group(func(r chi.Router) {
@@ -182,10 +184,8 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions/{sessionId}", HandleGetSession(s.db))
 
 			// Session sharing
+			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
-			if frontendURL == "" {
-				frontendURL = "http://localhost:5173"
-			}
 			r.Post("/sessions/{sessionId}/share", HandleCreateShare(s.db, frontendURL))
 			r.Get("/sessions/{sessionId}/shares", HandleListShares(s.db))
 			r.Delete("/shares/{shareToken}", HandleRevokeShare(s.db))
@@ -231,10 +231,10 @@ func (s *Server) handleValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"valid":  true,
+		"valid":   true,
 		"user_id": user.ID,
-		"email":  user.Email,
-		"name":   user.Name,
+		"email":   user.Email,
+		"name":    user.Name,
 	})
 }
 

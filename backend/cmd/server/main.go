@@ -89,20 +89,89 @@ func loadConfig() Config {
 		fmt.Sscanf(p, "%d", &port)
 	}
 
+	// Validate required OAuth configuration
+	githubClientID := os.Getenv("GITHUB_CLIENT_ID")
+	if githubClientID == "" {
+		log.Fatal("GITHUB_CLIENT_ID is required")
+	}
+
+	githubClientSecret := os.Getenv("GITHUB_CLIENT_SECRET")
+	if githubClientSecret == "" {
+		log.Fatal("GITHUB_CLIENT_SECRET is required")
+	}
+
+	githubRedirectURL := os.Getenv("GITHUB_REDIRECT_URL")
+	if githubRedirectURL == "" {
+		log.Fatal("GITHUB_REDIRECT_URL is required")
+	}
+
+	// Validate required security configuration
+	csrfSecretKey := os.Getenv("CSRF_SECRET_KEY")
+	if csrfSecretKey == "" {
+		log.Fatal("CSRF_SECRET_KEY is required (must be at least 32 characters)")
+	}
+	if len(csrfSecretKey) < 32 {
+		log.Fatal("CSRF_SECRET_KEY must be at least 32 characters")
+	}
+
+	// Validate required S3/storage configuration
+	s3Endpoint := os.Getenv("S3_ENDPOINT")
+	if s3Endpoint == "" {
+		log.Fatal("S3_ENDPOINT is required")
+	}
+
+	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
+	if awsAccessKeyID == "" {
+		log.Fatal("AWS_ACCESS_KEY_ID is required")
+	}
+
+	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	if awsSecretAccessKey == "" {
+		log.Fatal("AWS_SECRET_ACCESS_KEY is required")
+	}
+
+	bucketName := os.Getenv("BUCKET_NAME")
+	if bucketName == "" {
+		log.Fatal("BUCKET_NAME is required")
+	}
+
+	// Validate required access control configuration
+	allowedEmails := os.Getenv("ALLOWED_EMAILS")
+	if allowedEmails == "" {
+		log.Fatal("ALLOWED_EMAILS is required (comma-separated list of allowed email addresses)")
+	}
+
+	// Validate required database configuration
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL is required")
+	}
+
+	// Validate required frontend configuration
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		log.Fatal("FRONTEND_URL is required")
+	}
+
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		log.Fatal("ALLOWED_ORIGINS is required (comma-separated list of allowed origins)")
+	}
+
 	return Config{
 		Port:        port,
-		DatabaseURL: getEnvOrDefault("DATABASE_URL", "postgres://confab:confab@localhost:5432/confab?sslmode=disable"),
+		DatabaseURL: databaseURL,
 		S3Config: storage.S3Config{
-			Endpoint:        getEnvOrDefault("S3_ENDPOINT", "localhost:9000"),
-			AccessKeyID:     getEnvOrDefault("AWS_ACCESS_KEY_ID", "minioadmin"),
-			SecretAccessKey: getEnvOrDefault("AWS_SECRET_ACCESS_KEY", "minioadmin"),
-			BucketName:      getEnvOrDefault("BUCKET_NAME", "confab"),
-			UseSSL:          os.Getenv("S3_USE_SSL") == "true",
+			Endpoint:        s3Endpoint,
+			AccessKeyID:     awsAccessKeyID,
+			SecretAccessKey: awsSecretAccessKey,
+			BucketName:      bucketName,
+			UseSSL:          os.Getenv("S3_USE_SSL") != "false", // Default true
 		},
 		OAuthConfig: auth.OAuthConfig{
-			GitHubClientID:     os.Getenv("GITHUB_CLIENT_ID"),
-			GitHubClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
-			GitHubRedirectURL:  getEnvOrDefault("GITHUB_REDIRECT_URL", "http://localhost:8080/auth/github/callback"),
+			GitHubClientID:     githubClientID,
+			GitHubClientSecret: githubClientSecret,
+			GitHubRedirectURL:  githubRedirectURL,
 		},
 	}
 }

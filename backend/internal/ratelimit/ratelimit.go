@@ -156,7 +156,7 @@ func (l *InMemoryRateLimiter) Stats() map[string]interface{} {
 	})
 
 	return map[string]interface{}{
-		"type":           "in-memory",
+		"type":            "in-memory",
 		"active_limiters": count,
 		"rate_per_second": float64(l.rate),
 		"burst":           l.burst,

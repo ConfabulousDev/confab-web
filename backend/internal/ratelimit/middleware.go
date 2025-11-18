@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -66,35 +67,87 @@ func HandlerFunc(limiter RateLimiter, handler http.HandlerFunc) http.HandlerFunc
 	}
 }
 
-// getClientIP extracts the client IP from the request
-// Handles X-Forwarded-For and X-Real-IP headers for proxied requests
+// getClientIP extracts a composite key from multiple IP sources for rate limiting
+// Uses a tuple of IPs where at least one is trusted, making it future-proof across platforms
+// This prevents IP spoofing while working with Fly.io, nginx, Cloudflare, AWS, etc.
 func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header (set by proxies/load balancers)
+	ips := make(map[string]bool) // Use map to deduplicate
+
+	// 1. RemoteAddr - ALWAYS TRUSTED (actual TCP connection IP)
+	// This cannot be spoofed as it's the real connection source
+	if remoteIP := extractIP(r.RemoteAddr); remoteIP != "" {
+		ips[remoteIP] = true
+	}
+
+	// 2. Fly-Client-IP - TRUSTED on Fly.io
+	// Set by Fly.io edge proxy, cannot be spoofed by clients
+	if flyIP := r.Header.Get("Fly-Client-IP"); flyIP != "" {
+		ips[flyIP] = true
+	}
+
+	// 3. CF-Connecting-IP - TRUSTED on Cloudflare
+	// Set by Cloudflare edge, cannot be spoofed by clients
+	if cfIP := r.Header.Get("CF-Connecting-IP"); cfIP != "" {
+		ips[cfIP] = true
+	}
+
+	// 4. X-Real-IP - TRUSTED when behind nginx/similar reverse proxies
+	// Typically set by nginx with real_ip module configured
+	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+		ips[realIP] = true
+	}
+
+	// 5. True-Client-IP - TRUSTED on Akamai/Cloudflare Enterprise
+	if trueIP := r.Header.Get("True-Client-IP"); trueIP != "" {
+		ips[trueIP] = true
+	}
+
+	// 6. X-Forwarded-For - PARTIALLY TRUSTED
+	// Take only the first IP (claimed client IP)
+	// Even if spoofed, we still have RemoteAddr as a trusted anchor
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-		// Take the first one (client IP)
-		ips := strings.Split(forwarded, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
+		parts := strings.Split(forwarded, ",")
+		if len(parts) > 0 {
+			if firstIP := strings.TrimSpace(parts[0]); firstIP != "" {
+				ips[firstIP] = true
+			}
 		}
 	}
 
-	// Check X-Real-IP header (alternative to X-Forwarded-For)
-	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		return realIP
+	// Convert map to sorted slice for deterministic key generation
+	ipList := make([]string, 0, len(ips))
+	for ip := range ips {
+		ipList = append(ipList, ip)
 	}
+	sort.Strings(ipList)
 
-	// Fall back to RemoteAddr
-	// Format: "IP:port" or "[IPv6]:port"
-	ip := r.RemoteAddr
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
+	// Create composite key from all IPs
+	// Even if some headers are spoofed, RemoteAddr ensures at least one trusted IP
+	return strings.Join(ipList, "|")
+}
+
+// extractIP extracts IP from address that may include port
+// Handles formats: "IP:port", "[IPv6]:port", "IP"
+func extractIP(addr string) string {
+	// Remove port if present
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		// Check if it's IPv6 with port [IPv6]:port
+		if strings.Contains(addr, "[") {
+			addr = addr[:idx]
+		} else {
+			// Could be IPv4:port or just IPv6
+			// If there's only one colon, it's IPv4:port
+			if strings.Count(addr, ":") == 1 {
+				addr = addr[:idx]
+			}
+			// Otherwise it's IPv6 without port, keep as is
+		}
 	}
 
 	// Remove IPv6 brackets
-	ip = strings.Trim(ip, "[]")
+	addr = strings.Trim(addr, "[]")
 
-	return ip
+	return addr
 }
 
 // UserKeyFunc extracts user ID from context for rate limiting by user

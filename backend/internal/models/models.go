@@ -4,15 +4,15 @@ import "time"
 
 // User represents a confab user (OAuth-based)
 type User struct {
-	ID             int64      `json:"id"`
-	Email          string     `json:"email"`
-	Name           *string    `json:"name,omitempty"`
-	AvatarURL      *string    `json:"avatar_url,omitempty"`
-	GitHubID       *string    `json:"github_id,omitempty"`
-	GitHubUsername *string    `json:"github_username,omitempty"`
-	GoogleID       *string    `json:"google_id,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID             int64     `json:"id"`
+	Email          string    `json:"email"`
+	Name           *string   `json:"name,omitempty"`
+	AvatarURL      *string   `json:"avatar_url,omitempty"`
+	GitHubID       *string   `json:"github_id,omitempty"`
+	GitHubUsername *string   `json:"github_username,omitempty"`
+	GoogleID       *string   `json:"google_id,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // WebSession represents a browser session (for OAuth)
@@ -53,22 +53,22 @@ type Run struct {
 
 // File represents a session file (transcript or agent sidechain)
 type File struct {
-	ID            int64      `json:"id"`
-	RunID         int64      `json:"run_id"`
-	FilePath      string     `json:"file_path"`
-	FileType      string     `json:"file_type"` // "transcript" or "agent"
-	SizeBytes     int64      `json:"size_bytes"`
-	S3Key         *string    `json:"s3_key,omitempty"`
-	S3UploadedAt  *time.Time `json:"s3_uploaded_at,omitempty"`
+	ID           int64      `json:"id"`
+	RunID        int64      `json:"run_id"`
+	FilePath     string     `json:"file_path"`
+	FileType     string     `json:"file_type"` // "transcript" or "agent"
+	SizeBytes    int64      `json:"size_bytes"`
+	S3Key        *string    `json:"s3_key,omitempty"`
+	S3UploadedAt *time.Time `json:"s3_uploaded_at,omitempty"`
 }
 
 // SaveSessionRequest is the API request for saving a session
 type SaveSessionRequest struct {
-	SessionID      string      `json:"session_id"`
-	TranscriptPath string      `json:"transcript_path"`
-	CWD            string      `json:"cwd"`
-	Reason         string      `json:"reason"`
-	GitInfo        interface{} `json:"git_info,omitempty"`
+	SessionID      string       `json:"session_id"`
+	TranscriptPath string       `json:"transcript_path"`
+	CWD            string       `json:"cwd"`
+	Reason         string       `json:"reason"`
+	GitInfo        interface{}  `json:"git_info,omitempty"`
 	Files          []FileUpload `json:"files"`
 }
 

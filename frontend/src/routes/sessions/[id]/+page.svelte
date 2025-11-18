@@ -2,51 +2,9 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { fetchWithCSRF } from '$lib/csrf';
-
-	type FileDetail = {
-		id: number;
-		file_path: string;
-		file_type: string;
-		size_bytes: number;
-		s3_key?: string;
-		s3_uploaded_at?: string;
-	};
-
-	type GitInfo = {
-		repo_url?: string;
-		branch?: string;
-		commit_sha?: string;
-		commit_message?: string;
-		author?: string;
-		is_dirty?: boolean;
-	};
-
-	type RunDetail = {
-		id: number;
-		end_timestamp: string;
-		cwd: string;
-		reason: string;
-		transcript_path: string;
-		s3_uploaded: boolean;
-		git_info?: GitInfo;
-		files: FileDetail[];
-	};
-
-	type SessionDetail = {
-		session_id: string;
-		first_seen: string;
-		runs: RunDetail[];
-	};
-
-	type SessionShare = {
-		id: number;
-		share_token: string;
-		visibility: string;
-		invited_emails?: string[];
-		expires_at?: string;
-		created_at: string;
-		last_accessed_at?: string;
-	};
+	import type { SessionDetail, SessionShare } from '$lib/types';
+	import { formatDate } from '$lib/utils';
+	import RunCard from '$lib/components/RunCard.svelte';
 
 	let session: SessionDetail | null = null;
 	let loading = true;
@@ -98,19 +56,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	function formatDate(dateStr: string): string {
-		const date = new Date(dateStr);
-		return date.toLocaleString();
-	}
-
-	function formatBytes(bytes: number): string {
-		if (bytes === 0) return '0 B';
-		const k = 1024;
-		const sizes = ['B', 'KB', 'MB', 'GB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 	}
 
 	async function fetchShares() {
@@ -200,40 +145,6 @@
 		navigator.clipboard.writeText(text);
 		alert('Copied to clipboard!');
 	}
-
-	function getRepoWebURL(repoUrl?: string): string | null {
-		if (!repoUrl) return null;
-
-		// Convert SSH URLs to HTTPS
-		// git@github.com:user/repo.git -> https://github.com/user/repo
-		if (repoUrl.startsWith('git@github.com:')) {
-			return repoUrl.replace('git@github.com:', 'https://github.com/').replace(/\.git$/, '');
-		}
-		if (repoUrl.startsWith('git@gitlab.com:')) {
-			return repoUrl.replace('git@gitlab.com:', 'https://gitlab.com/').replace(/\.git$/, '');
-		}
-
-		// HTTPS URLs
-		if (repoUrl.startsWith('https://github.com/') || repoUrl.startsWith('https://gitlab.com/')) {
-			return repoUrl.replace(/\.git$/, '');
-		}
-
-		return null;
-	}
-
-	function getCommitURL(gitInfo?: GitInfo): string | null {
-		const repoUrl = getRepoWebURL(gitInfo?.repo_url);
-		if (!repoUrl || !gitInfo?.commit_sha) return null;
-
-		if (repoUrl.includes('github.com')) {
-			return `${repoUrl}/commit/${gitInfo.commit_sha}`;
-		}
-		if (repoUrl.includes('gitlab.com')) {
-			return `${repoUrl}/-/commit/${gitInfo.commit_sha}`;
-		}
-
-		return null;
-	}
 </script>
 
 <div class="container">
@@ -275,107 +186,7 @@
 		<h2>Runs</h2>
 
 		{#each session.runs as run, index}
-			<div class="run-card">
-				<div class="run-header">
-					<h3>Run #{index + 1}</h3>
-					<span class="timestamp">{formatDate(run.end_timestamp)}</span>
-				</div>
-
-				<div class="run-info">
-					<div class="info-row">
-						<span class="label">Working Directory:</span>
-						<code class="value">{run.cwd}</code>
-					</div>
-					<div class="info-row">
-						<span class="label">End Reason:</span>
-						<span class="value">{run.reason}</span>
-					</div>
-					<div class="info-row">
-						<span class="label">Transcript:</span>
-						<code class="value">{run.transcript_path}</code>
-					</div>
-					<div class="info-row">
-						<span class="label">Cloud Backup:</span>
-						<span class="value {run.s3_uploaded ? 'success' : 'muted'}">
-							{run.s3_uploaded ? '✓ Uploaded' : '✗ Not uploaded'}
-						</span>
-					</div>
-				</div>
-
-				{#if run.git_info}
-					<div class="git-info-section">
-						<h4>Git Information</h4>
-						<div class="git-info">
-							{#if run.git_info.repo_url}
-								<div class="info-row">
-									<span class="label">Repository:</span>
-									{#if getRepoWebURL(run.git_info.repo_url)}
-										<a href={getRepoWebURL(run.git_info.repo_url)} target="_blank" rel="noopener" class="value link">
-											{run.git_info.repo_url}
-										</a>
-									{:else}
-										<code class="value">{run.git_info.repo_url}</code>
-									{/if}
-								</div>
-							{/if}
-
-							{#if run.git_info.branch}
-								<div class="info-row">
-									<span class="label">Branch:</span>
-									<code class="value">{run.git_info.branch}</code>
-									{#if run.git_info.is_dirty}
-										<span class="dirty-badge">⚠ Uncommitted changes</span>
-									{/if}
-								</div>
-							{/if}
-
-							{#if run.git_info.commit_sha}
-								<div class="info-row">
-									<span class="label">Commit:</span>
-									{#if getCommitURL(run.git_info)}
-										<a href={getCommitURL(run.git_info)} target="_blank" rel="noopener" class="value link">
-											<code>{run.git_info.commit_sha.substring(0, 7)}</code>
-										</a>
-									{:else}
-										<code class="value">{run.git_info.commit_sha.substring(0, 7)}</code>
-									{/if}
-								</div>
-							{/if}
-
-							{#if run.git_info.commit_message}
-								<div class="info-row">
-									<span class="label">Message:</span>
-									<span class="value">{run.git_info.commit_message}</span>
-								</div>
-							{/if}
-
-							{#if run.git_info.author}
-								<div class="info-row">
-									<span class="label">Author:</span>
-									<span class="value">{run.git_info.author}</span>
-								</div>
-							{/if}
-						</div>
-					</div>
-				{/if}
-
-				{#if run.files && run.files.length > 0}
-					<div class="files-section">
-						<h4>Files ({run.files.length})</h4>
-						<div class="files-list">
-							{#each run.files as file}
-								<div class="file-item">
-									<div class="file-info">
-										<span class="file-type {file.file_type}">{file.file_type}</span>
-										<code class="file-path">{file.file_path}</code>
-									</div>
-									<span class="file-size">{formatBytes(file.size_bytes)}</span>
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
+			<RunCard {run} {index} />
 		{/each}
 	{/if}
 </div>
@@ -389,8 +200,8 @@
 				<button class="close-btn" on:click={() => (showShareDialog = false)}>×</button>
 			</div>
 
-			{#if createdShareURL}
-				<div class="modal-body">
+			<div class="modal-body">
+				{#if createdShareURL}
 					<div class="success-message">
 						<h3>✓ Share Link Created</h3>
 						<div class="share-url-box">
@@ -400,41 +211,7 @@
 							</button>
 						</div>
 					</div>
-
-					<div class="shares-list">
-						<h3>Active Shares</h3>
-						{#if loadingShares}
-							<p>Loading...</p>
-						{:else if shares.length === 0}
-							<p class="empty">No active shares</p>
-						{:else}
-							{#each shares as share}
-								<div class="share-item">
-									<div class="share-info">
-										<span class="visibility-badge {share.visibility}">
-											{share.visibility}
-										</span>
-										{#if share.visibility === 'private' && share.invited_emails}
-											<span class="invited">
-												{share.invited_emails.join(', ')}
-											</span>
-										{/if}
-										{#if share.expires_at}
-											<span class="expires">Expires: {formatDate(share.expires_at)}</span>
-										{:else}
-											<span class="never-expires">Never expires</span>
-										{/if}
-									</div>
-									<button class="btn btn-danger btn-sm" on:click={() => revokeShare(share.share_token)}>
-										Revoke
-									</button>
-								</div>
-							{/each}
-						{/if}
-					</div>
-				</div>
-			{:else}
-				<div class="modal-body">
+				{:else}
 					<div class="form-group">
 						<label>
 							<input
@@ -495,8 +272,40 @@
 							Cancel
 						</button>
 					</div>
+				{/if}
+
+				<div class="shares-list">
+					<h3>Active Shares</h3>
+					{#if loadingShares}
+						<p>Loading...</p>
+					{:else if shares.length === 0}
+						<p class="empty">No active shares</p>
+					{:else}
+						{#each shares as share}
+							<div class="share-item">
+								<div class="share-info">
+									<span class="visibility-badge {share.visibility}">
+										{share.visibility}
+									</span>
+									{#if share.visibility === 'private' && share.invited_emails}
+										<span class="invited">
+											{share.invited_emails.join(', ')}
+										</span>
+									{/if}
+									{#if share.expires_at}
+										<span class="expires">Expires: {formatDate(share.expires_at)}</span>
+									{:else}
+										<span class="never-expires">Never expires</span>
+									{/if}
+								</div>
+								<button class="btn btn-danger btn-sm" on:click={() => revokeShare(share.share_token)}>
+									Revoke
+								</button>
+							</div>
+						{/each}
+					{/if}
 				</div>
-			{/if}
+			</div>
 		</div>
 	</div>
 {/if}

@@ -1,34 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import type { SessionDetail } from '$lib/types';
+	import { formatDate } from '$lib/utils';
+	import RunCard from '$lib/components/RunCard.svelte';
 
 	const sessionId = $page.params.sessionId;
 	const shareToken = $page.params.token;
-
-	type FileDetail = {
-		id: number;
-		file_path: string;
-		file_type: string;
-		size_bytes: number;
-		s3_key?: string;
-		s3_uploaded_at?: string;
-	};
-
-	type RunDetail = {
-		id: number;
-		end_timestamp: string;
-		cwd: string;
-		reason: string;
-		transcript_path: string;
-		s3_uploaded: boolean;
-		files: FileDetail[];
-	};
-
-	type SessionDetail = {
-		session_id: string;
-		first_seen: string;
-		runs: RunDetail[];
-	};
 
 	let session: SessionDetail | null = null;
 	let loading = true;
@@ -71,18 +49,6 @@
 			loading = false;
 		}
 	});
-
-	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleString();
-	}
-
-	function formatBytes(bytes: number): string {
-		if (bytes === 0) return '0 B';
-		const k = 1024;
-		const sizes = ['B', 'KB', 'MB', 'GB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-	}
 </script>
 
 <div class="container">
@@ -145,65 +111,20 @@
 		<h2>Runs</h2>
 
 		{#each session.runs as run, index}
-			<div class="run-card">
-				<div class="run-header">
-					<h3>Run #{index + 1}</h3>
-					<span class="timestamp">{formatDate(run.end_timestamp)}</span>
-				</div>
-
-				<div class="run-info">
-					<div class="info-row">
-						<span class="label">Working Directory:</span>
-						<code class="value">{run.cwd}</code>
-					</div>
-					<div class="info-row">
-						<span class="label">End Reason:</span>
-						<span class="value">{run.reason}</span>
-					</div>
-					<div class="info-row">
-						<span class="label">Transcript:</span>
-						<code class="value">{run.transcript_path}</code>
-					</div>
-					<div class="info-row">
-						<span class="label">Cloud Backup:</span>
-						<span class="value {run.s3_uploaded ? 'success' : 'muted'}">
-							{run.s3_uploaded ? '✓ Uploaded' : '✗ Not uploaded'}
-						</span>
-					</div>
-				</div>
-
-				{#if run.files && run.files.length > 0}
-					<div class="files-section">
-						<h4>Files ({run.files.length})</h4>
-						<div class="files-list">
-							{#each run.files as file}
-								<div class="file-item">
-									<div class="file-info">
-										<span class="file-type {file.file_type}">{file.file_type}</span>
-										<code class="file-path">{file.file_path}</code>
-									</div>
-									<span class="file-size">{formatBytes(file.size_bytes)}</span>
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
+			<RunCard {run} {index} showGitInfo={false} />
 		{/each}
 	{/if}
 </div>
 
 <style>
+	/* Override container width for shared view */
 	.container {
 		max-width: 1200px;
-		margin: 0 auto;
-		padding: 2rem;
 	}
 
+	/* Override loading style for this page */
 	.loading {
-		text-align: center;
 		padding: 3rem;
-		color: #666;
 		font-size: 1.1rem;
 	}
 
@@ -304,134 +225,5 @@
 		font-size: 1.5rem;
 		color: #222;
 		margin: 2rem 0 1rem 0;
-	}
-
-	.run-card {
-		background: white;
-		border-radius: 8px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		padding: 1.5rem;
-		margin-bottom: 1.5rem;
-	}
-
-	.run-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1rem;
-		padding-bottom: 1rem;
-		border-bottom: 1px solid #dee2e6;
-	}
-
-	.run-header h3 {
-		font-size: 1.25rem;
-		color: #222;
-		margin: 0;
-	}
-
-	.timestamp {
-		color: #6c757d;
-		font-size: 0.9rem;
-	}
-
-	.run-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		margin-bottom: 1rem;
-	}
-
-	.info-row {
-		display: flex;
-		gap: 1rem;
-	}
-
-	.info-row .label {
-		font-weight: 600;
-		color: #495057;
-		min-width: 150px;
-	}
-
-	.info-row .value {
-		color: #212529;
-	}
-
-	.info-row code.value {
-		background: #f8f9fa;
-		padding: 0.25rem 0.5rem;
-		border-radius: 4px;
-		font-size: 0.9rem;
-	}
-
-	.success {
-		color: #28a745;
-	}
-
-	.muted {
-		color: #6c757d;
-	}
-
-	.files-section {
-		margin-top: 1.5rem;
-		padding-top: 1.5rem;
-		border-top: 1px solid #dee2e6;
-	}
-
-	.files-section h4 {
-		font-size: 1rem;
-		color: #495057;
-		margin: 0 0 1rem 0;
-	}
-
-	.files-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.file-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.75rem;
-		background: #f8f9fa;
-		border-radius: 6px;
-	}
-
-	.file-info {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		flex: 1;
-	}
-
-	.file-type {
-		font-size: 0.75rem;
-		font-weight: 600;
-		padding: 0.25rem 0.5rem;
-		border-radius: 4px;
-		text-transform: uppercase;
-	}
-
-	.file-type.transcript {
-		background: #d1ecf1;
-		color: #0c5460;
-	}
-
-	.file-type.agent {
-		background: #d4edda;
-		color: #155724;
-	}
-
-	.file-path {
-		font-family: monospace;
-		font-size: 0.85rem;
-		color: #495057;
-	}
-
-	.file-size {
-		color: #6c757d;
-		font-size: 0.85rem;
-		white-space: nowrap;
 	}
 </style>

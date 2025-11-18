@@ -14,14 +14,14 @@ import (
 
 // Validation limits for session uploads
 const (
-	MaxRequestBodySize   = 50 * 1024 * 1024  // 50MB total request size
-	MaxFileSize          = 10 * 1024 * 1024  // 10MB per file
-	MaxFiles             = 100               // Maximum number of files per session
-	MaxSessionIDLength   = 256               // Max session ID length
-	MaxPathLength        = 1024              // Max file path length
-	MaxReasonLength      = 10000             // Max reason text length
-	MaxCWDLength         = 4096              // Max current working directory length
-	MinSessionIDLength   = 1                 // Min session ID length
+	MaxRequestBodySize = 50 * 1024 * 1024 // 50MB total request size
+	MaxFileSize        = 10 * 1024 * 1024 // 10MB per file
+	MaxFiles           = 100              // Maximum number of files per session
+	MaxSessionIDLength = 256              // Max session ID length
+	MaxPathLength      = 1024             // Max file path length
+	MaxReasonLength    = 10000            // Max reason text length
+	MaxCWDLength       = 4096             // Max current working directory length
+	MinSessionIDLength = 1                // Min session ID length
 )
 
 // handleSaveSession processes session upload requests

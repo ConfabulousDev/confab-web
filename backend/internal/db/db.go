@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/santaclaude2025/confab/backend/internal/models"
 	_ "github.com/lib/pq"
+	"github.com/santaclaude2025/confab/backend/internal/models"
 )
 
 // DB wraps a PostgreSQL database connection
@@ -457,10 +457,10 @@ func (db *DB) CleanupExpiredSessions(ctx context.Context) (int64, error) {
 
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
-	SessionID       string    `json:"session_id"`
-	FirstSeen       time.Time `json:"first_seen"`
-	RunCount        int       `json:"run_count"`
-	LastRunTime     time.Time `json:"last_run_time"`
+	SessionID   string    `json:"session_id"`
+	FirstSeen   time.Time `json:"first_seen"`
+	RunCount    int       `json:"run_count"`
+	LastRunTime time.Time `json:"last_run_time"`
 }
 
 // ListUserSessions returns all sessions for a user
@@ -498,20 +498,20 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 
 // SessionDetail represents detailed session information
 type SessionDetail struct {
-	SessionID string    `json:"session_id"`
-	FirstSeen time.Time `json:"first_seen"`
+	SessionID string      `json:"session_id"`
+	FirstSeen time.Time   `json:"first_seen"`
 	Runs      []RunDetail `json:"runs"`
 }
 
 // RunDetail represents a run with its files
 type RunDetail struct {
-	ID             int64       `json:"id"`
-	EndTimestamp   time.Time   `json:"end_timestamp"`
-	CWD            string      `json:"cwd"`
-	Reason         string      `json:"reason"`
-	TranscriptPath string      `json:"transcript_path"`
-	S3Uploaded     bool        `json:"s3_uploaded"`
-	GitInfo        interface{} `json:"git_info,omitempty"`
+	ID             int64        `json:"id"`
+	EndTimestamp   time.Time    `json:"end_timestamp"`
+	CWD            string       `json:"cwd"`
+	Reason         string       `json:"reason"`
+	TranscriptPath string       `json:"transcript_path"`
+	S3Uploaded     bool         `json:"s3_uploaded"`
+	GitInfo        interface{}  `json:"git_info,omitempty"`
 	Files          []FileDetail `json:"files"`
 }
 
