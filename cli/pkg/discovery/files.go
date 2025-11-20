@@ -1,16 +1,15 @@
 package discovery
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/santaclaude2025/confab/pkg/types"
 )
-
-var agentIDPattern = regexp.MustCompile(`agent-([a-f0-9]{8})`)
 
 // DiscoverSessionFiles finds all files associated with a session
 func DiscoverSessionFiles(hookInput *types.HookInput) ([]types.SessionFile, error) {
@@ -65,33 +64,90 @@ func DiscoverSessionFiles(hookInput *types.HookInput) ([]types.SessionFile, erro
 }
 
 // findAgentReferences parses a transcript file for agent ID references
-// Only matches agent IDs in toolUseResult.agentId fields to avoid false positives
+// Properly parses JSONL and looks for toolUseResult.agentId fields
 func findAgentReferences(transcriptPath string) ([]string, error) {
-	content, err := os.ReadFile(transcriptPath)
+	file, err := os.Open(transcriptPath)
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
-	// More precise pattern: look for "agentId":"agent-XXXXXXXX" in toolUseResult
-	// This ensures we only match agents that were actually spawned, not just mentioned
-	agentRefPattern := regexp.MustCompile(`"agentId"\s*:\s*"agent-([a-f0-9]{8})"`)
-	matches := agentRefPattern.FindAllStringSubmatch(string(content), -1)
-
-	// Use map to deduplicate agent IDs
 	seen := make(map[string]bool)
 	var agentIDs []string
 
-	for _, match := range matches {
-		if len(match) > 1 {
-			agentID := match[1] // Capture group (just the hex part)
-			if !seen[agentID] {
-				seen[agentID] = true
-				agentIDs = append(agentIDs, agentID)
+	// Parse JSONL line by line
+	scanner := bufio.NewScanner(file)
+	// Increase buffer size for long transcript lines (default is 64KB, use 10MB)
+	buf := make([]byte, 0, 10*1024*1024)
+	scanner.Buffer(buf, 10*1024*1024)
+	for scanner.Scan() {
+		var message map[string]interface{}
+		if err := json.Unmarshal(scanner.Bytes(), &message); err != nil {
+			// Skip malformed lines
+			continue
+		}
+
+		// Check if this is a user message (tool results)
+		msgType, ok := message["type"].(string)
+		if !ok || msgType != "user" {
+			continue
+		}
+
+		// Check for toolUseResult.agentId at ROOT level (not inside message)
+		if toolUseResult, ok := message["toolUseResult"].(map[string]interface{}); ok {
+			if agentID, ok := toolUseResult["agentId"].(string); ok {
+				// agentId is just the hex value (e.g., "96f3c489")
+				// Validate it's 8 hex characters
+				if len(agentID) == 8 && isHexString(agentID) {
+					if !seen[agentID] {
+						seen[agentID] = true
+						agentIDs = append(agentIDs, agentID)
+					}
+				}
+			}
+		}
+
+		// Also check in content blocks inside the nested message object
+		if nestedMessage, ok := message["message"].(map[string]interface{}); ok {
+			if content, ok := nestedMessage["content"].([]interface{}); ok {
+				for _, block := range content {
+					if blockMap, ok := block.(map[string]interface{}); ok {
+						if blockMap["type"] == "tool_result" {
+							// Check content for toolUseResult.agentId
+							if resultContent, ok := blockMap["content"].(map[string]interface{}); ok {
+								if toolUseResult, ok := resultContent["toolUseResult"].(map[string]interface{}); ok {
+									if agentID, ok := toolUseResult["agentId"].(string); ok {
+										if len(agentID) == 8 && isHexString(agentID) {
+											if !seen[agentID] {
+												seen[agentID] = true
+												agentIDs = append(agentIDs, agentID)
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
 	return agentIDs, nil
+}
+
+// isHexString checks if a string contains only hexadecimal characters
+func isHexString(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // expandPath expands ~ to home directory
