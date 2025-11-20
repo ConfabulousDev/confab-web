@@ -22,7 +22,7 @@ type HookResponse struct {
 // SessionFile represents a file discovered for a session
 type SessionFile struct {
 	Path      string
-	Type      string // "transcript" | "agent"
+	Type      string // "transcript" | "agent" | "todo"
 	SizeBytes int64
 }
 

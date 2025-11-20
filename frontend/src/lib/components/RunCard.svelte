@@ -1,10 +1,16 @@
 <script lang="ts">
-	import type { RunDetail, GitInfo } from '$lib/types';
+	import type { RunDetail, GitInfo, TodoItem } from '$lib/types';
 	import { formatDate, formatBytes } from '$lib/utils';
+	import { onMount } from 'svelte';
+	import TranscriptViewer from './transcript/TranscriptViewer.svelte';
 
 	export let run: RunDetail;
 	export let index: number;
 	export let showGitInfo = true;
+
+	let todos: { agent_id: string; items: TodoItem[] }[] = [];
+	let loadingTodos = false;
+	let showTranscript = false;
 
 	function getRepoWebURL(repoUrl?: string): string | null {
 		if (!repoUrl) return null;
@@ -38,12 +44,64 @@
 
 		return null;
 	}
+
+	// Extract agent ID from todo file path
+	// Format: {sessionID}-agent-{agentID}.json
+	function extractAgentID(filePath: string): string {
+		const fileName = filePath.split('/').pop() || '';
+		const match = fileName.match(/-agent-([^.]+)\.json$/);
+		return match ? match[1] : 'unknown';
+	}
+
+	async function loadTodos() {
+		const todoFiles = run.files.filter((f) => f.file_type === 'todo');
+		if (todoFiles.length === 0) return;
+
+		loadingTodos = true;
+		const loadedTodos: { agent_id: string; items: TodoItem[] }[] = [];
+
+		for (const file of todoFiles) {
+			try {
+				// Fetch todo file content from backend
+				const response = await fetch(`/api/v1/runs/${run.id}/files/${file.id}/content`, {
+					credentials: 'include'
+				});
+
+				if (!response.ok) continue;
+
+				const content = await response.text();
+				const items: TodoItem[] = JSON.parse(content);
+
+				// Only add if there are actual todos
+				if (items.length > 0) {
+					loadedTodos.push({
+						agent_id: extractAgentID(file.file_path),
+						items
+					});
+				}
+			} catch (err) {
+				console.error('Failed to load todo file:', file.file_path, err);
+			}
+		}
+
+		todos = loadedTodos;
+		loadingTodos = false;
+	}
+
+	onMount(() => {
+		loadTodos();
+	});
 </script>
 
 <div class="run-card">
 	<div class="run-header">
-		<h3>Run #{index + 1}</h3>
-		<span class="timestamp">{formatDate(run.end_timestamp)}</span>
+		<div class="header-left">
+			<h3>Run #{index + 1}</h3>
+			<span class="timestamp">{formatDate(run.end_timestamp)}</span>
+		</div>
+		<button class="view-transcript-btn" on:click={() => (showTranscript = !showTranscript)}>
+			{showTranscript ? 'Hide' : 'View'} Transcript
+		</button>
 	</div>
 
 	<div class="run-info">
@@ -150,6 +208,39 @@
 			</div>
 		</div>
 	{/if}
+
+	{#if todos.length > 0}
+		<div class="todos-section">
+			<h4>Todo Lists ({todos.length})</h4>
+			{#each todos as todoGroup}
+				<div class="todo-group">
+					<h5>Agent: {todoGroup.agent_id}</h5>
+					<div class="todo-list">
+						{#each todoGroup.items as item}
+							<div class="todo-item status-{item.status}">
+								<span class="todo-status-icon">
+									{#if item.status === 'completed'}
+										✓
+									{:else if item.status === 'in_progress'}
+										⟳
+									{:else}
+										○
+									{/if}
+								</span>
+								<span class="todo-content">{item.content}</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
+	{#if showTranscript}
+		<div class="transcript-section">
+			<TranscriptViewer {run} />
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -168,6 +259,28 @@
 		margin-bottom: 1rem;
 		padding-bottom: 1rem;
 		border-bottom: 1px solid #dee2e6;
+	}
+
+	.header-left {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.view-transcript-btn {
+		padding: 0.5rem 1rem;
+		background: #007bff;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		font-size: 0.9rem;
+		font-weight: 500;
+		transition: background 0.2s;
+	}
+
+	.view-transcript-btn:hover {
+		background: #0056b3;
 	}
 
 	.run-header h3 {
@@ -306,6 +419,11 @@
 		color: #155724;
 	}
 
+	.file-type.todo {
+		background: #fff3cd;
+		color: #856404;
+	}
+
 	.file-path {
 		font-family: monospace;
 		font-size: 0.85rem;
@@ -316,5 +434,99 @@
 		color: #6c757d;
 		font-size: 0.85rem;
 		white-space: nowrap;
+	}
+
+	.todos-section {
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid #dee2e6;
+	}
+
+	.todos-section h4 {
+		font-size: 1rem;
+		color: #495057;
+		margin: 0 0 1rem 0;
+	}
+
+	.todo-group {
+		margin-bottom: 1.5rem;
+	}
+
+	.todo-group:last-child {
+		margin-bottom: 0;
+	}
+
+	.todo-group h5 {
+		font-size: 0.9rem;
+		color: #6c757d;
+		margin: 0 0 0.75rem 0;
+		font-weight: 600;
+	}
+
+	.todo-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.todo-item {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		background: #f8f9fa;
+		border-radius: 6px;
+		border-left: 3px solid transparent;
+	}
+
+	.todo-item.status-pending {
+		border-left-color: #6c757d;
+	}
+
+	.todo-item.status-in_progress {
+		border-left-color: #007bff;
+		background: #e7f3ff;
+	}
+
+	.todo-item.status-completed {
+		border-left-color: #28a745;
+		background: #e8f5e9;
+	}
+
+	.todo-status-icon {
+		font-size: 1rem;
+		line-height: 1.5;
+		min-width: 1.25rem;
+		text-align: center;
+	}
+
+	.todo-item.status-pending .todo-status-icon {
+		color: #6c757d;
+	}
+
+	.todo-item.status-in_progress .todo-status-icon {
+		color: #007bff;
+	}
+
+	.todo-item.status-completed .todo-status-icon {
+		color: #28a745;
+	}
+
+	.todo-content {
+		color: #212529;
+		font-size: 0.9rem;
+		line-height: 1.5;
+		flex: 1;
+	}
+
+	.todo-item.status-completed .todo-content {
+		color: #6c757d;
+		text-decoration: line-through;
+	}
+
+	.transcript-section {
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid #dee2e6;
 	}
 </style>

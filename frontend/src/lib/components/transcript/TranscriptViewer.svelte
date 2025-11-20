@@ -1,0 +1,265 @@
+<script lang="ts">
+	import type { RunDetail, TranscriptLine, AgentNode } from '$lib/types';
+	import { onMount } from 'svelte';
+	import { fetchParsedTranscript } from '$lib/services/transcriptService';
+	import { buildAgentTree } from '$lib/services/agentTreeBuilder';
+	import MessageList from './MessageList.svelte';
+
+	export let run: RunDetail;
+
+	let loading = true;
+	let error: string | null = null;
+	let messages: TranscriptLine[] = [];
+	let agents: AgentNode[] = [];
+	let expanded = true;
+	let showThinking = true;
+
+	// Expand/collapse all controls
+	let expandAllAgents = true;
+	let expandAllTools = false;
+	let expandAllResults = true;
+
+	onMount(async () => {
+		await loadTranscript();
+	});
+
+	async function loadTranscript() {
+		loading = true;
+		error = null;
+
+		try {
+			// Find transcript file
+			const transcriptFile = run.files.find((f) => f.file_type === 'transcript');
+			if (!transcriptFile) {
+				throw new Error('No transcript file found');
+			}
+
+			// Fetch and parse transcript
+			const parsed = await fetchParsedTranscript(
+				run.id,
+				transcriptFile.id,
+				run.transcript_path // session ID
+			);
+
+			messages = parsed.messages;
+
+			// Build agent tree
+			agents = await buildAgentTree(run.id, messages, run.files);
+
+			console.log('Loaded transcript:', {
+				messageCount: messages.length,
+				agentCount: agents.length
+			});
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load transcript';
+			console.error('Failed to load transcript:', e);
+		} finally {
+			loading = false;
+		}
+	}
+
+	function toggleExpanded() {
+		expanded = !expanded;
+	}
+
+	function toggleExpandAllAgents() {
+		expandAllAgents = !expandAllAgents;
+	}
+
+	function toggleExpandAllTools() {
+		expandAllTools = !expandAllTools;
+	}
+
+	function toggleExpandAllResults() {
+		expandAllResults = !expandAllResults;
+	}
+</script>
+
+<div class="transcript-viewer">
+	<div class="transcript-header">
+		<h3>Transcript</h3>
+		<div class="header-controls">
+			<button
+				class="toggle-btn thinking-toggle"
+				class:active={showThinking}
+				on:click={() => (showThinking = !showThinking)}
+				title={showThinking ? 'Hide thinking blocks' : 'Show thinking blocks'}
+			>
+				💭 {showThinking ? 'Hide' : 'Show'} Thinking
+			</button>
+			<button
+				class="toggle-btn"
+				on:click={toggleExpandAllAgents}
+				title={expandAllAgents ? 'Collapse all agents' : 'Expand all agents'}
+			>
+				🤖 {expandAllAgents ? 'Collapse' : 'Expand'} Agents
+			</button>
+			<button
+				class="toggle-btn"
+				on:click={toggleExpandAllTools}
+				title={expandAllTools ? 'Collapse all tool blocks' : 'Expand all tool blocks'}
+			>
+				🛠️ {expandAllTools ? 'Collapse' : 'Expand'} Tools
+			</button>
+			<button
+				class="toggle-btn"
+				on:click={toggleExpandAllResults}
+				title={expandAllResults ? 'Collapse all results' : 'Expand all results'}
+			>
+				✅ {expandAllResults ? 'Collapse' : 'Expand'} Results
+			</button>
+			<button class="toggle-btn" on:click={toggleExpanded}>
+				{expanded ? 'Collapse' : 'Expand'} All
+			</button>
+		</div>
+	</div>
+
+	{#if loading}
+		<div class="loading">Loading transcript...</div>
+	{:else if error}
+		<div class="error">
+			<strong>Error:</strong>
+			{error}
+		</div>
+	{:else if expanded}
+		<div class="transcript-content">
+			<div class="transcript-meta">
+				<span>{messages.length} messages</span>
+				{#if agents.length > 0}
+					<span>{agents.length} agent{agents.length === 1 ? '' : 's'}</span>
+				{/if}
+			</div>
+
+			<MessageList
+				{messages}
+				{agents}
+				{run}
+				{showThinking}
+				{expandAllAgents}
+				{expandAllTools}
+				{expandAllResults}
+			/>
+		</div>
+	{/if}
+</div>
+
+<style>
+	.transcript-viewer {
+		background: white;
+		border: 1px solid #dee2e6;
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	.transcript-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1rem;
+		background: #f8f9fa;
+		border-bottom: 1px solid #dee2e6;
+	}
+
+	.transcript-header h3 {
+		margin: 0;
+		font-size: 1.1rem;
+		color: #212529;
+	}
+
+	.header-controls {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.toggle-btn {
+		padding: 0.5rem 1rem;
+		background: white;
+		border: 1px solid #dee2e6;
+		border-radius: 4px;
+		cursor: pointer;
+		font-size: 0.9rem;
+		color: #495057;
+		transition: all 0.2s;
+		white-space: nowrap;
+	}
+
+	/* Mobile responsive styles */
+	@media (max-width: 768px) {
+		.transcript-header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.75rem;
+		}
+
+		.transcript-header h3 {
+			font-size: 1rem;
+		}
+
+		.header-controls {
+			width: 100%;
+			justify-content: flex-start;
+		}
+
+		.toggle-btn {
+			padding: 0.4rem 0.75rem;
+			font-size: 0.85rem;
+			flex: 0 0 auto;
+		}
+	}
+
+	@media (max-width: 480px) {
+		.toggle-btn {
+			padding: 0.35rem 0.6rem;
+			font-size: 0.8rem;
+		}
+
+		.transcript-header {
+			padding: 0.75rem;
+		}
+	}
+
+	.toggle-btn:hover {
+		background: #e9ecef;
+	}
+
+	.thinking-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.thinking-toggle.active {
+		background: #e7f3ff;
+		border-color: #007bff;
+		color: #007bff;
+	}
+
+	.thinking-toggle.active:hover {
+		background: #cce5ff;
+	}
+
+	.loading,
+	.error {
+		padding: 2rem;
+		text-align: center;
+	}
+
+	.error {
+		color: #dc3545;
+	}
+
+	.transcript-content {
+		padding: 1rem;
+	}
+
+	.transcript-meta {
+		display: flex;
+		gap: 1rem;
+		padding: 0.5rem 0 1rem 0;
+		font-size: 0.85rem;
+		color: #6c757d;
+		border-bottom: 1px solid #dee2e6;
+		margin-bottom: 1rem;
+	}
+</style>

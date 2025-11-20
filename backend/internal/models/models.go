@@ -51,12 +51,12 @@ type Run struct {
 	S3Uploaded     bool      `json:"s3_uploaded"`
 }
 
-// File represents a session file (transcript or agent sidechain)
+// File represents a session file (transcript, agent sidechain, or todos)
 type File struct {
 	ID           int64      `json:"id"`
 	RunID        int64      `json:"run_id"`
 	FilePath     string     `json:"file_path"`
-	FileType     string     `json:"file_type"` // "transcript" or "agent"
+	FileType     string     `json:"file_type"` // "transcript", "agent", or "todo"
 	SizeBytes    int64      `json:"size_bytes"`
 	S3Key        *string    `json:"s3_key,omitempty"`
 	S3UploadedAt *time.Time `json:"s3_uploaded_at,omitempty"`

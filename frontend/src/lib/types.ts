@@ -1,5 +1,8 @@
 // Shared TypeScript types for Confab frontend
 
+// Re-export transcript types
+export * from './types/transcript';
+
 // File detail within a run
 export type FileDetail = {
 	id: number;
@@ -63,4 +66,11 @@ export type APIKey = {
 	id: number;
 	name: string;
 	created_at: string;
+};
+
+// Todo item from Claude Code todo list
+export type TodoItem = {
+	content: string;
+	status: 'pending' | 'in_progress' | 'completed';
+	activeForm: string;
 };

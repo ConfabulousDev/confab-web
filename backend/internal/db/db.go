@@ -862,3 +862,33 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 
 	return &session, nil
 }
+
+// GetFileByID retrieves a file by ID with ownership verification
+func (db *DB) GetFileByID(ctx context.Context, fileID int64, userID int64) (*FileDetail, error) {
+	// Join through runs and sessions to verify ownership
+	query := `
+		SELECT f.id, f.file_path, f.file_type, f.size_bytes, f.s3_key, f.s3_uploaded_at
+		FROM files f
+		JOIN runs r ON f.run_id = r.id
+		JOIN sessions s ON r.session_id = s.session_id
+		WHERE f.id = $1 AND s.user_id = $2
+	`
+
+	var file FileDetail
+	err := db.conn.QueryRowContext(ctx, query, fileID, userID).Scan(
+		&file.ID,
+		&file.FilePath,
+		&file.FileType,
+		&file.SizeBytes,
+		&file.S3Key,
+		&file.S3UploadedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("file not found or unauthorized")
+		}
+		return nil, fmt.Errorf("failed to get file: %w", err)
+	}
+
+	return &file, nil
+}

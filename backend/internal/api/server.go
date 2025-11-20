@@ -183,6 +183,9 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions", HandleListSessions(s.db))
 			r.Get("/sessions/{sessionId}", HandleGetSession(s.db))
 
+			// File content
+			r.Get("/runs/{runId}/files/{fileId}/content", HandleGetFileContent(s.db, s.storage))
+
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
