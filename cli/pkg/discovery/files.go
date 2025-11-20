@@ -55,17 +55,27 @@ func DiscoverSessionFiles(hookInput *types.HookInput) ([]types.SessionFile, erro
 		}
 	}
 
+	// 4. Add todo files for session and agents
+	// Main session todo: {sessionID}-agent-{sessionID}.json
+	// Agent todos: {sessionID}-agent-{agentID}.json
+	todoFiles := findTodoFiles(hookInput.SessionID, agentIDs)
+	files = append(files, todoFiles...)
+
 	return files, nil
 }
 
 // findAgentReferences parses a transcript file for agent ID references
+// Only matches agent IDs in toolUseResult.agentId fields to avoid false positives
 func findAgentReferences(transcriptPath string) ([]string, error) {
 	content, err := os.ReadFile(transcriptPath)
 	if err != nil {
 		return nil, err
 	}
 
-	matches := agentIDPattern.FindAllStringSubmatch(string(content), -1)
+	// More precise pattern: look for "agentId":"agent-XXXXXXXX" in toolUseResult
+	// This ensures we only match agents that were actually spawned, not just mentioned
+	agentRefPattern := regexp.MustCompile(`"agentId"\s*:\s*"agent-([a-f0-9]{8})"`)
+	matches := agentRefPattern.FindAllStringSubmatch(string(content), -1)
 
 	// Use map to deduplicate agent IDs
 	seen := make(map[string]bool)
@@ -73,7 +83,7 @@ func findAgentReferences(transcriptPath string) ([]string, error) {
 
 	for _, match := range matches {
 		if len(match) > 1 {
-			agentID := match[1] // Capture group
+			agentID := match[1] // Capture group (just the hex part)
 			if !seen[agentID] {
 				seen[agentID] = true
 				agentIDs = append(agentIDs, agentID)
@@ -93,4 +103,41 @@ func expandPath(path string) string {
 		}
 	}
 	return path
+}
+
+// findTodoFiles finds todo files for the session and its agents
+// Todos are stored in ~/.claude/todos/ as {sessionID}-agent-{agentID}.json
+func findTodoFiles(sessionID string, agentIDs []string) []types.SessionFile {
+	var files []types.SessionFile
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// Can't find home directory, skip todos
+		return files
+	}
+
+	todoDir := filepath.Join(home, ".claude", "todos")
+
+	// Check if todos directory exists
+	if _, err := os.Stat(todoDir); os.IsNotExist(err) {
+		return files
+	}
+
+	// All agent IDs to check (including main session which uses sessionID as agentID)
+	allAgentIDs := append([]string{sessionID}, agentIDs...)
+
+	for _, agentID := range allAgentIDs {
+		todoFileName := fmt.Sprintf("%s-agent-%s.json", sessionID, agentID)
+		todoPath := filepath.Join(todoDir, todoFileName)
+
+		if todoInfo, err := os.Stat(todoPath); err == nil {
+			files = append(files, types.SessionFile{
+				Path:      todoPath,
+				Type:      "todo",
+				SizeBytes: todoInfo.Size(),
+			})
+		}
+	}
+
+	return files
 }
