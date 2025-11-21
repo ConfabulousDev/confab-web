@@ -111,7 +111,7 @@
 		<h2>Runs</h2>
 
 		{#each session.runs as run, index}
-			<RunCard {run} {index} showGitInfo={false} />
+			<RunCard {run} {index} showGitInfo={false} {shareToken} sessionId={session.session_id} />
 		{/each}
 	{/if}
 </div>

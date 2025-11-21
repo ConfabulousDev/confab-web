@@ -8,13 +8,32 @@ import type { TranscriptLine, ParsedTranscript } from '$lib/types/transcript';
 const transcriptCache = new Map<string, TranscriptLine[]>();
 
 /**
+ * Options for fetching transcript content
+ */
+export interface FetchOptions {
+	sessionId?: string;
+	shareToken?: string;
+}
+
+/**
  * Fetch transcript content from backend API
+ * Supports both authenticated and shared (public) access
  */
 export async function fetchTranscriptContent(
 	runId: number,
-	fileId: number
+	fileId: number,
+	options?: FetchOptions
 ): Promise<string> {
-	const response = await fetch(`/api/v1/runs/${runId}/files/${fileId}/content`, {
+	let url: string;
+
+	// Use shared endpoint if share token is provided
+	if (options?.shareToken && options?.sessionId) {
+		url = `/api/v1/sessions/${options.sessionId}/shared/${options.shareToken}/files/${fileId}/content`;
+	} else {
+		url = `/api/v1/runs/${runId}/files/${fileId}/content`;
+	}
+
+	const response = await fetch(url, {
 		credentials: 'include'
 	});
 
@@ -63,7 +82,7 @@ export function parseJSONL(jsonl: string): TranscriptLine[] {
 export async function fetchTranscript(
 	runId: number,
 	fileId: number,
-	options: { skipCache?: boolean } = {}
+	options: { skipCache?: boolean; sessionId?: string; shareToken?: string } = {}
 ): Promise<TranscriptLine[]> {
 	const cacheKey = `${runId}-${fileId}`;
 
@@ -73,7 +92,10 @@ export async function fetchTranscript(
 	}
 
 	// Fetch and parse
-	const content = await fetchTranscriptContent(runId, fileId);
+	const content = await fetchTranscriptContent(runId, fileId, {
+		sessionId: options.sessionId,
+		shareToken: options.shareToken
+	});
 	const messages = parseJSONL(content);
 
 	// Cache the result
@@ -88,9 +110,10 @@ export async function fetchTranscript(
 export async function fetchParsedTranscript(
 	runId: number,
 	fileId: number,
-	sessionId: string
+	sessionId: string,
+	shareToken?: string
 ): Promise<ParsedTranscript> {
-	const messages = await fetchTranscript(runId, fileId);
+	const messages = await fetchTranscript(runId, fileId, { sessionId, shareToken });
 
 	// Extract metadata
 	const timestamps = messages

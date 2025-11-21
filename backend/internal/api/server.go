@@ -196,6 +196,7 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// Public shared session access (no auth for public, optional auth for private)
 		r.Get("/sessions/{sessionId}/shared/{shareToken}", HandleGetSharedSession(s.db))
+		r.Get("/sessions/{sessionId}/shared/{shareToken}/files/{fileId}/content", HandleGetSharedFileContent(s.db, s.storage))
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)

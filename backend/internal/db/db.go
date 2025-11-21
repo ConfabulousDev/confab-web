@@ -892,3 +892,71 @@ func (db *DB) GetFileByID(ctx context.Context, fileID int64, userID int64) (*Fil
 
 	return &file, nil
 }
+
+// GetSharedFileByID retrieves a file by ID via share token (for shared sessions)
+func (db *DB) GetSharedFileByID(ctx context.Context, sessionID, shareToken string, fileID int64, viewerEmail *string) (*FileDetail, error) {
+	// First validate the share token
+	var share SessionShare
+	shareQuery := `SELECT id, session_id, user_id, visibility, expires_at
+	               FROM session_shares
+	               WHERE share_token = $1 AND session_id = $2`
+
+	err := db.conn.QueryRowContext(ctx, shareQuery, shareToken, sessionID).Scan(
+		&share.ID, &share.SessionID, &share.UserID, &share.Visibility, &share.ExpiresAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("share not found")
+		}
+		return nil, fmt.Errorf("failed to get share: %w", err)
+	}
+
+	// Check expiration
+	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now()) {
+		return nil, fmt.Errorf("share expired")
+	}
+
+	// Check private share access
+	if share.Visibility == "private" {
+		if viewerEmail == nil {
+			return nil, fmt.Errorf("unauthorized: private share requires authentication")
+		}
+		// Check if viewer is invited
+		var count int
+		inviteQuery := `SELECT COUNT(*) FROM session_share_invites
+		                WHERE share_id = $1 AND email = $2`
+		err = db.conn.QueryRowContext(ctx, inviteQuery, share.ID, *viewerEmail).Scan(&count)
+		if err != nil || count == 0 {
+			return nil, fmt.Errorf("unauthorized: not invited to this share")
+		}
+	}
+
+	// Get file, verifying it belongs to the shared session
+	fileQuery := `
+		SELECT f.id, f.file_path, f.file_type, f.size_bytes, f.s3_key, f.s3_uploaded_at
+		FROM files f
+		JOIN runs r ON f.run_id = r.id
+		WHERE f.id = $1 AND r.session_id = $2
+	`
+
+	var file FileDetail
+	err = db.conn.QueryRowContext(ctx, fileQuery, fileID, sessionID).Scan(
+		&file.ID,
+		&file.FilePath,
+		&file.FileType,
+		&file.SizeBytes,
+		&file.S3Key,
+		&file.S3UploadedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("file not found")
+		}
+		return nil, fmt.Errorf("failed to get file: %w", err)
+	}
+
+	// Update last accessed timestamp
+	updateQuery := `UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`
+	db.conn.ExecContext(ctx, updateQuery, share.ID)
+
+	return &file, nil
+}

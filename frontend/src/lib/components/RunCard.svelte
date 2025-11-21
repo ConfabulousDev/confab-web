@@ -7,6 +7,8 @@
 	export let run: RunDetail;
 	export let index: number;
 	export let showGitInfo = true;
+	export let shareToken: string | undefined = undefined;
+	export let sessionId: string | undefined = undefined;
 
 	let todos: { agent_id: string; items: TodoItem[] }[] = [];
 	let loadingTodos = false;
@@ -63,7 +65,11 @@
 		for (const file of todoFiles) {
 			try {
 				// Fetch todo file content from backend
-				const response = await fetch(`/api/v1/runs/${run.id}/files/${file.id}/content`, {
+				// Use shared endpoint if shareToken is provided
+				const url = shareToken && sessionId
+					? `/api/v1/sessions/${sessionId}/shared/${shareToken}/files/${file.id}/content`
+					: `/api/v1/runs/${run.id}/files/${file.id}/content`;
+				const response = await fetch(url, {
 					credentials: 'include'
 				});
 
@@ -238,7 +244,7 @@
 
 	{#if showTranscript}
 		<div class="transcript-section">
-			<TranscriptViewer {run} />
+			<TranscriptViewer {run} {shareToken} {sessionId} />
 		</div>
 	{/if}
 </div>

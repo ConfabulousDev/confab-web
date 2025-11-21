@@ -6,6 +6,8 @@
 	import MessageList from './MessageList.svelte';
 
 	export let run: RunDetail;
+	export let shareToken: string | undefined = undefined;
+	export let sessionId: string | undefined = undefined;
 
 	let loading = true;
 	let error: string | null = null;
@@ -35,16 +37,20 @@
 			}
 
 			// Fetch and parse transcript
+			// Use provided sessionId or fall back to transcript_path (for non-shared views)
+			const effectiveSessionId = sessionId || run.transcript_path;
 			const parsed = await fetchParsedTranscript(
 				run.id,
 				transcriptFile.id,
-				run.transcript_path // session ID
+				effectiveSessionId,
+				shareToken
 			);
 
 			messages = parsed.messages;
 
 			// Build agent tree
-			agents = await buildAgentTree(run.id, messages, run.files);
+			const shareOptions = shareToken && sessionId ? { sessionId, shareToken } : undefined;
+			agents = await buildAgentTree(run.id, messages, run.files, shareOptions);
 
 			console.log('Loaded transcript:', {
 				messageCount: messages.length,
