@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -297,6 +298,24 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, map[string]string{
 		"error": message,
 	})
+}
+
+// respondStorageError returns an appropriate error response based on the storage error type
+func respondStorageError(w http.ResponseWriter, err error, defaultMsg string) {
+	if errors.Is(err, storage.ErrObjectNotFound) {
+		respondError(w, http.StatusNotFound, "File not found in storage")
+		return
+	}
+	if errors.Is(err, storage.ErrAccessDenied) {
+		respondError(w, http.StatusForbidden, "Storage access denied")
+		return
+	}
+	if errors.Is(err, storage.ErrNetworkError) {
+		respondError(w, http.StatusServiceUnavailable, "Storage temporarily unavailable")
+		return
+	}
+	// Generic error
+	respondError(w, http.StatusInternalServerError, defaultMsg)
 }
 
 // securityHeadersMiddleware creates middleware that adds appropriate security headers

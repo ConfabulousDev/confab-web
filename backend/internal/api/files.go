@@ -63,7 +63,7 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 		// Download file from S3
 		content, err := store.Download(storageCtx, *file.S3Key)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "Failed to download file")
+			respondStorageError(w, err, "Failed to download file")
 			return
 		}
 
@@ -149,7 +149,7 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		// Download file from S3
 		content, err := store.Download(storageCtx, *file.S3Key)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "Failed to download file")
+			respondStorageError(w, err, "Failed to download file")
 			return
 		}
 

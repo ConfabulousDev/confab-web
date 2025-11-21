@@ -75,7 +75,7 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		s3Key, err := s.storage.Upload(storageCtx, userID, req.SessionID, file.Path, file.Content)
 		if err != nil {
 			log.Printf("Error uploading file %s to S3: %v", file.Path, err)
-			respondError(w, http.StatusInternalServerError, "Failed to upload files to storage")
+			respondStorageError(w, err, "Failed to upload files to storage")
 			return
 		}
 

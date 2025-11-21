@@ -3,12 +3,25 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+)
+
+// Sentinel errors for storage operations
+var (
+	// ErrObjectNotFound indicates the requested object does not exist
+	ErrObjectNotFound = errors.New("object not found")
+
+	// ErrAccessDenied indicates insufficient permissions for the operation
+	ErrAccessDenied = errors.New("access denied")
+
+	// ErrNetworkError indicates a network connectivity issue
+	ErrNetworkError = errors.New("network error")
 )
 
 // S3Config holds S3/MinIO configuration
@@ -67,7 +80,7 @@ func (s *S3Storage) Upload(ctx context.Context, userID int64, sessionID, filenam
 		ContentType: "application/json", // All our files are JSONL
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to upload to S3: %w", err)
+		return "", classifyStorageError(err, "upload")
 	}
 
 	return key, nil
@@ -77,13 +90,14 @@ func (s *S3Storage) Upload(ctx context.Context, userID int64, sessionID, filenam
 func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get object from S3: %w", err)
+		return nil, classifyStorageError(err, "download")
 	}
 	defer object.Close()
 
 	data, err := io.ReadAll(object)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read object data: %w", err)
+		// Check if error is from S3 response (e.g., NoSuchKey)
+		return nil, classifyStorageError(err, "download")
 	}
 
 	return data, nil
@@ -103,4 +117,45 @@ func (s *S3Storage) Delete(ctx context.Context, key string) error {
 func (s *S3Storage) generateKey(userID int64, sessionID, filename string) string {
 	basename := filepath.Base(filename)
 	return fmt.Sprintf("%d/%s/%s", userID, sessionID, basename)
+}
+
+// classifyStorageError examines a storage error and returns an appropriate sentinel error
+func classifyStorageError(err error, operation string) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check for MinIO error response
+	var minioErr minio.ErrorResponse
+	if errors.As(err, &minioErr) {
+		switch minioErr.Code {
+		case "NoSuchKey", "NoSuchBucket":
+			return fmt.Errorf("%s: %w", operation, ErrObjectNotFound)
+		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch":
+			return fmt.Errorf("%s: %w", operation, ErrAccessDenied)
+		}
+	}
+
+	// Check for network/connection errors
+	errStr := err.Error()
+	if containsAny(errStr, []string{"connection", "timeout", "network", "dial", "refused"}) {
+		return fmt.Errorf("%s network issue: %w", operation, ErrNetworkError)
+	}
+
+	// Return wrapped generic error for unknown cases
+	return fmt.Errorf("%s failed: %w", operation, err)
+}
+
+// containsAny checks if a string contains any of the given substrings
+func containsAny(s string, substrs []string) bool {
+	for _, substr := range substrs {
+		if len(s) >= len(substr) {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				if s[i:i+len(substr)] == substr {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
