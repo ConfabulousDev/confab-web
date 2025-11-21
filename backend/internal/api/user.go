@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/santaclaude2025/confab/backend/internal/auth"
@@ -8,14 +9,16 @@ import (
 
 // handleGetMe returns the current authenticated user's info
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	// Get user ID from session middleware
-	userID, ok := auth.GetUserID(ctx)
+	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
+
+	// Create context with timeout for database operation
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
 
 	// Get user from database
 	user, err := s.db.GetUserByID(ctx, userID)

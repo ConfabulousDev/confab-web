@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,10 +28,8 @@ const (
 
 // handleSaveSession processes session upload requests
 func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	// Get authenticated user ID
-	userID, ok := auth.GetUserID(ctx)
+	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "User not authenticated")
 		return
@@ -61,6 +60,10 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Processing session save for user %d, session %s with %d files", userID, req.SessionID, len(req.Files))
 
+	// Create context with timeout for storage operations (longer timeout for uploads)
+	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
+	defer storageCancel()
+
 	// Upload files to S3 and collect S3 keys
 	s3Keys := make(map[string]string)
 	for _, file := range req.Files {
@@ -69,7 +72,7 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		s3Key, err := s.storage.Upload(ctx, userID, req.SessionID, file.Path, file.Content)
+		s3Key, err := s.storage.Upload(storageCtx, userID, req.SessionID, file.Path, file.Content)
 		if err != nil {
 			log.Printf("Error uploading file %s to S3: %v", file.Path, err)
 			respondError(w, http.StatusInternalServerError, "Failed to upload files to storage")
@@ -80,8 +83,12 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Uploaded %s to S3 key: %s", file.Path, s3Key)
 	}
 
+	// Create context with timeout for database operation
+	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer dbCancel()
+
 	// Save metadata to database
-	runID, err := s.db.SaveSession(ctx, userID, &req, s3Keys, "hook")
+	runID, err := s.db.SaveSession(dbCtx, userID, &req, s3Keys, "hook")
 	if err != nil {
 		log.Printf("Error saving session to database: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to save session metadata")
@@ -196,10 +203,8 @@ func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
 // HandleCheckSessions checks which session IDs already exist for the user
 func HandleCheckSessions(s *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get authenticated user ID
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "User not authenticated")
 			return
@@ -223,6 +228,10 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "Too many session IDs (max 1000)")
 			return
 		}
+
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
 
 		// Check which sessions exist
 		existing, err := s.db.CheckSessionsExist(ctx, userID, req.SessionIDs)

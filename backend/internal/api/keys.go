@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -28,10 +29,8 @@ type CreateAPIKeyResponse struct {
 // HandleCreateAPIKey creates a new API key for the authenticated user
 func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context (set by SessionMiddleware)
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
@@ -55,6 +54,10 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
+
 		// Store in database
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
 		if err != nil {
@@ -77,14 +80,16 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 // HandleListAPIKeys lists all API keys for the authenticated user
 func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
+
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
 
 		// Get keys from database
 		keys, err := database.ListAPIKeys(ctx, userID)
@@ -106,10 +111,8 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 // HandleDeleteAPIKey deletes an API key
 func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
@@ -122,6 +125,10 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "Invalid key ID")
 			return
 		}
+
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
 
 		// Delete key
 		if err := database.DeleteAPIKey(ctx, userID, keyID); err != nil {

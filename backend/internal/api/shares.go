@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -33,10 +34,8 @@ type CreateShareResponse struct {
 // HandleCreateShare creates a new share for a session
 func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
@@ -95,6 +94,10 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 			expiresAt = &expires
 		}
 
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
+
 		// Create share in database
 		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.Visibility, expiresAt, req.InvitedEmails)
 		if err != nil {
@@ -130,10 +133,8 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 // HandleListShares lists all shares for a session
 func HandleListShares(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
@@ -145,6 +146,10 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "Missing session ID")
 			return
 		}
+
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
 
 		// Get shares from database
 		shares, err := database.ListShares(ctx, sessionID, userID)
@@ -174,10 +179,8 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 // HandleRevokeShare revokes a share
 func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
@@ -190,9 +193,13 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
+
 		// Revoke share
 		err := database.RevokeShare(ctx, shareToken, userID)
-		if err != nil {
+		if err != nil{
 			if errors.Is(err, db.ErrUnauthorized) {
 				respondError(w, http.StatusNotFound, "Share not found or unauthorized")
 				return
@@ -208,8 +215,6 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 // HandleGetSharedSession returns a session accessed via share link
 func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get session ID and share token from URL
 		sessionID := chi.URLParam(r, "sessionId")
 		shareToken := chi.URLParam(r, "shareToken")
@@ -218,6 +223,10 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "Missing session ID or share token")
 			return
 		}
+
+		// Create context with timeout for database operations
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
 
 		// Try to get viewer email from session (for private shares)
 		var viewerEmail *string

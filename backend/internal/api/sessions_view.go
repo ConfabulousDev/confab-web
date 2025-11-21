@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,14 +14,16 @@ import (
 // HandleListSessions lists all sessions for the authenticated user
 func HandleListSessions(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context (set by SessionMiddleware)
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
+
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
 
 		// Get sessions from database
 		sessions, err := database.ListUserSessions(ctx, userID)
@@ -42,10 +45,8 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 // HandleGetSession returns detailed information about a specific session
 func HandleGetSession(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
@@ -57,6 +58,10 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "Missing session ID")
 			return
 		}
+
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
 
 		// Get session detail (includes ownership check)
 		session, err := database.GetSessionDetail(ctx, sessionID, userID)

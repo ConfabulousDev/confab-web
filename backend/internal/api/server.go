@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -15,6 +16,17 @@ import (
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/ratelimit"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
+)
+
+// Operation timeout constants
+const (
+	// DatabaseTimeout is the maximum duration for database operations
+	// Prevents slow queries from holding connections indefinitely
+	DatabaseTimeout = 5 * time.Second
+
+	// StorageTimeout is the maximum duration for storage operations (uploads/downloads)
+	// Longer timeout to accommodate large file transfers (up to 50MB per file)
+	StorageTimeout = 30 * time.Second
 )
 
 // Server holds dependencies for API handlers

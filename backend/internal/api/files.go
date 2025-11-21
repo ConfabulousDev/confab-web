@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -14,10 +15,8 @@ import (
 // HandleGetFileContent returns file content from S3
 func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get user ID from context (set by SessionMiddleware)
-		userID, ok := auth.GetUserID(ctx)
+		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
@@ -36,8 +35,12 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 			return
 		}
 
+		// Create context with timeout for database operation
+		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer dbCancel()
+
 		// Get file metadata and verify ownership
-		file, err := database.GetFileByID(ctx, fileID, userID)
+		file, err := database.GetFileByID(dbCtx, fileID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
 				respondError(w, http.StatusNotFound, "File not found")
@@ -53,8 +56,12 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 			return
 		}
 
+		// Create context with timeout for storage operation
+		storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
+		defer storageCancel()
+
 		// Download file from S3
-		content, err := store.Download(ctx, *file.S3Key)
+		content, err := store.Download(storageCtx, *file.S3Key)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Failed to download file")
 			return
@@ -76,8 +83,6 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 // HandleGetSharedFileContent returns file content for shared sessions (no auth required)
 func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// Get params from URL
 		sessionID := chi.URLParam(r, "sessionId")
 		shareToken := chi.URLParam(r, "shareToken")
@@ -94,14 +99,18 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
+		// Create context with timeout for database operations
+		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer dbCancel()
+
 		// Get viewer email if authenticated (for private shares)
 		// Read cookie directly since this endpoint is outside auth middleware
 		var viewerEmail *string
 		cookie, err := r.Cookie("confab_session")
 		if err == nil {
-			session, err := database.GetWebSession(ctx, cookie.Value)
+			session, err := database.GetWebSession(dbCtx, cookie.Value)
 			if err == nil {
-				user, err := database.GetUserByID(ctx, session.UserID)
+				user, err := database.GetUserByID(dbCtx, session.UserID)
 				if err == nil && user != nil {
 					viewerEmail = &user.Email
 				}
@@ -109,7 +118,7 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Validate share token and get file
-		file, err := database.GetSharedFileByID(ctx, sessionID, shareToken, fileID, viewerEmail)
+		file, err := database.GetSharedFileByID(dbCtx, sessionID, shareToken, fileID, viewerEmail)
 		if err != nil {
 			if errors.Is(err, db.ErrFileNotFound) || errors.Is(err, db.ErrShareNotFound) {
 				respondError(w, http.StatusNotFound, "File not found")
@@ -133,8 +142,12 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
+		// Create context with timeout for storage operation
+		storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
+		defer storageCancel()
+
 		// Download file from S3
-		content, err := store.Download(ctx, *file.S3Key)
+		content, err := store.Download(storageCtx, *file.S3Key)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Failed to download file")
 			return
