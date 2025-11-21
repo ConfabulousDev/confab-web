@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -20,20 +19,20 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 		// Get user ID from context (set by SessionMiddleware)
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Get file ID from URL
 		fileIDStr := chi.URLParam(r, "fileId")
 		if fileIDStr == "" {
-			http.Error(w, "Missing file ID", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Missing file ID")
 			return
 		}
 
 		fileID, err := strconv.ParseInt(fileIDStr, 10, 64)
 		if err != nil {
-			http.Error(w, "Invalid file ID", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Invalid file ID")
 			return
 		}
 
@@ -41,23 +40,23 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 		file, err := database.GetFileByID(ctx, fileID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
-				http.Error(w, "File not found", http.StatusNotFound)
+				respondError(w, http.StatusNotFound, "File not found")
 				return
 			}
-			http.Error(w, "Failed to get file", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to get file")
 			return
 		}
 
 		// Check if file was uploaded to S3
 		if file.S3Key == nil {
-			http.Error(w, "File not available", http.StatusNotFound)
+			respondError(w, http.StatusNotFound, "File not available")
 			return
 		}
 
 		// Download file from S3
 		content, err := store.Download(ctx, *file.S3Key)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to download file: %v", err), http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to download file")
 			return
 		}
 
@@ -85,13 +84,13 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		fileIDStr := chi.URLParam(r, "fileId")
 
 		if sessionID == "" || shareToken == "" || fileIDStr == "" {
-			http.Error(w, "Missing required parameters", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Missing required parameters")
 			return
 		}
 
 		fileID, err := strconv.ParseInt(fileIDStr, 10, 64)
 		if err != nil {
-			http.Error(w, "Invalid file ID", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Invalid file ID")
 			return
 		}
 
@@ -113,31 +112,31 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		file, err := database.GetSharedFileByID(ctx, sessionID, shareToken, fileID, viewerEmail)
 		if err != nil {
 			if errors.Is(err, db.ErrFileNotFound) || errors.Is(err, db.ErrShareNotFound) {
-				http.Error(w, "File not found", http.StatusNotFound)
+				respondError(w, http.StatusNotFound, "File not found")
 				return
 			}
 			if errors.Is(err, db.ErrShareExpired) {
-				http.Error(w, "Share expired", http.StatusGone)
+				respondError(w, http.StatusGone, "Share expired")
 				return
 			}
 			if errors.Is(err, db.ErrUnauthorized) {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				respondError(w, http.StatusUnauthorized, "Unauthorized")
 				return
 			}
-			http.Error(w, "Failed to get file", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to get file")
 			return
 		}
 
 		// Check if file was uploaded to S3
 		if file.S3Key == nil {
-			http.Error(w, "File not available", http.StatusNotFound)
+			respondError(w, http.StatusNotFound, "File not available")
 			return
 		}
 
 		// Download file from S3
 		content, err := store.Download(ctx, *file.S3Key)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to download file: %v", err), http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to download file")
 			return
 		}
 

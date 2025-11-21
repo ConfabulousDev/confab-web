@@ -38,45 +38,45 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		// Get user ID from context
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Get session ID from URL
 		sessionID := chi.URLParam(r, "sessionId")
 		if sessionID == "" {
-			http.Error(w, "Missing session ID", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Missing session ID")
 			return
 		}
 
 		// Parse request body
 		var req CreateShareRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
 
 		// Validate visibility
 		if req.Visibility != "public" && req.Visibility != "private" {
-			http.Error(w, "Visibility must be 'public' or 'private'", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Visibility must be 'public' or 'private'")
 			return
 		}
 
 		// Validate private shares have invited emails
 		if req.Visibility == "private" {
 			if len(req.InvitedEmails) == 0 {
-				http.Error(w, "Private shares require at least one invited email", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "Private shares require at least one invited email")
 				return
 			}
 			if len(req.InvitedEmails) > 50 {
-				http.Error(w, "Maximum 50 invited emails allowed", http.StatusBadRequest)
+				respondError(w, http.StatusBadRequest, "Maximum 50 invited emails allowed")
 				return
 			}
 			// Validate email formats (basic)
 			for _, email := range req.InvitedEmails {
 				email = strings.TrimSpace(email)
 				if !strings.Contains(email, "@") {
-					http.Error(w, "Invalid email format", http.StatusBadRequest)
+					respondError(w, http.StatusBadRequest, "Invalid email format")
 					return
 				}
 			}
@@ -85,7 +85,7 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		// Generate share token (UUID-like)
 		shareToken, err := generateShareToken()
 		if err != nil {
-			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to generate token")
 			return
 		}
 
@@ -100,14 +100,14 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.Visibility, expiresAt, req.InvitedEmails)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
-				http.Error(w, "Session not found", http.StatusNotFound)
+				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
 			if errors.Is(err, db.ErrUnauthorized) {
-				http.Error(w, "Unauthorized", http.StatusForbidden)
+				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
-			http.Error(w, "Failed to create share", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to create share")
 			return
 		}
 
@@ -136,14 +136,14 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		// Get user ID from context
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Get session ID from URL
 		sessionID := chi.URLParam(r, "sessionId")
 		if sessionID == "" {
-			http.Error(w, "Missing session ID", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Missing session ID")
 			return
 		}
 
@@ -151,14 +151,14 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		shares, err := database.ListShares(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
-				http.Error(w, "Session not found", http.StatusNotFound)
+				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
 			if errors.Is(err, db.ErrUnauthorized) {
-				http.Error(w, "Unauthorized", http.StatusForbidden)
+				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
-			http.Error(w, "Failed to list shares", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to list shares")
 			return
 		}
 
@@ -180,14 +180,14 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		// Get user ID from context
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Get share token from URL
 		shareToken := chi.URLParam(r, "shareToken")
 		if shareToken == "" {
-			http.Error(w, "Missing share token", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Missing share token")
 			return
 		}
 
@@ -195,10 +195,10 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		err := database.RevokeShare(ctx, shareToken, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
-				http.Error(w, "Share not found or unauthorized", http.StatusNotFound)
+				respondError(w, http.StatusNotFound, "Share not found or unauthorized")
 				return
 			}
-			http.Error(w, "Failed to revoke share", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to revoke share")
 			return
 		}
 
@@ -216,7 +216,7 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		shareToken := chi.URLParam(r, "shareToken")
 
 		if sessionID == "" || shareToken == "" {
-			http.Error(w, "Missing session ID or share token", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Missing session ID or share token")
 			return
 		}
 
@@ -238,22 +238,22 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		session, err := database.GetSharedSession(ctx, sessionID, shareToken, viewerEmail)
 		if err != nil {
 			if errors.Is(err, db.ErrShareNotFound) || errors.Is(err, db.ErrSessionNotFound) {
-				http.Error(w, "Share not found", http.StatusNotFound)
+				respondError(w, http.StatusNotFound, "Share not found")
 				return
 			}
 			if errors.Is(err, db.ErrShareExpired) {
-				http.Error(w, "Share expired", http.StatusGone)
+				respondError(w, http.StatusGone, "Share expired")
 				return
 			}
 			if errors.Is(err, db.ErrUnauthorized) {
-				http.Error(w, "Please log in to view this private share", http.StatusUnauthorized)
+				respondError(w, http.StatusUnauthorized, "Please log in to view this private share")
 				return
 			}
 			if errors.Is(err, db.ErrForbidden) {
-				http.Error(w, "You are not authorized to view this share", http.StatusForbidden)
+				respondError(w, http.StatusForbidden, "You are not authorized to view this share")
 				return
 			}
-			http.Error(w, "Failed to get shared session", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to get shared session")
 			return
 		}
 

@@ -33,14 +33,14 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		// Get user ID from context (set by SessionMiddleware)
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Parse request body
 		var req CreateAPIKeyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
 
@@ -51,7 +51,7 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		// Generate API key
 		apiKey, keyHash, err := auth.GenerateAndHashAPIKey()
 		if err != nil {
-			http.Error(w, "Failed to generate API key", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to generate API key")
 			return
 		}
 
@@ -59,7 +59,7 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
 		if err != nil {
 			fmt.Printf("Error creating API key: %v\n", err)
-			http.Error(w, "Failed to create API key", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to create API key")
 			return
 		}
 
@@ -82,14 +82,14 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 		// Get user ID from context
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Get keys from database
 		keys, err := database.ListAPIKeys(ctx, userID)
 		if err != nil {
-			http.Error(w, "Failed to list API keys", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to list API keys")
 			return
 		}
 
@@ -111,7 +111,7 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 		// Get user ID from context
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -119,13 +119,13 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 		keyIDStr := chi.URLParam(r, "id")
 		keyID, err := strconv.ParseInt(keyIDStr, 10, 64)
 		if err != nil {
-			http.Error(w, "Invalid key ID", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Invalid key ID")
 			return
 		}
 
 		// Delete key
 		if err := database.DeleteAPIKey(ctx, userID, keyID); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			respondError(w, http.StatusNotFound, "API key not found")
 			return
 		}
 

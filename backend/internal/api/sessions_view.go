@@ -18,14 +18,14 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		// Get user ID from context (set by SessionMiddleware)
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Get sessions from database
 		sessions, err := database.ListUserSessions(ctx, userID)
 		if err != nil {
-			http.Error(w, "Failed to list sessions", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}
 
@@ -47,14 +47,14 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		// Get user ID from context
 		userID, ok := auth.GetUserID(ctx)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		// Get session ID from URL
 		sessionID := chi.URLParam(r, "sessionId")
 		if sessionID == "" {
-			http.Error(w, "Missing session ID", http.StatusBadRequest)
+			respondError(w, http.StatusBadRequest, "Missing session ID")
 			return
 		}
 
@@ -62,10 +62,10 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		session, err := database.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
-				http.Error(w, "Session not found", http.StatusNotFound)
+				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			http.Error(w, "Failed to get session", http.StatusInternalServerError)
+			respondError(w, http.StatusInternalServerError, "Failed to get session")
 			return
 		}
 
