@@ -45,6 +45,16 @@ func (db *DB) Close() error {
 	return db.conn.Close()
 }
 
+// Exec executes a query without returning rows (for testing/migrations)
+func (db *DB) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return db.conn.ExecContext(ctx, query, args...)
+}
+
+// QueryRow executes a query that returns at most one row (for testing)
+func (db *DB) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return db.conn.QueryRowContext(ctx, query, args...)
+}
+
 // RunMigrations applies database migrations
 func (db *DB) RunMigrations() error {
 	schema := `
