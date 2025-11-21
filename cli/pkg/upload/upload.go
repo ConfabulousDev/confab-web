@@ -12,6 +12,7 @@ import (
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/git"
 	"github.com/santaclaude2025/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/utils"
 )
 
 // UploadToCloud uploads session data to the backend
@@ -27,6 +28,12 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 		return nil
 	}
 
+	return UploadToCloudWithConfig(cfg, hookInput, files)
+}
+
+// UploadToCloudWithConfig uploads session data using the provided config
+// Use this when you already have the config (e.g., in backfill to avoid repeated loading)
+func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInput, files []types.SessionFile) error {
 	// Validate backend URL
 	if cfg.BackendURL == "" {
 		return fmt.Errorf("backend URL not configured")
@@ -40,19 +47,9 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 	}
 
 	// Read file contents
-	fileUploads := make([]FileUpload, 0, len(files))
-	for _, f := range files {
-		content, err := os.ReadFile(f.Path)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", f.Path, err)
-		}
-
-		fileUploads = append(fileUploads, FileUpload{
-			Path:      f.Path,
-			Type:      f.Type,
-			SizeBytes: f.SizeBytes,
-			Content:   content,
-		})
+	fileUploads, err := ReadFilesForUpload(files)
+	if err != nil {
+		return fmt.Errorf("failed to read files for upload: %w", err)
 	}
 
 	// Create request payload
@@ -65,6 +62,30 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 		Files:          fileUploads,
 	}
 
+	return SendSessionRequest(cfg, &request)
+}
+
+// ReadFilesForUpload reads file contents and creates FileUpload entries
+func ReadFilesForUpload(files []types.SessionFile) ([]FileUpload, error) {
+	fileUploads := make([]FileUpload, 0, len(files))
+	for _, f := range files {
+		content, err := os.ReadFile(f.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file %s: %w", f.Path, err)
+		}
+
+		fileUploads = append(fileUploads, FileUpload{
+			Path:      f.Path,
+			Type:      f.Type,
+			SizeBytes: f.SizeBytes,
+			Content:   content,
+		})
+	}
+	return fileUploads, nil
+}
+
+// SendSessionRequest sends a session save request to the backend with zstd compression
+func SendSessionRequest(cfg *config.UploadConfig, request *SaveSessionRequest) error {
 	// Marshal to JSON
 	payload, err := json.Marshal(request)
 	if err != nil {
@@ -100,7 +121,7 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 	req.Header.Set("Content-Encoding", "zstd")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: utils.UploadHTTPTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
@@ -108,11 +129,14 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 	defer resp.Body.Close()
 
 	// Read response
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	// Check status
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("upload failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
@@ -134,6 +158,7 @@ type SaveSessionRequest struct {
 	TranscriptPath string       `json:"transcript_path"`
 	CWD            string       `json:"cwd"`
 	Reason         string       `json:"reason"`
+	Source         string       `json:"source,omitempty"`
 	GitInfo        *git.GitInfo `json:"git_info,omitempty"`
 	Files          []FileUpload `json:"files"`
 }

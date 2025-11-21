@@ -8,7 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/types"
+)
+
+const (
+	// AgentIDLength is the expected length of agent ID hex strings
+	AgentIDLength = 8
+	// UUIDLength is the expected length of UUID strings (with hyphens)
+	UUIDLength = 36
 )
 
 // DiscoverSessionFiles finds all files associated with a session
@@ -68,7 +76,7 @@ func DiscoverSessionFiles(hookInput *types.HookInput) ([]types.SessionFile, erro
 func findAgentReferences(transcriptPath string) ([]string, error) {
 	file, err := os.Open(transcriptPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open transcript: %w", err)
 	}
 	defer file.Close()
 
@@ -98,7 +106,7 @@ func findAgentReferences(transcriptPath string) ([]string, error) {
 			if agentID, ok := toolUseResult["agentId"].(string); ok {
 				// agentId is just the hex value (e.g., "96f3c489")
 				// Validate it's 8 hex characters
-				if len(agentID) == 8 && isHexString(agentID) {
+				if len(agentID) == AgentIDLength && isHexString(agentID) {
 					if !seen[agentID] {
 						seen[agentID] = true
 						agentIDs = append(agentIDs, agentID)
@@ -117,7 +125,7 @@ func findAgentReferences(transcriptPath string) ([]string, error) {
 							if resultContent, ok := blockMap["content"].(map[string]interface{}); ok {
 								if toolUseResult, ok := resultContent["toolUseResult"].(map[string]interface{}); ok {
 									if agentID, ok := toolUseResult["agentId"].(string); ok {
-										if len(agentID) == 8 && isHexString(agentID) {
+										if len(agentID) == AgentIDLength && isHexString(agentID) {
 											if !seen[agentID] {
 												seen[agentID] = true
 												agentIDs = append(agentIDs, agentID)
@@ -134,7 +142,7 @@ func findAgentReferences(transcriptPath string) ([]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to scan transcript: %w", err)
 	}
 
 	return agentIDs, nil
@@ -166,13 +174,11 @@ func expandPath(path string) string {
 func findTodoFiles(sessionID string, agentIDs []string) []types.SessionFile {
 	var files []types.SessionFile
 
-	home, err := os.UserHomeDir()
+	todoDir, err := config.GetTodosDir()
 	if err != nil {
-		// Can't find home directory, skip todos
+		// Can't get todos directory, skip todos
 		return files
 	}
-
-	todoDir := filepath.Join(home, ".claude", "todos")
 
 	// Check if todos directory exists
 	if _, err := os.Stat(todoDir); os.IsNotExist(err) {

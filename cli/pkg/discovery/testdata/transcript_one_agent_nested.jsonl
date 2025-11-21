@@ -1,0 +1,3 @@
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Starting task."}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "content": {"toolUseResult": {"agentId": "abcd1234", "result": "Task completed"}}}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Done!"}]}}

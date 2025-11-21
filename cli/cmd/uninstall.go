@@ -13,9 +13,6 @@ var uninstallCmd = &cobra.Command{
 	Short: "Remove SessionEnd hook from Claude Code settings",
 	Long:  `Removes the confab SessionEnd hook from ~/.claude/settings.json.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger.Init()
-		defer logger.Close()
-
 		logger.Info("Running uninstall command")
 
 		fmt.Println("=== Confab: Uninstall ===")

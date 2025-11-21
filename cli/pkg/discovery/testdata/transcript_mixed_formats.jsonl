@@ -1,0 +1,4 @@
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Testing both formats."}]}}
+{"type": "user", "toolUseResult": {"agentId": "11112222", "result": "Root level agent"}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "content": {"toolUseResult": {"agentId": "33334444", "result": "Nested agent"}}}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Both found."}]}}

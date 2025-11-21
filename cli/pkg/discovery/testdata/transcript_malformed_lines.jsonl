@@ -1,0 +1,7 @@
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Starting."}]}}
+this is not valid json at all
+{"type": "user", "toolUseResult": {"agentId": "aabb1122", "result": "Valid agent"}}
+{incomplete json
+{"type": "user", "toolUseResult": {"agentId": "ccdd3344", "result": "Another valid agent"}}
+{"broken": true, "no closing brace"
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Done."}]}}

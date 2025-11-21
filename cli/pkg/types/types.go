@@ -12,6 +12,19 @@ type HookInput struct {
 	Reason         string `json:"reason"`
 }
 
+// NewHookInput creates a HookInput for manual session uploads
+// (not from stdin hook). Sets the required fields and leaves
+// hook-specific fields empty.
+func NewHookInput(sessionID, transcriptPath, cwd, reason string) *HookInput {
+	return &HookInput{
+		SessionID:      sessionID,
+		TranscriptPath: transcriptPath,
+		CWD:            cwd,
+		Reason:         reason,
+		// PermissionMode and HookEventName are empty for manual uploads
+	}
+}
+
 // HookResponse is the JSON response sent back to Claude Code
 type HookResponse struct {
 	Continue       bool   `json:"continue"`

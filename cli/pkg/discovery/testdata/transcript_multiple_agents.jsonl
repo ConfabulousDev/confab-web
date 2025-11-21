@@ -1,0 +1,7 @@
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Starting multiple tasks."}]}}
+{"type": "user", "toolUseResult": {"agentId": "11111111", "result": "First agent done"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "First task complete."}]}}
+{"type": "user", "toolUseResult": {"agentId": "22222222", "result": "Second agent done"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Second task complete."}]}}
+{"type": "user", "toolUseResult": {"agentId": "33333333", "result": "Third agent done"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "All done!"}]}}

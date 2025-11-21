@@ -1,0 +1,7 @@
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Testing invalid agent IDs."}]}}
+{"type": "user", "toolUseResult": {"agentId": "short", "result": "Too short"}}
+{"type": "user", "toolUseResult": {"agentId": "waytoolongagentid", "result": "Too long"}}
+{"type": "user", "toolUseResult": {"agentId": "ghijklmn", "result": "Not hex chars"}}
+{"type": "user", "toolUseResult": {"agentId": "abcd5678", "result": "This one is valid"}}
+{"type": "user", "toolUseResult": {"agentId": "ABCD1234", "result": "Uppercase hex is valid"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Done."}]}}

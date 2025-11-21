@@ -13,9 +13,6 @@ var initCmd = &cobra.Command{
 	Short: "Initialize confab (install hook)",
 	Long:  `Installs the SessionEnd hook in ~/.claude/settings.json to automatically capture sessions.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger.Init()
-		defer logger.Close()
-
 		logger.Info("Running init command")
 
 		fmt.Println("=== Confab: Initialize ===")

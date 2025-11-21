@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/discovery"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/types"
 	"github.com/santaclaude2025/confab/pkg/upload"
+	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -39,38 +39,23 @@ Examples:
 // saveSessionsByID uploads specific sessions by their IDs
 func saveSessionsByID(sessionIDs []string) error {
 	// Check authentication
-	cfg, err := config.GetUploadConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get config: %w", err)
-	}
-	if cfg.APIKey == "" {
-		return fmt.Errorf("not authenticated. Run 'confab login' first")
-	}
-
-	// Find session files
-	home, err := os.UserHomeDir()
+	cfg, err := config.EnsureAuthenticated()
 	if err != nil {
 		return err
 	}
-	projectsDir := filepath.Join(home, ".claude", "projects")
 
 	for _, sessionID := range sessionIDs {
 		// Handle partial session IDs (first 8 chars)
-		fullSessionID, transcriptPath, err := findSessionByID(projectsDir, sessionID)
+		fullSessionID, transcriptPath, err := discovery.FindSessionByID(sessionID)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			continue
 		}
 
-		fmt.Printf("Uploading session %s...\n", fullSessionID[:8])
+		fmt.Printf("Uploading session %s...\n", utils.TruncateSecret(fullSessionID, 8, 0))
 
 		// Create hook input for discovery
-		hookInput := &types.HookInput{
-			SessionID:      fullSessionID,
-			TranscriptPath: transcriptPath,
-			CWD:            filepath.Dir(transcriptPath),
-			Reason:         "manual",
-		}
+		hookInput := types.NewHookInput(fullSessionID, transcriptPath, filepath.Dir(transcriptPath), "manual")
 
 		// Discover and upload
 		files, err := discovery.DiscoverSessionFiles(hookInput)
@@ -79,7 +64,7 @@ func saveSessionsByID(sessionIDs []string) error {
 			continue
 		}
 
-		if err := upload.UploadToCloud(hookInput, files); err != nil {
+		if err := upload.UploadToCloudWithConfig(cfg, hookInput, files); err != nil {
 			fmt.Printf("  Error uploading: %v\n", err)
 			continue
 		}
@@ -90,52 +75,8 @@ func saveSessionsByID(sessionIDs []string) error {
 	return nil
 }
 
-// findSessionByID finds a session transcript by full or partial ID
-func findSessionByID(projectsDir, partialID string) (fullID string, transcriptPath string, err error) {
-	var matches []struct {
-		id   string
-		path string
-	}
-
-	filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-
-		if !strings.HasSuffix(path, ".jsonl") || strings.HasPrefix(d.Name(), "agent-") {
-			return nil
-		}
-
-		sessionID := strings.TrimSuffix(d.Name(), ".jsonl")
-
-		// Match full ID or prefix
-		if sessionID == partialID || strings.HasPrefix(sessionID, partialID) {
-			matches = append(matches, struct {
-				id   string
-				path string
-			}{sessionID, path})
-		}
-
-		return nil
-	})
-
-	if len(matches) == 0 {
-		return "", "", fmt.Errorf("session not found: %s", partialID)
-	}
-
-	if len(matches) > 1 {
-		return "", "", fmt.Errorf("ambiguous session ID '%s' matches %d sessions", partialID, len(matches))
-	}
-
-	return matches[0].id, matches[0].path, nil
-}
-
 // saveFromHook handles the hook mode (reading from stdin)
 func saveFromHook() error {
-	// Initialize logger
-	logger.Init()
-	defer logger.Close()
-
 	logger.Info("Starting session capture")
 
 	// Always output valid hook response, even on error
@@ -159,6 +100,34 @@ func saveFromHook() error {
 		return nil // Don't return error - let defer send success response
 	}
 
+	// Display session info
+	printSessionInfo(hookInput)
+
+	// Discover session files
+	files, err := discovery.DiscoverSessionFiles(hookInput)
+	if err != nil {
+		logger.Error("Failed to discover files: %v", err)
+		fmt.Fprintf(os.Stderr, "Error discovering files: %v\n", err)
+		return nil
+	}
+
+	// Display discovered files
+	printDiscoveredFiles(files)
+
+	// Upload to cloud
+	if err := uploadSessionFiles(hookInput, files); err != nil {
+		return nil // Error already logged and displayed
+	}
+
+	logger.Info("Session capture complete")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "=== Session Captured ===")
+
+	return nil
+}
+
+// printSessionInfo logs and displays session metadata
+func printSessionInfo(hookInput *types.HookInput) {
 	logger.Info("Session ID: %s", hookInput.SessionID)
 	logger.Info("Transcript: %s", hookInput.TranscriptPath)
 	logger.Info("Working Directory: %s", hookInput.CWD)
@@ -169,53 +138,39 @@ func saveFromHook() error {
 	fmt.Fprintf(os.Stderr, "Working Directory: %s\n", hookInput.CWD)
 	fmt.Fprintf(os.Stderr, "End Reason: %s\n", hookInput.Reason)
 	fmt.Fprintln(os.Stderr)
+}
 
-	// Discover session files
-	files, err := discovery.DiscoverSessionFiles(hookInput)
-	if err != nil {
-		logger.Error("Failed to discover files: %v", err)
-		fmt.Fprintf(os.Stderr, "Error discovering files: %v\n", err)
-		return nil
-	}
+// printDiscoveredFiles logs and displays discovered files with sizes
+func printDiscoveredFiles(files []types.SessionFile) {
+	totalSize := utils.CalculateTotalSize(files)
 
-	// Calculate total size
-	var totalSize int64
+	logger.Info("Discovered %d file(s) (%s)", len(files), utils.FormatBytesMB(totalSize))
 	for _, f := range files {
-		totalSize += f.SizeBytes
+		logger.Debug("File: %s (%s, %s)", f.Path, f.Type, utils.FormatBytesKB(f.SizeBytes))
 	}
 
-	logger.Info("Discovered %d file(s) (%.2f MB)", len(files), float64(totalSize)/(1024*1024))
-	for _, f := range files {
-		sizeKB := float64(f.SizeBytes) / 1024
-		logger.Debug("File: %s (%s, %.1f KB)", f.Path, f.Type, sizeKB)
-	}
-
-	fmt.Fprintf(os.Stderr, "Discovered %d file(s) (%.2f MB)\n", len(files), float64(totalSize)/(1024*1024))
+	fmt.Fprintf(os.Stderr, "Discovered %d file(s) (%s)\n", len(files), utils.FormatBytesMB(totalSize))
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Files:")
 	for _, f := range files {
-		sizeKB := float64(f.SizeBytes) / 1024
-		fmt.Fprintf(os.Stderr, "  - %s (%s, %.1f KB)\n", filepath.Base(f.Path), f.Type, sizeKB)
+		fmt.Fprintf(os.Stderr, "  - %s (%s, %s)\n", filepath.Base(f.Path), f.Type, utils.FormatBytesKB(f.SizeBytes))
 	}
 	fmt.Fprintln(os.Stderr)
+}
 
-	// Cloud upload (required)
+// uploadSessionFiles uploads files to cloud and handles errors
+func uploadSessionFiles(hookInput *types.HookInput, files []types.SessionFile) error {
 	logger.Info("Uploading to cloud...")
 	if err := upload.UploadToCloud(hookInput, files); err != nil {
 		logger.Error("Failed to upload to cloud: %v", err)
 		fmt.Fprintf(os.Stderr, "Error: Cloud upload failed: %v\n", err)
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Cloud upload is required. Please run 'confab login' to authenticate.")
-		return nil
+		return err
 	}
 
 	logger.Info("Cloud upload completed")
 	fmt.Fprintln(os.Stderr, "✓ Uploaded to cloud")
-
-	logger.Info("Session capture complete")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "=== Session Captured ===")
-
 	return nil
 }
 

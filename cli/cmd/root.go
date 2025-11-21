@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +13,14 @@ var rootCmd = &cobra.Command{
 	Short: "Archive and query your Claude Code sessions",
 	Long: `Confab automatically captures Claude Code session transcripts and agent sidechains
 to local SQLite storage for retrieval, search, and analytics.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Initialize logger for all commands (except --help which doesn't run this)
+		logger.Init()
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		// Close logger after all commands
+		logger.Close()
+	},
 }
 
 func Execute() {

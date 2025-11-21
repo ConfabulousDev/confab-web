@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	confabhttp "github.com/santaclaude2025/confab/pkg/http"
 	"github.com/santaclaude2025/confab/pkg/logger"
+	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -15,9 +15,6 @@ var statusCmd = &cobra.Command{
 	Short: "Show confab status",
 	Long:  `Displays hook installation status and cloud authentication status.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger.Init()
-		defer logger.Close()
-
 		logger.Info("Running status command")
 
 		fmt.Println("=== Confab: Status ===")
@@ -49,7 +46,7 @@ var statusCmd = &cobra.Command{
 			fmt.Println("Cloud Sync:")
 			if cfg.APIKey != "" {
 				fmt.Printf("  Backend: %s\n", cfg.BackendURL)
-				fmt.Printf("  API Key: %s...%s\n", cfg.APIKey[:12], cfg.APIKey[len(cfg.APIKey)-4:])
+				fmt.Printf("  API Key: %s\n", utils.TruncateSecret(cfg.APIKey, 12, 4))
 
 				// Validate API key
 				fmt.Print("  Validating API key... ")
@@ -77,32 +74,21 @@ var statusCmd = &cobra.Command{
 
 // validateAPIKey checks if the API key is valid by calling the backend
 func validateAPIKey(backendURL, apiKey string) error {
-	url := backendURL + "/api/v1/auth/validate"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+	// Create a temporary config for the HTTP client
+	cfg := &config.UploadConfig{
+		BackendURL: backendURL,
+		APIKey:     apiKey,
 	}
 
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to backend: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("authentication failed (HTTP %d)", resp.StatusCode)
-	}
-
+	client := confabhttp.NewClient(cfg, utils.DefaultHTTPTimeout)
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+
+	if err := client.Get("/api/v1/auth/validate", &result); err != nil {
+		return err
 	}
 
 	if valid, ok := result["valid"].(bool); !ok || !valid {
-		return fmt.Errorf("API key is not valid")
+		return fmt.Errorf("api key is not valid")
 	}
 
 	return nil

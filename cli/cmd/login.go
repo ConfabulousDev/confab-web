@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -28,8 +29,14 @@ TODO: Implement device code flow for remote/headless scenarios (similar to 'gh a
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
-	backendURL, _ := cmd.Flags().GetString("backend-url")
-	keyName, _ := cmd.Flags().GetString("name")
+	backendURL, err := cmd.Flags().GetString("backend-url")
+	if err != nil {
+		return fmt.Errorf("failed to get backend-url flag: %w", err)
+	}
+	keyName, err := cmd.Flags().GetString("name")
+	if err != nil {
+		return fmt.Errorf("failed to get name flag: %w", err)
+	}
 
 	// Default backend URL
 	// TODO: Change default to production (https://confab.fly.dev) once stable
@@ -128,7 +135,12 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	})
 
 	// Start server in background
-	server := &http.Server{Handler: mux}
+	server := &http.Server{
+		Handler:      mux,
+		ReadTimeout:  utils.ServerReadTimeout,
+		WriteTimeout: utils.ServerWriteTimeout,
+		IdleTimeout:  utils.ServerIdleTimeout,
+	}
 	go func() {
 		if err := server.Serve(listener); err != http.ErrServerClosed {
 			errorChan <- fmt.Errorf("callback server error: %w", err)
@@ -152,11 +164,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
-	fmt.Println("Waiting for authentication... (timeout: 5 minutes)")
+	fmt.Printf("Waiting for authentication... (timeout: %v)\n", utils.OAuthFlowTimeout)
 	fmt.Println()
 
 	// Wait for API key or timeout
-	timeout := time.After(5 * time.Minute)
+	timeout := time.After(utils.OAuthFlowTimeout)
 	var apiKey string
 
 	select {
@@ -167,7 +179,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("authentication failed: %w", err)
 	case <-timeout:
 		server.Close()
-		return fmt.Errorf("authentication timeout after 5 minutes")
+		return fmt.Errorf("authentication timeout after %v", utils.OAuthFlowTimeout)
 	}
 
 	// Shutdown callback server
@@ -185,7 +197,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("✓ Authentication successful!")
 	fmt.Println()
-	fmt.Printf("API Key: %s...%s\n", apiKey[:12], apiKey[len(apiKey)-4:])
+	fmt.Printf("API Key: %s\n", utils.TruncateSecret(apiKey, 12, 4))
 	fmt.Printf("Backend: %s\n", backendURL)
 	fmt.Println()
 	fmt.Println("Cloud sync is now enabled.")

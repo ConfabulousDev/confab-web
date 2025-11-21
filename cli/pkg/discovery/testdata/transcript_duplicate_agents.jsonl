@@ -1,0 +1,7 @@
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Running agent multiple times."}]}}
+{"type": "user", "toolUseResult": {"agentId": "deadbeef", "result": "First run"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Running again."}]}}
+{"type": "user", "toolUseResult": {"agentId": "deadbeef", "result": "Second run"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "And again."}]}}
+{"type": "user", "toolUseResult": {"agentId": "deadbeef", "result": "Third run"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Done with all runs."}]}}

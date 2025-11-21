@@ -2,32 +2,20 @@ package cmd
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/klauspost/compress/zstd"
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/discovery"
+	confabhttp "github.com/santaclaude2025/confab/pkg/http"
 	"github.com/santaclaude2025/confab/pkg/types"
+	"github.com/santaclaude2025/confab/pkg/upload"
+	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
-
-// SessionInfo holds metadata about a discovered session
-type SessionInfo struct {
-	SessionID      string
-	TranscriptPath string
-	ProjectPath    string
-	ModTime        time.Time
-	SizeBytes      int64
-}
 
 var backfillCmd = &cobra.Command{
 	Use:   "backfill",
@@ -41,17 +29,14 @@ a specific session.`,
 		fmt.Println()
 
 		// Check authentication
-		cfg, err := config.GetUploadConfig()
+		cfg, err := config.EnsureAuthenticated()
 		if err != nil {
-			return fmt.Errorf("failed to get config: %w", err)
-		}
-		if cfg.APIKey == "" {
-			return fmt.Errorf("not authenticated. Run 'confab login' first")
+			return err
 		}
 
 		// Scan for sessions
 		fmt.Println("Scanning ~/.claude/projects...")
-		sessions, err := scanForSessions()
+		sessions, err := discovery.ScanAllSessions()
 		if err != nil {
 			return fmt.Errorf("failed to scan for sessions: %w", err)
 		}
@@ -64,62 +49,18 @@ a specific session.`,
 		fmt.Printf("Found %d session(s)\n", len(sessions))
 		fmt.Println()
 
-		// Separate recent vs old sessions (1 hour threshold)
+		// Filter sessions by age (1 hour threshold)
 		threshold := time.Now().Add(-1 * time.Hour)
-		var oldSessions, recentSessions []SessionInfo
-		for _, s := range sessions {
-			if s.ModTime.Before(threshold) {
-				oldSessions = append(oldSessions, s)
-			} else {
-				recentSessions = append(recentSessions, s)
-			}
-		}
+		oldSessions, recentSessions := filterSessionsByAge(sessions, threshold)
 
-		// Check which old sessions already exist on server
-		var toUpload []SessionInfo
-		var alreadySynced []string
-		if len(oldSessions) > 0 {
-			sessionIDs := make([]string, len(oldSessions))
-			for i, s := range oldSessions {
-				sessionIDs[i] = s.SessionID
-			}
-
-			existing, err := checkSessionsExist(cfg, sessionIDs)
-			if err != nil {
-				return fmt.Errorf("failed to check existing sessions: %w", err)
-			}
-
-			existingSet := make(map[string]bool)
-			for _, id := range existing {
-				existingSet[id] = true
-			}
-
-			for _, s := range oldSessions {
-				if existingSet[s.SessionID] {
-					alreadySynced = append(alreadySynced, s.SessionID)
-				} else {
-					toUpload = append(toUpload, s)
-				}
-			}
+		// Determine which sessions need uploading
+		toUpload, alreadySynced, err := determineSessionsToUpload(cfg, oldSessions)
+		if err != nil {
+			return fmt.Errorf("failed to check existing sessions: %w", err)
 		}
 
 		// Print summary
-		if len(alreadySynced) > 0 {
-			fmt.Printf("Already synced: %d\n", len(alreadySynced))
-		}
-		fmt.Printf("To upload: %d\n", len(toUpload))
-
-		// Show skipped recent sessions
-		if len(recentSessions) > 0 {
-			fmt.Println()
-			fmt.Printf("Skipping %d recent session(s) (modified < 1 hour ago):\n", len(recentSessions))
-			for _, s := range recentSessions {
-				ago := time.Since(s.ModTime).Round(time.Minute)
-				fmt.Printf("  %s  %-20s  modified %s ago\n", s.SessionID[:8], truncatePath(s.ProjectPath, 20), ago)
-			}
-			fmt.Println()
-			fmt.Println("To upload a skipped session later, run: confab save <session-id>")
-		}
+		printBackfillSummary(toUpload, alreadySynced, recentSessions)
 
 		if len(toUpload) == 0 {
 			fmt.Println()
@@ -127,35 +68,16 @@ a specific session.`,
 			return nil
 		}
 
-		// Prompt for confirmation
-		fmt.Println()
-		fmt.Printf("Proceed with uploading %d session(s)? [Y/n]: ", len(toUpload))
-		reader := bufio.NewReader(os.Stdin)
-		response, _ := reader.ReadString('\n')
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "" && response != "y" && response != "yes" {
+		// Confirm upload
+		if !confirmUpload(len(toUpload)) {
 			fmt.Println("Cancelled.")
 			return nil
 		}
 
-		// Upload sessions
-		fmt.Println()
-		var succeeded, failed int
-		for i, session := range toUpload {
-			fmt.Printf("\rUploading... [%d/%d] %s", i+1, len(toUpload), session.SessionID[:8])
+		// Upload with progress
+		succeeded, failed := uploadSessionsWithProgress(cfg, toUpload)
 
-			err := uploadSession(cfg, session)
-			if err != nil {
-				fmt.Printf("\n  Error uploading %s: %v\n", session.SessionID[:8], err)
-				failed++
-			} else {
-				succeeded++
-			}
-		}
-
-		fmt.Printf("\rUploading... [%d/%d] Done.                    \n", len(toUpload), len(toUpload))
-		fmt.Println()
-
+		// Print final summary
 		if failed > 0 {
 			fmt.Printf("Uploaded %d session(s), %d failed.\n", succeeded, failed)
 		} else {
@@ -166,79 +88,108 @@ a specific session.`,
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(backfillCmd)
+// filterSessionsByAge separates sessions into old and recent based on threshold
+func filterSessionsByAge(sessions []discovery.SessionInfo, threshold time.Time) (old, recent []discovery.SessionInfo) {
+	for _, s := range sessions {
+		if s.ModTime.Before(threshold) {
+			old = append(old, s)
+		} else {
+			recent = append(recent, s)
+		}
+	}
+	return old, recent
 }
 
-// scanForSessions finds all session transcript files in ~/.claude/projects/
-func scanForSessions() ([]SessionInfo, error) {
-	home, err := os.UserHomeDir()
+// determineSessionsToUpload checks server for existing sessions and returns what needs uploading
+func determineSessionsToUpload(cfg *config.UploadConfig, oldSessions []discovery.SessionInfo) (toUpload []discovery.SessionInfo, alreadySynced []string, err error) {
+	if len(oldSessions) == 0 {
+		return nil, nil, nil
+	}
+
+	// Extract session IDs
+	sessionIDs := make([]string, len(oldSessions))
+	for i, s := range oldSessions {
+		sessionIDs[i] = s.SessionID
+	}
+
+	// Check which exist on server
+	existing, err := checkSessionsExist(cfg, sessionIDs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	projectsDir := filepath.Join(home, ".claude", "projects")
-	if _, err := os.Stat(projectsDir); os.IsNotExist(err) {
-		return nil, nil
+	// Build set for fast lookup
+	existingSet := make(map[string]bool)
+	for _, id := range existing {
+		existingSet[id] = true
 	}
 
-	var sessions []SessionInfo
+	// Separate sessions into already synced vs to upload
+	for _, s := range oldSessions {
+		if existingSet[s.SessionID] {
+			alreadySynced = append(alreadySynced, s.SessionID)
+		} else {
+			toUpload = append(toUpload, s)
+		}
+	}
 
-	// Walk through all project directories
-	err = filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
+	return toUpload, alreadySynced, nil
+}
+
+// printBackfillSummary displays what will be uploaded and what's skipped
+func printBackfillSummary(toUpload []discovery.SessionInfo, alreadySynced []string, recentSessions []discovery.SessionInfo) {
+	// Print sync summary
+	if len(alreadySynced) > 0 {
+		fmt.Printf("Already synced: %d\n", len(alreadySynced))
+	}
+	fmt.Printf("To upload: %d\n", len(toUpload))
+
+	// Show skipped recent sessions
+	if len(recentSessions) > 0 {
+		fmt.Println()
+		fmt.Printf("Skipping %d recent session(s) (modified < 1 hour ago):\n", len(recentSessions))
+		for _, s := range recentSessions {
+			ago := time.Since(s.ModTime).Round(time.Minute)
+			fmt.Printf("  %s  %-20s  modified %s ago\n", utils.TruncateSecret(s.SessionID, 8, 0), utils.TruncateWithEllipsis(s.ProjectPath, 20), ago)
+		}
+		fmt.Println()
+		fmt.Println("To upload a skipped session later, run: confab save <session-id>")
+	}
+}
+
+// confirmUpload prompts user to confirm uploading sessions
+func confirmUpload(count int) bool {
+	fmt.Println()
+	fmt.Printf("Proceed with uploading %d session(s)? [Y/n]: ", count)
+	reader := bufio.NewReader(os.Stdin)
+	response, _ := reader.ReadString('\n')
+	response = strings.TrimSpace(strings.ToLower(response))
+	return response == "" || response == "y" || response == "yes"
+}
+
+// uploadSessionsWithProgress uploads sessions and displays progress
+func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.SessionInfo) (succeeded, failed int) {
+	fmt.Println()
+	for i, session := range sessions {
+		fmt.Printf("\rUploading... [%d/%d] %s", i+1, len(sessions), utils.TruncateSecret(session.SessionID, 8, 0))
+
+		err := uploadSession(cfg, session)
 		if err != nil {
-			return nil // Skip errors
+			fmt.Printf("\n  Error uploading %s: %v\n", utils.TruncateSecret(session.SessionID, 8, 0), err)
+			failed++
+		} else {
+			succeeded++
 		}
-
-		// Look for .jsonl files that are session transcripts
-		// Session files: {uuid}.jsonl (36 chars + .jsonl = 42 chars)
-		// Agent files: agent-{8chars}.jsonl - skip these
-		if !d.IsDir() && strings.HasSuffix(path, ".jsonl") {
-			name := d.Name()
-
-			// Skip agent files
-			if strings.HasPrefix(name, "agent-") {
-				return nil
-			}
-
-			// Session ID is the filename without extension
-			sessionID := strings.TrimSuffix(name, ".jsonl")
-
-			// Validate it looks like a UUID (36 chars with hyphens)
-			if len(sessionID) != 36 {
-				return nil
-			}
-
-			info, err := d.Info()
-			if err != nil {
-				return nil
-			}
-
-			// Get project path (parent directory relative to projects/)
-			relPath, _ := filepath.Rel(projectsDir, filepath.Dir(path))
-
-			sessions = append(sessions, SessionInfo{
-				SessionID:      sessionID,
-				TranscriptPath: path,
-				ProjectPath:    relPath,
-				ModTime:        info.ModTime(),
-				SizeBytes:      info.Size(),
-			})
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
 	}
 
-	// Sort by mod time (oldest first)
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].ModTime.Before(sessions[j].ModTime)
-	})
+	fmt.Printf("\rUploading... [%d/%d] Done.                    \n", len(sessions), len(sessions))
+	fmt.Println()
 
-	return sessions, nil
+	return succeeded, failed
+}
+
+func init() {
+	rootCmd.AddCommand(backfillCmd)
 }
 
 // checkSessionsExist calls the backend to check which sessions already exist
@@ -254,77 +205,39 @@ func checkSessionsExist(cfg *config.UploadConfig, sessionIDs []string) ([]string
 		SessionIDs: sessionIDs,
 	}
 
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	url := cfg.BackendURL + "/api/v1/sessions/check"
-	req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
-	}
-
+	// Call backend API
+	client := confabhttp.NewClient(cfg, utils.DefaultHTTPTimeout)
 	var result struct {
 		Existing []string `json:"existing"`
 		Missing  []string `json:"missing"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+
+	if err := client.Post("/api/v1/sessions/check", reqBody, &result); err != nil {
 		return nil, err
 	}
 
 	return result.Existing, nil
 }
 
-// uploadSession uploads a single session to the backend
-func uploadSession(cfg *config.UploadConfig, session SessionInfo) error {
+// uploadSession uploads a single session to the backend using shared upload package
+func uploadSession(cfg *config.UploadConfig, session discovery.SessionInfo) error {
 	// Create a hook input for discovery
-	hookInput := &types.HookInput{
-		SessionID:      session.SessionID,
-		TranscriptPath: session.TranscriptPath,
-		CWD:            filepath.Dir(session.TranscriptPath),
-		Reason:         "backfill",
-	}
+	hookInput := types.NewHookInput(session.SessionID, session.TranscriptPath, filepath.Dir(session.TranscriptPath), "backfill")
 
 	// Discover session files
 	files, err := discovery.DiscoverSessionFiles(hookInput)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to discover session files for %s: %w", session.SessionID, err)
 	}
 
-	// Read file contents
-	fileUploads := make([]fileUpload, 0, len(files))
-	for _, f := range files {
-		content, err := os.ReadFile(f.Path)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", f.Path, err)
-		}
-
-		fileUploads = append(fileUploads, fileUpload{
-			Path:      f.Path,
-			Type:      f.Type,
-			SizeBytes: f.SizeBytes,
-			Content:   content,
-		})
+	// Read file contents using shared function
+	fileUploads, err := upload.ReadFilesForUpload(files)
+	if err != nil {
+		return fmt.Errorf("failed to read session files for %s: %w", session.SessionID, err)
 	}
 
-	// Create request payload
-	request := saveSessionRequest{
+	// Create request payload with backfill source
+	request := &upload.SaveSessionRequest{
 		SessionID:      session.SessionID,
 		TranscriptPath: session.TranscriptPath,
 		CWD:            hookInput.CWD,
@@ -333,76 +246,6 @@ func uploadSession(cfg *config.UploadConfig, session SessionInfo) error {
 		Files:          fileUploads,
 	}
 
-	// Marshal to JSON
-	payload, err := json.Marshal(request)
-	if err != nil {
-		return err
-	}
-
-	// Compress with zstd
-	var compressedPayload bytes.Buffer
-	encoder, err := zstd.NewWriter(&compressedPayload, zstd.WithEncoderLevel(zstd.SpeedDefault))
-	if err != nil {
-		return err
-	}
-
-	_, err = encoder.Write(payload)
-	if err != nil {
-		encoder.Close()
-		return err
-	}
-
-	if err := encoder.Close(); err != nil {
-		return err
-	}
-
-	// Send HTTP request
-	url := cfg.BackendURL + "/api/v1/sessions/save"
-	req, err := http.NewRequest("POST", url, bytes.NewReader(compressedPayload.Bytes()))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Encoding", "zstd")
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-// Local types for backfill (to avoid circular imports)
-type saveSessionRequest struct {
-	SessionID      string       `json:"session_id"`
-	TranscriptPath string       `json:"transcript_path"`
-	CWD            string       `json:"cwd"`
-	Reason         string       `json:"reason"`
-	Source         string       `json:"source,omitempty"`
-	Files          []fileUpload `json:"files"`
-}
-
-type fileUpload struct {
-	Path      string `json:"path"`
-	Type      string `json:"type"`
-	SizeBytes int64  `json:"size_bytes"`
-	Content   []byte `json:"content"`
-}
-
-// truncatePath shortens a path for display
-func truncatePath(path string, maxLen int) string {
-	if len(path) <= maxLen {
-		return path
-	}
-	return "..." + path[len(path)-maxLen+3:]
+	// Send using shared function (handles compression and HTTP)
+	return upload.SendSessionRequest(cfg, request)
 }

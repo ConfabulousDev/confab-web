@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -12,8 +13,14 @@ var configureCmd = &cobra.Command{
 	Short: "Configure cloud sync settings",
 	Long:  `Set backend URL and API key for cloud session sync.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		backendURL, _ := cmd.Flags().GetString("backend-url")
-		apiKey, _ := cmd.Flags().GetString("api-key")
+		backendURL, err := cmd.Flags().GetString("backend-url")
+		if err != nil {
+			return fmt.Errorf("failed to get backend-url flag: %w", err)
+		}
+		apiKey, err := cmd.Flags().GetString("api-key")
+		if err != nil {
+			return fmt.Errorf("failed to get api-key flag: %w", err)
+		}
 
 		// Get current config
 		cfg, err := config.GetUploadConfig()
@@ -38,7 +45,7 @@ var configureCmd = &cobra.Command{
 		fmt.Println()
 		fmt.Printf("Backend URL: %s\n", cfg.BackendURL)
 		if cfg.APIKey != "" {
-			fmt.Printf("API Key: %s...%s\n", cfg.APIKey[:8], cfg.APIKey[len(cfg.APIKey)-4:])
+			fmt.Printf("API Key: %s\n", utils.TruncateSecret(cfg.APIKey, 8, 4))
 			fmt.Println("Status: Cloud sync enabled")
 		} else {
 			fmt.Println("API Key: (not set)")
