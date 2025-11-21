@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -269,15 +270,29 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 // serveSPA serves the SvelteKit static files with SPA fallback
 func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 	fileServer := http.FileServer(http.Dir(staticDir))
+	// Clean staticDir once during initialization for security check
+	cleanStaticDir := filepath.Clean(staticDir)
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Try to serve the requested file
-		path := r.URL.Path
+		// Clean the requested path to prevent path traversal attacks
+		// This resolves .. sequences and removes redundant separators
+		requestPath := filepath.Clean(r.URL.Path)
+
+		// Join with staticDir to get the full path
+		fullPath := filepath.Join(cleanStaticDir, requestPath)
+
+		// CRITICAL SECURITY CHECK: Ensure resolved path is still under staticDir
+		// This prevents path traversal attacks like /../../../etc/passwd
+		if !strings.HasPrefix(fullPath, cleanStaticDir) {
+			// Path escapes static directory, serve index.html instead
+			http.ServeFile(w, r, filepath.Join(cleanStaticDir, "index.html"))
+			return
+		}
 
 		// Check if file exists
-		if _, err := os.Stat(staticDir + path); os.IsNotExist(err) {
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 			// File doesn't exist, serve index.html for SPA routing
-			http.ServeFile(w, r, staticDir+"/index.html")
+			http.ServeFile(w, r, filepath.Join(cleanStaticDir, "index.html"))
 			return
 		}
 
