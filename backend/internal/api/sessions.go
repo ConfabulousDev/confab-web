@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,8 +42,9 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var req models.SaveSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Check if error is due to request too large
-		if strings.Contains(err.Error(), "request body too large") {
+		// Check if error is due to request too large (type-safe check)
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
 			respondError(w, http.StatusRequestEntityTooLarge,
 				fmt.Sprintf("Request body too large (max %d MB)", MaxRequestBodySize/(1024*1024)))
 			return
