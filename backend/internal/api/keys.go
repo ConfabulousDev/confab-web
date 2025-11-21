@@ -2,13 +2,13 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/logger"
 	"github.com/santaclaude2025/confab/backend/internal/models"
 )
 
@@ -58,7 +58,7 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		// Store in database
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
 		if err != nil {
-			fmt.Printf("Error creating API key: %v\n", err)
+			logger.Error("Failed to create API key in database", "error", err, "user_id", userID, "name", req.Name)
 			respondError(w, http.StatusInternalServerError, "Failed to create API key")
 			return
 		}

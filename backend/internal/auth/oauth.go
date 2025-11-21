@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/logger"
 )
 
 const (
@@ -133,17 +133,21 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Get user info from GitHub
 		user, err := getGitHubUser(accessToken)
 		if err != nil {
-			fmt.Printf("Error getting GitHub user: %v\n", err)
+			logger.Error("Failed to get GitHub user", "error", err)
 			http.Error(w, "Failed to get user info", http.StatusInternalServerError)
 			return
 		}
 
-		// Debug: log user info from GitHub
-		fmt.Printf("GitHub user: ID=%d, Login=%s, Email=%s, Name=%s\n", user.ID, user.Login, user.Email, user.Name)
+		// Log user info from GitHub
+		logger.Info("GitHub OAuth user retrieved",
+			"github_id", user.ID,
+			"login", user.Login,
+			"email", user.Email,
+			"name", user.Name)
 
 		// Check email whitelist (if configured)
 		if !isEmailAllowed(user.Email) {
-			log.Printf("Email not in whitelist: %s", user.Email)
+			logger.Warn("Email not in whitelist", "email", user.Email)
 			http.Error(w, "Access denied: Your email is not authorized to use this application. Please contact the administrator.", http.StatusForbidden)
 			return
 		}
@@ -158,7 +162,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		githubID := fmt.Sprintf("%d", user.ID)
 		dbUser, err := database.FindOrCreateUserByGitHub(ctx, githubID, user.Login, user.Email, displayName, user.AvatarURL)
 		if err != nil {
-			fmt.Printf("Error creating user: %v\n", err)
+			logger.Error("Failed to create/find user in database", "error", err, "github_id", githubID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
@@ -423,12 +427,16 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		// Store in database
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, session.UserID, keyHash, keyName)
 		if err != nil {
-			fmt.Printf("Error creating API key: %v\n", err)
+			logger.Error("Failed to create API key in database", "error", err, "user_id", session.UserID)
 			http.Error(w, "Failed to create API key", http.StatusInternalServerError)
 			return
 		}
 
-		fmt.Printf("Created API key: ID=%d, Name=%s, UserID=%d, CreatedAt=%v\n", keyID, keyName, session.UserID, createdAt)
+		logger.Info("API key created successfully",
+			"key_id", keyID,
+			"name", keyName,
+			"user_id", session.UserID,
+			"created_at", createdAt)
 
 		// Redirect to callback with API key
 		redirectURL := fmt.Sprintf("%s?key=%s", callback, apiKey)
