@@ -14,8 +14,8 @@ import (
 
 // Validation limits for session uploads
 const (
-	MaxRequestBodySize = 50 * 1024 * 1024 // 50MB total request size
-	MaxFileSize        = 10 * 1024 * 1024 // 10MB per file
+	MaxRequestBodySize = 200 * 1024 * 1024 // 200MB total request size
+	MaxFileSize        = 50 * 1024 * 1024 // 50MB per file
 	MaxFiles           = 100              // Maximum number of files per session
 	MaxSessionIDLength = 256              // Max session ID length
 	MaxPathLength      = 1024             // Max file path length
@@ -79,7 +79,7 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save metadata to database
-	runID, err := s.db.SaveSession(ctx, userID, &req, s3Keys)
+	runID, err := s.db.SaveSession(ctx, userID, &req, s3Keys, "hook")
 	if err != nil {
 		log.Printf("Error saving session to database: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to save session metadata")
@@ -189,6 +189,64 @@ func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
 	}
 
 	return nil
+}
+
+// HandleCheckSessions checks which session IDs already exist for the user
+func HandleCheckSessions(s *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// Get authenticated user ID
+		userID, ok := auth.GetUserID(ctx)
+		if !ok {
+			respondError(w, http.StatusUnauthorized, "User not authenticated")
+			return
+		}
+
+		// Parse request body
+		var req struct {
+			SessionIDs []string `json:"session_ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid request body")
+			return
+		}
+
+		// Validate
+		if len(req.SessionIDs) == 0 {
+			respondError(w, http.StatusBadRequest, "session_ids is required")
+			return
+		}
+		if len(req.SessionIDs) > 1000 {
+			respondError(w, http.StatusBadRequest, "Too many session IDs (max 1000)")
+			return
+		}
+
+		// Check which sessions exist
+		existing, err := s.db.CheckSessionsExist(ctx, userID, req.SessionIDs)
+		if err != nil {
+			log.Printf("Error checking sessions: %v", err)
+			respondError(w, http.StatusInternalServerError, "Failed to check sessions")
+			return
+		}
+
+		// Build missing list
+		existingSet := make(map[string]bool)
+		for _, id := range existing {
+			existingSet[id] = true
+		}
+		var missing []string
+		for _, id := range req.SessionIDs {
+			if !existingSet[id] {
+				missing = append(missing, id)
+			}
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"existing": existing,
+			"missing":  missing,
+		})
+	}
 }
 
 // sanitizeString sanitizes user input strings

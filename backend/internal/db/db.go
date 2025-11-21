@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -86,7 +87,8 @@ func (db *DB) RunMigrations() error {
 		reason TEXT NOT NULL,
 		end_timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
 		s3_uploaded BOOLEAN NOT NULL DEFAULT FALSE,
-		git_info JSONB
+		git_info JSONB,
+		source TEXT NOT NULL DEFAULT 'hook'
 	);
 
 	-- Files table
@@ -146,6 +148,12 @@ func (db *DB) RunMigrations() error {
 	alterGitInfo := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS git_info JSONB;`
 	if _, err := db.conn.Exec(alterGitInfo); err != nil {
 		return fmt.Errorf("failed to add git_info column: %w", err)
+	}
+
+	// Add source column to existing runs table (for databases created before this migration)
+	alterSource := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'hook';`
+	if _, err := db.conn.Exec(alterSource); err != nil {
+		return fmt.Errorf("failed to add source column: %w", err)
 	}
 
 	return nil
@@ -259,7 +267,7 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 }
 
 // SaveSession stores a session with its run and files in a transaction
-func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSessionRequest, s3Keys map[string]string) (int64, error) {
+func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSessionRequest, s3Keys map[string]string, source string) (int64, error) {
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
@@ -276,20 +284,24 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 	}
 
 	// Marshal GitInfo to JSON for JSONB column
-	var gitInfoJSON []byte
+	var gitInfoJSON interface{} = nil // Explicitly nil for NULL in database
 	if req.GitInfo != nil {
-		gitInfoJSON, err = json.Marshal(req.GitInfo)
+		jsonBytes, err := json.Marshal(req.GitInfo)
 		if err != nil {
 			return 0, fmt.Errorf("failed to marshal git_info: %w", err)
 		}
+		gitInfoJSON = jsonBytes
 	}
 
 	// Always insert a new run
 	runSQL := `
-		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info, source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
+	if source == "" {
+		source = "hook"
+	}
 	var runID int64
 	err = tx.QueryRowContext(ctx, runSQL,
 		req.SessionID,
@@ -300,6 +312,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		now,
 		len(s3Keys) > 0,
 		gitInfoJSON,
+		source,
 	).Scan(&runID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert run: %w", err)
@@ -593,6 +606,45 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 	}
 
 	return &session, nil
+}
+
+// CheckSessionsExist checks which session IDs exist for a user
+// Returns the list of session IDs that already exist in the database
+func (db *DB) CheckSessionsExist(ctx context.Context, userID int64, sessionIDs []string) ([]string, error) {
+	if len(sessionIDs) == 0 {
+		return []string{}, nil
+	}
+
+	// Build query with placeholders
+	placeholders := make([]string, len(sessionIDs))
+	args := make([]interface{}, len(sessionIDs)+1)
+	args[0] = userID
+	for i, id := range sessionIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args[i+1] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT session_id FROM sessions
+		WHERE user_id = $1 AND session_id IN (%s)
+	`, strings.Join(placeholders, ","))
+
+	rows, err := db.conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var existing []string
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+		existing = append(existing, sessionID)
+	}
+
+	return existing, nil
 }
 
 // SessionShare represents a share link

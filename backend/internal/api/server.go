@@ -40,9 +40,9 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		// Auth endpoints: 10 requests per minute = 0.167 req/sec, burst of 5
 		// Stricter to prevent brute force attacks on OAuth flow
 		authLimiter: ratelimit.NewInMemoryRateLimiter(0.167, 5),
-		// Upload endpoints: 20 requests per hour = 0.0056 req/sec, burst of 5
-		// Very strict to prevent storage abuse
-		uploadLimiter: ratelimit.NewInMemoryRateLimiter(0.0056, 5),
+		// Upload endpoints: 1000 requests per hour = 0.278 req/sec, burst of 200
+		// Keyed by user ID (not IP) to allow backfill of many sessions
+		uploadLimiter: ratelimit.NewInMemoryRateLimiter(0.278, 200),
 		// Validation endpoint: 30 requests per minute = 0.5 req/sec, burst of 10
 		// Moderate limit for CLI validation checks while preventing abuse
 		validationLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 10),
@@ -149,10 +149,13 @@ func (s *Server) SetupRoutes() http.Handler {
 			// API key validation endpoint with rate limiting to prevent abuse
 			r.Get("/auth/validate", ratelimit.HandlerFunc(s.validationLimiter, s.handleValidateAPIKey))
 
-			// Upload endpoints with stricter rate limiting
+			// Check which sessions exist (for backfill deduplication)
+			r.Post("/sessions/check", HandleCheckSessions(s))
+
+			// Upload endpoints with user-based rate limiting
 			r.Group(func(r chi.Router) {
-				// Apply upload rate limiting to prevent storage abuse
-				r.Use(ratelimit.Middleware(s.uploadLimiter))
+				// Rate limit by user ID (not IP) to allow backfill of many sessions
+				r.Use(ratelimit.MiddlewareWithKey(s.uploadLimiter, ratelimit.UserKeyFunc(auth.GetUserIDContextKey())))
 				// Decompress zstd-compressed request bodies
 				r.Use(decompressMiddleware())
 				r.Post("/sessions/save", s.handleSaveSession)

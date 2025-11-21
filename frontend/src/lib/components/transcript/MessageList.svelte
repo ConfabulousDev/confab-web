@@ -124,8 +124,11 @@
 
 	{#if displayableMessages.length === 0}
 		<div class="empty-state">
-			<div class="empty-icon">💬</div>
-			<p>No messages to display</p>
+			<div class="empty-icon">📋</div>
+			<p>No conversation messages</p>
+			{#if messages.length > 0}
+				<p class="empty-detail">This session contains {messages.length} metadata {messages.length === 1 ? 'entry' : 'entries'} (file snapshots, etc.) but no user/assistant messages.</p>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -208,7 +211,13 @@
 	.empty-state p {
 		margin: 0;
 		font-size: 1.1rem;
-		font-style: italic;
+	}
+
+	.empty-detail {
+		margin-top: 0.5rem !important;
+		font-size: 0.9rem !important;
+		color: #868e96;
+		max-width: 400px;
 	}
 
 	/* Mobile responsive styles */
