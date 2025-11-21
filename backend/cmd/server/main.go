@@ -46,8 +46,8 @@ func main() {
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", config.Port),
 		Handler:      router,
-		ReadTimeout:  config.ReadTimeout,  // Configurable via READ_TIMEOUT (default: 30s)
-		WriteTimeout: config.WriteTimeout, // Configurable via WRITE_TIMEOUT (default: 30s)
+		ReadTimeout:  config.ReadTimeout,  // Configurable via HTTP_READ_TIMEOUT (default: 30s)
+		WriteTimeout: config.WriteTimeout, // Configurable via HTTP_WRITE_TIMEOUT (default: 30s)
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -92,14 +92,14 @@ func loadConfig() Config {
 
 	// HTTP timeout configuration (defaults to 30s)
 	readTimeout := 30 * time.Second
-	if rt := os.Getenv("READ_TIMEOUT"); rt != "" {
+	if rt := os.Getenv("HTTP_READ_TIMEOUT"); rt != "" {
 		if parsed, err := time.ParseDuration(rt); err == nil {
 			readTimeout = parsed
 		}
 	}
 
 	writeTimeout := 30 * time.Second
-	if wt := os.Getenv("WRITE_TIMEOUT"); wt != "" {
+	if wt := os.Getenv("HTTP_WRITE_TIMEOUT"); wt != "" {
 		if parsed, err := time.ParseDuration(wt); err == nil {
 			writeTimeout = parsed
 		}
