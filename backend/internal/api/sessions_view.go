@@ -8,6 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/logger"
+	"github.com/santaclaude2025/confab/backend/internal/validation"
 )
 
 // HandleListSessions lists all sessions for the authenticated user
@@ -27,6 +29,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		// Get sessions from database
 		sessions, err := database.ListUserSessions(ctx, userID)
 		if err != nil {
+			logger.Error("Failed to list sessions", "error", err, "user_id", userID)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}
@@ -52,8 +55,8 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 
 		// Get session ID from URL
 		sessionID := chi.URLParam(r, "sessionId")
-		if sessionID == "" {
-			respondError(w, http.StatusBadRequest, "Missing session ID")
+		if err := validation.ValidateSessionID(sessionID); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 

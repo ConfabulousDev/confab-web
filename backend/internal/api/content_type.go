@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"strings"
+
+	"github.com/santaclaude2025/confab/backend/internal/logger"
 )
 
 // validateContentType middleware ensures POST/PUT/PATCH requests have proper Content-Type
@@ -15,6 +17,7 @@ func validateContentType(next http.Handler) http.Handler {
 
 			// Content-Type must be present
 			if contentType == "" {
+				logger.Info("Request missing Content-Type header", "method", method, "path", r.URL.Path)
 				http.Error(w, "Content-Type header required", http.StatusUnsupportedMediaType)
 				return
 			}
@@ -28,6 +31,7 @@ func validateContentType(next http.Handler) http.Handler {
 
 			// Must be application/json
 			if mediaType != "application/json" {
+				logger.Info("Request with invalid Content-Type", "method", method, "path", r.URL.Path, "content_type", mediaType)
 				http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
 				return
 			}

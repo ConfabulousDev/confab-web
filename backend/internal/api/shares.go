@@ -44,8 +44,8 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 
 		// Get session ID from URL
 		sessionID := chi.URLParam(r, "sessionId")
-		if sessionID == "" {
-			respondError(w, http.StatusBadRequest, "Missing session ID")
+		if err := validation.ValidateSessionID(sessionID); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -152,8 +152,8 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 
 		// Get session ID from URL
 		sessionID := chi.URLParam(r, "sessionId")
-		if sessionID == "" {
-			respondError(w, http.StatusBadRequest, "Missing session ID")
+		if err := validation.ValidateSessionID(sessionID); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -201,8 +201,8 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 
 		// Get share token from URL
 		shareToken := chi.URLParam(r, "shareToken")
-		if shareToken == "" {
-			respondError(w, http.StatusBadRequest, "Missing share token")
+		if err := validation.ValidateShareToken(shareToken); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -236,8 +236,15 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		sessionID := chi.URLParam(r, "sessionId")
 		shareToken := chi.URLParam(r, "shareToken")
 
-		if sessionID == "" || shareToken == "" {
-			respondError(w, http.StatusBadRequest, "Missing session ID or share token")
+		// Validate session ID
+		if err := validation.ValidateSessionID(sessionID); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// Validate share token
+		if err := validation.ValidateShareToken(shareToken); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 

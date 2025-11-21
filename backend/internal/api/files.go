@@ -11,6 +11,7 @@ import (
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/logger"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
+	"github.com/santaclaude2025/confab/backend/internal/validation"
 )
 
 // HandleGetFileContent returns file content from S3
@@ -97,8 +98,21 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		shareToken := chi.URLParam(r, "shareToken")
 		fileIDStr := chi.URLParam(r, "fileId")
 
-		if sessionID == "" || shareToken == "" || fileIDStr == "" {
-			respondError(w, http.StatusBadRequest, "Missing required parameters")
+		// Validate session ID
+		if err := validation.ValidateSessionID(sessionID); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// Validate share token
+		if err := validation.ValidateShareToken(shareToken); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// Validate file ID
+		if fileIDStr == "" {
+			respondError(w, http.StatusBadRequest, "Missing file ID")
 			return
 		}
 
