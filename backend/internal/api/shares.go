@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/validation"
 )
 
 // CreateShareRequest is the request body for creating a share
@@ -72,10 +72,9 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 				respondError(w, http.StatusBadRequest, "Maximum 50 invited emails allowed")
 				return
 			}
-			// Validate email formats (basic)
+			// Validate email formats
 			for _, email := range req.InvitedEmails {
-				email = strings.TrimSpace(email)
-				if !strings.Contains(email, "@") {
+				if !validation.IsValidEmail(email) {
 					respondError(w, http.StatusBadRequest, "Invalid email format")
 					return
 				}

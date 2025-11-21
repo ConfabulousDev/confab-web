@@ -1,8 +1,9 @@
 package api
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/santaclaude2025/confab/backend/internal/validation"
 )
 
 // Test share token generation - security critical
@@ -112,9 +113,7 @@ func TestEmailValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			email := strings.TrimSpace(tt.email)
-			hasAt := strings.Contains(email, "@")
-			isValid := hasAt && email != "" && email != "@"
+			isValid := validation.IsValidEmail(tt.email)
 
 			if isValid != tt.wantValid {
 				t.Errorf("email %q: expected valid=%v, got valid=%v", tt.email, tt.wantValid, isValid)
