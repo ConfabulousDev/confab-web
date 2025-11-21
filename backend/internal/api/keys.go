@@ -67,8 +67,7 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		}
 
 		// Return response (key is only shown once)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(CreateAPIKeyResponse{
+		respondJSON(w, http.StatusOK, CreateAPIKeyResponse{
 			ID:        keyID,
 			Key:       apiKey,
 			Name:      req.Name,
@@ -103,8 +102,7 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 			keys = []models.APIKey{}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(keys)
+		respondJSON(w, http.StatusOK, keys)
 	}
 }
 

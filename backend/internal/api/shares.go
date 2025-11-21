@@ -125,8 +125,7 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 			ExpiresAt:     share.ExpiresAt,
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		respondJSON(w, http.StatusOK, response)
 	}
 }
 
@@ -171,8 +170,7 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 			shares = []db.SessionShare{}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(shares)
+		respondJSON(w, http.StatusOK, shares)
 	}
 }
 
@@ -265,8 +263,7 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(session)
+		respondJSON(w, http.StatusOK, session)
 	}
 }
 

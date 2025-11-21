@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -37,8 +36,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			sessions = []db.SessionListItem{}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(sessions)
+		respondJSON(w, http.StatusOK, sessions)
 	}
 }
 
@@ -74,7 +72,6 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(session)
+		respondJSON(w, http.StatusOK, session)
 	}
 }
