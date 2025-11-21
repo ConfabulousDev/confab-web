@@ -81,17 +81,26 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		t.Fatalf("Failed to get minio endpoint: %v", err)
 	}
 
-	// Create S3 storage client
+	// Create S3 storage client with retry (MinIO needs time to initialize)
 	t.Log("Initializing S3 storage...")
-	s3Storage, err := storage.NewS3Storage(storage.S3Config{
-		Endpoint:        minioEndpoint,
-		AccessKeyID:     "minioadmin",
-		SecretAccessKey: "minioadmin",
-		BucketName:      "confab-test",
-		UseSSL:          false, // Local testing without SSL
-	})
-	if err != nil {
-		t.Fatalf("Failed to create S3 storage: %v", err)
+	var s3Storage *storage.S3Storage
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		s3Storage, err = storage.NewS3Storage(storage.S3Config{
+			Endpoint:        minioEndpoint,
+			AccessKeyID:     "minioadmin",
+			SecretAccessKey: "minioadmin",
+			BucketName:      "confab-test",
+			UseSSL:          false, // Local testing without SSL
+		})
+		if err == nil {
+			break
+		}
+		if i == maxRetries-1 {
+			t.Fatalf("Failed to create S3 storage after %d retries: %v", maxRetries, err)
+		}
+		t.Logf("MinIO not ready yet, retrying... (%d/%d)", i+1, maxRetries)
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	env := &TestEnvironment{

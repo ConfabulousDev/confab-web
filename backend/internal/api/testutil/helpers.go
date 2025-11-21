@@ -78,7 +78,8 @@ func CreateTestUser(t *testing.T, env *TestEnvironment, email, name string) *mod
 		RETURNING id, email, name, avatar_url, github_id, created_at, updated_at
 	`
 
-	githubID := "test-github-123"
+	// Generate unique github_id based on email to avoid collisions
+	githubID := "test-github-" + email
 	avatarURL := "https://github.com/avatar.png"
 
 	var user models.User
