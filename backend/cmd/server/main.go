@@ -44,11 +44,10 @@ func main() {
 
 	// HTTP server configuration
 	httpServer := &http.Server{
-		Addr:        fmt.Sprintf(":%d", config.Port),
-		Handler:     router,
-		ReadTimeout: 15 * time.Second,
-		// TODO: is 15s enough for uploads?
-		WriteTimeout: 15 * time.Second,
+		Addr:         fmt.Sprintf(":%d", config.Port),
+		Handler:      router,
+		ReadTimeout:  config.ReadTimeout,  // Configurable via READ_TIMEOUT (default: 30s)
+		WriteTimeout: config.WriteTimeout, // Configurable via WRITE_TIMEOUT (default: 30s)
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -77,16 +76,33 @@ func main() {
 }
 
 type Config struct {
-	Port        int
-	DatabaseURL string
-	S3Config    storage.S3Config
-	OAuthConfig auth.OAuthConfig
+	Port         int
+	DatabaseURL  string
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	S3Config     storage.S3Config
+	OAuthConfig  auth.OAuthConfig
 }
 
 func loadConfig() Config {
 	port := 8080
 	if p := os.Getenv("PORT"); p != "" {
 		fmt.Sscanf(p, "%d", &port)
+	}
+
+	// HTTP timeout configuration (defaults to 30s)
+	readTimeout := 30 * time.Second
+	if rt := os.Getenv("READ_TIMEOUT"); rt != "" {
+		if parsed, err := time.ParseDuration(rt); err == nil {
+			readTimeout = parsed
+		}
+	}
+
+	writeTimeout := 30 * time.Second
+	if wt := os.Getenv("WRITE_TIMEOUT"); wt != "" {
+		if parsed, err := time.ParseDuration(wt); err == nil {
+			writeTimeout = parsed
+		}
 	}
 
 	// Validate required OAuth configuration
@@ -159,8 +175,10 @@ func loadConfig() Config {
 	}
 
 	return Config{
-		Port:        port,
-		DatabaseURL: databaseURL,
+		Port:         port,
+		DatabaseURL:  databaseURL,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
 		S3Config: storage.S3Config{
 			Endpoint:        s3Endpoint,
 			AccessKeyID:     awsAccessKeyID,
