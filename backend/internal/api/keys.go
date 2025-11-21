@@ -66,6 +66,9 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// Audit log: API key created
+		logger.Info("API key created", "user_id", userID, "key_id", keyID, "name", req.Name)
+
 		// Return response (key is only shown once)
 		respondJSON(w, http.StatusOK, CreateAPIKeyResponse{
 			ID:        keyID,
@@ -93,9 +96,13 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 		// Get keys from database
 		keys, err := database.ListAPIKeys(ctx, userID)
 		if err != nil {
+			logger.Error("Failed to list API keys", "error", err, "user_id", userID)
 			respondError(w, http.StatusInternalServerError, "Failed to list API keys")
 			return
 		}
+
+		// Success log
+		logger.Info("API keys listed", "user_id", userID, "count", len(keys))
 
 		// Return empty array if no keys
 		if keys == nil {
@@ -130,9 +137,13 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 
 		// Delete key
 		if err := database.DeleteAPIKey(ctx, userID, keyID); err != nil {
+			logger.Error("Failed to delete API key", "error", err, "user_id", userID, "key_id", keyID)
 			respondError(w, http.StatusNotFound, "API key not found")
 			return
 		}
+
+		// Audit log: API key deleted
+		logger.Info("API key deleted", "user_id", userID, "key_id", keyID)
 
 		w.WriteHeader(http.StatusNoContent)
 	}

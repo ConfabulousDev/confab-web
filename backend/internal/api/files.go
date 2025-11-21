@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/logger"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
 )
 
@@ -66,6 +67,14 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 			respondStorageError(w, err, "Failed to download file")
 			return
 		}
+
+		// Audit log: File downloaded
+		logger.Info("File downloaded",
+			"user_id", userID,
+			"file_id", fileID,
+			"file_type", file.FileType,
+			"file_path", file.FilePath,
+			"size_bytes", len(content))
 
 		// Set appropriate Content-Type based on file type
 		contentType := "application/json"
@@ -152,6 +161,16 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 			respondStorageError(w, err, "Failed to download file")
 			return
 		}
+
+		// Audit log: Shared file downloaded
+		logger.Info("Shared file downloaded",
+			"session_id", sessionID,
+			"share_token", shareToken,
+			"file_id", fileID,
+			"file_type", file.FileType,
+			"file_path", file.FilePath,
+			"viewer_email", viewerEmail,
+			"size_bytes", len(content))
 
 		// Set appropriate Content-Type based on file type
 		contentType := "application/json"

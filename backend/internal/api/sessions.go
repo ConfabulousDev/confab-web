@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/santaclaude2025/confab/backend/internal/auth"
+	"github.com/santaclaude2025/confab/backend/internal/logger"
 	"github.com/santaclaude2025/confab/backend/internal/models"
 )
 
@@ -58,7 +58,10 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Processing session save for user %d, session %s with %d files", userID, req.SessionID, len(req.Files))
+	logger.Info("Processing session save",
+		"user_id", userID,
+		"session_id", req.SessionID,
+		"file_count", len(req.Files))
 
 	// Create context with timeout for storage operations (longer timeout for uploads)
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
@@ -68,19 +71,23 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 	s3Keys := make(map[string]string)
 	for _, file := range req.Files {
 		if len(file.Content) == 0 {
-			log.Printf("Warning: Empty content for file %s", file.Path)
+			logger.Warn("Empty file content", "file_path", file.Path, "session_id", req.SessionID)
 			continue
 		}
 
 		s3Key, err := s.storage.Upload(storageCtx, userID, req.SessionID, file.Path, file.Content)
 		if err != nil {
-			log.Printf("Error uploading file %s to S3: %v", file.Path, err)
+			logger.Error("File upload failed",
+				"error", err,
+				"user_id", userID,
+				"session_id", req.SessionID,
+				"file_path", file.Path)
 			respondStorageError(w, err, "Failed to upload files to storage")
 			return
 		}
 
 		s3Keys[file.Path] = s3Key
-		log.Printf("Uploaded %s to S3 key: %s", file.Path, s3Key)
+		logger.Debug("File uploaded", "file_path", file.Path, "s3_key", s3Key)
 	}
 
 	// Create context with timeout for database operation
@@ -90,12 +97,20 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 	// Save metadata to database
 	runID, err := s.db.SaveSession(dbCtx, userID, &req, s3Keys, "hook")
 	if err != nil {
-		log.Printf("Error saving session to database: %v", err)
+		logger.Error("Failed to save session metadata",
+			"error", err,
+			"user_id", userID,
+			"session_id", req.SessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to save session metadata")
 		return
 	}
 
-	log.Printf("Successfully saved session %s, run ID: %d", req.SessionID, runID)
+	// Audit log: Session saved successfully
+	logger.Info("Session saved successfully",
+		"user_id", userID,
+		"session_id", req.SessionID,
+		"run_id", runID,
+		"file_count", len(s3Keys))
 
 	// Return success response
 	respondJSON(w, http.StatusOK, models.SaveSessionResponse{
@@ -192,8 +207,11 @@ func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
 
 		// Validate SizeBytes matches actual content (if provided)
 		if file.SizeBytes > 0 && file.SizeBytes != contentSize {
-			log.Printf("Warning: file[%d] (%s) size_bytes mismatch: declared=%d, actual=%d",
-				i, file.Path, file.SizeBytes, contentSize)
+			logger.Warn("File size mismatch",
+				"file_index", i,
+				"file_path", file.Path,
+				"declared_size", file.SizeBytes,
+				"actual_size", contentSize)
 		}
 	}
 
@@ -236,10 +254,16 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 		// Check which sessions exist
 		existing, err := s.db.CheckSessionsExist(ctx, userID, req.SessionIDs)
 		if err != nil {
-			log.Printf("Error checking sessions: %v", err)
+			logger.Error("Failed to check sessions", "error", err, "user_id", userID)
 			respondError(w, http.StatusInternalServerError, "Failed to check sessions")
 			return
 		}
+
+		// Success log
+		logger.Info("Sessions checked",
+			"user_id", userID,
+			"requested_count", len(req.SessionIDs),
+			"existing_count", len(existing))
 
 		// Build missing list
 		existingSet := make(map[string]bool)

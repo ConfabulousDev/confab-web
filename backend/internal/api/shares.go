@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/logger"
 	"github.com/santaclaude2025/confab/backend/internal/validation"
 )
 
@@ -109,12 +110,22 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
+			logger.Error("Failed to create share", "error", err, "user_id", userID, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to create share")
 			return
 		}
 
 		// Build share URL
 		shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
+
+		// Audit log: Share created
+		logger.Info("Share created",
+			"user_id", userID,
+			"session_id", sessionID,
+			"share_token", shareToken,
+			"visibility", share.Visibility,
+			"invited_emails_count", len(share.InvitedEmails),
+			"expires_at", share.ExpiresAt)
 
 		// Return response
 		response := CreateShareResponse{
@@ -161,9 +172,13 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
+			logger.Error("Failed to list shares", "error", err, "user_id", userID, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to list shares")
 			return
 		}
+
+		// Success log
+		logger.Info("Shares listed", "user_id", userID, "session_id", sessionID, "count", len(shares))
 
 		// Return empty array if no shares
 		if shares == nil {
@@ -197,14 +212,18 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 
 		// Revoke share
 		err := database.RevokeShare(ctx, shareToken, userID)
-		if err != nil{
+		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
 				respondError(w, http.StatusNotFound, "Share not found or unauthorized")
 				return
 			}
+			logger.Error("Failed to revoke share", "error", err, "user_id", userID, "share_token", shareToken)
 			respondError(w, http.StatusInternalServerError, "Failed to revoke share")
 			return
 		}
+
+		// Audit log: Share revoked
+		logger.Info("Share revoked", "user_id", userID, "share_token", shareToken)
 
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -259,9 +278,16 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "You are not authorized to view this share")
 				return
 			}
+			logger.Error("Failed to get shared session", "error", err, "session_id", sessionID, "share_token", shareToken)
 			respondError(w, http.StatusInternalServerError, "Failed to get shared session")
 			return
 		}
+
+		// Audit log: Shared session accessed
+		logger.Info("Shared session accessed",
+			"session_id", sessionID,
+			"share_token", shareToken,
+			"viewer_email", viewerEmail)
 
 		respondJSON(w, http.StatusOK, session)
 	}
