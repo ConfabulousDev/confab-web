@@ -70,9 +70,10 @@ func TestValidateSaveSessionRequest(t *testing.T) {
 	t.Run("rejects total size exceeding limit", func(t *testing.T) {
 		req := validRequest()
 		// Create multiple files that individually pass but exceed total
-		// MaxRequestBodySize = 50MB, so create 6 files of 9MB each = 54MB
-		fileSize := 9 * 1024 * 1024 // 9MB each (under MaxFileSize of 10MB)
-		numFiles := 6               // 6 * 9MB = 54MB > 50MB limit
+		// MaxRequestBodySize = 200MB, MaxFileSize = 50MB per file
+		// Create 5 files of 45MB each = 225MB > 200MB limit
+		fileSize := 45 * 1024 * 1024 // 45MB each (under MaxFileSize of 50MB)
+		numFiles := 5                // 5 * 45MB = 225MB > 200MB limit
 
 		req.Files = make([]models.FileUpload, numFiles)
 		for i := 0; i < numFiles; i++ {

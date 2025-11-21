@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -60,7 +61,7 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		// Get session detail (includes ownership check)
 		session, err := database.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
-			if err.Error() == "session not found" {
+			if errors.Is(err, db.ErrSessionNotFound) {
 				http.Error(w, "Session not found", http.StatusNotFound)
 				return
 			}

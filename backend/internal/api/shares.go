@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -98,11 +99,11 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		// Create share in database
 		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.Visibility, expiresAt, req.InvitedEmails)
 		if err != nil {
-			if strings.Contains(err.Error(), "session not found") {
+			if errors.Is(err, db.ErrSessionNotFound) {
 				http.Error(w, "Session not found", http.StatusNotFound)
 				return
 			}
-			if strings.Contains(err.Error(), "unauthorized") {
+			if errors.Is(err, db.ErrUnauthorized) {
 				http.Error(w, "Unauthorized", http.StatusForbidden)
 				return
 			}
@@ -149,11 +150,11 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		// Get shares from database
 		shares, err := database.ListShares(ctx, sessionID, userID)
 		if err != nil {
-			if strings.Contains(err.Error(), "session not found") {
+			if errors.Is(err, db.ErrSessionNotFound) {
 				http.Error(w, "Session not found", http.StatusNotFound)
 				return
 			}
-			if strings.Contains(err.Error(), "unauthorized") {
+			if errors.Is(err, db.ErrUnauthorized) {
 				http.Error(w, "Unauthorized", http.StatusForbidden)
 				return
 			}
@@ -193,7 +194,7 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		// Revoke share
 		err := database.RevokeShare(ctx, shareToken, userID)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "unauthorized") {
+			if errors.Is(err, db.ErrUnauthorized) {
 				http.Error(w, "Share not found or unauthorized", http.StatusNotFound)
 				return
 			}
@@ -236,19 +237,19 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		// Get shared session
 		session, err := database.GetSharedSession(ctx, sessionID, shareToken, viewerEmail)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, db.ErrShareNotFound) || errors.Is(err, db.ErrSessionNotFound) {
 				http.Error(w, "Share not found", http.StatusNotFound)
 				return
 			}
-			if strings.Contains(err.Error(), "expired") {
+			if errors.Is(err, db.ErrShareExpired) {
 				http.Error(w, "Share expired", http.StatusGone)
 				return
 			}
-			if strings.Contains(err.Error(), "unauthorized") {
+			if errors.Is(err, db.ErrUnauthorized) {
 				http.Error(w, "Please log in to view this private share", http.StatusUnauthorized)
 				return
 			}
-			if strings.Contains(err.Error(), "forbidden") {
+			if errors.Is(err, db.ErrForbidden) {
 				http.Error(w, "You are not authorized to view this share", http.StatusForbidden)
 				return
 			}

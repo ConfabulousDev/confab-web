@@ -1,10 +1,10 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
@@ -40,7 +40,7 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 		// Get file metadata and verify ownership
 		file, err := database.GetFileByID(ctx, fileID, userID)
 		if err != nil {
-			if err.Error() == "file not found or unauthorized" {
+			if errors.Is(err, db.ErrUnauthorized) {
 				http.Error(w, "File not found", http.StatusNotFound)
 				return
 			}
@@ -112,15 +112,15 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		// Validate share token and get file
 		file, err := database.GetSharedFileByID(ctx, sessionID, shareToken, fileID, viewerEmail)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if errors.Is(err, db.ErrFileNotFound) || errors.Is(err, db.ErrShareNotFound) {
 				http.Error(w, "File not found", http.StatusNotFound)
 				return
 			}
-			if strings.Contains(err.Error(), "expired") {
+			if errors.Is(err, db.ErrShareExpired) {
 				http.Error(w, "Share expired", http.StatusGone)
 				return
 			}
-			if strings.Contains(err.Error(), "unauthorized") {
+			if errors.Is(err, db.ErrUnauthorized) {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}

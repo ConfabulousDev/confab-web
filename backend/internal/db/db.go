@@ -29,6 +29,14 @@ func Connect(dsn string) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Configure connection pool
+	// MaxOpenConns: Limit total connections to avoid overwhelming the database
+	conn.SetMaxOpenConns(25)
+	// MaxIdleConns: Keep some connections ready for reuse, but not too many
+	conn.SetMaxIdleConns(5)
+	// ConnMaxLifetime: Recycle connections periodically to avoid stale connections
+	conn.SetConnMaxLifetime(5 * time.Minute)
+
 	return &DB{conn: conn}, nil
 }
 
@@ -177,7 +185,7 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -260,7 +268,7 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("API key not found")
+		return ErrAPIKeyNotFound
 	}
 
 	return nil
@@ -351,7 +359,13 @@ func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, githubUser
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+
+	// Defer rollback - will be a no-op if commit succeeds
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
 
 	// Try to find existing user by GitHub ID
 	query := `SELECT id, email, name, avatar_url, github_id, github_username, google_id, created_at, updated_at
@@ -377,7 +391,8 @@ func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, githubUser
 		if err != nil {
 			return nil, fmt.Errorf("failed to update user: %w", err)
 		}
-		if err := tx.Commit(); err != nil {
+		err = tx.Commit()
+		if err != nil {
 			return nil, fmt.Errorf("failed to commit: %w", err)
 		}
 		return &user, nil
@@ -407,7 +422,8 @@ func (db *DB) FindOrCreateUserByGitHub(ctx context.Context, githubID, githubUser
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+	if err != nil {
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
@@ -506,6 +522,10 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 		sessions = append(sessions, session)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sessions: %w", err)
+	}
+
 	return sessions, nil
 }
 
@@ -546,7 +566,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(&session.SessionID, &session.FirstSeen)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session not found")
+			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -600,9 +620,19 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 			}
 			run.Files = append(run.Files, file)
 		}
+
+		if err := fileRows.Err(); err != nil {
+			fileRows.Close()
+			return nil, fmt.Errorf("error iterating files: %w", err)
+		}
+
 		fileRows.Close()
 
 		session.Runs = append(session.Runs, run)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating runs: %w", err)
 	}
 
 	return &session, nil
@@ -644,6 +674,10 @@ func (db *DB) CheckSessionsExist(ctx context.Context, userID int64, sessionIDs [
 		existing = append(existing, sessionID)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating existing sessions: %w", err)
+	}
+
 	return existing, nil
 }
 
@@ -667,13 +701,13 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 	err := db.conn.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE session_id = $1`, sessionID).Scan(&ownerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session not found")
+			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to verify ownership: %w", err)
 	}
 
 	if ownerID != userID {
-		return nil, fmt.Errorf("unauthorized")
+		return nil, ErrUnauthorized
 	}
 
 	// Insert share
@@ -718,13 +752,13 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 	err := db.conn.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE session_id = $1`, sessionID).Scan(&ownerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session not found")
+			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to verify ownership: %w", err)
 	}
 
 	if ownerID != userID {
-		return nil, fmt.Errorf("unauthorized")
+		return nil, ErrUnauthorized
 	}
 
 	// Get shares
@@ -766,11 +800,21 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 				}
 				emails = append(emails, email)
 			}
+
+			if err := emailRows.Err(); err != nil {
+				emailRows.Close()
+				return nil, fmt.Errorf("error iterating emails: %w", err)
+			}
+
 			emailRows.Close()
 			share.InvitedEmails = emails
 		}
 
 		shares = append(shares, share)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating shares: %w", err)
 	}
 
 	return shares, nil
@@ -788,7 +832,8 @@ func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) 
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("share not found or unauthorized")
+		// Could be either not found or unauthorized - keeping combined error for security
+		return ErrUnauthorized
 	}
 
 	return nil
@@ -807,25 +852,25 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 		&share.ExpiresAt, &share.LastAccessedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("share not found")
+			return nil, ErrShareNotFound
 		}
 		return nil, fmt.Errorf("failed to get share: %w", err)
 	}
 
 	// Verify token belongs to this session
 	if share.SessionID != sessionID {
-		return nil, fmt.Errorf("share not found")
+		return nil, ErrShareNotFound
 	}
 
 	// Check expiration
 	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now()) {
-		return nil, fmt.Errorf("share expired")
+		return nil, ErrShareExpired
 	}
 
 	// Check authorization for private shares
 	if share.Visibility == "private" {
 		if viewerEmail == nil {
-			return nil, fmt.Errorf("unauthorized")
+			return nil, ErrUnauthorized
 		}
 
 		// Check if email is invited
@@ -838,7 +883,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 		}
 
 		if count == 0 {
-			return nil, fmt.Errorf("forbidden")
+			return nil, ErrForbidden
 		}
 	}
 
@@ -853,7 +898,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(&session.SessionID, &session.FirstSeen)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("session not found")
+			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -907,9 +952,19 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 			}
 			run.Files = append(run.Files, file)
 		}
+
+		if err := fileRows.Err(); err != nil {
+			fileRows.Close()
+			return nil, fmt.Errorf("error iterating files: %w", err)
+		}
+
 		fileRows.Close()
 
 		session.Runs = append(session.Runs, run)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating runs: %w", err)
 	}
 
 	return &session, nil
@@ -937,7 +992,8 @@ func (db *DB) GetFileByID(ctx context.Context, fileID int64, userID int64) (*Fil
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("file not found or unauthorized")
+			// Could be either not found or unauthorized - keeping combined for security
+			return nil, ErrUnauthorized
 		}
 		return nil, fmt.Errorf("failed to get file: %w", err)
 	}
@@ -957,20 +1013,20 @@ func (db *DB) GetSharedFileByID(ctx context.Context, sessionID, shareToken strin
 		&share.ID, &share.SessionID, &share.UserID, &share.Visibility, &share.ExpiresAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("share not found")
+			return nil, ErrShareNotFound
 		}
 		return nil, fmt.Errorf("failed to get share: %w", err)
 	}
 
 	// Check expiration
 	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now()) {
-		return nil, fmt.Errorf("share expired")
+		return nil, ErrShareExpired
 	}
 
 	// Check private share access
 	if share.Visibility == "private" {
 		if viewerEmail == nil {
-			return nil, fmt.Errorf("unauthorized: private share requires authentication")
+			return nil, ErrUnauthorized
 		}
 		// Check if viewer is invited
 		var count int
@@ -978,7 +1034,7 @@ func (db *DB) GetSharedFileByID(ctx context.Context, sessionID, shareToken strin
 		                WHERE share_id = $1 AND email = $2`
 		err = db.conn.QueryRowContext(ctx, inviteQuery, share.ID, *viewerEmail).Scan(&count)
 		if err != nil || count == 0 {
-			return nil, fmt.Errorf("unauthorized: not invited to this share")
+			return nil, ErrUnauthorized
 		}
 	}
 
@@ -1001,7 +1057,7 @@ func (db *DB) GetSharedFileByID(ctx context.Context, sessionID, shareToken strin
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("file not found")
+			return nil, ErrFileNotFound
 		}
 		return nil, fmt.Errorf("failed to get file: %w", err)
 	}

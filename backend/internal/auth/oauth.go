@@ -21,6 +21,9 @@ import (
 const (
 	SessionCookieName = "confab_session"
 	SessionDuration   = 7 * 24 * time.Hour // 7 days
+	// OAuthAPITimeout is the timeout for GitHub OAuth API calls
+	// Protects against hanging indefinitely if GitHub API is slow/unresponsive
+	OAuthAPITimeout = 30 * time.Second
 )
 
 // cookieSecure returns whether cookies should have Secure flag
@@ -28,6 +31,13 @@ const (
 func cookieSecure() bool {
 	// Only disable in local development - name is intentionally scary
 	return os.Getenv("INSECURE_DEV_MODE") != "true"
+}
+
+// oauthHTTPClient returns an HTTP client with timeout for OAuth API calls
+func oauthHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: OAuthAPITimeout,
+	}
 }
 
 // OAuthConfig holds OAuth configuration
@@ -259,7 +269,7 @@ func exchangeGitHubCode(code string, config OAuthConfig) (string, error) {
 	}
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient().Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -290,7 +300,7 @@ func getGitHubUser(accessToken string) (*GitHubUser, error) {
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +332,7 @@ func getGitHubPrimaryEmail(accessToken string) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient().Do(req)
 	if err != nil {
 		return "", err
 	}
