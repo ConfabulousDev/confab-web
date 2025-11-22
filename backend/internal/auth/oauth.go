@@ -174,7 +174,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			return
 		}
 
-		expiresAt := time.Now().Add(SessionDuration)
+		expiresAt := time.Now().UTC().Add(SessionDuration)
 		if err := database.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
 			http.Error(w, "Failed to save session", http.StatusInternalServerError)
 			return

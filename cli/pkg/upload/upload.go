@@ -56,15 +56,16 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 	}
 
 	// Extract last activity timestamp from transcript
-	var lastActivity *time.Time
+	// Default to current time if no timestamp found in transcript
+	lastActivity := time.Now().UTC()
 	for _, f := range files {
 		if f.Type == "transcript" {
 			ts, err := extractLastActivity(f.Path)
 			if err != nil {
 				// Log warning but don't fail upload
 				fmt.Fprintf(os.Stderr, "Warning: Failed to extract last activity: %v\n", err)
-			} else {
-				lastActivity = ts
+			} else if ts != nil {
+				lastActivity = *ts
 			}
 			break
 		}
@@ -78,7 +79,7 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 		Reason:         hookInput.Reason,
 		GitInfo:        gitInfo,
 		Files:          fileUploads,
-		LastActivity:   lastActivity,
+		LastActivity:   lastActivity, // Always provided, never nil
 	}
 
 	return SendSessionRequest(cfg, &request)
@@ -272,7 +273,7 @@ type SaveSessionRequest struct {
 	Source         string       `json:"source,omitempty"`
 	GitInfo        *git.GitInfo `json:"git_info,omitempty"`
 	Files          []FileUpload `json:"files"`
-	LastActivity   *time.Time   `json:"last_activity,omitempty"`
+	LastActivity   time.Time    `json:"last_activity"` // Required field, always provided by CLI
 }
 
 // FileUpload represents a file to be uploaded

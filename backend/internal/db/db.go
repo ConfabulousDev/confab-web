@@ -158,6 +158,7 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_runs_last_activity ON runs(last_activity);
 	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
+	CREATE INDEX IF NOT EXISTS idx_files_run_type_size ON files(run_id, file_type, size_bytes);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id, user_id);
 	CREATE INDEX IF NOT EXISTS idx_session_share_invites_share ON session_share_invites(share_id);
@@ -280,7 +281,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 	}
 	defer tx.Rollback()
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// Insert session if doesn't exist, or update title/session_type if provided
 	sessionSQL := `
@@ -319,12 +320,6 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		source = "hook"
 	}
 
-	// Use provided last_activity if present, otherwise use current time
-	lastActivity := now
-	if req.LastActivity != nil {
-		lastActivity = *req.LastActivity
-	}
-
 	var runID int64
 	err = tx.QueryRowContext(ctx, runSQL,
 		req.SessionID,
@@ -336,7 +331,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		len(s3Keys) > 0,
 		gitInfoJSON,
 		source,
-		lastActivity,
+		req.LastActivity, // CLI always provides this field
 	).Scan(&runID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert run: %w", err)
@@ -502,16 +497,18 @@ func (db *DB) CleanupExpiredSessions(ctx context.Context) (int64, error) {
 
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
-	SessionID   string    `json:"session_id"`
-	FirstSeen   time.Time `json:"first_seen"`
-	RunCount    int       `json:"run_count"`
-	LastRunTime time.Time `json:"last_run_time"`
-	Title       *string   `json:"title,omitempty"`
-	SessionType string    `json:"session_type"`
+	SessionID          string    `json:"session_id"`
+	FirstSeen          time.Time `json:"first_seen"`
+	RunCount           int       `json:"run_count"`
+	LastRunTime        time.Time `json:"last_run_time"`
+	Title              *string   `json:"title,omitempty"`
+	SessionType        string    `json:"session_type"`
+	MaxTranscriptSize  int64     `json:"max_transcript_size"` // Max transcript size across all runs (0 = empty session)
 }
 
 // ListUserSessions returns all sessions for a user
 func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionListItem, error) {
+	// Optimized query using subquery to avoid fan-out from multiple files per run
 	query := `
 		SELECT
 			s.session_id,
@@ -519,9 +516,16 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			COUNT(r.id) as run_count,
 			COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
 			s.title,
-			s.session_type
+			s.session_type,
+			COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size
 		FROM sessions s
 		LEFT JOIN runs r ON s.session_id = r.session_id
+		LEFT JOIN (
+			SELECT run_id, MAX(size_bytes) as max_size
+			FROM files
+			WHERE file_type = 'transcript'
+			GROUP BY run_id
+		) transcript_sizes ON r.id = transcript_sizes.run_id
 		WHERE s.user_id = $1
 		GROUP BY s.session_id, s.first_seen, s.title, s.session_type
 		ORDER BY last_run_time DESC
@@ -536,7 +540,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 	var sessions []SessionListItem
 	for rows.Next() {
 		var session SessionListItem
-		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime, &session.Title, &session.SessionType); err != nil {
+		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime, &session.Title, &session.SessionType, &session.MaxTranscriptSize); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
 		sessions = append(sessions, session)
@@ -883,7 +887,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 	}
 
 	// Check expiration
-	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now()) {
+	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now().UTC()) {
 		return nil, ErrShareExpired
 	}
 
@@ -1039,7 +1043,7 @@ func (db *DB) GetSharedFileByID(ctx context.Context, sessionID, shareToken strin
 	}
 
 	// Check expiration
-	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now()) {
+	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now().UTC()) {
 		return nil, ErrShareExpired
 	}
 

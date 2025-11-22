@@ -91,7 +91,7 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		// Calculate expiration
 		var expiresAt *time.Time
 		if req.ExpiresInDays != nil && *req.ExpiresInDays > 0 {
-			expires := time.Now().AddDate(0, 0, *req.ExpiresInDays)
+			expires := time.Now().UTC().AddDate(0, 0, *req.ExpiresInDays)
 			expiresAt = &expires
 		}
 

@@ -74,7 +74,7 @@ type SaveSessionRequest struct {
 	Files          []FileUpload `json:"files"`
 	Title          string       `json:"title,omitempty"`
 	SessionType    string       `json:"session_type,omitempty"`
-	LastActivity   *time.Time   `json:"last_activity,omitempty"`
+	LastActivity   time.Time    `json:"last_activity"` // Required field, always provided by CLI
 }
 
 // FileUpload represents a file to be uploaded

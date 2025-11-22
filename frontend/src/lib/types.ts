@@ -50,6 +50,7 @@ export type Session = {
 	last_run_time: string;
 	title?: string;
 	session_type: string;
+	max_transcript_size: number; // Max transcript size across all runs (0 = empty session)
 };
 
 // Share configuration

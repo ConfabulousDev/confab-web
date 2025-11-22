@@ -141,6 +141,7 @@
 		background: #f8f9fa;
 		border-radius: 4px;
 		overflow: hidden;
+		isolation: isolate; /* Create stacking context to contain positioned children */
 	}
 
 	.copy-btn {

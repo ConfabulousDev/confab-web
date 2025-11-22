@@ -49,9 +49,12 @@
 		}
 	}
 
-	// Sorted sessions (reactive)
+	// Sorted sessions (reactive) - filter out empty sessions (0 byte transcripts)
 	$: sortedSessions = (() => {
-		const sorted = [...sessions];
+		// Filter out sessions where all runs have 0-byte transcripts
+		const filtered = sessions.filter(s => s.max_transcript_size > 0);
+
+		const sorted = [...filtered];
 		sorted.sort((a, b) => {
 			let aVal, bVal;
 

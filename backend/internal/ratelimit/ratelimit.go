@@ -73,9 +73,9 @@ func (l *InMemoryRateLimiter) AllowN(ctx context.Context, key string, n int) boo
 	limiter := l.getLimiter(key)
 
 	// Update last access time
-	l.lastAccess.Store(key, time.Now())
+	l.lastAccess.Store(key, time.Now().UTC())
 
-	return limiter.AllowN(time.Now(), n)
+	return limiter.AllowN(time.Now().UTC(), n)
 }
 
 // getLimiter gets or creates a rate limiter for the given key
@@ -96,7 +96,7 @@ func (l *InMemoryRateLimiter) getLimiter(key string) *rate.Limiter {
 	}
 
 	// We created it, store last access time
-	l.lastAccess.Store(key, time.Now())
+	l.lastAccess.Store(key, time.Now().UTC())
 
 	return limiter
 }
@@ -118,7 +118,7 @@ func (l *InMemoryRateLimiter) cleanup() {
 
 // cleanupOldLimiters removes limiters that haven't been used recently
 func (l *InMemoryRateLimiter) cleanupOldLimiters() {
-	cutoff := time.Now().Add(-l.maxAge)
+	cutoff := time.Now().UTC().Add(-l.maxAge)
 	var keysToDelete []string
 
 	// Find old limiters
