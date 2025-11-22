@@ -109,7 +109,8 @@ func (db *DB) RunMigrations() error {
 		s3_uploaded BOOLEAN NOT NULL DEFAULT FALSE,
 		git_info JSONB,
 		source VARCHAR(50) NOT NULL DEFAULT 'hook',
-		created_at TIMESTAMP NOT NULL DEFAULT NOW()
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		last_activity TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 
 	-- Files table
@@ -155,6 +156,7 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_runs_user ON runs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_runs_end_timestamp ON runs(end_timestamp);
 	CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at);
+	CREATE INDEX IF NOT EXISTS idx_runs_last_activity ON runs(last_activity);
 	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id, user_id);
@@ -164,6 +166,12 @@ func (db *DB) RunMigrations() error {
 
 	if _, err := db.conn.Exec(schema); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	// Backfill last_activity from created_at for existing rows
+	backfillLastActivity := `UPDATE runs SET last_activity = created_at WHERE last_activity IS NULL;`
+	if _, err := db.conn.Exec(backfillLastActivity); err != nil {
+		return fmt.Errorf("failed to backfill last_activity: %w", err)
 	}
 
 	return nil
@@ -303,13 +311,20 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 
 	// Always insert a new run
 	runSQL := `
-		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info, source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info, source, last_activity)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id
 	`
 	if source == "" {
 		source = "hook"
 	}
+
+	// Use provided last_activity if present, otherwise use current time
+	lastActivity := now
+	if req.LastActivity != nil {
+		lastActivity = *req.LastActivity
+	}
+
 	var runID int64
 	err = tx.QueryRowContext(ctx, runSQL,
 		req.SessionID,
@@ -321,6 +336,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		len(s3Keys) > 0,
 		gitInfoJSON,
 		source,
+		lastActivity,
 	).Scan(&runID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert run: %w", err)
@@ -501,7 +517,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			s.session_id,
 			s.first_seen,
 			COUNT(r.id) as run_count,
-			COALESCE(MAX(r.created_at), s.first_seen) as last_run_time,
+			COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
 			s.title,
 			s.session_type
 		FROM sessions s
