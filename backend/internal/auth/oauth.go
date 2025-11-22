@@ -191,7 +191,21 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Redirect back to frontend
+		// Check if this was a CLI login flow
+		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
+			// Clear the cli_redirect cookie
+			http.SetCookie(w, &http.Cookie{
+				Name:   "cli_redirect",
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			// Redirect back to CLI authorize endpoint
+			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Redirect back to frontend (normal web login)
 		// Note: FRONTEND_URL is validated at startup in main.go
 		frontendURL := os.Getenv("FRONTEND_URL")
 		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
