@@ -354,6 +354,33 @@ invalid json line here
 			wantTimestamp: "2025-01-15T10:00:10Z",
 			wantErr:       false,
 		},
+		{
+			name: "file-history-snapshot with nested timestamp",
+			transcriptData: `{"type":"user","message":{"content":"start"},"timestamp":"2025-01-15T10:00:00Z"}
+{"type":"file-history-snapshot","messageId":"abc","isSnapshotUpdate":false,"snapshot":{"messageId":"abc","timestamp":"2025-01-15T10:00:15Z","trackedFileBackups":{"file.go":{"backupFileName":"backup1","version":1,"backupTime":"2025-01-15T10:00:15Z"}}}}
+{"type":"assistant","message":{"content":"response"},"timestamp":"2025-01-15T10:00:05Z"}`,
+			wantTimestamp: "2025-01-15T10:00:15Z",
+			wantErr:       false,
+		},
+		{
+			name: "queue-operation messages with timestamps",
+			transcriptData: `{"type":"user","message":{"content":"start"},"timestamp":"2025-01-15T10:00:00Z"}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2025-01-15T10:00:08Z","content":"queued","sessionId":"test"}
+{"type":"assistant","message":{"content":"response"},"timestamp":"2025-01-15T10:00:05Z"}`,
+			wantTimestamp: "2025-01-15T10:00:08Z",
+			wantErr:       false,
+		},
+		{
+			name: "all message types including file-history-snapshot and queue-operation",
+			transcriptData: `{"type":"user","message":{"content":"user msg"},"timestamp":"2025-01-15T10:00:00Z"}
+{"type":"assistant","message":{"content":"assistant msg"},"timestamp":"2025-01-15T10:00:01Z"}
+{"type":"system","message":"system msg","timestamp":"2025-01-15T10:00:02Z"}
+{"type":"summary","summary":"summary msg","timestamp":"2025-01-15T10:00:03Z"}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2025-01-15T10:00:04Z","content":"queued","sessionId":"test"}
+{"type":"file-history-snapshot","messageId":"xyz","isSnapshotUpdate":false,"snapshot":{"messageId":"xyz","timestamp":"2025-01-15T10:00:20Z","trackedFileBackups":{}}}`,
+			wantTimestamp: "2025-01-15T10:00:20Z",
+			wantErr:       false,
+		},
 	}
 
 	for _, tt := range tests {

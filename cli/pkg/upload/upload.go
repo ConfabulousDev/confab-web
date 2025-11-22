@@ -155,8 +155,21 @@ func extractLastActivity(transcriptPath string) (*time.Time, error) {
 			continue
 		}
 
-		// Extract timestamp field (present in all message types)
-		if tsStr, ok := entry["timestamp"].(string); ok && tsStr != "" {
+		// Extract timestamp field (present in most message types at top level)
+		var tsStr string
+		if ts, ok := entry["timestamp"].(string); ok && ts != "" {
+			tsStr = ts
+		} else if msgType, ok := entry["type"].(string); ok && msgType == "file-history-snapshot" {
+			// file-history-snapshot stores timestamp in snapshot.timestamp
+			if snapshot, ok := entry["snapshot"].(map[string]interface{}); ok {
+				if ts, ok := snapshot["timestamp"].(string); ok && ts != "" {
+					tsStr = ts
+				}
+			}
+		}
+
+		// Parse timestamp if found
+		if tsStr != "" {
 			// Parse RFC3339 timestamp
 			ts, err := time.Parse(time.RFC3339Nano, tsStr)
 			if err != nil {
