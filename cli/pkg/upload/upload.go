@@ -117,7 +117,7 @@ func ReadFilesForUpload(files []types.SessionFile) ([]FileUpload, error) {
 		fileUploads = append(fileUploads, FileUpload{
 			Path:      f.Path,
 			Type:      f.Type,
-			SizeBytes: f.SizeBytes,
+			SizeBytes: int64(len(content)), // Use actual content size after redaction
 			Content:   content,
 		})
 	}
