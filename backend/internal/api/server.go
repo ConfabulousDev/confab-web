@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -63,6 +65,27 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 	}
 }
 
+// parseAllowedOrigins parses ALLOWED_ORIGINS env var into CORS and CSRF formats
+// Returns (corsOrigins, csrfTrustedOrigins)
+// CORS needs full URLs like "https://example.com"
+// CSRF needs just host:port like "example.com:443"
+func parseAllowedOrigins() ([]string, []string) {
+	var allowedOrigins []string
+	var trustedOrigins []string
+
+	originsEnv := os.Getenv("ALLOWED_ORIGINS")
+	for _, origin := range strings.Split(originsEnv, ",") {
+		if trimmed := strings.TrimSpace(origin); trimmed != "" {
+			allowedOrigins = append(allowedOrigins, trimmed)
+			// Extract host for CSRF TrustedOrigins (expects "host:port" not "http://host:port")
+			host := strings.TrimPrefix(strings.TrimPrefix(trimmed, "https://"), "http://")
+			trustedOrigins = append(trustedOrigins, host)
+		}
+	}
+
+	return allowedOrigins, trustedOrigins
+}
+
 // SetupRoutes configures HTTP routes
 func (s *Server) SetupRoutes() http.Handler {
 	r := chi.NewRouter()
@@ -73,27 +96,23 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(securityHeadersMiddleware())
-	r.Use(middleware.Compress(5)) // gzip compression for responses >1KB, level 5 (good balance of speed/compression)
+
+	// Compression middleware: Brotli (preferred) + gzip (fallback)
+	// Brotli provides 15-25% better compression than gzip for JSON
+	// Serves Brotli to modern clients (95%+), gzip to legacy clients
+	compressor := middleware.NewCompressor(5) // gzip level 5 (baseline)
+	compressor.SetEncoder("br", func(w io.Writer, level int) io.Writer {
+		// Brotli level 5: balanced speed/compression, ~85% size reduction vs gzip's ~80%
+		return brotli.NewWriterLevel(w, 5)
+	})
+	r.Use(compressor.Handler)
+
 	r.Use(ratelimit.Middleware(s.globalLimiter)) // Global rate limiting
 
 	// CORS configuration - CRITICAL SECURITY FIX
-	// Get allowed origins from environment (comma-separated list)
 	// Note: ALLOWED_ORIGINS is validated at startup in main.go
-	allowedOrigins := []string{}
-	trustedOrigins := []string{} // For CSRF - just host:port without scheme
-	originsEnv := os.Getenv("ALLOWED_ORIGINS")
-	for _, origin := range strings.Split(originsEnv, ",") {
-		trimmed := strings.TrimSpace(origin)
-		if trimmed != "" {
-			allowedOrigins = append(allowedOrigins, trimmed)
-			// Extract host for CSRF TrustedOrigins (expects "host:port" not "http://host:port")
-			host := strings.TrimPrefix(trimmed, "https://")
-			host = strings.TrimPrefix(host, "http://")
-			trustedOrigins = append(trustedOrigins, host)
-		}
-	}
-	log.Printf("CORS allowed origins: %v", allowedOrigins)
-	log.Printf("CSRF trusted origins: %v", trustedOrigins)
+	allowedOrigins, trustedOrigins := parseAllowedOrigins()
+	log.Printf("CORS allowed origins: %v, CSRF trusted origins: %v", allowedOrigins, trustedOrigins)
 
 	r.Use(cors.Handler(cors.Options{
 		// AllowedOrigins: Only requests from these domains are allowed

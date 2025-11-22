@@ -37,7 +37,8 @@ func main() {
 	}
 
 	ctx := context.Background()
-	if err := database.CreateAPIKey(ctx, userID, keyHash, name); err != nil {
+	_, _, err = database.CreateAPIKeyWithReturn(ctx, userID, keyHash, name)
+	if err != nil {
 		log.Fatalf("Failed to create API key: %v", err)
 	}
 

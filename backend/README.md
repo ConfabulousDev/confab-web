@@ -92,6 +92,13 @@ Authorization: Bearer <api-key>
 }
 ```
 
+## Documentation
+
+- **[SECURITY.md](SECURITY.md)** - Complete security guide (authentication, CORS, CSRF, input validation, headers)
+- **[PERFORMANCE.md](PERFORMANCE.md)** - Performance optimization guide (rate limiting, compression, monitoring)
+- **[TEST.md](TEST.md)** - Testing guide
+- **[TODO.md](TODO.md)** - Future improvements and roadmap
+
 ## Database Schema
 
 See `internal/db/db.go` for the complete schema.

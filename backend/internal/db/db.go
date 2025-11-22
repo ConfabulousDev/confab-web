@@ -219,18 +219,6 @@ func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (int64, error)
 	return userID, nil
 }
 
-// CreateAPIKey creates a new API key for a user
-func (db *DB) CreateAPIKey(ctx context.Context, userID int64, keyHash, name string) error {
-	query := `INSERT INTO api_keys (user_id, key_hash, name) VALUES ($1, $2, $3)`
-
-	_, err := db.conn.ExecContext(ctx, query, userID, keyHash, name)
-	if err != nil {
-		return fmt.Errorf("failed to create API key: %w", err)
-	}
-
-	return nil
-}
-
 // CreateAPIKeyWithReturn creates a new API key and returns the key ID and created_at
 func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
 	query := `INSERT INTO api_keys (user_id, key_hash, name) VALUES ($1, $2, $3) RETURNING id, created_at`

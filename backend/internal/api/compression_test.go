@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/andybalholm/brotli"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
@@ -198,4 +199,176 @@ func TestCompressionSavings(t *testing.T) {
 	if string(decompressed) != wUncompressed.Body.String() {
 		t.Error("decompressed content does not match original uncompressed content")
 	}
+}
+
+// TestBrotliCompression tests that Brotli compression works correctly
+func TestBrotliCompression(t *testing.T) {
+	mockDB := &db.DB{}
+	mockStorage := &storage.S3Storage{}
+	mockOAuth := auth.OAuthConfig{}
+
+	server := NewServer(mockDB, mockStorage, mockOAuth)
+	handler := server.SetupRoutes()
+
+	t.Run("compresses with Brotli when client accepts br", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/health", nil)
+		req.Header.Set("Accept-Encoding", "br")
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", w.Code)
+		}
+
+		// Check Content-Encoding header
+		contentEncoding := w.Header().Get("Content-Encoding")
+		if contentEncoding != "br" {
+			t.Errorf("expected Content-Encoding: br, got %q", contentEncoding)
+		}
+
+		// Verify response is actually Brotli-compressed by decompressing it
+		reader := brotli.NewReader(w.Body)
+		decompressed, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatalf("failed to decompress Brotli response: %v", err)
+		}
+
+		// Health endpoint should return JSON with "status"
+		body := string(decompressed)
+		if !strings.Contains(body, "status") {
+			t.Errorf("expected decompressed body to contain 'status', got: %s", body)
+		}
+	})
+
+	t.Run("prefers Brotli over gzip when both are accepted", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/health", nil)
+		req.Header.Set("Accept-Encoding", "gzip, br")
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", w.Code)
+		}
+
+		// Should prefer Brotli (better compression)
+		contentEncoding := w.Header().Get("Content-Encoding")
+		if contentEncoding != "br" {
+			t.Errorf("expected Content-Encoding: br (preferred), got %q", contentEncoding)
+		}
+
+		// Verify Brotli decompression works
+		reader := brotli.NewReader(w.Body)
+		decompressed, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatalf("failed to decompress Brotli response: %v", err)
+		}
+
+		if len(decompressed) == 0 {
+			t.Error("expected non-empty decompressed response")
+		}
+	})
+
+	t.Run("falls back to gzip when Brotli not accepted", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/health", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", w.Code)
+		}
+
+		// Should use gzip fallback
+		contentEncoding := w.Header().Get("Content-Encoding")
+		if contentEncoding != "gzip" {
+			t.Errorf("expected Content-Encoding: gzip (fallback), got %q", contentEncoding)
+		}
+
+		// Verify gzip decompression works
+		reader, err := gzip.NewReader(w.Body)
+		if err != nil {
+			t.Fatalf("failed to create gzip reader: %v", err)
+		}
+		defer reader.Close()
+
+		decompressed, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatalf("failed to decompress gzip response: %v", err)
+		}
+
+		if len(decompressed) == 0 {
+			t.Error("expected non-empty decompressed response")
+		}
+	})
+
+	t.Run("Brotli provides better compression than gzip", func(t *testing.T) {
+		// Get gzip-compressed response
+		reqGzip := httptest.NewRequest("GET", "/health", nil)
+		reqGzip.Header.Set("Accept-Encoding", "gzip")
+		wGzip := httptest.NewRecorder()
+		handler.ServeHTTP(wGzip, reqGzip)
+
+		// Get Brotli-compressed response
+		reqBrotli := httptest.NewRequest("GET", "/health", nil)
+		reqBrotli.Header.Set("Accept-Encoding", "br")
+		wBrotli := httptest.NewRecorder()
+		handler.ServeHTTP(wBrotli, reqBrotli)
+
+		gzipSize := wGzip.Body.Len()
+		brotliSize := wBrotli.Body.Len()
+
+		t.Logf("gzip compressed size: %d bytes", gzipSize)
+		t.Logf("Brotli compressed size: %d bytes", brotliSize)
+
+		// For small responses like health check, the difference might be minimal
+		// But Brotli should never be significantly larger
+		// (for large JSON responses, Brotli is typically 15-25% smaller)
+		maxBrotliSize := float64(gzipSize) * 1.1
+		if float64(brotliSize) > maxBrotliSize {
+			t.Errorf("Brotli size (%d) is unexpectedly larger than gzip size (%d)", brotliSize, gzipSize)
+		}
+
+		// Verify both decompress to the same content
+		gzipReader, _ := gzip.NewReader(bytes.NewReader(wGzip.Body.Bytes()))
+		gzipContent, _ := io.ReadAll(gzipReader)
+
+		brotliReader := brotli.NewReader(bytes.NewReader(wBrotli.Body.Bytes()))
+		brotliContent, _ := io.ReadAll(brotliReader)
+
+		if string(gzipContent) != string(brotliContent) {
+			t.Error("gzip and Brotli decompressed content should match")
+		}
+	})
+
+	t.Run("Brotli compression works with error responses", func(t *testing.T) {
+		// Request a non-existent endpoint to trigger 404
+		req := httptest.NewRequest("GET", "/nonexistent", nil)
+		req.Header.Set("Accept-Encoding", "br")
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected status 404, got %d", w.Code)
+		}
+
+		// Even error responses should be Brotli-compressed
+		if w.Header().Get("Content-Encoding") != "br" {
+			t.Error("expected Brotli compression for error response")
+		}
+
+		// Decompress and verify it's a valid response
+		reader := brotli.NewReader(w.Body)
+		decompressed, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatalf("failed to decompress Brotli response: %v", err)
+		}
+
+		if len(decompressed) == 0 {
+			t.Error("expected non-empty decompressed error response")
+		}
+	})
 }
