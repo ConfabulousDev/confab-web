@@ -241,3 +241,104 @@ func TestSanitizeString(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeTitleText(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "removes script tags and escapes content",
+			input:    "<script>alert('xss')</script>",
+			expected: "alert(&#39;xss&#39;)",
+		},
+		{
+			name:     "removes script tags with surrounding text",
+			input:    "Hello <script>alert('xss')</script> World",
+			expected: "Hello alert(&#39;xss&#39;) World",
+		},
+		{
+			name:     "removes img tags with onerror",
+			input:    `<img src=x onerror="alert('xss')">`,
+			expected: "",
+		},
+		{
+			name:     "removes all HTML tags",
+			input:    "<div><p>Hello <b>World</b></p></div>",
+			expected: "Hello World",
+		},
+		{
+			name:     "escapes HTML entities and removes empty tags",
+			input:    "This & that < or > maybe",
+			expected: "This &amp; that  maybe",
+		},
+		{
+			name:     "handles already escaped HTML entities",
+			input:    "&lt;script&gt;alert('xss')&lt;/script&gt;",
+			expected: "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
+		},
+		{
+			name:     "handles mixed tags and entities",
+			input:    "<script>alert('test')</script> & <b>bold</b>",
+			expected: "alert(&#39;test&#39;) &amp; bold",
+		},
+		{
+			name:     "trims whitespace",
+			input:    "  <p>Hello</p>  ",
+			expected: "Hello",
+		},
+		{
+			name:     "handles empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "handles plain text",
+			input:    "Just plain text",
+			expected: "Just plain text",
+		},
+		{
+			name:     "handles javascript: protocol",
+			input:    `<a href="javascript:alert('xss')">Click</a>`,
+			expected: "Click",
+		},
+		{
+			name:     "handles data: protocol",
+			input:    `<img src="data:text/html,<script>alert('xss')</script>">`,
+			expected: "alert(&#39;xss&#39;)&#34;&gt;",
+		},
+		{
+			name:     "handles nested tags",
+			input:    "<div><div><div>Deep nesting</div></div></div>",
+			expected: "Deep nesting",
+		},
+		{
+			name:     "handles malformed tags",
+			input:    "<script<script>alert('xss')</script>",
+			expected: "alert(&#39;xss&#39;)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeTitleText(tt.input)
+			if result != tt.expected {
+				t.Errorf("sanitizeTitleText(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+
+			// Verify no script tags remain
+			if strings.Contains(strings.ToLower(result), "<script") {
+				t.Errorf("sanitizeTitleText(%q) still contains <script tag: %q", tt.input, result)
+			}
+
+			// Verify no HTML tags remain
+			if strings.Contains(result, "<") && strings.Contains(result, ">") {
+				// Check if it's an escaped entity
+				if !strings.Contains(result, "&lt;") && !strings.Contains(result, "&gt;") {
+					t.Errorf("sanitizeTitleText(%q) may contain unescaped HTML tags: %q", tt.input, result)
+				}
+			}
+		})
+	}
+}

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -225,6 +227,21 @@ func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
 	return nil
 }
 
+// sanitizeTitleText removes HTML tags and escapes HTML entities to prevent XSS
+func sanitizeTitleText(input string) string {
+	// First, remove all HTML tags using regex
+	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
+	cleaned := htmlTagRegex.ReplaceAllString(input, "")
+
+	// Unescape HTML entities (e.g., &lt; -> <) and then escape them again
+	// This handles cases like "&lt;script&gt;" -> "<script>" -> "&lt;script&gt;"
+	unescaped := html.UnescapeString(cleaned)
+	escaped := html.EscapeString(unescaped)
+
+	// Trim whitespace
+	return strings.TrimSpace(escaped)
+}
+
 // extractSessionMetadata parses the transcript JSONL to extract title and session type
 func extractSessionMetadata(files []models.FileUpload) (title string, sessionType string) {
 	// Find the transcript file
@@ -267,7 +284,7 @@ func extractSessionMetadata(files []models.FileUpload) (title string, sessionTyp
 		// Priority 1: Extract title from summary (best quality)
 		if title == "" && msgType == "summary" {
 			if summary, ok := entry["summary"].(string); ok && summary != "" {
-				title = summary
+				title = sanitizeTitleText(summary)
 			}
 		}
 
@@ -276,10 +293,11 @@ func extractSessionMetadata(files []models.FileUpload) (title string, sessionTyp
 			if message, ok := entry["message"].(map[string]interface{}); ok {
 				if content, ok := message["content"].(string); ok && content != "" {
 					// Use first 100 characters as fallback title
-					if len(content) > 100 {
-						firstUserMessage = content[:100]
+					sanitized := sanitizeTitleText(content)
+					if len(sanitized) > 100 {
+						firstUserMessage = sanitized[:100]
 					} else {
-						firstUserMessage = content
+						firstUserMessage = sanitized
 					}
 				}
 			}
