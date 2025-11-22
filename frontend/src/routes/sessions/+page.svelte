@@ -57,14 +57,12 @@
 
 			switch (sortColumn) {
 				case 'title':
-					// For now, all titles are the same, but this will work when we have real titles
-					aVal = 'Untitled Session';
-					bVal = 'Untitled Session';
+					aVal = a.title || 'Untitled Session';
+					bVal = b.title || 'Untitled Session';
 					break;
 				case 'type':
-					// For now, all types are Claude Code, but this will work when we have real types
-					aVal = 'Claude Code';
-					bVal = 'Claude Code';
+					aVal = a.session_type || 'Claude Code';
+					bVal = b.session_type || 'Claude Code';
 					break;
 				case 'session_id':
 					aVal = a.session_id;
@@ -135,8 +133,8 @@
 					<tbody>
 						{#each sortedSessions as session (session.session_id)}
 							<tr class="clickable-row" on:click={() => window.location.href = `/sessions/${session.session_id}`}>
-								<td class="session-title">Untitled Session</td>
-								<td class="session-type">Claude Code</td>
+								<td class:session-title={!session.title}>{session.title || 'Untitled Session'}</td>
+								<td class="session-type">{session.session_type || 'Claude Code'}</td>
 								<td>
 									<code class="session-id">{session.session_id.substring(0, 8)}</code>
 								</td>

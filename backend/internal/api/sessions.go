@@ -58,10 +58,17 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract session metadata from transcript
+	title, sessionType := extractSessionMetadata(req.Files)
+	req.Title = title
+	req.SessionType = sessionType
+
 	logger.Info("Processing session save",
 		"user_id", userID,
 		"session_id", req.SessionID,
-		"file_count", len(req.Files))
+		"file_count", len(req.Files),
+		"title", title,
+		"session_type", sessionType)
 
 	// Create context with timeout for storage operations (longer timeout for uploads)
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
@@ -216,6 +223,85 @@ func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
 	}
 
 	return nil
+}
+
+// extractSessionMetadata parses the transcript JSONL to extract title and session type
+func extractSessionMetadata(files []models.FileUpload) (title string, sessionType string) {
+	// Find the transcript file
+	var transcriptContent []byte
+	for _, file := range files {
+		if file.Type == "transcript" {
+			transcriptContent = file.Content
+			break
+		}
+	}
+
+	if len(transcriptContent) == 0 {
+		return "", "Claude Code"
+	}
+
+	// Parse JSONL to find summary, user message, and version info
+	lines := strings.Split(string(transcriptContent), "\n")
+	var firstUserMessage string
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		var entry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		// Extract session type from version field (if present)
+		if sessionType == "" {
+			if version, ok := entry["version"].(string); ok && version != "" {
+				// For now, all sessions with version field are Claude Code
+				sessionType = "Claude Code"
+			}
+		}
+
+		msgType, _ := entry["type"].(string)
+
+		// Priority 1: Extract title from summary (best quality)
+		if title == "" && msgType == "summary" {
+			if summary, ok := entry["summary"].(string); ok && summary != "" {
+				title = summary
+			}
+		}
+
+		// Collect first user message as fallback
+		if firstUserMessage == "" && msgType == "user" {
+			if message, ok := entry["message"].(map[string]interface{}); ok {
+				if content, ok := message["content"].(string); ok && content != "" {
+					// Use first 100 characters as fallback title
+					if len(content) > 100 {
+						firstUserMessage = content[:100]
+					} else {
+						firstUserMessage = content
+					}
+				}
+			}
+		}
+
+		// Stop once we have both summary title and session type
+		if title != "" && sessionType != "" {
+			break
+		}
+	}
+
+	// Fallback to first user message if no summary found
+	if title == "" && firstUserMessage != "" {
+		title = firstUserMessage
+	}
+
+	// Set defaults if not found
+	if sessionType == "" {
+		sessionType = "Claude Code"
+	}
+
+	return title, sessionType
 }
 
 // HandleCheckSessions checks which session IDs already exist for the user

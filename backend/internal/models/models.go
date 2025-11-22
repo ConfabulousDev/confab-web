@@ -34,9 +34,11 @@ type APIKey struct {
 
 // Session represents a Claude Code session
 type Session struct {
-	SessionID string    `json:"session_id"`
-	UserID    int64     `json:"user_id"`
-	FirstSeen time.Time `json:"first_seen"`
+	SessionID   string    `json:"session_id"`
+	UserID      int64     `json:"user_id"`
+	FirstSeen   time.Time `json:"first_seen"`
+	Title       *string   `json:"title,omitempty"`
+	SessionType string    `json:"session_type"`
 }
 
 // Run represents a single execution/resumption of a session
@@ -70,6 +72,8 @@ type SaveSessionRequest struct {
 	Reason         string       `json:"reason"`
 	GitInfo        interface{}  `json:"git_info,omitempty"`
 	Files          []FileUpload `json:"files"`
+	Title          string       `json:"title,omitempty"`
+	SessionType    string       `json:"session_type,omitempty"`
 }
 
 // FileUpload represents a file to be uploaded

@@ -61,19 +61,19 @@ func (db *DB) RunMigrations() error {
 	-- Users table (OAuth-based authentication)
 	CREATE TABLE IF NOT EXISTS users (
 		id BIGSERIAL PRIMARY KEY,
-		email TEXT NOT NULL UNIQUE,
-		name TEXT,
+		email VARCHAR(255) NOT NULL UNIQUE,
+		name VARCHAR(255),
 		avatar_url TEXT,
-		github_id TEXT UNIQUE,
-		github_username TEXT,
-		google_id TEXT UNIQUE,
+		github_id VARCHAR(255) UNIQUE,
+		github_username VARCHAR(255),
+		google_id VARCHAR(255) UNIQUE,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 
 	-- Web sessions table (for browser authentication via OAuth)
 	CREATE TABLE IF NOT EXISTS web_sessions (
-		id TEXT PRIMARY KEY,
+		id VARCHAR(64) PRIMARY KEY,
 		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		expires_at TIMESTAMP NOT NULL
@@ -83,22 +83,24 @@ func (db *DB) RunMigrations() error {
 	CREATE TABLE IF NOT EXISTS api_keys (
 		id BIGSERIAL PRIMARY KEY,
 		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		key_hash TEXT NOT NULL UNIQUE,
-		name TEXT NOT NULL,
+		key_hash CHAR(64) NOT NULL UNIQUE,
+		name VARCHAR(255) NOT NULL,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 
-	-- Sessions table (mirrors SQLite)
+	-- Sessions table
 	CREATE TABLE IF NOT EXISTS sessions (
-		session_id TEXT PRIMARY KEY,
+		session_id VARCHAR(255) PRIMARY KEY,
 		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		first_seen TIMESTAMP NOT NULL DEFAULT NOW()
+		first_seen TIMESTAMP NOT NULL DEFAULT NOW(),
+		title TEXT,
+		session_type VARCHAR(50) NOT NULL DEFAULT 'Claude Code'
 	);
 
 	-- Runs table (execution instances)
 	CREATE TABLE IF NOT EXISTS runs (
 		id BIGSERIAL PRIMARY KEY,
-		session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+		session_id VARCHAR(255) NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
 		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		transcript_path TEXT NOT NULL,
 		cwd TEXT NOT NULL,
@@ -106,7 +108,7 @@ func (db *DB) RunMigrations() error {
 		end_timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
 		s3_uploaded BOOLEAN NOT NULL DEFAULT FALSE,
 		git_info JSONB,
-		source TEXT NOT NULL DEFAULT 'hook',
+		source VARCHAR(50) NOT NULL DEFAULT 'hook',
 		created_at TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 
@@ -115,7 +117,7 @@ func (db *DB) RunMigrations() error {
 		id BIGSERIAL PRIMARY KEY,
 		run_id BIGINT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
 		file_path TEXT NOT NULL,
-		file_type TEXT NOT NULL,
+		file_type VARCHAR(50) NOT NULL,
 		size_bytes BIGINT NOT NULL,
 		s3_key TEXT,
 		s3_uploaded_at TIMESTAMP
@@ -124,10 +126,10 @@ func (db *DB) RunMigrations() error {
 	-- Session shares table
 	CREATE TABLE IF NOT EXISTS session_shares (
 		id BIGSERIAL PRIMARY KEY,
-		session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+		session_id VARCHAR(255) NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
 		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		share_token TEXT NOT NULL UNIQUE,
-		visibility TEXT NOT NULL,
+		share_token CHAR(32) NOT NULL UNIQUE,
+		visibility VARCHAR(20) NOT NULL,
 		expires_at TIMESTAMP,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		last_accessed_at TIMESTAMP
@@ -137,7 +139,7 @@ func (db *DB) RunMigrations() error {
 	CREATE TABLE IF NOT EXISTS session_share_invites (
 		id BIGSERIAL PRIMARY KEY,
 		share_id BIGINT NOT NULL REFERENCES session_shares(id) ON DELETE CASCADE,
-		email TEXT NOT NULL,
+		email VARCHAR(255) NOT NULL,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		UNIQUE(share_id, email)
 	);
@@ -162,37 +164,6 @@ func (db *DB) RunMigrations() error {
 
 	if _, err := db.conn.Exec(schema); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	// Add git_info column to existing runs table (for databases created before this migration)
-	alterGitInfo := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS git_info JSONB;`
-	if _, err := db.conn.Exec(alterGitInfo); err != nil {
-		return fmt.Errorf("failed to add git_info column: %w", err)
-	}
-
-	// Add source column to existing runs table (for databases created before this migration)
-	alterSource := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'hook';`
-	if _, err := db.conn.Exec(alterSource); err != nil {
-		return fmt.Errorf("failed to add source column: %w", err)
-	}
-
-	// Add created_at column to existing runs table (for databases created before this migration)
-	// First add the column without NOT NULL constraint
-	alterCreatedAt := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;`
-	if _, err := db.conn.Exec(alterCreatedAt); err != nil {
-		return fmt.Errorf("failed to add created_at column: %w", err)
-	}
-
-	// Backfill created_at with end_timestamp for existing rows
-	backfillCreatedAt := `UPDATE runs SET created_at = end_timestamp WHERE created_at IS NULL;`
-	if _, err := db.conn.Exec(backfillCreatedAt); err != nil {
-		return fmt.Errorf("failed to backfill created_at: %w", err)
-	}
-
-	// Now make it NOT NULL with default for new rows
-	alterCreatedAtNotNull := `ALTER TABLE runs ALTER COLUMN created_at SET NOT NULL, ALTER COLUMN created_at SET DEFAULT NOW();`
-	if _, err := db.conn.Exec(alterCreatedAtNotNull); err != nil {
-		return fmt.Errorf("failed to set created_at constraints: %w", err)
 	}
 
 	return nil
@@ -303,9 +274,19 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 
 	now := time.Now()
 
-	// Insert session if doesn't exist (first time seeing this session_id)
-	sessionSQL := `INSERT INTO sessions (session_id, user_id, first_seen) VALUES ($1, $2, $3) ON CONFLICT (session_id) DO NOTHING`
-	_, err = tx.ExecContext(ctx, sessionSQL, req.SessionID, userID, now)
+	// Insert session if doesn't exist, or update title/session_type if provided
+	sessionSQL := `
+		INSERT INTO sessions (session_id, user_id, first_seen, title, session_type)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (session_id) DO UPDATE SET
+			title = CASE WHEN EXCLUDED.title IS NOT NULL AND EXCLUDED.title != '' THEN EXCLUDED.title ELSE sessions.title END,
+			session_type = CASE WHEN EXCLUDED.session_type IS NOT NULL AND EXCLUDED.session_type != '' THEN EXCLUDED.session_type ELSE sessions.session_type END
+	`
+	sessionType := req.SessionType
+	if sessionType == "" {
+		sessionType = "Claude Code" // Default
+	}
+	_, err = tx.ExecContext(ctx, sessionSQL, req.SessionID, userID, now, req.Title, sessionType)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert session: %w", err)
 	}
@@ -509,6 +490,8 @@ type SessionListItem struct {
 	FirstSeen   time.Time `json:"first_seen"`
 	RunCount    int       `json:"run_count"`
 	LastRunTime time.Time `json:"last_run_time"`
+	Title       *string   `json:"title,omitempty"`
+	SessionType string    `json:"session_type"`
 }
 
 // ListUserSessions returns all sessions for a user
@@ -518,11 +501,13 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			s.session_id,
 			s.first_seen,
 			COUNT(r.id) as run_count,
-			COALESCE(MAX(r.created_at), s.first_seen) as last_run_time
+			COALESCE(MAX(r.created_at), s.first_seen) as last_run_time,
+			s.title,
+			s.session_type
 		FROM sessions s
 		LEFT JOIN runs r ON s.session_id = r.session_id
 		WHERE s.user_id = $1
-		GROUP BY s.session_id, s.first_seen
+		GROUP BY s.session_id, s.first_seen, s.title, s.session_type
 		ORDER BY last_run_time DESC
 	`
 
@@ -535,7 +520,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 	var sessions []SessionListItem
 	for rows.Next() {
 		var session SessionListItem
-		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime); err != nil {
+		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime, &session.Title, &session.SessionType); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
 		sessions = append(sessions, session)

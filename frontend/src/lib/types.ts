@@ -48,6 +48,8 @@ export type Session = {
 	first_seen: string;
 	run_count: number;
 	last_run_time: string;
+	title?: string;
+	session_type: string;
 };
 
 // Share configuration
