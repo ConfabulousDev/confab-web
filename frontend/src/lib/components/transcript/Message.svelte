@@ -5,6 +5,8 @@
 		isAssistantMessage,
 		isSystemMessage,
 		isSummaryMessage,
+		isFileHistorySnapshot,
+		isQueueOperationMessage,
 		isToolResultMessage,
 		hasThinking,
 		usesTools
@@ -50,6 +52,30 @@
 	} else if (isSummaryMessage(message)) {
 		role = 'system';
 		content = [{ type: 'text', text: `📋 ${message.summary}` }];
+	} else if (isFileHistorySnapshot(message)) {
+		role = 'system';
+		// Build a human-readable summary of the file snapshot
+		const fileCount = Object.keys(message.snapshot.trackedFileBackups).length;
+		const fileList = Object.entries(message.snapshot.trackedFileBackups)
+			.map(([path, backup]) => `  • ${path} (v${backup.version})`)
+			.join('\n');
+		const snapshotText = `📸 File Snapshot (${fileCount} ${fileCount === 1 ? 'file' : 'files'})\n${fileList}`;
+		content = [{ type: 'text', text: snapshotText }];
+	} else if (isQueueOperationMessage(message)) {
+		role = 'system';
+		timestamp = message.timestamp;
+		const operationEmoji = message.operation === 'enqueue' ? '➕' : '➖';
+		const operationText = message.operation === 'enqueue' ? 'Added to queue' : 'Removed from queue';
+		content = [{ type: 'text', text: `${operationEmoji} ${operationText}` }];
+	} else {
+		// Fallback for unknown message types (future-proofing)
+		// Log to console so developers can detect new message types from Claude Code
+		console.warn('Unknown message type encountered:', message);
+		role = 'system';
+		// Try to extract timestamp if it exists
+		timestamp = 'timestamp' in message ? (message as any).timestamp : undefined;
+		// Display raw JSON for unknown types so nothing is hidden
+		content = [{ type: 'text', text: `⚠️ Unknown message type\n\`\`\`json\n${JSON.stringify(message, null, 2)}\n\`\`\`` }];
 	}
 
 	// Build tool name map from content blocks

@@ -1,11 +1,6 @@
 <script lang="ts">
 	import type { TranscriptLine, AgentNode, RunDetail } from '$lib/types';
-	import {
-		isUserMessage,
-		isAssistantMessage,
-		isSystemMessage,
-		isSummaryMessage
-	} from '$lib/types/transcript';
+	// Type guards are now only used in Message.svelte
 	import Message from './Message.svelte';
 	import AgentPanel from './AgentPanel.svelte';
 	import { getAgentInsertionIndex } from '$lib/services/agentTreeBuilder';
@@ -35,11 +30,8 @@
 		return map;
 	})();
 
-	// Filter out non-displayable messages (reactive)
-	$: displayableMessages = messages.filter(
-		(msg) =>
-			isUserMessage(msg) || isAssistantMessage(msg) || isSystemMessage(msg) || isSummaryMessage(msg)
-	);
+	// Display all messages - complete coverage including file snapshots, queue operations, etc.
+	$: displayableMessages = messages;
 
 	onMount(() => {
 		if (autoScroll) {
@@ -128,10 +120,7 @@
 	{#if displayableMessages.length === 0}
 		<div class="empty-state">
 			<div class="empty-icon">📋</div>
-			<p>No conversation messages</p>
-			{#if messages.length > 0}
-				<p class="empty-detail">This session contains {messages.length} metadata {messages.length === 1 ? 'entry' : 'entries'} (file snapshots, etc.) but no user/assistant messages.</p>
-			{/if}
+			<p>No messages in this session</p>
 		</div>
 	{/if}
 </div>
