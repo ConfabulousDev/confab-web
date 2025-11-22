@@ -1,12 +1,15 @@
 package upload
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/santaclaude2025/confab/pkg/config"
@@ -53,6 +56,21 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 		return fmt.Errorf("failed to read files for upload: %w", err)
 	}
 
+	// Extract last activity timestamp from transcript
+	var lastActivity *time.Time
+	for _, f := range files {
+		if f.Type == "transcript" {
+			ts, err := extractLastActivity(f.Path)
+			if err != nil {
+				// Log warning but don't fail upload
+				fmt.Fprintf(os.Stderr, "Warning: Failed to extract last activity: %v\n", err)
+			} else {
+				lastActivity = ts
+			}
+			break
+		}
+	}
+
 	// Create request payload
 	request := SaveSessionRequest{
 		SessionID:      hookInput.SessionID,
@@ -61,6 +79,7 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 		Reason:         hookInput.Reason,
 		GitInfo:        gitInfo,
 		Files:          fileUploads,
+		LastActivity:   lastActivity,
 	}
 
 	return SendSessionRequest(cfg, &request)
@@ -103,6 +122,65 @@ func ReadFilesForUpload(files []types.SessionFile) ([]FileUpload, error) {
 		})
 	}
 	return fileUploads, nil
+}
+
+// extractLastActivity parses a transcript JSONL file and extracts the most recent timestamp
+// from ALL message types. Returns nil if no valid timestamps are found.
+func extractLastActivity(transcriptPath string) (*time.Time, error) {
+	// Open the transcript file
+	file, err := os.Open(transcriptPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open transcript: %w", err)
+	}
+	defer file.Close()
+
+	var maxTimestamp *time.Time
+	scanner := bufio.NewScanner(file)
+
+	// Read line by line (JSONL format)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Parse JSON
+		var entry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			// Log warning but continue parsing other lines
+			fmt.Fprintf(os.Stderr, "Warning: Failed to parse transcript line %d: %v\n", lineNum, err)
+			continue
+		}
+
+		// Extract timestamp field (present in all message types)
+		if tsStr, ok := entry["timestamp"].(string); ok && tsStr != "" {
+			// Parse RFC3339 timestamp
+			ts, err := time.Parse(time.RFC3339Nano, tsStr)
+			if err != nil {
+				// Try RFC3339 without nano precision
+				ts, err = time.Parse(time.RFC3339, tsStr)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Failed to parse timestamp on line %d: %v\n", lineNum, err)
+					continue
+				}
+			}
+
+			// Update max timestamp
+			if maxTimestamp == nil || ts.After(*maxTimestamp) {
+				maxTimestamp = &ts
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading transcript: %w", err)
+	}
+
+	return maxTimestamp, nil
 }
 
 // SendSessionRequest sends a session save request to the backend with zstd compression
@@ -182,6 +260,7 @@ type SaveSessionRequest struct {
 	Source         string       `json:"source,omitempty"`
 	GitInfo        *git.GitInfo `json:"git_info,omitempty"`
 	Files          []FileUpload `json:"files"`
+	LastActivity   *time.Time   `json:"last_activity,omitempty"`
 }
 
 // FileUpload represents a file to be uploaded
