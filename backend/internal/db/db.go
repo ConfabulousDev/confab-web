@@ -106,7 +106,8 @@ func (db *DB) RunMigrations() error {
 		end_timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
 		s3_uploaded BOOLEAN NOT NULL DEFAULT FALSE,
 		git_info JSONB,
-		source TEXT NOT NULL DEFAULT 'hook'
+		source TEXT NOT NULL DEFAULT 'hook',
+		created_at TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 
 	-- Files table
@@ -151,6 +152,7 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id);
 	CREATE INDEX IF NOT EXISTS idx_runs_user ON runs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_runs_end_timestamp ON runs(end_timestamp);
+	CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id, user_id);
@@ -172,6 +174,25 @@ func (db *DB) RunMigrations() error {
 	alterSource := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'hook';`
 	if _, err := db.conn.Exec(alterSource); err != nil {
 		return fmt.Errorf("failed to add source column: %w", err)
+	}
+
+	// Add created_at column to existing runs table (for databases created before this migration)
+	// First add the column without NOT NULL constraint
+	alterCreatedAt := `ALTER TABLE runs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;`
+	if _, err := db.conn.Exec(alterCreatedAt); err != nil {
+		return fmt.Errorf("failed to add created_at column: %w", err)
+	}
+
+	// Backfill created_at with end_timestamp for existing rows
+	backfillCreatedAt := `UPDATE runs SET created_at = end_timestamp WHERE created_at IS NULL;`
+	if _, err := db.conn.Exec(backfillCreatedAt); err != nil {
+		return fmt.Errorf("failed to backfill created_at: %w", err)
+	}
+
+	// Now make it NOT NULL with default for new rows
+	alterCreatedAtNotNull := `ALTER TABLE runs ALTER COLUMN created_at SET NOT NULL, ALTER COLUMN created_at SET DEFAULT NOW();`
+	if _, err := db.conn.Exec(alterCreatedAtNotNull); err != nil {
+		return fmt.Errorf("failed to set created_at constraints: %w", err)
 	}
 
 	return nil
@@ -497,7 +518,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			s.session_id,
 			s.first_seen,
 			COUNT(r.id) as run_count,
-			COALESCE(MAX(r.end_timestamp), s.first_seen) as last_run_time
+			COALESCE(MAX(r.created_at), s.first_seen) as last_run_time
 		FROM sessions s
 		LEFT JOIN runs r ON s.session_id = r.session_id
 		WHERE s.user_id = $1

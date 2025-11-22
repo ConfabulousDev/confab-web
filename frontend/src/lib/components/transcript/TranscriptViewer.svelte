@@ -16,6 +16,11 @@
 	let expanded = true;
 	let showThinking = true;
 
+	// Batched rendering state
+	let allMessages: TranscriptLine[] = [];
+	let renderingBatch = false;
+	let renderProgress = { current: 0, total: 0 };
+
 	// Expand/collapse all controls
 	let expandAllAgents = true;
 	let expandAllTools = false;
@@ -29,6 +34,7 @@
 		loading = true;
 		error = null;
 
+		const t0 = performance.now();
 		try {
 			// Find transcript file
 			const transcriptFile = run.files.find((f) => f.file_type === 'transcript');
@@ -39,28 +45,65 @@
 			// Fetch and parse transcript
 			// Use provided sessionId or fall back to transcript_path (for non-shared views)
 			const effectiveSessionId = sessionId || run.transcript_path;
+
+			const t1 = performance.now();
 			const parsed = await fetchParsedTranscript(
 				run.id,
 				transcriptFile.id,
 				effectiveSessionId,
 				shareToken
 			);
+			const t2 = performance.now();
+			console.log(`⏱️ fetchParsedTranscript took ${Math.round(t2 - t1)}ms`);
 
-			messages = parsed.messages;
+			// Store all messages
+			allMessages = parsed.messages;
 
 			// Build agent tree
 			const shareOptions = shareToken && sessionId ? { sessionId, shareToken } : undefined;
-			agents = await buildAgentTree(run.id, messages, run.files, shareOptions);
+			const t3 = performance.now();
+			agents = await buildAgentTree(run.id, allMessages, run.files, shareOptions);
+			const t4 = performance.now();
+			console.log(`⏱️ buildAgentTree took ${Math.round(t4 - t3)}ms`);
 
-			console.log('Loaded transcript:', {
-				messageCount: messages.length,
+			const total = performance.now() - t0;
+			console.log(`⏱️ Data load complete: ${Math.round(total)}ms`, {
+				messageCount: allMessages.length,
 				agentCount: agents.length
 			});
+
+			// Start batched rendering
+			loading = false;
+			if (allMessages.length > 0) {
+				renderingBatch = true;
+				renderProgress = { current: 0, total: allMessages.length };
+				renderNextBatch();
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load transcript';
 			console.error('Failed to load transcript:', e);
-		} finally {
 			loading = false;
+		}
+	}
+
+	function renderNextBatch() {
+		const BATCH_SIZE = 100;
+		const start = messages.length;
+		const end = Math.min(start + BATCH_SIZE, allMessages.length);
+
+		// Add next batch of messages
+		messages = [...messages, ...allMessages.slice(start, end)];
+		renderProgress = { current: end, total: renderProgress.total };
+
+		// Continue if there are more messages
+		if (end < allMessages.length) {
+			setTimeout(renderNextBatch, 0); // Yield to browser
+		} else {
+			// Rendering complete - delay slightly to show 100% completion
+			setTimeout(() => {
+				renderingBatch = false;
+				console.log(`⏱️ Rendering complete: ${messages.length} messages`);
+			}, 300);
 		}
 	}
 
@@ -129,12 +172,27 @@
 		</div>
 	{:else if expanded}
 		<div class="transcript-content">
-			<div class="transcript-meta">
-				<span>{messages.length} messages</span>
-				{#if agents.length > 0}
-					<span>{agents.length} agent{agents.length === 1 ? '' : 's'}</span>
-				{/if}
-			</div>
+			{#if renderingBatch}
+				<div class="rendering-progress">
+					<div class="progress-text">
+						Rendering messages: {renderProgress.current.toLocaleString()} / {renderProgress.total.toLocaleString()}
+						({Math.round((renderProgress.current / renderProgress.total) * 100)}%)
+					</div>
+					<div class="progress-bar">
+						<div
+							class="progress-fill"
+							style="width: {(renderProgress.current / renderProgress.total) * 100}%"
+						></div>
+					</div>
+				</div>
+			{:else}
+				<div class="transcript-meta">
+					<span>{messages.length} messages</span>
+					{#if agents.length > 0}
+						<span>{agents.length} agent{agents.length === 1 ? '' : 's'}</span>
+					{/if}
+				</div>
+			{/if}
 
 			<MessageList
 				{messages}
@@ -257,6 +315,42 @@
 
 	.transcript-content {
 		padding: 1rem;
+	}
+
+	.rendering-progress {
+		padding: 1rem;
+		background: #f8f9fa;
+		border-radius: 8px;
+		margin-bottom: 1rem;
+	}
+
+	.progress-text {
+		font-size: 0.9rem;
+		color: #495057;
+		margin-bottom: 0.75rem;
+		text-align: center;
+		font-weight: 500;
+	}
+
+	.progress-bar {
+		width: 100%;
+		height: 24px;
+		background: #e9ecef;
+		border-radius: 12px;
+		overflow: hidden;
+		position: relative;
+	}
+
+	.progress-fill {
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		background: linear-gradient(90deg, #28a745, #20c997);
+		transition: width 0.2s ease;
+		will-change: width;
+		min-width: 0;
+		max-width: 100%;
 	}
 
 	.transcript-meta {

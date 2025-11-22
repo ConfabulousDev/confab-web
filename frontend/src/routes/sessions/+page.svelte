@@ -6,6 +6,8 @@
 	let sessions: Session[] = [];
 	let loading = true;
 	let error = '';
+	let sortColumn: 'title' | 'type' | 'session_id' | 'last_run_time' = 'last_run_time';
+	let sortDirection: 'asc' | 'desc' = 'desc'; // Default: most recent first
 
 	onMount(async () => {
 		await fetchSessions();
@@ -35,6 +37,51 @@
 			loading = false;
 		}
 	}
+
+	function handleSort(column: 'title' | 'type' | 'session_id' | 'last_run_time') {
+		if (sortColumn === column) {
+			// Toggle direction if clicking the same column
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			// New column: default to ascending (except last_run_time defaults to descending)
+			sortColumn = column;
+			sortDirection = column === 'last_run_time' ? 'desc' : 'asc';
+		}
+	}
+
+	// Sorted sessions (reactive)
+	$: sortedSessions = (() => {
+		const sorted = [...sessions];
+		sorted.sort((a, b) => {
+			let aVal, bVal;
+
+			switch (sortColumn) {
+				case 'title':
+					// For now, all titles are the same, but this will work when we have real titles
+					aVal = 'Untitled Session';
+					bVal = 'Untitled Session';
+					break;
+				case 'type':
+					// For now, all types are Claude Code, but this will work when we have real types
+					aVal = 'Claude Code';
+					bVal = 'Claude Code';
+					break;
+				case 'session_id':
+					aVal = a.session_id;
+					bVal = b.session_id;
+					break;
+				case 'last_run_time':
+					aVal = new Date(a.last_run_time).getTime();
+					bVal = new Date(b.last_run_time).getTime();
+					break;
+			}
+
+			if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+			if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+			return 0;
+		});
+		return sorted;
+	})();
 </script>
 
 <div class="container">
@@ -59,27 +106,41 @@
 				<table>
 					<thead>
 						<tr>
-							<th>Session ID</th>
-							<th>First Seen</th>
-							<th>Runs</th>
-							<th>Last Activity</th>
-							<th></th>
+							<th class="sortable" on:click={() => handleSort('title')}>
+								Title
+								{#if sortColumn === 'title'}
+									<span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+								{/if}
+							</th>
+							<th class="sortable" on:click={() => handleSort('type')}>
+								Type
+								{#if sortColumn === 'type'}
+									<span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+								{/if}
+							</th>
+							<th class="sortable" on:click={() => handleSort('session_id')}>
+								Session ID
+								{#if sortColumn === 'session_id'}
+									<span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+								{/if}
+							</th>
+							<th class="sortable" on:click={() => handleSort('last_run_time')}>
+								Last Activity
+								{#if sortColumn === 'last_run_time'}
+									<span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+								{/if}
+							</th>
 						</tr>
 					</thead>
 					<tbody>
-						{#each sessions as session (session.session_id)}
-							<tr>
+						{#each sortedSessions as session (session.session_id)}
+							<tr class="clickable-row" on:click={() => window.location.href = `/sessions/${session.session_id}`}>
+								<td class="session-title">Untitled Session</td>
+								<td class="session-type">Claude Code</td>
 								<td>
 									<code class="session-id">{session.session_id.substring(0, 8)}</code>
 								</td>
-								<td>{formatDate(session.first_seen)}</td>
-								<td>{session.run_count}</td>
-								<td>
-									<span class="relative-time">{formatRelativeTime(session.last_run_time)}</span>
-								</td>
-								<td>
-									<a href="/sessions/{session.session_id}" class="btn btn-sm">View</a>
-								</td>
+								<td>{formatDate(session.last_run_time)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -99,11 +160,11 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 2rem;
+		margin-bottom: 1.5rem;
 	}
 
 	.header h1 {
-		font-size: 2rem;
+		font-size: 1.75rem;
 		color: #222;
 	}
 
@@ -122,28 +183,60 @@
 
 	th {
 		text-align: left;
-		padding: 0.75rem;
+		padding: 0.5rem 0.75rem;
 		font-weight: 600;
 		color: #495057;
 		border-bottom: 2px solid #dee2e6;
 	}
 
-	td {
-		padding: 0.75rem;
-		border-bottom: 1px solid #dee2e6;
-		color: #212529;
+	th.sortable {
+		cursor: pointer;
+		user-select: none;
+		transition: background-color 0.2s ease;
 	}
 
-	tbody tr:hover {
-		background: #f8f9fa;
+	th.sortable:hover {
+		background: #e9ecef;
+	}
+
+	.sort-indicator {
+		margin-left: 0.25rem;
+		font-size: 0.85rem;
+		color: #007bff;
+	}
+
+	td {
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid #dee2e6;
+		color: #212529;
+		font-size: 0.9rem;
+	}
+
+	.clickable-row {
+		cursor: pointer;
+		transition: background-color 0.2s ease;
+	}
+
+	.clickable-row:hover {
+		background: #e9ecef;
+	}
+
+	.session-title {
+		color: #6c757d;
+		font-style: italic;
+	}
+
+	.session-type {
+		color: #495057;
+		font-weight: 500;
 	}
 
 	.session-id {
 		font-family: monospace;
 		background: #e9ecef;
-		padding: 0.25rem 0.5rem;
+		padding: 0.2rem 0.4rem;
 		border-radius: 4px;
-		font-size: 0.9rem;
+		font-size: 0.85rem;
 	}
 
 	.relative-time {

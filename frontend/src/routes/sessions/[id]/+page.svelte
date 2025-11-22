@@ -21,7 +21,12 @@
 	let shares: SessionShare[] = [];
 	let loadingShares = false;
 
+	// Run selection state
+	let selectedRunIndex = 0;
+
 	$: sessionId = $page.params.id;
+
+	$: selectedRun = session?.runs[selectedRunIndex];
 
 	onMount(async () => {
 		await fetchSession();
@@ -51,6 +56,16 @@
 			}
 
 			session = await response.json();
+
+			// Set initial selection to the latest run by timestamp
+			if (session.runs && session.runs.length > 0) {
+				const latestIndex = session.runs.reduce((latestIdx, run, idx) => {
+					return new Date(run.end_timestamp) > new Date(session.runs[latestIdx].end_timestamp)
+						? idx
+						: latestIdx;
+				}, 0);
+				selectedRunIndex = latestIndex;
+			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load session';
 		} finally {
@@ -177,17 +192,33 @@
 				<span class="meta-label">First Seen:</span>
 				<span class="meta-value">{formatDate(session.first_seen)}</span>
 			</div>
-			<div class="meta-item">
-				<span class="meta-label">Total Runs:</span>
-				<span class="meta-value">{session.runs.length}</span>
-			</div>
+
+			<!-- Version selector dropdown (only show if multiple runs) -->
+			{#if session.runs.length > 1}
+				<div class="meta-item">
+					<span class="meta-label">Select Version:</span>
+					<select id="run-select" bind:value={selectedRunIndex} class="version-select">
+						{#each session.runs as run, index}
+							{@const isLatestRun = session.runs.every(
+								(r) => new Date(run.end_timestamp) >= new Date(r.end_timestamp)
+							)}
+							{@const isOldestRun = session.runs.every(
+								(r) => new Date(run.end_timestamp) <= new Date(r.end_timestamp)
+							)}
+							{@const label = isLatestRun ? 'latest' : isOldestRun ? 'started' : 'updated'}
+							<option value={index}>
+								#{index + 1} {label} @ {formatDate(run.end_timestamp)}
+							</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
 		</div>
 
-		<h2>Runs</h2>
-
-		{#each session.runs as run, index}
-			<RunCard {run} {index} />
-		{/each}
+		<!-- Display the selected run -->
+		{#if selectedRun}
+			<RunCard run={selectedRun} index={selectedRunIndex} />
+		{/if}
 	{/if}
 </div>
 
@@ -380,16 +411,39 @@
 		background: white;
 		border-radius: 8px;
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		padding: 1.5rem;
-		margin-bottom: 2rem;
+		padding: 1rem;
+		margin-bottom: 1rem;
 		display: flex;
-		gap: 2rem;
+		gap: 1.5rem;
 	}
 
 	.meta-item {
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
+	}
+
+	.version-select {
+		padding: 0.5rem 0.75rem;
+		border: 1px solid #ced4da;
+		border-radius: 6px;
+		font-size: 0.875rem;
+		color: #495057;
+		background-color: white;
+		cursor: pointer;
+		transition: border-color 0.2s, box-shadow 0.2s;
+		width: auto;
+		min-width: 250px;
+	}
+
+	.version-select:hover {
+		border-color: #80bdff;
+	}
+
+	.version-select:focus {
+		outline: none;
+		border-color: #007bff;
+		box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 	}
 
 	.meta-label {

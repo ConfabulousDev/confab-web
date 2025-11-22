@@ -102,7 +102,7 @@
 <div class="run-card">
 	<div class="run-header">
 		<div class="header-left">
-			<h3>Run #{index + 1}</h3>
+			<h3>Version #{index + 1}</h3>
 			<span class="timestamp">{formatDate(run.end_timestamp)}</span>
 		</div>
 		<button class="view-transcript-btn" on:click={() => (showTranscript = !showTranscript)}>
@@ -122,12 +122,6 @@
 		<div class="info-row">
 			<span class="label">Transcript:</span>
 			<code class="value">{run.transcript_path}</code>
-		</div>
-		<div class="info-row">
-			<span class="label">Cloud Backup:</span>
-			<span class="value {run.s3_uploaded ? 'success' : 'muted'}">
-				{run.s3_uploaded ? '✓ Uploaded' : '✗ Not uploaded'}
-			</span>
 		</div>
 	</div>
 
@@ -254,16 +248,16 @@
 		background: white;
 		border-radius: 8px;
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		padding: 1.5rem;
-		margin-bottom: 1.5rem;
+		padding: 1rem;
+		margin-bottom: 1rem;
 	}
 
 	.run-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 1rem;
-		padding-bottom: 1rem;
+		margin-bottom: 0.75rem;
+		padding-bottom: 0.75rem;
 		border-bottom: 1px solid #dee2e6;
 	}
 
@@ -303,13 +297,13 @@
 	.run-info {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
-		margin-bottom: 1rem;
+		gap: 0.5rem;
+		margin-bottom: 0.75rem;
 	}
 
 	.info-row {
 		display: flex;
-		gap: 1rem;
+		gap: 0.75rem;
 	}
 
 	.info-row .label {
@@ -338,21 +332,21 @@
 	}
 
 	.git-info-section {
-		margin-top: 1.5rem;
-		padding-top: 1.5rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
 		border-top: 1px solid #dee2e6;
 	}
 
 	.git-info-section h4 {
 		font-size: 1rem;
 		color: #495057;
-		margin: 0 0 1rem 0;
+		margin: 0 0 0.75rem 0;
 	}
 
 	.git-info {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.5rem;
 	}
 
 	.link {
@@ -374,15 +368,15 @@
 	}
 
 	.files-section {
-		margin-top: 1.5rem;
-		padding-top: 1.5rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
 		border-top: 1px solid #dee2e6;
 	}
 
 	.files-section h4 {
 		font-size: 1rem;
 		color: #495057;
-		margin: 0 0 1rem 0;
+		margin: 0 0 0.75rem 0;
 	}
 
 	.files-list {
@@ -395,7 +389,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 0.75rem;
+		padding: 0.5rem 0.75rem;
 		background: #f8f9fa;
 		border-radius: 6px;
 	}
@@ -443,19 +437,19 @@
 	}
 
 	.todos-section {
-		margin-top: 1.5rem;
-		padding-top: 1.5rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
 		border-top: 1px solid #dee2e6;
 	}
 
 	.todos-section h4 {
 		font-size: 1rem;
 		color: #495057;
-		margin: 0 0 1rem 0;
+		margin: 0 0 0.75rem 0;
 	}
 
 	.todo-group {
-		margin-bottom: 1.5rem;
+		margin-bottom: 1rem;
 	}
 
 	.todo-group:last-child {
@@ -479,7 +473,7 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 0.75rem;
-		padding: 0.75rem;
+		padding: 0.5rem 0.75rem;
 		background: #f8f9fa;
 		border-radius: 6px;
 		border-left: 3px solid transparent;
@@ -531,8 +525,8 @@
 	}
 
 	.transcript-section {
-		margin-top: 1.5rem;
-		padding-top: 1.5rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
 		border-top: 1px solid #dee2e6;
 	}
 </style>

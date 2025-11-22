@@ -23,17 +23,20 @@
 	let messageListElement: HTMLDivElement;
 	let shouldScrollToBottom = false;
 
-	// Build a map of where to insert agents
-	const agentInsertionMap = new Map<number, AgentNode[]>();
-	agents.forEach((agent) => {
-		const insertIndex = getAgentInsertionIndex(messages, agent.parentMessageId);
-		const existing = agentInsertionMap.get(insertIndex) || [];
-		existing.push(agent);
-		agentInsertionMap.set(insertIndex, existing);
-	});
+	// Build a map of where to insert agents (reactive)
+	$: agentInsertionMap = (() => {
+		const map = new Map<number, AgentNode[]>();
+		agents.forEach((agent) => {
+			const insertIndex = getAgentInsertionIndex(messages, agent.parentMessageId);
+			const existing = map.get(insertIndex) || [];
+			existing.push(agent);
+			map.set(insertIndex, existing);
+		});
+		return map;
+	})();
 
-	// Filter out non-displayable messages
-	const displayableMessages = messages.filter(
+	// Filter out non-displayable messages (reactive)
+	$: displayableMessages = messages.filter(
 		(msg) =>
 			isUserMessage(msg) || isAssistantMessage(msg) || isSystemMessage(msg) || isSummaryMessage(msg)
 	);

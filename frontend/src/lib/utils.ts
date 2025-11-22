@@ -4,7 +4,10 @@
  * Format a date string for display
  */
 export function formatDate(dateStr: string): string {
-	const date = new Date(dateStr);
+	// Ensure we're parsing the date correctly regardless of timezone format
+	// If the string ends with 'Z', it's UTC. Otherwise, treat it as UTC by appending 'Z'
+	const normalizedDateStr = dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
+	const date = new Date(normalizedDateStr);
 	return date.toLocaleString();
 }
 
@@ -23,7 +26,10 @@ export function formatBytes(bytes: number): string {
  * Format a date as relative time (e.g., "5m ago")
  */
 export function formatRelativeTime(dateStr: string): string {
-	const date = new Date(dateStr);
+	// Ensure we're parsing the date correctly regardless of timezone format
+	// If the string ends with 'Z', it's UTC. Otherwise, treat it as UTC by appending 'Z'
+	const normalizedDateStr = dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
+	const date = new Date(normalizedDateStr);
 	const now = new Date();
 	const diff = now.getTime() - date.getTime();
 
@@ -35,5 +41,6 @@ export function formatRelativeTime(dateStr: string): string {
 	if (days > 0) return `${days}d ago`;
 	if (hours > 0) return `${hours}h ago`;
 	if (minutes > 0) return `${minutes}m ago`;
-	return `${seconds}s ago`;
+	if (seconds > 0) return `${seconds}s ago`;
+	return 'just now';
 }

@@ -88,15 +88,23 @@ export async function fetchTranscript(
 
 	// Check cache first
 	if (!options.skipCache && transcriptCache.has(cacheKey)) {
+		console.log(`    ⏱️ Using cached transcript`);
 		return transcriptCache.get(cacheKey)!;
 	}
 
 	// Fetch and parse
+	const t0 = performance.now();
 	const content = await fetchTranscriptContent(runId, fileId, {
 		sessionId: options.sessionId,
 		shareToken: options.shareToken
 	});
+	const t1 = performance.now();
+	console.log(`    ⏱️ Network fetch took ${Math.round(t1 - t0)}ms (${Math.round(content.length / 1024 / 1024 * 10) / 10}MB)`);
+
+	const t2 = performance.now();
 	const messages = parseJSONL(content);
+	const t3 = performance.now();
+	console.log(`    ⏱️ Parsing JSONL took ${Math.round(t3 - t2)}ms (${messages.length} messages)`);
 
 	// Cache the result
 	transcriptCache.set(cacheKey, messages);
@@ -113,7 +121,10 @@ export async function fetchParsedTranscript(
 	sessionId: string,
 	shareToken?: string
 ): Promise<ParsedTranscript> {
+	const t0 = performance.now();
 	const messages = await fetchTranscript(runId, fileId, { sessionId, shareToken });
+	const t1 = performance.now();
+	console.log(`  ⏱️ fetchTranscript (network + parse) took ${Math.round(t1 - t0)}ms for ${messages.length} messages`);
 
 	// Extract metadata
 	const timestamps = messages
