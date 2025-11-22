@@ -21,6 +21,14 @@
 	let renderingBatch = false;
 	let renderProgress = { current: 0, total: 0 };
 
+	// Computed progress percentage for reactivity
+	$: progressPercent = renderProgress.total > 0
+		? Math.round((renderProgress.current / renderProgress.total) * 100)
+		: 0;
+	$: progressWidth = renderProgress.total > 0
+		? (renderProgress.current / renderProgress.total) * 100
+		: 0;
+
 	// Expand/collapse all controls
 	let expandAllAgents = true;
 	let expandAllTools = false;
@@ -97,7 +105,10 @@
 
 		// Continue if there are more messages
 		if (end < allMessages.length) {
-			setTimeout(renderNextBatch, 0); // Yield to browser
+			// Slightly longer delay to allow UI updates
+			requestAnimationFrame(() => {
+				setTimeout(renderNextBatch, 10);
+			});
 		} else {
 			// Rendering complete - delay slightly to show 100% completion
 			setTimeout(() => {
@@ -176,12 +187,12 @@
 				<div class="rendering-progress">
 					<div class="progress-text">
 						Rendering messages: {renderProgress.current.toLocaleString()} / {renderProgress.total.toLocaleString()}
-						({Math.round((renderProgress.current / renderProgress.total) * 100)}%)
+						({progressPercent}%)
 					</div>
 					<div class="progress-bar">
 						<div
 							class="progress-fill"
-							style="width: {(renderProgress.current / renderProgress.total) * 100}%"
+							style="width: {progressWidth}%"
 						></div>
 					</div>
 				</div>
