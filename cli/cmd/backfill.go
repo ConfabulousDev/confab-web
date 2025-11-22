@@ -230,22 +230,6 @@ func uploadSession(cfg *config.UploadConfig, session discovery.SessionInfo) erro
 		return fmt.Errorf("failed to discover session files for %s: %w", session.SessionID, err)
 	}
 
-	// Read file contents using shared function
-	fileUploads, err := upload.ReadFilesForUpload(files)
-	if err != nil {
-		return fmt.Errorf("failed to read session files for %s: %w", session.SessionID, err)
-	}
-
-	// Create request payload with backfill source
-	request := &upload.SaveSessionRequest{
-		SessionID:      session.SessionID,
-		TranscriptPath: session.TranscriptPath,
-		CWD:            hookInput.CWD,
-		Reason:         "backfill",
-		Source:         "backfill",
-		Files:          fileUploads,
-	}
-
-	// Send using shared function (handles compression and HTTP)
-	return upload.SendSessionRequest(cfg, request)
+	// Use UploadToCloudWithConfig to ensure timestamp extraction happens
+	return upload.UploadToCloudWithConfig(cfg, hookInput, files)
 }
