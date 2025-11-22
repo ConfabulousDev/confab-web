@@ -73,6 +73,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(securityHeadersMiddleware())
+	r.Use(middleware.Compress(5)) // gzip compression for responses >1KB, level 5 (good balance of speed/compression)
 	r.Use(ratelimit.Middleware(s.globalLimiter)) // Global rate limiting
 
 	// CORS configuration - CRITICAL SECURITY FIX
