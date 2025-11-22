@@ -394,7 +394,26 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		// Validate session
 		session, err := database.GetWebSession(ctx, cookie.Value)
 		if err != nil {
-			http.Error(w, "Invalid or expired session", http.StatusUnauthorized)
+			// Session is invalid or expired - clear the stale cookie and redirect to login
+			http.SetCookie(w, &http.Cookie{
+				Name:   SessionCookieName,
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+
+			// Redirect to GitHub login, then back here
+			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery
+			http.SetCookie(w, &http.Cookie{
+				Name:     "cli_redirect",
+				Value:    redirectURL,
+				Path:     "/",
+				MaxAge:   300, // 5 minutes
+				HttpOnly: true,
+				Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
+				SameSite: http.SameSiteLaxMode,
+			})
+			http.Redirect(w, r, "/auth/github/login", http.StatusTemporaryRedirect)
 			return
 		}
 
