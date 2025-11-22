@@ -1,6 +1,24 @@
 package types
 
-import "time"
+import (
+	"bufio"
+	"io"
+	"time"
+)
+
+// MaxJSONLLineSize is the maximum size for a single JSONL line
+// Default bufio.Scanner buffer is 64KB, but transcript lines with
+// thinking blocks and tool results can exceed 1MB
+const MaxJSONLLineSize = 10 * 1024 * 1024 // 10MB
+
+// NewJSONLScanner creates a bufio.Scanner configured for large JSONL files
+// with a 10MB buffer to handle long transcript lines
+func NewJSONLScanner(r io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	buf := make([]byte, MaxJSONLLineSize)
+	scanner.Buffer(buf, MaxJSONLLineSize)
+	return scanner
+}
 
 // HookInput represents the SessionEnd hook data from Claude Code
 type HookInput struct {

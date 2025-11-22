@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -84,10 +83,7 @@ func findAgentReferences(transcriptPath string) ([]string, error) {
 	var agentIDs []string
 
 	// Parse JSONL line by line
-	scanner := bufio.NewScanner(file)
-	// Increase buffer size for long transcript lines (default is 64KB, use 10MB)
-	buf := make([]byte, 0, 10*1024*1024)
-	scanner.Buffer(buf, 10*1024*1024)
+	scanner := types.NewJSONLScanner(file)
 	for scanner.Scan() {
 		var message map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &message); err != nil {

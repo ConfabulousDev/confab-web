@@ -1,7 +1,6 @@
 package upload
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -135,7 +134,7 @@ func extractLastActivity(transcriptPath string) (*time.Time, error) {
 	defer file.Close()
 
 	var maxTimestamp *time.Time
-	scanner := bufio.NewScanner(file)
+	scanner := types.NewJSONLScanner(file)
 
 	// Read line by line (JSONL format)
 	lineNum := 0
