@@ -11,6 +11,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/git"
+	"github.com/santaclaude2025/confab/pkg/redactor"
 	"github.com/santaclaude2025/confab/pkg/types"
 	"github.com/santaclaude2025/confab/pkg/utils"
 )
@@ -68,10 +69,30 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 // ReadFilesForUpload reads file contents and creates FileUpload entries
 func ReadFilesForUpload(files []types.SessionFile) ([]FileUpload, error) {
 	fileUploads := make([]FileUpload, 0, len(files))
+
+	// Check if redaction is enabled and load config if so
+	var r *redactor.Redactor
+	if redactor.IsEnabled() {
+		cfg, err := redactor.LoadConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load redaction config: %w", err)
+		}
+
+		r, err = redactor.NewRedactor(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create redactor: %w", err)
+		}
+	}
+
 	for _, f := range files {
 		content, err := os.ReadFile(f.Path)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read file %s: %w", f.Path, err)
+		}
+
+		// Redact content if redaction is enabled
+		if r != nil {
+			content = r.RedactBytes(content)
 		}
 
 		fileUploads = append(fileUploads, FileUpload{
