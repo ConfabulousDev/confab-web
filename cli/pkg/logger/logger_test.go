@@ -42,7 +42,13 @@ func TestInit(t *testing.T) {
 		t.Errorf("Log directory not created: %s", logDir)
 	}
 
-	// Verify log file was created
+	// Note: lumberjack creates the file lazily on first write
+	// So we need to write something first
+	if instance != nil {
+		instance.Info("Test message")
+	}
+
+	// Verify log file was created after writing
 	logFile := filepath.Join(logDir, logFileName)
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		t.Errorf("Log file not created: %s", logFile)

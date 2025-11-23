@@ -2,16 +2,23 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
 	logDirName  = ".confab/logs"
 	logFileName = "confab.log"
+	maxSizeMB   = 1     // 1MB per file
+	maxAgeDays  = 14    // Keep 2 weeks
+	maxBackups  = 20    // Max old log files (safety limit)
+	compressOld = true  // Compress rotated logs
 )
 
 // Level represents the log level
@@ -41,7 +48,7 @@ func (l Level) String() string {
 
 // Logger manages logging to file and optionally stderr
 type Logger struct {
-	file       *os.File
+	file       io.WriteCloser
 	logger     *log.Logger
 	logPath    string
 	level      Level
@@ -71,15 +78,20 @@ func Init() error {
 		}
 
 		logPath := filepath.Join(logDir, logFileName)
-		file, openErr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if openErr != nil {
-			err = fmt.Errorf("failed to open log file: %w", openErr)
-			return
+
+		// Use lumberjack for automatic log rotation
+		rotator := &lumberjack.Logger{
+			Filename:   logPath,
+			MaxSize:    maxSizeMB,   // megabytes
+			MaxAge:     maxAgeDays,  // days
+			MaxBackups: maxBackups,  // number of old files
+			Compress:   compressOld, // compress old files
+			LocalTime:  true,        // use local time for filenames
 		}
 
 		instance = &Logger{
-			file:       file,
-			logger:     log.New(file, "", 0), // We'll format manually
+			file:       rotator,
+			logger:     log.New(rotator, "", 0), // We'll format manually
 			logPath:    logPath,
 			level:      INFO,
 			alsoStderr: false,

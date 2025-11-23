@@ -78,7 +78,38 @@ Removes the SessionEnd hook from Claude Code settings.
 
 - **Cloud config:** `~/.confab/config.json` - Backend URL and API key
 - **Redaction config:** `~/.confab/redaction.json` - Redaction patterns
-- **Logs:** `~/.confab/logs/confab.log` - Operation logs
+- **Logs:** `~/.confab/logs/` - Operation logs with automatic rotation
+  - `confab.log` - Current log file (max 1MB)
+  - `confab.log.1.gz`, `confab.log.2.gz`, etc. - Rotated logs (kept for 14 days)
+
+## Log Management
+
+Logs are automatically rotated and cleaned up:
+- **Max size:** 1MB per log file
+- **Retention:** 14 days (2 weeks)
+- **Location:** `~/.confab/logs/`
+- **Format:**
+  - Active: `confab.log`
+  - Rotated: `confab.log.1.gz`, `confab.log.2.gz`, etc.
+- **Compression:** Old logs are compressed with gzip
+
+To view logs:
+```bash
+# Current log
+tail -f ~/.confab/logs/confab.log
+
+# Rotated logs (compressed)
+zcat ~/.confab/logs/confab.log.1.gz | tail -100
+
+# All logs (last 100 lines)
+for f in ~/.confab/logs/confab.log*; do
+  if [[ $f == *.gz ]]; then
+    zcat "$f"
+  else
+    cat "$f"
+  fi
+done | tail -100
+```
 
 ## Development
 
