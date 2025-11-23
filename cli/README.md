@@ -1,8 +1,6 @@
 # Confab CLI
 
-Command-line tool for archiving and querying your Claude Code sessions.
-
-Confab automatically captures Claude Code session transcripts and agent sidechains to local SQLite storage for retrieval, search, and analytics.
+Command-line tool for capturing and uploading Claude Code sessions to cloud storage.
 
 ## Installation
 
@@ -19,48 +17,42 @@ This will:
 1. Build the `confab` binary
 2. Install it to `~/.local/bin`
 3. Set up the SessionEnd hook in `~/.claude/settings.json`
-4. Create the SQLite database at `~/.confab/sessions.db`
 
 Make sure `~/.local/bin` is in your PATH.
 
 ## Usage
 
-### View Status
+### Authentication
 
 ```bash
-confab status
-```
-
-Shows:
-- Database location and session count
-- Recent captured sessions
-- Hook installation status
-
-### Cloud Sync
-
-Authenticate and sync sessions across devices:
-
-```bash
-# Interactive login (recommended)
+# Interactive login (recommended - opens browser for GitHub OAuth)
 confab login
 
 # Or manually configure with API key
 confab configure \
-  --backend-url http://localhost:8080 \
+  --backend-url https://your-backend.com \
   --api-key <your-api-key>
 
-# Check cloud sync status
+# Check configuration status
 confab status
 
-# Logout and disable cloud sync (clears API key)
+# Logout (clears API key)
 confab logout
 ```
 
-### Manual Capture (Testing)
+### Redaction
+
+Redact sensitive data before uploading:
 
 ```bash
-# Normally the save command is called automatically by the SessionEnd hook
-echo '{"session_id":"test","transcript_path":"/path/to/transcript.jsonl",...}' | confab save
+# Enable redaction with default patterns
+confab redaction enable
+
+# View current configuration
+confab redaction status
+
+# Disable redaction
+confab redaction disable
 ```
 
 ### Uninstall Hook
@@ -69,36 +61,24 @@ echo '{"session_id":"test","transcript_path":"/path/to/transcript.jsonl",...}' |
 confab uninstall
 ```
 
-Removes the SessionEnd hook but preserves your database and sessions.
+Removes the SessionEnd hook from Claude Code settings.
 
 ## How It Works
 
 1. When you end a Claude Code session, the SessionEnd hook fires
 2. Confab reads session metadata from stdin
-3. Discovers the transcript file and any referenced agent sidechains (using regex pattern `agent-[a-f0-9]{8}`)
-4. Stores metadata and file paths in SQLite
-5. Optionally uploads to cloud backend (if configured)
+3. Discovers the transcript file and any referenced agent sidechains
+4. Optionally redacts sensitive data (if enabled)
+5. Uploads files to cloud backend (if API key configured)
 6. Returns success response to Claude Code
 
-## Local Database
+**Note:** Sessions are only captured when the hook fires (on session end). There is no local database - all data is uploaded to the cloud backend.
 
-**Location:** `~/.confab/sessions.db`
+## Configuration Files
 
-**Schema:**
-- `sessions` - Unique session IDs with first seen timestamp
-- `runs` - Individual executions/resumptions of sessions
-- `files` - Files associated with each run (transcript and agent sidechains)
-
-**Logs:** `~/.confab/logs/confab.log`
-
-## Cloud Sync
-
-When cloud sync is enabled, sessions are automatically uploaded to the backend after local storage succeeds. This enables:
-- Session access across multiple devices
-- Cloud-based search and analytics
-- Backup and archival
-
-See the [backend documentation](../backend/README.md) for running your own backend server.
+- **Cloud config:** `~/.confab/config.json` - Backend URL and API key
+- **Redaction config:** `~/.confab/redaction.json` - Redaction patterns
+- **Logs:** `~/.confab/logs/confab.log` - Operation logs
 
 ## Development
 
@@ -106,60 +86,26 @@ See the [backend documentation](../backend/README.md) for running your own backe
 # Build
 make build
 
-# Clean
-make clean
-
-# Test with sample input
-make test
-
 # Run tests
 go test ./...
 
 # Run tests with coverage
 go test -cover ./...
-
-# Run linter (requires golangci-lint)
-golangci-lint run
 ```
 
 ## Environment Variables
 
-Confab can be configured using the following environment variables:
-
 ### `CONFAB_CLAUDE_DIR`
 
-Override the default Claude Code state directory location.
+Override the default Claude Code state directory.
 
 - **Default:** `~/.claude`
-- **Usage:** Useful for testing, non-standard installations, or running multiple Claude Code instances
-- **Example:**
-  ```bash
-  export CONFAB_CLAUDE_DIR=/custom/path/to/claude
-  confab status
-  ```
+- **Example:** `export CONFAB_CLAUDE_DIR=/custom/path/to/claude`
 
 This affects:
-- Settings file location: `$CONFAB_CLAUDE_DIR/settings.json`
+- Settings file: `$CONFAB_CLAUDE_DIR/settings.json`
 - Projects directory: `$CONFAB_CLAUDE_DIR/projects/`
 - Todos directory: `$CONFAB_CLAUDE_DIR/todos/`
-
-## Configuration Files
-
-Confab uses several configuration files:
-
-### Cloud Sync Configuration
-- **Location:** `~/.confab/config.json`
-- **Contents:** Backend URL and API key
-- **Created by:** `confab login` or `confab configure`
-
-### Redaction Configuration
-- **Location:** `~/.confab/redaction.json` (enabled) or `~/.confab/redaction.json.disabled` (disabled)
-- **Contents:** Patterns for redacting sensitive data before upload
-- **Managed by:** `confab redaction` commands
-
-### Logs
-- **Location:** `~/.confab/logs/confab.log`
-- **Contents:** Detailed operation logs for debugging
 
 ## License
 

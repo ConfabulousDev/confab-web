@@ -49,7 +49,7 @@ A production-grade migration system must provide:
 - Built-in version control and database locking
 - Dirty state detection and recovery
 - Can embed migrations in binary (`embed.FS` support)
-- Extensive database support (PostgreSQL, MySQL, SQLite, etc.)
+- Extensive database support (PostgreSQL, MySQL, etc.)
 - Active maintenance and community
 - Simple migration file format: `{version}_{name}.up.sql` and `{version}_{name}.down.sql`
 - No external dependencies
