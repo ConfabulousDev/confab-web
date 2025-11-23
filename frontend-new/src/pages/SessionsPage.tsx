@@ -4,7 +4,7 @@ import type { Session } from '@/types';
 import { formatDate } from '@/utils/utils';
 import styles from './SessionsPage.module.css';
 
-type SortColumn = 'title' | 'type' | 'session_id' | 'last_run_time';
+type SortColumn = 'title' | 'session_id' | 'last_run_time';
 type SortDirection = 'asc' | 'desc';
 
 function SessionsPage() {
@@ -71,10 +71,6 @@ function SessionsPage() {
           aVal = a.title || 'Untitled Session';
           bVal = b.title || 'Untitled Session';
           break;
-        case 'type':
-          aVal = a.session_type || 'Claude Code';
-          bVal = b.session_type || 'Claude Code';
-          break;
         case 'session_id':
           aVal = a.session_id;
           bVal = b.session_id;
@@ -127,14 +123,6 @@ function SessionsPage() {
                       </span>
                     )}
                   </th>
-                  <th className={styles.sortable} onClick={() => handleSort('type')}>
-                    Type
-                    {sortColumn === 'type' && (
-                      <span className={styles.sortIndicator}>
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </th>
                   <th className={styles.sortable} onClick={() => handleSort('session_id')}>
                     Session ID
                     {sortColumn === 'session_id' && (
@@ -163,7 +151,6 @@ function SessionsPage() {
                     <td className={session.title ? '' : styles.sessionTitle}>
                       {session.title || 'Untitled Session'}
                     </td>
-                    <td className={styles.sessionType}>{session.session_type || 'Claude Code'}</td>
                     <td>
                       <code className={styles.sessionId}>{session.session_id.substring(0, 8)}</code>
                     </td>

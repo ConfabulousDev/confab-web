@@ -6,7 +6,7 @@
 	let sessions: Session[] = [];
 	let loading = true;
 	let error = '';
-	let sortColumn: 'title' | 'type' | 'session_id' | 'last_run_time' = 'last_run_time';
+	let sortColumn: 'title' | 'session_id' | 'last_run_time' = 'last_run_time';
 	let sortDirection: 'asc' | 'desc' = 'desc'; // Default: most recent first
 
 	onMount(async () => {
@@ -38,7 +38,7 @@
 		}
 	}
 
-	function handleSort(column: 'title' | 'type' | 'session_id' | 'last_run_time') {
+	function handleSort(column: 'title' | 'session_id' | 'last_run_time') {
 		if (sortColumn === column) {
 			// Toggle direction if clicking the same column
 			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -62,10 +62,6 @@
 				case 'title':
 					aVal = a.title || 'Untitled Session';
 					bVal = b.title || 'Untitled Session';
-					break;
-				case 'type':
-					aVal = a.session_type || 'Claude Code';
-					bVal = b.session_type || 'Claude Code';
 					break;
 				case 'session_id':
 					aVal = a.session_id;
@@ -113,12 +109,6 @@
 									<span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
 								{/if}
 							</th>
-							<th class="sortable" on:click={() => handleSort('type')}>
-								Type
-								{#if sortColumn === 'type'}
-									<span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-								{/if}
-							</th>
 							<th class="sortable" on:click={() => handleSort('session_id')}>
 								Session ID
 								{#if sortColumn === 'session_id'}
@@ -137,7 +127,6 @@
 						{#each sortedSessions as session (session.session_id)}
 							<tr class="clickable-row" on:click={() => window.location.href = `/sessions/${session.session_id}`}>
 								<td class:session-title={!session.title}>{session.title || 'Untitled Session'}</td>
-								<td class="session-type">{session.session_type || 'Claude Code'}</td>
 								<td>
 									<code class="session-id">{session.session_id.substring(0, 8)}</code>
 								</td>
