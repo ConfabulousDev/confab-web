@@ -1,0 +1,164 @@
+# golangci-lint configuration for confab CLI
+# See: https://golangci-lint.run/usage/configuration/
+
+run:
+  # Timeout for analysis
+  timeout: 5m
+
+  # Include test files in linting
+  tests: true
+
+  # Exit code when at least one issue was found
+  issues-exit-code: 1
+
+  # Modules download mode (readonly, vendor, or mod)
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Essential linters
+    - errcheck        # Check for unchecked errors
+    - gosimple        # Simplify code
+    - govet           # Reports suspicious constructs
+    - ineffassign     # Detect ineffectual assignments
+    - staticcheck     # Advanced static analysis
+    - unused          # Check for unused constants, variables, functions
+
+    # Code quality
+    - gocyclo         # Check cyclomatic complexity
+    - gofmt           # Check formatting (gofmt)
+    - goimports       # Check imports formatting
+    - misspell        # Find commonly misspelled English words
+    - unconvert       # Remove unnecessary type conversions
+    - unparam         # Find unused function parameters
+
+    # Style and best practices
+    - errname         # Check error naming conventions (e.g., ErrFoo)
+    - errorlint       # Find misuses of errors
+    - goconst         # Find repeated strings that could be constants
+    - goprintffuncname # Check printf-like function naming
+    - nolintlint      # Ill-formed or insufficient nolint directives
+    - predeclared     # Find code that shadows predeclared identifiers
+    - revive          # Fast, configurable, extensible, flexible linter
+    - thelper         # Detect test helpers without t.Helper()
+    - wastedassign    # Find wasted assignment statements
+
+    # Security
+    - gosec           # Security checker
+
+  disable:
+    # Disabled because they're too strict for this project
+    - gochecknoglobals # We use some global variables (logger singleton, etc.)
+    - gochecknoinits   # We use init() in some packages
+    - godox            # Allows TODO/FIXME comments
+    - nlreturn         # Too strict about newlines
+    - wsl              # Too strict about whitespace
+
+linters-settings:
+  errcheck:
+    # Report about not checking errors in type assertions: `a := b.(MyStruct)`
+    check-type-assertions: true
+
+    # Report about assignment of errors to blank identifier
+    check-blank: true
+
+  govet:
+    # Enable all analyzers
+    enable-all: true
+
+    # Disable shadow check (can be too noisy)
+    disable:
+      - shadow
+
+  gocyclo:
+    # Minimum cyclomatic complexity to report
+    min-complexity: 15
+
+  misspell:
+    # Locale to use
+    locale: US
+
+  revive:
+    rules:
+      # Common sense rules
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: var-naming
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  gosec:
+    # Security severity levels
+    severity: medium
+    confidence: medium
+
+    # Exclude specific rules (G104 is duplicate of errcheck)
+    excludes:
+      - G104
+
+  goconst:
+    # Minimum length of string constant
+    min-len: 3
+    # Minimum occurrences before flagging
+    min-occurrences: 3
+
+issues:
+  # Maximum issues count per linter
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text
+  max-same-issues: 0
+
+  # Excluding configuration
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - gosec
+        - unparam
+
+    # Exclude godot (require comments to end with period) for tests
+    - path: _test\.go
+      linters:
+        - godot
+
+    # Allow shadowing 'err' variable
+    - text: "shadow: declaration of \"err\""
+      linters:
+        - govet
+
+  # Show all issues
+  exclude-use-default: false
+
+  # Independently of option `exclude` we use default exclude patterns,
+  # it can be disabled by this option.
+  exclude-use-default: false
+
+output:
+  # Format: colored-line-number, line-number, json, tab, checkstyle, code-climate
+  format: colored-line-number
+
+  # Print lines of code with issue
+  print-issued-lines: true
+
+  # Print linter name in the end of issue text
+  print-linter-name: true
+
+  # Sort results by: filepath, line, and column
+  sort-results: true
