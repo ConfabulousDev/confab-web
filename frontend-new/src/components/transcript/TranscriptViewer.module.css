@@ -1,0 +1,154 @@
+.transcriptViewer {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transcriptHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.transcriptHeader h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #212529;
+}
+
+.headerControls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.toggleBtn {
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #495057;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .transcriptHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .transcriptHeader h3 {
+    font-size: 1rem;
+  }
+
+  .headerControls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .toggleBtn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .toggleBtn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .transcriptHeader {
+    padding: 0.75rem;
+  }
+}
+
+.toggleBtn:hover {
+  background: #e9ecef;
+}
+
+.thinkingToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.thinkingToggle.active {
+  background: #e7f3ff;
+  border-color: #007bff;
+  color: #007bff;
+}
+
+.thinkingToggle.active:hover {
+  background: #cce5ff;
+}
+
+.loading,
+.error {
+  padding: 2rem;
+  text-align: center;
+}
+
+.error {
+  color: #dc3545;
+}
+
+.transcriptContent {
+  padding: 1rem;
+}
+
+.renderingProgress {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.progressText {
+  font-size: 0.9rem;
+  color: #495057;
+  margin-bottom: 0.75rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.progressBar {
+  width: 100%;
+  height: 24px;
+  background: #e9ecef;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progressFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #28a745, #20c997);
+  transition: width 0.2s ease;
+  will-change: width;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.transcriptMeta {
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem 0 1rem 0;
+  font-size: 0.85rem;
+  color: #6c757d;
+  border-bottom: 1px solid #dee2e6;
+  margin-bottom: 1rem;
+}

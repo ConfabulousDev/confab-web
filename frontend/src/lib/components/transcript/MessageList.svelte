@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { TranscriptLine, AgentNode, RunDetail } from '$lib/types';
-	// Type guards are now only used in Message.svelte
 	import Message from './Message.svelte';
 	import AgentPanel from './AgentPanel.svelte';
 	import { getAgentInsertionIndex } from '$lib/services/agentTreeBuilder';
 	import { onMount, afterUpdate } from 'svelte';
+	import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
 	export let messages: TranscriptLine[];
 	export let agents: AgentNode[];
@@ -16,7 +16,14 @@
 	export let expandAllResults: boolean = true;
 
 	let messageListElement: HTMLDivElement;
+	let virtualListRef: any;
 	let shouldScrollToBottom = false;
+
+	// Item types for virtual list
+	type VirtualItem =
+		| { type: 'message'; message: TranscriptLine; index: number }
+		| { type: 'separator'; timestamp: string }
+		| { type: 'agent'; agent: AgentNode };
 
 	// Build a map of where to insert agents (reactive)
 	$: agentInsertionMap = (() => {
@@ -30,8 +37,32 @@
 		return map;
 	})();
 
-	// Display all messages - complete coverage including file snapshots, queue operations, etc.
-	$: displayableMessages = messages;
+	// Flatten messages, separators, and agents into a single virtual list
+	$: virtualItems = (() => {
+		const items: VirtualItem[] = [];
+
+		messages.forEach((message, index) => {
+			// Add time separator if needed
+			if (shouldShowTimeSeparator(message, index > 0 ? messages[index - 1] : null)) {
+				if ('timestamp' in message) {
+					items.push({ type: 'separator', timestamp: message.timestamp });
+				}
+			}
+
+			// Add message
+			items.push({ type: 'message', message, index });
+
+			// Add agents after this message
+			const agentsAtIndex = agentInsertionMap.get(index + 1);
+			if (agentsAtIndex) {
+				agentsAtIndex.forEach(agent => {
+					items.push({ type: 'agent', agent });
+				});
+			}
+		});
+
+		return items;
+	})();
 
 	onMount(() => {
 		if (autoScroll) {
@@ -47,8 +78,11 @@
 	});
 
 	function scrollToBottom() {
-		if (messageListElement) {
-			messageListElement.scrollTop = messageListElement.scrollHeight;
+		if (virtualListRef && virtualListRef.scroll) {
+			virtualListRef.scroll({
+				index: virtualItems.length - 1,
+				align: 'end'
+			});
 		}
 	}
 
@@ -94,69 +128,89 @@
 	}
 </script>
 
-<div class="message-list" bind:this={messageListElement}>
-	{#each displayableMessages as message, index}
-		<!-- Time separator -->
-		{#if shouldShowTimeSeparator(message, index > 0 ? displayableMessages[index - 1] : null)}
-			{#if 'timestamp' in message}
-				<div class="time-separator">
-					<span class="time-separator-line"></span>
-					<span class="time-separator-text">{formatTimeSeparator(message.timestamp)}</span>
-					<span class="time-separator-line"></span>
-				</div>
-			{/if}
-		{/if}
-
-		<Message {message} {index} {showThinking} {expandAllTools} {expandAllResults} />
-
-		<!-- Insert agents after their parent message -->
-		{#if agentInsertionMap.has(index + 1)}
-			{#each agentInsertionMap.get(index + 1) as agent}
-				<AgentPanel {agent} {run} depth={0} {showThinking} {expandAllAgents} {expandAllTools} {expandAllResults} />
-			{/each}
-		{/if}
-	{/each}
-
-	{#if displayableMessages.length === 0}
-		<div class="empty-state">
-			<div class="empty-icon">📋</div>
-			<p>No messages in this session</p>
-		</div>
-	{/if}
-</div>
+{#if virtualItems.length === 0}
+	<div class="empty-state">
+		<div class="empty-icon">📋</div>
+		<p>No messages in this session</p>
+	</div>
+{:else}
+	<div class="message-list-wrapper">
+		<SvelteVirtualList
+			items={virtualItems}
+			bind:this={virtualListRef}
+			defaultEstimatedItemHeight={150}
+			bufferSize={5}
+		>
+			{#snippet renderItem(item)}
+				{#if item.type === 'separator'}
+					<div class="time-separator">
+						<span class="time-separator-line"></span>
+						<span class="time-separator-text">{formatTimeSeparator(item.timestamp)}</span>
+						<span class="time-separator-line"></span>
+					</div>
+				{:else if item.type === 'message'}
+					<div class="message-wrapper">
+						<Message
+							message={item.message}
+							index={item.index}
+							{showThinking}
+							{expandAllTools}
+							{expandAllResults}
+						/>
+					</div>
+				{:else if item.type === 'agent'}
+					<div class="agent-wrapper">
+						<AgentPanel
+							agent={item.agent}
+							{run}
+							depth={0}
+							{showThinking}
+							{expandAllAgents}
+							{expandAllTools}
+							{expandAllResults}
+						/>
+					</div>
+				{/if}
+			{/snippet}
+		</SvelteVirtualList>
+	</div>
+{/if}
 
 <style>
-	.message-list {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		max-height: 80vh;
-		overflow-y: auto;
-		padding: 0.5rem;
-		scroll-behavior: smooth;
+	.message-list-wrapper {
+		height: 80vh;
+		width: 100%;
+		overflow: hidden;
 	}
 
-	/* Scrollbar styling */
-	.message-list::-webkit-scrollbar {
+	/* Item wrappers for proper spacing */
+	.message-wrapper,
+	.agent-wrapper {
+		padding: 0 0.5rem;
+		margin-bottom: 1rem;
+	}
+
+	/* Scrollbar styling for virtual list */
+	.message-list-wrapper :global(::-webkit-scrollbar) {
 		width: 8px;
 	}
 
-	.message-list::-webkit-scrollbar-track {
+	.message-list-wrapper :global(::-webkit-scrollbar-track) {
 		background: #f1f1f1;
 		border-radius: 4px;
 	}
 
-	.message-list::-webkit-scrollbar-thumb {
+	.message-list-wrapper :global(::-webkit-scrollbar-thumb) {
 		background: #888;
 		border-radius: 4px;
 		transition: background 0.2s ease;
 	}
 
-	.message-list::-webkit-scrollbar-thumb:hover {
+	.message-list-wrapper :global(::-webkit-scrollbar-thumb:hover) {
 		background: #555;
 	}
 
-	.message-list::-webkit-scrollbar-thumb:active {
+	.message-list-wrapper :global(::-webkit-scrollbar-thumb:active) {
 		background: #333;
 	}
 

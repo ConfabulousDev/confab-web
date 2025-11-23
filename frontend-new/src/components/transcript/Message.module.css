@@ -1,0 +1,260 @@
+.message {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  background: white;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.message-user {
+  border-left: 3px solid #007bff;
+  background: #f8f9ff;
+}
+
+.message-assistant {
+  border-left: 3px solid #6c757d;
+  background: #f8f9fa;
+}
+
+.message-system {
+  border-left: 3px solid #ffc107;
+  background: #fffbf0;
+}
+
+.message.isToolResult {
+  border-left-color: #28a745;
+  background: #f0fdf4;
+}
+
+.messageSidebar {
+  flex-shrink: 0;
+}
+
+.messageIcon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  border: 2px solid #dee2e6;
+}
+
+.message-user .messageIcon {
+  border-color: #007bff;
+}
+
+.message-assistant .messageIcon {
+  border-color: #6c757d;
+}
+
+.message-system .messageIcon {
+  border-color: #ffc107;
+}
+
+.messageBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.messageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.messageMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.messageRole {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #212529;
+}
+
+.messageTimestamp {
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.messageModel {
+  font-size: 0.75rem;
+  color: #6c757d;
+  background: #e9ecef;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.messageActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.messageBadges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+  transition: transform 0.2s ease;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.badge:hover {
+  transform: scale(1.05);
+}
+
+.copyMessageBtn {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #495057;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+}
+
+.copyMessageBtn:hover {
+  background: white;
+  border-color: #007bff;
+  color: #007bff;
+  transform: scale(1.05);
+}
+
+.copyMessageBtn:active {
+  transform: scale(0.95);
+}
+
+.badgeThinking {
+  background: #e7f3ff;
+  color: #0066cc;
+}
+
+.badgeTools {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.messageContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .message {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .messageIcon {
+    width: 32px;
+    height: 32px;
+    font-size: 1.2rem;
+  }
+
+  .messageRole {
+    font-size: 0.9rem;
+  }
+
+  .messageTimestamp {
+    font-size: 0.75rem;
+  }
+
+  .messageModel {
+    font-size: 0.7rem;
+  }
+
+  .badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+  }
+
+  .copyMessageBtn {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+    min-width: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .message {
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .messageIcon {
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+  }
+
+  .messageHeader {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .messageMeta {
+    gap: 0.5rem;
+  }
+
+  .copyMessageBtn {
+    padding: 0.15rem 0.3rem;
+    font-size: 0.7rem;
+    min-width: 22px;
+  }
+}

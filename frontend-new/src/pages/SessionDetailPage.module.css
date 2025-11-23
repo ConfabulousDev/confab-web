@@ -1,0 +1,377 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 2rem;
+  color: #222;
+  margin: 0 0 0.5rem 0;
+}
+
+.sessionId {
+  color: #666;
+  margin: 0;
+}
+
+.sessionId code {
+  background: #f8f9fa;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.btnLink {
+  color: #666;
+  text-decoration: none;
+}
+
+.btnLink:hover {
+  color: #222;
+}
+
+.card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.alert {
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.alertError {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+}
+
+.metaCard {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 1.5rem;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.versionSelect {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #495057;
+  background-color: white;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: auto;
+  min-width: 250px;
+}
+
+.versionSelect:hover {
+  border-color: #80bdff;
+}
+
+.versionSelect:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.metaLabel {
+  font-size: 0.875rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.metaValue {
+  font-size: 1.25rem;
+  color: #212529;
+  font-weight: 600;
+}
+
+/* Share button and header */
+.headerActions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.2s;
+  color: white;
+}
+
+.btnShare {
+  background: #28a745;
+}
+
+.btnShare:hover {
+  background: #218838;
+}
+
+.btnPrimary {
+  background: #007bff;
+}
+
+.btnPrimary:hover {
+  background: #0056b3;
+}
+
+.btnSecondary {
+  background: #6c757d;
+}
+
+.btnSecondary:hover {
+  background: #5a6268;
+}
+
+.btnDanger {
+  background: #dc3545;
+}
+
+.btnDanger:hover {
+  background: #c82333;
+}
+
+.btnSm {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+/* Modal */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 8px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #6c757d;
+}
+
+.closeBtn:hover {
+  color: #212529;
+}
+
+.modalBody {
+  padding: 1.5rem;
+}
+
+.modalFooter {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+.formGroup {
+  margin-bottom: 1.5rem;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.formGroup input[type='radio'] {
+  margin-right: 0.5rem;
+}
+
+.formGroup select,
+.formGroup input[type='email'] {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.emailInputGroup {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.emailInputGroup input {
+  flex: 1;
+}
+
+.emailList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.emailTag {
+  background: #e9ecef;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: #6c757d;
+}
+
+.removeBtn:hover {
+  color: #dc3545;
+}
+
+.successMessage {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.successMessage h3 {
+  color: #155724;
+  margin: 0 0 0.5rem 0;
+}
+
+.shareUrlBox {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.shareUrlInput {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #c3e6cb;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.sharesList {
+  margin-top: 1.5rem;
+}
+
+.sharesList h3 {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.shareItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+
+.shareInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.visibilityBadge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.visibilityBadge.public {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.visibilityBadge.private {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.invited,
+.expires,
+.neverExpires {
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
+.empty {
+  color: #6c757d;
+  font-style: italic;
+}

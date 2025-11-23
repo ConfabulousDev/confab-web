@@ -1,0 +1,211 @@
+import { useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import type { TranscriptLine, AgentNode, RunDetail } from '@/types';
+import { getAgentInsertionIndex } from '@/services/agentTreeBuilder';
+import Message from './Message';
+import AgentPanel from './AgentPanel';
+import styles from './MessageList.module.css';
+
+// Item types for virtual list
+type VirtualItem =
+  | { type: 'message'; message: TranscriptLine; index: number }
+  | { type: 'separator'; timestamp: string }
+  | { type: 'agent'; agent: AgentNode };
+
+interface MessageListProps {
+  messages: TranscriptLine[];
+  agents: AgentNode[];
+  run: RunDetail;
+  autoScroll?: boolean;
+  showThinking?: boolean;
+  expandAllAgents?: boolean;
+  expandAllTools?: boolean;
+  expandAllResults?: boolean;
+}
+
+export interface MessageListHandle {
+  scrollToEnd: () => void;
+}
+
+const MessageList = forwardRef<MessageListHandle, MessageListProps>(
+  (
+    {
+      messages,
+      agents,
+      run,
+      // autoScroll = false, // TODO: Implement auto-scroll if needed
+      showThinking = true,
+      expandAllAgents = true,
+      expandAllTools = false,
+      expandAllResults = true,
+    },
+    ref
+  ) => {
+    const parentRef = useRef<HTMLDivElement>(null);
+
+    // Build a map of where to insert agents
+    const agentInsertionMap = useMemo(() => {
+      const map = new Map<number, AgentNode[]>();
+      agents.forEach((agent) => {
+        const insertIndex = getAgentInsertionIndex(messages, agent.parentMessageId);
+        const existing = map.get(insertIndex) || [];
+        existing.push(agent);
+        map.set(insertIndex, existing);
+      });
+      return map;
+    }, [messages, agents]);
+
+    // Flatten messages, separators, and agents into a single virtual list
+    const virtualItems = useMemo<VirtualItem[]>(() => {
+      const items: VirtualItem[] = [];
+
+      messages.forEach((message, index) => {
+        // Add time separator if needed
+        if (shouldShowTimeSeparator(message, index > 0 ? messages[index - 1] : null)) {
+          if ('timestamp' in message) {
+            items.push({ type: 'separator', timestamp: message.timestamp });
+          }
+        }
+
+        // Add message
+        items.push({ type: 'message', message, index });
+
+        // Add agents after this message
+        const agentsAtIndex = agentInsertionMap.get(index + 1);
+        if (agentsAtIndex) {
+          agentsAtIndex.forEach((agent) => {
+            items.push({ type: 'agent', agent });
+          });
+        }
+      });
+
+      return items;
+    }, [messages, agentInsertionMap]);
+
+    // Setup virtual scrolling with TanStack Virtual
+    const virtualizer = useVirtualizer({
+      count: virtualItems.length,
+      getScrollElement: () => parentRef.current,
+      estimateSize: () => 150, // Estimated item height
+      overscan: 5, // Number of items to render outside visible area
+    });
+
+    // Expose scrollToEnd method via ref
+    useImperativeHandle(ref, () => ({
+      scrollToEnd: () => {
+        if (virtualItems.length > 0) {
+          virtualizer.scrollToIndex(virtualItems.length - 1, { align: 'end' });
+        }
+      },
+    }));
+
+    // Check if we should show a time separator
+    function shouldShowTimeSeparator(current: TranscriptLine, previous: TranscriptLine | null): boolean {
+      if (!previous) return false;
+
+      const currentTime = 'timestamp' in current ? new Date(current.timestamp) : null;
+      const previousTime = 'timestamp' in previous ? new Date(previous.timestamp) : null;
+
+      if (!currentTime || !previousTime) return false;
+
+      // Show separator if more than 5 minutes between messages
+      const diff = currentTime.getTime() - previousTime.getTime();
+      return diff > 5 * 60 * 1000; // 5 minutes in milliseconds
+    }
+
+    function formatTimeSeparator(timestamp: string): string {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+      if (messageDate.getTime() === today.getTime()) {
+        return date.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+
+    if (virtualItems.length === 0) {
+      return (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyIcon}>📋</div>
+          <p>No messages in this session</p>
+        </div>
+      );
+    }
+
+    return (
+      <div ref={parentRef} className={styles.messageListWrapper}>
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const item = virtualItems[virtualItem.index];
+
+            return (
+              <div
+                key={virtualItem.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
+              >
+                {item.type === 'separator' ? (
+                  <div className={styles.timeSeparator}>
+                    <span className={styles.timeSeparatorLine}></span>
+                    <span className={styles.timeSeparatorText}>{formatTimeSeparator(item.timestamp)}</span>
+                    <span className={styles.timeSeparatorLine}></span>
+                  </div>
+                ) : item.type === 'message' ? (
+                  <div className={styles.messageWrapper}>
+                    <Message
+                      message={item.message}
+                      index={item.index}
+                      showThinking={showThinking}
+                      expandAllTools={expandAllTools}
+                      expandAllResults={expandAllResults}
+                    />
+                  </div>
+                ) : item.type === 'agent' ? (
+                  <div className={styles.agentWrapper}>
+                    <AgentPanel
+                      agent={item.agent}
+                      run={run}
+                      depth={0}
+                      showThinking={showThinking}
+                      expandAllAgents={expandAllAgents}
+                      expandAllTools={expandAllTools}
+                      expandAllResults={expandAllResults}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+);
+
+MessageList.displayName = 'MessageList';
+
+export default MessageList;

@@ -1,0 +1,146 @@
+.messageListWrapper {
+  height: 80vh;
+  width: 100%;
+  overflow: auto;
+}
+
+/* Item wrappers for proper spacing */
+.messageWrapper,
+.agentWrapper {
+  padding: 0 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* Scrollbar styling for virtual list */
+.messageListWrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messageListWrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.messageListWrapper::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.messageListWrapper::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.messageListWrapper::-webkit-scrollbar-thumb:active {
+  background: #333;
+}
+
+.timeSeparator {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.timeSeparatorLine {
+  flex: 1;
+  height: 1px;
+  background: #dee2e6;
+}
+
+.timeSeparatorText {
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 0.25rem 0.75rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #dee2e6;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: #6c757d;
+}
+
+.emptyIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.emptyState p {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .messageListWrapper {
+    max-height: 85vh;
+  }
+
+  .messageWrapper,
+  .agentWrapper {
+    padding: 0 0.4rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .timeSeparator {
+    margin: 0.75rem 0;
+    gap: 0.75rem;
+  }
+
+  .timeSeparatorText {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+  }
+
+  .emptyIcon {
+    font-size: 2.5rem;
+  }
+
+  .emptyState p {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .messageListWrapper {
+    max-height: 90vh;
+  }
+
+  .messageWrapper,
+  .agentWrapper {
+    padding: 0 0.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .timeSeparator {
+    margin: 0.5rem 0;
+    gap: 0.5rem;
+  }
+
+  .timeSeparatorText {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .emptyState {
+    padding: 3rem 1rem;
+  }
+
+  .emptyIcon {
+    font-size: 2rem;
+  }
+
+  .emptyState p {
+    font-size: 0.95rem;
+  }
+}

@@ -1,0 +1,285 @@
+.runCard {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.runHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.viewTranscriptBtn {
+  padding: 0.5rem 1rem;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.viewTranscriptBtn:hover {
+  background: #0056b3;
+}
+
+.runHeader h3 {
+  font-size: 1.25rem;
+  color: #222;
+  margin: 0;
+}
+
+.timestamp {
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.runInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.infoRow {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.infoRow .label {
+  font-weight: 600;
+  color: #495057;
+  min-width: 150px;
+}
+
+.infoRow .value {
+  color: #212529;
+}
+
+.infoRow code.value {
+  background: #f8f9fa;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.success {
+  color: #28a745;
+}
+
+.muted {
+  color: #6c757d;
+}
+
+.gitInfoSection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.gitInfoSection h4 {
+  font-size: 1rem;
+  color: #495057;
+  margin: 0 0 0.75rem 0;
+}
+
+.gitInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.link {
+  color: #1976d2;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.dirtyBadge {
+  font-size: 0.75rem;
+  background: #fff3cd;
+  color: #856404;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+}
+
+.filesSection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.filesSection h4 {
+  font-size: 1rem;
+  color: #495057;
+  margin: 0 0 0.75rem 0;
+}
+
+.filesList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fileItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.fileInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.fileType {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.fileType.transcript {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.fileType.agent {
+  background: #d4edda;
+  color: #155724;
+}
+
+.fileType.todo {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.filePath {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: #495057;
+}
+
+.fileSize {
+  color: #6c757d;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.todosSection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.todosSection h4 {
+  font-size: 1rem;
+  color: #495057;
+  margin: 0 0 0.75rem 0;
+}
+
+.todoGroup {
+  margin-bottom: 1rem;
+}
+
+.todoGroup:last-child {
+  margin-bottom: 0;
+}
+
+.todoGroup h5 {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin: 0 0 0.75rem 0;
+  font-weight: 600;
+}
+
+.todoList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.todoItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+
+.todoItem.status-pending {
+  border-left-color: #6c757d;
+}
+
+.todoItem.status-in_progress {
+  border-left-color: #007bff;
+  background: #e7f3ff;
+}
+
+.todoItem.status-completed {
+  border-left-color: #28a745;
+  background: #e8f5e9;
+}
+
+.todoStatusIcon {
+  font-size: 1rem;
+  line-height: 1.5;
+  min-width: 1.25rem;
+  text-align: center;
+}
+
+.todoItem.status-pending .todoStatusIcon {
+  color: #6c757d;
+}
+
+.todoItem.status-in_progress .todoStatusIcon {
+  color: #007bff;
+}
+
+.todoItem.status-completed .todoStatusIcon {
+  color: #28a745;
+}
+
+.todoContent {
+  color: #212529;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.todoItem.status-completed .todoContent {
+  color: #6c757d;
+  text-decoration: line-through;
+}
+
+.transcriptSection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}

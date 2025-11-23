@@ -1,0 +1,251 @@
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.textBlock {
+  color: #212529;
+}
+
+/* Style links in pre blocks */
+.textBlock pre :global(a) {
+  color: #007bff;
+  text-decoration: underline;
+}
+
+.textBlock pre :global(a:hover) {
+  color: #0056b3;
+}
+
+.thinkingBlock {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.thinkingHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #6c757d;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.25rem 0;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.thinkingHeader:hover {
+  opacity: 0.8;
+}
+
+.thinkingHeader:active {
+  transform: scale(0.98);
+}
+
+.thinkingIcon {
+  font-size: 1rem;
+}
+
+.thinkingLabel {
+  flex: 1;
+}
+
+.thinkingContent {
+  color: #495057;
+  font-style: italic;
+  margin-top: 0.5rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.toolUseBlock {
+  background: #e7f3ff;
+  border: 1px solid #007bff;
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.toolHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #007bff;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.25rem 0;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.toolHeader:hover {
+  opacity: 0.8;
+}
+
+.toolHeader:active {
+  transform: scale(0.98);
+}
+
+.toolName {
+  font-size: 0.95rem;
+  flex: 1;
+}
+
+.toolIcon {
+  font-size: 1rem;
+}
+
+.expandBtn {
+  background: none;
+  border: none;
+  font-size: 0.8rem;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.toolInput {
+  margin-top: 0.5rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.toolResultBlock {
+  background: #d4edda;
+  border: 1px solid #28a745;
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+
+.toolResultBlock.error {
+  background: #f8d7da;
+  border-color: #dc3545;
+}
+
+.toolResultHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #155724;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.25rem 0;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.toolResultHeader:hover {
+  opacity: 0.8;
+}
+
+.toolResultHeader:active {
+  transform: scale(0.98);
+}
+
+.toolResultBlock.error .toolResultHeader {
+  color: #721c24;
+}
+
+.resultIcon {
+  font-size: 1rem;
+}
+
+.toolResultHeader span:not(.resultIcon):not(.expandBtn) {
+  flex: 1;
+}
+
+.toolResultContent {
+  margin-top: 0.5rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.unknownBlock {
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .thinkingBlock {
+    padding: 0.6rem;
+  }
+
+  .thinkingHeader,
+  .toolHeader,
+  .toolResultHeader {
+    padding: 0.2rem 0;
+    font-size: 0.85rem;
+  }
+
+  .thinkingIcon,
+  .toolIcon,
+  .resultIcon {
+    font-size: 0.9rem;
+  }
+
+  .toolName {
+    font-size: 0.9rem;
+  }
+
+  .toolUseBlock,
+  .toolResultBlock {
+    padding: 0.6rem;
+  }
+
+  .toolInput,
+  .toolResultContent {
+    margin-top: 0.4rem;
+  }
+
+  pre {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .thinkingBlock,
+  .toolUseBlock,
+  .toolResultBlock {
+    padding: 0.5rem;
+  }
+
+  .thinkingHeader,
+  .toolHeader,
+  .toolResultHeader {
+    font-size: 0.8rem;
+  }
+
+  .thinkingIcon,
+  .toolIcon,
+  .resultIcon {
+    font-size: 0.85rem;
+  }
+
+  .toolName {
+    font-size: 0.85rem;
+  }
+
+  .expandBtn {
+    font-size: 0.75rem;
+    padding: 0.2rem;
+  }
+
+  pre {
+    font-size: 0.8rem;
+  }
+}

@@ -1,0 +1,146 @@
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import type { SessionDetail } from '@/types';
+import { formatDate } from '@/utils';
+import RunCard from '@/components/RunCard';
+import styles from './SharedSessionPage.module.css';
+
+type ErrorType = 'not_found' | 'expired' | 'unauthorized' | 'forbidden' | 'general' | null;
+
+function SharedSessionPage() {
+  const { sessionId, token } = useParams<{ sessionId: string; token: string }>();
+  const [session, setSession] = useState<SessionDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState<ErrorType>(null);
+
+  useEffect(() => {
+    async function loadSharedSession() {
+      try {
+        const response = await fetch(`/api/v1/sessions/${sessionId}/shared/${token}`, {
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            setErrorType('not_found');
+            setError('Share not found');
+          } else if (response.status === 410) {
+            setErrorType('expired');
+            setError('This share link has expired');
+          } else if (response.status === 401) {
+            setErrorType('unauthorized');
+            const text = await response.text();
+            setError(text || 'Please log in to view this private share');
+          } else if (response.status === 403) {
+            setErrorType('forbidden');
+            setError('You are not authorized to view this share');
+          } else {
+            setErrorType('general');
+            setError('Failed to load shared session');
+          }
+          setLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        setSession(data);
+        setLoading(false);
+      } catch (err) {
+        setError('Failed to load shared session');
+        setErrorType('general');
+        setLoading(false);
+      }
+    }
+
+    loadSharedSession();
+  }, [sessionId, token]);
+
+  function getErrorIcon(type: ErrorType): string {
+    switch (type) {
+      case 'not_found':
+        return '🔍';
+      case 'expired':
+        return '⏰';
+      case 'unauthorized':
+        return '🔒';
+      case 'forbidden':
+        return '🚫';
+      default:
+        return '⚠️';
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loading}>Loading shared session...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <div className={styles.errorIcon}>{getErrorIcon(errorType)}</div>
+          <h2>{error}</h2>
+          {errorType === 'unauthorized' && (
+            <p>
+              This is a private share. Please <a href="/auth/github/login">log in</a> to view it.
+            </p>
+          )}
+          {errorType === 'forbidden' && <p>This share is only accessible to invited users.</p>}
+          {errorType === 'expired' && <p>Please request a new share link from the session owner.</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  return (
+    <div className={styles.container}>
+      {/* Share Banner */}
+      <div className={styles.shareBanner}>
+        <span className={styles.shareIcon}>📤</span>
+        <span>
+          <strong>Shared Session</strong>
+        </span>
+      </div>
+
+      {/* Session Header */}
+      <div className={styles.header}>
+        <div>
+          <h1>Session Detail</h1>
+          <p className={styles.sessionId}>
+            <strong>Session ID:</strong> <code>{session.session_id}</code>
+          </p>
+        </div>
+      </div>
+
+      {/* Session Metadata */}
+      <div className={styles.metaCard}>
+        <div className={styles.metaItem}>
+          <span className={styles.metaLabel}>First Seen:</span>
+          <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
+        </div>
+        <div className={styles.metaItem}>
+          <span className={styles.metaLabel}>Total Runs:</span>
+          <span className={styles.metaValue}>{session.runs.length}</span>
+        </div>
+      </div>
+
+      {/* Runs */}
+      <h2>Runs</h2>
+
+      {session.runs.map((run, index) => (
+        <RunCard key={index} run={run} index={index} showGitInfo={false} shareToken={token} sessionId={session.session_id} />
+      ))}
+    </div>
+  );
+}
+
+export default SharedSessionPage;

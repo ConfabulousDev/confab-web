@@ -1,0 +1,109 @@
+/* Override container width for shared view */
+.container {
+  max-width: 1200px;
+}
+
+/* Override loading style for this page */
+.loading {
+  padding: 3rem;
+  font-size: 1.1rem;
+}
+
+.errorContainer {
+  text-align: center;
+  padding: 3rem;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.errorIcon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.errorContainer h2 {
+  color: #d32f2f;
+  margin-bottom: 1rem;
+}
+
+.errorContainer p {
+  color: #666;
+  margin-bottom: 1rem;
+}
+
+.errorContainer a {
+  color: #1976d2;
+  text-decoration: underline;
+}
+
+.shareBanner {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.05rem;
+}
+
+.shareIcon {
+  font-size: 1.5rem;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 2rem;
+  color: #222;
+  margin: 0 0 0.5rem 0;
+}
+
+.sessionId {
+  color: #666;
+  margin: 0;
+}
+
+.sessionId code {
+  background: #f8f9fa;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.metaCard {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  display: flex;
+  gap: 2rem;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.metaLabel {
+  font-size: 0.875rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.metaValue {
+  font-size: 1.25rem;
+  color: #212529;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 1.5rem;
+  color: #222;
+  margin: 2rem 0 1rem 0;
+}

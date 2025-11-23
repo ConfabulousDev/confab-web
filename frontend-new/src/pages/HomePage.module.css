@@ -1,0 +1,99 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.hero {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.hero h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #222;
+}
+
+.hero p {
+  font-size: 1.25rem;
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+.userInfo {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 2rem;
+  margin-top: 2rem;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.userInfo h2 {
+  color: #28a745;
+  margin-bottom: 1rem;
+}
+
+.userInfo p {
+  margin: 0.5rem 0;
+  text-align: left;
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  margin: 1rem 0;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: all 0.2s;
+  display: inline-block;
+}
+
+.btnPrimary {
+  background-color: #007bff;
+  color: white;
+}
+
+.btnPrimary:hover {
+  background-color: #0056b3;
+}
+
+.btnGithub {
+  background-color: #24292e;
+  color: white;
+  font-size: 1.1rem;
+  padding: 1rem 2rem;
+}
+
+.btnGithub:hover {
+  background-color: #1a1e22;
+}
+
+.logout {
+  background-color: #dc3545;
+  color: white;
+}
+
+.logout:hover {
+  background-color: #c82333;
+}
