@@ -53,6 +53,10 @@ export type Session = {
 	max_transcript_size: number; // Max transcript size across all runs (0 = empty session)
 	git_repo?: string; // Git repository from latest run (e.g., "org/repo") - extracted from git_info JSONB
 	git_branch?: string; // Git branch from latest run - extracted from git_info JSONB
+	is_owner: boolean; // Whether current user owns this session
+	access_type: 'owner' | 'private_share' | 'public_share'; // How user has access to this session
+	share_token?: string; // Share token if accessed via share
+	shared_by_email?: string; // Email of user who shared (for shared sessions)
 };
 
 // Share configuration

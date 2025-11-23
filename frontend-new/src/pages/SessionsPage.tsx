@@ -12,7 +12,8 @@ type SortColumn = 'title' | 'session_id' | 'last_run_time';
 function SessionsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { sessions, loading, error } = useSessions();
+  const [includeShared, setIncludeShared] = useState(false);
+  const { sessions, loading, error } = useSessions(includeShared);
   const [sortColumn, setSortColumn] = useState<SortColumn>('last_run_time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [successMessage, setSuccessMessage] = useState('');
@@ -71,6 +72,17 @@ function SessionsPage() {
       {successMessage && <Alert variant="success" className={successFading ? styles.alertFading : ''}>✓ {successMessage}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
+      <div className={styles.filterSection}>
+        <label className={styles.checkbox}>
+          <input
+            type="checkbox"
+            checked={includeShared}
+            onChange={(e) => setIncludeShared(e.target.checked)}
+          />
+          <span>Include sessions shared with me</span>
+        </label>
+      </div>
+
       <div className={styles.card}>
         {loading ? (
           <p className={styles.loading}>Loading sessions...</p>
@@ -117,6 +129,11 @@ function SessionsPage() {
                   >
                     <td className={session.title ? '' : styles.sessionTitle}>
                       {session.title || 'Untitled Session'}
+                      {!session.is_owner && (
+                        <span className={styles.sharedBadge} title={`Shared by ${session.shared_by_email}`}>
+                          {session.access_type === 'private_share' ? ' 🔒 Private' : ' 🔗 Public'}
+                        </span>
+                      )}
                     </td>
                     <td className={styles.gitInfo}>{session.git_repo || '—'}</td>
                     <td className={styles.gitInfo}>{session.git_branch || '—'}</td>

@@ -208,7 +208,10 @@ export const api = new APIClient();
 
 // Export type-safe API methods for common endpoints
 export const sessionsAPI = {
-  list: () => api.get<Array<import('@/types').Session>>('/sessions'),
+  list: (includeShared = false) =>
+    api.get<Array<import('@/types').Session>>(
+      `/sessions${includeShared ? '?include_shared=true' : ''}`
+    ),
 
   get: (sessionId: string) =>
     api.get<import('@/types').SessionDetail>(`/sessions/${sessionId}`),

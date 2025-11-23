@@ -13,13 +13,14 @@ interface UseSessionsReturn {
 
 /**
  * Hook for fetching sessions list with React Query
+ * @param includeShared - Whether to include sessions shared with the user (default: false)
  */
-export function useSessions(): UseSessionsReturn {
+export function useSessions(includeShared = false): UseSessionsReturn {
   const navigate = useNavigate();
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['sessions'],
-    queryFn: sessionsAPI.list,
+    queryKey: ['sessions', includeShared],
+    queryFn: () => sessionsAPI.list(includeShared),
   });
 
   // Redirect on auth error
