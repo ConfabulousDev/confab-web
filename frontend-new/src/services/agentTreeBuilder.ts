@@ -3,7 +3,6 @@ import type {
 	TranscriptLine,
 	AgentNode,
 	AssistantMessage,
-	UserMessage,
 	FileDetail
 } from '@/types';
 import {
@@ -23,23 +22,29 @@ function extractAgentIdFromPath(filePath: string): string | null {
 	return match ? match[1] : null;
 }
 
+interface AgentMetadata {
+	status?: 'completed' | 'interrupted' | 'error';
+	totalDurationMs?: number;
+	totalTokens?: number;
+	totalToolUseCount?: number;
+}
+
+interface AgentReference {
+	agentId: string;
+	toolUseId: string;
+	parentMessageId: string;
+	prompt: string;
+	metadata: AgentMetadata;
+}
+
 /**
  * Find agent references in a transcript
  * Returns map of agentId -> { toolUseId, messageId, prompt }
  */
 function findAgentReferences(
 	messages: TranscriptLine[]
-): Map<
-	string,
-	{
-		agentId: string;
-		toolUseId: string;
-		parentMessageId: string;
-		prompt: string;
-		metadata: any;
-	}
-> {
-	const references = new Map();
+): Map<string, AgentReference> {
+	const references = new Map<string, AgentReference>();
 
 	// Walk through messages looking for tool results with toolUseResult.agentId
 	for (const message of messages) {
@@ -48,29 +53,40 @@ function findAgentReferences(
 		const toolResults = getToolResults(message);
 		for (const result of toolResults) {
 			// Check if this is a Task tool result with agent metadata
-			if (typeof result.content !== 'string') {
-				// Content might be an array or object with toolUseResult
-				const content = result.content as any;
-				if (content.toolUseResult?.agentId) {
-					const agentData = content.toolUseResult;
-					references.set(agentData.agentId, {
-						agentId: agentData.agentId,
-						toolUseId: result.tool_use_id,
-						parentMessageId: message.uuid,
-						prompt: agentData.prompt || '',
-						metadata: {
-							status: agentData.status,
-							totalDurationMs: agentData.totalDurationMs,
-							totalTokens: agentData.totalTokens,
-							totalToolUseCount: agentData.totalToolUseCount
+			if (typeof result.content !== 'string' && Array.isArray(result.content)) {
+				// Content might be an array with toolUseResult
+				for (const block of result.content) {
+					if (typeof block === 'object' && block !== null && 'toolUseResult' in block) {
+						const agentData = (block as { toolUseResult?: {
+							agentId?: string;
+							prompt?: string;
+							status?: 'completed' | 'interrupted' | 'error';
+							totalDurationMs?: number;
+							totalTokens?: number;
+							totalToolUseCount?: number;
+						} }).toolUseResult;
+
+						if (agentData?.agentId) {
+							references.set(agentData.agentId, {
+								agentId: agentData.agentId,
+								toolUseId: result.tool_use_id,
+								parentMessageId: message.uuid,
+								prompt: agentData.prompt || '',
+								metadata: {
+									status: agentData.status,
+									totalDurationMs: agentData.totalDurationMs,
+									totalTokens: agentData.totalTokens,
+									totalToolUseCount: agentData.totalToolUseCount
+								}
+							});
 						}
-					});
+					}
 				}
 			}
 
 			// Also check in the message's toolUseResult field (direct property)
-			if ((message as UserMessage).toolUseResult?.agentId) {
-				const agentData = (message as UserMessage).toolUseResult!;
+			if (message.toolUseResult?.agentId) {
+				const agentData = message.toolUseResult;
 				references.set(agentData.agentId, {
 					agentId: agentData.agentId,
 					toolUseId: result.tool_use_id,
@@ -99,7 +115,7 @@ async function buildAgentNodeRecursive(
 	agentFile: FileDetail,
 	parentToolUseId: string,
 	parentMessageId: string,
-	metadata: any,
+	metadata: AgentMetadata,
 	agentFileMap: Map<string, FileDetail>,
 	depth: number = 0,
 	maxDepth: number = 10,

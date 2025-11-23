@@ -1,97 +1,69 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchWithCSRF } from '@/services/csrf';
-import type { APIKey } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keysAPI } from '@/services/api';
 import { formatDate } from '@/utils/utils';
+import { createAPIKeySchema, validateForm, getFieldError } from '@/schemas/validation';
+import type { CreateAPIKeyData } from '@/schemas/validation';
+import FormField from '@/components/FormField';
+import LoadingSkeleton from '@/components/LoadingSkeleton';
+import ErrorDisplay from '@/components/ErrorDisplay';
+import Button from '@/components/Button';
+import Alert from '@/components/Alert';
 import styles from './APIKeysPage.module.css';
 
 function APIKeysPage() {
-  const [keys, setKeys] = useState<APIKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const queryClient = useQueryClient();
   const [newKeyName, setNewKeyName] = useState('');
   const [createdKey, setCreatedKey] = useState<{ key: string; name: string } | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>();
 
-  useEffect(() => {
-    fetchKeys();
-  }, []);
+  // Fetch API keys
+  const { data: keys = [], isLoading, error, refetch } = useQuery({
+    queryKey: ['apiKeys'],
+    queryFn: keysAPI.list,
+  });
 
-  const fetchKeys = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch('/api/v1/keys', {
-        credentials: 'include',
-      });
+  // Create API key mutation
+  const createMutation = useMutation({
+    mutationFn: (name: string) => keysAPI.create(name),
+    onSuccess: (result) => {
+      setCreatedKey({ key: result.key, name: result.api_key.name });
+      setNewKeyName('');
+      setShowCreateForm(false);
+      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
+    },
+  });
 
-      if (response.status === 401) {
-        window.location.href = '/';
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch keys');
-      }
-
-      const data = await response.json();
-      setKeys(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load API keys');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Delete API key mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => keysAPI.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
+    },
+  });
 
   const createKey = async () => {
-    if (!newKeyName.trim()) {
-      setError('Please enter a key name');
+    setValidationErrors(undefined);
+
+    // Validate form data with Zod
+    const formData: CreateAPIKeyData = { name: newKeyName };
+    const validation = validateForm(createAPIKeySchema, formData);
+
+    if (!validation.success) {
+      setValidationErrors(validation.errors);
       return;
     }
 
-    setError('');
-    try {
-      const response = await fetchWithCSRF('/api/v1/keys', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: newKeyName }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create key');
-      }
-
-      const result = await response.json();
-      setCreatedKey({ key: result.key, name: result.name });
-      setNewKeyName('');
-      setShowCreateForm(false);
-      await fetchKeys();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create key');
-    }
+    createMutation.mutate(validation.data.name);
   };
 
   const deleteKey = async (id: number, name: string) => {
     if (!confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
       return;
     }
-
-    setError('');
-    try {
-      const response = await fetchWithCSRF(`/api/v1/keys/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete key');
-      }
-
-      await fetchKeys();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete key');
-    }
+    deleteMutation.mutate(id);
   };
 
   const copyToClipboard = (text: string) => {
@@ -109,61 +81,88 @@ function APIKeysPage() {
       </div>
 
       {createdKey && (
-        <div className={styles.alertSuccess}>
+        <Alert variant="success" onClose={() => setCreatedKey(null)}>
           <h3>✓ API Key Created Successfully!</h3>
           <p>
             <strong>Name:</strong> {createdKey.name}
           </p>
           <div className={styles.keyDisplay}>
             <code>{createdKey.key}</code>
-            <button className={`${styles.btn} ${styles.btnSm}`} onClick={() => copyToClipboard(createdKey.key)}>
+            <Button size="sm" onClick={() => copyToClipboard(createdKey.key)}>
               Copy
-            </button>
+            </Button>
           </div>
-          <p className={styles.warning}>
+          <Alert variant="warning">
             ⚠️ This is the only time you'll see this key. Save it securely!
-          </p>
-          <button className={styles.btn} onClick={() => setCreatedKey(null)}>
-            Close
-          </button>
-        </div>
+          </Alert>
+        </Alert>
       )}
 
-      {error && <div className={styles.alertError}>{error}</div>}
+      {error && <ErrorDisplay message={error instanceof Error ? error.message : 'Failed to load API keys'} retry={refetch} />}
+      {createMutation.error && <Alert variant="error">{createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create key'}</Alert>}
+      {deleteMutation.error && <Alert variant="error">{deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete key'}</Alert>}
 
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <h2>Your API Keys</h2>
           {!showCreateForm && (
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setShowCreateForm(true)}>
+            <Button variant="primary" onClick={() => setShowCreateForm(true)}>
               + Create New Key
-            </button>
+            </Button>
           )}
         </div>
 
         {showCreateForm && (
           <div className={styles.createForm}>
             <h3>Create New API Key</h3>
-            <input
-              type="text"
-              placeholder="Key name (e.g., Production Server, My Laptop)"
-              value={newKeyName}
-              onChange={(e) => setNewKeyName(e.target.value)}
-              className={styles.input}
-            />
+            <FormField
+              label="Key name"
+              required
+              error={getFieldError(validationErrors, 'name')}
+            >
+              <input
+                type="text"
+                placeholder="e.g., Production Server, My Laptop"
+                value={newKeyName}
+                onChange={(e) => {
+                  setNewKeyName(e.target.value);
+                  setValidationErrors(undefined);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    createKey();
+                  }
+                }}
+                className={styles.input}
+                disabled={createMutation.isPending}
+              />
+            </FormField>
             <div className={styles.formActions}>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={createKey}>
-                Create Key
-              </button>
-              <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => setShowCreateForm(false)}>
+              <Button
+                variant="primary"
+                onClick={createKey}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? 'Creating...' : 'Create Key'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setValidationErrors(undefined);
+                  setNewKeyName('');
+                }}
+                disabled={createMutation.isPending}
+              >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
-        {loading ? (
-          <p className={styles.loading}>Loading...</p>
+        {isLoading ? (
+          <LoadingSkeleton variant="list" count={3} />
         ) : keys.length === 0 ? (
           <p className={styles.empty}>No API keys yet. Create one to get started!</p>
         ) : (
@@ -174,12 +173,13 @@ function APIKeysPage() {
                   <h3>{key.name}</h3>
                   <p className={styles.keyMeta}>Created: {formatDate(key.created_at)}</p>
                 </div>
-                <button
-                  className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`}
+                <Button
+                  variant="danger"
+                  size="sm"
                   onClick={() => deleteKey(key.id, key.name)}
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             ))}
           </div>

@@ -86,7 +86,33 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     const virtualizer = useVirtualizer({
       count: virtualItems.length,
       getScrollElement: () => parentRef.current,
-      estimateSize: () => 150, // Estimated item height
+      estimateSize: (index) => {
+        const item = virtualItems[index];
+        if (!item) return 150;
+
+        // Dynamic size estimation based on item type
+        switch (item.type) {
+          case 'separator':
+            return 40; // Time separators are small
+          case 'agent':
+            return 200; // Agent panels are larger
+          case 'message': {
+            const msg = item.message;
+            // Estimate based on message type and content
+            if (msg.type === 'user') return 80;
+            if (msg.type === 'assistant') {
+              const contentLength = JSON.stringify(msg).length;
+              if (contentLength > 1000) return 300;
+              if (contentLength > 500) return 200;
+              return 120;
+            }
+            // Default for other types (system, summary, etc.)
+            return 100;
+          }
+          default:
+            return 150;
+        }
+      },
       overscan: 5, // Number of items to render outside visible area
     });
 

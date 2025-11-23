@@ -27,15 +27,6 @@
   text-decoration: underline;
 }
 
-.alertError {
-  background: #f8d7da;
-  color: #721c24;
-  padding: 1rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-  border: 1px solid #f5c6cb;
-}
-
 .card {
   background: white;
   border-radius: 8px;
@@ -69,22 +60,6 @@ th {
   font-weight: 600;
   color: #495057;
   border-bottom: 2px solid #dee2e6;
-}
-
-.sortable {
-  cursor: pointer;
-  user-select: none;
-  transition: background-color 0.2s ease;
-}
-
-.sortable:hover {
-  background: #e9ecef;
-}
-
-.sortIndicator {
-  margin-left: 0.25rem;
-  font-size: 0.85rem;
-  color: #007bff;
 }
 
 td {

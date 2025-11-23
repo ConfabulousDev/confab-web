@@ -1,0 +1,57 @@
+.btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-md);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  border: none;
+  transition: all var(--transition-base);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.primary {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.secondary {
+  background-color: var(--color-secondary);
+  color: white;
+}
+
+.secondary:hover:not(:disabled) {
+  background-color: var(--color-secondary-hover);
+}
+
+.danger {
+  background-color: var(--color-danger);
+  color: white;
+}
+
+.danger:hover:not(:disabled) {
+  background-color: var(--color-danger-hover);
+}
+
+.github {
+  background-color: #24292e;
+  color: white;
+  font-size: var(--font-base);
+  padding: 0.75rem var(--spacing-lg);
+}
+
+.github:hover:not(:disabled) {
+  background-color: #1b1f23;
+}
+
+.sm {
+  padding: 0.35rem 0.75rem;
+  font-size: var(--font-sm);
+}

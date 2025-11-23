@@ -1,0 +1,53 @@
+.gitInfoSection {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.gitInfoSection h4 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  color: #333;
+}
+
+.gitInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.label {
+  font-weight: 500;
+  color: #666;
+  min-width: 100px;
+}
+
+.value {
+  color: #333;
+}
+
+.value.link {
+  color: #1976d2;
+  text-decoration: none;
+}
+
+.value.link:hover {
+  text-decoration: underline;
+}
+
+.dirtyBadge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: #fff3cd;
+  color: #856404;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}

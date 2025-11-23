@@ -1,0 +1,13 @@
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.indicator {
+  margin-left: 0.5rem;
+  color: #666;
+}

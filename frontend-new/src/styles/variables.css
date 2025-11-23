@@ -1,0 +1,107 @@
+/**
+ * Global CSS Variables
+ * Single source of truth for colors, spacing, and common styles
+ */
+
+:root {
+  /* Colors - Primary */
+  --color-primary: #28a745;
+  --color-primary-hover: #218838;
+  --color-primary-dark: #1e7e34;
+
+  /* Colors - Secondary */
+  --color-secondary: #6c757d;
+  --color-secondary-hover: #5a6268;
+
+  /* Colors - Danger */
+  --color-danger: #dc3545;
+  --color-danger-hover: #c82333;
+  --color-danger-dark: #bd2130;
+
+  /* Colors - Info/Link */
+  --color-info: #007bff;
+  --color-info-hover: #0056b3;
+  --color-info-light: #d1ecf1;
+  --color-info-text: #0c5460;
+
+  /* Colors - Success */
+  --color-success: #28a745;
+  --color-success-bg: #d4edda;
+  --color-success-text: #155724;
+  --color-success-border: #c3e6cb;
+
+  /* Colors - Error */
+  --color-error: #dc3545;
+  --color-error-bg: #f8d7da;
+  --color-error-text: #721c24;
+  --color-error-border: #f5c6cb;
+
+  /* Colors - Warning */
+  --color-warning: #ffc107;
+  --color-warning-bg: #fff3cd;
+  --color-warning-text: #856404;
+  --color-warning-border: #ffeaa7;
+
+  /* Colors - Neutral */
+  --color-text-primary: #222;
+  --color-text-secondary: #495057;
+  --color-text-muted: #6c757d;
+  --color-text-light: #666;
+
+  --color-bg-primary: white;
+  --color-bg-secondary: #f8f9fa;
+  --color-bg-hover: #e9ecef;
+
+  --color-border: #dee2e6;
+  --color-border-light: #e0e0e0;
+  --color-border-dark: #ccc;
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;  /* 4px */
+  --spacing-sm: 0.5rem;   /* 8px */
+  --spacing-md: 1rem;     /* 16px */
+  --spacing-lg: 1.5rem;   /* 24px */
+  --spacing-xl: 2rem;     /* 32px */
+  --spacing-2xl: 3rem;    /* 48px */
+  --spacing-3xl: 4rem;    /* 64px */
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 50%;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.2);
+
+  /* Font Sizes */
+  --font-xs: 0.75rem;    /* 12px */
+  --font-sm: 0.875rem;   /* 14px */
+  --font-md: 0.95rem;    /* 15px */
+  --font-base: 1rem;     /* 16px */
+  --font-lg: 1.125rem;   /* 18px */
+  --font-xl: 1.25rem;    /* 20px */
+  --font-2xl: 1.5rem;    /* 24px */
+  --font-3xl: 1.75rem;   /* 28px */
+  --font-4xl: 2rem;      /* 32px */
+  --font-5xl: 3rem;      /* 48px */
+
+  /* Font Weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Transitions */
+  --transition-fast: 0.1s;
+  --transition-base: 0.2s;
+  --transition-slow: 0.3s;
+
+  /* Z-index */
+  --z-dropdown: 100;
+  --z-modal: 1000;
+  --z-tooltip: 1100;
+}

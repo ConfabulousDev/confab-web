@@ -57,6 +57,7 @@
   flex-wrap: wrap;
 }
 
+/* Link styled as button for navigation */
 .btn {
   padding: 0.75rem 1.5rem;
   border-radius: 6px;
@@ -76,24 +77,4 @@
 
 .btnPrimary:hover {
   background-color: #0056b3;
-}
-
-.btnGithub {
-  background-color: #24292e;
-  color: white;
-  font-size: 1.1rem;
-  padding: 1rem 2rem;
-}
-
-.btnGithub:hover {
-  background-color: #1a1e22;
-}
-
-.logout {
-  background-color: #dc3545;
-  color: white;
-}
-
-.logout:hover {
-  background-color: #c82333;
 }

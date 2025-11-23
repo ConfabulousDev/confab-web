@@ -1,38 +1,10 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import Button from '@/components/Button';
 import styles from './HomePage.module.css';
 
-interface User {
-  name: string;
-  email: string;
-  avatar_url: string;
-}
-
 function HomePage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check if user is authenticated
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('/api/v1/me', {
-          credentials: 'include',
-        });
-
-        if (response.ok) {
-          const userData = await response.json();
-          setUser(userData);
-        }
-      } catch (error) {
-        console.error('Failed to check auth:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAuth();
-  }, []);
+  const { user, loading } = useAuth();
 
   const handleLogin = () => {
     window.location.href = '/auth/github/login';
@@ -73,15 +45,15 @@ function HomePage() {
               <Link to="/keys" className={`${styles.btn} ${styles.btnPrimary}`}>
                 Manage API Keys
               </Link>
-              <button className={`${styles.btn} ${styles.logout}`} onClick={handleLogout}>
+              <Button variant="secondary" onClick={handleLogout}>
                 Logout
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
-          <button className={`${styles.btn} ${styles.btnGithub}`} onClick={handleLogin}>
+          <Button variant="github" onClick={handleLogin}>
             Login with GitHub
-          </button>
+          </Button>
         )}
       </div>
     </div>

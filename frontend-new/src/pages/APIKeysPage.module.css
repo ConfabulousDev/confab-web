@@ -27,70 +27,6 @@
   text-decoration: underline;
 }
 
-.btn {
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s;
-}
-
-.btnPrimary {
-  background-color: #28a745;
-  color: white;
-}
-
-.btnPrimary:hover {
-  background-color: #218838;
-}
-
-.btnSecondary {
-  background-color: #6c757d;
-  color: white;
-}
-
-.btnSecondary:hover {
-  background-color: #5a6268;
-}
-
-.btnDanger {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btnDanger:hover {
-  background-color: #c82333;
-}
-
-.btnSm {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.85rem;
-}
-
-.alertError {
-  background: #f8d7da;
-  color: #721c24;
-  padding: 1.5rem;
-  border-radius: 4px;
-  margin-bottom: 2rem;
-  border: 1px solid #f5c6cb;
-}
-
-.alertSuccess {
-  background: #d4edda;
-  color: #155724;
-  padding: 1.5rem;
-  border-radius: 4px;
-  margin-bottom: 2rem;
-  border: 1px solid #c3e6cb;
-}
-
-.alertSuccess h3 {
-  margin: 0 0 0.5rem 0;
-}
-
 .keyDisplay {
   display: flex;
   align-items: center;
@@ -106,14 +42,6 @@
   font-family: monospace;
   word-break: break-all;
   font-size: 0.9rem;
-}
-
-.warning {
-  color: #856404;
-  background: #fff3cd;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin: 1rem 0;
 }
 
 .card {

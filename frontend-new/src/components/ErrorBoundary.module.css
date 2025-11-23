@@ -1,0 +1,87 @@
+.errorBoundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background-color: #f5f5f5;
+}
+
+.errorCard {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 600px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.errorCard h2 {
+  color: #d32f2f;
+  margin: 0 0 1rem;
+}
+
+.errorMessage {
+  color: #666;
+  margin: 0 0 1.5rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.errorActions {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.retryBtn,
+.homeBtn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.retryBtn {
+  background-color: #1976d2;
+  color: white;
+}
+
+.retryBtn:hover {
+  background-color: #1565c0;
+}
+
+.homeBtn {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.homeBtn:hover {
+  background-color: #e0e0e0;
+}
+
+.errorDetails {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.errorDetails summary {
+  cursor: pointer;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.errorDetails pre {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: #d32f2f;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 0.75rem;
+}

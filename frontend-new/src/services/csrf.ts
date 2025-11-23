@@ -27,7 +27,9 @@ export async function initCSRF(): Promise<void> {
 			csrfToken = headerToken;
 		}
 
-		console.log('CSRF token initialized');
+		if (import.meta.env.DEV) {
+			console.log('CSRF token initialized');
+		}
 	} catch (error) {
 		console.error('Error initializing CSRF token:', error);
 	}
@@ -60,7 +62,9 @@ export async function fetchWithCSRF(
 	if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
 		// If token is not initialized, try to fetch it first
 		if (!csrfToken) {
-			console.warn('CSRF token not initialized, fetching now...');
+			if (import.meta.env.DEV) {
+				console.warn('CSRF token not initialized, fetching now...');
+			}
 			await initCSRF();
 		}
 
@@ -68,8 +72,6 @@ export async function fetchWithCSRF(
 			...fetchOptions.headers,
 			'X-CSRF-Token': csrfToken
 		};
-
-		console.log('Sending CSRF token:', csrfToken ? 'present' : 'MISSING');
 	}
 
 	return fetch(url, fetchOptions);
