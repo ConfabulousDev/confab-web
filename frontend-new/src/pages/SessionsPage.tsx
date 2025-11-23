@@ -56,8 +56,14 @@ function SessionsPage() {
     });
   }, [sessions, sortColumn, sortDirection]);
 
-  const handleRowClick = (sessionId: string) => {
-    navigate(`/sessions/${sessionId}`);
+  const handleRowClick = (session: typeof sessions[0]) => {
+    // For shared sessions, use the share URL. For owned sessions, use normal URL
+    if (session.is_owner) {
+      navigate(`/sessions/${session.session_id}`);
+    } else {
+      // Shared session - use share token URL
+      navigate(`/sessions/${session.session_id}/shared/${session.share_token}`);
+    }
   };
 
   return (
@@ -125,7 +131,7 @@ function SessionsPage() {
                   <tr
                     key={session.session_id}
                     className={styles.clickableRow}
-                    onClick={() => handleRowClick(session.session_id)}
+                    onClick={() => handleRowClick(session)}
                   >
                     <td className={session.title ? '' : styles.sessionTitle}>
                       {session.title || 'Untitled Session'}
