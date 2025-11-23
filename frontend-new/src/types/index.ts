@@ -51,8 +51,6 @@ export type Session = {
 	title?: string;
 	session_type: string;
 	max_transcript_size: number; // Max transcript size across all runs (0 = empty session)
-	git_repo?: string; // Git repository from latest run (e.g., "org/repo")
-	git_branch?: string; // Git branch from latest run
 };
 
 // Share configuration
