@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
 import type { SessionDetail, SessionShare, RunDetail } from '@/types';
 import { formatDate } from '@/utils/utils';
@@ -8,9 +9,14 @@ import styles from './SessionDetailPage.module.css';
 
 function SessionDetailPage() {
   const { id: sessionId } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [successFading, setSuccessFading] = useState(false);
 
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -22,6 +28,12 @@ function SessionDetailPage() {
   const [shares, setShares] = useState<SessionShare[]>([]);
   const [loadingShares, setLoadingShares] = useState(false);
 
+  // Delete dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteMode, setDeleteMode] = useState<'session' | 'version'>('session');
+  const [selectedDeleteRunIndex, setSelectedDeleteRunIndex] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Run selection state
   const [selectedRunIndex, setSelectedRunIndex] = useState(0);
 
@@ -30,6 +42,19 @@ function SessionDetailPage() {
   useEffect(() => {
     if (sessionId) {
       fetchSession();
+    }
+
+    // Check for success message from URL params
+    const successParam = searchParams.get('success');
+    if (successParam) {
+      setSuccessMessage(successParam);
+      setSuccessFading(false);
+      // Remove the success param from URL
+      searchParams.delete('success');
+      setSearchParams(searchParams, { replace: true });
+      // Start fade out after 4.5 seconds, then remove after animation completes
+      setTimeout(() => setSuccessFading(true), 4500);
+      setTimeout(() => setSuccessMessage(''), 5000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -169,6 +194,68 @@ function SessionDetailPage() {
     alert('Copied to clipboard!');
   }
 
+  function openDeleteDialog() {
+    setShowDeleteDialog(true);
+    setDeleteMode('session');
+    setSelectedDeleteRunIndex(null);
+    setError('');
+  }
+
+  async function handleDelete() {
+    if (!sessionId || !session) return;
+
+    setDeleting(true);
+    setError('');
+
+    try {
+      let url: string;
+      let body: any = {};
+
+      if (deleteMode === 'version' && selectedDeleteRunIndex !== null) {
+        // Delete specific version
+        const run = session.runs[selectedDeleteRunIndex];
+        url = `/api/v1/sessions/${sessionId}`;
+        body = { run_id: run.id };
+      } else {
+        // Delete entire session
+        url = `/api/v1/sessions/${sessionId}`;
+      }
+
+      const response = await fetchWithCSRF(url, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to delete' }));
+        throw new Error(errorData.error || 'Failed to delete');
+      }
+
+      const result = await response.json();
+
+      // If session was deleted (either directly or because it was the last version), redirect to sessions list
+      if (deleteMode === 'session' || result.session_deleted) {
+        // Invalidate sessions cache to ensure fresh data on sessions list page
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        navigate('/sessions?success=Session deleted successfully');
+      } else {
+        // Refresh the session to show updated state
+        await fetchSession();
+        setShowDeleteDialog(false);
+        setSuccessMessage('Version deleted successfully');
+        setSuccessFading(false);
+        // Start fade out after 4.5 seconds, then remove after animation completes
+        setTimeout(() => setSuccessFading(true), 4500);
+        setTimeout(() => setSuccessMessage(''), 5000);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -184,11 +271,20 @@ function SessionDetailPage() {
           <button className={`${styles.btn} ${styles.btnShare}`} onClick={openShareDialog}>
             📤 Share
           </button>
+          <button className={`${styles.btn} ${styles.btnDanger}`} onClick={openDeleteDialog}>
+            🗑️ Delete
+          </button>
           <Link to="/sessions" className={styles.btnLink}>
             ← Back to Sessions
           </Link>
         </div>
       </div>
+
+      {successMessage && (
+        <div className={`${styles.alert} ${styles.alertSuccess} ${successFading ? styles.alertFading : ''}`}>
+          ✓ {successMessage}
+        </div>
+      )}
 
       {error ? (
         <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>
@@ -361,6 +457,110 @@ function SessionDetailPage() {
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Dialog Modal */}
+      {showDeleteDialog && session && (
+        <div className={styles.modalOverlay} onClick={() => !deleting && setShowDeleteDialog(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2>Delete Session</h2>
+              <button
+                className={styles.closeBtn}
+                onClick={() => !deleting && setShowDeleteDialog(false)}
+                disabled={deleting}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className={styles.modalBody}>
+              {error && <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>}
+
+              <div className={styles.formGroup}>
+                <p>What would you like to delete?</p>
+
+                {session.runs.length > 1 ? (
+                  <>
+                    <label>
+                      <input
+                        type="radio"
+                        checked={deleteMode === 'session'}
+                        onChange={() => setDeleteMode('session')}
+                        disabled={deleting}
+                      />
+                      <strong>Entire session</strong> - Delete all {session.runs.length} versions
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        checked={deleteMode === 'version'}
+                        onChange={() => {
+                          setDeleteMode('version');
+                          setSelectedDeleteRunIndex(0);
+                        }}
+                        disabled={deleting}
+                      />
+                      <strong>Specific version</strong> - Delete one version only
+                    </label>
+
+                    {deleteMode === 'version' && (
+                      <div className={styles.formGroup} style={{ marginLeft: '1.5rem' }}>
+                        <label>Select version to delete:</label>
+                        <select
+                          value={selectedDeleteRunIndex ?? 0}
+                          onChange={(e) => setSelectedDeleteRunIndex(Number(e.target.value))}
+                          className={styles.versionSelect}
+                          disabled={deleting}
+                        >
+                          {session.runs.map((run, index) => {
+                            const isLatestRun = session.runs.every(
+                              (r) => new Date(run.end_timestamp) >= new Date(r.end_timestamp)
+                            );
+                            const isOldestRun = session.runs.every(
+                              (r) => new Date(run.end_timestamp) <= new Date(r.end_timestamp)
+                            );
+                            const label = isLatestRun ? 'latest' : isOldestRun ? 'started' : 'updated';
+                            return (
+                              <option key={index} value={index}>
+                                #{index + 1} {label} @ {formatDate(run.end_timestamp)}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p>
+                    This session has only one version. Deleting it will delete the entire session.
+                  </p>
+                )}
+              </div>
+
+              <div className={styles.warningMessage}>
+                <strong>⚠️ Warning:</strong> This action cannot be undone. All associated files will be permanently deleted from storage.
+              </div>
+
+              <div className={styles.modalFooter}>
+                <button
+                  className={`${styles.btn} ${styles.btnDanger}`}
+                  onClick={handleDelete}
+                  disabled={deleting || (deleteMode === 'version' && selectedDeleteRunIndex === null)}
+                >
+                  {deleting ? 'Deleting...' : `Delete ${deleteMode === 'session' ? 'Session' : 'Version'}`}
+                </button>
+                <button
+                  className={`${styles.btn} ${styles.btnSecondary}`}
+                  onClick={() => setShowDeleteDialog(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

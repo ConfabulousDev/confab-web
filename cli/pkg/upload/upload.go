@@ -260,6 +260,10 @@ func SendSessionRequest(cfg *config.UploadConfig, request *SaveSessionRequest) e
 
 	// Check status
 	if resp.StatusCode != http.StatusOK {
+		// Special handling for rate limit errors
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return fmt.Errorf("rate limit exceeded: %s", string(body))
+		}
 		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 

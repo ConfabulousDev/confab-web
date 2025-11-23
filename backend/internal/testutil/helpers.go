@@ -200,3 +200,15 @@ func CreateTestAPIKey(t *testing.T, env *TestEnvironment, userID int64, keyHash,
 
 	return id
 }
+
+// BackdateRun updates the created_at timestamp of a run to a specific time
+// This is useful for testing time-based features like rate limiting
+func BackdateRun(t *testing.T, env *TestEnvironment, runID int64, timestamp time.Time) {
+	t.Helper()
+
+	query := `UPDATE runs SET created_at = $1 WHERE id = $2`
+	_, err := env.DB.Exec(env.Ctx, query, timestamp, runID)
+	if err != nil {
+		t.Fatalf("failed to backdate run: %v", err)
+	}
+}

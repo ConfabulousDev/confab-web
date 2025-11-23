@@ -7,6 +7,7 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--spacing-md);
+  transition: opacity 0.5s ease-out;
 }
 
 .content {

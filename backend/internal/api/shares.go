@@ -300,6 +300,40 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 	}
 }
 
+// HandleListAllUserShares lists all shares for the authenticated user across all sessions
+func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get user ID from context
+		userID, ok := auth.GetUserID(r.Context())
+		if !ok {
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+
+		// Create context with timeout for database operation
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
+
+		// Get all shares from database
+		shares, err := database.ListAllUserShares(ctx, userID)
+		if err != nil {
+			logger.Error("Failed to list all user shares", "error", err, "user_id", userID)
+			respondError(w, http.StatusInternalServerError, "Failed to list shares")
+			return
+		}
+
+		// Success log
+		logger.Info("All user shares listed", "user_id", userID, "count", len(shares))
+
+		// Return empty array if no shares
+		if shares == nil {
+			shares = []db.ShareWithSessionInfo{}
+		}
+
+		respondJSON(w, http.StatusOK, shares)
+	}
+}
+
 // generateShareToken generates a random share token
 func generateShareToken() (string, error) {
 	bytes := make([]byte, 16) // 16 bytes = 32 hex chars

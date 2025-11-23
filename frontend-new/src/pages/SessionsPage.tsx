@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useSessions } from '@/hooks/useSessions';
 import { formatDate } from '@/utils/utils';
 import { sortData, type SortDirection } from '@/utils/sorting';
@@ -11,9 +11,28 @@ type SortColumn = 'title' | 'session_id' | 'last_run_time';
 
 function SessionsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { sessions, loading, error } = useSessions();
   const [sortColumn, setSortColumn] = useState<SortColumn>('last_run_time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [successFading, setSuccessFading] = useState(false);
+
+  useEffect(() => {
+    // Check for success message from URL params
+    const successParam = searchParams.get('success');
+    if (successParam) {
+      setSuccessMessage(successParam);
+      setSuccessFading(false);
+      // Remove the success param from URL
+      searchParams.delete('success');
+      setSearchParams(searchParams, { replace: true });
+      // Start fade out after 4.5 seconds, then remove after animation completes
+      setTimeout(() => setSuccessFading(true), 4500);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -49,6 +68,7 @@ function SessionsPage() {
         </Link>
       </div>
 
+      {successMessage && <Alert variant="success" className={successFading ? styles.alertFading : ''}>✓ {successMessage}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
       <div className={styles.card}>

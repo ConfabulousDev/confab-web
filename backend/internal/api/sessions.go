@@ -19,13 +19,14 @@ import (
 // Validation limits for session uploads
 const (
 	MaxRequestBodySize = 200 * 1024 * 1024 // 200MB total request size
-	MaxFileSize        = 50 * 1024 * 1024 // 50MB per file
-	MaxFiles           = 100              // Maximum number of files per session
-	MaxSessionIDLength = 256              // Max session ID length
-	MaxPathLength      = 1024             // Max file path length
-	MaxReasonLength    = 10000            // Max reason text length
-	MaxCWDLength       = 4096             // Max current working directory length
-	MinSessionIDLength = 1                // Min session ID length
+	MaxFileSize        = 50 * 1024 * 1024  // 50MB per file
+	MaxFiles           = 100               // Maximum number of files per session
+	MaxSessionIDLength = 256               // Max session ID length
+	MaxPathLength      = 1024              // Max file path length
+	MaxReasonLength    = 10000             // Max reason text length
+	MaxCWDLength       = 4096              // Max current working directory length
+	MinSessionIDLength = 1                 // Min session ID length
+	MaxRunsPerWeek     = 200               // Maximum runs (versions) a user can upload per week
 )
 
 // handleSaveSession processes session upload requests
@@ -34,6 +35,27 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	// Check weekly rate limit BEFORE processing upload
+	rateLimitCtx, rateLimitCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer rateLimitCancel()
+
+	runCount, err := s.db.CountUserRunsInLastWeek(rateLimitCtx, userID)
+	if err != nil {
+		logger.Error("Failed to check rate limit", "error", err, "user_id", userID)
+		respondError(w, http.StatusInternalServerError, "Failed to check upload limit")
+		return
+	}
+
+	if runCount >= MaxRunsPerWeek {
+		logger.Warn("Rate limit exceeded",
+			"user_id", userID,
+			"run_count", runCount,
+			"limit", MaxRunsPerWeek)
+		respondError(w, http.StatusTooManyRequests,
+			fmt.Sprintf("Weekly upload limit exceeded. You have uploaded %d/%d runs in the last 7 days. Please try again later.", runCount, MaxRunsPerWeek))
 		return
 	}
 

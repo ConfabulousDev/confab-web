@@ -17,9 +17,15 @@ var (
 	// File errors
 	ErrFileNotFound = errors.New("file not found")
 
+	// Run errors
+	ErrRunNotFound = errors.New("run not found")
+
 	// User errors
 	ErrUserNotFound = errors.New("user not found")
 
 	// API key errors
 	ErrAPIKeyNotFound = errors.New("API key not found")
+
+	// Rate limiting errors
+	ErrRateLimitExceeded = errors.New("weekly upload limit exceeded")
 )

@@ -63,6 +63,20 @@
   color: #721c24;
 }
 
+.alertSuccess {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+}
+
+.alert {
+  transition: opacity 0.5s ease-out;
+}
+
+.alertFading {
+  opacity: 0;
+}
+
 .metaCard {
   background: white;
   border-radius: 8px;
@@ -374,4 +388,13 @@
 .empty {
   color: #6c757d;
   font-style: italic;
+}
+
+.warningMessage {
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+  color: #856404;
 }

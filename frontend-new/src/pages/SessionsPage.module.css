@@ -101,3 +101,8 @@ td {
   font-size: 0.875rem;
   font-family: monospace;
 }
+
+.alertFading {
+  opacity: 0;
+  transition: opacity 0.5s ease-out;
+}

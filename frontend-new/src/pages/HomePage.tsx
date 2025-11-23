@@ -42,6 +42,9 @@ function HomePage() {
               <Link to="/sessions" className={`${styles.btn} ${styles.btnPrimary}`}>
                 View Sessions
               </Link>
+              <Link to="/shares" className={`${styles.btn} ${styles.btnPrimary}`}>
+                Share Links
+              </Link>
               <Link to="/keys" className={`${styles.btn} ${styles.btnPrimary}`}>
                 Manage API Keys
               </Link>

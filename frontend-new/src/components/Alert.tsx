@@ -5,11 +5,12 @@ interface AlertProps {
   variant?: 'success' | 'error' | 'warning' | 'info';
   children: ReactNode;
   onClose?: () => void;
+  className?: string;
 }
 
-function Alert({ variant = 'info', children, onClose }: AlertProps) {
+function Alert({ variant = 'info', children, onClose, className }: AlertProps) {
   return (
-    <div className={`${styles.alert} ${styles[variant]}`}>
+    <div className={`${styles.alert} ${styles[variant]} ${className || ''}`}>
       <div className={styles.content}>{children}</div>
       {onClose && (
         <button className={styles.closeBtn} onClick={onClose} aria-label="Close">

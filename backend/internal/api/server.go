@@ -210,6 +210,7 @@ func (s *Server) SetupRoutes() http.Handler {
 				})
 			})
 			r.Get("/me", s.handleGetMe)
+			r.Get("/usage/weekly", s.handleGetWeeklyUsage)
 
 			// API key management
 			r.Post("/keys", HandleCreateAPIKey(s.db))
@@ -220,6 +221,10 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions", HandleListSessions(s.db))
 			r.Get("/sessions/{sessionId}", HandleGetSession(s.db))
 
+			// Session deletion
+			r.Delete("/sessions/{sessionId}", HandleDeleteSessionOrRun(s.db, s.storage))
+			r.Delete("/runs/{runId}", HandleDeleteRun(s.db, s.storage))
+
 			// File content
 			r.Get("/runs/{runId}/files/{fileId}/content", HandleGetFileContent(s.db, s.storage))
 
@@ -228,6 +233,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			frontendURL := os.Getenv("FRONTEND_URL")
 			r.Post("/sessions/{sessionId}/share", HandleCreateShare(s.db, frontendURL))
 			r.Get("/sessions/{sessionId}/shares", HandleListShares(s.db))
+			r.Get("/shares", HandleListAllUserShares(s.db))
 			r.Delete("/shares/{shareToken}", HandleRevokeShare(s.db))
 		})
 

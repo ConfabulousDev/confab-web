@@ -894,6 +894,82 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 	return shares, nil
 }
 
+// ShareWithSessionInfo includes both share and session details
+type ShareWithSessionInfo struct {
+	SessionShare
+	SessionTitle *string `json:"session_title,omitempty"`
+}
+
+// ListAllUserShares returns all shares for a user across all sessions
+func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithSessionInfo, error) {
+	// Get all shares for the user with session info
+	query := `
+		SELECT
+			ss.id, ss.session_id, ss.user_id, ss.share_token, ss.visibility,
+			ss.expires_at, ss.created_at, ss.last_accessed_at,
+			s.title
+		FROM session_shares ss
+		JOIN sessions s ON ss.session_id = s.session_id
+		WHERE ss.user_id = $1
+		ORDER BY ss.created_at DESC
+	`
+
+	rows, err := db.conn.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list shares: %w", err)
+	}
+	defer rows.Close()
+
+	var shares []ShareWithSessionInfo
+	for rows.Next() {
+		var share ShareWithSessionInfo
+		err := rows.Scan(
+			&share.ID, &share.SessionID, &share.UserID, &share.ShareToken,
+			&share.Visibility, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
+			&share.SessionTitle,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan share: %w", err)
+		}
+
+		// Get invited emails for private shares
+		if share.Visibility == "private" {
+			emailRows, err := db.conn.QueryContext(ctx,
+				`SELECT email FROM session_share_invites WHERE share_id = $1 ORDER BY email`,
+				share.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get invites: %w", err)
+			}
+
+			var emails []string
+			for emailRows.Next() {
+				var email string
+				if err := emailRows.Scan(&email); err != nil {
+					emailRows.Close()
+					return nil, fmt.Errorf("failed to scan email: %w", err)
+				}
+				emails = append(emails, email)
+			}
+
+			if err := emailRows.Err(); err != nil {
+				emailRows.Close()
+				return nil, fmt.Errorf("error iterating emails: %w", err)
+			}
+
+			emailRows.Close()
+			share.InvitedEmails = emails
+		}
+
+		shares = append(shares, share)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating shares: %w", err)
+	}
+
+	return shares, nil
+}
+
 // RevokeShare deletes a share
 func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) error {
 	// Verify ownership and delete
@@ -1141,4 +1217,211 @@ func (db *DB) GetSharedFileByID(ctx context.Context, sessionID, shareToken strin
 	db.conn.ExecContext(ctx, updateQuery, share.ID)
 
 	return &file, nil
+}
+
+// GetRunS3Keys retrieves all S3 keys for files in a specific run
+// Also verifies ownership and returns the session ID and run count
+func (db *DB) GetRunS3Keys(ctx context.Context, runID int64, userID int64) (sessionID string, runCount int, s3Keys []string, err error) {
+	// Verify ownership by joining through sessions and get run count
+	ownershipQuery := `
+		SELECT s.session_id, COUNT(r2.id) as run_count
+		FROM runs r
+		JOIN sessions s ON r.session_id = s.session_id
+		LEFT JOIN runs r2 ON s.session_id = r2.session_id
+		WHERE r.id = $1 AND s.user_id = $2
+		GROUP BY s.session_id
+	`
+	err = db.conn.QueryRowContext(ctx, ownershipQuery, runID, userID).Scan(&sessionID, &runCount)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", 0, nil, ErrUnauthorized
+		}
+		return "", 0, nil, fmt.Errorf("failed to verify ownership: %w", err)
+	}
+
+	// Get all S3 keys for files in this run
+	query := `SELECT s3_key FROM files WHERE run_id = $1 AND s3_key IS NOT NULL`
+	rows, err := db.conn.QueryContext(ctx, query, runID)
+	if err != nil {
+		return "", 0, nil, fmt.Errorf("failed to query S3 keys: %w", err)
+	}
+	defer rows.Close()
+
+	s3Keys = []string{}
+	for rows.Next() {
+		var s3Key string
+		if err := rows.Scan(&s3Key); err != nil {
+			return "", 0, nil, fmt.Errorf("failed to scan S3 key: %w", err)
+		}
+		s3Keys = append(s3Keys, s3Key)
+	}
+
+	if err := rows.Err(); err != nil {
+		return "", 0, nil, fmt.Errorf("error iterating S3 keys: %w", err)
+	}
+
+	return sessionID, runCount, s3Keys, nil
+}
+
+// GetSessionS3Keys retrieves all S3 keys for all files in all runs of a session
+// Also verifies ownership
+func (db *DB) GetSessionS3Keys(ctx context.Context, sessionID string, userID int64) ([]string, error) {
+	// Verify ownership
+	var ownerID int64
+	ownershipQuery := `SELECT user_id FROM sessions WHERE session_id = $1`
+	err := db.conn.QueryRowContext(ctx, ownershipQuery, sessionID).Scan(&ownerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to verify ownership: %w", err)
+	}
+
+	if ownerID != userID {
+		return nil, ErrUnauthorized
+	}
+
+	// Get all S3 keys for all files in all runs of this session
+	query := `
+		SELECT f.s3_key
+		FROM files f
+		JOIN runs r ON f.run_id = r.id
+		WHERE r.session_id = $1 AND f.s3_key IS NOT NULL
+	`
+	rows, err := db.conn.QueryContext(ctx, query, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query S3 keys: %w", err)
+	}
+	defer rows.Close()
+
+	s3Keys := []string{}
+	for rows.Next() {
+		var s3Key string
+		if err := rows.Scan(&s3Key); err != nil {
+			return nil, fmt.Errorf("failed to scan S3 key: %w", err)
+		}
+		s3Keys = append(s3Keys, s3Key)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating S3 keys: %w", err)
+	}
+
+	return s3Keys, nil
+}
+
+// DeleteRunFromDB deletes a single run from the database
+// S3 objects must be deleted BEFORE calling this function
+// If this is the only run for the session, the session is also deleted
+func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, sessionID string, runCount int) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete the run (CASCADE will delete files)
+	deleteRunQuery := `DELETE FROM runs WHERE id = $1`
+	result, err := tx.ExecContext(ctx, deleteRunQuery, runID)
+	if err != nil {
+		return fmt.Errorf("failed to delete run: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrRunNotFound
+	}
+
+	// If this was the only run, delete the session too
+	if runCount == 1 {
+		deleteSessionQuery := `DELETE FROM sessions WHERE session_id = $1`
+		_, err = tx.ExecContext(ctx, deleteSessionQuery, sessionID)
+		if err != nil {
+			return fmt.Errorf("failed to delete session: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteSessionFromDB deletes an entire session and all its runs from the database
+// S3 objects must be deleted BEFORE calling this function
+func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete the session (CASCADE will delete runs, files, shares, and share invites)
+	deleteSessionQuery := `DELETE FROM sessions WHERE session_id = $1`
+	result, err := tx.ExecContext(ctx, deleteSessionQuery, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete session: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrSessionNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// CountUserRunsInLastWeek returns the number of runs uploaded by a user in the last 7 days
+func (db *DB) CountUserRunsInLastWeek(ctx context.Context, userID int64) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM runs
+		WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+	`
+
+	var count int
+	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count runs: %w", err)
+	}
+
+	return count, nil
+}
+
+// WeeklyUsage represents a user's weekly upload usage statistics
+type WeeklyUsage struct {
+	CurrentCount int       `json:"runs_uploaded"`
+	Limit        int       `json:"limit"`
+	Remaining    int       `json:"remaining"`
+	PeriodStart  time.Time `json:"period_start"`
+	PeriodEnd    time.Time `json:"period_end"`
+}
+
+// GetUserWeeklyUsage returns detailed weekly usage statistics for a user
+func (db *DB) GetUserWeeklyUsage(ctx context.Context, userID int64, maxRunsPerWeek int) (*WeeklyUsage, error) {
+	count, err := db.CountUserRunsInLastWeek(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	periodStart := now.Add(-7 * 24 * time.Hour)
+
+	remaining := maxRunsPerWeek - count
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	return &WeeklyUsage{
+		CurrentCount: count,
+		Limit:        maxRunsPerWeek,
+		Remaining:    remaining,
+		PeriodStart:  periodStart,
+		PeriodEnd:    now,
+	}, nil
 }

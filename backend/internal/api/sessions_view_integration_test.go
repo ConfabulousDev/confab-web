@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/santaclaude2025/confab/backend/internal/api/testutil"
+	"github.com/santaclaude2025/confab/backend/internal/testutil"
 	"github.com/santaclaude2025/confab/backend/internal/db"
 )
 
