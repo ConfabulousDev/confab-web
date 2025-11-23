@@ -109,6 +109,8 @@
 									<span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
 								{/if}
 							</th>
+							<th>Git Repo</th>
+							<th>Git Branch</th>
 							<th class="sortable" on:click={() => handleSort('session_id')}>
 								Session ID
 								{#if sortColumn === 'session_id'}
@@ -127,6 +129,8 @@
 						{#each sortedSessions as session (session.session_id)}
 							<tr class="clickable-row" on:click={() => window.location.href = `/sessions/${session.session_id}`}>
 								<td class:session-title={!session.title}>{session.title || 'Untitled Session'}</td>
+								<td class="git-info">{session.git_repo || '—'}</td>
+								<td class="git-info">{session.git_branch || '—'}</td>
 								<td>
 									<code class="session-id">{session.session_id.substring(0, 8)}</code>
 								</td>
@@ -227,6 +231,12 @@
 		padding: 0.2rem 0.4rem;
 		border-radius: 4px;
 		font-size: 0.85rem;
+	}
+
+	.git-info {
+		color: #495057;
+		font-size: 0.875rem;
+		font-family: monospace;
 	}
 
 	.relative-time {

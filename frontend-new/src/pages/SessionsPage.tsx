@@ -123,6 +123,8 @@ function SessionsPage() {
                       </span>
                     )}
                   </th>
+                  <th>Git Repo</th>
+                  <th>Git Branch</th>
                   <th className={styles.sortable} onClick={() => handleSort('session_id')}>
                     Session ID
                     {sortColumn === 'session_id' && (
@@ -151,6 +153,8 @@ function SessionsPage() {
                     <td className={session.title ? '' : styles.sessionTitle}>
                       {session.title || 'Untitled Session'}
                     </td>
+                    <td className={styles.gitInfo}>{session.git_repo || '—'}</td>
+                    <td className={styles.gitInfo}>{session.git_branch || '—'}</td>
                     <td>
                       <code className={styles.sessionId}>{session.session_id.substring(0, 8)}</code>
                     </td>

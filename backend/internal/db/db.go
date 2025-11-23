@@ -504,12 +504,22 @@ type SessionListItem struct {
 	Title              *string   `json:"title,omitempty"`
 	SessionType        string    `json:"session_type"`
 	MaxTranscriptSize  int64     `json:"max_transcript_size"` // Max transcript size across all runs (0 = empty session)
+	GitRepo            *string   `json:"git_repo,omitempty"`  // Git repository from latest run (e.g., "org/repo")
+	GitBranch          *string   `json:"git_branch,omitempty"` // Git branch from latest run
 }
 
 // ListUserSessions returns all sessions for a user
 func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionListItem, error) {
 	// Optimized query using subquery to avoid fan-out from multiple files per run
 	query := `
+		WITH latest_runs AS (
+			SELECT DISTINCT ON (session_id)
+				session_id,
+				git_repo,
+				git_branch
+			FROM runs
+			ORDER BY session_id, last_activity DESC
+		)
 		SELECT
 			s.session_id,
 			s.first_seen,
@@ -517,7 +527,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
 			s.title,
 			s.session_type,
-			COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size
+			COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
+			latest_runs.git_repo,
+			latest_runs.git_branch
 		FROM sessions s
 		LEFT JOIN runs r ON s.session_id = r.session_id
 		LEFT JOIN (
@@ -526,8 +538,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			WHERE file_type = 'transcript'
 			GROUP BY run_id
 		) transcript_sizes ON r.id = transcript_sizes.run_id
+		LEFT JOIN latest_runs ON s.session_id = latest_runs.session_id
 		WHERE s.user_id = $1
-		GROUP BY s.session_id, s.first_seen, s.title, s.session_type
+		GROUP BY s.session_id, s.first_seen, s.title, s.session_type, latest_runs.git_repo, latest_runs.git_branch
 		ORDER BY last_run_time DESC
 	`
 
@@ -540,7 +553,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 	var sessions []SessionListItem
 	for rows.Next() {
 		var session SessionListItem
-		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime, &session.Title, &session.SessionType, &session.MaxTranscriptSize); err != nil {
+		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime, &session.Title, &session.SessionType, &session.MaxTranscriptSize, &session.GitRepo, &session.GitBranch); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
 		sessions = append(sessions, session)
