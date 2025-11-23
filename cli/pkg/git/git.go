@@ -1,6 +1,9 @@
 package git
 
 import (
+	"bufio"
+	"encoding/json"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -75,4 +78,61 @@ func gitCommand(cwd string, args ...string) (string, error) {
 	}
 
 	return string(output), nil
+}
+
+// ExtractGitInfoFromTranscript parses a Claude Code transcript file to extract git information
+// This is useful for backfilling sessions where the original directory may not exist
+func ExtractGitInfoFromTranscript(transcriptPath string) (*GitInfo, error) {
+	file, err := os.Open(transcriptPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	// Increase buffer size for large lines in transcripts
+	const maxCapacity = 1024 * 1024 // 1MB
+	buf := make([]byte, maxCapacity)
+	scanner.Buffer(buf, maxCapacity)
+
+	var gitInfo *GitInfo
+	var cwd string
+
+	// Scan through transcript looking for git information
+	for scanner.Scan() {
+		var msg map[string]interface{}
+		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
+			continue // Skip malformed lines
+		}
+
+		// Look for gitBranch field in message
+		if branch, ok := msg["gitBranch"].(string); ok && branch != "" {
+			if gitInfo == nil {
+				gitInfo = &GitInfo{}
+			}
+			gitInfo.Branch = branch
+
+			// Also extract cwd if available
+			if cwdField, ok := msg["cwd"].(string); ok && cwdField != "" {
+				cwd = cwdField
+			}
+
+			// Once we have git info, we can stop scanning
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	// If we found git info and a cwd, try to get repo URL from that directory
+	if gitInfo != nil && cwd != "" {
+		// Try to get repo URL if the directory still exists
+		if url, err := gitCommand(cwd, "config", "--get", "remote.origin.url"); err == nil {
+			gitInfo.RepoURL = strings.TrimSpace(url)
+		}
+	}
+
+	return gitInfo, nil
 }

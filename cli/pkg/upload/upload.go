@@ -49,6 +49,18 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 		fmt.Fprintf(os.Stderr, "Warning: Failed to detect git info: %v\n", err)
 	}
 
+	// If no git info from direct detection, try extracting from transcript
+	// This is especially useful for backfilled sessions
+	if gitInfo == nil && hookInput.TranscriptPath != "" {
+		transcriptGitInfo, err := git.ExtractGitInfoFromTranscript(hookInput.TranscriptPath)
+		if err != nil {
+			// Log error but don't fail upload
+			fmt.Fprintf(os.Stderr, "Warning: Failed to extract git info from transcript: %v\n", err)
+		} else if transcriptGitInfo != nil {
+			gitInfo = transcriptGitInfo
+		}
+	}
+
 	// Read file contents
 	fileUploads, err := ReadFilesForUpload(files)
 	if err != nil {
