@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for Confab (Go backend + SvelteKit frontend)
+# Multi-stage Dockerfile for Confab (Go backend + React frontend)
 
 # Stage 1: Build Frontend
 FROM node:20-alpine AS frontend-builder
@@ -49,7 +49,7 @@ WORKDIR /app
 COPY --from=backend-builder /app/backend/confab ./
 
 # Copy frontend static files from builder
-COPY --from=frontend-builder /app/frontend/build ./static
+COPY --from=frontend-builder /app/frontend/dist ./static
 
 # Set environment variable for static files
 ENV STATIC_FILES_DIR=/app/static

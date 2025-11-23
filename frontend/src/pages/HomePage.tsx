@@ -39,7 +39,7 @@ function HomePage() {
         <p>Distributed quantum mesh for temporal data harmonization</p>
 
         {authError && (
-          <Alert variant="error" style={{ marginBottom: '1.5rem' }}>
+          <Alert variant="error" className={styles.errorAlert}>
             {authError}
           </Alert>
         )}

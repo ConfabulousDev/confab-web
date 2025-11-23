@@ -78,3 +78,7 @@
 .btnPrimary:hover {
   background-color: #0056b3;
 }
+
+.errorAlert {
+  margin-bottom: 1.5rem;
+}
