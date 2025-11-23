@@ -13,6 +13,8 @@ import (
 )
 
 // HandleListSessions lists all sessions for the authenticated user
+// Query parameters:
+//   - include_shared: "true" to include sessions shared with the user (default: false)
 func HandleListSessions(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get user ID from context (set by SessionMiddleware)
@@ -22,14 +24,17 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// Parse include_shared query parameter (default: false)
+		includeShared := r.URL.Query().Get("include_shared") == "true"
+
 		// Create context with timeout for database operation
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
 		// Get sessions from database
-		sessions, err := database.ListUserSessions(ctx, userID)
+		sessions, err := database.ListUserSessions(ctx, userID, includeShared)
 		if err != nil {
-			logger.Error("Failed to list sessions", "error", err, "user_id", userID)
+			logger.Error("Failed to list sessions", "error", err, "user_id", userID, "include_shared", includeShared)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}

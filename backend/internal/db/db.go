@@ -145,6 +145,17 @@ func (db *DB) RunMigrations() error {
 		UNIQUE(share_id, email)
 	);
 
+	-- Session share accesses table (tracks which users accessed which shares)
+	CREATE TABLE IF NOT EXISTS session_share_accesses (
+		id BIGSERIAL PRIMARY KEY,
+		share_id BIGINT NOT NULL REFERENCES session_shares(id) ON DELETE CASCADE,
+		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		first_accessed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		last_accessed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		access_count INT NOT NULL DEFAULT 1,
+		UNIQUE(share_id, user_id)
+	);
+
 	-- Indexes
 	CREATE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id);
 	CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
@@ -163,6 +174,8 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id, user_id);
 	CREATE INDEX IF NOT EXISTS idx_session_share_invites_share ON session_share_invites(share_id);
 	CREATE INDEX IF NOT EXISTS idx_session_share_invites_email ON session_share_invites(email);
+	CREATE INDEX IF NOT EXISTS idx_session_share_accesses_share ON session_share_accesses(share_id);
+	CREATE INDEX IF NOT EXISTS idx_session_share_accesses_user ON session_share_accesses(user_id);
 	`
 
 	if _, err := db.conn.Exec(schema); err != nil {
@@ -535,46 +548,187 @@ type SessionListItem struct {
 	MaxTranscriptSize  int64     `json:"max_transcript_size"` // Max transcript size across all runs (0 = empty session)
 	GitRepo            *string   `json:"git_repo,omitempty"`  // Git repository from latest run (e.g., "org/repo") - extracted from git_info JSONB
 	GitBranch          *string   `json:"git_branch,omitempty"` // Git branch from latest run - extracted from git_info JSONB
+	IsOwner            bool      `json:"is_owner"`             // true if user owns this session
+	AccessType         string    `json:"access_type"`          // "owner" | "private_share" | "public_share"
+	ShareToken         *string   `json:"share_token,omitempty"` // share token if accessed via share
+	SharedByEmail      *string   `json:"shared_by_email,omitempty"` // email of user who shared (if not owner)
 }
 
 // ListUserSessions returns all sessions for a user
-func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionListItem, error) {
-	// Optimized query using subquery to avoid fan-out from multiple files per run
-	// Extract git info from the latest run's git_info JSONB column
-	query := `
-		WITH latest_runs AS (
-			SELECT DISTINCT ON (session_id)
-				session_id,
-				git_info->>'repo_url' as git_repo_url,
-				git_info->>'branch' as git_branch
-			FROM runs
-			ORDER BY session_id, last_activity DESC
-		)
-		SELECT
-			s.session_id,
-			s.first_seen,
-			COUNT(r.id) as run_count,
-			COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
-			s.title,
-			s.session_type,
-			COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
-			latest_runs.git_repo_url,
-			latest_runs.git_branch
-		FROM sessions s
-		LEFT JOIN runs r ON s.session_id = r.session_id
-		LEFT JOIN (
-			SELECT run_id, MAX(size_bytes) as max_size
-			FROM files
-			WHERE file_type = 'transcript'
-			GROUP BY run_id
-		) transcript_sizes ON r.id = transcript_sizes.run_id
-		LEFT JOIN latest_runs ON s.session_id = latest_runs.session_id
-		WHERE s.user_id = $1
-		GROUP BY s.session_id, s.first_seen, s.title, s.session_type, latest_runs.git_repo_url, latest_runs.git_branch
-		ORDER BY last_run_time DESC
-	`
+// If includeShared is true, also includes sessions shared with the user (private shares and accessed public shares)
+func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared bool) ([]SessionListItem, error) {
+	// Get user's email for private share matching
+	var userEmail string
+	emailQuery := `SELECT email FROM users WHERE id = $1`
+	if err := db.conn.QueryRowContext(ctx, emailQuery, userID).Scan(&userEmail); err != nil {
+		return nil, fmt.Errorf("failed to get user email: %w", err)
+	}
 
-	rows, err := db.conn.QueryContext(ctx, query, userID)
+	var query string
+	if !includeShared {
+		// Original query - only owned sessions
+		query = `
+			WITH latest_runs AS (
+				SELECT DISTINCT ON (session_id)
+					session_id,
+					git_info->>'repo_url' as git_repo_url,
+					git_info->>'branch' as git_branch
+				FROM runs
+				ORDER BY session_id, last_activity DESC
+			)
+			SELECT
+				s.session_id,
+				s.first_seen,
+				COUNT(r.id) as run_count,
+				COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+				s.title,
+				s.session_type,
+				COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
+				latest_runs.git_repo_url,
+				latest_runs.git_branch,
+				true as is_owner,
+				'owner' as access_type,
+				NULL::text as share_token,
+				NULL::text as shared_by_email
+			FROM sessions s
+			LEFT JOIN runs r ON s.session_id = r.session_id
+			LEFT JOIN (
+				SELECT run_id, MAX(size_bytes) as max_size
+				FROM files
+				WHERE file_type = 'transcript'
+				GROUP BY run_id
+			) transcript_sizes ON r.id = transcript_sizes.run_id
+			LEFT JOIN latest_runs ON s.session_id = latest_runs.session_id
+			WHERE s.user_id = $1
+			GROUP BY s.session_id, s.first_seen, s.title, s.session_type, latest_runs.git_repo_url, latest_runs.git_branch
+			ORDER BY last_run_time DESC
+		`
+	} else {
+		// Include owned + shared sessions via UNION
+		query = `
+			WITH latest_runs AS (
+				SELECT DISTINCT ON (session_id)
+					session_id,
+					git_info->>'repo_url' as git_repo_url,
+					git_info->>'branch' as git_branch
+				FROM runs
+				ORDER BY session_id, last_activity DESC
+			),
+			-- User's own sessions
+			owned_sessions AS (
+				SELECT
+					s.session_id,
+					s.first_seen,
+					COUNT(r.id) as run_count,
+					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+					s.title,
+					s.session_type,
+					COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
+					latest_runs.git_repo_url,
+					latest_runs.git_branch,
+					true as is_owner,
+					'owner' as access_type,
+					NULL::text as share_token,
+					NULL::text as shared_by_email
+				FROM sessions s
+				LEFT JOIN runs r ON s.session_id = r.session_id
+				LEFT JOIN (
+					SELECT run_id, MAX(size_bytes) as max_size
+					FROM files
+					WHERE file_type = 'transcript'
+					GROUP BY run_id
+				) transcript_sizes ON r.id = transcript_sizes.run_id
+				LEFT JOIN latest_runs ON s.session_id = latest_runs.session_id
+				WHERE s.user_id = $1
+				GROUP BY s.session_id, s.first_seen, s.title, s.session_type,
+				         latest_runs.git_repo_url, latest_runs.git_branch
+			),
+			-- Private shares (invited by email)
+			private_shares AS (
+				SELECT
+					s.session_id,
+					s.first_seen,
+					COUNT(r.id) as run_count,
+					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+					s.title,
+					s.session_type,
+					COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
+					latest_runs.git_repo_url,
+					latest_runs.git_branch,
+					false as is_owner,
+					'private_share' as access_type,
+					sh.share_token,
+					u.email as shared_by_email
+				FROM sessions s
+				JOIN session_shares sh ON s.session_id = sh.session_id
+				JOIN session_share_invites si ON sh.id = si.share_id
+				JOIN users u ON sh.user_id = u.id
+				LEFT JOIN runs r ON s.session_id = r.session_id
+				LEFT JOIN (
+					SELECT run_id, MAX(size_bytes) as max_size
+					FROM files
+					WHERE file_type = 'transcript'
+					GROUP BY run_id
+				) transcript_sizes ON r.id = transcript_sizes.run_id
+				LEFT JOIN latest_runs ON s.session_id = latest_runs.session_id
+				WHERE sh.visibility = 'private'
+				  AND LOWER(si.email) = LOWER($2)
+				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+				  AND s.user_id != $1  -- Don't duplicate owned sessions
+				GROUP BY s.session_id, s.first_seen, s.title, s.session_type,
+				         latest_runs.git_repo_url, latest_runs.git_branch, sh.share_token, u.email
+			),
+			-- Public shares accessed by user
+			public_shares AS (
+				SELECT
+					s.session_id,
+					s.first_seen,
+					COUNT(r.id) as run_count,
+					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+					s.title,
+					s.session_type,
+					COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
+					latest_runs.git_repo_url,
+					latest_runs.git_branch,
+					false as is_owner,
+					'public_share' as access_type,
+					sh.share_token,
+					u.email as shared_by_email
+				FROM sessions s
+				JOIN session_shares sh ON s.session_id = sh.session_id
+				JOIN session_share_accesses sa ON sh.id = sa.share_id
+				JOIN users u ON sh.user_id = u.id
+				LEFT JOIN runs r ON s.session_id = r.session_id
+				LEFT JOIN (
+					SELECT run_id, MAX(size_bytes) as max_size
+					FROM files
+					WHERE file_type = 'transcript'
+					GROUP BY run_id
+				) transcript_sizes ON r.id = transcript_sizes.run_id
+				LEFT JOIN latest_runs ON s.session_id = latest_runs.session_id
+				WHERE sh.visibility = 'public'
+				  AND sa.user_id = $1
+				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+				  AND s.user_id != $1  -- Don't duplicate owned sessions
+				GROUP BY s.session_id, s.first_seen, s.title, s.session_type,
+				         latest_runs.git_repo_url, latest_runs.git_branch, sh.share_token, u.email
+			)
+			SELECT * FROM owned_sessions
+			UNION ALL
+			SELECT * FROM private_shares
+			UNION ALL
+			SELECT * FROM public_shares
+			ORDER BY last_run_time DESC
+		`
+	}
+
+	var rows *sql.Rows
+	var err error
+	if !includeShared {
+		rows, err = db.conn.QueryContext(ctx, query, userID)
+	} else {
+		rows, err = db.conn.QueryContext(ctx, query, userID, userEmail)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to query sessions: %w", err)
 	}
@@ -584,7 +738,21 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 	for rows.Next() {
 		var session SessionListItem
 		var gitRepoURL *string // Full URL from git_info JSONB
-		if err := rows.Scan(&session.SessionID, &session.FirstSeen, &session.RunCount, &session.LastRunTime, &session.Title, &session.SessionType, &session.MaxTranscriptSize, &gitRepoURL, &session.GitBranch); err != nil {
+		if err := rows.Scan(
+			&session.SessionID,
+			&session.FirstSeen,
+			&session.RunCount,
+			&session.LastRunTime,
+			&session.Title,
+			&session.SessionType,
+			&session.MaxTranscriptSize,
+			&gitRepoURL,
+			&session.GitBranch,
+			&session.IsOwner,
+			&session.AccessType,
+			&session.ShareToken,
+			&session.SharedByEmail,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
 
@@ -1118,6 +1286,38 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 	}
 
 	return &session, nil
+}
+
+// RecordShareAccess records that a user accessed a share
+// This is used to track public shares accessed by logged-in users
+// so they can see them in their session list
+func (db *DB) RecordShareAccess(ctx context.Context, shareToken string, userID int64) error {
+	// First get the share ID
+	var shareID int64
+	query := `SELECT id FROM session_shares WHERE share_token = $1`
+	err := db.conn.QueryRowContext(ctx, query, shareToken).Scan(&shareID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrShareNotFound
+		}
+		return fmt.Errorf("failed to get share: %w", err)
+	}
+
+	// Record access (INSERT or UPDATE existing record)
+	upsertQuery := `
+		INSERT INTO session_share_accesses (share_id, user_id, first_accessed_at, last_accessed_at, access_count)
+		VALUES ($1, $2, NOW(), NOW(), 1)
+		ON CONFLICT (share_id, user_id)
+		DO UPDATE SET
+			last_accessed_at = NOW(),
+			access_count = session_share_accesses.access_count + 1
+	`
+	_, err = db.conn.ExecContext(ctx, upsertQuery, shareID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to record share access: %w", err)
+	}
+
+	return nil
 }
 
 // GetFileByID retrieves a file by ID with ownership verification

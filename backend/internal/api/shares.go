@@ -296,6 +296,23 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 			"share_token", shareToken,
 			"viewer_email", viewerEmail)
 
+		// If user is logged in, record their access for later retrieval in session list
+		if viewerEmail != nil {
+			// Get user ID from session cookie (we already validated it above)
+			cookie, _ := r.Cookie("confab_session")
+			webSession, err := database.GetWebSession(ctx, cookie.Value)
+			if err == nil {
+				// Record that this user accessed this share
+				// This allows the share to appear in their session list later
+				recordCtx, recordCancel := context.WithTimeout(context.Background(), DatabaseTimeout)
+				defer recordCancel()
+				if err := database.RecordShareAccess(recordCtx, shareToken, webSession.UserID); err != nil {
+					// Log but don't fail the request
+					logger.Error("Failed to record share access", "error", err, "share_token", shareToken, "user_id", webSession.UserID)
+				}
+			}
+		}
+
 		respondJSON(w, http.StatusOK, session)
 	}
 }

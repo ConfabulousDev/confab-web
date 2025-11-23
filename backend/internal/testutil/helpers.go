@@ -3,6 +3,8 @@ package testutil
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -211,4 +213,13 @@ func BackdateRun(t *testing.T, env *TestEnvironment, runID int64, timestamp time
 	if err != nil {
 		t.Fatalf("failed to backdate run: %v", err)
 	}
+}
+
+// GenerateShareToken generates a random share token for testing (32 hex chars)
+func GenerateShareToken() string {
+	bytes := make([]byte, 16) // 16 bytes = 32 hex chars
+	if _, err := rand.Read(bytes); err != nil {
+		panic(err) // In tests, panic is acceptable for crypto failures
+	}
+	return hex.EncodeToString(bytes)
 }
