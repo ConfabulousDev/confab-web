@@ -22,6 +22,10 @@ func TestSaveFromHook_ValidInput(t *testing.T) {
 	tmpDir := t.TempDir()
 	transcriptPath := filepath.Join(tmpDir, "session-123.jsonl")
 
+	// Setup: Use temp config file to avoid polluting user's real config
+	testConfigPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("CONFAB_CONFIG_PATH", testConfigPath)
+
 	// Create a simple transcript file
 	transcriptContent := `{"type":"user","message":"test"}`
 	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0644); err != nil {
@@ -307,6 +311,10 @@ func TestSaveFromHook_MissingTranscript(t *testing.T) {
 func TestSaveFromHook_UploadFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	transcriptPath := filepath.Join(tmpDir, "session-789.jsonl")
+
+	// Setup: Use temp config file to avoid polluting user's real config
+	testConfigPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("CONFAB_CONFIG_PATH", testConfigPath)
 
 	// Create transcript
 	if err := os.WriteFile(transcriptPath, []byte(`{"type":"test"}`), 0644); err != nil {

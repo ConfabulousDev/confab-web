@@ -17,6 +17,11 @@ func TestRunLogin_SuccessfulCallback(t *testing.T) {
 	// This test verifies the callback server works correctly
 	// We'll start the login flow and immediately simulate the callback
 
+	// Setup: Use temp config file to avoid polluting user's real config
+	tmpDir := t.TempDir()
+	testConfigPath := fmt.Sprintf("%s/config.json", tmpDir)
+	t.Setenv("CONFAB_CONFIG_PATH", testConfigPath)
+
 	// Create a test backend URL (not used in this test, but needed for login)
 	testBackendURL := "http://test-backend.example.com"
 

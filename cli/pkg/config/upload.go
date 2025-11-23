@@ -77,6 +77,12 @@ func SaveUploadConfig(config *UploadConfig) error {
 }
 
 func getConfigPath() (string, error) {
+	// Allow overriding config path for testing
+	// This prevents tests from polluting the user's real config
+	if testConfigPath := os.Getenv("CONFAB_CONFIG_PATH"); testConfigPath != "" {
+		return testConfigPath, nil
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
