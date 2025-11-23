@@ -21,7 +21,7 @@ var backfillCmd = &cobra.Command{
 	Use:   "backfill",
 	Short: "Upload historical sessions from ~/.claude to cloud",
 	Long: `Scans ~/.claude/projects/ for existing session transcripts and uploads
-them to the cloud backend. Sessions modified within the last hour are skipped
+them to the cloud backend. Sessions modified within the last 20 minutes are skipped
 (likely still in progress). Use 'confab save <session-id>' to force upload
 a specific session.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -49,8 +49,8 @@ a specific session.`,
 		fmt.Printf("Found %d session(s)\n", len(sessions))
 		fmt.Println()
 
-		// Filter sessions by age (1 hour threshold)
-		threshold := time.Now().Add(-1 * time.Hour)
+		// Filter sessions by age (20 minute threshold)
+		threshold := time.Now().Add(-20 * time.Minute)
 		oldSessions, recentSessions := filterSessionsByAge(sessions, threshold)
 
 		// Determine which sessions need uploading
@@ -147,7 +147,7 @@ func printBackfillSummary(toUpload []discovery.SessionInfo, alreadySynced []stri
 	// Show skipped recent sessions
 	if len(recentSessions) > 0 {
 		fmt.Println()
-		fmt.Printf("Skipping %d recent session(s) (modified < 1 hour ago):\n", len(recentSessions))
+		fmt.Printf("Skipping %d recent session(s) (modified < 20 minutes ago):\n", len(recentSessions))
 		for _, s := range recentSessions {
 			ago := time.Since(s.ModTime).Round(time.Minute)
 			fmt.Printf("  %s  %-20s  modified %s ago\n", utils.TruncateSecret(s.SessionID, 8, 0), utils.TruncateWithEllipsis(s.ProjectPath, 20), ago)
