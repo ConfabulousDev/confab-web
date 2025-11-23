@@ -6,9 +6,6 @@ import (
 	"path/filepath"
 )
 
-// Environment variable to override the default Claude state directory
-const ClaudeStateDirEnv = "CONFAB_CLAUDE_DIR"
-
 // GetClaudeStateDir returns the Claude state directory path.
 // Defaults to ~/.claude but can be overridden with CONFAB_CLAUDE_DIR env var.
 // This is useful for testing and non-standard installations.

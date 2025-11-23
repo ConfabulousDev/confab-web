@@ -111,7 +111,55 @@ make clean
 
 # Test with sample input
 make test
+
+# Run tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run linter (requires golangci-lint)
+golangci-lint run
 ```
+
+## Environment Variables
+
+Confab can be configured using the following environment variables:
+
+### `CONFAB_CLAUDE_DIR`
+
+Override the default Claude Code state directory location.
+
+- **Default:** `~/.claude`
+- **Usage:** Useful for testing, non-standard installations, or running multiple Claude Code instances
+- **Example:**
+  ```bash
+  export CONFAB_CLAUDE_DIR=/custom/path/to/claude
+  confab status
+  ```
+
+This affects:
+- Settings file location: `$CONFAB_CLAUDE_DIR/settings.json`
+- Projects directory: `$CONFAB_CLAUDE_DIR/projects/`
+- Todos directory: `$CONFAB_CLAUDE_DIR/todos/`
+
+## Configuration Files
+
+Confab uses several configuration files:
+
+### Cloud Sync Configuration
+- **Location:** `~/.confab/config.json`
+- **Contents:** Backend URL and API key
+- **Created by:** `confab login` or `confab configure`
+
+### Redaction Configuration
+- **Location:** `~/.confab/redaction.json` (enabled) or `~/.confab/redaction.json.disabled` (disabled)
+- **Contents:** Patterns for redacting sensitive data before upload
+- **Managed by:** `confab redaction` commands
+
+### Logs
+- **Location:** `~/.confab/logs/confab.log`
+- **Contents:** Detailed operation logs for debugging
 
 ## License
 

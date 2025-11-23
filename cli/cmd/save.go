@@ -15,6 +15,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Helper functions for dual logging (file + stderr)
+
+// logInfo logs to file and prints to stderr
+func logInfo(format string, args ...interface{}) {
+	logger.Info(format, args...)
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+}
+
+// logError logs error to file and prints to stderr
+func logError(format string, args ...interface{}) {
+	logger.Error(format, args...)
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+}
+
+// logDebugPrint logs at debug level and prints to stderr
+// (stderr output is not conditional on log level)
+func logDebugPrint(format string, args ...interface{}) {
+	logger.Debug(format, args...)
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+}
+
 var saveCmd = &cobra.Command{
 	Use:   "save [session-id...]",
 	Short: "Save session data to cloud",
@@ -95,8 +116,7 @@ func saveFromHook() error {
 	// Read hook input from stdin
 	hookInput, err := discovery.ReadHookInput()
 	if err != nil {
-		logger.Error("Failed to read hook input: %v", err)
-		fmt.Fprintf(os.Stderr, "Error reading hook input: %v\n", err)
+		logError("Error reading hook input: %v", err)
 		return nil // Don't return error - let defer send success response
 	}
 
@@ -106,8 +126,7 @@ func saveFromHook() error {
 	// Discover session files
 	files, err := discovery.DiscoverSessionFiles(hookInput)
 	if err != nil {
-		logger.Error("Failed to discover files: %v", err)
-		fmt.Fprintf(os.Stderr, "Error discovering files: %v\n", err)
+		logError("Error discovering files: %v", err)
 		return nil
 	}
 
@@ -128,15 +147,10 @@ func saveFromHook() error {
 
 // printSessionInfo logs and displays session metadata
 func printSessionInfo(hookInput *types.HookInput) {
-	logger.Info("Session ID: %s", hookInput.SessionID)
-	logger.Info("Transcript: %s", hookInput.TranscriptPath)
-	logger.Info("Working Directory: %s", hookInput.CWD)
-	logger.Info("End Reason: %s", hookInput.Reason)
-
-	fmt.Fprintf(os.Stderr, "Session ID: %s\n", hookInput.SessionID)
-	fmt.Fprintf(os.Stderr, "Transcript: %s\n", hookInput.TranscriptPath)
-	fmt.Fprintf(os.Stderr, "Working Directory: %s\n", hookInput.CWD)
-	fmt.Fprintf(os.Stderr, "End Reason: %s\n", hookInput.Reason)
+	logInfo("Session ID: %s", hookInput.SessionID)
+	logInfo("Transcript: %s", hookInput.TranscriptPath)
+	logInfo("Working Directory: %s", hookInput.CWD)
+	logInfo("End Reason: %s", hookInput.Reason)
 	fmt.Fprintln(os.Stderr)
 }
 
@@ -144,12 +158,11 @@ func printSessionInfo(hookInput *types.HookInput) {
 func printDiscoveredFiles(files []types.SessionFile) {
 	totalSize := utils.CalculateTotalSize(files)
 
-	logger.Info("Discovered %d file(s) (%s)", len(files), utils.FormatBytesMB(totalSize))
+	logInfo("Discovered %d file(s) (%s)", len(files), utils.FormatBytesMB(totalSize))
 	for _, f := range files {
 		logger.Debug("File: %s (%s, %s)", f.Path, f.Type, utils.FormatBytesKB(f.SizeBytes))
 	}
 
-	fmt.Fprintf(os.Stderr, "Discovered %d file(s) (%s)\n", len(files), utils.FormatBytesMB(totalSize))
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Files:")
 	for _, f := range files {
@@ -162,8 +175,7 @@ func printDiscoveredFiles(files []types.SessionFile) {
 func uploadSessionFiles(hookInput *types.HookInput, files []types.SessionFile) error {
 	logger.Info("Uploading to cloud...")
 	if err := upload.UploadToCloud(hookInput, files); err != nil {
-		logger.Error("Failed to upload to cloud: %v", err)
-		fmt.Fprintf(os.Stderr, "Error: Cloud upload failed: %v\n", err)
+		logError("Error: Cloud upload failed: %v", err)
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Cloud upload is required. Please run 'confab login' to authenticate.")
 		return err
