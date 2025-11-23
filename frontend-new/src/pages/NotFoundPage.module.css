@@ -1,0 +1,73 @@
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 2rem;
+  text-align: center;
+}
+
+.content {
+  max-width: 500px;
+}
+
+.title {
+  font-size: 6rem;
+  font-weight: 700;
+  color: #dee2e6;
+  margin: 0;
+  line-height: 1;
+}
+
+.subtitle {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #222;
+  margin: 1rem 0;
+}
+
+.message {
+  font-size: 1.1rem;
+  color: #6c757d;
+  margin: 1.5rem 0 2rem;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.homeBtn,
+.backBtn {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+
+.homeBtn {
+  background: #007bff;
+  color: white;
+}
+
+.homeBtn:hover {
+  background: #0056b3;
+}
+
+.backBtn {
+  background: #f8f9fa;
+  color: #495057;
+  border: 1px solid #dee2e6;
+}
+
+.backBtn:hover {
+  background: #e9ecef;
+}

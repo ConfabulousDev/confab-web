@@ -1,10 +1,28 @@
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/Button';
+import Alert from '@/components/Alert';
 import styles from './HomePage.module.css';
 
 function HomePage() {
   const { user, loading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check for auth error from OAuth callback
+    const error = searchParams.get('error');
+    const errorDescription = searchParams.get('error_description');
+
+    if (error) {
+      setAuthError(errorDescription || 'Authentication failed. Please try again.');
+      // Clear error params from URL
+      searchParams.delete('error');
+      searchParams.delete('error_description');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleLogin = () => {
     window.location.href = '/auth/github/login';
@@ -19,6 +37,12 @@ function HomePage() {
       <div className={styles.hero}>
         <h1>Confab</h1>
         <p>Distributed quantum mesh for temporal data harmonization</p>
+
+        {authError && (
+          <Alert variant="error" style={{ marginBottom: '1.5rem' }}>
+            {authError}
+          </Alert>
+        )}
 
         {loading ? (
           <p>Loading...</p>

@@ -10,6 +10,7 @@ const SessionDetailPage = lazy(() => import('@/pages/SessionDetailPage'));
 const SharedSessionPage = lazy(() => import('@/pages/SharedSessionPage'));
 const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 // Loading fallback component
 function PageLoader() {
@@ -70,6 +71,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageLoader />}>
             <ShareLinksPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: '*',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <NotFoundPage />
           </Suspense>
         ),
       },

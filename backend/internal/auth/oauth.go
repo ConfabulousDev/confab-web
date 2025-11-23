@@ -126,7 +126,12 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Exchange code for access token
 		accessToken, err := exchangeGitHubCode(code, config)
 		if err != nil {
-			http.Error(w, "Failed to exchange code", http.StatusInternalServerError)
+			logger.Error("Failed to exchange GitHub code", "error", err)
+			frontendURL := os.Getenv("FRONTEND_URL")
+			errorURL := fmt.Sprintf("%s?error=github_error&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Failed to complete GitHub authentication. Please try again."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -134,7 +139,11 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		user, err := getGitHubUser(accessToken)
 		if err != nil {
 			logger.Error("Failed to get GitHub user", "error", err)
-			http.Error(w, "Failed to get user info", http.StatusInternalServerError)
+			frontendURL := os.Getenv("FRONTEND_URL")
+			errorURL := fmt.Sprintf("%s?error=github_error&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Failed to retrieve user information from GitHub. Please try again."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -148,7 +157,12 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Check email whitelist (if configured)
 		if !isEmailAllowed(user.Email) {
 			logger.Warn("Email not in whitelist", "email", user.Email)
-			http.Error(w, "Access denied: Your email is not authorized to use this application. Please contact the administrator.", http.StatusForbidden)
+			// Redirect to frontend with error instead of showing raw HTTP error
+			frontendURL := os.Getenv("FRONTEND_URL")
+			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Your email is not authorized to use this application. Please contact the administrator."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}
 
