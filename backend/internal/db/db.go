@@ -497,17 +497,6 @@ func (db *DB) DeleteWebSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-// CleanupExpiredSessions removes expired web sessions
-func (db *DB) CleanupExpiredSessions(ctx context.Context) (int64, error) {
-	query := `DELETE FROM web_sessions WHERE expires_at < NOW()`
-	result, err := db.conn.ExecContext(ctx, query)
-	if err != nil {
-		return 0, fmt.Errorf("failed to cleanup sessions: %w", err)
-	}
-	count, _ := result.RowsAffected()
-	return count, nil
-}
-
 // extractRepoName extracts the org/repo from a git URL
 // Examples:
 //   - "https://github.com/santaclaude2025/confab.git" -> "santaclaude2025/confab"

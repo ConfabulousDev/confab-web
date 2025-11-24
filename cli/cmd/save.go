@@ -15,27 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Helper functions for dual logging (file + stderr)
-
-// logInfo logs to file and prints to stderr
-func logInfo(format string, args ...interface{}) {
-	logger.Info(format, args...)
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-}
-
-// logError logs error to file and prints to stderr
-func logError(format string, args ...interface{}) {
-	logger.Error(format, args...)
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-}
-
-// logDebugPrint logs at debug level and prints to stderr
-// (stderr output is not conditional on log level)
-func logDebugPrint(format string, args ...interface{}) {
-	logger.Debug(format, args...)
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-}
-
 var saveCmd = &cobra.Command{
 	Use:   "save [session-id...]",
 	Short: "Save session data to cloud",
@@ -116,7 +95,7 @@ func saveFromHook() error {
 	// Read hook input from stdin
 	hookInput, err := discovery.ReadHookInput()
 	if err != nil {
-		logError("Error reading hook input: %v", err)
+		logger.ErrorPrint("Error reading hook input: %v", err)
 		return nil // Don't return error - let defer send success response
 	}
 
@@ -126,7 +105,7 @@ func saveFromHook() error {
 	// Discover session files
 	files, err := discovery.DiscoverSessionFiles(hookInput)
 	if err != nil {
-		logError("Error discovering files: %v", err)
+		logger.ErrorPrint("Error discovering files: %v", err)
 		return nil
 	}
 
@@ -147,10 +126,10 @@ func saveFromHook() error {
 
 // printSessionInfo logs and displays session metadata
 func printSessionInfo(hookInput *types.HookInput) {
-	logInfo("Session ID: %s", hookInput.SessionID)
-	logInfo("Transcript: %s", hookInput.TranscriptPath)
-	logInfo("Working Directory: %s", hookInput.CWD)
-	logInfo("End Reason: %s", hookInput.Reason)
+	logger.InfoPrint("Session ID: %s", hookInput.SessionID)
+	logger.InfoPrint("Transcript: %s", hookInput.TranscriptPath)
+	logger.InfoPrint("Working Directory: %s", hookInput.CWD)
+	logger.InfoPrint("End Reason: %s", hookInput.Reason)
 	fmt.Fprintln(os.Stderr)
 }
 
@@ -158,7 +137,7 @@ func printSessionInfo(hookInput *types.HookInput) {
 func printDiscoveredFiles(files []types.SessionFile) {
 	totalSize := utils.CalculateTotalSize(files)
 
-	logInfo("Discovered %d file(s) (%s)", len(files), utils.FormatBytesMB(totalSize))
+	logger.InfoPrint("Discovered %d file(s) (%s)", len(files), utils.FormatBytesMB(totalSize))
 	for _, f := range files {
 		logger.Debug("File: %s (%s, %s)", f.Path, f.Type, utils.FormatBytesKB(f.SizeBytes))
 	}
@@ -175,14 +154,13 @@ func printDiscoveredFiles(files []types.SessionFile) {
 func uploadSessionFiles(hookInput *types.HookInput, files []types.SessionFile) error {
 	logger.Info("Uploading to cloud...")
 	if err := upload.UploadToCloud(hookInput, files); err != nil {
-		logError("Error: Cloud upload failed: %v", err)
+		logger.ErrorPrint("Error: Cloud upload failed: %v", err)
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Cloud upload is required. Please run 'confab login' to authenticate.")
 		return err
 	}
 
-	logger.Info("Cloud upload completed")
-	fmt.Fprintln(os.Stderr, "✓ Uploaded to cloud")
+	logger.InfoPrint("Uploaded to cloud")
 	return nil
 }
 

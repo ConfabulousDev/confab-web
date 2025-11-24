@@ -137,11 +137,6 @@ func (l *Logger) SetAlsoStderr(enabled bool) {
 	l.alsoStderr = enabled
 }
 
-// LogPath returns the path to the log file
-func (l *Logger) LogPath() string {
-	return l.logPath
-}
-
 // log writes a log message at the specified level
 func (l *Logger) log(level Level, format string, args ...interface{}) {
 	if level < l.level {
@@ -186,19 +181,65 @@ func (l *Logger) Error(format string, args ...interface{}) {
 	l.log(ERROR, format, args...)
 }
 
+// logAndPrint logs to file at the specified level AND prints a user-friendly message to stderr
+func (l *Logger) logAndPrint(level Level, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+
+	// Always log to file with full formatting
+	l.log(level, format, args...)
+
+	// Print user-friendly message to stderr (no timestamp/level prefix)
+	fmt.Fprintln(os.Stderr, message)
+}
+
+// InfoPrint logs an info message to file AND prints to stderr for user visibility
+func (l *Logger) InfoPrint(format string, args ...interface{}) {
+	l.logAndPrint(INFO, format, args...)
+}
+
+// WarnPrint logs a warning to file AND prints to stderr for user visibility
+func (l *Logger) WarnPrint(format string, args ...interface{}) {
+	l.logAndPrint(WARN, format, args...)
+}
+
+// ErrorPrint logs an error to file AND prints to stderr for user visibility
+func (l *Logger) ErrorPrint(format string, args ...interface{}) {
+	l.logAndPrint(ERROR, format, args...)
+}
+
 // Package-level convenience functions
+
+// Debug logs a debug message (file only, not shown to user)
 func Debug(format string, args ...interface{}) {
 	Get().Debug(format, args...)
 }
 
+// Info logs an info message (file only, not shown to user)
 func Info(format string, args ...interface{}) {
 	Get().Info(format, args...)
 }
 
+// Warn logs a warning (file only, not shown to user)
 func Warn(format string, args ...interface{}) {
 	Get().Warn(format, args...)
 }
 
+// Error logs an error (file only, not shown to user)
 func Error(format string, args ...interface{}) {
 	Get().Error(format, args...)
+}
+
+// InfoPrint logs an info message AND prints to stderr for user visibility
+func InfoPrint(format string, args ...interface{}) {
+	Get().InfoPrint(format, args...)
+}
+
+// WarnPrint logs a warning AND prints to stderr for user visibility
+func WarnPrint(format string, args ...interface{}) {
+	Get().WarnPrint(format, args...)
+}
+
+// ErrorPrint logs an error AND prints to stderr for user visibility
+func ErrorPrint(format string, args ...interface{}) {
+	Get().ErrorPrint(format, args...)
 }

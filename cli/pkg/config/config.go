@@ -65,13 +65,6 @@ func ReadSettings() (*ClaudeSettings, error) {
 	return &settings, nil
 }
 
-// WriteSettings writes the Claude settings file using atomic write
-// This is a convenience wrapper for backwards compatibility
-// New code should use AtomicUpdateSettings instead for race-free updates
-func WriteSettings(settings *ClaudeSettings) error {
-	return writeSettingsInternal(settings, time.Time{})
-}
-
 // writeSettingsInternal writes settings with optional mtime-based optimistic locking
 // If expectedMtime is zero, mtime checking is skipped
 // If expectedMtime is non-zero, it checks mtime and returns error on mismatch

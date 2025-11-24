@@ -164,11 +164,6 @@ func LoadConfig() (Config, error) {
 	return loadConfigFromPath(GetConfigPath())
 }
 
-// SaveConfig saves the redaction config to the standard location
-func SaveConfig(config Config) error {
-	return saveConfigToPath(GetConfigPath(), config)
-}
-
 // IsEnabled returns true if redaction is currently enabled
 func IsEnabled() bool {
 	return isEnabledInDir(getConfabDir())

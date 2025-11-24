@@ -34,11 +34,3 @@ func Debug(msg string, args ...any) {
 func Warn(msg string, args ...any) {
 	log.Warn(msg, args...)
 }
-
-// SetLevel sets the minimum log level
-func SetLevel(level slog.Level) {
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: level,
-	})
-	log = slog.New(handler)
-}

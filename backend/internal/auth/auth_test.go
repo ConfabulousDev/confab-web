@@ -176,7 +176,7 @@ func SetUserIDForTest(ctx context.Context, userID int64) context.Context {
 // Test GetUserID context extraction
 func TestGetUserID(t *testing.T) {
 	t.Run("extracts user ID from context", func(t *testing.T) {
-		ctx := SetUserIDForTest(nil, 12345)
+		ctx := SetUserIDForTest(context.Background(), 12345)
 		userID, ok := GetUserID(ctx)
 
 		if !ok {

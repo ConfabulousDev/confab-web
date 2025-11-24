@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,8 @@ TODO: Implement device code flow for remote/headless scenarios (similar to 'gh a
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
+	logger.Info("Starting login flow")
+
 	backendURL, err := cmd.Flags().GetString("backend-url")
 	if err != nil {
 		return fmt.Errorf("failed to get backend-url flag: %w", err)
@@ -54,6 +57,8 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	logger.Debug("Login parameters: backend=%s, keyName=%s", backendURL, keyName)
+
 	fmt.Println("=== Confab Login ===")
 	fmt.Println()
 	fmt.Printf("Backend: %s\n", backendURL)
@@ -63,6 +68,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// Start localhost callback server
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		logger.Error("Failed to start callback server: %v", err)
 		return fmt.Errorf("failed to start callback server: %w", err)
 	}
 	defer listener.Close()
@@ -70,6 +76,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	port := listener.Addr().(*net.TCPAddr).Port
 	callbackURL := fmt.Sprintf("http://localhost:%d", port)
 
+	logger.Info("Started callback server on port %d", port)
 	fmt.Printf("Starting callback server on port %d...\n", port)
 
 	// Channel to receive API key
@@ -154,9 +161,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		url.QueryEscape(keyName),
 	)
 
+	logger.Debug("Opening browser: %s", authorizeURL)
 	fmt.Println("Opening browser for authentication...")
 	fmt.Println()
 	if err := openBrowser(authorizeURL); err != nil {
+		logger.Warn("Failed to open browser: %v", err)
 		fmt.Println("Failed to open browser automatically.")
 		fmt.Println("Please open this URL manually:")
 		fmt.Println()
@@ -173,11 +182,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	select {
 	case apiKey = <-apiKeyChan:
-		// Success!
+		logger.Info("Received API key from callback")
 	case err := <-errorChan:
+		logger.Error("Authentication failed: %v", err)
 		server.Close()
 		return fmt.Errorf("authentication failed: %w", err)
 	case <-timeout:
+		logger.Error("Authentication timeout after %v", utils.OAuthFlowTimeout)
 		server.Close()
 		return fmt.Errorf("authentication timeout after %v", utils.OAuthFlowTimeout)
 	}
@@ -192,12 +203,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := config.SaveUploadConfig(cfg); err != nil {
+		logger.Error("Failed to save config: %v", err)
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
+	logger.Info("Login successful, config saved")
 	fmt.Println("✓ Authentication successful!")
 	fmt.Println()
-	fmt.Printf("API Key: %s\n", utils.TruncateSecret(apiKey, 12, 4))
 	fmt.Printf("Backend: %s\n", backendURL)
 	fmt.Println()
 	fmt.Println("Cloud sync is now enabled.")

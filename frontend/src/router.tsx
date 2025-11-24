@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import App from './App';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Lazy load pages for code splitting
 const HomePage = lazy(() => import('@/pages/HomePage'));
@@ -12,13 +12,9 @@ const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
-// Loading fallback component
+// Loading fallback - minimal to avoid flash
 function PageLoader() {
-  return (
-    <div style={{ padding: '2rem' }}>
-      <LoadingSkeleton variant="list" count={5} />
-    </div>
-  );
+  return null;
 }
 
 export const router = createBrowserRouter([
@@ -38,7 +34,9 @@ export const router = createBrowserRouter([
         path: 'sessions',
         element: (
           <Suspense fallback={<PageLoader />}>
-            <SessionsPage />
+            <ProtectedRoute>
+              <SessionsPage />
+            </ProtectedRoute>
           </Suspense>
         ),
       },
@@ -46,7 +44,9 @@ export const router = createBrowserRouter([
         path: 'sessions/:id',
         element: (
           <Suspense fallback={<PageLoader />}>
-            <SessionDetailPage />
+            <ProtectedRoute>
+              <SessionDetailPage />
+            </ProtectedRoute>
           </Suspense>
         ),
       },
@@ -62,7 +62,9 @@ export const router = createBrowserRouter([
         path: 'keys',
         element: (
           <Suspense fallback={<PageLoader />}>
-            <APIKeysPage />
+            <ProtectedRoute>
+              <APIKeysPage />
+            </ProtectedRoute>
           </Suspense>
         ),
       },
@@ -70,7 +72,9 @@ export const router = createBrowserRouter([
         path: 'shares',
         element: (
           <Suspense fallback={<PageLoader />}>
-            <ShareLinksPage />
+            <ProtectedRoute>
+              <ShareLinksPage />
+            </ProtectedRoute>
           </Suspense>
         ),
       },

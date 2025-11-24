@@ -161,9 +161,3 @@ func UserKeyFunc(userIDKey interface{}) func(*http.Request) string {
 		return ""
 	}
 }
-
-// EndpointKeyFunc combines IP and endpoint path for per-endpoint rate limiting
-func EndpointKeyFunc(r *http.Request) string {
-	ip := getClientIP(r)
-	return fmt.Sprintf("%s:%s", ip, r.URL.Path)
-}

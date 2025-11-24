@@ -46,7 +46,6 @@ var statusCmd = &cobra.Command{
 			fmt.Println("Cloud Sync:")
 			if cfg.APIKey != "" {
 				fmt.Printf("  Backend: %s\n", cfg.BackendURL)
-				fmt.Printf("  API Key: %s\n", utils.TruncateSecret(cfg.APIKey, 12, 4))
 
 				// Validate API key
 				fmt.Print("  Validating API key... ")

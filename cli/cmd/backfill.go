@@ -11,6 +11,7 @@ import (
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/discovery"
 	confabhttp "github.com/santaclaude2025/confab/pkg/http"
+	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/types"
 	"github.com/santaclaude2025/confab/pkg/upload"
 	"github.com/santaclaude2025/confab/pkg/utils"
@@ -25,27 +26,33 @@ them to the cloud backend. Sessions modified within the last 20 minutes are skip
 (likely still in progress). Use 'confab save <session-id>' to force upload
 a specific session.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		logger.Info("Starting backfill")
 		fmt.Println("=== Confab: Backfill Historical Sessions ===")
 		fmt.Println()
 
 		// Check authentication
 		cfg, err := config.EnsureAuthenticated()
 		if err != nil {
+			logger.Error("Authentication check failed: %v", err)
 			return err
 		}
 
 		// Scan for sessions
+		logger.Info("Scanning for sessions in ~/.claude/projects")
 		fmt.Println("Scanning ~/.claude/projects...")
 		sessions, err := discovery.ScanAllSessions()
 		if err != nil {
+			logger.Error("Failed to scan for sessions: %v", err)
 			return fmt.Errorf("failed to scan for sessions: %w", err)
 		}
 
 		if len(sessions) == 0 {
+			logger.Info("No sessions found")
 			fmt.Println("No sessions found in ~/.claude/projects/")
 			return nil
 		}
 
+		logger.Info("Found %d session(s)", len(sessions))
 		fmt.Printf("Found %d session(s)\n", len(sessions))
 		fmt.Println()
 
@@ -56,8 +63,12 @@ a specific session.`,
 		// Determine which sessions need uploading
 		toUpload, alreadySynced, err := determineSessionsToUpload(cfg, oldSessions)
 		if err != nil {
+			logger.Error("Failed to check existing sessions: %v", err)
 			return fmt.Errorf("failed to check existing sessions: %w", err)
 		}
+
+		logger.Debug("Sessions to upload: %d, already synced: %d, recent (skipped): %d",
+			len(toUpload), len(alreadySynced), len(recentSessions))
 
 		// Print summary
 		printBackfillSummary(toUpload, alreadySynced, recentSessions)
@@ -78,6 +89,7 @@ a specific session.`,
 		succeeded, failed := uploadSessionsWithProgress(cfg, toUpload)
 
 		// Print final summary
+		logger.Info("Backfill complete: %d succeeded, %d failed", succeeded, failed)
 		if failed > 0 {
 			fmt.Printf("Uploaded %d session(s), %d failed.\n", succeeded, failed)
 		} else {
@@ -175,9 +187,11 @@ func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.S
 
 		err := uploadSession(cfg, session)
 		if err != nil {
+			logger.Error("Failed to upload session %s: %v", session.SessionID, err)
 			fmt.Printf("\n  Error uploading %s: %v\n", utils.TruncateSecret(session.SessionID, 8, 0), err)
 			failed++
 		} else {
+			logger.Debug("Uploaded session %s", session.SessionID)
 			succeeded++
 		}
 	}
