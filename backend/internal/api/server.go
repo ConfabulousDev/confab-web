@@ -293,7 +293,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// serveSPA serves the SvelteKit static files with SPA fallback
+// serveSPA serves the static frontend files with SPA fallback
 func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 	fileServer := http.FileServer(http.Dir(staticDir))
 	// Clean staticDir once during initialization for security check
@@ -369,8 +369,8 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 			// Content-Security-Policy: Prevents XSS attacks
 			// Different policies for static frontend vs API-only mode
 			if servingStatic {
-				// Relaxed CSP for SvelteKit: allows inline scripts needed for SPA bootstrap
-				// - script-src 'self' 'unsafe-inline': Allow inline scripts (SvelteKit needs this)
+				// Relaxed CSP for SPA frontend: allows inline scripts needed for SPA bootstrap
+				// - script-src 'self' 'unsafe-inline': Allow inline scripts (React apps may need this)
 				// - style-src 'self' 'unsafe-inline': Allow inline styles
 				w.Header().Set("Content-Security-Policy",
 					"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")

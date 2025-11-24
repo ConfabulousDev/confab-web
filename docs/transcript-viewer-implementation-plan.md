@@ -183,11 +183,11 @@ export function buildAgentTree(
 
 #### 1.3: Component Structure
 Create skeleton components:
-- [ ] `TranscriptViewer.svelte` - Top-level viewer
-- [ ] `MessageList.svelte` - List of messages
-- [ ] `Message.svelte` - Single message renderer
-- [ ] `ContentBlock.svelte` - Renders different content types
-- [ ] `AgentPanel.svelte` - Nested agent view
+- [ ] `TranscriptViewer.tsx` - Top-level viewer
+- [ ] `MessageList.tsx` - List of messages
+- [ ] `Message.tsx` - Single message renderer
+- [ ] `ContentBlock.tsx` - Renders different content types
+- [ ] `AgentPanel.tsx` - Nested agent view
 
 **Deliverable:** Working infrastructure to fetch and parse transcripts
 
@@ -205,7 +205,7 @@ Create skeleton components:
 ### Tasks
 
 #### 2.1: Message Component
-Implement `Message.svelte`:
+Implement `Message.tsx`:
 - [ ] Detect message role (user vs assistant)
 - [ ] Apply different styling for each role
   - User: Blue/purple, left-aligned
@@ -213,48 +213,58 @@ Implement `Message.svelte`:
 - [ ] Display timestamp if available
 - [ ] Handle multi-part content (array of blocks)
 
-```svelte
-<!-- Message.svelte -->
-<script lang="ts">
-  import type { TranscriptMessage } from '$lib/types/transcript';
-  import ContentBlock from './ContentBlock.svelte';
+```tsx
+// Message.tsx
+import React from 'react';
+import type { TranscriptMessage } from '../types/transcript';
+import { ContentBlock } from './ContentBlock';
 
-  export let message: TranscriptMessage;
-  export let index: number;
-</script>
+interface MessageProps {
+  message: TranscriptMessage;
+  index: number;
+}
 
-<div class="message message-{message.role}">
-  <div class="message-header">
-    <span class="role">{message.role}</span>
-    {#if message.timestamp}
-      <span class="timestamp">{formatTimestamp(message.timestamp)}</span>
-    {/if}
-  </div>
+const formatTimestamp = (ts: string) => {
+  // Format timestamp implementation
+  return new Date(ts).toLocaleTimeString();
+};
 
-  <div class="message-content">
-    {#each message.content as block}
-      <ContentBlock {block} />
-    {/each}
-  </div>
-</div>
+export const Message: React.FC<MessageProps> = ({ message, index }) => {
+  return (
+    <div className={`message message-${message.role}`}>
+      <div className="message-header">
+        <span className="role">{message.role}</span>
+        {message.timestamp && (
+          <span className="timestamp">{formatTimestamp(message.timestamp)}</span>
+        )}
+      </div>
+
+      <div className="message-content">
+        {message.content.map((block, idx) => (
+          <ContentBlock key={idx} block={block} />
+        ))}
+      </div>
+    </div>
+  );
+};
 ```
 
 #### 2.2: Text Content Block
-Implement basic text rendering in `ContentBlock.svelte`:
+Implement basic text rendering in `ContentBlock.tsx`:
 - [ ] Handle plain text blocks
 - [ ] Preserve formatting (whitespace, newlines)
 - [ ] Support markdown rendering (optional)
 - [ ] Auto-link URLs
 
 #### 2.3: Message List Layout
-Implement `MessageList.svelte`:
+Implement `MessageList.tsx`:
 - [ ] Render messages in chronological order
 - [ ] Add visual separators between messages
 - [ ] Implement virtualization for large transcripts (optional)
 - [ ] Add "scroll to bottom" behavior
 
 #### 2.4: Integration with RunCard
-Update `RunCard.svelte`:
+Update `RunCard.tsx`:
 - [ ] Add "View Transcript" button/toggle
 - [ ] Load and display TranscriptViewer
 - [ ] Handle loading states
@@ -277,34 +287,50 @@ Update `RunCard.svelte`:
 ### Tasks
 
 #### 3.1: Tool Use Block Renderer
-Create `ToolUseBlock.svelte`:
+Create `ToolUseBlock.tsx`:
 - [ ] Display tool name prominently
 - [ ] Render input parameters as formatted JSON
 - [ ] Add syntax highlighting (use Prism.js or Shiki)
 - [ ] Make collapsible (start collapsed for large inputs)
 - [ ] Add "Copy" button for parameters
 
-```svelte
-<div class="tool-use">
-  <div class="tool-header" on:click={toggle}>
-    <span class="tool-icon">🛠️</span>
-    <span class="tool-name">{block.name}</span>
-    <span class="expand-icon">{expanded ? '▼' : '▶'}</span>
-  </div>
+```tsx
+import React, { useState } from 'react';
+import { CodeBlock } from './CodeBlock';
 
-  {#if expanded}
-    <div class="tool-input">
-      <CodeBlock
-        language="json"
-        code={JSON.stringify(block.input, null, 2)}
-      />
+interface ToolUseBlockProps {
+  block: {
+    name: string;
+    input: any;
+  };
+}
+
+export const ToolUseBlock: React.FC<ToolUseBlockProps> = ({ block }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="tool-use">
+      <div className="tool-header" onClick={() => setExpanded(!expanded)}>
+        <span className="tool-icon">🛠️</span>
+        <span className="tool-name">{block.name}</span>
+        <span className="expand-icon">{expanded ? '▼' : '▶'}</span>
+      </div>
+
+      {expanded && (
+        <div className="tool-input">
+          <CodeBlock
+            language="json"
+            code={JSON.stringify(block.input, null, 2)}
+          />
+        </div>
+      )}
     </div>
-  {/if}
-</div>
+  );
+};
 ```
 
 #### 3.2: Tool Result Block Renderer
-Create `ToolResultBlock.svelte`:
+Create `ToolResultBlock.tsx`:
 - [ ] Match result to corresponding tool use (by tool_use_id)
 - [ ] Display result content with syntax highlighting
 - [ ] Distinguish success vs error states
@@ -318,17 +344,17 @@ Create `ToolResultBlock.svelte`:
 
 #### 3.3: Code Syntax Highlighting
 - [ ] Install syntax highlighting library (`npm install shiki`)
-- [ ] Create `CodeBlock.svelte` component
+- [ ] Create `CodeBlock.tsx` component
 - [ ] Support multiple languages (typescript, python, bash, json, etc.)
 - [ ] Add line numbers
 - [ ] Add copy button
 
 #### 3.4: Tool-Specific Renderers
 Create specialized renderers for common tools:
-- [ ] `BashOutput.svelte` - Terminal-style display
-- [ ] `FileContent.svelte` - File viewer with line numbers
-- [ ] `GrepResults.svelte` - Search results with highlights
-- [ ] `ImageBlock.svelte` - Image viewer (if images in transcripts)
+- [ ] `BashOutput.tsx` - Terminal-style display
+- [ ] `FileContent.tsx` - File viewer with line numbers
+- [ ] `GrepResults.tsx` - Search results with highlights
+- [ ] `ImageBlock.tsx` - Image viewer (if images in transcripts)
 
 **Deliverable:** Full tool use/result visualization
 
@@ -346,26 +372,41 @@ Create specialized renderers for common tools:
 ### Tasks
 
 #### 4.1: Thinking Block Renderer
-Create `ThinkingBlock.svelte`:
+Create `ThinkingBlock.tsx`:
 - [ ] Distinctive visual style (italic, muted color)
 - [ ] Collapsible by default (optional to show)
 - [ ] Add icon (🤔 or brain emoji)
 - [ ] Support markdown in thinking content
 
-```svelte
-<div class="thinking-block">
-  <div class="thinking-header" on:click={toggle}>
-    <span class="thinking-icon">💭</span>
-    <span>Thinking...</span>
-    <span>{expanded ? 'Hide' : 'Show'}</span>
-  </div>
+```tsx
+import React, { useState } from 'react';
+import { Markdown } from './Markdown';
 
-  {#if expanded}
-    <div class="thinking-content">
-      <Markdown content={block.content} />
+interface ThinkingBlockProps {
+  block: {
+    content: string;
+  };
+}
+
+export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ block }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="thinking-block">
+      <div className="thinking-header" onClick={() => setExpanded(!expanded)}>
+        <span className="thinking-icon">💭</span>
+        <span>Thinking...</span>
+        <span>{expanded ? 'Hide' : 'Show'}</span>
+      </div>
+
+      {expanded && (
+        <div className="thinking-content">
+          <Markdown content={block.content} />
+        </div>
+      )}
     </div>
-  {/if}
-</div>
+  );
+};
 ```
 
 #### 4.2: Global Thinking Toggle
@@ -391,41 +432,46 @@ Add viewer-level setting:
 ### Tasks
 
 #### 5.1: Agent Panel Component
-Create `AgentPanel.svelte`:
+Create `AgentPanel.tsx`:
 - [ ] Recursive component (can contain nested AgentPanels)
 - [ ] Visual nesting (indentation, border, background color)
 - [ ] Header showing agent ID and type
 - [ ] Collapsible (start collapsed for deep nesting)
 - [ ] Contains full MessageList
 
-```svelte
-<script lang="ts">
-  import type { AgentNode } from '$lib/services/agentTreeBuilder';
-  import MessageList from './MessageList.svelte';
+```tsx
+import React, { useState } from 'react';
+import type { AgentNode } from '../services/agentTreeBuilder';
+import MessageList from './MessageList';
 
-  export let agent: AgentNode;
-  export let depth: number = 0;
+interface AgentPanelProps {
+  agent: AgentNode;
+  depth?: number;
+}
 
-  let expanded = depth < 2; // Auto-expand first 2 levels
-</script>
+export const AgentPanel: React.FC<AgentPanelProps> = ({ agent, depth = 0 }) => {
+  const [expanded, setExpanded] = useState(depth < 2); // Auto-expand first 2 levels
 
-<div class="agent-panel" style="margin-left: {depth * 20}px">
-  <div class="agent-header" on:click={toggle}>
-    <span class="agent-icon">🤖</span>
-    <span class="agent-id">Agent {agent.agentId}</span>
-    <span class="message-count">{agent.transcript.length} messages</span>
-  </div>
+  return (
+    <div className="agent-panel" style={{ marginLeft: `${depth * 20}px` }}>
+      <div className="agent-header" onClick={() => setExpanded(!expanded)}>
+        <span className="agent-icon">🤖</span>
+        <span className="agent-id">Agent {agent.agentId}</span>
+        <span className="message-count">{agent.transcript.length} messages</span>
+      </div>
 
-  {#if expanded}
-    <div class="agent-content">
-      <MessageList messages={agent.transcript} />
+      {expanded && (
+        <div className="agent-content">
+          <MessageList messages={agent.transcript} />
 
-      {#each agent.children as child}
-        <svelte:self agent={child} depth={depth + 1} />
-      {/each}
+          {agent.children.map((child, index) => (
+            <AgentPanel key={index} agent={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
     </div>
-  {/if}
-</div>
+  );
+};
 ```
 
 #### 5.2: Agent Linking
@@ -616,19 +662,19 @@ export function searchTranscript(
 frontend/src/lib/
 ├── components/
 │   ├── transcript/
-│   │   ├── TranscriptViewer.svelte
-│   │   ├── MessageList.svelte
-│   │   ├── Message.svelte
-│   │   ├── ContentBlock.svelte
+│   │   ├── TranscriptViewer.tsx
+│   │   ├── MessageList.tsx
+│   │   ├── Message.tsx
+│   │   ├── ContentBlock.tsx
 │   │   ├── blocks/
-│   │   │   ├── TextBlock.svelte
-│   │   │   ├── ToolUseBlock.svelte
-│   │   │   ├── ToolResultBlock.svelte
-│   │   │   ├── ThinkingBlock.svelte
-│   │   │   └── CodeBlock.svelte
-│   │   ├── AgentPanel.svelte
-│   │   └── SearchBar.svelte
-│   └── RunCard.svelte (update)
+│   │   │   ├── TextBlock.tsx
+│   │   │   ├── ToolUseBlock.tsx
+│   │   │   ├── ToolResultBlock.tsx
+│   │   │   ├── ThinkingBlock.tsx
+│   │   │   └── CodeBlock.tsx
+│   │   ├── AgentPanel.tsx
+│   │   └── SearchBar.tsx
+│   └── RunCard.tsx (update)
 ├── services/
 │   ├── transcriptService.ts
 │   ├── agentTreeBuilder.ts

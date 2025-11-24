@@ -448,7 +448,7 @@ Content-Security-Policy: default-src 'self';
 **SPA Mode (with STATIC_FILES_DIR):**
 ```
 Content-Security-Policy: default-src 'self';
-                         script-src 'self' 'unsafe-inline';  // SvelteKit needs inline
+                         script-src 'self' 'unsafe-inline';  // React apps may need inline
                          style-src 'self' 'unsafe-inline';
                          img-src 'self' data: https:;
                          font-src 'self';

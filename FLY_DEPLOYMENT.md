@@ -127,7 +127,7 @@ curl https://confab.fly.dev/health
 ### Check Frontend
 ```bash
 open https://confab.fly.dev
-# Should see SvelteKit frontend
+# Should see React frontend
 ```
 
 ### Test Login
