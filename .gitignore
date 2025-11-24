@@ -1,3 +1,7 @@
+# MacOS
+
+.DS_Store
+
 # Binaries
 confab
 bin/
