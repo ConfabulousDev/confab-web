@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/santaclaude2025/confab/backend/internal/models"
 )
 
@@ -19,7 +19,7 @@ type DB struct {
 
 // Connect establishes a connection to PostgreSQL
 func Connect(dsn string) (*DB, error) {
-	conn, err := sql.Open("postgres", dsn)
+	conn, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -31,11 +31,11 @@ func Connect(dsn string) (*DB, error) {
 
 	// Configure connection pool
 	// MaxOpenConns: Limit total connections to avoid overwhelming the database
-	conn.SetMaxOpenConns(25)
+	conn.SetMaxOpenConns(500)
 	// MaxIdleConns: Keep some connections ready for reuse, but not too many
-	conn.SetMaxIdleConns(5)
+	conn.SetMaxIdleConns(100)
 	// ConnMaxLifetime: Recycle connections periodically to avoid stale connections
-	conn.SetConnMaxLifetime(5 * time.Minute)
+	conn.SetConnMaxLifetime(20 * time.Minute)
 
 	return &DB{conn: conn}, nil
 }
@@ -539,19 +539,19 @@ func extractRepoName(repoURL string) *string {
 
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
-	SessionID          string    `json:"session_id"`
-	FirstSeen          time.Time `json:"first_seen"`
-	RunCount           int       `json:"run_count"`
-	LastRunTime        time.Time `json:"last_run_time"`
-	Title              *string   `json:"title,omitempty"`
-	SessionType        string    `json:"session_type"`
-	MaxTranscriptSize  int64     `json:"max_transcript_size"` // Max transcript size across all runs (0 = empty session)
-	GitRepo            *string   `json:"git_repo,omitempty"`  // Git repository from latest run (e.g., "org/repo") - extracted from git_info JSONB
-	GitBranch          *string   `json:"git_branch,omitempty"` // Git branch from latest run - extracted from git_info JSONB
-	IsOwner            bool      `json:"is_owner"`             // true if user owns this session
-	AccessType         string    `json:"access_type"`          // "owner" | "private_share" | "public_share"
-	ShareToken         *string   `json:"share_token,omitempty"` // share token if accessed via share
-	SharedByEmail      *string   `json:"shared_by_email,omitempty"` // email of user who shared (if not owner)
+	SessionID         string    `json:"session_id"`
+	FirstSeen         time.Time `json:"first_seen"`
+	RunCount          int       `json:"run_count"`
+	LastRunTime       time.Time `json:"last_run_time"`
+	Title             *string   `json:"title,omitempty"`
+	SessionType       string    `json:"session_type"`
+	MaxTranscriptSize int64     `json:"max_transcript_size"`       // Max transcript size across all runs (0 = empty session)
+	GitRepo           *string   `json:"git_repo,omitempty"`        // Git repository from latest run (e.g., "org/repo") - extracted from git_info JSONB
+	GitBranch         *string   `json:"git_branch,omitempty"`      // Git branch from latest run - extracted from git_info JSONB
+	IsOwner           bool      `json:"is_owner"`                  // true if user owns this session
+	AccessType        string    `json:"access_type"`               // "owner" | "private_share" | "public_share"
+	ShareToken        *string   `json:"share_token,omitempty"`     // share token if accessed via share
+	SharedByEmail     *string   `json:"shared_by_email,omitempty"` // email of user who shared (if not owner)
 }
 
 // ListUserSessions returns all sessions for a user
@@ -853,6 +853,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		if err != nil {
 			return nil, fmt.Errorf("failed to query files: %w", err)
 		}
+		defer fileRows.Close()
 
 		for fileRows.Next() {
 			var file FileDetail
@@ -1032,6 +1033,7 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 			if err != nil {
 				return nil, fmt.Errorf("failed to get invites: %w", err)
 			}
+			defer emailRows.Close()
 
 			var emails []string
 			for emailRows.Next() {
@@ -1108,6 +1110,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 			if err != nil {
 				return nil, fmt.Errorf("failed to get invites: %w", err)
 			}
+			defer emailRows.Close()
 
 			var emails []string
 			for emailRows.Next() {
@@ -1261,6 +1264,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID, shareToken string
 		if err != nil {
 			return nil, fmt.Errorf("failed to query files: %w", err)
 		}
+		defer fileRows.Close()
 
 		for fileRows.Next() {
 			var file FileDetail
