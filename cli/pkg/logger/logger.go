@@ -13,6 +13,8 @@ import (
 )
 
 const (
+	// LogDirEnv is the environment variable to override the default log directory
+	LogDirEnv   = "CONFAB_LOG_DIR"
 	logDirName  = ".confab/logs"
 	logFileName = "confab.log"
 	maxSizeMB   = 1     // 1MB per file
@@ -65,13 +67,16 @@ var (
 func Init() error {
 	var err error
 	once.Do(func() {
-		home, homeErr := os.UserHomeDir()
-		if homeErr != nil {
-			err = fmt.Errorf("failed to get home directory: %w", homeErr)
-			return
+		logDir := os.Getenv(LogDirEnv)
+		if logDir == "" {
+			home, homeErr := os.UserHomeDir()
+			if homeErr != nil {
+				err = fmt.Errorf("failed to get home directory: %w", homeErr)
+				return
+			}
+			logDir = filepath.Join(home, logDirName)
 		}
 
-		logDir := filepath.Join(home, logDirName)
 		if mkdirErr := os.MkdirAll(logDir, 0755); mkdirErr != nil {
 			err = fmt.Errorf("failed to create log directory: %w", mkdirErr)
 			return

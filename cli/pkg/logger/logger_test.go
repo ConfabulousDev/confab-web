@@ -24,11 +24,9 @@ func TestInit(t *testing.T) {
 	instance = nil
 	once = sync.Once{}
 
-	// Set HOME to temp dir for test
-	tmpHome := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", oldHome)
+	// Set CONFAB_LOG_DIR to temp dir for test isolation
+	tmpDir := t.TempDir()
+	t.Setenv(LogDirEnv, tmpDir)
 
 	// Init logger
 	err := Init()
@@ -36,10 +34,9 @@ func TestInit(t *testing.T) {
 		t.Fatalf("Init() failed: %v", err)
 	}
 
-	// Verify log directory was created
-	logDir := filepath.Join(tmpHome, logDirName)
-	if _, err := os.Stat(logDir); os.IsNotExist(err) {
-		t.Errorf("Log directory not created: %s", logDir)
+	// Verify log directory exists (it's the tmpDir itself now)
+	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
+		t.Errorf("Log directory not created: %s", tmpDir)
 	}
 
 	// Note: lumberjack creates the file lazily on first write
@@ -49,7 +46,7 @@ func TestInit(t *testing.T) {
 	}
 
 	// Verify log file was created after writing
-	logFile := filepath.Join(logDir, logFileName)
+	logFile := filepath.Join(tmpDir, logFileName)
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		t.Errorf("Log file not created: %s", logFile)
 	}
@@ -309,6 +306,10 @@ func TestGet(t *testing.T) {
 	instance = nil
 	once = sync.Once{}
 
+	// Set CONFAB_LOG_DIR to temp dir for test isolation
+	tmpDir := t.TempDir()
+	t.Setenv(LogDirEnv, tmpDir)
+
 	// Get should initialize if needed
 	logger := Get()
 	if logger == nil {
@@ -319,6 +320,11 @@ func TestGet(t *testing.T) {
 	logger2 := Get()
 	if logger != logger2 {
 		t.Error("Get() returned different instances")
+	}
+
+	// Clean up the logger file
+	if instance != nil && instance.file != nil {
+		instance.file.Close()
 	}
 }
 
