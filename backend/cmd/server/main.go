@@ -21,16 +21,13 @@ func main() {
 	config := loadConfig()
 
 	// Initialize database connection
+	// Note: Migrations are run separately via CLI before starting the server
+	// See: migrate -database "$DATABASE_URL" -path internal/db/migrations up
 	database, err := db.Connect(config.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer database.Close()
-
-	// Run migrations
-	if err := database.RunMigrations(); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
-	}
 
 	// Initialize S3/MinIO storage
 	store, err := storage.NewS3Storage(config.S3Config)

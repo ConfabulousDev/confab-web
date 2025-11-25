@@ -34,6 +34,7 @@ vendor/
 
 # Secrets (DO NOT commit filled-in secrets!)
 fly-secrets.sh
+.envrc
 .env
 .env.local
 .env.production
