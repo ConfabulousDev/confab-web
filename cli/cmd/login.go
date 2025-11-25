@@ -93,50 +93,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			return
 		}
 
-		// Send success page
-		html := `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Confab Login Success</title>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .container {
-            background: white;
-            padding: 3rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            text-align: center;
-            max-width: 400px;
-        }
-        h1 { color: #333; margin: 0 0 1rem 0; }
-        p { color: #666; margin: 0.5rem 0; }
-        .success { color: #10b981; font-size: 3rem; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="success">✓</div>
-        <h1>Login Successful!</h1>
-        <p>Your API key has been saved.</p>
-        <p>You can close this window and return to your terminal.</p>
-    </div>
-    <script>
-        setTimeout(() => window.close(), 3000);
-    </script>
-</body>
-</html>`
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(html))
+		// Redirect to backend success page
+		successURL := backendURL + "/auth/login/success"
+		http.Redirect(w, r, successURL, http.StatusTemporaryRedirect)
 
 		apiKeyChan <- apiKey
 	})
