@@ -94,13 +94,13 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get params from URL
-		sessionID := chi.URLParam(r, "sessionId")
+		sessionPK := chi.URLParam(r, "sessionId")
 		shareToken := chi.URLParam(r, "shareToken")
 		fileIDStr := chi.URLParam(r, "fileId")
 
-		// Validate session ID
-		if err := validation.ValidateSessionID(sessionID); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+		// Validate session PK (UUID)
+		if sessionPK == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
@@ -131,9 +131,9 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		var viewerEmail *string
 		cookie, err := r.Cookie("confab_session")
 		if err == nil {
-			session, err := database.GetWebSession(dbCtx, cookie.Value)
+			webSession, err := database.GetWebSession(dbCtx, cookie.Value)
 			if err == nil {
-				user, err := database.GetUserByID(dbCtx, session.UserID)
+				user, err := database.GetUserByID(dbCtx, webSession.UserID)
 				if err == nil && user != nil {
 					viewerEmail = &user.Email
 				}
@@ -141,7 +141,7 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Validate share token and get file
-		file, err := database.GetSharedFileByID(dbCtx, sessionID, shareToken, fileID, viewerEmail)
+		file, err := database.GetSharedFileByID(dbCtx, sessionPK, shareToken, fileID, viewerEmail)
 		if err != nil {
 			if errors.Is(err, db.ErrFileNotFound) || errors.Is(err, db.ErrShareNotFound) {
 				respondError(w, http.StatusNotFound, "File not found")
@@ -178,7 +178,7 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 
 		// Audit log: Shared file downloaded
 		logger.Info("Shared file downloaded",
-			"session_id", sessionID,
+			"session_pk", sessionPK,
 			"share_token", shareToken,
 			"file_id", fileID,
 			"file_type", file.FileType,

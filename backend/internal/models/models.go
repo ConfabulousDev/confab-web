@@ -4,15 +4,40 @@ import "time"
 
 // User represents a confab user (OAuth-based)
 type User struct {
-	ID             int64     `json:"id"`
-	Email          string    `json:"email"`
-	Name           *string   `json:"name,omitempty"`
-	AvatarURL      *string   `json:"avatar_url,omitempty"`
-	GitHubID       *string   `json:"github_id,omitempty"`
-	GitHubUsername *string   `json:"github_username,omitempty"`
-	GoogleID       *string   `json:"google_id,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID        int64     `json:"id"`
+	Email     string    `json:"email"`
+	Name      *string   `json:"name,omitempty"`
+	AvatarURL *string   `json:"avatar_url,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// OAuthProvider represents supported OAuth providers
+type OAuthProvider string
+
+const (
+	ProviderGitHub OAuthProvider = "github"
+	ProviderGoogle OAuthProvider = "google"
+)
+
+// UserIdentity represents an OAuth identity linked to a user
+type UserIdentity struct {
+	ID               int64         `json:"id"`
+	UserID           int64         `json:"user_id"`
+	Provider         OAuthProvider `json:"provider"`
+	ProviderID       string        `json:"provider_id"`
+	ProviderUsername *string       `json:"provider_username,omitempty"`
+	CreatedAt        time.Time     `json:"created_at"`
+}
+
+// OAuthUserInfo contains user info fetched from an OAuth provider
+type OAuthUserInfo struct {
+	Provider         OAuthProvider
+	ProviderID       string
+	ProviderUsername string
+	Email            string
+	Name             string
+	AvatarURL        string
 }
 
 // WebSession represents a browser session (for OAuth)
@@ -87,8 +112,9 @@ type FileUpload struct {
 
 // SaveSessionResponse is the API response
 type SaveSessionResponse struct {
-	Success   bool   `json:"success"`
-	SessionID string `json:"session_id"`
-	RunID     int64  `json:"run_id"`
-	Message   string `json:"message,omitempty"`
+	Success    bool   `json:"success"`
+	SessionID  string `json:"session_id"`
+	RunID      int64  `json:"run_id"`
+	SessionURL string `json:"session_url"`
+	Message    string `json:"message,omitempty"`
 }

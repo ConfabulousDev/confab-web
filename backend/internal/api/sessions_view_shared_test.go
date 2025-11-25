@@ -32,12 +32,12 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 	// User A creates two sessions
 	sessionA1 := "session-a1"
 	sessionA2 := "session-a2"
-	testutil.CreateTestSession(t, env, userA.ID, sessionA1)
-	testutil.CreateTestSession(t, env, userA.ID, sessionA2)
+	sessionA1PK := testutil.CreateTestSession(t, env, userA.ID, sessionA1)
+	sessionA2PK := testutil.CreateTestSession(t, env, userA.ID, sessionA2)
 
 	// User B creates one session
 	sessionB1 := "session-b1"
-	testutil.CreateTestSession(t, env, userB.ID, sessionB1)
+	sessionB1PK := testutil.CreateTestSession(t, env, userB.ID, sessionB1)
 
 	t.Run("User B sees only their own session by default", func(t *testing.T) {
 		// Test with include_shared=false (default)
@@ -74,9 +74,9 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 	var shareID int64
 	var shareToken string
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, user_id, share_token, visibility)
-		 VALUES ($1, $2, $3, 'private') RETURNING id, share_token`,
-		sessionA1, userA.ID, testutil.GenerateShareToken()).Scan(&shareID, &shareToken)
+		`INSERT INTO session_shares (session_pk, share_token, visibility)
+		 VALUES ($1, $2, 'private') RETURNING id, share_token`,
+		sessionA1PK, testutil.GenerateShareToken()).Scan(&shareID, &shareToken)
 	if err != nil {
 		t.Fatalf("Failed to create share: %v", err)
 	}
@@ -146,9 +146,9 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 	var publicShareID int64
 	var publicShareToken string
 	err = env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, user_id, share_token, visibility)
-		 VALUES ($1, $2, $3, 'public') RETURNING id, share_token`,
-		sessionA2, userA.ID, testutil.GenerateShareToken()).Scan(&publicShareID, &publicShareToken)
+		`INSERT INTO session_shares (session_pk, share_token, visibility)
+		 VALUES ($1, $2, 'public') RETURNING id, share_token`,
+		sessionA2PK, testutil.GenerateShareToken()).Scan(&publicShareID, &publicShareToken)
 	if err != nil {
 		t.Fatalf("Failed to create public share: %v", err)
 	}
@@ -200,9 +200,9 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		// Create an expired share
 		yesterday := time.Now().UTC().Add(-24 * time.Hour)
 		_, err := env.DB.Exec(ctx,
-			`INSERT INTO session_shares (session_id, user_id, share_token, visibility, expires_at)
-			 VALUES ($1, $2, $3, 'public', $4)`,
-			sessionB1, userB.ID, testutil.GenerateShareToken(), yesterday)
+			`INSERT INTO session_shares (session_pk, share_token, visibility, expires_at)
+			 VALUES ($1, $2, 'public', $3)`,
+			sessionB1PK, testutil.GenerateShareToken(), yesterday)
 		if err != nil {
 			t.Fatalf("Failed to create expired share: %v", err)
 		}

@@ -23,8 +23,12 @@ function Header() {
     window.location.href = '/auth/logout';
   };
 
-  const handleLogin = () => {
+  const handleGitHubLogin = () => {
     window.location.href = '/auth/github/login';
+  };
+
+  const handleGoogleLogin = () => {
+    window.location.href = '/auth/google/login';
   };
 
   if (!isAuthenticated) {
@@ -40,8 +44,11 @@ function Header() {
           </button>
           {menuOpen && (
             <div className={styles.dropdown}>
-              <button className={styles.dropdownItem} onClick={handleLogin}>
+              <button className={styles.dropdownItem} onClick={handleGitHubLogin}>
                 Continue with GitHub
+              </button>
+              <button className={styles.dropdownItem} onClick={handleGoogleLogin}>
+                Continue with Google
               </button>
             </div>
           )}

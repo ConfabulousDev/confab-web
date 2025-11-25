@@ -26,8 +26,8 @@ func TestHandleGetFileContent_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 		sessionID := "test-session"
 
-		testutil.CreateTestSession(t, env, user.ID, sessionID)
-		runID := testutil.CreateTestRun(t, env, sessionID, user.ID, "Test", "/home/test", "transcript.jsonl")
+		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		runID := testutil.CreateTestRun(t, env, sessionPK, "Test", "/home/test", "transcript.jsonl")
 
 		// Upload file to S3
 		fileContent := []byte(`{"type":"message","content":"test"}`)
@@ -88,8 +88,8 @@ func TestHandleGetFileContent_Integration(t *testing.T) {
 		user2 := testutil.CreateTestUser(t, env, "user2@example.com", "User Two")
 
 		sessionID := "user2-session"
-		testutil.CreateTestSession(t, env, user2.ID, sessionID)
-		runID := testutil.CreateTestRun(t, env, sessionID, user2.ID, "Test", "/home/test", "transcript.jsonl")
+		sessionPK := testutil.CreateTestSession(t, env, user2.ID, sessionID)
+		runID := testutil.CreateTestRun(t, env, sessionPK, "Test", "/home/test", "transcript.jsonl")
 
 		fileContent := []byte("user2 file")
 		s3Key := testutil.UploadTestFile(t, env, user2.ID, sessionID, "file.txt", fileContent)
@@ -165,8 +165,8 @@ func TestHandleGetSharedFileContent_Integration(t *testing.T) {
 		sessionID := "shared-session"
 		shareToken := "12345678901234567890123456789012" // Exactly 32 chars
 
-		testutil.CreateTestSession(t, env, user.ID, sessionID)
-		runID := testutil.CreateTestRun(t, env, sessionID, user.ID, "Test", "/home/test", "transcript.jsonl")
+		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		runID := testutil.CreateTestRun(t, env, sessionPK, "Test", "/home/test", "transcript.jsonl")
 
 		// Upload file to S3
 		fileContent := []byte(`{"type":"message","content":"shared"}`)
@@ -176,15 +176,15 @@ func TestHandleGetSharedFileContent_Integration(t *testing.T) {
 		fileID := testutil.CreateTestFile(t, env, runID, "transcript.jsonl", "transcript", s3Key, int64(len(fileContent)))
 
 		// Create public share
-		testutil.CreateTestShare(t, env, sessionID, user.ID, shareToken, "public", nil, nil)
+		testutil.CreateTestShare(t, env, sessionPK, shareToken, "public", nil, nil)
 
 		fileIDStr := strconv.FormatInt(fileID, 10)
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/share/"+sessionID+"/"+shareToken+"/files/"+fileIDStr, nil, 0)
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/share/"+sessionPK+"/"+shareToken+"/files/"+fileIDStr, nil, 0)
 		req = req.WithContext(context.Background()) // No auth required for public shares
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("sessionId", sessionPK)
 		rctx.URLParams.Add("shareToken", shareToken)
 		rctx.URLParams.Add("fileId", fileIDStr)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -207,8 +207,8 @@ func TestHandleGetSharedFileContent_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 		sessionID := "shared-session"
 
-		testutil.CreateTestSession(t, env, user.ID, sessionID)
-		runID := testutil.CreateTestRun(t, env, sessionID, user.ID, "Test", "/home/test", "transcript.jsonl")
+		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		runID := testutil.CreateTestRun(t, env, sessionPK, "Test", "/home/test", "transcript.jsonl")
 
 		fileContent := []byte("test")
 		s3Key := testutil.UploadTestFile(t, env, user.ID, sessionID, "file.txt", fileContent)
@@ -218,15 +218,15 @@ func TestHandleGetSharedFileContent_Integration(t *testing.T) {
 		// Create share with different token (must be 32 hex chars)
 		correctToken := "abc123def456abc123def456abc123de" // 32 hex chars
 		wrongToken := "111222333444555666777888999aaabb"   // 32 hex chars (different)
-		testutil.CreateTestShare(t, env, sessionID, user.ID, correctToken, "public", nil, nil)
+		testutil.CreateTestShare(t, env, sessionPK, correctToken, "public", nil, nil)
 
 		fileIDStr := strconv.FormatInt(fileID, 10)
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/share/"+sessionID+"/"+wrongToken+"/files/"+fileIDStr, nil, 0)
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/share/"+sessionPK+"/"+wrongToken+"/files/"+fileIDStr, nil, 0)
 		req = req.WithContext(context.Background())
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("sessionId", sessionPK)
 		rctx.URLParams.Add("shareToken", wrongToken)
 		rctx.URLParams.Add("fileId", fileIDStr)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -245,8 +245,8 @@ func TestHandleGetSharedFileContent_Integration(t *testing.T) {
 		sessionID := "expired-session"
 		shareToken := "deadbeefdeadbeefdeadbeefdeadbeef" // 32 hex chars
 
-		testutil.CreateTestSession(t, env, user.ID, sessionID)
-		runID := testutil.CreateTestRun(t, env, sessionID, user.ID, "Test", "/home/test", "transcript.jsonl")
+		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		runID := testutil.CreateTestRun(t, env, sessionPK, "Test", "/home/test", "transcript.jsonl")
 
 		fileContent := []byte("test")
 		s3Key := testutil.UploadTestFile(t, env, user.ID, sessionID, "file.txt", fileContent)
@@ -255,15 +255,15 @@ func TestHandleGetSharedFileContent_Integration(t *testing.T) {
 
 		// Create expired share (yesterday)
 		yesterday := time.Now().Add(-24 * time.Hour)
-		testutil.CreateTestShare(t, env, sessionID, user.ID, shareToken, "public", &yesterday, nil)
+		testutil.CreateTestShare(t, env, sessionPK, shareToken, "public", &yesterday, nil)
 
 		fileIDStr := strconv.FormatInt(fileID, 10)
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/share/"+sessionID+"/"+shareToken+"/files/"+fileIDStr, nil, 0)
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/share/"+sessionPK+"/"+shareToken+"/files/"+fileIDStr, nil, 0)
 		req = req.WithContext(context.Background())
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("sessionId", sessionPK)
 		rctx.URLParams.Add("shareToken", shareToken)
 		rctx.URLParams.Add("fileId", fileIDStr)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))

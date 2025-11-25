@@ -42,10 +42,10 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 			return
 		}
 
-		// Get session ID from URL
-		sessionID := chi.URLParam(r, "sessionId")
-		if err := validation.ValidateSessionID(sessionID); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+		// Get session PK from URL (UUID)
+		sessionPK := chi.URLParam(r, "sessionId")
+		if sessionPK == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
@@ -100,7 +100,7 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		defer cancel()
 
 		// Create share in database
-		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.Visibility, expiresAt, req.InvitedEmails)
+		share, err := database.CreateShare(ctx, sessionPK, userID, shareToken, req.Visibility, expiresAt, req.InvitedEmails)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -110,18 +110,18 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
-			logger.Error("Failed to create share", "error", err, "user_id", userID, "session_id", sessionID)
+			logger.Error("Failed to create share", "error", err, "user_id", userID, "session_pk", sessionPK)
 			respondError(w, http.StatusInternalServerError, "Failed to create share")
 			return
 		}
 
-		// Build share URL
-		shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
+		// Build share URL (uses session PK in URL)
+		shareURL := frontendURL + "/sessions/" + sessionPK + "/shared/" + shareToken
 
 		// Audit log: Share created
 		logger.Info("Share created",
 			"user_id", userID,
-			"session_id", sessionID,
+			"session_pk", sessionPK,
 			"share_token", shareToken,
 			"visibility", share.Visibility,
 			"invited_emails_count", len(share.InvitedEmails),
@@ -150,10 +150,10 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Get session ID from URL
-		sessionID := chi.URLParam(r, "sessionId")
-		if err := validation.ValidateSessionID(sessionID); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+		// Get session PK from URL (UUID)
+		sessionPK := chi.URLParam(r, "sessionId")
+		if sessionPK == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
@@ -162,7 +162,7 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get shares from database
-		shares, err := database.ListShares(ctx, sessionID, userID)
+		shares, err := database.ListShares(ctx, sessionPK, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -172,13 +172,13 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
-			logger.Error("Failed to list shares", "error", err, "user_id", userID, "session_id", sessionID)
+			logger.Error("Failed to list shares", "error", err, "user_id", userID, "session_pk", sessionPK)
 			respondError(w, http.StatusInternalServerError, "Failed to list shares")
 			return
 		}
 
 		// Success log
-		logger.Info("Shares listed", "user_id", userID, "session_id", sessionID, "count", len(shares))
+		logger.Info("Shares listed", "user_id", userID, "session_pk", sessionPK, "count", len(shares))
 
 		// Return empty array if no shares
 		if shares == nil {
@@ -232,13 +232,13 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 // HandleGetSharedSession returns a session accessed via share link
 func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get session ID and share token from URL
-		sessionID := chi.URLParam(r, "sessionId")
+		// Get session PK (UUID) and share token from URL
+		sessionPK := chi.URLParam(r, "sessionId")
 		shareToken := chi.URLParam(r, "shareToken")
 
-		// Validate session ID
-		if err := validation.ValidateSessionID(sessionID); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+		// Validate session PK
+		if sessionPK == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
@@ -257,9 +257,9 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		cookie, err := r.Cookie("confab_session")
 		if err == nil {
 			// User is logged in, get their email
-			session, err := database.GetWebSession(ctx, cookie.Value)
+			webSession, err := database.GetWebSession(ctx, cookie.Value)
 			if err == nil {
-				user, err := database.GetUserByID(ctx, session.UserID)
+				user, err := database.GetUserByID(ctx, webSession.UserID)
 				if err == nil {
 					viewerEmail = &user.Email
 				}
@@ -267,7 +267,7 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		}
 
 		// Get shared session
-		session, err := database.GetSharedSession(ctx, sessionID, shareToken, viewerEmail)
+		session, err := database.GetSharedSession(ctx, sessionPK, shareToken, viewerEmail)
 		if err != nil {
 			if errors.Is(err, db.ErrShareNotFound) || errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Share not found")
@@ -285,14 +285,14 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "You are not authorized to view this share")
 				return
 			}
-			logger.Error("Failed to get shared session", "error", err, "session_id", sessionID, "share_token", shareToken)
+			logger.Error("Failed to get shared session", "error", err, "session_pk", sessionPK, "share_token", shareToken)
 			respondError(w, http.StatusInternalServerError, "Failed to get shared session")
 			return
 		}
 
 		// Audit log: Shared session accessed
 		logger.Info("Shared session accessed",
-			"session_id", sessionID,
+			"session_pk", sessionPK,
 			"share_token", shareToken,
 			"viewer_email", viewerEmail)
 

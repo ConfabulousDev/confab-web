@@ -113,14 +113,14 @@ func TestSessionIsolation_Integration(t *testing.T) {
 
 		// Alice creates a session
 		sessionID := "private-session-456"
-		testutil.CreateTestSession(t, env, alice.ID, sessionID)
-		testutil.CreateTestRun(t, env, sessionID, alice.ID, "Alice's run", "/home/alice", "transcript.jsonl")
+		sessionPK := testutil.CreateTestSession(t, env, alice.ID, sessionID)
+		testutil.CreateTestRun(t, env, sessionPK, "Alice's run", "/home/alice", "transcript.jsonl")
 
-		// Bob tries to view Alice's session using the same session ID
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, bob.ID)
+		// Bob tries to view Alice's session using her session PK
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionPK, nil, bob.ID)
 
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("sessionId", sessionPK)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -139,16 +139,16 @@ func TestSessionIsolation_Integration(t *testing.T) {
 
 		// Alice creates a session
 		sessionID := "delete-test-session"
-		testutil.CreateTestSession(t, env, alice.ID, sessionID)
-		runID := testutil.CreateTestRun(t, env, sessionID, alice.ID, "Alice's run", "/home/alice", "transcript.jsonl")
+		sessionPK := testutil.CreateTestSession(t, env, alice.ID, sessionID)
+		runID := testutil.CreateTestRun(t, env, sessionPK, "Alice's run", "/home/alice", "transcript.jsonl")
 		testutil.CreateTestFile(t, env, runID, "transcript.jsonl", "transcript", "alice/"+sessionID+"/transcript.jsonl", 100)
 
 		// Bob tries to delete Alice's session
 		// Send empty JSON body (required by the handler)
-		req := testutil.AuthenticatedRequest(t, "DELETE", "/api/v1/sessions/"+sessionID, map[string]interface{}{}, bob.ID)
+		req := testutil.AuthenticatedRequest(t, "DELETE", "/api/v1/sessions/"+sessionPK, map[string]interface{}{}, bob.ID)
 
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("sessionId", sessionPK)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -181,16 +181,16 @@ func TestSessionIsolation_Integration(t *testing.T) {
 
 		// Alice creates a session
 		sessionID := "share-test-session"
-		testutil.CreateTestSession(t, env, alice.ID, sessionID)
+		sessionPK := testutil.CreateTestSession(t, env, alice.ID, sessionID)
 
 		// Bob tries to create a share for Alice's session
 		reqBody := CreateShareRequest{
 			Visibility: "public",
 		}
-		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sessions/"+sessionID+"/share", reqBody, bob.ID)
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sessions/"+sessionPK+"/share", reqBody, bob.ID)
 
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("sessionId", sessionPK)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -213,14 +213,14 @@ func TestSessionIsolation_Integration(t *testing.T) {
 
 		// Alice creates a session with a share
 		sessionID := "list-shares-test"
-		testutil.CreateTestSession(t, env, alice.ID, sessionID)
-		testutil.CreateTestShare(t, env, sessionID, alice.ID, testutil.GenerateShareToken(), "public", nil, nil)
+		sessionPK := testutil.CreateTestSession(t, env, alice.ID, sessionID)
+		testutil.CreateTestShare(t, env, sessionPK, testutil.GenerateShareToken(), "public", nil, nil)
 
 		// Bob tries to list Alice's shares
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID+"/shares", nil, bob.ID)
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionPK+"/shares", nil, bob.ID)
 
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("sessionId", sessionPK)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -328,10 +328,10 @@ func TestSessionIsolation_Integration(t *testing.T) {
 
 		// Both users have sessions with the same ID
 		sessionID := "cascade-test"
-		testutil.CreateTestSession(t, env, alice.ID, sessionID)
-		testutil.CreateTestSession(t, env, bob.ID, sessionID)
-		testutil.CreateTestRun(t, env, sessionID, alice.ID, "Alice run", "/alice", "t.jsonl")
-		testutil.CreateTestRun(t, env, sessionID, bob.ID, "Bob run", "/bob", "t.jsonl")
+		aliceSessionPK := testutil.CreateTestSession(t, env, alice.ID, sessionID)
+		bobSessionPK := testutil.CreateTestSession(t, env, bob.ID, sessionID)
+		testutil.CreateTestRun(t, env, aliceSessionPK, "Alice run", "/alice", "t.jsonl")
+		testutil.CreateTestRun(t, env, bobSessionPK, "Bob run", "/bob", "t.jsonl")
 
 		// Delete Alice's user
 		_, err := env.DB.Exec(env.Ctx, "DELETE FROM users WHERE id = $1", alice.ID)
@@ -355,8 +355,8 @@ func TestSessionIsolation_Integration(t *testing.T) {
 		// Bob's run should still exist
 		var bobRunCount int
 		row = env.DB.QueryRow(env.Ctx,
-			"SELECT COUNT(*) FROM runs WHERE session_id = $1 AND user_id = $2",
-			sessionID, bob.ID)
+			"SELECT COUNT(*) FROM runs WHERE session_pk = $1",
+			bobSessionPK)
 		if err := row.Scan(&bobRunCount); err != nil {
 			t.Fatalf("failed to query Bob's runs: %v", err)
 		}

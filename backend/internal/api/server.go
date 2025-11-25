@@ -38,6 +38,7 @@ type Server struct {
 	db                *db.DB
 	storage           *storage.S3Storage
 	oauthConfig       auth.OAuthConfig
+	frontendURL       string                // Base URL for the frontend (for building session URLs)
 	globalLimiter     ratelimit.RateLimiter // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter // Stricter limiter for uploads
@@ -50,6 +51,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		db:          database,
 		storage:     store,
 		oauthConfig: oauthConfig,
+		frontendURL: os.Getenv("FRONTEND_URL"),
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -163,8 +165,13 @@ func (s *Server) SetupRoutes() http.Handler {
 	}
 
 	// OAuth routes (public) - Apply stricter auth rate limiting
+	// GitHub
 	r.Get("/auth/github/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig)))
 	r.Get("/auth/github/callback", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubCallback(s.oauthConfig, s.db)))
+	// Google
+	r.Get("/auth/google/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleLogin(s.oauthConfig)))
+	r.Get("/auth/google/callback", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleCallback(s.oauthConfig, s.db)))
+	// Logout
 	r.Get("/auth/logout", ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db)))
 
 	// CLI authorize (requires web session) - Apply auth rate limiting

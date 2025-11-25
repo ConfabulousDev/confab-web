@@ -90,8 +90,8 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		// Verify run exists
 		var runCount int
 		row = env.DB.QueryRow(env.Ctx,
-			"SELECT COUNT(*) FROM runs WHERE id = $1 AND session_id = $2",
-			resp.RunID, sessionID)
+			"SELECT COUNT(*) FROM runs WHERE id = $1",
+			resp.RunID)
 		if err := row.Scan(&runCount); err != nil {
 			t.Fatalf("failed to query runs: %v", err)
 		}

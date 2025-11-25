@@ -126,7 +126,7 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 	defer dbCancel()
 
 	// Save metadata to database
-	runID, err := s.db.SaveSession(dbCtx, userID, &req, s3Keys, "hook")
+	result, err := s.db.SaveSession(dbCtx, userID, &req, s3Keys, "hook")
 	if err != nil {
 		logger.Error("Failed to save session metadata",
 			"error", err,
@@ -136,19 +136,24 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build session URL using the UUID primary key
+	sessionURL := s.frontendURL + "/sessions/" + result.SessionPK
+
 	// Audit log: Session saved successfully
 	logger.Info("Session saved successfully",
 		"user_id", userID,
 		"session_id", req.SessionID,
-		"run_id", runID,
+		"session_pk", result.SessionPK,
+		"run_id", result.RunID,
 		"file_count", len(s3Keys))
 
 	// Return success response
 	respondJSON(w, http.StatusOK, models.SaveSessionResponse{
-		Success:   true,
-		SessionID: req.SessionID,
-		RunID:     runID,
-		Message:   "Session saved successfully",
+		Success:    true,
+		SessionID:  req.SessionID,
+		RunID:      result.RunID,
+		SessionURL: sessionURL,
+		Message:    "Session saved successfully",
 	})
 }
 

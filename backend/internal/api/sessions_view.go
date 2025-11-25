@@ -9,7 +9,6 @@ import (
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/logger"
-	"github.com/santaclaude2025/confab/backend/internal/validation"
 )
 
 // HandleListSessions lists all sessions for the authenticated user
@@ -58,10 +57,10 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Get session ID from URL
-		sessionID := chi.URLParam(r, "sessionId")
-		if err := validation.ValidateSessionID(sessionID); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+		// Get session PK from URL (UUID)
+		sessionPK := chi.URLParam(r, "sessionId")
+		if sessionPK == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
@@ -70,7 +69,7 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get session detail (includes ownership check)
-		session, err := database.GetSessionDetail(ctx, sessionID, userID)
+		session, err := database.GetSessionDetail(ctx, sessionPK, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")

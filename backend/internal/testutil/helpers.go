@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/models"
 )
@@ -74,54 +75,69 @@ func AssertErrorResponse(t *testing.T, w *httptest.ResponseRecorder, expectedSta
 func CreateTestUser(t *testing.T, env *TestEnvironment, email, name string) *models.User {
 	t.Helper()
 
-	query := `
-		INSERT INTO users (email, name, github_id, avatar_url, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW(), NOW())
-		RETURNING id, email, name, avatar_url, github_id, created_at, updated_at
+	// Create user
+	userQuery := `
+		INSERT INTO users (email, name, avatar_url, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		RETURNING id, email, name, avatar_url, created_at, updated_at
 	`
 
-	// Generate unique github_id based on email to avoid collisions
-	githubID := "test-github-" + email
 	avatarURL := "https://github.com/avatar.png"
 
 	var user models.User
-	row := env.DB.QueryRow(env.Ctx, query, email, name, githubID, avatarURL)
-	err := row.Scan(&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.GitHubID, &user.CreatedAt, &user.UpdatedAt)
-
+	row := env.DB.QueryRow(env.Ctx, userQuery, email, name, avatarURL)
+	err := row.Scan(&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Create a GitHub identity for the user (for test compatibility)
+	identityQuery := `
+		INSERT INTO user_identities (user_id, provider, provider_id, created_at)
+		VALUES ($1, 'github', $2, NOW())
+	`
+	githubID := "test-github-" + email
+	_, err = env.DB.Exec(env.Ctx, identityQuery, user.ID, githubID)
+	if err != nil {
+		t.Fatalf("failed to create test user identity: %v", err)
 	}
 
 	return &user
 }
 
 // CreateTestSession creates a session in the database for testing
-func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, sessionID string) {
+// Returns the session's UUID primary key
+func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, sessionID string) string {
 	t.Helper()
 
+	sessionPK := uuid.New().String()
+
 	query := `
-		INSERT INTO sessions (user_id, session_id, first_seen)
-		VALUES ($1, $2, NOW())
+		INSERT INTO sessions (id, user_id, session_id, first_seen)
+		VALUES ($1, $2, $3, NOW())
 	`
 
-	_, err := env.DB.Exec(env.Ctx, query, userID, sessionID)
+	_, err := env.DB.Exec(env.Ctx, query, sessionPK, userID, sessionID)
 	if err != nil {
 		t.Fatalf("failed to create test session: %v", err)
 	}
+
+	return sessionPK
 }
 
 // CreateTestRun creates a run in the database for testing
-func CreateTestRun(t *testing.T, env *TestEnvironment, sessionID string, userID int64, reason, cwd, transcriptPath string) int64 {
+// sessionPK is the UUID primary key of the session
+func CreateTestRun(t *testing.T, env *TestEnvironment, sessionPK string, reason, cwd, transcriptPath string) int64 {
 	t.Helper()
 
 	query := `
-		INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, source, end_timestamp)
-		VALUES ($1, $2, $3, $4, $5, 'hook', NOW())
+		INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp, last_activity)
+		VALUES ($1, $2, $3, $4, 'hook', NOW(), NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, userID, transcriptPath, cwd, reason)
+	row := env.DB.QueryRow(env.Ctx, query, sessionPK, transcriptPath, cwd, reason)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test run: %v", err)
@@ -151,18 +167,19 @@ func CreateTestFile(t *testing.T, env *TestEnvironment, runID int64, filePath, f
 }
 
 // CreateTestShare creates a share in the database for testing
-func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, userID int64, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) int64 {
+// sessionPK is the UUID primary key of the session
+func CreateTestShare(t *testing.T, env *TestEnvironment, sessionPK string, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) int64 {
 	t.Helper()
 
 	// Insert share
 	query := `
-		INSERT INTO session_shares (user_id, session_id, share_token, visibility, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, NOW())
+		INSERT INTO session_shares (session_pk, share_token, visibility, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, userID, sessionID, shareToken, visibility, expiresAt)
+	row := env.DB.QueryRow(env.Ctx, query, sessionPK, shareToken, visibility, expiresAt)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test share: %v", err)

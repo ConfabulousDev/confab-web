@@ -16,6 +16,7 @@ import (
 
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/logger"
+	"github.com/santaclaude2025/confab/backend/internal/models"
 )
 
 const (
@@ -40,11 +41,14 @@ func oauthHTTPClient() *http.Client {
 	}
 }
 
-// OAuthConfig holds OAuth configuration
+// OAuthConfig holds OAuth configuration for all providers
 type OAuthConfig struct {
 	GitHubClientID     string
 	GitHubClientSecret string
 	GitHubRedirectURL  string
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
 }
 
 // GitHubUser represents GitHub user info from OAuth
@@ -172,11 +176,18 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			displayName = user.Login
 		}
 
-		// Find or create user in database
-		githubID := fmt.Sprintf("%d", user.ID)
-		dbUser, err := database.FindOrCreateUserByGitHub(ctx, githubID, user.Login, user.Email, displayName, user.AvatarURL)
+		// Find or create user in database using generic OAuth function
+		oauthInfo := models.OAuthUserInfo{
+			Provider:         models.ProviderGitHub,
+			ProviderID:       fmt.Sprintf("%d", user.ID),
+			ProviderUsername: user.Login,
+			Email:            user.Email,
+			Name:             displayName,
+			AvatarURL:        user.AvatarURL,
+		}
+		dbUser, err := database.FindOrCreateUserByOAuth(ctx, oauthInfo)
 		if err != nil {
-			logger.Error("Failed to create/find user in database", "error", err, "github_id", githubID)
+			logger.Error("Failed to create/find user in database", "error", err, "github_id", oauthInfo.ProviderID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
@@ -385,6 +396,244 @@ func getGitHubPrimaryEmail(accessToken string) (string, error) {
 
 	// If no verified email, reject the login
 	return "", fmt.Errorf("no verified email found - please verify your email on GitHub")
+}
+
+// ============================================================================
+// Google OAuth
+// ============================================================================
+
+// GoogleUser represents Google user info from OAuth
+type GoogleUser struct {
+	ID            string `json:"id"`
+	Email         string `json:"email"`
+	VerifiedEmail bool   `json:"verified_email"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+}
+
+// HandleGoogleLogin initiates Google OAuth flow
+func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Generate random state for CSRF protection
+		state, err := generateRandomString(32)
+		if err != nil {
+			http.Error(w, "Failed to generate state", http.StatusInternalServerError)
+			return
+		}
+
+		// Store state in cookie for validation
+		http.SetCookie(w, &http.Cookie{
+			Name:     "oauth_state",
+			Value:    state,
+			Path:     "/",
+			MaxAge:   300, // 5 minutes
+			HttpOnly: true,
+			Secure:   cookieSecure(),
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		// Redirect to Google
+		authURL := fmt.Sprintf(
+			"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&state=%s&scope=%s",
+			url.QueryEscape(config.GoogleClientID),
+			url.QueryEscape(config.GoogleRedirectURL),
+			url.QueryEscape(state),
+			url.QueryEscape("openid email profile"),
+		)
+		http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
+	}
+}
+
+// HandleGoogleCallback handles the OAuth callback from Google
+func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		frontendURL := os.Getenv("FRONTEND_URL")
+
+		// Validate state to prevent CSRF
+		stateCookie, err := r.Cookie("oauth_state")
+		if err != nil || stateCookie.Value != r.URL.Query().Get("state") {
+			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+			return
+		}
+
+		// Clear state cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:   "oauth_state",
+			Value:  "",
+			Path:   "/",
+			MaxAge: -1,
+		})
+
+		// Get authorization code
+		code := r.URL.Query().Get("code")
+		if code == "" {
+			http.Error(w, "Missing code parameter", http.StatusBadRequest)
+			return
+		}
+
+		// Exchange code for access token
+		accessToken, err := exchangeGoogleCode(code, config)
+		if err != nil {
+			logger.Error("Failed to exchange Google code", "error", err)
+			errorURL := fmt.Sprintf("%s?error=google_error&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Failed to complete Google authentication. Please try again."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Get user info from Google
+		user, err := getGoogleUser(accessToken)
+		if err != nil {
+			logger.Error("Failed to get Google user", "error", err)
+			errorURL := fmt.Sprintf("%s?error=google_error&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Failed to retrieve user information from Google. Please try again."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// SECURITY: Reject unverified emails
+		if !user.VerifiedEmail {
+			logger.Warn("Google email not verified", "email", user.Email)
+			errorURL := fmt.Sprintf("%s?error=email_unverified&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Your Google email is not verified. Please verify your email and try again."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
+
+		logger.Info("Google OAuth user retrieved",
+			"google_id", user.ID,
+			"email", user.Email,
+			"name", user.Name)
+
+		// Check email whitelist
+		if !isEmailAllowed(user.Email) {
+			logger.Warn("Email not in whitelist", "email", user.Email)
+			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Your email is not authorized to use this application. Please contact the administrator."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Find or create user in database
+		oauthInfo := models.OAuthUserInfo{
+			Provider:   models.ProviderGoogle,
+			ProviderID: user.ID,
+			Email:      user.Email,
+			Name:       user.Name,
+			AvatarURL:  user.Picture,
+		}
+		dbUser, err := database.FindOrCreateUserByOAuth(ctx, oauthInfo)
+		if err != nil {
+			logger.Error("Failed to create/find user in database", "error", err, "google_id", user.ID)
+			http.Error(w, "Failed to create user", http.StatusInternalServerError)
+			return
+		}
+
+		// Create web session
+		sessionID, err := generateRandomString(32)
+		if err != nil {
+			http.Error(w, "Failed to create session", http.StatusInternalServerError)
+			return
+		}
+
+		expiresAt := time.Now().UTC().Add(SessionDuration)
+		if err := database.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
+			http.Error(w, "Failed to save session", http.StatusInternalServerError)
+			return
+		}
+
+		// Set session cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     SessionCookieName,
+			Value:    sessionID,
+			Path:     "/",
+			Expires:  expiresAt,
+			HttpOnly: true,
+			Secure:   cookieSecure(),
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		// Check if this was a CLI login flow
+		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
+			http.SetCookie(w, &http.Cookie{
+				Name:   "cli_redirect",
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Redirect to frontend
+		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
+	}
+}
+
+// exchangeGoogleCode exchanges authorization code for access token
+func exchangeGoogleCode(code string, config OAuthConfig) (string, error) {
+	data := url.Values{
+		"client_id":     {config.GoogleClientID},
+		"client_secret": {config.GoogleClientSecret},
+		"code":          {code},
+		"redirect_uri":  {config.GoogleRedirectURL},
+		"grant_type":    {"authorization_code"},
+	}
+
+	resp, err := oauthHTTPClient().PostForm("https://oauth2.googleapis.com/token", data)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+		Error       string `json:"error"`
+		ErrorDesc   string `json:"error_description"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+
+	if result.Error != "" {
+		return "", fmt.Errorf("google oauth error: %s - %s", result.Error, result.ErrorDesc)
+	}
+
+	if result.AccessToken == "" {
+		return "", fmt.Errorf("no access token in response")
+	}
+
+	return result.AccessToken, nil
+}
+
+// getGoogleUser fetches user info from Google
+func getGoogleUser(accessToken string) (*GoogleUser, error) {
+	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := oauthHTTPClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var user GoogleUser
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, err
+	}
+
+	return &user, nil
 }
 
 // generateRandomString generates a random string for sessions/state

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/santaclaude2025/confab/backend/internal/testutil"
 )
 
@@ -23,12 +24,21 @@ func TestCountUserRunsInLastWeek(t *testing.T) {
 	// Create a test user using raw SQL
 	var userID int64
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO users (email, name, github_id, avatar_url, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
-		"test@example.com", "Test User", "test-github", "https://test.com/avatar.png",
+		`INSERT INTO users (email, name, avatar_url, created_at, updated_at)
+		 VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id`,
+		"test@example.com", "Test User", "https://test.com/avatar.png",
 	).Scan(&userID)
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Create user identity
+	_, err = env.DB.Exec(ctx,
+		`INSERT INTO user_identities (user_id, provider, provider_id, created_at)
+		 VALUES ($1, 'github', $2, NOW())`,
+		userID, "test-github")
+	if err != nil {
+		t.Fatalf("Failed to create user identity: %v", err)
 	}
 
 	t.Run("no runs returns zero", func(t *testing.T) {
@@ -42,11 +52,12 @@ func TestCountUserRunsInLastWeek(t *testing.T) {
 	})
 
 	t.Run("counts recent runs within 7 days", func(t *testing.T) {
-		// Create a session using raw SQL
+		// Create a session using raw SQL with UUID
 		sessionID := "test-session-recent"
+		sessionPK := uuid.New().String()
 		_, err := env.DB.Exec(ctx,
-			`INSERT INTO sessions (session_id, user_id, first_seen) VALUES ($1, $2, NOW())`,
-			sessionID, userID)
+			`INSERT INTO sessions (id, session_id, user_id, first_seen) VALUES ($1, $2, $3, NOW())`,
+			sessionPK, sessionID, userID)
 		if err != nil {
 			t.Fatalf("Failed to create session: %v", err)
 		}
@@ -54,9 +65,9 @@ func TestCountUserRunsInLastWeek(t *testing.T) {
 		// Create 5 runs in the last week using raw SQL
 		for i := 0; i < 5; i++ {
 			_, err = env.DB.Exec(ctx,
-				`INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, source, end_timestamp)
-				 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-				sessionID, userID, "/path/to/transcript", "/cwd", "test", "hook")
+				`INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp)
+				 VALUES ($1, $2, $3, $4, $5, NOW())`,
+				sessionPK, "/path/to/transcript", "/cwd", "test", "hook")
 			if err != nil {
 				t.Fatalf("Failed to create run %d: %v", i, err)
 			}
@@ -72,11 +83,12 @@ func TestCountUserRunsInLastWeek(t *testing.T) {
 	})
 
 	t.Run("excludes runs older than 7 days", func(t *testing.T) {
-		// Create a session for old runs
+		// Create a session for old runs with UUID
 		sessionID := "test-session-old"
+		sessionPK := uuid.New().String()
 		_, err := env.DB.Exec(ctx,
-			`INSERT INTO sessions (session_id, user_id, first_seen) VALUES ($1, $2, NOW())`,
-			sessionID, userID)
+			`INSERT INTO sessions (id, session_id, user_id, first_seen) VALUES ($1, $2, $3, NOW())`,
+			sessionPK, sessionID, userID)
 		if err != nil {
 			t.Fatalf("Failed to create session: %v", err)
 		}
@@ -84,9 +96,9 @@ func TestCountUserRunsInLastWeek(t *testing.T) {
 		// Create a run and manually backdate it to 8 days ago
 		var runID int64
 		err = env.DB.QueryRow(ctx,
-			`INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, source, end_timestamp)
-			 VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id`,
-			sessionID, userID, "/path/to/old", "/cwd", "old test", "hook",
+			`INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp)
+			 VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id`,
+			sessionPK, "/path/to/old", "/cwd", "old test", "hook",
 		).Scan(&runID)
 		if err != nil {
 			t.Fatalf("Failed to create old run: %v", err)
@@ -115,27 +127,37 @@ func TestCountUserRunsInLastWeek(t *testing.T) {
 		// Create another user using raw SQL
 		var otherUserID int64
 		err := env.DB.QueryRow(ctx,
-			`INSERT INTO users (email, name, github_id, avatar_url, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
-			"other@example.com", "Other User", "other-github", "https://test.com/other.png",
+			`INSERT INTO users (email, name, avatar_url, created_at, updated_at)
+			 VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id`,
+			"other@example.com", "Other User", "https://test.com/other.png",
 		).Scan(&otherUserID)
 		if err != nil {
 			t.Fatalf("Failed to create other user: %v", err)
 		}
 
-		// Create a session and run for other user
-		otherSessionID := "other-session"
+		// Create user identity for other user
 		_, err = env.DB.Exec(ctx,
-			`INSERT INTO sessions (session_id, user_id, first_seen) VALUES ($1, $2, NOW())`,
-			otherSessionID, otherUserID)
+			`INSERT INTO user_identities (user_id, provider, provider_id, created_at)
+			 VALUES ($1, 'github', $2, NOW())`,
+			otherUserID, "other-github")
+		if err != nil {
+			t.Fatalf("Failed to create other user identity: %v", err)
+		}
+
+		// Create a session and run for other user with UUID
+		otherSessionID := "other-session"
+		otherSessionPK := uuid.New().String()
+		_, err = env.DB.Exec(ctx,
+			`INSERT INTO sessions (id, session_id, user_id, first_seen) VALUES ($1, $2, $3, NOW())`,
+			otherSessionPK, otherSessionID, otherUserID)
 		if err != nil {
 			t.Fatalf("Failed to create other session: %v", err)
 		}
 
 		_, err = env.DB.Exec(ctx,
-			`INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, source, end_timestamp)
-			 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-			otherSessionID, otherUserID, "/path/to/other", "/cwd", "other test", "hook")
+			`INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp)
+			 VALUES ($1, $2, $3, $4, $5, NOW())`,
+			otherSessionPK, "/path/to/other", "/cwd", "other test", "hook")
 		if err != nil {
 			t.Fatalf("Failed to create other run: %v", err)
 		}
@@ -175,12 +197,21 @@ func TestGetUserWeeklyUsage(t *testing.T) {
 	// Create a test user using raw SQL
 	var userID int64
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO users (email, name, github_id, avatar_url, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id`,
-		"usage@example.com", "Usage User", "usage-github", "https://test.com/usage.png",
+		`INSERT INTO users (email, name, avatar_url, created_at, updated_at)
+		 VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id`,
+		"usage@example.com", "Usage User", "https://test.com/usage.png",
 	).Scan(&userID)
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Create user identity
+	_, err = env.DB.Exec(ctx,
+		`INSERT INTO user_identities (user_id, provider, provider_id, created_at)
+		 VALUES ($1, 'github', $2, NOW())`,
+		userID, "usage-github")
+	if err != nil {
+		t.Fatalf("Failed to create user identity: %v", err)
 	}
 
 	const maxRuns = 200
@@ -209,20 +240,21 @@ func TestGetUserWeeklyUsage(t *testing.T) {
 	})
 
 	t.Run("partial usage", func(t *testing.T) {
-		// Create session and 50 runs using raw SQL
+		// Create session and 50 runs using raw SQL with UUID
 		sessionID := "usage-session"
+		sessionPK := uuid.New().String()
 		_, err := env.DB.Exec(ctx,
-			`INSERT INTO sessions (session_id, user_id, first_seen) VALUES ($1, $2, NOW())`,
-			sessionID, userID)
+			`INSERT INTO sessions (id, session_id, user_id, first_seen) VALUES ($1, $2, $3, NOW())`,
+			sessionPK, sessionID, userID)
 		if err != nil {
 			t.Fatalf("Failed to create session: %v", err)
 		}
 
 		for i := 0; i < 50; i++ {
 			_, err = env.DB.Exec(ctx,
-				`INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, source, end_timestamp)
-				 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-				sessionID, userID, "/path/to/usage", "/cwd", "usage test", "hook")
+				`INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp)
+				 VALUES ($1, $2, $3, $4, $5, NOW())`,
+				sessionPK, "/path/to/usage", "/cwd", "usage test", "hook")
 			if err != nil {
 				t.Fatalf("Failed to create run %d: %v", i, err)
 			}
@@ -246,12 +278,19 @@ func TestGetUserWeeklyUsage(t *testing.T) {
 
 	t.Run("at limit", func(t *testing.T) {
 		// Create 150 more runs to reach 200 total using raw SQL
-		sessionID := "usage-session"
+		// Get the session PK from the existing session
+		var sessionPK string
+		err := env.DB.QueryRow(ctx,
+			`SELECT id FROM sessions WHERE session_id = 'usage-session' AND user_id = $1`,
+			userID).Scan(&sessionPK)
+		if err != nil {
+			t.Fatalf("Failed to get session PK: %v", err)
+		}
 		for i := 0; i < 150; i++ {
 			_, err = env.DB.Exec(ctx,
-				`INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, source, end_timestamp)
-				 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-				sessionID, userID, "/path/to/usage", "/cwd", "usage test", "hook")
+				`INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp)
+				 VALUES ($1, $2, $3, $4, $5, NOW())`,
+				sessionPK, "/path/to/usage", "/cwd", "usage test", "hook")
 			if err != nil {
 				t.Fatalf("Failed to create run %d: %v", i, err)
 			}
@@ -272,12 +311,19 @@ func TestGetUserWeeklyUsage(t *testing.T) {
 
 	t.Run("over limit", func(t *testing.T) {
 		// Create 5 more runs to exceed limit using raw SQL
-		sessionID := "usage-session"
+		// Get the session PK from the existing session
+		var sessionPK string
+		err := env.DB.QueryRow(ctx,
+			`SELECT id FROM sessions WHERE session_id = 'usage-session' AND user_id = $1`,
+			userID).Scan(&sessionPK)
+		if err != nil {
+			t.Fatalf("Failed to get session PK: %v", err)
+		}
 		for i := 0; i < 5; i++ {
 			_, err = env.DB.Exec(ctx,
-				`INSERT INTO runs (session_id, user_id, transcript_path, cwd, reason, source, end_timestamp)
-				 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-				sessionID, userID, "/path/to/usage", "/cwd", "usage test", "hook")
+				`INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp)
+				 VALUES ($1, $2, $3, $4, $5, NOW())`,
+				sessionPK, "/path/to/usage", "/cwd", "usage test", "hook")
 			if err != nil {
 				t.Fatalf("Failed to create run %d: %v", i, err)
 			}

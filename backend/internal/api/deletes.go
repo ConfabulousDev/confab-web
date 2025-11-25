@@ -37,7 +37,7 @@ func HandleDeleteRun(database *db.DB, store *storage.S3Storage) http.HandlerFunc
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
-		sessionID, runCount, s3Keys, err := database.GetRunS3Keys(dbCtx, runID, userID)
+		sessionPK, runCount, s3Keys, err := database.GetRunS3Keys(dbCtx, runID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
 				respondError(w, http.StatusForbidden, "Access denied")
@@ -72,7 +72,7 @@ func HandleDeleteRun(database *db.DB, store *storage.S3Storage) http.HandlerFunc
 		dbCtx2, dbCancel2 := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel2()
 
-		if err := database.DeleteRunFromDB(dbCtx2, runID, userID, sessionID, runCount); err != nil {
+		if err := database.DeleteRunFromDB(dbCtx2, runID, userID, sessionPK, runCount); err != nil {
 			if errors.Is(err, db.ErrRunNotFound) {
 				respondError(w, http.StatusNotFound, "Run not found")
 				return
@@ -89,7 +89,7 @@ func HandleDeleteRun(database *db.DB, store *storage.S3Storage) http.HandlerFunc
 		logger.Info("Run deleted successfully",
 			"user_id", userID,
 			"run_id", runID,
-			"session_id", sessionID,
+			"session_pk", sessionPK,
 			"s3_objects_deleted", len(s3Keys),
 			"session_deleted", runCount == 1)
 
@@ -113,10 +113,10 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 			return
 		}
 
-		// Get session ID from URL
-		sessionID := chi.URLParam(r, "sessionId")
-		if sessionID == "" {
-			respondError(w, http.StatusBadRequest, "Session ID is required")
+		// Get session PK from URL (UUID)
+		sessionPK := chi.URLParam(r, "sessionId")
+		if sessionPK == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
@@ -124,7 +124,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
-		s3Keys, err := database.GetSessionS3Keys(dbCtx, sessionID, userID)
+		s3Keys, err := database.GetSessionS3Keys(dbCtx, sessionPK, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -137,7 +137,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 			logger.Error("Failed to get S3 keys for session",
 				"error", err,
 				"user_id", userID,
-				"session_id", sessionID)
+				"session_pk", sessionPK)
 			respondError(w, http.StatusInternalServerError, "Failed to retrieve session information")
 			return
 		}
@@ -151,7 +151,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 				logger.Error("Failed to delete S3 object",
 					"error", err,
 					"user_id", userID,
-					"session_id", sessionID,
+					"session_pk", sessionPK,
 					"s3_key", s3Key)
 				respondError(w, http.StatusInternalServerError, "Failed to delete files from storage")
 				return
@@ -163,7 +163,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx2, dbCancel2 := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel2()
 
-		if err := database.DeleteSessionFromDB(dbCtx2, userID, sessionID); err != nil {
+		if err := database.DeleteSessionFromDB(dbCtx2, sessionPK, userID); err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
@@ -171,7 +171,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 			logger.Error("Failed to delete session from database",
 				"error", err,
 				"user_id", userID,
-				"session_id", sessionID)
+				"session_pk", sessionPK)
 			respondError(w, http.StatusInternalServerError, "Failed to delete session")
 			return
 		}
@@ -179,13 +179,13 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		// Audit log: Session deleted successfully
 		logger.Info("Session deleted successfully",
 			"user_id", userID,
-			"session_id", sessionID,
+			"session_pk", sessionPK,
 			"s3_objects_deleted", len(s3Keys))
 
 		// Return success response
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"success":    true,
-			"session_id": sessionID,
+			"session_pk": sessionPK,
 			"message":    "Session deleted successfully",
 		})
 	}
@@ -201,9 +201,9 @@ func HandleDeleteSessionOrRun(database *db.DB, store *storage.S3Storage) http.Ha
 			return
 		}
 
-		// Get session ID from URL
-		sessionID := chi.URLParam(r, "sessionId")
-		if sessionID == "" {
+		// Get session PK (UUID) from URL
+		sessionPK := chi.URLParam(r, "sessionId")
+		if sessionPK == "" {
 			respondError(w, http.StatusBadRequest, "Session ID is required")
 			return
 		}
@@ -223,7 +223,7 @@ func HandleDeleteSessionOrRun(database *db.DB, store *storage.S3Storage) http.Ha
 			dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 			defer dbCancel()
 
-			sessionIDFromRun, _, _, err := database.GetRunS3Keys(dbCtx, *req.RunID, userID)
+			sessionPKFromRun, _, _, err := database.GetRunS3Keys(dbCtx, *req.RunID, userID)
 			if err != nil {
 				if errors.Is(err, db.ErrUnauthorized) {
 					respondError(w, http.StatusForbidden, "Access denied")
@@ -238,7 +238,7 @@ func HandleDeleteSessionOrRun(database *db.DB, store *storage.S3Storage) http.Ha
 			}
 
 			// Verify run belongs to the specified session
-			if sessionIDFromRun != sessionID {
+			if sessionPKFromRun != sessionPK {
 				respondError(w, http.StatusBadRequest, "Run does not belong to specified session")
 				return
 			}
