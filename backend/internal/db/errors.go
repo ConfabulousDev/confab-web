@@ -28,4 +28,7 @@ var (
 
 	// Rate limiting errors
 	ErrRateLimitExceeded = errors.New("weekly upload limit exceeded")
+
+	// Device code errors
+	ErrDeviceCodeNotFound = errors.New("device code not found or expired")
 )

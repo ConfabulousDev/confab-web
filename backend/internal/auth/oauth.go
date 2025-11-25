@@ -88,6 +88,19 @@ func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
 			SameSite: http.SameSiteLaxMode,
 		})
 
+		// Store post-login redirect URL if provided (e.g., from /device page)
+		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "post_login_redirect",
+				Value:    redirectAfter,
+				Path:     "/",
+				MaxAge:   300, // 5 minutes
+				HttpOnly: true,
+				Secure:   cookieSecure(),
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
+
 		// Redirect to GitHub
 		// Scope: read:user gets profile info, user:email gets email
 		authURL := fmt.Sprintf(
@@ -227,6 +240,20 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			})
 			// Redirect back to CLI authorize endpoint
 			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Check if there's a post-login redirect (e.g., from /device page)
+		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
+			// Clear the cookie
+			http.SetCookie(w, &http.Cookie{
+				Name:   "post_login_redirect",
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			// Redirect to the stored path (relative URL on same backend)
+			http.Redirect(w, r, postLoginRedirect.Value, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -432,6 +459,19 @@ func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
 			SameSite: http.SameSiteLaxMode,
 		})
 
+		// Store post-login redirect URL if provided (e.g., from /device page)
+		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "post_login_redirect",
+				Value:    redirectAfter,
+				Path:     "/",
+				MaxAge:   300, // 5 minutes
+				HttpOnly: true,
+				Secure:   cookieSecure(),
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
+
 		// Redirect to Google
 		authURL := fmt.Sprintf(
 			"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&state=%s&scope=%s",
@@ -567,6 +607,20 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 				MaxAge: -1,
 			})
 			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Check if there's a post-login redirect (e.g., from /device page)
+		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
+			// Clear the cookie
+			http.SetCookie(w, &http.Cookie{
+				Name:   "post_login_redirect",
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			// Redirect to the stored path (relative URL on same backend)
+			http.Redirect(w, r, postLoginRedirect.Value, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -889,6 +943,487 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		redirectURL := fmt.Sprintf("%s?key=%s", callback, apiKey)
 		http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 	}
+}
+
+// ============================================================================
+// Device Code Flow (for CLI authentication without browser on same machine)
+// ============================================================================
+
+const (
+	// DeviceCodeExpiry is how long a device code is valid
+	DeviceCodeExpiry = 15 * time.Minute
+	// DeviceCodePollInterval is the minimum interval between poll requests
+	DeviceCodePollInterval = 5 * time.Second
+)
+
+// DeviceCodeRequest is the request body for /auth/device/code
+type DeviceCodeRequest struct {
+	KeyName string `json:"key_name"`
+}
+
+// DeviceCodeResponse is the response from /auth/device/code
+type DeviceCodeResponse struct {
+	DeviceCode      string `json:"device_code"`
+	UserCode        string `json:"user_code"`
+	VerificationURI string `json:"verification_uri"`
+	ExpiresIn       int    `json:"expires_in"`       // seconds
+	Interval        int    `json:"interval"`         // polling interval in seconds
+}
+
+// DeviceTokenRequest is the request body for /auth/device/token
+type DeviceTokenRequest struct {
+	DeviceCode string `json:"device_code"`
+}
+
+// DeviceTokenResponse is the response from /auth/device/token
+type DeviceTokenResponse struct {
+	AccessToken string `json:"access_token,omitempty"`
+	TokenType   string `json:"token_type,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+// generateUserCode generates a human-friendly code (e.g., "ABCD-1234")
+func generateUserCode() (string, error) {
+	// Use uppercase letters (excluding confusing ones: 0, O, I, L, 1)
+	const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+	code := make([]byte, 8)
+	for i := range code {
+		b := make([]byte, 1)
+		if _, err := rand.Read(b); err != nil {
+			return "", err
+		}
+		code[i] = chars[int(b[0])%len(chars)]
+	}
+	// Format as XXXX-XXXX
+	return string(code[:4]) + "-" + string(code[4:]), nil
+}
+
+// generateDeviceCode generates a secure random device code
+func generateDeviceCode() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", bytes), nil
+}
+
+// HandleDeviceCode initiates a device code flow
+// POST /auth/device/code
+func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// Parse request
+		var req DeviceCodeRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			// Allow empty body, use default key name
+			req.KeyName = "CLI Key"
+		}
+		if req.KeyName == "" {
+			req.KeyName = "CLI Key"
+		}
+
+		// Generate codes
+		deviceCode, err := generateDeviceCode()
+		if err != nil {
+			logger.Error("Failed to generate device code", "error", err)
+			http.Error(w, "Failed to generate device code", http.StatusInternalServerError)
+			return
+		}
+
+		userCode, err := generateUserCode()
+		if err != nil {
+			logger.Error("Failed to generate user code", "error", err)
+			http.Error(w, "Failed to generate user code", http.StatusInternalServerError)
+			return
+		}
+
+		expiresAt := time.Now().UTC().Add(DeviceCodeExpiry)
+
+		// Store in database
+		if err := database.CreateDeviceCode(ctx, deviceCode, userCode, req.KeyName, expiresAt); err != nil {
+			logger.Error("Failed to store device code", "error", err)
+			http.Error(w, "Failed to create device code", http.StatusInternalServerError)
+			return
+		}
+
+		logger.Info("Device code created", "user_code", userCode)
+
+		// Return response
+		resp := DeviceCodeResponse{
+			DeviceCode:      deviceCode,
+			UserCode:        userCode,
+			VerificationURI: backendURL + "/auth/device",
+			ExpiresIn:       int(DeviceCodeExpiry.Seconds()),
+			Interval:        int(DeviceCodePollInterval.Seconds()),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// HandleDeviceToken exchanges a device code for an API key
+// POST /auth/device/token
+func HandleDeviceToken(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// Parse request
+		var req DeviceTokenRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "invalid_request"})
+			return
+		}
+
+		if req.DeviceCode == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "invalid_request"})
+			return
+		}
+
+		// Look up device code
+		dc, err := database.GetDeviceCodeByDeviceCode(ctx, req.DeviceCode)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			if err == db.ErrDeviceCodeNotFound {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "invalid_grant"})
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+			}
+			return
+		}
+
+		// Check if expired
+		if time.Now().UTC().After(dc.ExpiresAt) {
+			database.DeleteDeviceCode(ctx, req.DeviceCode)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "expired_token"})
+			return
+		}
+
+		// Check if authorized
+		if dc.AuthorizedAt == nil || dc.UserID == nil {
+			// Not yet authorized - tell client to keep polling
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "authorization_pending"})
+			return
+		}
+
+		// Authorized! Generate API key
+		apiKey, keyHash, err := GenerateAPIKey()
+		if err != nil {
+			logger.Error("Failed to generate API key", "error", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+			return
+		}
+
+		// Store API key
+		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, *dc.UserID, keyHash, dc.KeyName)
+		if err != nil {
+			logger.Error("Failed to create API key", "error", err, "user_id", *dc.UserID)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+			return
+		}
+
+		logger.Info("API key created via device flow",
+			"key_id", keyID,
+			"name", dc.KeyName,
+			"user_id", *dc.UserID,
+			"created_at", createdAt)
+
+		// Delete the device code (one-time use)
+		database.DeleteDeviceCode(ctx, req.DeviceCode)
+
+		// Return the API key
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(DeviceTokenResponse{
+			AccessToken: apiKey,
+			TokenType:   "Bearer",
+		})
+	}
+}
+
+// HandleDevicePage serves the device verification page
+// GET /device
+func HandleDevicePage(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Check if user is logged in
+		cookie, err := r.Cookie(SessionCookieName)
+		loggedIn := err == nil && cookie.Value != ""
+
+		var userID int64
+		if loggedIn {
+			session, err := database.GetWebSession(r.Context(), cookie.Value)
+			if err != nil {
+				loggedIn = false
+			} else {
+				userID = session.UserID
+			}
+		}
+
+		// Get pre-filled code from query param
+		prefilledCode := r.URL.Query().Get("code")
+
+		html := generateDevicePageHTML(loggedIn, prefilledCode, userID > 0)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(html))
+	}
+}
+
+// HandleDeviceVerify handles the form submission to verify a device code
+// POST /device/verify
+func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// Must be logged in
+		cookie, err := r.Cookie(SessionCookieName)
+		if err != nil {
+			http.Redirect(w, r, "/auth/login?redirect=/auth/device", http.StatusTemporaryRedirect)
+			return
+		}
+
+		session, err := database.GetWebSession(ctx, cookie.Value)
+		if err != nil {
+			http.Redirect(w, r, "/auth/login?redirect=/auth/device", http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Parse form
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Invalid form", http.StatusBadRequest)
+			return
+		}
+
+		userCode := strings.ToUpper(strings.TrimSpace(r.FormValue("code")))
+		// Normalize: remove any dashes and re-add in correct position
+		userCode = strings.ReplaceAll(userCode, "-", "")
+		if len(userCode) == 8 {
+			userCode = userCode[:4] + "-" + userCode[4:]
+		}
+
+		// Validate and authorize
+		err = database.AuthorizeDeviceCode(ctx, userCode, session.UserID)
+		if err != nil {
+			logger.Warn("Device code authorization failed", "error", err, "user_code", userCode)
+			// Show error page
+			html := generateDeviceResultHTML(false, "Invalid or expired code. Please try again.")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(html))
+			return
+		}
+
+		logger.Info("Device code authorized", "user_code", userCode, "user_id", session.UserID)
+
+		// Show success page
+		html := generateDeviceResultHTML(true, "Device authorized! You can close this window and return to your terminal.")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(html))
+	}
+}
+
+func generateDevicePageHTML(loggedIn bool, prefilledCode string, hasValidSession bool) string {
+	loginPrompt := ""
+	if !loggedIn {
+		loginPrompt = `<p class="login-prompt">You need to <a href="/auth/login?redirect=/auth/device">sign in</a> first to authorize this device.</p>`
+	}
+
+	disabledAttr := ""
+	if !loggedIn {
+		disabledAttr = "disabled"
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authorize Device - Confab</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #0f0f0f;
+            color: #fff;
+        }
+        .container {
+            background: #1a1a1a;
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 90%%;
+        }
+        h1 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+            color: #fff;
+        }
+        p {
+            color: #888;
+            margin: 0 0 1.5rem 0;
+            font-size: 0.9rem;
+        }
+        .login-prompt {
+            background: #2a2a2a;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .login-prompt a {
+            color: #60a5fa;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        input[type="text"] {
+            padding: 1rem;
+            font-size: 1.5rem;
+            text-align: center;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            border: 2px solid #333;
+            border-radius: 0.5rem;
+            background: #0f0f0f;
+            color: #fff;
+            font-family: monospace;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #60a5fa;
+        }
+        input[type="text"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        button {
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: 500;
+            border: none;
+            border-radius: 0.5rem;
+            background: #3b82f6;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover:not(:disabled) {
+            background: #2563eb;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .hint {
+            font-size: 0.8rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Authorize Device</h1>
+        <p>Enter the code shown in your terminal to connect your CLI.</p>
+        %s
+        <form action="/auth/device/verify" method="POST">
+            <input type="text" name="code" placeholder="XXXX-XXXX" maxlength="9"
+                   value="%s" autocomplete="off" autofocus %s>
+            <button type="submit" %s>Authorize</button>
+        </form>
+        <p class="hint">The code expires in 15 minutes.</p>
+    </div>
+</body>
+</html>`, loginPrompt, prefilledCode, disabledAttr, disabledAttr)
+}
+
+func generateDeviceResultHTML(success bool, message string) string {
+	icon := "✗"
+	iconColor := "#ef4444"
+	if success {
+		icon = "✓"
+		iconColor = "#10b981"
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Authorization - Confab</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #0f0f0f;
+            color: #fff;
+        }
+        .container {
+            background: #1a1a1a;
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 90%%;
+        }
+        .icon {
+            font-size: 4rem;
+            color: %s;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
+            color: #fff;
+        }
+        p {
+            color: #888;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">%s</div>
+        <h1>%s</h1>
+        <p>%s</p>
+    </div>
+</body>
+</html>`, iconColor, icon, func() string {
+		if success {
+			return "Success!"
+		}
+		return "Error"
+	}(), message)
 }
 
 // isLocalhostURL checks if URL is localhost

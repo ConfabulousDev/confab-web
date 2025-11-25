@@ -55,9 +55,9 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
-		// Auth endpoints: 10 requests per minute = 0.167 req/sec, burst of 5
-		// Stricter to prevent brute force attacks on OAuth flow
-		authLimiter: ratelimit.NewInMemoryRateLimiter(0.167, 5),
+		// Auth endpoints: 60 requests per minute = 1 req/sec, burst of 30
+		// Reasonable limit to prevent brute force while allowing normal dev usage
+		authLimiter: ratelimit.NewInMemoryRateLimiter(1, 30),
 		// Upload endpoints: 1000 requests per hour = 0.278 req/sec, burst of 200
 		// Keyed by user ID (not IP) to allow backfill of many sessions
 		uploadLimiter: ratelimit.NewInMemoryRateLimiter(0.278, 200),
@@ -178,6 +178,16 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// CLI authorize (requires web session) - Apply auth rate limiting
 	r.Get("/auth/cli/authorize", ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db)))
+
+	// Device code flow (for CLI on headless/remote machines)
+	backendURL := os.Getenv("BACKEND_URL")
+	if backendURL == "" {
+		backendURL = "http://localhost:8080" // Default for local dev
+	}
+	r.Post("/auth/device/code", ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceCode(s.db, backendURL)))
+	r.Post("/auth/device/token", ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db)))
+	r.Get("/auth/device", auth.HandleDevicePage(s.db))
+	r.Post("/auth/device/verify", ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db)))
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {

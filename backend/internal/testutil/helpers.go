@@ -240,3 +240,53 @@ func GenerateShareToken() string {
 	}
 	return hex.EncodeToString(bytes)
 }
+
+// CreateTestDeviceCode creates a device code in the database for testing
+// Note: expiresAt should be in UTC for consistent behavior with PostgreSQL NOW()
+func CreateTestDeviceCode(t *testing.T, env *TestEnvironment, deviceCode, userCode, keyName string, expiresAt time.Time) int64 {
+	t.Helper()
+
+	// Ensure time is in UTC for consistency with PostgreSQL
+	expiresAtUTC := expiresAt.UTC()
+
+	query := `
+		INSERT INTO device_codes (device_code, user_code, key_name, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		RETURNING id
+	`
+
+	var id int64
+	row := env.DB.QueryRow(env.Ctx, query, deviceCode, userCode, keyName, expiresAtUTC)
+	err := row.Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to create test device code: %v", err)
+	}
+
+	return id
+}
+
+// AuthorizeTestDeviceCode marks a device code as authorized by a user
+func AuthorizeTestDeviceCode(t *testing.T, env *TestEnvironment, userCode string, userID int64) {
+	t.Helper()
+
+	query := `UPDATE device_codes SET user_id = $1, authorized_at = NOW() WHERE user_code = $2`
+	_, err := env.DB.Exec(env.Ctx, query, userID, userCode)
+	if err != nil {
+		t.Fatalf("failed to authorize test device code: %v", err)
+	}
+}
+
+// CreateTestWebSession creates a web session in the database for testing
+func CreateTestWebSession(t *testing.T, env *TestEnvironment, sessionID string, userID int64, expiresAt time.Time) {
+	t.Helper()
+
+	query := `
+		INSERT INTO web_sessions (id, user_id, expires_at, created_at)
+		VALUES ($1, $2, $3, NOW())
+	`
+
+	_, err := env.DB.Exec(env.Ctx, query, sessionID, userID, expiresAt)
+	if err != nil {
+		t.Fatalf("failed to create test web session: %v", err)
+	}
+}

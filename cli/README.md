@@ -25,13 +25,14 @@ Make sure `~/.local/bin` is in your PATH.
 ### Authentication
 
 ```bash
-# Interactive login (recommended - opens browser for GitHub OAuth)
+# Login using device code flow (works on any machine)
 confab login
 
-# Or manually configure with API key
-confab configure \
-  --backend-url https://your-backend.com \
-  --api-key <your-api-key>
+# Or use setup for login + hook installation in one step
+confab setup
+
+# Change backend URL (without re-authenticating)
+confab configure --backend-url https://your-backend.com
 
 # Check configuration status
 confab status

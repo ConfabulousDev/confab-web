@@ -1,10 +1,11 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -12,21 +13,33 @@ import (
 
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/logger"
-	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with confab cloud backend",
-	Long: `Opens browser to authenticate via GitHub OAuth and obtain an API key.
+	Long: `Authenticates with the confab backend using device code flow.
 
-Note: This requires a browser on the same machine as the CLI. For remote/headless
-servers, use the web dashboard to create an API key, then run:
-  confab configure --api-key <key>
-
-TODO: Implement device code flow for remote/headless scenarios (similar to 'gh auth login').`,
+You'll receive a code to enter at a URL. This works on any machine, including
+remote/headless servers - authenticate from any device with a browser.`,
 	RunE: runLogin,
+}
+
+// DeviceCodeResponse is the response from /auth/device/code
+type DeviceCodeResponse struct {
+	DeviceCode      string `json:"device_code"`
+	UserCode        string `json:"user_code"`
+	VerificationURI string `json:"verification_uri"`
+	ExpiresIn       int    `json:"expires_in"`
+	Interval        int    `json:"interval"`
+}
+
+// DeviceTokenResponse is the response from /auth/device/token
+type DeviceTokenResponse struct {
+	AccessToken string `json:"access_token,omitempty"`
+	TokenType   string `json:"token_type,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
@@ -62,139 +75,72 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	fmt.Println("=== Confab Login ===")
 	fmt.Println()
 	fmt.Printf("Backend: %s\n", backendURL)
-	fmt.Printf("Key name: %s\n", keyName)
 	fmt.Println()
 
-	// Start localhost callback server
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	// Step 1: Request device code
+	deviceCode, err := requestDeviceCode(backendURL, keyName)
 	if err != nil {
-		logger.Error("Failed to start callback server: %v", err)
-		return fmt.Errorf("failed to start callback server: %w", err)
+		logger.Error("Failed to get device code: %v", err)
+		return fmt.Errorf("failed to initiate login: %w", err)
 	}
-	defer listener.Close()
 
-	port := listener.Addr().(*net.TCPAddr).Port
-	callbackURL := fmt.Sprintf("http://localhost:%d", port)
-
-	logger.Info("Started callback server on port %d", port)
-	fmt.Printf("Starting callback server on port %d...\n", port)
-
-	// Channel to receive API key
-	apiKeyChan := make(chan string, 1)
-	errorChan := make(chan error, 1)
-
-	// HTTP handler for callback
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		apiKey := r.URL.Query().Get("key")
-		if apiKey == "" {
-			http.Error(w, "Missing API key", http.StatusBadRequest)
-			errorChan <- fmt.Errorf("missing API key in callback")
-			return
-		}
-
-		// Send success page
-		html := `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Confab Login Success</title>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .container {
-            background: white;
-            padding: 3rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            text-align: center;
-            max-width: 400px;
-        }
-        h1 { color: #333; margin: 0 0 1rem 0; }
-        p { color: #666; margin: 0.5rem 0; }
-        .success { color: #10b981; font-size: 3rem; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="success">✓</div>
-        <h1>Login Successful!</h1>
-        <p>Your API key has been saved.</p>
-        <p>You can close this window and return to your terminal.</p>
-    </div>
-    <script>
-        setTimeout(() => window.close(), 3000);
-    </script>
-</body>
-</html>`
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(html))
-
-		apiKeyChan <- apiKey
-	})
-
-	// Start server in background
-	server := &http.Server{
-		Handler:      mux,
-		ReadTimeout:  utils.ServerReadTimeout,
-		WriteTimeout: utils.ServerWriteTimeout,
-		IdleTimeout:  utils.ServerIdleTimeout,
-	}
-	go func() {
-		if err := server.Serve(listener); err != http.ErrServerClosed {
-			errorChan <- fmt.Errorf("callback server error: %w", err)
-		}
-	}()
-
-	// Build authorize URL
-	authorizeURL := fmt.Sprintf("%s/auth/cli/authorize?callback=%s&name=%s",
-		backendURL,
-		url.QueryEscape(callbackURL),
-		url.QueryEscape(keyName),
-	)
-
-	logger.Debug("Opening browser: %s", authorizeURL)
-	fmt.Println("Opening browser for authentication...")
+	// Display instructions
+	fmt.Println("To authenticate, visit:")
+	fmt.Printf("  %s\n", deviceCode.VerificationURI)
 	fmt.Println()
-	if err := openBrowser(authorizeURL); err != nil {
-		logger.Warn("Failed to open browser: %v", err)
-		fmt.Println("Failed to open browser automatically.")
-		fmt.Println("Please open this URL manually:")
-		fmt.Println()
-		fmt.Println(authorizeURL)
-		fmt.Println()
-	}
-
-	fmt.Printf("Waiting for authentication... (timeout: %v)\n", utils.OAuthFlowTimeout)
+	fmt.Printf("And enter code: %s\n", deviceCode.UserCode)
 	fmt.Println()
 
-	// Wait for API key or timeout
-	timeout := time.After(utils.OAuthFlowTimeout)
+	// Try to open browser
+	if err := openBrowser(deviceCode.VerificationURI + "?code=" + deviceCode.UserCode); err != nil {
+		logger.Debug("Failed to open browser: %v", err)
+		// Not an error - user can open manually
+	}
+
+	fmt.Printf("Waiting for authorization... (expires in %d seconds)\n", deviceCode.ExpiresIn)
+
+	// Step 2: Poll for token
+	pollInterval := time.Duration(deviceCode.Interval) * time.Second
+	if pollInterval < 5*time.Second {
+		pollInterval = 5 * time.Second
+	}
+
+	expiresAt := time.Now().Add(time.Duration(deviceCode.ExpiresIn) * time.Second)
+
 	var apiKey string
+	for {
+		if time.Now().After(expiresAt) {
+			return fmt.Errorf("authorization timed out - please try again")
+		}
 
-	select {
-	case apiKey = <-apiKeyChan:
-		logger.Info("Received API key from callback")
-	case err := <-errorChan:
-		logger.Error("Authentication failed: %v", err)
-		server.Close()
-		return fmt.Errorf("authentication failed: %w", err)
-	case <-timeout:
-		logger.Error("Authentication timeout after %v", utils.OAuthFlowTimeout)
-		server.Close()
-		return fmt.Errorf("authentication timeout after %v", utils.OAuthFlowTimeout)
+		time.Sleep(pollInterval)
+
+		token, err := pollDeviceToken(backendURL, deviceCode.DeviceCode)
+		if err != nil {
+			logger.Error("Error polling for token: %v", err)
+			return fmt.Errorf("failed to complete authorization: %w", err)
+		}
+
+		if token.Error == "authorization_pending" {
+			// User hasn't authorized yet, keep polling
+			continue
+		}
+
+		if token.Error == "slow_down" {
+			// We're polling too fast, increase interval
+			pollInterval += 5 * time.Second
+			continue
+		}
+
+		if token.Error != "" {
+			return fmt.Errorf("authorization failed: %s", token.Error)
+		}
+
+		if token.AccessToken != "" {
+			apiKey = token.AccessToken
+			break
+		}
 	}
-
-	// Shutdown callback server
-	server.Close()
 
 	// Save configuration
 	cfg := &config.UploadConfig{
@@ -208,15 +154,72 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.Info("Login successful, config saved")
-	fmt.Println("✓ Authentication successful!")
 	fmt.Println()
-	fmt.Printf("Backend: %s\n", backendURL)
+	fmt.Println("Authentication successful!")
 	fmt.Println()
 	fmt.Println("Next step: Run 'confab init' to install the session hook.")
 	fmt.Println()
 	fmt.Println("Tip: Use 'confab setup' next time to do login + init in one step.")
 
 	return nil
+}
+
+// requestDeviceCode initiates the device code flow
+func requestDeviceCode(backendURL, keyName string) (*DeviceCodeResponse, error) {
+	reqBody := map[string]string{"key_name": keyName}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(backendURL+"/auth/device/code", "application/json", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", string(body))
+	}
+
+	var deviceCode DeviceCodeResponse
+	if err := json.Unmarshal(body, &deviceCode); err != nil {
+		return nil, err
+	}
+
+	return &deviceCode, nil
+}
+
+// pollDeviceToken polls the backend for the token
+func pollDeviceToken(backendURL, deviceCode string) (*DeviceTokenResponse, error) {
+	reqBody := map[string]string{"device_code": deviceCode}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(backendURL+"/auth/device/token", "application/json", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var token DeviceTokenResponse
+	if err := json.Unmarshal(body, &token); err != nil {
+		return nil, err
+	}
+
+	return &token, nil
 }
 
 // openBrowser opens a URL in the default browser

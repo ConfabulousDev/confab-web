@@ -166,7 +166,22 @@ func (db *DB) RunMigrations() error {
 		UNIQUE(share_id, user_id)
 	);
 
+	-- Device codes table (for CLI device authorization flow)
+	CREATE TABLE IF NOT EXISTS device_codes (
+		id BIGSERIAL PRIMARY KEY,
+		device_code CHAR(64) NOT NULL UNIQUE,
+		user_code CHAR(9) NOT NULL UNIQUE,
+		key_name VARCHAR(255) NOT NULL,
+		user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+		expires_at TIMESTAMP NOT NULL,
+		authorized_at TIMESTAMP,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW()
+	);
+
 	-- Indexes
+	CREATE INDEX IF NOT EXISTS idx_device_codes_device_code ON device_codes(device_code);
+	CREATE INDEX IF NOT EXISTS idx_device_codes_user_code ON device_codes(user_code);
+	CREATE INDEX IF NOT EXISTS idx_device_codes_expires ON device_codes(expires_at);
 	CREATE INDEX IF NOT EXISTS idx_user_identities_user ON user_identities(user_id);
 	CREATE INDEX IF NOT EXISTS idx_user_identities_provider ON user_identities(provider, provider_id);
 	CREATE INDEX IF NOT EXISTS idx_web_sessions_user ON web_sessions(user_id);
@@ -1740,4 +1755,106 @@ func (db *DB) GetUserWeeklyUsage(ctx context.Context, userID int64, maxRunsPerWe
 		PeriodStart:  periodStart,
 		PeriodEnd:    now,
 	}, nil
+}
+
+// ============================================================================
+// Device Code Flow (for CLI authentication)
+// ============================================================================
+
+// DeviceCode represents a pending device authorization
+type DeviceCode struct {
+	ID           int64      `json:"id"`
+	DeviceCode   string     `json:"device_code"`
+	UserCode     string     `json:"user_code"`
+	KeyName      string     `json:"key_name"`
+	UserID       *int64     `json:"user_id,omitempty"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	AuthorizedAt *time.Time `json:"authorized_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+// CreateDeviceCode creates a new device code for CLI authentication
+func (db *DB) CreateDeviceCode(ctx context.Context, deviceCode, userCode, keyName string, expiresAt time.Time) error {
+	query := `INSERT INTO device_codes (device_code, user_code, key_name, expires_at) VALUES ($1, $2, $3, $4)`
+	_, err := db.conn.ExecContext(ctx, query, deviceCode, userCode, keyName, expiresAt)
+	if err != nil {
+		return fmt.Errorf("failed to create device code: %w", err)
+	}
+	return nil
+}
+
+// GetDeviceCodeByUserCode retrieves a device code by user code (for web verification page)
+func (db *DB) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*DeviceCode, error) {
+	query := `SELECT id, device_code, user_code, key_name, user_id, expires_at, authorized_at, created_at
+	          FROM device_codes WHERE user_code = $1 AND expires_at > NOW()`
+
+	var dc DeviceCode
+	err := db.conn.QueryRowContext(ctx, query, userCode).Scan(
+		&dc.ID, &dc.DeviceCode, &dc.UserCode, &dc.KeyName,
+		&dc.UserID, &dc.ExpiresAt, &dc.AuthorizedAt, &dc.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrDeviceCodeNotFound
+		}
+		return nil, fmt.Errorf("failed to get device code: %w", err)
+	}
+	return &dc, nil
+}
+
+// GetDeviceCodeByDeviceCode retrieves a device code by device code (for CLI polling)
+func (db *DB) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string) (*DeviceCode, error) {
+	query := `SELECT id, device_code, user_code, key_name, user_id, expires_at, authorized_at, created_at
+	          FROM device_codes WHERE device_code = $1`
+
+	var dc DeviceCode
+	err := db.conn.QueryRowContext(ctx, query, deviceCode).Scan(
+		&dc.ID, &dc.DeviceCode, &dc.UserCode, &dc.KeyName,
+		&dc.UserID, &dc.ExpiresAt, &dc.AuthorizedAt, &dc.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrDeviceCodeNotFound
+		}
+		return nil, fmt.Errorf("failed to get device code: %w", err)
+	}
+	return &dc, nil
+}
+
+// AuthorizeDeviceCode marks a device code as authorized by a user
+func (db *DB) AuthorizeDeviceCode(ctx context.Context, userCode string, userID int64) error {
+	query := `UPDATE device_codes SET user_id = $1, authorized_at = NOW()
+	          WHERE user_code = $2 AND expires_at > NOW() AND authorized_at IS NULL`
+
+	result, err := db.conn.ExecContext(ctx, query, userID, userCode)
+	if err != nil {
+		return fmt.Errorf("failed to authorize device code: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrDeviceCodeNotFound
+	}
+	return nil
+}
+
+// DeleteDeviceCode removes a device code (after successful token exchange or expiration)
+func (db *DB) DeleteDeviceCode(ctx context.Context, deviceCode string) error {
+	query := `DELETE FROM device_codes WHERE device_code = $1`
+	_, err := db.conn.ExecContext(ctx, query, deviceCode)
+	if err != nil {
+		return fmt.Errorf("failed to delete device code: %w", err)
+	}
+	return nil
+}
+
+// CleanupExpiredDeviceCodes removes expired device codes
+func (db *DB) CleanupExpiredDeviceCodes(ctx context.Context) (int64, error) {
+	query := `DELETE FROM device_codes WHERE expires_at < NOW()`
+	result, err := db.conn.ExecContext(ctx, query)
+	if err != nil {
+		return 0, fmt.Errorf("failed to cleanup expired device codes: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	return rows, nil
 }

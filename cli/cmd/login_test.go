@@ -1,221 +1,282 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
-	"strings"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
 )
 
-// TestRunLogin_SuccessfulCallback tests the core OAuth callback flow
-func TestRunLogin_SuccessfulCallback(t *testing.T) {
-	// This test verifies the callback server works correctly
-	// We'll start the login flow and immediately simulate the callback
+// TestRequestDeviceCode tests the device code request function
+func TestRequestDeviceCode(t *testing.T) {
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/auth/device/code" {
+			t.Errorf("Expected /auth/device/code, got %s", r.URL.Path)
+		}
 
-	// Setup: Use temp config file to avoid polluting user's real config
+		// Parse request
+		var req map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("Failed to decode request: %v", err)
+		}
+		if req["key_name"] != "test-key" {
+			t.Errorf("Expected key_name 'test-key', got %s", req["key_name"])
+		}
+
+		// Return mock response
+		resp := DeviceCodeResponse{
+			DeviceCode:      "device-code-123",
+			UserCode:        "ABCD-1234",
+			VerificationURI: "http://localhost/device",
+			ExpiresIn:       900,
+			Interval:        5,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	// Test
+	deviceCode, err := requestDeviceCode(server.URL, "test-key")
+	if err != nil {
+		t.Fatalf("requestDeviceCode failed: %v", err)
+	}
+
+	if deviceCode.DeviceCode != "device-code-123" {
+		t.Errorf("Expected device_code 'device-code-123', got %s", deviceCode.DeviceCode)
+	}
+	if deviceCode.UserCode != "ABCD-1234" {
+		t.Errorf("Expected user_code 'ABCD-1234', got %s", deviceCode.UserCode)
+	}
+	if deviceCode.ExpiresIn != 900 {
+		t.Errorf("Expected expires_in 900, got %d", deviceCode.ExpiresIn)
+	}
+}
+
+// TestPollDeviceToken_Pending tests polling when authorization is pending
+func TestPollDeviceToken_Pending(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/auth/device/token" {
+			t.Errorf("Expected /auth/device/token, got %s", r.URL.Path)
+		}
+
+		// Return pending status
+		resp := DeviceTokenResponse{
+			Error: "authorization_pending",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	token, err := pollDeviceToken(server.URL, "device-code-123")
+	if err != nil {
+		t.Fatalf("pollDeviceToken failed: %v", err)
+	}
+
+	if token.Error != "authorization_pending" {
+		t.Errorf("Expected error 'authorization_pending', got %s", token.Error)
+	}
+	if token.AccessToken != "" {
+		t.Errorf("Expected no access_token, got %s", token.AccessToken)
+	}
+}
+
+// TestPollDeviceToken_Success tests polling when authorization succeeds
+func TestPollDeviceToken_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := DeviceTokenResponse{
+			AccessToken: "cfb_test-api-key-123456",
+			TokenType:   "Bearer",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	token, err := pollDeviceToken(server.URL, "device-code-123")
+	if err != nil {
+		t.Fatalf("pollDeviceToken failed: %v", err)
+	}
+
+	if token.Error != "" {
+		t.Errorf("Expected no error, got %s", token.Error)
+	}
+	if token.AccessToken != "cfb_test-api-key-123456" {
+		t.Errorf("Expected access_token 'cfb_test-api-key-123456', got %s", token.AccessToken)
+	}
+}
+
+// TestDeviceCodeFlow_Integration tests the full device code flow
+func TestDeviceCodeFlow_Integration(t *testing.T) {
+	// Setup: Use temp config file
 	tmpDir := t.TempDir()
 	testConfigPath := fmt.Sprintf("%s/config.json", tmpDir)
 	t.Setenv("CONFAB_CONFIG_PATH", testConfigPath)
 
-	// Create a test backend URL (not used in this test, but needed for login)
-	testBackendURL := "http://test-backend.example.com"
+	// Track request count to simulate progression
+	requestCount := 0
 
-	// We'll test the core callback handling logic by directly testing
-	// what happens when the callback endpoint receives an API key
-
-	// Start login in a goroutine (it will block waiting for callback)
-	errChan := make(chan error, 1)
-	portChan := make(chan int, 1)
-
-	go func() {
-		// We can't easily test runLogin directly due to browser opening
-		// Instead, test the core callback server behavior
-		// by creating our own minimal version that matches the pattern
-
-		// Start callback server
-		listener, err := startCallbackServer(portChan)
-		if err != nil {
-			errChan <- err
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth/device/code" {
+			resp := DeviceCodeResponse{
+				DeviceCode:      "device-code-integration-test",
+				UserCode:        "TEST-1234",
+				VerificationURI: "http://test/device",
+				ExpiresIn:       300,
+				Interval:        1, // Fast polling for test
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
 			return
 		}
-		defer listener.Close()
 
-		// Wait for callback or timeout
-		select {
-		case apiKey := <-apiKeyChan:
-			// Save config (same as runLogin)
-			cfg := &config.UploadConfig{
-				BackendURL: testBackendURL,
-				APIKey:     apiKey,
+		if r.URL.Path == "/auth/device/token" {
+			requestCount++
+			w.Header().Set("Content-Type", "application/json")
+
+			// First 2 requests: pending, then success
+			if requestCount < 3 {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "authorization_pending"})
+			} else {
+				json.NewEncoder(w).Encode(DeviceTokenResponse{
+					AccessToken: "cfb_integration-test-key",
+					TokenType:   "Bearer",
+				})
 			}
-			if err := config.SaveUploadConfig(cfg); err != nil {
-				errChan <- err
+			return
+		}
+
+		t.Errorf("Unexpected request to %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	// Run the device code flow
+	done := make(chan error, 1)
+	go func() {
+		// Request device code
+		dc, err := requestDeviceCode(server.URL, "test-key")
+		if err != nil {
+			done <- err
+			return
+		}
+
+		// Poll for token
+		pollInterval := time.Duration(dc.Interval) * time.Second
+		expiresAt := time.Now().Add(time.Duration(dc.ExpiresIn) * time.Second)
+
+		for {
+			if time.Now().After(expiresAt) {
+				done <- fmt.Errorf("timeout")
 				return
 			}
-			errChan <- nil
-		case <-time.After(5 * time.Second):
-			errChan <- fmt.Errorf("timeout waiting for callback")
+
+			time.Sleep(pollInterval)
+
+			token, err := pollDeviceToken(server.URL, dc.DeviceCode)
+			if err != nil {
+				done <- err
+				return
+			}
+
+			if token.Error == "authorization_pending" {
+				continue
+			}
+
+			if token.Error != "" {
+				done <- fmt.Errorf("error: %s", token.Error)
+				return
+			}
+
+			if token.AccessToken != "" {
+				// Save config
+				cfg := &config.UploadConfig{
+					BackendURL: server.URL,
+					APIKey:     token.AccessToken,
+				}
+				if err := config.SaveUploadConfig(cfg); err != nil {
+					done <- err
+					return
+				}
+				done <- nil
+				return
+			}
 		}
 	}()
 
-	// Wait for server to start
-	var port int
+	// Wait for completion
 	select {
-	case port = <-portChan:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Timeout waiting for server to start")
-	}
-
-	// Simulate OAuth callback with API key
-	testAPIKey := "test-api-key-abcdef123456"
-	callbackURL := fmt.Sprintf("http://localhost:%d/?key=%s", port, url.QueryEscape(testAPIKey))
-
-	resp, err := http.Get(callbackURL)
-	if err != nil {
-		t.Fatalf("Failed to send callback: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Verify callback returned success
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
-
-	// Wait for login flow to complete
-	select {
-	case err := <-errChan:
+	case err := <-done:
 		if err != nil {
-			t.Fatalf("Login flow failed: %v", err)
+			t.Fatalf("Device code flow failed: %v", err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Timeout waiting for login flow to complete")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timeout waiting for device code flow")
 	}
 
-	// Verify config was saved correctly
+	// Verify config was saved
 	cfg, err := config.GetUploadConfig()
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
 
-	if cfg.APIKey != testAPIKey {
-		t.Errorf("Expected API key %s, got %s", testAPIKey, cfg.APIKey)
+	if cfg.APIKey != "cfb_integration-test-key" {
+		t.Errorf("Expected API key 'cfb_integration-test-key', got %s", cfg.APIKey)
 	}
-
-	if cfg.BackendURL != testBackendURL {
-		t.Errorf("Expected backend URL %s, got %s", testBackendURL, cfg.BackendURL)
-	}
-}
-
-// TestRunLogin_MissingAPIKey tests callback with missing API key
-func TestRunLogin_MissingAPIKey(t *testing.T) {
-	portChan := make(chan int, 1)
-	errChan := make(chan error, 1)
-
-	go func() {
-		listener, err := startCallbackServer(portChan)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		defer listener.Close()
-
-		select {
-		case <-apiKeyChan:
-			errChan <- nil
-		case err := <-errorChan:
-			errChan <- err
-		case <-time.After(5 * time.Second):
-			errChan <- fmt.Errorf("timeout")
-		}
-	}()
-
-	// Wait for server to start
-	var port int
-	select {
-	case port = <-portChan:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Timeout waiting for server to start")
-	}
-
-	// Send callback without API key
-	callbackURL := fmt.Sprintf("http://localhost:%d/", port)
-	resp, err := http.Get(callbackURL)
-	if err != nil {
-		t.Fatalf("Failed to send callback: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Verify callback returned error
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("Expected status 400, got %d", resp.StatusCode)
-	}
-
-	// Verify error was received
-	select {
-	case err := <-errChan:
-		if err == nil {
-			t.Error("Expected error for missing API key")
-		}
-		if !strings.Contains(err.Error(), "missing API key") {
-			t.Errorf("Expected 'missing API key' error, got: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Timeout waiting for error")
+	if cfg.BackendURL != server.URL {
+		t.Errorf("Expected backend URL %s, got %s", server.URL, cfg.BackendURL)
 	}
 }
 
-// Helper function to start callback server (matches login.go pattern)
+// TestPollDeviceToken_ServerError tests handling of server errors
+func TestPollDeviceToken_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return valid JSON with error field
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+	}))
+	defer server.Close()
 
-var (
-	apiKeyChan chan string
-	errorChan  chan error
-)
-
-func startCallbackServer(portChan chan<- int) (net.Listener, error) {
-	// Initialize channels
-	apiKeyChan = make(chan string, 1)
-	errorChan = make(chan error, 1)
-
-	// Start listener
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	token, err := pollDeviceToken(server.URL, "device-code-123")
 	if err != nil {
-		return nil, fmt.Errorf("failed to start listener: %w", err)
+		t.Fatalf("pollDeviceToken should not return network error: %v", err)
 	}
 
-	port := listener.Addr().(*net.TCPAddr).Port
-	portChan <- port
-
-	// HTTP handler (same as login.go)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		apiKey := r.URL.Query().Get("key")
-		if apiKey == "" {
-			http.Error(w, "Missing API key", http.StatusBadRequest)
-			errorChan <- fmt.Errorf("missing API key in callback")
-			return
-		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("<html><body>Success</body></html>"))
-
-		apiKeyChan <- apiKey
-	})
-
-	// Start server
-	server := &http.Server{
-		Handler: mux,
+	// Server error results in error field being set
+	if token.Error != "server_error" {
+		t.Errorf("Expected error 'server_error', got %s", token.Error)
 	}
-	go func() {
-		server.Serve(listener)
-	}()
+	if token.AccessToken != "" {
+		t.Errorf("Expected no access_token on error, got %s", token.AccessToken)
+	}
+}
 
-	return listener, nil
+// TestRequestDeviceCode_ServerError tests handling of server errors during code request
+func TestRequestDeviceCode_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte("Service Unavailable"))
+	}))
+	defer server.Close()
+
+	_, err := requestDeviceCode(server.URL, "test-key")
+	if err == nil {
+		t.Error("Expected error for server error, got nil")
+	}
 }
 
 // Note: We don't test openBrowser() because it has side effects (opens browser)
