@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import type { SessionDetail } from '@/types';
 import { formatDate } from '@/utils';
 import RunCard from '@/components/RunCard';
 import styles from './SharedSessionPage.module.css';
 
-type ErrorType = 'not_found' | 'expired' | 'unauthorized' | 'forbidden' | 'general' | null;
+type ErrorType = 'not_found' | 'expired' | 'forbidden' | 'general' | null;
 
 function SharedSessionPage() {
   const { sessionId, token } = useParams<{ sessionId: string; token: string }>();
+  const location = useLocation();
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -34,9 +35,10 @@ function SharedSessionPage() {
             setErrorType('expired');
             setError('This share link has expired');
           } else if (response.status === 401) {
-            setErrorType('unauthorized');
-            const text = await response.text();
-            setError(text || 'Please log in to view this private share');
+            // Redirect to login, preserving the current URL to return after auth
+            const intendedPath = location.pathname + location.search;
+            window.location.href = `/auth/login?redirect=${encodeURIComponent(intendedPath)}`;
+            return;
           } else if (response.status === 403) {
             setErrorType('forbidden');
             setError('You are not authorized to view this share');
@@ -59,7 +61,7 @@ function SharedSessionPage() {
     }
 
     loadSharedSession();
-  }, [sessionId, token]);
+  }, [sessionId, token, location.pathname, location.search]);
 
   function getErrorIcon(type: ErrorType): string {
     switch (type) {
@@ -67,8 +69,6 @@ function SharedSessionPage() {
         return '🔍';
       case 'expired':
         return '⏰';
-      case 'unauthorized':
-        return '🔒';
       case 'forbidden':
         return '🚫';
       default:
@@ -90,11 +90,6 @@ function SharedSessionPage() {
         <div className={styles.errorContainer}>
           <div className={styles.errorIcon}>{getErrorIcon(errorType)}</div>
           <h2>{error}</h2>
-          {errorType === 'unauthorized' && (
-            <p>
-              This is a private share. Please <a href="/auth/github/login">log in</a> to view it.
-            </p>
-          )}
           {errorType === 'forbidden' && <p>This share is only accessible to invited users.</p>}
           {errorType === 'expired' && <p>Please request a new share link from the session owner.</p>}
         </div>

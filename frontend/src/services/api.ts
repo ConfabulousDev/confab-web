@@ -128,14 +128,19 @@ class APIClient {
       }
     }
 
-    // Add JSON content type if body is an object
+    // Add JSON content type and stringify if body is an object
+    let body: BodyInit | undefined;
     if (fetchOptions.body && typeof fetchOptions.body === 'object') {
       headers.set('Content-Type', 'application/json');
+      body = JSON.stringify(fetchOptions.body);
+    } else {
+      body = fetchOptions.body ?? undefined;
     }
 
     const config: RequestInit = {
       ...fetchOptions,
       headers,
+      body,
       credentials: skipAuth ? 'omit' : 'include',
     };
 
@@ -184,7 +189,7 @@ class APIClient {
     return this.request<T>(endpoint, {
       ...options,
       method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
+      body: data as BodyInit,
     });
   }
 
@@ -196,7 +201,7 @@ class APIClient {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
+      body: data as BodyInit,
     });
   }
 
@@ -212,7 +217,7 @@ class APIClient {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PATCH',
-      body: data ? JSON.stringify(data) : undefined,
+      body: data as BodyInit,
     });
   }
 }
