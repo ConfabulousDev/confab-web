@@ -94,11 +94,29 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		"title", title,
 		"session_type", sessionType)
 
-	// Create context with timeout for storage operations (longer timeout for uploads)
+	// Step 1: Create session and run in database to get runID for S3 paths
+	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer dbCancel()
+
+	result, err := s.db.CreateSessionRun(dbCtx, userID, &req, "hook")
+	if err != nil {
+		logger.Error("Failed to create session/run",
+			"error", err,
+			"user_id", userID,
+			"external_id", req.ExternalID)
+		respondError(w, http.StatusInternalServerError, "Failed to create session record")
+		return
+	}
+
+	logger.Debug("Created session/run",
+		"session_id", result.ID,
+		"run_id", result.RunID,
+		"session_type", result.SessionType)
+
+	// Step 2: Upload files to S3 using runID in path
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 	defer storageCancel()
 
-	// Upload files to S3 and collect S3 keys
 	s3Keys := make(map[string]string)
 	for _, file := range req.Files {
 		if len(file.Content) == 0 {
@@ -106,13 +124,21 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		s3Key, err := s.storage.Upload(storageCtx, userID, req.ExternalID, file.Path, file.Content)
+		// S3 path: {user_id}/{session_type}/{external_id}/{run_id}/{filename}
+		s3Key, err := s.storage.Upload(storageCtx, userID, result.SessionType, req.ExternalID, result.RunID, file.Path, file.Content)
 		if err != nil {
 			logger.Error("File upload failed",
 				"error", err,
 				"user_id", userID,
 				"external_id", req.ExternalID,
+				"run_id", result.RunID,
 				"file_path", file.Path)
+			// Clean up the run record since S3 upload failed
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), DatabaseTimeout)
+			if cleanupErr := s.db.DeleteRun(cleanupCtx, result.RunID); cleanupErr != nil {
+				logger.Error("Failed to cleanup run after S3 failure", "error", cleanupErr, "run_id", result.RunID)
+			}
+			cleanupCancel()
 			respondStorageError(w, err, "Failed to upload files to storage")
 			return
 		}
@@ -121,18 +147,18 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		logger.Debug("File uploaded", "file_path", file.Path, "s3_key", s3Key)
 	}
 
-	// Create context with timeout for database operation
-	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer dbCancel()
+	// Step 3: Add file records to the run
+	filesCtx, filesCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer filesCancel()
 
-	// Save metadata to database
-	result, err := s.db.SaveSession(dbCtx, userID, &req, s3Keys, "hook")
-	if err != nil {
-		logger.Error("Failed to save session metadata",
+	if err := s.db.AddFilesToRun(filesCtx, result.RunID, req.Files, s3Keys); err != nil {
+		logger.Error("Failed to add files to run",
 			"error", err,
 			"user_id", userID,
-			"external_id", req.ExternalID)
-		respondError(w, http.StatusInternalServerError, "Failed to save session metadata")
+			"external_id", req.ExternalID,
+			"run_id", result.RunID)
+		// Note: S3 objects are orphaned here - will need GC strategy
+		respondError(w, http.StatusInternalServerError, "Failed to save file metadata")
 		return
 	}
 

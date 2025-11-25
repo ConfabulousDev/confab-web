@@ -5,10 +5,27 @@ import (
 )
 
 // UploadTestFile uploads a file to S3 for testing
-func UploadTestFile(t *testing.T, env *TestEnvironment, userID int64, sessionID, filePath string, content []byte) string {
+// Uses default test values for sessionType and runID
+func UploadTestFile(t *testing.T, env *TestEnvironment, userID int64, externalID, filePath string, content []byte) string {
 	t.Helper()
 
-	s3Key, err := env.Storage.Upload(env.Ctx, userID, sessionID, filePath, content)
+	// Use default test values for sessionType and runID
+	sessionType := "Claude Code"
+	runID := int64(1)
+
+	s3Key, err := env.Storage.Upload(env.Ctx, userID, sessionType, externalID, runID, filePath, content)
+	if err != nil {
+		t.Fatalf("failed to upload test file: %v", err)
+	}
+
+	return s3Key
+}
+
+// UploadTestFileWithRunID uploads a file to S3 with specific sessionType and runID
+func UploadTestFileWithRunID(t *testing.T, env *TestEnvironment, userID int64, sessionType, externalID string, runID int64, filePath string, content []byte) string {
+	t.Helper()
+
+	s3Key, err := env.Storage.Upload(env.Ctx, userID, sessionType, externalID, runID, filePath, content)
 	if err != nil {
 		t.Fatalf("failed to upload test file: %v", err)
 	}

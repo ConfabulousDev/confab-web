@@ -293,14 +293,16 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 	return nil
 }
 
-// SaveSession stores a session with its run and files in a transaction
 // SaveSessionResult contains the result of saving a session
 type SaveSessionResult struct {
-	RunID int64
-	ID    string // UUID primary key of the session
+	RunID       int64
+	ID          string // UUID primary key of the session
+	SessionType string // Normalized session type (for S3 path)
 }
 
-func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSessionRequest, s3Keys map[string]string, source string) (*SaveSessionResult, error) {
+// CreateSessionRun creates a session and run record, returning the IDs needed for S3 uploads
+// This is step 1 of the upload flow: create run -> upload to S3 -> add files
+func (db *DB) CreateSessionRun(ctx context.Context, userID int64, req *models.SaveSessionRequest, source string) (*SaveSessionResult, error) {
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -341,7 +343,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		gitInfoJSON = jsonBytes
 	}
 
-	// Always insert a new run
+	// Always insert a new run (s3_uploaded starts as false, updated after files added)
 	runSQL := `
 		INSERT INTO runs (session_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info, source, last_activity)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -358,7 +360,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		req.CWD,
 		req.Reason,
 		now,
-		len(s3Keys) > 0,
+		false, // s3_uploaded starts as false
 		gitInfoJSON,
 		source,
 		req.LastActivity, // CLI always provides this field
@@ -367,12 +369,34 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 		return nil, fmt.Errorf("failed to insert run: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return &SaveSessionResult{
+		RunID:       runID,
+		ID:          sessionID,
+		SessionType: sessionType,
+	}, nil
+}
+
+// AddFilesToRun adds file records to an existing run after S3 upload
+// This is step 2 of the upload flow: create run -> upload to S3 -> add files
+func (db *DB) AddFilesToRun(ctx context.Context, runID int64, files []models.FileUpload, s3Keys map[string]string) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC()
+
 	// Insert files linked to this run
 	fileSQL := `
 		INSERT INTO files (run_id, file_path, file_type, size_bytes, s3_key, s3_uploaded_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
-	for _, f := range req.Files {
+	for _, f := range files {
 		s3Key, uploaded := s3Keys[f.Path]
 		var s3UploadedAt *time.Time
 		var s3KeyPtr *string
@@ -383,19 +407,44 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 
 		_, err = tx.ExecContext(ctx, fileSQL, runID, f.Path, f.Type, f.SizeBytes, s3KeyPtr, s3UploadedAt)
 		if err != nil {
-			return nil, fmt.Errorf("failed to insert file: %w", err)
+			return fmt.Errorf("failed to insert file: %w", err)
+		}
+	}
+
+	// Update run to mark S3 as uploaded if any files were uploaded
+	if len(s3Keys) > 0 {
+		_, err = tx.ExecContext(ctx, `UPDATE runs SET s3_uploaded = true WHERE id = $1`, runID)
+		if err != nil {
+			return fmt.Errorf("failed to update run s3_uploaded: %w", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return &SaveSessionResult{
-		RunID: runID,
-		ID:    sessionID,
-	}, nil
+	return nil
 }
+
+// DeleteRun deletes a run record (used for cleanup if S3 upload fails)
+func (db *DB) DeleteRun(ctx context.Context, runID int64) error {
+	_, err := db.conn.ExecContext(ctx, `DELETE FROM runs WHERE id = $1`, runID)
+	if err != nil {
+		return fmt.Errorf("failed to delete run: %w", err)
+	}
+	return nil
+}
+
+// TODO: Implement GC strategy for orphaned S3 objects
+// When the upload flow fails between S3 upload and AddFilesToRun, we may have:
+// 1. S3 objects that were uploaded but no corresponding file records
+// 2. Run records with s3_uploaded=false that never got files added
+//
+// Potential GC approaches:
+// - Periodic job to scan S3 objects and compare against files table
+// - S3 lifecycle policy to delete objects older than X days without DB references
+// - Track upload_started_at on runs and delete runs stuck in "uploading" state
+// - Use S3 object tags to mark objects as "pending" until DB record confirmed
 
 // FindOrCreateUserByOAuth finds or creates a user by OAuth provider identity.
 // It handles account linking: if an identity doesn't exist but the email matches

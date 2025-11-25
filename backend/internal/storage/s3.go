@@ -71,9 +71,9 @@ func NewS3Storage(config S3Config) (*S3Storage, error) {
 
 // Upload uploads a file to S3/MinIO
 // Returns the S3 key where the file was stored
-func (s *S3Storage) Upload(ctx context.Context, userID int64, sessionID, filename string, data []byte) (string, error) {
-	// Organize files by user/session
-	key := s.generateKey(userID, sessionID, filename)
+func (s *S3Storage) Upload(ctx context.Context, userID int64, sessionType, externalID string, runID int64, filename string, data []byte) (string, error) {
+	// Organize files by user/session_type/external_id/run_id
+	key := s.generateKey(userID, sessionType, externalID, runID, filename)
 
 	reader := bytes.NewReader(data)
 	_, err := s.client.PutObject(ctx, s.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
@@ -113,10 +113,30 @@ func (s *S3Storage) Delete(ctx context.Context, key string) error {
 }
 
 // generateKey creates an organized S3 key path
-// Format: {user_id}/{session_id}/{filename}
-func (s *S3Storage) generateKey(userID int64, sessionID, filename string) string {
+// Format: {user_id}/{session_type}/{external_id}/{run_id}/{filename}
+func (s *S3Storage) generateKey(userID int64, sessionType, externalID string, runID int64, filename string) string {
 	basename := filepath.Base(filename)
-	return fmt.Sprintf("%d/%s/%s", userID, sessionID, basename)
+	// Normalize session type: lowercase, spaces to hyphens
+	normalizedType := normalizeSessionType(sessionType)
+	return fmt.Sprintf("%d/%s/%s/%d/%s", userID, normalizedType, externalID, runID, basename)
+}
+
+// normalizeSessionType converts session type to a safe S3 key component
+// e.g., "Claude Code" -> "claude-code"
+func normalizeSessionType(sessionType string) string {
+	result := make([]byte, 0, len(sessionType))
+	for i := 0; i < len(sessionType); i++ {
+		c := sessionType[i]
+		if c >= 'A' && c <= 'Z' {
+			result = append(result, c+32) // lowercase
+		} else if c == ' ' {
+			result = append(result, '-')
+		} else if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+			result = append(result, c)
+		}
+		// skip other characters
+	}
+	return string(result)
 }
 
 // classifyStorageError examines a storage error and returns an appropriate sentinel error
