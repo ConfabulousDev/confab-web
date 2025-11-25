@@ -56,17 +56,29 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	// Step 1: Check if already authenticated
 	needsLogin := true
 	cfg, err := config.GetUploadConfig()
-	if err == nil && cfg.BackendURL != "" && cfg.APIKey != "" {
-		// Config exists, verify it works
-		fmt.Println("Checking existing authentication...")
-		if verifyAPIKey(cfg) {
-			logger.Info("Existing API key is valid, skipping login")
-			fmt.Println("✓ Already authenticated")
-			fmt.Println()
-			needsLogin = false
+	if err == nil && cfg.APIKey != "" {
+		// If no backend URL specified on command line, use the saved one
+		if backendURL == "http://localhost:8080" && cfg.BackendURL != "" {
+			backendURL = cfg.BackendURL
+		}
+
+		// Check if backend URL matches
+		if cfg.BackendURL == backendURL {
+			// Config exists with matching backend, verify it works
+			fmt.Println("Checking existing authentication...")
+			if err := verifyAPIKey(cfg); err == nil {
+				logger.Info("Existing API key is valid, skipping login")
+				fmt.Println("✓ Already authenticated")
+				fmt.Println()
+				needsLogin = false
+			} else {
+				logger.Info("Existing API key is invalid: %v", err)
+				fmt.Println("✗ Existing credentials invalid, need to re-authenticate")
+				fmt.Println()
+			}
 		} else {
-			logger.Info("Existing API key is invalid, need to re-login")
-			fmt.Println("✗ Existing credentials invalid, need to re-authenticate")
+			logger.Info("Backend URL changed from %s to %s, need to re-login", cfg.BackendURL, backendURL)
+			fmt.Printf("Backend URL changed, need to re-authenticate\n")
 			fmt.Println()
 		}
 	}
@@ -113,7 +125,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 }
 
 // verifyAPIKey checks if the API key works by making a test request
-func verifyAPIKey(cfg *config.UploadConfig) bool {
+func verifyAPIKey(cfg *config.UploadConfig) error {
 	client := confabhttp.NewClient(cfg, 5*time.Second)
 
 	// Try to hit an authenticated endpoint - sessions/check with empty list is lightweight
@@ -127,8 +139,7 @@ func verifyAPIKey(cfg *config.UploadConfig) bool {
 		ExternalIDs: []string{},
 	}
 
-	err := client.Post("/api/v1/sessions/check", reqBody, &result)
-	return err == nil
+	return client.Post("/api/v1/sessions/check", reqBody, &result)
 }
 
 // doLogin performs the OAuth login flow
