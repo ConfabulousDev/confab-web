@@ -35,11 +35,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get backend-url flag: %w", err)
 	}
-
-	// Default backend URL
-	if backendURL == "" {
-		backendURL = "http://localhost:8080"
-	}
+	backendURLSpecified := backendURL != ""
 
 	// Default key name to hostname
 	var keyName string
@@ -58,12 +54,12 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	cfg, err := config.GetUploadConfig()
 	if err == nil && cfg.APIKey != "" {
 		// If no backend URL specified on command line, use the saved one
-		if backendURL == "http://localhost:8080" && cfg.BackendURL != "" {
+		if !backendURLSpecified && cfg.BackendURL != "" {
 			backendURL = cfg.BackendURL
 		}
 
-		// Check if backend URL matches
-		if cfg.BackendURL == backendURL {
+		// Check if backend URL matches (or no URL specified yet)
+		if cfg.BackendURL == backendURL || (!backendURLSpecified && cfg.BackendURL != "") {
 			// Config exists with matching backend, verify it works
 			fmt.Println("Checking existing authentication...")
 			if err := verifyAPIKey(cfg); err == nil {
@@ -81,6 +77,11 @@ func runSetup(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Backend URL changed, need to re-authenticate\n")
 			fmt.Println()
 		}
+	}
+
+	// Apply default backend URL if still not set
+	if backendURL == "" {
+		backendURL = "http://localhost:8080"
 	}
 
 	// Step 2: Login if needed
@@ -124,22 +125,20 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// verifyAPIKey checks if the API key works by making a test request
+// verifyAPIKey checks if the API key works by calling the validate endpoint
 func verifyAPIKey(cfg *config.UploadConfig) error {
 	client := confabhttp.NewClient(cfg, 5*time.Second)
 
-	// Try to hit an authenticated endpoint - sessions/check with empty list is lightweight
-	var result struct {
-		Existing []string `json:"existing"`
-		Missing  []string `json:"missing"`
-	}
-	reqBody := struct {
-		ExternalIDs []string `json:"external_ids"`
-	}{
-		ExternalIDs: []string{},
+	var result map[string]interface{}
+	if err := client.Get("/api/v1/auth/validate", &result); err != nil {
+		return err
 	}
 
-	return client.Post("/api/v1/sessions/check", reqBody, &result)
+	if valid, ok := result["valid"].(bool); !ok || !valid {
+		return fmt.Errorf("api key is not valid")
+	}
+
+	return nil
 }
 
 // doLogin performs the OAuth login flow
