@@ -1,6 +1,15 @@
 // Centralized API client with error handling and interceptors
-import { getCSRFToken, initCSRF } from './csrf';
+import { getCSRFToken, initCSRF, clearCSRFToken } from './csrf';
 import type { z } from 'zod';
+
+/**
+ * Handles authentication failures by clearing cached state and redirecting to home.
+ * Call this when a 401 response is received.
+ */
+export function handleAuthFailure(): void {
+  clearCSRFToken();
+  window.location.href = '/';
+}
 
 export class APIError extends Error {
   status: number;
@@ -49,8 +58,9 @@ class APIClient {
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
-    // Handle authentication errors
+    // Handle authentication errors - clear state and redirect
     if (response.status === 401) {
+      handleAuthFailure();
       throw new AuthenticationError();
     }
 

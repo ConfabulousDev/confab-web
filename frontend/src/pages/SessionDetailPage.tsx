@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
+import { sessionsAPI, APIError } from '@/services/api';
 import { useDocumentTitle, useSuccessMessage } from '@/hooks';
 import type { SessionDetail, RunDetail } from '@/types';
 import { formatRelativeTime } from '@/utils';
@@ -53,26 +54,8 @@ function SessionDetailPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`/api/v1/sessions/${sessionId}`, {
-        credentials: 'include',
-      });
-
-      if (response.status === 401) {
-        window.location.href = '/';
-        return;
-      }
-
-      if (response.status === 404) {
-        setError('Session not found');
-        setLoading(false);
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch session');
-      }
-
-      const data: SessionDetail = await response.json();
+      // Uses sessionsAPI which handles 401 globally via handleAuthFailure()
+      const data = await sessionsAPI.get(sessionId);
       setSession(data);
 
       // Set initial selection to the latest run by timestamp
@@ -83,7 +66,12 @@ function SessionDetailPage() {
         setSelectedRunIndex(latestIndex);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load session');
+      // 401 is handled globally by the API client, so we only handle other errors here
+      if (err instanceof APIError && err.status === 404) {
+        setError('Session not found');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load session');
+      }
     } finally {
       setLoading(false);
     }

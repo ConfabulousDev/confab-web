@@ -44,6 +44,14 @@ export function getCSRFToken(): string {
 }
 
 /**
+ * Clears the cached CSRF token
+ * Should be called on logout or authentication failure
+ */
+export function clearCSRFToken(): void {
+	csrfToken = '';
+}
+
+/**
  * Makes a fetch request with CSRF token automatically included
  * Use this for all POST, PUT, DELETE requests
  */
