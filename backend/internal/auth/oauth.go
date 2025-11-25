@@ -1156,27 +1156,36 @@ func HandleDeviceToken(database *db.DB) http.HandlerFunc {
 }
 
 // HandleDevicePage serves the device verification page
-// GET /device
+// GET /auth/device
 func HandleDevicePage(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Get pre-filled code from query param
+		prefilledCode := r.URL.Query().Get("code")
+
 		// Check if user is logged in
 		cookie, err := r.Cookie(SessionCookieName)
 		loggedIn := err == nil && cookie.Value != ""
 
-		var userID int64
 		if loggedIn {
-			session, err := database.GetWebSession(r.Context(), cookie.Value)
+			_, err := database.GetWebSession(r.Context(), cookie.Value)
 			if err != nil {
 				loggedIn = false
-			} else {
-				userID = session.UserID
 			}
 		}
 
-		// Get pre-filled code from query param
-		prefilledCode := r.URL.Query().Get("code")
+		// If not logged in, redirect directly to login selector
+		if !loggedIn {
+			redirectURL := "/auth/device"
+			if prefilledCode != "" {
+				redirectURL = "/auth/device?code=" + url.QueryEscape(prefilledCode)
+			}
+			loginURL := "/auth/login?redirect=" + url.QueryEscape(redirectURL)
+			http.Redirect(w, r, loginURL, http.StatusTemporaryRedirect)
+			return
+		}
 
-		html := generateDevicePageHTML(loggedIn, prefilledCode, userID > 0)
+		// Logged in - show the code entry form
+		html := generateDevicePageHTML(prefilledCode)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(html))
@@ -1189,26 +1198,33 @@ func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		// Parse form first to get the code for redirect
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Invalid form", http.StatusBadRequest)
+			return
+		}
+		userCode := strings.ToUpper(strings.TrimSpace(r.FormValue("code")))
+
+		// Build redirect URL with code preserved
+		redirectURL := "/auth/device"
+		if userCode != "" {
+			redirectURL = "/auth/device?code=" + url.QueryEscape(userCode)
+		}
+		loginRedirect := "/auth/login?redirect=" + url.QueryEscape(redirectURL)
+
 		// Must be logged in
 		cookie, err := r.Cookie(SessionCookieName)
 		if err != nil {
-			http.Redirect(w, r, "/auth/login?redirect=/auth/device", http.StatusTemporaryRedirect)
+			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
 			return
 		}
 
 		session, err := database.GetWebSession(ctx, cookie.Value)
 		if err != nil {
-			http.Redirect(w, r, "/auth/login?redirect=/auth/device", http.StatusTemporaryRedirect)
+			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
 			return
 		}
 
-		// Parse form
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Invalid form", http.StatusBadRequest)
-			return
-		}
-
-		userCode := strings.ToUpper(strings.TrimSpace(r.FormValue("code")))
 		// Normalize: remove any dashes and re-add in correct position
 		userCode = strings.ReplaceAll(userCode, "-", "")
 		if len(userCode) == 8 {
@@ -1237,17 +1253,7 @@ func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 	}
 }
 
-func generateDevicePageHTML(loggedIn bool, prefilledCode string, hasValidSession bool) string {
-	loginPrompt := ""
-	if !loggedIn {
-		loginPrompt = `<p class="login-prompt">You need to <a href="/auth/login?redirect=/auth/device">sign in</a> first to authorize this device.</p>`
-	}
-
-	disabledAttr := ""
-	if !loggedIn {
-		disabledAttr = "disabled"
-	}
-
+func generateDevicePageHTML(prefilledCode string) string {
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
@@ -1285,15 +1291,6 @@ func generateDevicePageHTML(loggedIn bool, prefilledCode string, hasValidSession
             margin: 0 0 1.5rem 0;
             font-size: 0.9rem;
         }
-        .login-prompt {
-            background: #2a2a2a;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .login-prompt a {
-            color: #60a5fa;
-        }
         form {
             display: flex;
             flex-direction: column;
@@ -1315,10 +1312,6 @@ func generateDevicePageHTML(loggedIn bool, prefilledCode string, hasValidSession
             outline: none;
             border-color: #60a5fa;
         }
-        input[type="text"]:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
         button {
             padding: 1rem;
             font-size: 1rem;
@@ -1330,12 +1323,8 @@ func generateDevicePageHTML(loggedIn bool, prefilledCode string, hasValidSession
             cursor: pointer;
             transition: background 0.2s;
         }
-        button:hover:not(:disabled) {
+        button:hover {
             background: #2563eb;
-        }
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
         }
         .hint {
             font-size: 0.8rem;
@@ -1347,16 +1336,15 @@ func generateDevicePageHTML(loggedIn bool, prefilledCode string, hasValidSession
     <div class="container">
         <h1>Authorize Device</h1>
         <p>Enter the code shown in your terminal to connect your CLI.</p>
-        %s
         <form action="/auth/device/verify" method="POST">
             <input type="text" name="code" placeholder="XXXX-XXXX" maxlength="9"
-                   value="%s" autocomplete="off" autofocus %s>
-            <button type="submit" %s>Authorize</button>
+                   value="%s" autocomplete="off" autofocus>
+            <button type="submit">Authorize</button>
         </form>
         <p class="hint">The code expires in 15 minutes.</p>
     </div>
 </body>
-</html>`, loginPrompt, prefilledCode, disabledAttr, disabledAttr)
+</html>`, prefilledCode)
 }
 
 func generateDeviceResultHTML(success bool, message string) string {
@@ -1365,6 +1353,15 @@ func generateDeviceResultHTML(success bool, message string) string {
 	if success {
 		icon = "✓"
 		iconColor = "#10b981"
+	}
+
+	// Add link to frontend on success
+	homeLink := ""
+	if success {
+		frontendURL := os.Getenv("FRONTEND_URL")
+		if frontendURL != "" {
+			homeLink = fmt.Sprintf(`<a href="%s" class="home-link">Go to Confab</a>`, frontendURL)
+		}
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html>
@@ -1409,6 +1406,20 @@ func generateDeviceResultHTML(success bool, message string) string {
             margin: 0;
             font-size: 0.9rem;
         }
+        .home-link {
+            display: inline-block;
+            margin-top: 1.5rem;
+            padding: 0.75rem 1.5rem;
+            background: #3b82f6;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .home-link:hover {
+            background: #2563eb;
+        }
     </style>
 </head>
 <body>
@@ -1416,6 +1427,7 @@ func generateDeviceResultHTML(success bool, message string) string {
         <div class="icon">%s</div>
         <h1>%s</h1>
         <p>%s</p>
+        %s
     </div>
 </body>
 </html>`, iconColor, icon, func() string {
@@ -1423,7 +1435,7 @@ func generateDeviceResultHTML(success bool, message string) string {
 			return "Success!"
 		}
 		return "Error"
-	}(), message)
+	}(), message, homeLink)
 }
 
 // isLocalhostURL checks if URL is localhost
