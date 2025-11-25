@@ -35,9 +35,9 @@ var initCmd = &cobra.Command{
 		fmt.Println()
 		fmt.Println("Confab will now automatically capture your Claude Code sessions.")
 		fmt.Println()
-		fmt.Println("Next steps:")
-		fmt.Println("  1. Run 'confab login' to authenticate with the cloud backend")
-		fmt.Println("  2. Run 'confab status' to verify your setup")
+		fmt.Println("If not logged in yet, run 'confab login' to authenticate.")
+		fmt.Println()
+		fmt.Println("Tip: Use 'confab setup' next time to do login + init in one step.")
 
 		return nil
 	},

@@ -6,31 +6,30 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
-	"runtime"
 	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	confabhttp "github.com/santaclaude2025/confab/pkg/http"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
-var loginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "Authenticate with confab cloud backend",
-	Long: `Opens browser to authenticate via GitHub OAuth and obtain an API key.
+var setupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Set up confab (login + install hook)",
+	Long: `Complete setup for confab in one command.
 
-Note: This requires a browser on the same machine as the CLI. For remote/headless
-servers, use the web dashboard to create an API key, then run:
-  confab configure --api-key <key>
+This command:
+1. Authenticates with the cloud backend (if not already logged in)
+2. Installs the SessionEnd hook to automatically capture sessions
 
-TODO: Implement device code flow for remote/headless scenarios (similar to 'gh auth login').`,
-	RunE: runLogin,
+If you're already authenticated with a valid API key, the login step is skipped.`,
+	RunE: runSetup,
 }
 
-func runLogin(cmd *cobra.Command, args []string) error {
-	logger.Info("Starting login flow")
+func runSetup(cmd *cobra.Command, args []string) error {
+	logger.Info("Starting setup")
 
 	backendURL, err := cmd.Flags().GetString("backend-url")
 	if err != nil {
@@ -42,7 +41,6 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Default backend URL
-	// TODO: Change default to production (https://confab.fly.dev) once stable
 	if backendURL == "" {
 		backendURL = "http://localhost:8080"
 	}
@@ -57,10 +55,91 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	fmt.Println("=== Confab Setup ===")
+	fmt.Println()
+
+	// Step 1: Check if already authenticated
+	needsLogin := true
+	cfg, err := config.GetUploadConfig()
+	if err == nil && cfg.BackendURL != "" && cfg.APIKey != "" {
+		// Config exists, verify it works
+		fmt.Println("Checking existing authentication...")
+		if verifyAPIKey(cfg) {
+			logger.Info("Existing API key is valid, skipping login")
+			fmt.Println("✓ Already authenticated")
+			fmt.Println()
+			needsLogin = false
+		} else {
+			logger.Info("Existing API key is invalid, need to re-login")
+			fmt.Println("✗ Existing credentials invalid, need to re-authenticate")
+			fmt.Println()
+		}
+	}
+
+	// Step 2: Login if needed
+	if needsLogin {
+		fmt.Println("Step 1/2: Authentication")
+		fmt.Println()
+		if err := doLogin(backendURL, keyName); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
+
+	// Step 3: Install hook
+	if needsLogin {
+		fmt.Println("Step 2/2: Installing hook")
+	} else {
+		fmt.Println("Installing hook...")
+	}
+	fmt.Println()
+
+	if err := config.InstallHook(); err != nil {
+		logger.Error("Failed to install hook: %v", err)
+		return fmt.Errorf("failed to install hook: %w", err)
+	}
+
+	settingsPath, _ := config.GetSettingsPath()
+	logger.Info("Hook installed in %s", settingsPath)
+	fmt.Printf("✓ Hook installed in %s\n", settingsPath)
+	fmt.Println()
+
+	// Final message
+	fmt.Println("=== Setup Complete ===")
+	fmt.Println()
+	fmt.Println("Confab will now automatically capture your Claude Code sessions.")
+	fmt.Println()
+	fmt.Println("Try it out:")
+	fmt.Println("  1. Start a new Claude Code session")
+	fmt.Println("  2. When you end the session, it will be uploaded automatically")
+	fmt.Println("  3. Run 'confab status' to check your setup")
+
+	return nil
+}
+
+// verifyAPIKey checks if the API key works by making a test request
+func verifyAPIKey(cfg *config.UploadConfig) bool {
+	client := confabhttp.NewClient(cfg, 5*time.Second)
+
+	// Try to hit an authenticated endpoint - sessions/check with empty list is lightweight
+	var result struct {
+		Existing []string `json:"existing"`
+		Missing  []string `json:"missing"`
+	}
+	reqBody := struct {
+		ExternalIDs []string `json:"external_ids"`
+	}{
+		ExternalIDs: []string{},
+	}
+
+	err := client.Post("/api/v1/sessions/check", reqBody, &result)
+	return err == nil
+}
+
+// doLogin performs the OAuth login flow
+func doLogin(backendURL, keyName string) error {
 	logger.Debug("Login parameters: backend=%s, keyName=%s", backendURL, keyName)
 
-	fmt.Println("=== Confab Login ===")
-	fmt.Println()
 	fmt.Printf("Backend: %s\n", backendURL)
 	fmt.Printf("Key name: %s\n", keyName)
 	fmt.Println()
@@ -209,37 +288,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	logger.Info("Login successful, config saved")
 	fmt.Println("✓ Authentication successful!")
-	fmt.Println()
-	fmt.Printf("Backend: %s\n", backendURL)
-	fmt.Println()
-	fmt.Println("Next step: Run 'confab init' to install the session hook.")
-	fmt.Println()
-	fmt.Println("Tip: Use 'confab setup' next time to do login + init in one step.")
 
 	return nil
 }
 
-// openBrowser opens a URL in the default browser
-func openBrowser(url string) error {
-	var cmd *exec.Cmd
-
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		return fmt.Errorf("unsupported platform")
-	}
-
-	return cmd.Start()
-}
-
 func init() {
-	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(setupCmd)
 
-	loginCmd.Flags().String("backend-url", "", "Backend API URL (default: http://localhost:8080)")
-	loginCmd.Flags().String("name", "", "Name for this API key (default: hostname)")
+	setupCmd.Flags().String("backend-url", "", "Backend API URL (default: http://localhost:8080)")
+	setupCmd.Flags().String("name", "", "Name for this API key (default: hostname)")
 }
