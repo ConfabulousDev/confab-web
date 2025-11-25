@@ -96,13 +96,7 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 		LastActivity:   lastActivity, // Always provided, never nil
 	}
 
-	if err := SendSessionRequest(cfg, &request); err != nil {
-		return "", err
-	}
-
-	// Return URL to view the session
-	sessionURL := fmt.Sprintf("%s/sessions/%s", cfg.BackendURL, hookInput.SessionID)
-	return sessionURL, nil
+	return SendSessionRequest(cfg, &request)
 }
 
 // ReadFilesForUpload reads file contents and creates FileUpload entries
@@ -217,11 +211,12 @@ func extractLastActivity(transcriptPath string) (*time.Time, error) {
 }
 
 // SendSessionRequest sends a session save request to the backend with zstd compression
-func SendSessionRequest(cfg *config.UploadConfig, request *SaveSessionRequest) error {
+// Returns the session URL from the API response
+func SendSessionRequest(cfg *config.UploadConfig, request *SaveSessionRequest) (string, error) {
 	// Marshal to JSON
 	payload, err := json.Marshal(request)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Compress with zstd for faster uploads and lower bandwidth
@@ -229,24 +224,24 @@ func SendSessionRequest(cfg *config.UploadConfig, request *SaveSessionRequest) e
 	var compressedPayload bytes.Buffer
 	encoder, err := zstd.NewWriter(&compressedPayload, zstd.WithEncoderLevel(zstd.SpeedDefault))
 	if err != nil {
-		return fmt.Errorf("failed to create zstd encoder: %w", err)
+		return "", fmt.Errorf("failed to create zstd encoder: %w", err)
 	}
 
 	_, err = encoder.Write(payload)
 	if err != nil {
 		encoder.Close()
-		return fmt.Errorf("failed to compress payload: %w", err)
+		return "", fmt.Errorf("failed to compress payload: %w", err)
 	}
 
 	if err := encoder.Close(); err != nil {
-		return fmt.Errorf("failed to finalize compression: %w", err)
+		return "", fmt.Errorf("failed to finalize compression: %w", err)
 	}
 
 	// Send HTTP request
-	url := cfg.BackendURL + "/api/v1/sessions/save"
-	req, err := http.NewRequest("POST", url, bytes.NewReader(compressedPayload.Bytes()))
+	apiURL := cfg.BackendURL + "/api/v1/sessions/save"
+	req, err := http.NewRequest("POST", apiURL, bytes.NewReader(compressedPayload.Bytes()))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -256,36 +251,36 @@ func SendSessionRequest(cfg *config.UploadConfig, request *SaveSessionRequest) e
 	client := &http.Client{Timeout: utils.UploadHTTPTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	// Check status
 	if resp.StatusCode != http.StatusOK {
 		// Special handling for rate limit errors
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return fmt.Errorf("rate limit exceeded: %s", string(body))
+			return "", fmt.Errorf("rate limit exceeded: %s", string(body))
 		}
-		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
 	var response SaveSessionResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if !response.Success {
-		return fmt.Errorf("upload failed: %s", response.Message)
+		return "", fmt.Errorf("upload failed: %s", response.Message)
 	}
 
-	return nil
+	return response.SessionURL, nil
 }
 
 // SaveSessionRequest is the API request for saving a session
@@ -310,8 +305,9 @@ type FileUpload struct {
 
 // SaveSessionResponse is the API response
 type SaveSessionResponse struct {
-	Success   bool   `json:"success"`
-	SessionID string `json:"session_id"`
-	RunID     int64  `json:"run_id"`
-	Message   string `json:"message,omitempty"`
+	Success    bool   `json:"success"`
+	SessionID  string `json:"session_id"`
+	RunID      int64  `json:"run_id"`
+	SessionURL string `json:"session_url,omitempty"`
+	Message    string `json:"message,omitempty"`
 }

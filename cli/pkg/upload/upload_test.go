@@ -146,7 +146,7 @@ func TestSendSessionRequest_Success(t *testing.T) {
 		},
 	}
 
-	err := SendSessionRequest(cfg, request)
+	_, err := SendSessionRequest(cfg, request)
 	if err != nil {
 		t.Fatalf("SendSessionRequest() failed: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestSendSessionRequest_HTTPError(t *testing.T) {
 		Files:     []FileUpload{},
 	}
 
-	err := SendSessionRequest(cfg, request)
+	_, err := SendSessionRequest(cfg, request)
 	if err == nil {
 		t.Fatal("Expected error for HTTP 400, got nil")
 	}
@@ -201,7 +201,7 @@ func TestSendSessionRequest_ServerRejectsUpload(t *testing.T) {
 		Files:     []FileUpload{},
 	}
 
-	err := SendSessionRequest(cfg, request)
+	_, err := SendSessionRequest(cfg, request)
 	if err == nil {
 		t.Fatal("Expected error for success=false response, got nil")
 	}
@@ -240,7 +240,7 @@ func TestSendSessionRequest_CompressionWorks(t *testing.T) {
 		},
 	}
 
-	err := SendSessionRequest(cfg, request)
+	_, err := SendSessionRequest(cfg, request)
 	if err != nil {
 		t.Fatalf("SendSessionRequest() failed: %v", err)
 	}
