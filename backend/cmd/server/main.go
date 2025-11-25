@@ -118,10 +118,21 @@ func loadConfig() Config {
 		log.Fatal("GITHUB_REDIRECT_URL is required")
 	}
 
-	// Google OAuth configuration (optional - only required if using Google sign-in)
+	// Google OAuth configuration
 	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
+	if googleClientID == "" {
+		log.Fatal("GOOGLE_CLIENT_ID is required")
+	}
+
 	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
+	if googleClientSecret == "" {
+		log.Fatal("GOOGLE_CLIENT_SECRET is required")
+	}
+
 	googleRedirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
+	if googleRedirectURL == "" {
+		log.Fatal("GOOGLE_REDIRECT_URL is required")
+	}
 
 	// Validate required security configuration
 	csrfSecretKey := os.Getenv("CSRF_SECRET_KEY")

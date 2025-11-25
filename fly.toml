@@ -15,8 +15,10 @@ primary_region = 'sjc'
 
   # Frontend/Backend URLs (update if using custom domain)
   FRONTEND_URL = "https://confab.fly.dev"
+  BACKEND_URL = "https://confab.fly.dev"
   ALLOWED_ORIGINS = "https://confab.fly.dev"
   GITHUB_REDIRECT_URL = "https://confab.fly.dev/auth/github/callback"
+  GOOGLE_REDIRECT_URL = "https://confab.fly.dev/auth/google/callback"
 
   # S3/Tigris Configuration (Fly Object Storage)
   # Note: Fly secrets already set: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, BUCKET_NAME
