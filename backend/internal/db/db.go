@@ -88,20 +88,21 @@ func (db *DB) RunMigrations() error {
 		created_at TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 
-	-- Sessions table
+	-- Sessions table (identified by composite key: user_id + session_id)
 	CREATE TABLE IF NOT EXISTS sessions (
-		session_id VARCHAR(255) PRIMARY KEY,
 		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		session_id VARCHAR(255) NOT NULL,
 		first_seen TIMESTAMP NOT NULL DEFAULT NOW(),
 		title TEXT,
-		session_type VARCHAR(50) NOT NULL DEFAULT 'Claude Code'
+		session_type VARCHAR(50) NOT NULL DEFAULT 'Claude Code',
+		PRIMARY KEY (user_id, session_id)
 	);
 
 	-- Runs table (execution instances)
 	CREATE TABLE IF NOT EXISTS runs (
 		id BIGSERIAL PRIMARY KEY,
-		session_id VARCHAR(255) NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
-		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		user_id BIGINT NOT NULL,
+		session_id VARCHAR(255) NOT NULL,
 		transcript_path TEXT NOT NULL,
 		cwd TEXT NOT NULL,
 		reason TEXT NOT NULL,
@@ -110,7 +111,9 @@ func (db *DB) RunMigrations() error {
 		git_info JSONB,
 		source VARCHAR(50) NOT NULL DEFAULT 'hook',
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-		last_activity TIMESTAMP NOT NULL DEFAULT NOW()
+		last_activity TIMESTAMP NOT NULL DEFAULT NOW(),
+		FOREIGN KEY (user_id, session_id) REFERENCES sessions(user_id, session_id) ON DELETE CASCADE,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
 	-- Files table
@@ -127,13 +130,15 @@ func (db *DB) RunMigrations() error {
 	-- Session shares table
 	CREATE TABLE IF NOT EXISTS session_shares (
 		id BIGSERIAL PRIMARY KEY,
-		session_id VARCHAR(255) NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
-		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		user_id BIGINT NOT NULL,
+		session_id VARCHAR(255) NOT NULL,
 		share_token CHAR(32) NOT NULL UNIQUE,
 		visibility VARCHAR(20) NOT NULL,
 		expires_at TIMESTAMP,
 		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-		last_accessed_at TIMESTAMP
+		last_accessed_at TIMESTAMP,
+		FOREIGN KEY (user_id, session_id) REFERENCES sessions(user_id, session_id) ON DELETE CASCADE,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
 	-- Session share invites table (for private shares)
@@ -162,16 +167,17 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_web_sessions_user ON web_sessions(user_id);
 	CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);
 	CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-	CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id);
-	CREATE INDEX IF NOT EXISTS idx_runs_user ON runs(user_id);
+	-- sessions PK already covers (user_id, session_id), add index for session_id lookups
+	CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id);
+	-- runs: composite index for session lookups within user
+	CREATE INDEX IF NOT EXISTS idx_runs_user_session ON runs(user_id, session_id);
 	CREATE INDEX IF NOT EXISTS idx_runs_end_timestamp ON runs(end_timestamp);
 	CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_runs_last_activity ON runs(last_activity);
 	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
 	CREATE INDEX IF NOT EXISTS idx_files_run_type_size ON files(run_id, file_type, size_bytes);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
-	CREATE INDEX IF NOT EXISTS idx_session_shares_session ON session_shares(session_id, user_id);
+	CREATE INDEX IF NOT EXISTS idx_session_shares_user_session ON session_shares(user_id, session_id);
 	CREATE INDEX IF NOT EXISTS idx_session_share_invites_share ON session_share_invites(share_id);
 	CREATE INDEX IF NOT EXISTS idx_session_share_invites_email ON session_share_invites(email);
 	CREATE INDEX IF NOT EXISTS idx_session_share_accesses_share ON session_share_accesses(share_id);
@@ -297,10 +303,11 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 	now := time.Now().UTC()
 
 	// Insert session if doesn't exist, or update title/session_type if provided
+	// Composite key is (user_id, session_id) - each user has their own namespace
 	sessionSQL := `
-		INSERT INTO sessions (session_id, user_id, first_seen, title, session_type)
+		INSERT INTO sessions (user_id, session_id, first_seen, title, session_type)
 		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (session_id) DO UPDATE SET
+		ON CONFLICT (user_id, session_id) DO UPDATE SET
 			title = CASE WHEN EXCLUDED.title IS NOT NULL AND EXCLUDED.title != '' THEN EXCLUDED.title ELSE sessions.title END,
 			session_type = CASE WHEN EXCLUDED.session_type IS NOT NULL AND EXCLUDED.session_type != '' THEN EXCLUDED.session_type ELSE sessions.session_type END
 	`
@@ -308,7 +315,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 	if sessionType == "" {
 		sessionType = "Claude Code" // Default
 	}
-	_, err = tx.ExecContext(ctx, sessionSQL, req.SessionID, userID, now, req.Title, sessionType)
+	_, err = tx.ExecContext(ctx, sessionSQL, userID, req.SessionID, now, req.Title, sessionType)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert session: %w", err)
 	}
@@ -928,22 +935,20 @@ type SessionShare struct {
 
 // CreateShare creates a new share link
 func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) (*SessionShare, error) {
-	// Verify session ownership
-	var ownerID int64
-	err := db.conn.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE session_id = $1`, sessionID).Scan(&ownerID)
+	// Verify session exists for this user (composite key lookup)
+	var exists bool
+	err := db.conn.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM sessions WHERE user_id = $1 AND session_id = $2)`,
+		userID, sessionID).Scan(&exists)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
-		}
-		return nil, fmt.Errorf("failed to verify ownership: %w", err)
+		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
-
-	if ownerID != userID {
-		return nil, ErrUnauthorized
+	if !exists {
+		return nil, ErrSessionNotFound
 	}
 
 	// Insert share
-	query := `INSERT INTO session_shares (session_id, user_id, share_token, visibility, expires_at)
+	query := `INSERT INTO session_shares (user_id, session_id, share_token, visibility, expires_at)
 	          VALUES ($1, $2, $3, $4, $5)
 	          RETURNING id, created_at`
 
@@ -954,7 +959,7 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 	share.Visibility = visibility
 	share.ExpiresAt = expiresAt
 
-	err = db.conn.QueryRowContext(ctx, query, sessionID, userID, shareToken, visibility, expiresAt).Scan(&share.ID, &share.CreatedAt)
+	err = db.conn.QueryRowContext(ctx, query, userID, sessionID, shareToken, visibility, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
@@ -979,27 +984,25 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 
 // ListShares returns all shares for a session
 func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([]SessionShare, error) {
-	// Verify ownership
-	var ownerID int64
-	err := db.conn.QueryRowContext(ctx, `SELECT user_id FROM sessions WHERE session_id = $1`, sessionID).Scan(&ownerID)
+	// Verify session exists for this user (composite key lookup)
+	var exists bool
+	err := db.conn.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM sessions WHERE user_id = $1 AND session_id = $2)`,
+		userID, sessionID).Scan(&exists)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
-		}
-		return nil, fmt.Errorf("failed to verify ownership: %w", err)
+		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
-
-	if ownerID != userID {
-		return nil, ErrUnauthorized
+	if !exists {
+		return nil, ErrSessionNotFound
 	}
 
 	// Get shares
 	query := `SELECT id, session_id, user_id, share_token, visibility, expires_at, created_at, last_accessed_at
 	          FROM session_shares
-	          WHERE session_id = $1 AND user_id = $2
+	          WHERE user_id = $1 AND session_id = $2
 	          ORDER BY created_at DESC`
 
-	rows, err := db.conn.QueryContext(ctx, query, sessionID, userID)
+	rows, err := db.conn.QueryContext(ctx, query, userID, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list shares: %w", err)
 	}
@@ -1457,21 +1460,18 @@ func (db *DB) GetRunS3Keys(ctx context.Context, runID int64, userID int64) (sess
 }
 
 // GetSessionS3Keys retrieves all S3 keys for all files in all runs of a session
-// Also verifies ownership
+// Also verifies ownership via composite key lookup
 func (db *DB) GetSessionS3Keys(ctx context.Context, sessionID string, userID int64) ([]string, error) {
-	// Verify ownership
-	var ownerID int64
-	ownershipQuery := `SELECT user_id FROM sessions WHERE session_id = $1`
-	err := db.conn.QueryRowContext(ctx, ownershipQuery, sessionID).Scan(&ownerID)
+	// Verify session exists for this user (composite key lookup)
+	var exists bool
+	err := db.conn.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM sessions WHERE user_id = $1 AND session_id = $2)`,
+		userID, sessionID).Scan(&exists)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
-		}
-		return nil, fmt.Errorf("failed to verify ownership: %w", err)
+		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
-
-	if ownerID != userID {
-		return nil, ErrUnauthorized
+	if !exists {
+		return nil, ErrSessionNotFound
 	}
 
 	// Get all S3 keys for all files in all runs of this session
@@ -1479,9 +1479,9 @@ func (db *DB) GetSessionS3Keys(ctx context.Context, sessionID string, userID int
 		SELECT f.s3_key
 		FROM files f
 		JOIN runs r ON f.run_id = r.id
-		WHERE r.session_id = $1 AND f.s3_key IS NOT NULL
+		WHERE r.user_id = $1 AND r.session_id = $2 AND f.s3_key IS NOT NULL
 	`
-	rows, err := db.conn.QueryContext(ctx, query, sessionID)
+	rows, err := db.conn.QueryContext(ctx, query, userID, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query S3 keys: %w", err)
 	}
@@ -1506,7 +1506,7 @@ func (db *DB) GetSessionS3Keys(ctx context.Context, sessionID string, userID int
 // DeleteRunFromDB deletes a single run from the database
 // S3 objects must be deleted BEFORE calling this function
 // If this is the only run for the session, the session is also deleted
-func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, sessionID string, runCount int) error {
+func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, userID int64, sessionID string, runCount int) error {
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -1527,8 +1527,8 @@ func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, sessionID string
 
 	// If this was the only run, delete the session too
 	if runCount == 1 {
-		deleteSessionQuery := `DELETE FROM sessions WHERE session_id = $1`
-		_, err = tx.ExecContext(ctx, deleteSessionQuery, sessionID)
+		deleteSessionQuery := `DELETE FROM sessions WHERE user_id = $1 AND session_id = $2`
+		_, err = tx.ExecContext(ctx, deleteSessionQuery, userID, sessionID)
 		if err != nil {
 			return fmt.Errorf("failed to delete session: %w", err)
 		}
@@ -1543,7 +1543,7 @@ func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, sessionID string
 
 // DeleteSessionFromDB deletes an entire session and all its runs from the database
 // S3 objects must be deleted BEFORE calling this function
-func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string) error {
+func (db *DB) DeleteSessionFromDB(ctx context.Context, userID int64, sessionID string) error {
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -1551,8 +1551,8 @@ func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string) error {
 	defer tx.Rollback()
 
 	// Delete the session (CASCADE will delete runs, files, shares, and share invites)
-	deleteSessionQuery := `DELETE FROM sessions WHERE session_id = $1`
-	result, err := tx.ExecContext(ctx, deleteSessionQuery, sessionID)
+	deleteSessionQuery := `DELETE FROM sessions WHERE user_id = $1 AND session_id = $2`
+	result, err := tx.ExecContext(ctx, deleteSessionQuery, userID, sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}

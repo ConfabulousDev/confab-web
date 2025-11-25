@@ -100,11 +100,11 @@ func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, session
 	t.Helper()
 
 	query := `
-		INSERT INTO sessions (session_id, user_id, first_seen)
+		INSERT INTO sessions (user_id, session_id, first_seen)
 		VALUES ($1, $2, NOW())
 	`
 
-	_, err := env.DB.Exec(env.Ctx, query, sessionID, userID)
+	_, err := env.DB.Exec(env.Ctx, query, userID, sessionID)
 	if err != nil {
 		t.Fatalf("failed to create test session: %v", err)
 	}
@@ -156,13 +156,13 @@ func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, userI
 
 	// Insert share
 	query := `
-		INSERT INTO session_shares (session_id, user_id, share_token, visibility, expires_at, created_at)
+		INSERT INTO session_shares (user_id, session_id, share_token, visibility, expires_at, created_at)
 		VALUES ($1, $2, $3, $4, $5, NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, userID, shareToken, visibility, expiresAt)
+	row := env.DB.QueryRow(env.Ctx, query, userID, sessionID, shareToken, visibility, expiresAt)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test share: %v", err)

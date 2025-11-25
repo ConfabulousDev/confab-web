@@ -72,7 +72,7 @@ func HandleDeleteRun(database *db.DB, store *storage.S3Storage) http.HandlerFunc
 		dbCtx2, dbCancel2 := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel2()
 
-		if err := database.DeleteRunFromDB(dbCtx2, runID, sessionID, runCount); err != nil {
+		if err := database.DeleteRunFromDB(dbCtx2, runID, userID, sessionID, runCount); err != nil {
 			if errors.Is(err, db.ErrRunNotFound) {
 				respondError(w, http.StatusNotFound, "Run not found")
 				return
@@ -163,7 +163,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx2, dbCancel2 := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel2()
 
-		if err := database.DeleteSessionFromDB(dbCtx2, sessionID); err != nil {
+		if err := database.DeleteSessionFromDB(dbCtx2, userID, sessionID); err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
