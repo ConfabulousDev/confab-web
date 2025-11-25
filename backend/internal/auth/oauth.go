@@ -243,7 +243,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			return
 		}
 
-		// Check if there's a post-login redirect (e.g., from /device page)
+		// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
 		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
 			// Clear the cookie
 			http.SetCookie(w, &http.Cookie{
@@ -252,8 +252,12 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 				Path:   "/",
 				MaxAge: -1,
 			})
-			// Redirect to the stored path (relative URL on same backend)
-			http.Redirect(w, r, postLoginRedirect.Value, http.StatusTemporaryRedirect)
+			redirectURL := postLoginRedirect.Value
+			// If it's a frontend path (not a backend path like /device), prepend frontend URL
+			if strings.HasPrefix(redirectURL, "/") && !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
+				redirectURL = os.Getenv("FRONTEND_URL") + redirectURL
+			}
+			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -610,7 +614,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			return
 		}
 
-		// Check if there's a post-login redirect (e.g., from /device page)
+		// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
 		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
 			// Clear the cookie
 			http.SetCookie(w, &http.Cookie{
@@ -619,8 +623,12 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 				Path:   "/",
 				MaxAge: -1,
 			})
-			// Redirect to the stored path (relative URL on same backend)
-			http.Redirect(w, r, postLoginRedirect.Value, http.StatusTemporaryRedirect)
+			redirectURL := postLoginRedirect.Value
+			// If it's a frontend path (not a backend path like /device), prepend frontend URL
+			if strings.HasPrefix(redirectURL, "/") && !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
+				redirectURL = frontendURL + redirectURL
+			}
+			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 			return
 		}
 

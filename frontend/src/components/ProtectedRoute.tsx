@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ProtectedRouteProps {
@@ -8,20 +8,24 @@ interface ProtectedRouteProps {
 /**
  * Wrapper component that protects routes requiring authentication.
  * - Shows nothing while auth is loading (prevents flash of content)
- * - Redirects to home page if not authenticated
+ * - Redirects to login page if not authenticated, preserving intended destination
  * - Renders children if authenticated
  */
 function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { loading, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   // Show nothing while loading - prevents flash of protected content
   if (loading) {
     return null;
   }
 
-  // Redirect to home if not authenticated
+  // Redirect to login if not authenticated, with redirect back to intended page
   if (!isAuthenticated) {
-    return <Navigate to="/" replace />;
+    const intendedPath = location.pathname + location.search;
+    const loginUrl = `/auth/login?redirect=${encodeURIComponent(intendedPath)}`;
+    window.location.href = loginUrl;
+    return null;
   }
 
   return <>{children}</>;
