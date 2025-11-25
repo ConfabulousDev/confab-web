@@ -781,11 +781,14 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		// Check if user confirmed provider choice (came back from login selector)
+		confirmed := r.URL.Query().Get("confirmed") == "1"
+
 		// Get session cookie (user must be logged in via web)
 		cookie, err := r.Cookie(SessionCookieName)
 		if err != nil {
-			// Redirect to login selector, then back here
-			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery
+			// No session - redirect to login selector, then back here
+			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1"
 			http.SetCookie(w, &http.Cookie{
 				Name:     "cli_redirect",
 				Value:    redirectURL,
@@ -811,7 +814,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 			})
 
 			// Redirect to login selector, then back here
-			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery
+			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1"
 			http.SetCookie(w, &http.Cookie{
 				Name:     "cli_redirect",
 				Value:    redirectURL,
@@ -819,6 +822,23 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 				MaxAge:   300, // 5 minutes
 				HttpOnly: true,
 				Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
+				SameSite: http.SameSiteLaxMode,
+			})
+			http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
+			return
+		}
+
+		// If user has session but hasn't confirmed provider choice yet, show selector
+		// This allows users to switch accounts/providers during CLI login
+		if !confirmed {
+			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1"
+			http.SetCookie(w, &http.Cookie{
+				Name:     "cli_redirect",
+				Value:    redirectURL,
+				Path:     "/",
+				MaxAge:   300, // 5 minutes
+				HttpOnly: true,
+				Secure:   cookieSecure(),
 				SameSite: http.SameSiteLaxMode,
 			})
 			http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
