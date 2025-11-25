@@ -55,29 +55,46 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Default backend URL
-	// TODO: Change default to production (https://confab.fly.dev) once stable
 	if backendURL == "" {
 		backendURL = "http://localhost:8080"
 	}
 
 	// Default key name to hostname
 	if keyName == "" {
-		hostname, err := os.Hostname()
-		if err != nil {
-			keyName = "CLI"
-		} else {
-			keyName = hostname
-		}
+		keyName = defaultKeyName()
 	}
-
-	logger.Debug("Login parameters: backend=%s, keyName=%s", backendURL, keyName)
 
 	fmt.Println("=== Confab Login ===")
 	fmt.Println()
+
+	if err := doDeviceLogin(backendURL, keyName); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Println("Next step: Run 'confab init' to install the session hook.")
+	fmt.Println()
+	fmt.Println("Tip: Use 'confab setup' next time to do login + init in one step.")
+
+	return nil
+}
+
+// defaultKeyName returns the hostname or "CLI" as fallback
+func defaultKeyName() string {
+	if hostname, err := os.Hostname(); err == nil {
+		return hostname
+	}
+	return "CLI"
+}
+
+// doDeviceLogin performs the device code login flow and saves credentials
+func doDeviceLogin(backendURL, keyName string) error {
+	logger.Debug("Login parameters: backend=%s, keyName=%s", backendURL, keyName)
+
 	fmt.Printf("Backend: %s\n", backendURL)
 	fmt.Println()
 
-	// Step 1: Request device code
+	// Request device code
 	deviceCode, err := requestDeviceCode(backendURL, keyName)
 	if err != nil {
 		logger.Error("Failed to get device code: %v", err)
@@ -94,52 +111,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// Try to open browser
 	if err := openBrowser(deviceCode.VerificationURI + "?code=" + deviceCode.UserCode); err != nil {
 		logger.Debug("Failed to open browser: %v", err)
-		// Not an error - user can open manually
 	}
 
 	fmt.Printf("Waiting for authorization... (expires in %d seconds)\n", deviceCode.ExpiresIn)
 
-	// Step 2: Poll for token
-	pollInterval := time.Duration(deviceCode.Interval) * time.Second
-	if pollInterval < 5*time.Second {
-		pollInterval = 5 * time.Second
-	}
-
-	expiresAt := time.Now().Add(time.Duration(deviceCode.ExpiresIn) * time.Second)
-
-	var apiKey string
-	for {
-		if time.Now().After(expiresAt) {
-			return fmt.Errorf("authorization timed out - please try again")
-		}
-
-		time.Sleep(pollInterval)
-
-		token, err := pollDeviceToken(backendURL, deviceCode.DeviceCode)
-		if err != nil {
-			logger.Error("Error polling for token: %v", err)
-			return fmt.Errorf("failed to complete authorization: %w", err)
-		}
-
-		if token.Error == "authorization_pending" {
-			// User hasn't authorized yet, keep polling
-			continue
-		}
-
-		if token.Error == "slow_down" {
-			// We're polling too fast, increase interval
-			pollInterval += 5 * time.Second
-			continue
-		}
-
-		if token.Error != "" {
-			return fmt.Errorf("authorization failed: %s", token.Error)
-		}
-
-		if token.AccessToken != "" {
-			apiKey = token.AccessToken
-			break
-		}
+	// Poll for token
+	apiKey, err := pollForToken(backendURL, deviceCode)
+	if err != nil {
+		return err
 	}
 
 	// Save configuration
@@ -156,12 +135,46 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	logger.Info("Login successful, config saved")
 	fmt.Println()
 	fmt.Println("Authentication successful!")
-	fmt.Println()
-	fmt.Println("Next step: Run 'confab init' to install the session hook.")
-	fmt.Println()
-	fmt.Println("Tip: Use 'confab setup' next time to do login + init in one step.")
 
 	return nil
+}
+
+// pollForToken polls the backend until authorization completes or times out
+func pollForToken(backendURL string, deviceCode *DeviceCodeResponse) (string, error) {
+	pollInterval := time.Duration(deviceCode.Interval) * time.Second
+	if pollInterval < 5*time.Second {
+		pollInterval = 5 * time.Second
+	}
+
+	expiresAt := time.Now().Add(time.Duration(deviceCode.ExpiresIn) * time.Second)
+
+	for {
+		if time.Now().After(expiresAt) {
+			return "", fmt.Errorf("authorization timed out - please try again")
+		}
+
+		time.Sleep(pollInterval)
+
+		token, err := pollDeviceToken(backendURL, deviceCode.DeviceCode)
+		if err != nil {
+			logger.Error("Error polling for token: %v", err)
+			return "", fmt.Errorf("failed to complete authorization: %w", err)
+		}
+
+		switch token.Error {
+		case "authorization_pending":
+			continue
+		case "slow_down":
+			pollInterval += 5 * time.Second
+			continue
+		case "":
+			if token.AccessToken != "" {
+				return token.AccessToken, nil
+			}
+		default:
+			return "", fmt.Errorf("authorization failed: %s", token.Error)
+		}
+	}
 }
 
 // requestDeviceCode initiates the device code flow

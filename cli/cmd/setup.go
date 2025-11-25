@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
@@ -33,19 +32,10 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	}
 	backendURLSpecified := backendURL != ""
 
-	// Default key name to hostname
-	var keyName string
-	hostname, err := os.Hostname()
-	if err != nil {
-		keyName = "CLI"
-	} else {
-		keyName = hostname
-	}
-
 	fmt.Println("=== Confab Setup ===")
 	fmt.Println()
 
-	// Step 1: Check if already authenticated
+	// Check if already authenticated
 	needsLogin := true
 	cfg, err := config.GetUploadConfig()
 	if err == nil && cfg.APIKey != "" {
@@ -56,7 +46,6 @@ func runSetup(cmd *cobra.Command, args []string) error {
 
 		// Check if backend URL matches (or no URL specified yet)
 		if cfg.BackendURL == backendURL || (!backendURLSpecified && cfg.BackendURL != "") {
-			// Config exists with matching backend, verify it works
 			fmt.Println("Checking existing authentication...")
 			if err := verifyAPIKey(cfg); err == nil {
 				logger.Info("Existing API key is valid, skipping login")
@@ -70,7 +59,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 			}
 		} else {
 			logger.Info("Backend URL changed from %s to %s, need to re-login", cfg.BackendURL, backendURL)
-			fmt.Printf("Backend URL changed, need to re-authenticate\n")
+			fmt.Println("Backend URL changed, need to re-authenticate")
 			fmt.Println()
 		}
 	}
@@ -80,17 +69,17 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		backendURL = "http://localhost:8080"
 	}
 
-	// Step 2: Login if needed
+	// Login if needed
 	if needsLogin {
 		fmt.Println("Step 1/2: Authentication")
 		fmt.Println()
-		if err := doLogin(backendURL, keyName); err != nil {
+		if err := doDeviceLogin(backendURL, defaultKeyName()); err != nil {
 			return err
 		}
 		fmt.Println()
 	}
 
-	// Step 3: Install hook
+	// Install hook
 	if needsLogin {
 		fmt.Println("Step 2/2: Installing hook")
 	} else {
@@ -108,7 +97,6 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Hook installed in %s\n", settingsPath)
 	fmt.Println()
 
-	// Final message
 	fmt.Println("=== Setup Complete ===")
 	fmt.Println()
 	fmt.Println("Confab will now automatically capture your Claude Code sessions.")
@@ -133,96 +121,6 @@ func verifyAPIKey(cfg *config.UploadConfig) error {
 	if valid, ok := result["valid"].(bool); !ok || !valid {
 		return fmt.Errorf("api key is not valid")
 	}
-
-	return nil
-}
-
-// doLogin performs the device code login flow
-func doLogin(backendURL, keyName string) error {
-	logger.Debug("Login parameters: backend=%s, keyName=%s", backendURL, keyName)
-
-	fmt.Printf("Backend: %s\n", backendURL)
-	fmt.Println()
-
-	// Step 1: Request device code
-	deviceCode, err := requestDeviceCode(backendURL, keyName)
-	if err != nil {
-		logger.Error("Failed to get device code: %v", err)
-		return fmt.Errorf("failed to initiate login: %w", err)
-	}
-
-	// Display instructions
-	fmt.Println("To authenticate, visit:")
-	fmt.Printf("  %s\n", deviceCode.VerificationURI)
-	fmt.Println()
-	fmt.Printf("And enter code: %s\n", deviceCode.UserCode)
-	fmt.Println()
-
-	// Try to open browser
-	if err := openBrowser(deviceCode.VerificationURI + "?code=" + deviceCode.UserCode); err != nil {
-		logger.Debug("Failed to open browser: %v", err)
-		// Not an error - user can open manually
-	}
-
-	fmt.Printf("Waiting for authorization... (expires in %d seconds)\n", deviceCode.ExpiresIn)
-
-	// Step 2: Poll for token
-	pollInterval := time.Duration(deviceCode.Interval) * time.Second
-	if pollInterval < 5*time.Second {
-		pollInterval = 5 * time.Second
-	}
-
-	expiresAt := time.Now().Add(time.Duration(deviceCode.ExpiresIn) * time.Second)
-
-	var apiKey string
-	for {
-		if time.Now().After(expiresAt) {
-			return fmt.Errorf("authorization timed out - please try again")
-		}
-
-		time.Sleep(pollInterval)
-
-		token, err := pollDeviceToken(backendURL, deviceCode.DeviceCode)
-		if err != nil {
-			logger.Error("Error polling for token: %v", err)
-			return fmt.Errorf("failed to complete authorization: %w", err)
-		}
-
-		if token.Error == "authorization_pending" {
-			// User hasn't authorized yet, keep polling
-			continue
-		}
-
-		if token.Error == "slow_down" {
-			// We're polling too fast, increase interval
-			pollInterval += 5 * time.Second
-			continue
-		}
-
-		if token.Error != "" {
-			return fmt.Errorf("authorization failed: %s", token.Error)
-		}
-
-		if token.AccessToken != "" {
-			apiKey = token.AccessToken
-			break
-		}
-	}
-
-	// Save configuration
-	cfg := &config.UploadConfig{
-		BackendURL: backendURL,
-		APIKey:     apiKey,
-	}
-
-	if err := config.SaveUploadConfig(cfg); err != nil {
-		logger.Error("Failed to save config: %v", err)
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	logger.Info("Login successful, config saved")
-	fmt.Println()
-	fmt.Println("Authentication successful!")
 
 	return nil
 }
