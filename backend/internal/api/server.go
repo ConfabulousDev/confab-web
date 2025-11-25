@@ -165,9 +165,8 @@ func (s *Server) SetupRoutes() http.Handler {
 	}
 
 	// OAuth routes (public) - Apply stricter auth rate limiting
-	// Login selector (choose provider) and success page
+	// Login selector (choose provider)
 	r.Get("/auth/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleLoginSelector()))
-	r.Get("/auth/login/success", auth.HandleLoginSuccess())
 	// GitHub
 	r.Get("/auth/github/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig)))
 	r.Get("/auth/github/callback", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubCallback(s.oauthConfig, s.db)))
