@@ -57,10 +57,14 @@ class APIClient {
     this.baseURL = baseURL;
   }
 
-  private async handleResponse<T>(response: Response): Promise<T> {
-    // Handle authentication errors - clear state and redirect
+  private async handleResponse<T>(response: Response, endpoint: string): Promise<T> {
+    // Handle authentication errors
     if (response.status === 401) {
-      handleAuthFailure();
+      // Don't redirect for /me - it's expected to return 401 when not logged in
+      // The useAuth hook handles this gracefully
+      if (!endpoint.endsWith('/me')) {
+        handleAuthFailure();
+      }
       throw new AuthenticationError();
     }
 
@@ -137,7 +141,7 @@ class APIClient {
 
     try {
       const response = await fetch(url, config);
-      const data = await this.handleResponse<T>(response);
+      const data = await this.handleResponse<T>(response, endpoint);
 
       // Optional runtime validation with Zod
       if (validateResponse) {
