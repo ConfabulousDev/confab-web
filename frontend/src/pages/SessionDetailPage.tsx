@@ -37,7 +37,7 @@ function SessionDetailPage() {
   const selectedRun: RunDetail | undefined = session?.runs[selectedRunIndex];
 
   // Dynamic page title based on session
-  const pageTitle = session ? `Session ${session.session_id.substring(0, 8)}` : 'Session';
+  const pageTitle = session ? `Session ${session.external_id.substring(0, 8)}` : 'Session';
   useDocumentTitle(pageTitle);
 
   useEffect(() => {
@@ -147,7 +147,7 @@ function SessionDetailPage() {
           <h1>Session Detail</h1>
           {session && (
             <p className={styles.sessionId}>
-              <strong>Session ID:</strong> <code>{session.session_id}</code>
+              <strong>Session ID:</strong> <code>{session.external_id}</code>
             </p>
           )}
         </div>

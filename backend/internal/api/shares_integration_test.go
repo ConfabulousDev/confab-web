@@ -26,19 +26,19 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 
 		// Create test data
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-		sessionID := "test-session-123"
-		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		externalID := "test-session-123"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		// Create request
 		reqBody := CreateShareRequest{
 			Visibility: "public",
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
-			"/api/v1/sessions/"+sessionPK+"/share", reqBody, user.ID)
+			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
 
 		// Setup chi router with URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionPK)
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		// Execute handler
@@ -68,8 +68,8 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		// Verify database state
 		var count int
 		row := env.DB.QueryRow(env.Ctx,
-			"SELECT COUNT(*) FROM session_shares WHERE session_pk = $1",
-			sessionPK)
+			"SELECT COUNT(*) FROM session_shares WHERE session_id = $1",
+			sessionID)
 		if err := row.Scan(&count); err != nil {
 			t.Fatalf("failed to query shares: %v", err)
 		}
@@ -82,19 +82,19 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		sessionID := "test-session-456"
-		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		externalID := "test-session-456"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		reqBody := CreateShareRequest{
 			Visibility:    "private",
 			InvitedEmails: []string{"friend@example.com", "colleague@example.com"},
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
-			"/api/v1/sessions/"+sessionPK+"/share", reqBody, user.ID)
+			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionPK)
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -132,17 +132,17 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test")
-		sessionID := "non-existent"
+		nonExistentID := "non-existent-uuid"
 
 		reqBody := CreateShareRequest{
 			Visibility: "public",
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
-			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
+			"/api/v1/sessions/"+nonExistentID+"/share", reqBody, user.ID)
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("id", nonExistentID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -156,18 +156,18 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test")
-		sessionID := "test-session-789"
-		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		externalID := "test-session-789"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		reqBody := CreateShareRequest{
 			Visibility: "invalid",
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
-			"/api/v1/sessions/"+sessionPK+"/share", reqBody, user.ID)
+			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionPK)
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -188,19 +188,19 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test")
-		sessionID := "test-session-abc"
-		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		externalID := "test-session-abc"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		reqBody := CreateShareRequest{
 			Visibility:    "private",
 			InvitedEmails: []string{}, // Empty - should fail
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
-			"/api/v1/sessions/"+sessionPK+"/share", reqBody, user.ID)
+			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionPK)
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()

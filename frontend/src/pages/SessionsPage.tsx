@@ -6,7 +6,7 @@ import SortableHeader from '@/components/SortableHeader';
 import Alert from '@/components/Alert';
 import styles from './SessionsPage.module.css';
 
-type SortColumn = 'title' | 'session_id' | 'last_run_time';
+type SortColumn = 'title' | 'external_id' | 'last_run_time';
 
 function SessionsPage() {
   useDocumentTitle('Sessions');
@@ -46,10 +46,10 @@ function SessionsPage() {
   const handleRowClick = (session: typeof sessions[0]) => {
     // For shared sessions, use the share URL. For owned sessions, use normal URL
     if (session.is_owner) {
-      navigate(`/sessions/${session.session_id}`);
+      navigate(`/sessions/${session.id}`);
     } else {
       // Shared session - use share token URL
-      navigate(`/sessions/${session.session_id}/shared/${session.share_token}`);
+      navigate(`/sessions/${session.id}/shared/${session.share_token}`);
     }
   };
 
@@ -107,7 +107,7 @@ function SessionsPage() {
                   <th>Repo</th>
                   <th>Branch</th>
                   <SortableHeader
-                    column="session_id"
+                    column="external_id"
                     label="ID"
                     currentColumn={sortColumn}
                     direction={sortDirection}
@@ -125,7 +125,7 @@ function SessionsPage() {
               <tbody>
                 {sortedSessions.map((session) => (
                   <tr
-                    key={session.session_id}
+                    key={session.id}
                     className={styles.clickableRow}
                     onClick={() => handleRowClick(session)}
                   >
@@ -136,7 +136,7 @@ function SessionsPage() {
                     </td>
                     <td className={styles.gitInfo}>{session.git_repo || ''}</td>
                     <td className={styles.gitInfo}>{session.git_branch || ''}</td>
-                    <td className={styles.sessionId}>{session.session_id.substring(0, 8)}</td>
+                    <td className={styles.sessionId}>{session.external_id.substring(0, 8)}</td>
                     <td className={styles.timestamp}>{formatRelativeTime(session.last_run_time)}</td>
                   </tr>
                 ))}

@@ -29,9 +29,9 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
 		// Create session upload request
-		sessionID := "test-session-upload-123"
+		externalID := "test-session-upload-123"
 		reqBody := models.SaveSessionRequest{
-			SessionID:      sessionID,
+			ExternalID:     externalID,
 			TranscriptPath: "transcript.jsonl",
 			CWD:            "/home/user/project",
 			Reason:         "Test upload",
@@ -68,8 +68,11 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		if !resp.Success {
 			t.Error("expected success=true")
 		}
-		if resp.SessionID != sessionID {
-			t.Errorf("expected session_id %s, got %s", sessionID, resp.SessionID)
+		if resp.ExternalID != externalID {
+			t.Errorf("expected external_id %s, got %s", externalID, resp.ExternalID)
+		}
+		if resp.ID == "" {
+			t.Error("expected non-empty id (UUID)")
 		}
 		if resp.RunID == 0 {
 			t.Error("expected non-zero run_id")
@@ -78,8 +81,8 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		// Verify database state - session exists
 		var sessionCount int
 		row := env.DB.QueryRow(env.Ctx,
-			"SELECT COUNT(*) FROM sessions WHERE session_id = $1 AND user_id = $2",
-			sessionID, user.ID)
+			"SELECT COUNT(*) FROM sessions WHERE external_id = $1 AND user_id = $2",
+			externalID, user.ID)
 		if err := row.Scan(&sessionCount); err != nil {
 			t.Fatalf("failed to query sessions: %v", err)
 		}
@@ -126,13 +129,13 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 400 for missing session_id", func(t *testing.T) {
+	t.Run("returns 400 for missing external_id", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
 		reqBody := models.SaveSessionRequest{
-			SessionID:      "", // Empty - should fail
+			ExternalID:     "", // Empty - should fail
 			TranscriptPath: "transcript.jsonl",
 			Files: []models.FileUpload{
 				{
@@ -154,10 +157,10 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		testutil.ParseJSONResponse(t, w, &resp)
 
 		if resp["error"] == "" {
-			t.Error("expected error message for missing session_id")
+			t.Error("expected error message for missing external_id")
 		}
-		if !strings.Contains(resp["error"], "session_id") {
-			t.Errorf("expected error about session_id, got: %s", resp["error"])
+		if !strings.Contains(resp["error"], "external_id") {
+			t.Errorf("expected error about external_id, got: %s", resp["error"])
 		}
 	})
 
@@ -167,7 +170,7 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
 		reqBody := models.SaveSessionRequest{
-			SessionID:      "test-session-empty-files",
+			ExternalID:     "test-session-empty-files",
 			TranscriptPath: "transcript.jsonl",
 			Files:          []models.FileUpload{}, // Empty - should fail
 		}
@@ -193,7 +196,7 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
 		reqBody := models.SaveSessionRequest{
-			SessionID:      "test-session-path-traversal",
+			ExternalID:     "test-session-path-traversal",
 			TranscriptPath: "transcript.jsonl",
 			Files: []models.FileUpload{
 				{
@@ -219,16 +222,16 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 400 for session_id too long", func(t *testing.T) {
+	t.Run("returns 400 for external_id too long", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
-		// Create session ID longer than MaxSessionIDLength (256)
-		longSessionID := strings.Repeat("a", 257)
+		// Create external ID longer than MaxExternalIDLength (256)
+		longExternalID := strings.Repeat("a", 257)
 
 		reqBody := models.SaveSessionRequest{
-			SessionID:      longSessionID,
+			ExternalID:     longExternalID,
 			TranscriptPath: "transcript.jsonl",
 			Files: []models.FileUpload{
 				{
@@ -249,8 +252,8 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		var resp map[string]string
 		testutil.ParseJSONResponse(t, w, &resp)
 
-		if !strings.Contains(resp["error"], "session_id must be between") {
-			t.Errorf("expected error about session_id length, got: %s", resp["error"])
+		if !strings.Contains(resp["error"], "external_id must be between") {
+			t.Errorf("expected error about external_id length, got: %s", resp["error"])
 		}
 	})
 
@@ -258,7 +261,7 @@ func TestHandleSaveSession_Integration(t *testing.T) {
 		env.CleanDB(t)
 
 		reqBody := models.SaveSessionRequest{
-			SessionID:      "test-session-unauth",
+			ExternalID:     "test-session-unauth",
 			TranscriptPath: "transcript.jsonl",
 			Files: []models.FileUpload{
 				{
@@ -290,7 +293,7 @@ func TestHandleCheckSessions_Integration(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 
-	t.Run("returns existing and missing session IDs", func(t *testing.T) {
+	t.Run("returns existing and missing external IDs", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
@@ -301,9 +304,9 @@ func TestHandleCheckSessions_Integration(t *testing.T) {
 
 		// Check which sessions exist
 		reqBody := struct {
-			SessionIDs []string `json:"session_ids"`
+			ExternalIDs []string `json:"external_ids"`
 		}{
-			SessionIDs: []string{
+			ExternalIDs: []string{
 				"session-exists-1",
 				"session-exists-2",
 				"session-missing-1",
@@ -359,15 +362,15 @@ func TestHandleCheckSessions_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 400 for empty session_ids array", func(t *testing.T) {
+	t.Run("returns 400 for empty external_ids array", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
 		reqBody := struct {
-			SessionIDs []string `json:"session_ids"`
+			ExternalIDs []string `json:"external_ids"`
 		}{
-			SessionIDs: []string{}, // Empty - should fail
+			ExternalIDs: []string{}, // Empty - should fail
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sessions/check", reqBody, user.ID)
@@ -382,26 +385,26 @@ func TestHandleCheckSessions_Integration(t *testing.T) {
 		var resp map[string]string
 		testutil.ParseJSONResponse(t, w, &resp)
 
-		if !strings.Contains(resp["error"], "session_ids is required") {
-			t.Errorf("expected error about session_ids, got: %s", resp["error"])
+		if !strings.Contains(resp["error"], "external_ids is required") {
+			t.Errorf("expected error about external_ids, got: %s", resp["error"])
 		}
 	})
 
-	t.Run("returns 400 for too many session IDs", func(t *testing.T) {
+	t.Run("returns 400 for too many external IDs", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
-		// Create 1001 session IDs (limit is 1000)
-		sessionIDs := make([]string, 1001)
+		// Create 1001 external IDs (limit is 1000)
+		externalIDs := make([]string, 1001)
 		for i := 0; i < 1001; i++ {
-			sessionIDs[i] = "session-" + strings.Repeat("a", 10)
+			externalIDs[i] = "session-" + strings.Repeat("a", 10)
 		}
 
 		reqBody := struct {
-			SessionIDs []string `json:"session_ids"`
+			ExternalIDs []string `json:"external_ids"`
 		}{
-			SessionIDs: sessionIDs,
+			ExternalIDs: externalIDs,
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sessions/check", reqBody, user.ID)
@@ -416,7 +419,7 @@ func TestHandleCheckSessions_Integration(t *testing.T) {
 		var resp map[string]string
 		testutil.ParseJSONResponse(t, w, &resp)
 
-		if !strings.Contains(resp["error"], "Too many session IDs") {
+		if !strings.Contains(resp["error"], "Too many external IDs") {
 			t.Errorf("expected error about too many IDs, got: %s", resp["error"])
 		}
 	})

@@ -212,11 +212,11 @@ func checkSessionsExist(cfg *config.UploadConfig, sessionIDs []string) ([]string
 		return nil, nil
 	}
 
-	// Build request
+	// Build request - backend expects external_ids (Claude Code's session IDs)
 	reqBody := struct {
-		SessionIDs []string `json:"session_ids"`
+		ExternalIDs []string `json:"external_ids"`
 	}{
-		SessionIDs: sessionIDs,
+		ExternalIDs: sessionIDs,
 	}
 
 	// Call backend API

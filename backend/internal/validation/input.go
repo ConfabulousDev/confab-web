@@ -8,25 +8,25 @@ import (
 
 // Validation limits for URL parameters
 const (
-	MaxSessionIDLength = 256 // Max session ID length
-	MinSessionIDLength = 1   // Min session ID length
-	ShareTokenLength   = 32  // Share tokens are exactly 32 hex chars
+	MaxExternalIDLength = 256 // Max external ID length
+	MinExternalIDLength = 1   // Min external ID length
+	ShareTokenLength    = 32  // Share tokens are exactly 32 hex chars
 )
 
 // hexRegex matches hexadecimal strings
 var hexRegex = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 
-// ValidateSessionID validates a session ID from URL parameters
-// Returns error if session ID is invalid
-func ValidateSessionID(sessionID string) error {
-	if sessionID == "" {
-		return fmt.Errorf("session_id is required")
+// ValidateExternalID validates an external ID from URL parameters
+// Returns error if external ID is invalid
+func ValidateExternalID(externalID string) error {
+	if externalID == "" {
+		return fmt.Errorf("external_id is required")
 	}
-	if len(sessionID) < MinSessionIDLength || len(sessionID) > MaxSessionIDLength {
-		return fmt.Errorf("session_id must be between %d and %d characters", MinSessionIDLength, MaxSessionIDLength)
+	if len(externalID) < MinExternalIDLength || len(externalID) > MaxExternalIDLength {
+		return fmt.Errorf("external_id must be between %d and %d characters", MinExternalIDLength, MaxExternalIDLength)
 	}
-	if !utf8.ValidString(sessionID) {
-		return fmt.Errorf("session_id must be valid UTF-8")
+	if !utf8.ValidString(externalID) {
+		return fmt.Errorf("external_id must be valid UTF-8")
 	}
 	return nil
 }

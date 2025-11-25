@@ -18,15 +18,15 @@ import (
 
 // Validation limits for session uploads
 const (
-	MaxRequestBodySize = 200 * 1024 * 1024 // 200MB total request size
-	MaxFileSize        = 50 * 1024 * 1024  // 50MB per file
-	MaxFiles           = 100               // Maximum number of files per session
-	MaxSessionIDLength = 256               // Max session ID length
-	MaxPathLength      = 1024              // Max file path length
-	MaxReasonLength    = 10000             // Max reason text length
-	MaxCWDLength       = 4096              // Max current working directory length
-	MinSessionIDLength = 1                 // Min session ID length
-	MaxRunsPerWeek     = 200               // Maximum runs (versions) a user can upload per week
+	MaxRequestBodySize   = 200 * 1024 * 1024 // 200MB total request size
+	MaxFileSize          = 50 * 1024 * 1024  // 50MB per file
+	MaxFiles             = 100               // Maximum number of files per session
+	MaxExternalIDLength  = 256               // Max external ID length
+	MaxPathLength        = 1024              // Max file path length
+	MaxReasonLength      = 10000             // Max reason text length
+	MaxCWDLength         = 4096              // Max current working directory length
+	MinExternalIDLength  = 1                 // Min external ID length
+	MaxRunsPerWeek       = 200               // Maximum runs (versions) a user can upload per week
 )
 
 // handleSaveSession processes session upload requests
@@ -89,7 +89,7 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Processing session save",
 		"user_id", userID,
-		"session_id", req.SessionID,
+		"external_id", req.ExternalID,
 		"file_count", len(req.Files),
 		"title", title,
 		"session_type", sessionType)
@@ -102,16 +102,16 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 	s3Keys := make(map[string]string)
 	for _, file := range req.Files {
 		if len(file.Content) == 0 {
-			logger.Warn("Empty file content", "file_path", file.Path, "session_id", req.SessionID)
+			logger.Warn("Empty file content", "file_path", file.Path, "external_id", req.ExternalID)
 			continue
 		}
 
-		s3Key, err := s.storage.Upload(storageCtx, userID, req.SessionID, file.Path, file.Content)
+		s3Key, err := s.storage.Upload(storageCtx, userID, req.ExternalID, file.Path, file.Content)
 		if err != nil {
 			logger.Error("File upload failed",
 				"error", err,
 				"user_id", userID,
-				"session_id", req.SessionID,
+				"external_id", req.ExternalID,
 				"file_path", file.Path)
 			respondStorageError(w, err, "Failed to upload files to storage")
 			return
@@ -131,26 +131,27 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Failed to save session metadata",
 			"error", err,
 			"user_id", userID,
-			"session_id", req.SessionID)
+			"external_id", req.ExternalID)
 		respondError(w, http.StatusInternalServerError, "Failed to save session metadata")
 		return
 	}
 
 	// Build session URL using the UUID primary key
-	sessionURL := s.frontendURL + "/sessions/" + result.SessionPK
+	sessionURL := s.frontendURL + "/sessions/" + result.ID
 
 	// Audit log: Session saved successfully
 	logger.Info("Session saved successfully",
 		"user_id", userID,
-		"session_id", req.SessionID,
-		"session_pk", result.SessionPK,
+		"external_id", req.ExternalID,
+		"session_id", result.ID,
 		"run_id", result.RunID,
 		"file_count", len(s3Keys))
 
 	// Return success response
 	respondJSON(w, http.StatusOK, models.SaveSessionResponse{
 		Success:    true,
-		SessionID:  req.SessionID,
+		ID:         result.ID,
+		ExternalID: req.ExternalID,
 		RunID:      result.RunID,
 		SessionURL: sessionURL,
 		Message:    "Session saved successfully",
@@ -159,15 +160,15 @@ func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
 
 // validateSaveSessionRequest validates session upload request
 func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
-	// Validate session ID
-	if req.SessionID == "" {
-		return fmt.Errorf("session_id is required")
+	// Validate external ID
+	if req.ExternalID == "" {
+		return fmt.Errorf("external_id is required")
 	}
-	if len(req.SessionID) < MinSessionIDLength || len(req.SessionID) > MaxSessionIDLength {
-		return fmt.Errorf("session_id must be between %d and %d characters", MinSessionIDLength, MaxSessionIDLength)
+	if len(req.ExternalID) < MinExternalIDLength || len(req.ExternalID) > MaxExternalIDLength {
+		return fmt.Errorf("external_id must be between %d and %d characters", MinExternalIDLength, MaxExternalIDLength)
 	}
-	if !utf8.ValidString(req.SessionID) {
-		return fmt.Errorf("session_id must be valid UTF-8")
+	if !utf8.ValidString(req.ExternalID) {
+		return fmt.Errorf("external_id must be valid UTF-8")
 	}
 
 	// Validate transcript path
@@ -349,7 +350,7 @@ func extractSessionMetadata(files []models.FileUpload) (title string, sessionTyp
 	return title, sessionType
 }
 
-// HandleCheckSessions checks which session IDs already exist for the user
+// HandleCheckSessions checks which external IDs already exist for the user
 func HandleCheckSessions(s *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get authenticated user ID
@@ -361,7 +362,7 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 
 		// Parse request body
 		var req struct {
-			SessionIDs []string `json:"session_ids"`
+			ExternalIDs []string `json:"external_ids"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -369,12 +370,12 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 		}
 
 		// Validate
-		if len(req.SessionIDs) == 0 {
-			respondError(w, http.StatusBadRequest, "session_ids is required")
+		if len(req.ExternalIDs) == 0 {
+			respondError(w, http.StatusBadRequest, "external_ids is required")
 			return
 		}
-		if len(req.SessionIDs) > 1000 {
-			respondError(w, http.StatusBadRequest, "Too many session IDs (max 1000)")
+		if len(req.ExternalIDs) > 1000 {
+			respondError(w, http.StatusBadRequest, "Too many external IDs (max 1000)")
 			return
 		}
 
@@ -383,7 +384,7 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 		defer cancel()
 
 		// Check which sessions exist
-		existing, err := s.db.CheckSessionsExist(ctx, userID, req.SessionIDs)
+		existing, err := s.db.CheckSessionsExist(ctx, userID, req.ExternalIDs)
 		if err != nil {
 			logger.Error("Failed to check sessions", "error", err, "user_id", userID)
 			respondError(w, http.StatusInternalServerError, "Failed to check sessions")
@@ -393,7 +394,7 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 		// Success log
 		logger.Info("Sessions checked",
 			"user_id", userID,
-			"requested_count", len(req.SessionIDs),
+			"requested_count", len(req.ExternalIDs),
 			"existing_count", len(existing))
 
 		// Build missing list
@@ -402,7 +403,7 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 			existingSet[id] = true
 		}
 		var missing []string
-		for _, id := range req.SessionIDs {
+		for _, id := range req.ExternalIDs {
 			if !existingSet[id] {
 				missing = append(missing, id)
 			}

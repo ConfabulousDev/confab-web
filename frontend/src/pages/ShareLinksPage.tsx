@@ -120,7 +120,7 @@ function ShareLinksPage() {
                           {share.session_title || 'Untitled Session'}
                         </Link>
                         <div className={styles.sessionId}>
-                          <code>{share.session_id.substring(0, 8)}</code>
+                          <code>{share.external_id.substring(0, 8)}</code>
                         </div>
                       </td>
                       <td>

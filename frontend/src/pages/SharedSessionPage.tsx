@@ -16,7 +16,7 @@ function SharedSessionPage() {
   const [errorType, setErrorType] = useState<ErrorType>(null);
 
   // Dynamic page title
-  const pageTitle = session ? `Shared: ${session.session_id.substring(0, 8)}` : 'Shared Session';
+  const pageTitle = session ? `Shared: ${session.external_id.substring(0, 8)}` : 'Shared Session';
   useDocumentTitle(pageTitle);
 
   useEffect(() => {
@@ -121,7 +121,7 @@ function SharedSessionPage() {
         <div>
           <h1>Session Detail</h1>
           <p className={styles.sessionId}>
-            <strong>Session ID:</strong> <code>{session.session_id}</code>
+            <strong>Session ID:</strong> <code>{session.external_id}</code>
           </p>
         </div>
       </div>
@@ -142,7 +142,7 @@ function SharedSessionPage() {
       <h2>Runs</h2>
 
       {session.runs.map((run, index) => (
-        <RunCard key={index} run={run} index={index} showGitInfo={false} shareToken={token} sessionId={session.session_id} />
+        <RunCard key={index} run={run} index={index} showGitInfo={false} shareToken={token} sessionId={session.id} />
       ))}
     </div>
   );

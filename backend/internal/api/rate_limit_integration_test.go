@@ -30,9 +30,9 @@ func TestRateLimitEnforcement(t *testing.T) {
 	server := &Server{db: env.DB, storage: env.Storage}
 
 	// Helper to create upload request
-	makeUploadRequest := func(sessionID string) *http.Request {
+	makeUploadRequest := func(externalID string) *http.Request {
 		req := models.SaveSessionRequest{
-			SessionID:      sessionID,
+			ExternalID:     externalID,
 			TranscriptPath: "test.txt",
 			CWD:            "/test",
 			Reason:         "test upload",
@@ -144,9 +144,9 @@ func TestRateLimitEnforcement(t *testing.T) {
 
 	t.Run("old runs don't count toward limit", func(t *testing.T) {
 		// Create a session and run, then backdate it to 8 days ago
-		sessionID := "old-session-test"
-		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
-		runID := testutil.CreateTestRun(t, env, sessionPK, "old test", "/cwd", "/old/path")
+		externalID := "old-session-test"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
+		runID := testutil.CreateTestRun(t, env, sessionID, "old test", "/cwd", "/old/path")
 
 		// Backdate the run by 8 days
 		eightDaysAgo := time.Now().UTC().Add(-8 * 24 * time.Hour)
@@ -219,11 +219,11 @@ func TestWeeklyUsageEndpoint(t *testing.T) {
 
 	t.Run("returns correct usage after uploads", func(t *testing.T) {
 		// Create 10 runs
-		sessionID := "usage-test-session"
-		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		externalID := "usage-test-session"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		for i := 0; i < 10; i++ {
-			testutil.CreateTestRun(t, env, sessionPK, "test", "/cwd", "/test")
+			testutil.CreateTestRun(t, env, sessionID, "test", "/cwd", "/test")
 		}
 
 		// Get usage

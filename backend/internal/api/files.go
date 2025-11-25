@@ -94,12 +94,12 @@ func HandleGetFileContent(database *db.DB, store *storage.S3Storage) http.Handle
 func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get params from URL
-		sessionPK := chi.URLParam(r, "sessionId")
+		sessionID := chi.URLParam(r, "id")
 		shareToken := chi.URLParam(r, "shareToken")
 		fileIDStr := chi.URLParam(r, "fileId")
 
-		// Validate session PK (UUID)
-		if sessionPK == "" {
+		// Validate session ID (UUID)
+		if sessionID == "" {
 			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
@@ -141,7 +141,7 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Validate share token and get file
-		file, err := database.GetSharedFileByID(dbCtx, sessionPK, shareToken, fileID, viewerEmail)
+		file, err := database.GetSharedFileByID(dbCtx, sessionID, shareToken, fileID, viewerEmail)
 		if err != nil {
 			if errors.Is(err, db.ErrFileNotFound) || errors.Is(err, db.ErrShareNotFound) {
 				respondError(w, http.StatusNotFound, "File not found")
@@ -178,7 +178,7 @@ func HandleGetSharedFileContent(database *db.DB, store *storage.S3Storage) http.
 
 		// Audit log: Shared file downloaded
 		logger.Info("Shared file downloaded",
-			"session_pk", sessionPK,
+			"session_id", sessionID,
 			"share_token", shareToken,
 			"file_id", fileID,
 			"file_type", file.FileType,

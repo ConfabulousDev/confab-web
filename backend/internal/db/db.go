@@ -98,21 +98,21 @@ func (db *DB) RunMigrations() error {
 		created_at TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 
-	-- Sessions table (globally unique UUID for URLs, user_id+session_id for deduplication)
+	-- Sessions table (globally unique UUID for URLs, user_id+session_type+external_id for deduplication)
 	CREATE TABLE IF NOT EXISTS sessions (
 		id UUID PRIMARY KEY,
 		user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		session_id VARCHAR(255) NOT NULL,
+		external_id TEXT NOT NULL,
 		first_seen TIMESTAMP NOT NULL DEFAULT NOW(),
 		title TEXT,
 		session_type VARCHAR(50) NOT NULL DEFAULT 'Claude Code',
-		UNIQUE(user_id, session_id)
+		UNIQUE(user_id, session_type, external_id)
 	);
 
 	-- Runs table (execution instances)
 	CREATE TABLE IF NOT EXISTS runs (
 		id BIGSERIAL PRIMARY KEY,
-		session_pk UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+		session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
 		transcript_path TEXT NOT NULL,
 		cwd TEXT NOT NULL,
 		reason TEXT NOT NULL,
@@ -138,7 +138,7 @@ func (db *DB) RunMigrations() error {
 	-- Session shares table
 	CREATE TABLE IF NOT EXISTS session_shares (
 		id BIGSERIAL PRIMARY KEY,
-		session_pk UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+		session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
 		share_token CHAR(32) NOT NULL UNIQUE,
 		visibility VARCHAR(20) NOT NULL,
 		expires_at TIMESTAMP,
@@ -173,15 +173,15 @@ func (db *DB) RunMigrations() error {
 	CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);
 	CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 	CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_user_session_id ON sessions(user_id, session_id);
-	CREATE INDEX IF NOT EXISTS idx_runs_session_pk ON runs(session_pk);
+	CREATE INDEX IF NOT EXISTS idx_sessions_user_external_id ON sessions(user_id, session_type, external_id);
+	CREATE INDEX IF NOT EXISTS idx_runs_session_id ON runs(session_id);
 	CREATE INDEX IF NOT EXISTS idx_runs_end_timestamp ON runs(end_timestamp);
 	CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_runs_last_activity ON runs(last_activity);
 	CREATE INDEX IF NOT EXISTS idx_files_run ON files(run_id);
 	CREATE INDEX IF NOT EXISTS idx_files_run_type_size ON files(run_id, file_type, size_bytes);
 	CREATE INDEX IF NOT EXISTS idx_session_shares_token ON session_shares(share_token);
-	CREATE INDEX IF NOT EXISTS idx_session_shares_session_pk ON session_shares(session_pk);
+	CREATE INDEX IF NOT EXISTS idx_session_shares_session_id ON session_shares(session_id);
 	CREATE INDEX IF NOT EXISTS idx_session_share_invites_share ON session_share_invites(share_id);
 	CREATE INDEX IF NOT EXISTS idx_session_share_invites_email ON session_share_invites(email);
 	CREATE INDEX IF NOT EXISTS idx_session_share_accesses_share ON session_share_accesses(share_id);
@@ -296,8 +296,8 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 // SaveSession stores a session with its run and files in a transaction
 // SaveSessionResult contains the result of saving a session
 type SaveSessionResult struct {
-	RunID     int64
-	SessionPK string // UUID primary key of the session
+	RunID int64
+	ID    string // UUID primary key of the session
 }
 
 func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSessionRequest, s3Keys map[string]string, source string) (*SaveSessionResult, error) {
@@ -312,22 +312,21 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 	// Generate a new UUID for the session (only used if this is a new session)
 	newSessionUUID := uuid.New().String()
 
-	// Insert session if doesn't exist, or update title/session_type if provided
+	// Insert session if doesn't exist, or update title if provided
 	// Returns the session's UUID primary key for use in the run
-	sessionSQL := `
-		INSERT INTO sessions (id, user_id, session_id, first_seen, title, session_type)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (user_id, session_id) DO UPDATE SET
-			title = CASE WHEN EXCLUDED.title IS NOT NULL AND EXCLUDED.title != '' THEN EXCLUDED.title ELSE sessions.title END,
-			session_type = CASE WHEN EXCLUDED.session_type IS NOT NULL AND EXCLUDED.session_type != '' THEN EXCLUDED.session_type ELSE sessions.session_type END
-		RETURNING id
-	`
 	sessionType := req.SessionType
 	if sessionType == "" {
 		sessionType = "Claude Code" // Default
 	}
-	var sessionPK string
-	err = tx.QueryRowContext(ctx, sessionSQL, newSessionUUID, userID, req.SessionID, now, req.Title, sessionType).Scan(&sessionPK)
+	sessionSQL := `
+		INSERT INTO sessions (id, user_id, external_id, first_seen, title, session_type)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (user_id, session_type, external_id) DO UPDATE SET
+			title = CASE WHEN EXCLUDED.title IS NOT NULL AND EXCLUDED.title != '' THEN EXCLUDED.title ELSE sessions.title END
+		RETURNING id
+	`
+	var sessionID string
+	err = tx.QueryRowContext(ctx, sessionSQL, newSessionUUID, userID, req.ExternalID, now, req.Title, sessionType).Scan(&sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert session: %w", err)
 	}
@@ -344,7 +343,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 
 	// Always insert a new run
 	runSQL := `
-		INSERT INTO runs (session_pk, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info, source, last_activity)
+		INSERT INTO runs (session_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info, source, last_activity)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
@@ -354,7 +353,7 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 
 	var runID int64
 	err = tx.QueryRowContext(ctx, runSQL,
-		sessionPK,
+		sessionID,
 		req.TranscriptPath,
 		req.CWD,
 		req.Reason,
@@ -393,8 +392,8 @@ func (db *DB) SaveSession(ctx context.Context, userID int64, req *models.SaveSes
 	}
 
 	return &SaveSessionResult{
-		RunID:     runID,
-		SessionPK: sessionPK,
+		RunID: runID,
+		ID:    sessionID,
 	}, nil
 }
 
@@ -585,7 +584,7 @@ func extractRepoName(repoURL string) *string {
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
 	ID                string    `json:"id"`                        // UUID primary key for URL routing
-	SessionID         string    `json:"session_id"`                // Claude Code's session ID (for display)
+	ExternalID        string    `json:"external_id"`               // External system's session ID (e.g., Claude Code's ID)
 	FirstSeen         time.Time `json:"first_seen"`
 	RunCount          int       `json:"run_count"`
 	LastRunTime       time.Time `json:"last_run_time"`
@@ -615,16 +614,16 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 		// Original query - only owned sessions
 		query = `
 			WITH latest_runs AS (
-				SELECT DISTINCT ON (session_pk)
-					session_pk,
+				SELECT DISTINCT ON (session_id)
+					session_id,
 					git_info->>'repo_url' as git_repo_url,
 					git_info->>'branch' as git_branch
 				FROM runs
-				ORDER BY session_pk, last_activity DESC
+				ORDER BY session_id, last_activity DESC
 			)
 			SELECT
 				s.id,
-				s.session_id,
+				s.external_id,
 				s.first_seen,
 				COUNT(r.id) as run_count,
 				COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
@@ -638,34 +637,34 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				NULL::text as share_token,
 				NULL::text as shared_by_email
 			FROM sessions s
-			LEFT JOIN runs r ON s.id = r.session_pk
+			LEFT JOIN runs r ON s.id = r.session_id
 			LEFT JOIN (
 				SELECT run_id, MAX(size_bytes) as max_size
 				FROM files
 				WHERE file_type = 'transcript'
 				GROUP BY run_id
 			) transcript_sizes ON r.id = transcript_sizes.run_id
-			LEFT JOIN latest_runs ON s.id = latest_runs.session_pk
+			LEFT JOIN latest_runs ON s.id = latest_runs.session_id
 			WHERE s.user_id = $1
-			GROUP BY s.id, s.session_id, s.first_seen, s.title, s.session_type, latest_runs.git_repo_url, latest_runs.git_branch
+			GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type, latest_runs.git_repo_url, latest_runs.git_branch
 			ORDER BY last_run_time DESC
 		`
 	} else {
 		// Include owned + shared sessions via UNION
 		query = `
 			WITH latest_runs AS (
-				SELECT DISTINCT ON (session_pk)
-					session_pk,
+				SELECT DISTINCT ON (session_id)
+					session_id,
 					git_info->>'repo_url' as git_repo_url,
 					git_info->>'branch' as git_branch
 				FROM runs
-				ORDER BY session_pk, last_activity DESC
+				ORDER BY session_id, last_activity DESC
 			),
 			-- User's own sessions
 			owned_sessions AS (
 				SELECT
 					s.id,
-					s.session_id,
+					s.external_id,
 					s.first_seen,
 					COUNT(r.id) as run_count,
 					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
@@ -679,23 +678,23 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					NULL::text as share_token,
 					NULL::text as shared_by_email
 				FROM sessions s
-				LEFT JOIN runs r ON s.id = r.session_pk
+				LEFT JOIN runs r ON s.id = r.session_id
 				LEFT JOIN (
 					SELECT run_id, MAX(size_bytes) as max_size
 					FROM files
 					WHERE file_type = 'transcript'
 					GROUP BY run_id
 				) transcript_sizes ON r.id = transcript_sizes.run_id
-				LEFT JOIN latest_runs ON s.id = latest_runs.session_pk
+				LEFT JOIN latest_runs ON s.id = latest_runs.session_id
 				WHERE s.user_id = $1
-				GROUP BY s.id, s.session_id, s.first_seen, s.title, s.session_type,
+				GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type,
 				         latest_runs.git_repo_url, latest_runs.git_branch
 			),
 			-- Private shares (invited by email)
 			private_shares AS (
 				SELECT
 					s.id,
-					s.session_id,
+					s.external_id,
 					s.first_seen,
 					COUNT(r.id) as run_count,
 					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
@@ -709,29 +708,29 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					sh.share_token,
 					u.email as shared_by_email
 				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_pk
+				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_invites si ON sh.id = si.share_id
 				JOIN users u ON s.user_id = u.id
-				LEFT JOIN runs r ON s.id = r.session_pk
+				LEFT JOIN runs r ON s.id = r.session_id
 				LEFT JOIN (
 					SELECT run_id, MAX(size_bytes) as max_size
 					FROM files
 					WHERE file_type = 'transcript'
 					GROUP BY run_id
 				) transcript_sizes ON r.id = transcript_sizes.run_id
-				LEFT JOIN latest_runs ON s.id = latest_runs.session_pk
+				LEFT JOIN latest_runs ON s.id = latest_runs.session_id
 				WHERE sh.visibility = 'private'
 				  AND LOWER(si.email) = LOWER($2)
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
-				GROUP BY s.id, s.session_id, s.first_seen, s.title, s.session_type,
+				GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type,
 				         latest_runs.git_repo_url, latest_runs.git_branch, sh.share_token, u.email
 			),
 			-- Public shares accessed by user
 			public_shares AS (
 				SELECT
 					s.id,
-					s.session_id,
+					s.external_id,
 					s.first_seen,
 					COUNT(r.id) as run_count,
 					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
@@ -745,22 +744,22 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					sh.share_token,
 					u.email as shared_by_email
 				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_pk
+				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_accesses sa ON sh.id = sa.share_id
 				JOIN users u ON s.user_id = u.id
-				LEFT JOIN runs r ON s.id = r.session_pk
+				LEFT JOIN runs r ON s.id = r.session_id
 				LEFT JOIN (
 					SELECT run_id, MAX(size_bytes) as max_size
 					FROM files
 					WHERE file_type = 'transcript'
 					GROUP BY run_id
 				) transcript_sizes ON r.id = transcript_sizes.run_id
-				LEFT JOIN latest_runs ON s.id = latest_runs.session_pk
+				LEFT JOIN latest_runs ON s.id = latest_runs.session_id
 				WHERE sh.visibility = 'public'
 				  AND sa.user_id = $1
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
-				GROUP BY s.id, s.session_id, s.first_seen, s.title, s.session_type,
+				GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type,
 				         latest_runs.git_repo_url, latest_runs.git_branch, sh.share_token, u.email
 			)
 			SELECT * FROM owned_sessions
@@ -790,7 +789,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 		var gitRepoURL *string // Full URL from git_info JSONB
 		if err := rows.Scan(
 			&session.ID,
-			&session.SessionID,
+			&session.ExternalID,
 			&session.FirstSeen,
 			&session.RunCount,
 			&session.LastRunTime,
@@ -824,10 +823,10 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 
 // SessionDetail represents detailed session information
 type SessionDetail struct {
-	ID        string      `json:"id"`         // UUID primary key for URL routing
-	SessionID string      `json:"session_id"` // Claude Code's session ID
-	FirstSeen time.Time   `json:"first_seen"`
-	Runs      []RunDetail `json:"runs"`
+	ID         string      `json:"id"`          // UUID primary key for URL routing
+	ExternalID string      `json:"external_id"` // External system's session ID
+	FirstSeen  time.Time   `json:"first_seen"`
+	Runs       []RunDetail `json:"runs"`
 }
 
 // RunDetail represents a run with its files
@@ -853,11 +852,11 @@ type FileDetail struct {
 }
 
 // GetSessionDetail returns detailed information about a session by its UUID primary key
-func (db *DB) GetSessionDetail(ctx context.Context, sessionPK string, userID int64) (*SessionDetail, error) {
+func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int64) (*SessionDetail, error) {
 	// First, get the session and verify ownership
 	var session SessionDetail
-	sessionQuery := `SELECT id, session_id, first_seen FROM sessions WHERE id = $1 AND user_id = $2`
-	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionPK, userID).Scan(&session.ID, &session.SessionID, &session.FirstSeen)
+	sessionQuery := `SELECT id, external_id, first_seen FROM sessions WHERE id = $1 AND user_id = $2`
+	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(&session.ID, &session.ExternalID, &session.FirstSeen)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
@@ -873,11 +872,11 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionPK string, userID int
 	runsQuery := `
 		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded, git_info
 		FROM runs
-		WHERE session_pk = $1
+		WHERE session_id = $1
 		ORDER BY end_timestamp ASC
 	`
 
-	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionPK)
+	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query runs: %w", err)
 	}
@@ -937,25 +936,25 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionPK string, userID int
 	return &session, nil
 }
 
-// CheckSessionsExist checks which session IDs exist for a user
-// Returns the list of session IDs that already exist in the database
-func (db *DB) CheckSessionsExist(ctx context.Context, userID int64, sessionIDs []string) ([]string, error) {
-	if len(sessionIDs) == 0 {
+// CheckSessionsExist checks which external IDs exist for a user
+// Returns the list of external IDs that already exist in the database
+func (db *DB) CheckSessionsExist(ctx context.Context, userID int64, externalIDs []string) ([]string, error) {
+	if len(externalIDs) == 0 {
 		return []string{}, nil
 	}
 
 	// Build query with placeholders
-	placeholders := make([]string, len(sessionIDs))
-	args := make([]interface{}, len(sessionIDs)+1)
+	placeholders := make([]string, len(externalIDs))
+	args := make([]interface{}, len(externalIDs)+1)
 	args[0] = userID
-	for i, id := range sessionIDs {
+	for i, id := range externalIDs {
 		placeholders[i] = fmt.Sprintf("$%d", i+2)
 		args[i+1] = id
 	}
 
 	query := fmt.Sprintf(`
-		SELECT session_id FROM sessions
-		WHERE user_id = $1 AND session_id IN (%s)
+		SELECT external_id FROM sessions
+		WHERE user_id = $1 AND external_id IN (%s)
 	`, strings.Join(placeholders, ","))
 
 	rows, err := db.conn.QueryContext(ctx, query, args...)
@@ -966,11 +965,11 @@ func (db *DB) CheckSessionsExist(ctx context.Context, userID int64, sessionIDs [
 
 	var existing []string
 	for rows.Next() {
-		var sessionID string
-		if err := rows.Scan(&sessionID); err != nil {
+		var externalID string
+		if err := rows.Scan(&externalID); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
-		existing = append(existing, sessionID)
+		existing = append(existing, externalID)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -983,8 +982,8 @@ func (db *DB) CheckSessionsExist(ctx context.Context, userID int64, sessionIDs [
 // SessionShare represents a share link
 type SessionShare struct {
 	ID             int64      `json:"id"`
-	SessionPK      string     `json:"session_pk"`      // UUID references sessions.id
-	SessionID      string     `json:"session_id"`      // Claude Code's session ID (for display)
+	SessionID      string     `json:"session_id"`      // UUID references sessions.id
+	ExternalID     string     `json:"external_id"`     // External system's session ID (for display)
 	ShareToken     string     `json:"share_token"`
 	Visibility     string     `json:"visibility"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
@@ -994,12 +993,12 @@ type SessionShare struct {
 }
 
 // CreateShare creates a new share link for a session (by UUID primary key)
-func (db *DB) CreateShare(ctx context.Context, sessionPK string, userID int64, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) (*SessionShare, error) {
-	// Verify session exists for this user and get session_id for display
-	var sessionID string
+func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) (*SessionShare, error) {
+	// Verify session exists for this user and get external_id for display
+	var externalID string
 	err := db.conn.QueryRowContext(ctx,
-		`SELECT session_id FROM sessions WHERE id = $1 AND user_id = $2`,
-		sessionPK, userID).Scan(&sessionID)
+		`SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`,
+		sessionID, userID).Scan(&externalID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
@@ -1012,18 +1011,18 @@ func (db *DB) CreateShare(ctx context.Context, sessionPK string, userID int64, s
 	}
 
 	// Insert share
-	query := `INSERT INTO session_shares (session_pk, share_token, visibility, expires_at)
+	query := `INSERT INTO session_shares (session_id, share_token, visibility, expires_at)
 	          VALUES ($1, $2, $3, $4)
 	          RETURNING id, created_at`
 
 	var share SessionShare
-	share.SessionPK = sessionPK
 	share.SessionID = sessionID
+	share.ExternalID = externalID
 	share.ShareToken = shareToken
 	share.Visibility = visibility
 	share.ExpiresAt = expiresAt
 
-	err = db.conn.QueryRowContext(ctx, query, sessionPK, shareToken, visibility, expiresAt).Scan(&share.ID, &share.CreatedAt)
+	err = db.conn.QueryRowContext(ctx, query, sessionID, shareToken, visibility, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
@@ -1047,12 +1046,12 @@ func (db *DB) CreateShare(ctx context.Context, sessionPK string, userID int64, s
 }
 
 // ListShares returns all shares for a session (by UUID primary key)
-func (db *DB) ListShares(ctx context.Context, sessionPK string, userID int64) ([]SessionShare, error) {
-	// Verify session exists for this user and get session_id for display
-	var sessionID string
+func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([]SessionShare, error) {
+	// Verify session exists for this user and get external_id for display
+	var externalID string
 	err := db.conn.QueryRowContext(ctx,
-		`SELECT session_id FROM sessions WHERE id = $1 AND user_id = $2`,
-		sessionPK, userID).Scan(&sessionID)
+		`SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`,
+		sessionID, userID).Scan(&externalID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
@@ -1065,12 +1064,12 @@ func (db *DB) ListShares(ctx context.Context, sessionPK string, userID int64) ([
 	}
 
 	// Get shares
-	query := `SELECT id, session_pk, share_token, visibility, expires_at, created_at, last_accessed_at
+	query := `SELECT id, session_id, share_token, visibility, expires_at, created_at, last_accessed_at
 	          FROM session_shares
-	          WHERE session_pk = $1
+	          WHERE session_id = $1
 	          ORDER BY created_at DESC`
 
-	rows, err := db.conn.QueryContext(ctx, query, sessionPK)
+	rows, err := db.conn.QueryContext(ctx, query, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list shares: %w", err)
 	}
@@ -1079,12 +1078,12 @@ func (db *DB) ListShares(ctx context.Context, sessionPK string, userID int64) ([
 	var shares []SessionShare
 	for rows.Next() {
 		var share SessionShare
-		err := rows.Scan(&share.ID, &share.SessionPK, &share.ShareToken,
+		err := rows.Scan(&share.ID, &share.SessionID, &share.ShareToken,
 			&share.Visibility, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan share: %w", err)
 		}
-		share.SessionID = sessionID // Set from parent query
+		share.ExternalID = externalID // Set from parent query
 
 		// Get invited emails for private shares
 		if share.Visibility == "private" {
@@ -1136,11 +1135,11 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 	// Get all shares for the user with session info
 	query := `
 		SELECT
-			ss.id, ss.session_pk, s.session_id, ss.share_token, ss.visibility,
+			ss.id, ss.session_id, s.external_id, ss.share_token, ss.visibility,
 			ss.expires_at, ss.created_at, ss.last_accessed_at,
 			s.title
 		FROM session_shares ss
-		JOIN sessions s ON ss.session_pk = s.id
+		JOIN sessions s ON ss.session_id = s.id
 		WHERE s.user_id = $1
 		ORDER BY ss.created_at DESC
 	`
@@ -1155,7 +1154,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 	for rows.Next() {
 		var share ShareWithSessionInfo
 		err := rows.Scan(
-			&share.ID, &share.SessionPK, &share.SessionID, &share.ShareToken,
+			&share.ID, &share.SessionID, &share.ExternalID, &share.ShareToken,
 			&share.Visibility, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
 			&share.SessionTitle,
 		)
@@ -1208,7 +1207,7 @@ func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) 
 	result, err := db.conn.ExecContext(ctx,
 		`DELETE FROM session_shares ss
 		 USING sessions s
-		 WHERE ss.session_pk = s.id AND ss.share_token = $1 AND s.user_id = $2`,
+		 WHERE ss.session_id = s.id AND ss.share_token = $1 AND s.user_id = $2`,
 		shareToken, userID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke share: %w", err)
@@ -1223,16 +1222,16 @@ func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) 
 	return nil
 }
 
-// GetSharedSession returns session detail via share token (sessionPK is the UUID primary key)
-func (db *DB) GetSharedSession(ctx context.Context, sessionPK string, shareToken string, viewerEmail *string) (*SessionDetail, error) {
+// GetSharedSession returns session detail via share token (sessionID is the UUID primary key)
+func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken string, viewerEmail *string) (*SessionDetail, error) {
 	// Get share and verify it belongs to this session
 	var share SessionShare
-	query := `SELECT ss.id, ss.session_pk, ss.visibility, ss.expires_at, ss.last_accessed_at
+	query := `SELECT ss.id, ss.session_id, ss.visibility, ss.expires_at, ss.last_accessed_at
 	          FROM session_shares ss
-	          WHERE ss.share_token = $1 AND ss.session_pk = $2`
+	          WHERE ss.share_token = $1 AND ss.session_id = $2`
 
-	err := db.conn.QueryRowContext(ctx, query, shareToken, sessionPK).Scan(
-		&share.ID, &share.SessionPK, &share.Visibility,
+	err := db.conn.QueryRowContext(ctx, query, shareToken, sessionID).Scan(
+		&share.ID, &share.SessionID, &share.Visibility,
 		&share.ExpiresAt, &share.LastAccessedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1273,8 +1272,8 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionPK string, shareToken
 
 	// Get session detail (no ownership check since share verified)
 	var session SessionDetail
-	sessionQuery := `SELECT id, session_id, first_seen FROM sessions WHERE id = $1`
-	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionPK).Scan(&session.ID, &session.SessionID, &session.FirstSeen)
+	sessionQuery := `SELECT id, external_id, first_seen FROM sessions WHERE id = $1`
+	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(&session.ID, &session.ExternalID, &session.FirstSeen)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
@@ -1290,11 +1289,11 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionPK string, shareToken
 	runsQuery := `
 		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded, git_info
 		FROM runs
-		WHERE session_pk = $1
+		WHERE session_id = $1
 		ORDER BY end_timestamp ASC
 	`
 
-	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionPK)
+	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query runs: %w", err)
 	}
@@ -1393,7 +1392,7 @@ func (db *DB) GetFileByID(ctx context.Context, fileID int64, userID int64) (*Fil
 		SELECT f.id, f.file_path, f.file_type, f.size_bytes, f.s3_key, f.s3_uploaded_at
 		FROM files f
 		JOIN runs r ON f.run_id = r.id
-		JOIN sessions s ON r.session_pk = s.id
+		JOIN sessions s ON r.session_id = s.id
 		WHERE f.id = $1 AND s.user_id = $2
 	`
 
@@ -1418,15 +1417,15 @@ func (db *DB) GetFileByID(ctx context.Context, fileID int64, userID int64) (*Fil
 }
 
 // GetSharedFileByID retrieves a file by ID via share token (for shared sessions)
-func (db *DB) GetSharedFileByID(ctx context.Context, sessionPK string, shareToken string, fileID int64, viewerEmail *string) (*FileDetail, error) {
+func (db *DB) GetSharedFileByID(ctx context.Context, sessionID string, shareToken string, fileID int64, viewerEmail *string) (*FileDetail, error) {
 	// First validate the share token
 	var share SessionShare
-	shareQuery := `SELECT id, session_pk, visibility, expires_at
+	shareQuery := `SELECT id, session_id, visibility, expires_at
 	               FROM session_shares
-	               WHERE share_token = $1 AND session_pk = $2`
+	               WHERE share_token = $1 AND session_id = $2`
 
-	err := db.conn.QueryRowContext(ctx, shareQuery, shareToken, sessionPK).Scan(
-		&share.ID, &share.SessionPK, &share.Visibility, &share.ExpiresAt)
+	err := db.conn.QueryRowContext(ctx, shareQuery, shareToken, sessionID).Scan(
+		&share.ID, &share.SessionID, &share.Visibility, &share.ExpiresAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrShareNotFound
@@ -1459,11 +1458,11 @@ func (db *DB) GetSharedFileByID(ctx context.Context, sessionPK string, shareToke
 		SELECT f.id, f.file_path, f.file_type, f.size_bytes, f.s3_key, f.s3_uploaded_at
 		FROM files f
 		JOIN runs r ON f.run_id = r.id
-		WHERE f.id = $1 AND r.session_pk = $2
+		WHERE f.id = $1 AND r.session_id = $2
 	`
 
 	var file FileDetail
-	err = db.conn.QueryRowContext(ctx, fileQuery, fileID, sessionPK).Scan(
+	err = db.conn.QueryRowContext(ctx, fileQuery, fileID, sessionID).Scan(
 		&file.ID,
 		&file.FilePath,
 		&file.FileType,
@@ -1486,18 +1485,18 @@ func (db *DB) GetSharedFileByID(ctx context.Context, sessionPK string, shareToke
 }
 
 // GetRunS3Keys retrieves all S3 keys for files in a specific run
-// Also verifies ownership and returns the session UUID PK and run count
-func (db *DB) GetRunS3Keys(ctx context.Context, runID int64, userID int64) (sessionPK string, runCount int, s3Keys []string, err error) {
+// Also verifies ownership and returns the session UUID and run count
+func (db *DB) GetRunS3Keys(ctx context.Context, runID int64, userID int64) (sessionID string, runCount int, s3Keys []string, err error) {
 	// Verify ownership by joining through sessions and get run count
 	ownershipQuery := `
 		SELECT s.id, COUNT(r2.id) as run_count
 		FROM runs r
-		JOIN sessions s ON r.session_pk = s.id
-		LEFT JOIN runs r2 ON s.id = r2.session_pk
+		JOIN sessions s ON r.session_id = s.id
+		LEFT JOIN runs r2 ON s.id = r2.session_id
 		WHERE r.id = $1 AND s.user_id = $2
 		GROUP BY s.id
 	`
-	err = db.conn.QueryRowContext(ctx, ownershipQuery, runID, userID).Scan(&sessionPK, &runCount)
+	err = db.conn.QueryRowContext(ctx, ownershipQuery, runID, userID).Scan(&sessionID, &runCount)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", 0, nil, ErrUnauthorized
@@ -1526,17 +1525,17 @@ func (db *DB) GetRunS3Keys(ctx context.Context, runID int64, userID int64) (sess
 		return "", 0, nil, fmt.Errorf("error iterating S3 keys: %w", err)
 	}
 
-	return sessionPK, runCount, s3Keys, nil
+	return sessionID, runCount, s3Keys, nil
 }
 
 // GetSessionS3Keys retrieves all S3 keys for all files in all runs of a session
-// Also verifies ownership via session UUID primary key lookup
-func (db *DB) GetSessionS3Keys(ctx context.Context, sessionPK string, userID int64) ([]string, error) {
+// Also verifies ownership via session UUID lookup
+func (db *DB) GetSessionS3Keys(ctx context.Context, sessionID string, userID int64) ([]string, error) {
 	// Verify session exists for this user
 	var exists bool
 	err := db.conn.QueryRowContext(ctx,
 		`SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1 AND user_id = $2)`,
-		sessionPK, userID).Scan(&exists)
+		sessionID, userID).Scan(&exists)
 	if err != nil {
 		// Handle invalid UUID format
 		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
@@ -1553,9 +1552,9 @@ func (db *DB) GetSessionS3Keys(ctx context.Context, sessionPK string, userID int
 		SELECT f.s3_key
 		FROM files f
 		JOIN runs r ON f.run_id = r.id
-		WHERE r.session_pk = $1 AND f.s3_key IS NOT NULL
+		WHERE r.session_id = $1 AND f.s3_key IS NOT NULL
 	`
-	rows, err := db.conn.QueryContext(ctx, query, sessionPK)
+	rows, err := db.conn.QueryContext(ctx, query, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query S3 keys: %w", err)
 	}
@@ -1580,7 +1579,7 @@ func (db *DB) GetSessionS3Keys(ctx context.Context, sessionPK string, userID int
 // DeleteRunFromDB deletes a single run from the database
 // S3 objects must be deleted BEFORE calling this function
 // If this is the only run for the session, the session is also deleted
-func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, userID int64, sessionPK string, runCount int) error {
+func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, userID int64, sessionID string, runCount int) error {
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -1602,7 +1601,7 @@ func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, userID int64, se
 	// If this was the only run, delete the session too
 	if runCount == 1 {
 		deleteSessionQuery := `DELETE FROM sessions WHERE id = $1 AND user_id = $2`
-		_, err = tx.ExecContext(ctx, deleteSessionQuery, sessionPK, userID)
+		_, err = tx.ExecContext(ctx, deleteSessionQuery, sessionID, userID)
 		if err != nil {
 			return fmt.Errorf("failed to delete session: %w", err)
 		}
@@ -1617,7 +1616,7 @@ func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, userID int64, se
 
 // DeleteSessionFromDB deletes an entire session and all its runs from the database
 // S3 objects must be deleted BEFORE calling this function
-func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionPK string, userID int64) error {
+func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string, userID int64) error {
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -1626,7 +1625,7 @@ func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionPK string, userID 
 
 	// Delete the session (CASCADE will delete runs, files, shares, and share invites)
 	deleteSessionQuery := `DELETE FROM sessions WHERE id = $1 AND user_id = $2`
-	result, err := tx.ExecContext(ctx, deleteSessionQuery, sessionPK, userID)
+	result, err := tx.ExecContext(ctx, deleteSessionQuery, sessionID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
@@ -1648,7 +1647,7 @@ func (db *DB) CountUserRunsInLastWeek(ctx context.Context, userID int64) (int, e
 	query := `
 		SELECT COUNT(*)
 		FROM runs r
-		JOIN sessions s ON r.session_pk = s.id
+		JOIN sessions s ON r.session_id = s.id
 		WHERE s.user_id = $1 AND r.created_at >= NOW() - INTERVAL '7 days'
 	`
 

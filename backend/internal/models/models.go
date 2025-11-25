@@ -57,9 +57,10 @@ type APIKey struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Session represents a Claude Code session
+// Session represents a session in Confab
 type Session struct {
-	SessionID   string    `json:"session_id"`
+	ID          string    `json:"id"`          // UUID primary key
+	ExternalID  string    `json:"external_id"` // External system's session ID
 	UserID      int64     `json:"user_id"`
 	FirstSeen   time.Time `json:"first_seen"`
 	Title       *string   `json:"title,omitempty"`
@@ -69,7 +70,7 @@ type Session struct {
 // Run represents a single execution/resumption of a session
 type Run struct {
 	ID             int64     `json:"id"`
-	SessionID      string    `json:"session_id"`
+	SessionID      string    `json:"session_id"` // UUID references sessions.id
 	UserID         int64     `json:"user_id"`
 	TranscriptPath string    `json:"transcript_path"`
 	CWD            string    `json:"cwd"`
@@ -91,7 +92,7 @@ type File struct {
 
 // SaveSessionRequest is the API request for saving a session
 type SaveSessionRequest struct {
-	SessionID      string       `json:"session_id"`
+	ExternalID     string       `json:"external_id"`   // External system's session identifier
 	TranscriptPath string       `json:"transcript_path"`
 	CWD            string       `json:"cwd"`
 	Reason         string       `json:"reason"`
@@ -113,7 +114,8 @@ type FileUpload struct {
 // SaveSessionResponse is the API response
 type SaveSessionResponse struct {
 	Success    bool   `json:"success"`
-	SessionID  string `json:"session_id"`
+	ID         string `json:"id"`          // UUID primary key
+	ExternalID string `json:"external_id"` // External system's session identifier (echo back)
 	RunID      int64  `json:"run_id"`
 	SessionURL string `json:"session_url"`
 	Message    string `json:"message,omitempty"`

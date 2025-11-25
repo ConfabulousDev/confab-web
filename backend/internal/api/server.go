@@ -226,10 +226,10 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Session viewing
 			r.Get("/sessions", HandleListSessions(s.db))
-			r.Get("/sessions/{sessionId}", HandleGetSession(s.db))
+			r.Get("/sessions/{id}", HandleGetSession(s.db))
 
 			// Session deletion
-			r.Delete("/sessions/{sessionId}", HandleDeleteSessionOrRun(s.db, s.storage))
+			r.Delete("/sessions/{id}", HandleDeleteSessionOrRun(s.db, s.storage))
 			r.Delete("/runs/{runId}", HandleDeleteRun(s.db, s.storage))
 
 			// File content
@@ -238,15 +238,15 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
-			r.Post("/sessions/{sessionId}/share", HandleCreateShare(s.db, frontendURL))
-			r.Get("/sessions/{sessionId}/shares", HandleListShares(s.db))
+			r.Post("/sessions/{id}/share", HandleCreateShare(s.db, frontendURL))
+			r.Get("/sessions/{id}/shares", HandleListShares(s.db))
 			r.Get("/shares", HandleListAllUserShares(s.db))
 			r.Delete("/shares/{shareToken}", HandleRevokeShare(s.db))
 		})
 
 		// Public shared session access (no auth for public, optional auth for private)
-		r.Get("/sessions/{sessionId}/shared/{shareToken}", HandleGetSharedSession(s.db))
-		r.Get("/sessions/{sessionId}/shared/{shareToken}/files/{fileId}/content", HandleGetSharedFileContent(s.db, s.storage))
+		r.Get("/sessions/{id}/shared/{shareToken}", HandleGetSharedSession(s.db))
+		r.Get("/sessions/{id}/shared/{shareToken}/files/{fileId}/content", HandleGetSharedFileContent(s.db, s.storage))
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)

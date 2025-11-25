@@ -37,14 +37,16 @@ export type RunDetail = {
 
 // Full session detail with runs
 export type SessionDetail = {
-	session_id: string;
+	id: string; // UUID primary key
+	external_id: string; // External identifier (e.g., Claude Code session ID)
 	first_seen: string;
 	runs: RunDetail[];
 };
 
 // Session list item (summary)
 export type Session = {
-	session_id: string;
+	id: string; // UUID primary key
+	external_id: string; // External identifier (e.g., Claude Code session ID)
 	first_seen: string;
 	run_count: number;
 	last_run_time: string;
@@ -62,7 +64,8 @@ export type Session = {
 // Share configuration
 export type SessionShare = {
 	id: number;
-	session_id: string;
+	session_id: string; // UUID primary key for session
+	external_id: string; // External identifier (e.g., Claude Code session ID)
 	session_title?: string;
 	share_token: string;
 	visibility: 'public' | 'private';

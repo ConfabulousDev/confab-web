@@ -106,38 +106,38 @@ func CreateTestUser(t *testing.T, env *TestEnvironment, email, name string) *mod
 }
 
 // CreateTestSession creates a session in the database for testing
-// Returns the session's UUID primary key
-func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, sessionID string) string {
+// Returns the session's UUID primary key (id)
+func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, externalID string) string {
 	t.Helper()
 
-	sessionPK := uuid.New().String()
+	sessionID := uuid.New().String()
 
 	query := `
-		INSERT INTO sessions (id, user_id, session_id, first_seen)
+		INSERT INTO sessions (id, user_id, external_id, first_seen)
 		VALUES ($1, $2, $3, NOW())
 	`
 
-	_, err := env.DB.Exec(env.Ctx, query, sessionPK, userID, sessionID)
+	_, err := env.DB.Exec(env.Ctx, query, sessionID, userID, externalID)
 	if err != nil {
 		t.Fatalf("failed to create test session: %v", err)
 	}
 
-	return sessionPK
+	return sessionID
 }
 
 // CreateTestRun creates a run in the database for testing
-// sessionPK is the UUID primary key of the session
-func CreateTestRun(t *testing.T, env *TestEnvironment, sessionPK string, reason, cwd, transcriptPath string) int64 {
+// sessionID is the UUID primary key of the session
+func CreateTestRun(t *testing.T, env *TestEnvironment, sessionID string, reason, cwd, transcriptPath string) int64 {
 	t.Helper()
 
 	query := `
-		INSERT INTO runs (session_pk, transcript_path, cwd, reason, source, end_timestamp, last_activity)
+		INSERT INTO runs (session_id, transcript_path, cwd, reason, source, end_timestamp, last_activity)
 		VALUES ($1, $2, $3, $4, 'hook', NOW(), NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionPK, transcriptPath, cwd, reason)
+	row := env.DB.QueryRow(env.Ctx, query, sessionID, transcriptPath, cwd, reason)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test run: %v", err)
@@ -167,19 +167,19 @@ func CreateTestFile(t *testing.T, env *TestEnvironment, runID int64, filePath, f
 }
 
 // CreateTestShare creates a share in the database for testing
-// sessionPK is the UUID primary key of the session
-func CreateTestShare(t *testing.T, env *TestEnvironment, sessionPK string, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) int64 {
+// sessionID is the UUID primary key of the session
+func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) int64 {
 	t.Helper()
 
 	// Insert share
 	query := `
-		INSERT INTO session_shares (session_pk, share_token, visibility, expires_at, created_at)
+		INSERT INTO session_shares (session_id, share_token, visibility, expires_at, created_at)
 		VALUES ($1, $2, $3, $4, NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionPK, shareToken, visibility, expiresAt)
+	row := env.DB.QueryRow(env.Ctx, query, sessionID, shareToken, visibility, expiresAt)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test share: %v", err)

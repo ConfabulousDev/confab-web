@@ -59,8 +59,8 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		if len(sessions) != 1 {
 			t.Fatalf("Expected 1 session, got %d", len(sessions))
 		}
-		if sessions[0].SessionID != sessionB1 {
-			t.Errorf("Expected session %s, got %s", sessionB1, sessions[0].SessionID)
+		if sessions[0].ExternalID != sessionB1 {
+			t.Errorf("Expected session %s, got %s", sessionB1, sessions[0].ExternalID)
 		}
 		if !sessions[0].IsOwner {
 			t.Error("Expected IsOwner=true for owned session")
@@ -74,7 +74,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 	var shareID int64
 	var shareToken string
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_pk, share_token, visibility)
+		`INSERT INTO session_shares (session_id, share_token, visibility)
 		 VALUES ($1, $2, 'private') RETURNING id, share_token`,
 		sessionA1PK, testutil.GenerateShareToken()).Scan(&shareID, &shareToken)
 	if err != nil {
@@ -113,9 +113,9 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		var sharedSession *db.SessionListItem
 		var ownedSession *db.SessionListItem
 		for i := range sessions {
-			if sessions[i].SessionID == sessionA1 {
+			if sessions[i].ExternalID == sessionA1 {
 				sharedSession = &sessions[i]
-			} else if sessions[i].SessionID == sessionB1 {
+			} else if sessions[i].ExternalID == sessionB1 {
 				ownedSession = &sessions[i]
 			}
 		}
@@ -146,7 +146,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 	var publicShareID int64
 	var publicShareToken string
 	err = env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_pk, share_token, visibility)
+		`INSERT INTO session_shares (session_id, share_token, visibility)
 		 VALUES ($1, $2, 'public') RETURNING id, share_token`,
 		sessionA2PK, testutil.GenerateShareToken()).Scan(&publicShareID, &publicShareToken)
 	if err != nil {
@@ -182,8 +182,8 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 			t.Fatalf("Expected 1 session (accessed public share), got %d", len(sessions))
 		}
 
-		if sessions[0].SessionID != sessionA2 {
-			t.Errorf("Expected session %s, got %s", sessionA2, sessions[0].SessionID)
+		if sessions[0].ExternalID != sessionA2 {
+			t.Errorf("Expected session %s, got %s", sessionA2, sessions[0].ExternalID)
 		}
 		if sessions[0].IsOwner {
 			t.Error("Expected IsOwner=false for public share")
@@ -200,7 +200,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		// Create an expired share
 		yesterday := time.Now().UTC().Add(-24 * time.Hour)
 		_, err := env.DB.Exec(ctx,
-			`INSERT INTO session_shares (session_pk, share_token, visibility, expires_at)
+			`INSERT INTO session_shares (session_id, share_token, visibility, expires_at)
 			 VALUES ($1, $2, 'public', $3)`,
 			sessionB1PK, testutil.GenerateShareToken(), yesterday)
 		if err != nil {
@@ -223,7 +223,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		if len(sessions) != 1 {
 			t.Fatalf("Expected 1 session (expired share should be filtered), got %d", len(sessions))
 		}
-		if sessions[0].SessionID == sessionB1 {
+		if sessions[0].ExternalID == sessionB1 {
 			t.Error("Expired share should not appear in list")
 		}
 	})
@@ -248,7 +248,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		// Both should be owned
 		for _, s := range sessions {
 			if !s.IsOwner {
-				t.Errorf("Session %s should be owned by user A", s.SessionID)
+				t.Errorf("Session %s should be owned by user A", s.ExternalID)
 			}
 		}
 	})

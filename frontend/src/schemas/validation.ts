@@ -12,10 +12,15 @@ export const emailSchema = z
   .email('Invalid email address')
   .max(255, 'Email is too long');
 
+export const externalIdSchema = z
+  .string()
+  .min(1, 'External ID is required')
+  .regex(/^[a-zA-Z0-9_-]+$/, 'Invalid external ID format');
+
 export const sessionIdSchema = z
   .string()
   .min(1, 'Session ID is required')
-  .regex(/^[a-zA-Z0-9_-]+$/, 'Invalid session ID format');
+  .uuid('Invalid session ID format (must be UUID)');
 
 // ============================================================================
 // Share Form Schemas
@@ -114,13 +119,15 @@ export const runDetailSchema = z.object({
 });
 
 export const sessionDetailSchema = z.object({
-  session_id: sessionIdSchema,
+  id: sessionIdSchema,
+  external_id: externalIdSchema,
   first_seen: z.string(),
   runs: z.array(runDetailSchema),
 });
 
 export const sessionSchema = z.object({
-  session_id: sessionIdSchema,
+  id: sessionIdSchema,
+  external_id: externalIdSchema,
   first_seen: z.string(),
   run_count: z.number(),
   last_run_time: z.string(),

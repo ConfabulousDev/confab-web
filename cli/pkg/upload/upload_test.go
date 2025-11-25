@@ -117,16 +117,17 @@ func TestSendSessionRequest_Success(t *testing.T) {
 			t.Fatalf("Failed to unmarshal request: %v", err)
 		}
 
-		if req.SessionID != "test-session-123" {
-			t.Errorf("Expected SessionID test-session-123, got %s", req.SessionID)
+		if req.ExternalID != "test-session-123" {
+			t.Errorf("Expected ExternalID test-session-123, got %s", req.ExternalID)
 		}
 
 		// Send success response
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(SaveSessionResponse{
-			Success:   true,
-			SessionID: "test-session-123",
-			RunID:     42,
+			Success:    true,
+			ID:         "550e8400-e29b-41d4-a716-446655440000",
+			ExternalID: "test-session-123",
+			RunID:      42,
 		})
 	}))
 	defer server.Close()
@@ -137,7 +138,7 @@ func TestSendSessionRequest_Success(t *testing.T) {
 	}
 
 	request := &SaveSessionRequest{
-		SessionID:      "test-session-123",
+		ExternalID:     "test-session-123",
 		TranscriptPath: "/test/path",
 		CWD:            "/test",
 		Reason:         "test",
@@ -166,8 +167,8 @@ func TestSendSessionRequest_HTTPError(t *testing.T) {
 	}
 
 	request := &SaveSessionRequest{
-		SessionID: "test-session-123",
-		Files:     []FileUpload{},
+		ExternalID: "test-session-123",
+		Files:      []FileUpload{},
 	}
 
 	_, err := SendSessionRequest(cfg, request)
@@ -197,8 +198,8 @@ func TestSendSessionRequest_ServerRejectsUpload(t *testing.T) {
 	}
 
 	request := &SaveSessionRequest{
-		SessionID: "test-session-123",
-		Files:     []FileUpload{},
+		ExternalID: "test-session-123",
+		Files:      []FileUpload{},
 	}
 
 	_, err := SendSessionRequest(cfg, request)
@@ -220,8 +221,9 @@ func TestSendSessionRequest_CompressionWorks(t *testing.T) {
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(SaveSessionResponse{
-			Success:   true,
-			SessionID: "test",
+			Success:    true,
+			ID:         "550e8400-e29b-41d4-a716-446655440000",
+			ExternalID: "test",
 		})
 	}))
 	defer server.Close()
@@ -234,7 +236,7 @@ func TestSendSessionRequest_CompressionWorks(t *testing.T) {
 	// Create a large payload with repetitive data (compresses well)
 	largeContent := bytes.Repeat([]byte("test data "), 1000)
 	request := &SaveSessionRequest{
-		SessionID: "test",
+		ExternalID: "test",
 		Files: []FileUpload{
 			{Path: "/test", Type: "transcript", SizeBytes: int64(len(largeContent)), Content: largeContent},
 		},

@@ -12,7 +12,7 @@ func TestValidateSaveSessionRequest(t *testing.T) {
 	// Helper to create valid base request
 	validRequest := func() *models.SaveSessionRequest {
 		return &models.SaveSessionRequest{
-			SessionID:      "valid-session-id",
+			ExternalID:     "valid-external-id",
 			TranscriptPath: "path/to/transcript.jsonl",
 			Files: []models.FileUpload{
 				{
@@ -36,9 +36,9 @@ func TestValidateSaveSessionRequest(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects invalid UTF-8 in session ID", func(t *testing.T) {
+	t.Run("rejects invalid UTF-8 in external ID", func(t *testing.T) {
 		req := validRequest()
-		req.SessionID = "invalid-\xff\xfe-utf8"
+		req.ExternalID = "invalid-\xff\xfe-utf8"
 
 		err := validateSaveSessionRequest(req)
 		if err == nil {
@@ -105,23 +105,23 @@ func TestValidateSaveSessionRequest(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects empty session ID", func(t *testing.T) {
+	t.Run("rejects empty external ID", func(t *testing.T) {
 		req := validRequest()
-		req.SessionID = ""
+		req.ExternalID = ""
 
 		err := validateSaveSessionRequest(req)
 		if err == nil {
-			t.Fatal("expected error for empty session ID, got nil")
+			t.Fatal("expected error for empty external ID, got nil")
 		}
 	})
 
-	t.Run("rejects oversized session ID", func(t *testing.T) {
+	t.Run("rejects oversized external ID", func(t *testing.T) {
 		req := validRequest()
-		req.SessionID = strings.Repeat("a", MaxSessionIDLength+1)
+		req.ExternalID = strings.Repeat("a", MaxExternalIDLength+1)
 
 		err := validateSaveSessionRequest(req)
 		if err == nil {
-			t.Fatal("expected error for oversized session ID, got nil")
+			t.Fatal("expected error for oversized external ID, got nil")
 		}
 	})
 
@@ -177,7 +177,7 @@ func TestValidateSaveSessionRequest(t *testing.T) {
 
 	t.Run("accepts maximum valid sizes", func(t *testing.T) {
 		req := validRequest()
-		req.SessionID = strings.Repeat("a", MaxSessionIDLength)
+		req.ExternalID = strings.Repeat("a", MaxExternalIDLength)
 		req.Files[0].Path = strings.Repeat("b", MaxPathLength)
 		req.Files[0].Content = make([]byte, MaxFileSize)
 

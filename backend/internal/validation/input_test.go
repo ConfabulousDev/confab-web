@@ -5,54 +5,54 @@ import (
 	"testing"
 )
 
-func TestValidateSessionID(t *testing.T) {
+func TestValidateExternalID(t *testing.T) {
 	tests := []struct {
-		name      string
-		sessionID string
-		wantErr   bool
+		name       string
+		externalID string
+		wantErr    bool
 	}{
 		{
-			name:      "valid session ID",
-			sessionID: "session-123-abc",
-			wantErr:   false,
+			name:       "valid external ID",
+			externalID: "session-123-abc",
+			wantErr:    false,
 		},
 		{
-			name:      "empty session ID",
-			sessionID: "",
-			wantErr:   true,
+			name:       "empty external ID",
+			externalID: "",
+			wantErr:    true,
 		},
 		{
-			name:      "session ID too long",
-			sessionID: strings.Repeat("a", 257),
-			wantErr:   true,
+			name:       "external ID too long",
+			externalID: strings.Repeat("a", 257),
+			wantErr:    true,
 		},
 		{
-			name:      "session ID at max length",
-			sessionID: strings.Repeat("a", 256),
-			wantErr:   false,
+			name:       "external ID at max length",
+			externalID: strings.Repeat("a", 256),
+			wantErr:    false,
 		},
 		{
-			name:      "session ID with spaces",
-			sessionID: "session 123",
-			wantErr:   false, // Spaces are valid UTF-8
+			name:       "external ID with spaces",
+			externalID: "session 123",
+			wantErr:    false, // Spaces are valid UTF-8
 		},
 		{
-			name:      "session ID with special chars",
-			sessionID: "session-123_abc.xyz",
-			wantErr:   false,
+			name:       "external ID with special chars",
+			externalID: "session-123_abc.xyz",
+			wantErr:    false,
 		},
 		{
-			name:      "invalid UTF-8",
-			sessionID: string([]byte{0xff, 0xfe, 0xfd}),
-			wantErr:   true,
+			name:       "invalid UTF-8",
+			externalID: string([]byte{0xff, 0xfe, 0xfd}),
+			wantErr:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateSessionID(tt.sessionID)
+			err := ValidateExternalID(tt.externalID)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateSessionID() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ValidateExternalID() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

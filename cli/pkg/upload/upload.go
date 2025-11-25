@@ -87,7 +87,7 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 
 	// Create request payload
 	request := SaveSessionRequest{
-		SessionID:      hookInput.SessionID,
+		ExternalID:     hookInput.SessionID, // Claude Code's session_id becomes external_id
 		TranscriptPath: hookInput.TranscriptPath,
 		CWD:            hookInput.CWD,
 		Reason:         hookInput.Reason,
@@ -285,7 +285,7 @@ func SendSessionRequest(cfg *config.UploadConfig, request *SaveSessionRequest) (
 
 // SaveSessionRequest is the API request for saving a session
 type SaveSessionRequest struct {
-	SessionID      string       `json:"session_id"`
+	ExternalID     string       `json:"external_id"` // Claude Code's session_id
 	TranscriptPath string       `json:"transcript_path"`
 	CWD            string       `json:"cwd"`
 	Reason         string       `json:"reason"`
@@ -306,7 +306,8 @@ type FileUpload struct {
 // SaveSessionResponse is the API response
 type SaveSessionResponse struct {
 	Success    bool   `json:"success"`
-	SessionID  string `json:"session_id"`
+	ID         string `json:"id"`          // UUID primary key
+	ExternalID string `json:"external_id"` // Claude Code's session_id
 	RunID      int64  `json:"run_id"`
 	SessionURL string `json:"session_url,omitempty"`
 	Message    string `json:"message,omitempty"`

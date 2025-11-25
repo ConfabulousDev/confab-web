@@ -44,19 +44,19 @@ func TestHandleListSessions_Integration(t *testing.T) {
 			t.Errorf("expected 3 sessions, got %d", len(sessions))
 		}
 
-		// Verify session IDs are present
-		sessionIDs := make(map[string]bool)
+		// Verify external IDs are present
+		externalIDs := make(map[string]bool)
 		for _, session := range sessions {
-			sessionIDs[session.SessionID] = true
+			externalIDs[session.ExternalID] = true
 		}
 
-		if !sessionIDs["session-1"] {
+		if !externalIDs["session-1"] {
 			t.Error("expected session-1 in response")
 		}
-		if !sessionIDs["session-2"] {
+		if !externalIDs["session-2"] {
 			t.Error("expected session-2 in response")
 		}
-		if !sessionIDs["session-3"] {
+		if !externalIDs["session-3"] {
 			t.Error("expected session-3 in response")
 		}
 	})
@@ -108,8 +108,8 @@ func TestHandleListSessions_Integration(t *testing.T) {
 			t.Errorf("expected 1 session for user1, got %d", len(sessions))
 		}
 
-		if sessions[0].SessionID != "user1-session" {
-			t.Errorf("expected 'user1-session', got %s", sessions[0].SessionID)
+		if sessions[0].ExternalID != "user1-session" {
+			t.Errorf("expected 'user1-session', got %s", sessions[0].ExternalID)
 		}
 	})
 
@@ -139,22 +139,22 @@ func TestHandleGetSession_Integration(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-		sessionID := "test-session-detail"
+		externalID := "test-session-detail"
 
-		sessionPK := testutil.CreateTestSession(t, env, user.ID, sessionID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		// Create a run for the session
-		runID := testutil.CreateTestRun(t, env, sessionPK, "Test reason", "/home/test", "transcript.jsonl")
+		runID := testutil.CreateTestRun(t, env, sessionID, "Test reason", "/home/test", "transcript.jsonl")
 
 		// Create files for the run
 		testutil.CreateTestFile(t, env, runID, "transcript.jsonl", "transcript", "s3-key-1", 100)
 		testutil.CreateTestFile(t, env, runID, "agent.jsonl", "agent", "s3-key-2", 200)
 
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionPK, nil, user.ID)
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, user.ID)
 
 		// Add URL parameter
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionPK)
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -166,8 +166,8 @@ func TestHandleGetSession_Integration(t *testing.T) {
 		var session db.SessionDetail
 		testutil.ParseJSONResponse(t, w, &session)
 
-		if session.SessionID != sessionID {
-			t.Errorf("expected session_id %s, got %s", sessionID, session.SessionID)
+		if session.ExternalID != externalID {
+			t.Errorf("expected external_id %s, got %s", externalID, session.ExternalID)
 		}
 
 		if len(session.Runs) == 0 {
@@ -187,13 +187,13 @@ func TestHandleGetSession_Integration(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-		sessionID := "non-existent-session"
+		nonExistentID := "non-existent-session"
 
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, user.ID)
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+nonExistentID, nil, user.ID)
 
 		// Add URL parameter
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("id", nonExistentID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -209,15 +209,15 @@ func TestHandleGetSession_Integration(t *testing.T) {
 		user1 := testutil.CreateTestUser(t, env, "user1@example.com", "User One")
 		user2 := testutil.CreateTestUser(t, env, "user2@example.com", "User Two")
 
-		sessionID := "user2-session"
-		sessionPK := testutil.CreateTestSession(t, env, user2.ID, sessionID)
+		externalID := "user2-session"
+		sessionID := testutil.CreateTestSession(t, env, user2.ID, externalID)
 
 		// Try to access as user1
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionPK, nil, user1.ID)
+		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, user1.ID)
 
 		// Add URL parameter
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionPK)
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -239,7 +239,7 @@ func TestHandleGetSession_Integration(t *testing.T) {
 
 		// Add URL parameter
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", invalidSessionID)
+		rctx.URLParams.Add("id", invalidSessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -259,7 +259,7 @@ func TestHandleGetSession_Integration(t *testing.T) {
 
 		// Add empty URL parameter
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", "")
+		rctx.URLParams.Add("id", "")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
@@ -279,7 +279,7 @@ func TestHandleGetSession_Integration(t *testing.T) {
 
 		// Add URL parameter
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()

@@ -57,9 +57,9 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Get session PK from URL (UUID)
-		sessionPK := chi.URLParam(r, "sessionId")
-		if sessionPK == "" {
+		// Get session ID from URL (UUID)
+		sessionID := chi.URLParam(r, "id")
+		if sessionID == "" {
 			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
@@ -69,7 +69,7 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get session detail (includes ownership check)
-		session, err := database.GetSessionDetail(ctx, sessionPK, userID)
+		session, err := database.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
