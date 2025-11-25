@@ -48,49 +48,49 @@ function HomePage() {
 
       {/* Hero Section */}
       <section className={styles.hero}>
-        <h1 className={styles.title}>Share and review your Claude Code sessions</h1>
+        <h1 className={styles.title}>Quantum flux harmonics for hyperdrive calibration</h1>
         <p className={styles.subtitle}>
-          Capture, organize, and share your AI coding sessions with your team.
+          Synchronize your tachyon emitters across the subspace relay network.
         </p>
       </section>
 
       {/* Value Props */}
       <section className={styles.features}>
         <div className={styles.feature}>
-          <div className={styles.featureIcon}>📤</div>
-          <h3>Upload Sessions</h3>
-          <p>Automatically sync your Claude Code transcripts to the cloud</p>
+          <div className={styles.featureIcon}>🛸</div>
+          <h3>Plasma Conduits</h3>
+          <p>Route antimatter streams through your deflector array</p>
         </div>
         <div className={styles.feature}>
-          <div className={styles.featureIcon}>🔗</div>
-          <h3>Share Securely</h3>
-          <p>Create public or private links to share with teammates</p>
+          <div className={styles.featureIcon}>🌀</div>
+          <h3>Warp Signatures</h3>
+          <p>Encrypt your transponder codes with quantum entanglement</p>
         </div>
         <div className={styles.feature}>
-          <div className={styles.featureIcon}>📖</div>
-          <h3>Review Together</h3>
-          <p>Browse full transcripts with tool calls and outputs</p>
+          <div className={styles.featureIcon}>👽</div>
+          <h3>Xenolinguistics</h3>
+          <p>Parse alien transmissions with neural mesh decoders</p>
         </div>
       </section>
 
       {/* How It Works */}
       <section className={styles.howItWorks}>
-        <h2>How it works</h2>
+        <h2>Initiation sequence</h2>
         <div className={styles.steps}>
           <div className={styles.step}>
             <div className={styles.stepNumber}>1</div>
-            <h4>Install the CLI</h4>
-            <code>brew install anthropics/tap/confab</code>
+            <h4>Engage the core</h4>
+            <code>brew install zeta-reticuli/tap/confab</code>
           </div>
           <div className={styles.step}>
             <div className={styles.stepNumber}>2</div>
-            <h4>Login & sync</h4>
-            <code>confab login && confab push</code>
+            <h4>Align crystals</h4>
+            <code>confab calibrate && confab ignite</code>
           </div>
           <div className={styles.step}>
             <div className={styles.stepNumber}>3</div>
-            <h4>Share your session</h4>
-            <p>Generate a link from the web UI</p>
+            <h4>Broadcast signal</h4>
+            <p>Transmit via the orbital beacon array</p>
           </div>
         </div>
       </section>
