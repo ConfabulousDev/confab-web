@@ -98,7 +98,7 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
             )
           ) : (
             // Recursive rendering for nested content blocks
-            (block.content as any[]).map((nestedBlock: ContentBlockType, i: number) => (
+            block.content.map((nestedBlock, i) => (
               <ContentBlock
                 key={i}
                 block={nestedBlock}

@@ -152,22 +152,6 @@ export function formatTimestamp(timestamp: string): string {
 }
 
 /**
- * Get role icon emoji
- */
-export function getRoleIcon(role: string): string {
-  switch (role) {
-    case 'user':
-      return '👤';
-    case 'assistant':
-      return '🤖';
-    case 'system':
-      return 'ℹ️';
-    default:
-      return '•';
-  }
-}
-
-/**
  * Get role label for display
  */
 export function getRoleLabel(role: string, isToolResult: boolean): string {

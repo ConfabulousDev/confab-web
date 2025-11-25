@@ -3,7 +3,6 @@ import {
   parseMessage,
   buildToolNameMap,
   extractTextContent,
-  getRoleIcon,
   getRoleLabel,
 } from './messageParser';
 import type { UserMessage, AssistantMessage, ContentBlock } from '@/types/transcript';
@@ -112,15 +111,6 @@ describe('messageParser', () => {
       const result = extractTextContent(content);
       expect(result).toContain('[Thinking]');
       expect(result).toContain('Analyzing...');
-    });
-  });
-
-  describe('getRoleIcon', () => {
-    it('should return correct icons', () => {
-      expect(getRoleIcon('user')).toBe('👤');
-      expect(getRoleIcon('assistant')).toBe('🤖');
-      expect(getRoleIcon('system')).toBe('ℹ️');
-      expect(getRoleIcon('unknown')).toBe('•');
     });
   });
 

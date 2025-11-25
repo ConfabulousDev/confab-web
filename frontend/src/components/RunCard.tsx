@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { RunDetail, GitInfo, TodoItem } from '@/types';
-import { formatRelativeTime, formatBytes } from '@/utils/utils';
+import type { RunDetail, TodoItem } from '@/types';
+import { formatRelativeTime, formatBytes, getRepoWebURL, getCommitURL } from '@/utils';
 import TranscriptViewer from './transcript/TranscriptViewer';
 import styles from './RunCard.module.css';
 
@@ -15,39 +15,6 @@ interface RunCardProps {
 function RunCard({ run, index, showGitInfo = true, shareToken, sessionId }: RunCardProps) {
   const [todos, setTodos] = useState<{ agent_id: string; items: TodoItem[] }[]>([]);
   const [showTranscript, setShowTranscript] = useState(false);
-
-  function getRepoWebURL(repoUrl?: string): string | null {
-    if (!repoUrl) return null;
-
-    // Convert SSH URLs to HTTPS
-    if (repoUrl.startsWith('git@github.com:')) {
-      return repoUrl.replace('git@github.com:', 'https://github.com/').replace(/\.git$/, '');
-    }
-    if (repoUrl.startsWith('git@gitlab.com:')) {
-      return repoUrl.replace('git@gitlab.com:', 'https://gitlab.com/').replace(/\.git$/, '');
-    }
-
-    // HTTPS URLs
-    if (repoUrl.startsWith('https://github.com/') || repoUrl.startsWith('https://gitlab.com/')) {
-      return repoUrl.replace(/\.git$/, '');
-    }
-
-    return null;
-  }
-
-  function getCommitURL(gitInfo?: GitInfo): string | null {
-    const repoUrl = getRepoWebURL(gitInfo?.repo_url);
-    if (!repoUrl || !gitInfo?.commit_sha) return null;
-
-    if (repoUrl.includes('github.com')) {
-      return `${repoUrl}/commit/${gitInfo.commit_sha}`;
-    }
-    if (repoUrl.includes('gitlab.com')) {
-      return `${repoUrl}/-/commit/${gitInfo.commit_sha}`;
-    }
-
-    return null;
-  }
 
   // Extract agent ID from todo file path
   // Format: {sessionID}-agent-{agentID}.json

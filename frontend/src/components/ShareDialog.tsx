@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { SessionShare } from '@/types';
 import { sessionsAPI } from '@/services/api';
-import { formatDate } from '@/utils/utils';
+import { useCopyToClipboard } from '@/hooks';
+import { formatDate } from '@/utils';
 import { shareFormSchema, emailSchema, validateForm, getFieldError } from '@/schemas/validation';
 import type { ShareFormData } from '@/schemas/validation';
 import ErrorDisplay from './ErrorDisplay';
@@ -26,6 +27,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
   const [loadingShares, setLoadingShares] = useState(false);
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>();
+  const { copy, copied } = useCopyToClipboard();
 
   useEffect(() => {
     if (isOpen) {
@@ -130,11 +132,6 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
     }
   }
 
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text);
-    alert('Copied to clipboard!');
-  }
-
   if (!isOpen) return null;
 
   return (
@@ -165,9 +162,9 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                 />
                 <Button
                   size="sm"
-                  onClick={() => copyToClipboard(createdShareURL)}
+                  onClick={() => copy(createdShareURL)}
                 >
-                  Copy
+                  {copied ? 'Copied!' : 'Copy'}
                 </Button>
               </div>
             </div>

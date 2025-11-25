@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { keysAPI } from '@/services/api';
-import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { formatRelativeTime } from '@/utils/utils';
+import { useDocumentTitle, useCopyToClipboard } from '@/hooks';
+import { formatRelativeTime } from '@/utils';
 import { createAPIKeySchema, validateForm, getFieldError } from '@/schemas/validation';
 import type { CreateAPIKeyData } from '@/schemas/validation';
 import FormField from '@/components/FormField';
@@ -19,6 +19,7 @@ function APIKeysPage() {
   const [createdKey, setCreatedKey] = useState<{ key: string; name: string } | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>();
+  const { copy, copied } = useCopyToClipboard();
 
   // Fetch API keys
   const { data: keys = [], isLoading, error, refetch } = useQuery({
@@ -67,11 +68,6 @@ function APIKeysPage() {
     deleteMutation.mutate(id);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert('API key copied to clipboard!');
-  };
-
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -86,8 +82,8 @@ function APIKeysPage() {
           </p>
           <div className={styles.keyDisplay}>
             <code>{createdKey.key}</code>
-            <Button size="sm" onClick={() => copyToClipboard(createdKey.key)}>
-              Copy
+            <Button size="sm" onClick={() => copy(createdKey.key)}>
+              {copied ? 'Copied!' : 'Copy'}
             </Button>
           </div>
           <Alert variant="warning">

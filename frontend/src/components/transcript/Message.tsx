@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock } from '@/types';
 import {
   parseMessage,
@@ -8,6 +8,7 @@ import {
   formatTimestamp,
   getRoleLabel,
 } from '@/services/messageParser';
+import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from './ContentBlock';
 import styles from './Message.module.css';
 
@@ -18,7 +19,7 @@ interface MessageProps {
 }
 
 function Message({ message, previousMessage }: MessageProps) {
-  const [copySuccess, setCopySuccess] = useState(false);
+  const { copy, copied } = useCopyToClipboard();
 
   // Parse message into structured data using service
   const messageData = useMemo(() => parseMessage(message), [message]);
@@ -31,17 +32,9 @@ function Message({ message, previousMessage }: MessageProps) {
   const toolNameMap = useMemo(() => buildToolNameMap(messageData.content), [messageData.content]);
 
   // Copy message content to clipboard
-  async function copyMessage() {
-    try {
-      const text = extractTextContent(messageData.content);
-      await navigator.clipboard.writeText(text);
-      setCopySuccess(true);
-      setTimeout(() => {
-        setCopySuccess(false);
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy message:', err);
-    }
+  function copyMessage() {
+    const text = extractTextContent(messageData.content);
+    copy(text);
   }
 
   return (
@@ -54,7 +47,7 @@ function Message({ message, previousMessage }: MessageProps) {
           )}
           {messageData.timestamp && <span className={styles.messageTimestamp}>{formatTimestamp(messageData.timestamp)}</span>}
           <button className={styles.copyBtn} onClick={copyMessage} title="Copy message">
-            {copySuccess ? '✓' : '⎘'}
+            {copied ? '✓' : '⎘'}
           </button>
         </div>
       </div>

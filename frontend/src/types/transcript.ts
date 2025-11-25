@@ -328,12 +328,24 @@ export function isToolResultBlock(block: ContentBlock): block is ToolResultBlock
 // Utility Functions
 // ============================================================================
 
+/** Content block with embedded tool use result (from Task tool) */
+interface ToolResultWithAgentContent {
+	toolUseResult?: {
+		agentId?: string;
+	};
+}
+
 /**
  * Extract agent ID from tool result if it was a Task tool
  */
 export function extractAgentId(toolResult: ToolResultBlock): string | null {
-	if (typeof toolResult.content === 'object' && 'toolUseResult' in toolResult.content) {
-		return (toolResult.content as any).toolUseResult?.agentId || null;
+	if (
+		typeof toolResult.content === 'object' &&
+		!Array.isArray(toolResult.content) &&
+		'toolUseResult' in toolResult.content
+	) {
+		const content = toolResult.content as unknown as ToolResultWithAgentContent;
+		return content.toolUseResult?.agentId || null;
 	}
 	return null;
 }

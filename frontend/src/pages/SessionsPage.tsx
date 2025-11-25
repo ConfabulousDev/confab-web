@@ -1,9 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useSessions } from '@/hooks/useSessions';
-import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { formatRelativeTime } from '@/utils/utils';
-import { sortData, type SortDirection } from '@/utils/sorting';
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useSessions, useDocumentTitle, useSuccessMessage } from '@/hooks';
+import { formatRelativeTime, sortData, type SortDirection } from '@/utils';
 import SortableHeader from '@/components/SortableHeader';
 import Alert from '@/components/Alert';
 import styles from './SessionsPage.module.css';
@@ -13,29 +11,11 @@ type SortColumn = 'title' | 'session_id' | 'last_run_time';
 function SessionsPage() {
   useDocumentTitle('Sessions');
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [showSharedWithMe, setShowSharedWithMe] = useState(false);
   const { sessions, loading, error } = useSessions(showSharedWithMe);
   const [sortColumn, setSortColumn] = useState<SortColumn>('last_run_time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [successFading, setSuccessFading] = useState(false);
-
-  useEffect(() => {
-    // Check for success message from URL params
-    const successParam = searchParams.get('success');
-    if (successParam) {
-      setSuccessMessage(successParam);
-      setSuccessFading(false);
-      // Remove the success param from URL
-      searchParams.delete('success');
-      setSearchParams(searchParams, { replace: true });
-      // Start fade out after 4.5 seconds, then remove after animation completes
-      setTimeout(() => setSuccessFading(true), 4500);
-      setTimeout(() => setSuccessMessage(''), 5000);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { message: successMessage, fading: successFading } = useSuccessMessage();
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {

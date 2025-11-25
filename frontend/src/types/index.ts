@@ -62,8 +62,10 @@ export type Session = {
 // Share configuration
 export type SessionShare = {
 	id: number;
+	session_id: string;
+	session_title?: string;
 	share_token: string;
-	visibility: string;
+	visibility: 'public' | 'private';
 	invited_emails?: string[];
 	expires_at?: string;
 	created_at: string;

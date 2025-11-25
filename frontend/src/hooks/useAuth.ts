@@ -12,7 +12,7 @@ interface UseAuthReturn {
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
 }
 
 /**
@@ -35,6 +35,6 @@ export function useAuth(): UseAuthReturn {
         ? error.message
         : null,
     isAuthenticated: user !== undefined && user !== null,
-    refetch: () => { refetch(); },
+    refetch,
   };
 }

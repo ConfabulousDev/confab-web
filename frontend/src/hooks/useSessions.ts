@@ -8,7 +8,7 @@ interface UseSessionsReturn {
   sessions: Session[];
   loading: boolean;
   error: string | null;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
 }
 
 /**
@@ -38,6 +38,6 @@ export function useSessions(includeShared = false): UseSessionsReturn {
       : error instanceof Error
         ? error.message
         : null,
-    refetch: () => { refetch(); },
+    refetch,
   };
 }

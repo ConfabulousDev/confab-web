@@ -126,11 +126,10 @@ export async function fetchParsedTranscript(
 	const t1 = performance.now();
 	console.log(`  ⏱️ fetchTranscript (network + parse) took ${Math.round(t1 - t0)}ms for ${messages.length} messages`);
 
-	// Extract metadata
+	// Extract metadata - filter to messages with timestamp property
 	const timestamps = messages
-		.filter((m) => 'timestamp' in m)
-		.map((m) => (m as any).timestamp)
-		.filter(Boolean);
+		.filter((m): m is typeof m & { timestamp: string } => 'timestamp' in m && typeof m.timestamp === 'string')
+		.map((m) => m.timestamp);
 
 	return {
 		sessionId,

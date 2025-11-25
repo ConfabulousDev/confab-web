@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import Prism from 'prismjs';
+import { useCopyToClipboard } from '@/hooks';
 
 // Import core languages
 import 'prismjs/components/prism-bash';
@@ -33,7 +34,7 @@ function CodeBlock({
   maxHeight = 'none',
   truncateLines = 0,
 }: CodeBlockProps) {
-  const [copySuccess, setCopySuccess] = useState(false);
+  const { copy, copied } = useCopyToClipboard();
   const [showingFull, setShowingFull] = useState(false);
   const [highlightedCode, setHighlightedCode] = useState('');
 
@@ -102,22 +103,10 @@ function CodeBlock({
     setShowingFull(!showingFull);
   }
 
-  async function copyToClipboard() {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopySuccess(true);
-      setTimeout(() => {
-        setCopySuccess(false);
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  }
-
   return (
     <div className={`${styles.codeBlock} ${showLineNumbers ? styles.lineNumbers : ''}`}>
-      <button className={styles.copyBtn} onClick={copyToClipboard} title="Copy to clipboard">
-        {copySuccess ? '✓ Copied' : '📋 Copy'}
+      <button className={styles.copyBtn} onClick={() => copy(code)} title="Copy to clipboard">
+        {copied ? '✓ Copied' : '📋 Copy'}
       </button>
       <pre style={{ maxHeight }}>
         <code className={`language-${normalizeLanguage(language)}`} dangerouslySetInnerHTML={{ __html: highlightedCode }} />

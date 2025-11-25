@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useCopyToClipboard } from '@/hooks';
 import styles from './BashOutput.module.css';
 
 interface BashOutputProps {
@@ -9,7 +10,7 @@ interface BashOutputProps {
 }
 
 function BashOutput({ output, command = '', exitCode = null, maxHeight = '400px' }: BashOutputProps) {
-  const [copySuccess, setCopySuccess] = useState(false);
+  const { copy, copied } = useCopyToClipboard();
 
   // Parse ANSI color codes (basic support)
   function parseANSI(text: string): string {
@@ -22,22 +23,10 @@ function BashOutput({ output, command = '', exitCode = null, maxHeight = '400px'
   const cleanOutput = useMemo(() => parseANSI(output), [output]);
   const hasError = exitCode !== null && exitCode !== 0;
 
-  async function copyToClipboard() {
-    try {
-      await navigator.clipboard.writeText(output);
-      setCopySuccess(true);
-      setTimeout(() => {
-        setCopySuccess(false);
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  }
-
   return (
     <div className={`${styles.bashOutput} ${hasError ? styles.error : ''}`}>
-      <button className={styles.copyBtn} onClick={copyToClipboard} title="Copy output to clipboard">
-        {copySuccess ? '✓' : '📋'}
+      <button className={styles.copyBtn} onClick={() => copy(output)} title="Copy output to clipboard">
+        {copied ? '✓' : '📋'}
       </button>
       {command && (
         <div className={styles.bashPrompt}>
