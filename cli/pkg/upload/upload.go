@@ -19,16 +19,17 @@ import (
 )
 
 // UploadToCloud uploads session data to the backend
-func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error {
+// Returns the URL to view the session on success
+func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) (string, error) {
 	// Get upload configuration
 	cfg, err := config.GetUploadConfig()
 	if err != nil {
-		return fmt.Errorf("failed to get upload config: %w", err)
+		return "", fmt.Errorf("failed to get upload config: %w", err)
 	}
 
 	// Skip if API key not configured
 	if cfg.APIKey == "" {
-		return nil
+		return "", nil
 	}
 
 	return UploadToCloudWithConfig(cfg, hookInput, files)
@@ -36,10 +37,11 @@ func UploadToCloud(hookInput *types.HookInput, files []types.SessionFile) error 
 
 // UploadToCloudWithConfig uploads session data using the provided config
 // Use this when you already have the config (e.g., in backfill to avoid repeated loading)
-func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInput, files []types.SessionFile) error {
+// Returns the URL to view the session on success
+func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInput, files []types.SessionFile) (string, error) {
 	// Validate backend URL
 	if cfg.BackendURL == "" {
-		return fmt.Errorf("backend URL not configured")
+		return "", fmt.Errorf("backend URL not configured")
 	}
 
 	// Detect git information from current working directory
@@ -64,7 +66,7 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 	// Read file contents
 	fileUploads, err := ReadFilesForUpload(files)
 	if err != nil {
-		return fmt.Errorf("failed to read files for upload: %w", err)
+		return "", fmt.Errorf("failed to read files for upload: %w", err)
 	}
 
 	// Extract last activity timestamp from transcript
@@ -94,7 +96,13 @@ func UploadToCloudWithConfig(cfg *config.UploadConfig, hookInput *types.HookInpu
 		LastActivity:   lastActivity, // Always provided, never nil
 	}
 
-	return SendSessionRequest(cfg, &request)
+	if err := SendSessionRequest(cfg, &request); err != nil {
+		return "", err
+	}
+
+	// Return URL to view the session
+	sessionURL := fmt.Sprintf("%s/sessions/%s", cfg.BackendURL, hookInput.SessionID)
+	return sessionURL, nil
 }
 
 // ReadFilesForUpload reads file contents and creates FileUpload entries

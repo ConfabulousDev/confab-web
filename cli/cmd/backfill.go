@@ -245,5 +245,7 @@ func uploadSession(cfg *config.UploadConfig, session discovery.SessionInfo) erro
 	}
 
 	// Use UploadToCloudWithConfig to ensure timestamp extraction happens
-	return upload.UploadToCloudWithConfig(cfg, hookInput, files)
+	// Backfill doesn't print URLs since it uploads many sessions
+	_, err = upload.UploadToCloudWithConfig(cfg, hookInput, files)
+	return err
 }
