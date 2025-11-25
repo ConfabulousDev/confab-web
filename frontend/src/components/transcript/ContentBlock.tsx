@@ -1,40 +1,27 @@
 import { useState, useEffect } from 'react';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock } from '@/types/transcript';
 import CodeBlock from './CodeBlock';
 import BashOutput from './BashOutput';
 import styles from './ContentBlock.module.css';
 
+// Configure marked for performance
+marked.use({
+  async: false,
+  gfm: true,
+  breaks: true,
+});
+
 interface ContentBlockProps {
   block: ContentBlockType;
   index?: number;
   toolName?: string;
-  showThinking?: boolean;
-  expandAllTools?: boolean;
-  expandAllResults?: boolean;
 }
 
-function ContentBlock({
-  block,
-  // index = 0, // Reserved for future use
-  toolName: initialToolName = '',
-  showThinking = true,
-  expandAllTools = false,
-  expandAllResults = true,
-}: ContentBlockProps) {
-  const [toolExpanded, setToolExpanded] = useState(expandAllTools);
-  const [toolResultExpanded, setToolResultExpanded] = useState(expandAllResults);
-  const [thinkingExpanded, setThinkingExpanded] = useState(false);
+function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockProps) {
   const [toolName, setToolName] = useState(initialToolName);
-
-  // React to changes in expand all controls
-  useEffect(() => {
-    setToolExpanded(expandAllTools);
-  }, [expandAllTools]);
-
-  useEffect(() => {
-    setToolResultExpanded(expandAllResults);
-  }, [expandAllResults]);
 
   // Track tool name from tool_use blocks
   useEffect(() => {
@@ -43,10 +30,12 @@ function ContentBlock({
     }
   }, [block]);
 
-  // Auto-link URLs in text
-  function linkify(text: string): string {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Parse markdown and sanitize HTML
+  function renderMarkdown(text: string): string {
+    const html = marked.parse(text) as string;
+    return DOMPurify.sanitize(html, {
+      ADD_ATTR: ['target'], // Allow target="_blank" on links
+    });
   }
 
   // Detect if this is Bash-like output
@@ -58,27 +47,23 @@ function ContentBlock({
 
   if (isTextBlock(block)) {
     return (
-      <div className={styles.textBlock}>
-        <pre dangerouslySetInnerHTML={{ __html: linkify(block.text) }} />
-      </div>
+      <div
+        className={styles.textBlock}
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(block.text) }}
+      />
     );
   }
 
   if (isThinkingBlock(block)) {
-    if (!showThinking) return null;
-
     return (
       <div className={styles.thinkingBlock}>
-        <div className={styles.thinkingHeader} onClick={() => setThinkingExpanded(!thinkingExpanded)}>
+        <div className={styles.thinkingHeader}>
           <span className={styles.thinkingIcon}>💭</span>
           <span className={styles.thinkingLabel}>Thinking</span>
-          <button className={styles.expandBtn}>{thinkingExpanded ? '▼' : '▶'}</button>
         </div>
-        {thinkingExpanded && (
-          <div className={styles.thinkingContent}>
-            <pre>{block.thinking}</pre>
-          </div>
-        )}
+        <div className={styles.thinkingContent}>
+          <pre>{block.thinking}</pre>
+        </div>
       </div>
     );
   }
@@ -86,16 +71,13 @@ function ContentBlock({
   if (isToolUseBlock(block)) {
     return (
       <div className={styles.toolUseBlock}>
-        <div className={styles.toolHeader} onClick={() => setToolExpanded(!toolExpanded)}>
+        <div className={styles.toolHeader}>
           <span className={styles.toolIcon}>🛠️</span>
           <span className={styles.toolName}>{block.name}</span>
-          <button className={styles.expandBtn}>{toolExpanded ? '▼' : '▶'}</button>
         </div>
-        {toolExpanded && (
-          <div className={styles.toolInput}>
-            <CodeBlock code={JSON.stringify(block.input, null, 2)} language="json" />
-          </div>
-        )}
+        <div className={styles.toolInput}>
+          <CodeBlock code={JSON.stringify(block.input, null, 2)} language="json" />
+        </div>
       </div>
     );
   }
@@ -103,34 +85,28 @@ function ContentBlock({
   if (isToolResultBlock(block)) {
     return (
       <div className={`${styles.toolResultBlock} ${block.is_error ? styles.error : ''}`}>
-        <div className={styles.toolResultHeader} onClick={() => setToolResultExpanded(!toolResultExpanded)}>
+        <div className={styles.toolResultHeader}>
           <span className={styles.resultIcon}>{block.is_error ? '❌' : '✅'}</span>
           <span>Tool Result</span>
-          <button className={styles.expandBtn}>{toolResultExpanded ? '▼' : '▶'}</button>
         </div>
-        {toolResultExpanded && (
-          <div className={styles.toolResultContent}>
-            {typeof block.content === 'string' ? (
-              isBashOutput(block.content, toolName) ? (
-                <BashOutput output={block.content} />
-              ) : (
-                <CodeBlock code={block.content} language="plain" maxHeight="500px" truncateLines={100} />
-              )
+        <div className={styles.toolResultContent}>
+          {typeof block.content === 'string' ? (
+            isBashOutput(block.content, toolName) ? (
+              <BashOutput output={block.content} />
             ) : (
-              // Recursive rendering for nested content blocks
-              (block.content as any[]).map((nestedBlock: ContentBlockType, i: number) => (
-                <ContentBlock
-                  key={i}
-                  block={nestedBlock}
-                  toolName={toolName}
-                  showThinking={showThinking}
-                  expandAllTools={expandAllTools}
-                  expandAllResults={expandAllResults}
-                />
-              ))
-            )}
-          </div>
-        )}
+              <CodeBlock code={block.content} language="plain" maxHeight="500px" truncateLines={100} />
+            )
+          ) : (
+            // Recursive rendering for nested content blocks
+            (block.content as any[]).map((nestedBlock: ContentBlockType, i: number) => (
+              <ContentBlock
+                key={i}
+                block={nestedBlock}
+                toolName={toolName}
+              />
+            ))
+          )}
+        </div>
       </div>
     );
   }

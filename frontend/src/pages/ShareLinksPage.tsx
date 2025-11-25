@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchWithCSRF } from '@/services/csrf';
-import { formatDate } from '@/utils/utils';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { formatRelativeTime } from '@/utils/utils';
 import Alert from '@/components/Alert';
 import styles from './ShareLinksPage.module.css';
 
@@ -18,6 +19,7 @@ interface ShareLink {
 }
 
 function ShareLinksPage() {
+  useDocumentTitle('Share Links');
   const navigate = useNavigate();
   const [shares, setShares] = useState<ShareLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,9 +93,6 @@ function ShareLinksPage() {
     <div className={styles.container}>
       <div className={styles.header}>
         <h1>Share Links</h1>
-        <Link to="/" className={styles.btnLink}>
-          ← Back to Home
-        </Link>
       </div>
 
       {successMessage && <Alert variant="success">✓ {successMessage}</Alert>}
@@ -146,15 +145,15 @@ function ShareLinksPage() {
                       </td>
                       <td>
                         {share.expires_at ? (
-                          <span className={isExpired ? styles.expired : ''}>
-                            {formatDate(share.expires_at)}
+                          <span className={isExpired ? styles.expired : styles.timestamp}>
+                            {formatRelativeTime(share.expires_at)}
                             {isExpired && ' (Expired)'}
                           </span>
                         ) : (
                           <span className={styles.neverExpires}>Never</span>
                         )}
                       </td>
-                      <td>{formatDate(share.created_at)}</td>
+                      <td className={styles.timestamp}>{formatRelativeTime(share.created_at)}</td>
                       <td>
                         <div className={styles.actions}>
                           <button

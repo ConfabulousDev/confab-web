@@ -16,11 +16,6 @@ interface MessageListProps {
   messages: TranscriptLine[];
   agents: AgentNode[];
   run: RunDetail;
-  autoScroll?: boolean;
-  showThinking?: boolean;
-  expandAllAgents?: boolean;
-  expandAllTools?: boolean;
-  expandAllResults?: boolean;
 }
 
 export interface MessageListHandle {
@@ -28,19 +23,7 @@ export interface MessageListHandle {
 }
 
 const MessageList = forwardRef<MessageListHandle, MessageListProps>(
-  (
-    {
-      messages,
-      agents,
-      run,
-      // autoScroll = false, // TODO: Implement auto-scroll if needed
-      showThinking = true,
-      expandAllAgents = true,
-      expandAllTools = false,
-      expandAllResults = true,
-    },
-    ref
-  ) => {
+  ({ messages, agents, run }, ref) => {
     const parentRef = useRef<HTMLDivElement>(null);
 
     // Build a map of where to insert agents
@@ -205,22 +188,12 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                     <Message
                       message={item.message}
                       index={item.index}
-                      showThinking={showThinking}
-                      expandAllTools={expandAllTools}
-                      expandAllResults={expandAllResults}
+                      previousMessage={item.index > 0 ? messages[item.index - 1] : undefined}
                     />
                   </div>
                 ) : item.type === 'agent' ? (
                   <div className={styles.agentWrapper}>
-                    <AgentPanel
-                      agent={item.agent}
-                      run={run}
-                      depth={0}
-                      showThinking={showThinking}
-                      expandAllAgents={expandAllAgents}
-                      expandAllTools={expandAllTools}
-                      expandAllResults={expandAllResults}
-                    />
+                    <AgentPanel agent={item.agent} run={run} depth={0} />
                   </div>
                 ) : null}
               </div>

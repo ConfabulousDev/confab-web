@@ -1,110 +1,111 @@
 .runCard {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  padding: 1rem;
-  margin-bottom: 1rem;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
 }
 
 .runHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #dee2e6;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .headerLeft {
   display: flex;
   align-items: center;
-  gap: 1rem;
-}
-
-.viewTranscriptBtn {
-  padding: 0.5rem 1rem;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.viewTranscriptBtn:hover {
-  background: #0056b3;
+  gap: var(--spacing-md);
 }
 
 .runHeader h3 {
-  font-size: 1.25rem;
-  color: #222;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
   margin: 0;
 }
 
 .timestamp {
-  color: #6c757d;
-  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+}
+
+.viewTranscriptBtn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  transition: background var(--transition-fast);
+}
+
+.viewTranscriptBtn:hover {
+  background: var(--color-primary-hover);
 }
 
 .runInfo {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
 }
 
 .infoRow {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--spacing-md);
+  font-size: var(--font-sm);
 }
 
 .infoRow .label {
-  font-weight: 600;
-  color: #495057;
-  min-width: 150px;
+  font-weight: var(--font-medium);
+  color: var(--color-text-muted);
+  min-width: 120px;
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .infoRow .value {
-  color: #212529;
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
 }
 
 .infoRow code.value {
-  background: #f8f9fa;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.success {
-  color: #28a745;
-}
-
-.muted {
-  color: #6c757d;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  background: var(--color-bg-secondary);
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
 }
 
 .gitInfoSection {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #dee2e6;
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-light);
 }
 
 .gitInfoSection h4 {
-  font-size: 1rem;
-  color: #495057;
-  margin: 0 0 0.75rem 0;
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--spacing-sm) 0;
 }
 
 .gitInfo {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .link {
-  color: #1976d2;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
@@ -113,97 +114,109 @@
 }
 
 .dirtyBadge {
-  font-size: 0.75rem;
-  background: #fff3cd;
-  color: #856404;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  margin-left: 0.5rem;
+  font-size: var(--font-xs);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  margin-left: var(--spacing-sm);
 }
 
 .filesSection {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #dee2e6;
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-light);
 }
 
 .filesSection h4 {
-  font-size: 1rem;
-  color: #495057;
-  margin: 0 0 0.75rem 0;
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--spacing-sm) 0;
 }
 
 .filesList {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .fileItem {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0.75rem;
-  background: #f8f9fa;
-  border-radius: 6px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
 }
 
 .fileInfo {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--spacing-sm);
   flex: 1;
+  min-width: 0;
 }
 
 .fileType {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 
 .fileType.transcript {
-  background: #d1ecf1;
-  color: #0c5460;
+  background: var(--color-info-light);
+  color: var(--color-info-text);
 }
 
 .fileType.agent {
-  background: #d4edda;
-  color: #155724;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 .fileType.todo {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .filePath {
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: #495057;
-}
-
-.fileSize {
-  color: #6c757d;
-  font-size: 0.85rem;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.fileSize {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .todosSection {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #dee2e6;
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-light);
 }
 
 .todosSection h4 {
-  font-size: 1rem;
-  color: #495057;
-  margin: 0 0 0.75rem 0;
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--spacing-sm) 0;
 }
 
 .todoGroup {
-  margin-bottom: 1rem;
+  margin-bottom: var(--spacing-md);
 }
 
 .todoGroup:last-child {
@@ -211,75 +224,75 @@
 }
 
 .todoGroup h5 {
-  font-size: 0.9rem;
-  color: #6c757d;
-  margin: 0 0 0.75rem 0;
-  font-weight: 600;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--spacing-sm) 0;
+  font-weight: var(--font-medium);
 }
 
 .todoList {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .todoItem {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border-left: 3px solid transparent;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  border-left: 2px solid transparent;
 }
 
 .todoItem.status-pending {
-  border-left-color: #6c757d;
+  border-left-color: var(--color-text-muted);
 }
 
 .todoItem.status-in_progress {
-  border-left-color: #007bff;
-  background: #e7f3ff;
+  border-left-color: var(--color-accent);
+  background: var(--color-accent-light);
 }
 
 .todoItem.status-completed {
-  border-left-color: #28a745;
-  background: #e8f5e9;
+  border-left-color: var(--color-success);
+  background: var(--color-success-bg);
 }
 
 .todoStatusIcon {
-  font-size: 1rem;
+  font-size: var(--font-sm);
   line-height: 1.5;
-  min-width: 1.25rem;
+  min-width: 1rem;
   text-align: center;
 }
 
 .todoItem.status-pending .todoStatusIcon {
-  color: #6c757d;
+  color: var(--color-text-muted);
 }
 
 .todoItem.status-in_progress .todoStatusIcon {
-  color: #007bff;
+  color: var(--color-accent);
 }
 
 .todoItem.status-completed .todoStatusIcon {
-  color: #28a745;
+  color: var(--color-success);
 }
 
 .todoContent {
-  color: #212529;
-  font-size: 0.9rem;
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
   line-height: 1.5;
   flex: 1;
 }
 
 .todoItem.status-completed .todoContent {
-  color: #6c757d;
+  color: var(--color-text-muted);
   text-decoration: line-through;
 }
 
 .transcriptSection {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #dee2e6;
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-light);
 }

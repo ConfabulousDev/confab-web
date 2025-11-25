@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import type { SessionDetail, SessionShare, RunDetail } from '@/types';
-import { formatDate } from '@/utils/utils';
+import { formatRelativeTime, formatDate } from '@/utils/utils';
 import RunCard from '@/components/RunCard';
 import styles from './SessionDetailPage.module.css';
 
@@ -38,6 +39,10 @@ function SessionDetailPage() {
   const [selectedRunIndex, setSelectedRunIndex] = useState(0);
 
   const selectedRun: RunDetail | undefined = session?.runs[selectedRunIndex];
+
+  // Dynamic page title based on session
+  const pageTitle = session ? `Session ${session.session_id.substring(0, 8)}` : 'Session';
+  useDocumentTitle(pageTitle);
 
   useEffect(() => {
     if (sessionId) {
@@ -269,14 +274,11 @@ function SessionDetailPage() {
         </div>
         <div className={styles.headerActions}>
           <button className={`${styles.btn} ${styles.btnShare}`} onClick={openShareDialog}>
-            📤 Share
+            Share
           </button>
           <button className={`${styles.btn} ${styles.btnDanger}`} onClick={openDeleteDialog}>
-            🗑️ Delete
+            Delete
           </button>
-          <Link to="/sessions" className={styles.btnLink}>
-            ← Back to Sessions
-          </Link>
         </div>
       </div>
 
@@ -297,7 +299,7 @@ function SessionDetailPage() {
           <div className={styles.metaCard}>
             <div className={styles.metaItem}>
               <span className={styles.metaLabel}>First Seen:</span>
-              <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
+              <span className={styles.metaValue}>{formatRelativeTime(session.first_seen)}</span>
             </div>
 
             {/* Version selector dropdown (only show if multiple runs) */}
@@ -320,7 +322,7 @@ function SessionDetailPage() {
                     const label = isLatestRun ? 'latest' : isOldestRun ? 'started' : 'updated';
                     return (
                       <option key={index} value={index}>
-                        #{index + 1} {label} @ {formatDate(run.end_timestamp)}
+                        #{index + 1} {label} ({formatRelativeTime(run.end_timestamp)})
                       </option>
                     );
                   })}
@@ -527,7 +529,7 @@ function SessionDetailPage() {
                             const label = isLatestRun ? 'latest' : isOldestRun ? 'started' : 'updated';
                             return (
                               <option key={index} value={index}>
-                                #{index + 1} {label} @ {formatDate(run.end_timestamp)}
+                                #{index + 1} {label} ({formatRelativeTime(run.end_timestamp)})
                               </option>
                             );
                           })}

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { keysAPI } from '@/services/api';
-import { formatDate } from '@/utils/utils';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { formatRelativeTime } from '@/utils/utils';
 import { createAPIKeySchema, validateForm, getFieldError } from '@/schemas/validation';
 import type { CreateAPIKeyData } from '@/schemas/validation';
 import FormField from '@/components/FormField';
@@ -13,6 +13,7 @@ import Alert from '@/components/Alert';
 import styles from './APIKeysPage.module.css';
 
 function APIKeysPage() {
+  useDocumentTitle('API Keys');
   const queryClient = useQueryClient();
   const [newKeyName, setNewKeyName] = useState('');
   const [createdKey, setCreatedKey] = useState<{ key: string; name: string } | null>(null);
@@ -75,9 +76,6 @@ function APIKeysPage() {
     <div className={styles.container}>
       <div className={styles.header}>
         <h1>API Keys</h1>
-        <Link to="/" className={styles.btnLink}>
-          ← Back to Home
-        </Link>
       </div>
 
       {createdKey && (
@@ -171,7 +169,7 @@ function APIKeysPage() {
               <div key={key.id} className={styles.keyItem}>
                 <div className={styles.keyInfo}>
                   <h3>{key.name}</h3>
-                  <p className={styles.keyMeta}>Created: {formatDate(key.created_at)}</p>
+                  <p className={styles.keyMeta}>Created {formatRelativeTime(key.created_at)}</p>
                 </div>
                 <Button
                   variant="danger"

@@ -16,8 +16,6 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
   const [agents, setAgents] = useState<AgentNode[]>([]);
-  const [expanded, setExpanded] = useState(true);
-  const [showThinking, setShowThinking] = useState(true);
 
   // Batched rendering state
   const [renderingBatch, setRenderingBatch] = useState(false);
@@ -33,11 +31,6 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
     () => (renderProgress.total > 0 ? (renderProgress.current / renderProgress.total) * 100 : 0),
     [renderProgress]
   );
-
-  // Expand/collapse all controls
-  const [expandAllAgents, setExpandAllAgents] = useState(true);
-  const [expandAllTools, setExpandAllTools] = useState(false);
-  const [expandAllResults, setExpandAllResults] = useState(true);
 
   useEffect(() => {
     loadTranscript();
@@ -120,59 +113,10 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
     }
   }
 
-  function toggleExpanded() {
-    setExpanded(!expanded);
-  }
-
-  function toggleExpandAllAgents() {
-    setExpandAllAgents(!expandAllAgents);
-  }
-
-  function toggleExpandAllTools() {
-    setExpandAllTools(!expandAllTools);
-  }
-
-  function toggleExpandAllResults() {
-    setExpandAllResults(!expandAllResults);
-  }
-
   return (
     <div className={styles.transcriptViewer}>
       <div className={styles.transcriptHeader}>
         <h3>Transcript</h3>
-        <div className={styles.headerControls}>
-          <button
-            className={`${styles.toggleBtn} ${styles.thinkingToggle} ${showThinking ? styles.active : ''}`}
-            onClick={() => setShowThinking(!showThinking)}
-            title={showThinking ? 'Hide thinking blocks' : 'Show thinking blocks'}
-          >
-            💭 {showThinking ? 'Hide' : 'Show'} Thinking
-          </button>
-          <button
-            className={styles.toggleBtn}
-            onClick={toggleExpandAllAgents}
-            title={expandAllAgents ? 'Collapse all agents' : 'Expand all agents'}
-          >
-            🤖 {expandAllAgents ? 'Collapse' : 'Expand'} Agents
-          </button>
-          <button
-            className={styles.toggleBtn}
-            onClick={toggleExpandAllTools}
-            title={expandAllTools ? 'Collapse all tool blocks' : 'Expand all tool blocks'}
-          >
-            🛠️ {expandAllTools ? 'Collapse' : 'Expand'} Tools
-          </button>
-          <button
-            className={styles.toggleBtn}
-            onClick={toggleExpandAllResults}
-            title={expandAllResults ? 'Collapse all results' : 'Expand all results'}
-          >
-            ✅ {expandAllResults ? 'Collapse' : 'Expand'} Results
-          </button>
-          <button className={styles.toggleBtn} onClick={toggleExpanded}>
-            {expanded ? 'Collapse' : 'Expand'} All
-          </button>
-        </div>
       </div>
 
       {loading ? (
@@ -181,7 +125,7 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
         <div className={styles.error}>
           <strong>Error:</strong> {error}
         </div>
-      ) : expanded ? (
+      ) : (
         <div className={styles.transcriptContent}>
           {renderingBatch ? (
             <div className={styles.renderingProgress}>
@@ -208,13 +152,9 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
             messages={messages}
             agents={agents}
             run={run}
-            showThinking={showThinking}
-            expandAllAgents={expandAllAgents}
-            expandAllTools={expandAllTools}
-            expandAllResults={expandAllResults}
           />
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

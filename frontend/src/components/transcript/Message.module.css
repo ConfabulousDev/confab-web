@@ -1,260 +1,128 @@
+/* Play Script Style - compact message layout */
 .message {
-  display: flex;
-  gap: 1rem;
-  padding: 1rem;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
-  background: white;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-  animation: fadeInUp 0.3s ease-out;
+  padding: var(--spacing-sm) 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Messages from a different speaker get a separator line */
+.message.differentSpeaker {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
 }
 
-.message:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transform: translateY(-1px);
-}
-
+/* Role-based left border accent */
 .message-user {
-  border-left: 3px solid #007bff;
-  background: #f8f9ff;
+  border-left: 2px solid var(--color-accent);
+  padding-left: var(--spacing-sm);
+  margin-left: calc(-1 * var(--spacing-sm));
 }
 
 .message-assistant {
-  border-left: 3px solid #6c757d;
-  background: #f8f9fa;
+  /* No left border for assistant - cleaner look */
 }
 
 .message-system {
-  border-left: 3px solid #ffc107;
-  background: #fffbf0;
+  border-left: 2px solid var(--color-warning);
+  padding-left: var(--spacing-sm);
+  margin-left: calc(-1 * var(--spacing-sm));
 }
 
 .message.isToolResult {
-  border-left-color: #28a745;
-  background: #f0fdf4;
+  border-left: 2px solid var(--color-success);
+  padding-left: var(--spacing-sm);
+  margin-left: calc(-1 * var(--spacing-sm));
 }
 
-.messageSidebar {
-  flex-shrink: 0;
-}
-
-.messageIcon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  border-radius: 50%;
-  font-size: 1.5rem;
-  border: 2px solid #dee2e6;
-}
-
-.message-user .messageIcon {
-  border-color: #007bff;
-}
-
-.message-assistant .messageIcon {
-  border-color: #6c757d;
-}
-
-.message-system .messageIcon {
-  border-color: #ffc107;
-}
-
-.messageBody {
-  flex: 1;
-  min-width: 0;
-}
-
+/* Header row: ROLE on left, metadata on right */
 .messageHeader {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.messageMeta {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  align-items: baseline;
+  margin-bottom: var(--spacing-xs);
+  gap: var(--spacing-sm);
 }
 
 .messageRole {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: #212529;
+  font-weight: var(--font-bold);
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.message-user .messageRole {
+  color: var(--color-accent);
+}
+
+.message-assistant .messageRole {
+  color: var(--color-text-muted);
+}
+
+.message-system .messageRole {
+  color: var(--color-warning-text);
+}
+
+.isToolResult .messageRole {
+  color: var(--color-success-text);
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .messageTimestamp {
-  font-size: 0.8rem;
-  color: #6c757d;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  font-family: 'SF Mono', Monaco, monospace;
 }
 
 .messageModel {
-  font-size: 0.75rem;
-  color: #6c757d;
-  background: #e9ecef;
-  padding: 0.2rem 0.5rem;
-  border-radius: 3px;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
   font-family: monospace;
 }
 
-.messageActions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.messageBadges {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.badge {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  font-weight: 500;
-  transition: transform 0.2s ease;
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.badge:hover {
-  transform: scale(1.05);
-}
-
-.copyMessageBtn {
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.85rem;
+.copyBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-sm);
   cursor: pointer;
-  transition: all 0.2s;
-  color: #495057;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
+  color: var(--color-text-muted);
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+  line-height: 1;
 }
 
-.copyMessageBtn:hover {
-  background: white;
-  border-color: #007bff;
-  color: #007bff;
-  transform: scale(1.05);
+.message:hover .copyBtn {
+  opacity: 1;
 }
 
-.copyMessageBtn:active {
-  transform: scale(0.95);
+.copyBtn:hover {
+  color: var(--color-accent);
 }
 
-.badgeThinking {
-  background: #e7f3ff;
-  color: #0066cc;
-}
-
-.badgeTools {
-  background: #fff3cd;
-  color: #856404;
-}
-
+/* Message content area */
 .messageContent {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--spacing-xs);
+  padding-left: var(--spacing-xs);
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Mobile responsive styles */
 @media (max-width: 768px) {
   .message {
-    gap: 0.75rem;
-    padding: 0.75rem;
+    padding: var(--spacing-xs) 0;
   }
 
-  .messageIcon {
-    width: 32px;
-    height: 32px;
-    font-size: 1.2rem;
-  }
-
-  .messageRole {
-    font-size: 0.9rem;
-  }
-
-  .messageTimestamp {
-    font-size: 0.75rem;
-  }
-
-  .messageModel {
-    font-size: 0.7rem;
-  }
-
-  .badge {
-    font-size: 0.7rem;
-    padding: 0.15rem 0.4rem;
-  }
-
-  .copyMessageBtn {
-    padding: 0.2rem 0.4rem;
-    font-size: 0.75rem;
-    min-width: 24px;
-  }
-}
-
-@media (max-width: 480px) {
-  .message {
-    gap: 0.5rem;
-    padding: 0.5rem;
-  }
-
-  .messageIcon {
-    width: 28px;
-    height: 28px;
-    font-size: 1rem;
-  }
-
-  .messageHeader {
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.4rem;
-  }
-
-  .messageMeta {
-    gap: 0.5rem;
-  }
-
-  .copyMessageBtn {
-    padding: 0.15rem 0.3rem;
-    font-size: 0.7rem;
-    min-width: 22px;
+  .copyBtn {
+    opacity: 1;
   }
 }

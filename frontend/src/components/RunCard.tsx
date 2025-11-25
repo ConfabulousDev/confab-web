@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { RunDetail, GitInfo, TodoItem } from '@/types';
-import { formatDate, formatBytes } from '@/utils/utils';
+import { formatRelativeTime, formatBytes } from '@/utils/utils';
 import TranscriptViewer from './transcript/TranscriptViewer';
 import styles from './RunCard.module.css';
 
@@ -105,7 +105,7 @@ function RunCard({ run, index, showGitInfo = true, shareToken, sessionId }: RunC
       <div className={styles.runHeader}>
         <div className={styles.headerLeft}>
           <h3>Version #{index + 1}</h3>
-          <span className={styles.timestamp}>{formatDate(run.end_timestamp)}</span>
+          <span className={styles.timestamp}>{formatRelativeTime(run.end_timestamp)}</span>
         </div>
         <button className={styles.viewTranscriptBtn} onClick={() => setShowTranscript(!showTranscript)}>
           {showTranscript ? 'Hide' : 'View'} Transcript

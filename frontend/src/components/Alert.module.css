@@ -1,12 +1,13 @@
 .alert {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
   border: 1px solid;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
+  font-size: var(--font-sm);
   transition: opacity 0.5s ease-out;
 }
 
@@ -17,7 +18,7 @@
 .closeBtn {
   background: none;
   border: none;
-  font-size: var(--font-xl);
+  font-size: var(--font-lg);
   line-height: 1;
   cursor: pointer;
   padding: 0;
@@ -50,5 +51,5 @@
 .info {
   background: var(--color-info-light);
   color: var(--color-info-text);
-  border-color: #bee5eb;
+  border-color: var(--color-accent);
 }

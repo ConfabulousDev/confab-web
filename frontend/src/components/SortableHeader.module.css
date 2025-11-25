@@ -1,13 +1,15 @@
 .sortable {
   cursor: pointer;
   user-select: none;
+  transition: background-color var(--transition-fast);
 }
 
 .sortable:hover {
-  background-color: rgba(0, 0, 0, 0.02);
+  background-color: var(--color-bg-hover);
 }
 
 .indicator {
-  margin-left: 0.5rem;
-  color: #666;
+  margin-left: var(--spacing-xs);
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
 }

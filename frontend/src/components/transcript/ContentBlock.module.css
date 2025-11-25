@@ -1,251 +1,197 @@
-pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
+/* Text block - markdown content */
 .textBlock {
-  color: #212529;
+  color: var(--color-text-primary);
+  font-size: var(--font-xs);
+  line-height: 1.6;
 }
 
-/* Style links in pre blocks */
-.textBlock pre :global(a) {
-  color: #007bff;
+/* Markdown element styles */
+.textBlock :global(p) {
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.textBlock :global(p:last-child) {
+  margin-bottom: 0;
+}
+
+.textBlock :global(a) {
+  color: var(--color-accent);
   text-decoration: underline;
 }
 
-.textBlock pre :global(a:hover) {
-  color: #0056b3;
+.textBlock :global(a:hover) {
+  color: var(--color-accent-hover);
 }
 
+.textBlock :global(code) {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--color-bg-secondary);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.textBlock :global(pre) {
+  margin: var(--spacing-xs) 0;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.textBlock :global(pre code) {
+  background: none;
+  padding: 0;
+}
+
+.textBlock :global(ul),
+.textBlock :global(ol) {
+  margin: var(--spacing-xs) 0;
+  padding-left: var(--spacing-lg);
+}
+
+.textBlock :global(li) {
+  margin: 2px 0;
+}
+
+.textBlock :global(blockquote) {
+  margin: var(--spacing-xs) 0;
+  padding-left: var(--spacing-sm);
+  border-left: 2px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.textBlock :global(strong) {
+  font-weight: var(--font-semibold);
+}
+
+.textBlock :global(h1),
+.textBlock :global(h2),
+.textBlock :global(h3),
+.textBlock :global(h4) {
+  margin: var(--spacing-sm) 0 var(--spacing-xs) 0;
+  font-weight: var(--font-semibold);
+}
+
+.textBlock :global(h1) { font-size: var(--font-lg); }
+.textBlock :global(h2) { font-size: var(--font-md); }
+.textBlock :global(h3) { font-size: var(--font-base); }
+.textBlock :global(h4) { font-size: var(--font-sm); }
+
+/* Thinking block - collapsible */
 .thinkingBlock {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  padding: 0.75rem;
+  border-left: 2px solid var(--color-text-muted);
+  padding-left: var(--spacing-sm);
+  margin: var(--spacing-xs) 0;
 }
 
 .thinkingHeader {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-  color: #6c757d;
-  font-size: 0.9rem;
-  cursor: pointer;
-  user-select: none;
-  padding: 0.25rem 0;
-  transition: opacity 0.2s ease, transform 0.1s ease;
-}
-
-.thinkingHeader:hover {
-  opacity: 0.8;
-}
-
-.thinkingHeader:active {
-  transform: scale(0.98);
+  gap: var(--spacing-xs);
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
 }
 
 .thinkingIcon {
-  font-size: 1rem;
+  font-size: var(--font-xs);
 }
 
 .thinkingLabel {
   flex: 1;
+  font-weight: var(--font-medium);
 }
 
 .thinkingContent {
-  color: #495057;
+  color: var(--color-text-secondary);
   font-style: italic;
-  margin-top: 0.5rem;
-  animation: fadeIn 0.2s ease-out;
+  margin-top: var(--spacing-xs);
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
+/* Tool use block - bordered box style */
 .toolUseBlock {
-  background: #e7f3ff;
-  border: 1px solid #007bff;
-  border-radius: 4px;
-  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  margin: var(--spacing-xs) 0;
+  overflow: hidden;
 }
 
 .toolHeader {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-  color: #007bff;
-  cursor: pointer;
-  user-select: none;
-  padding: 0.25rem 0;
-  transition: opacity 0.2s ease, transform 0.1s ease;
-}
-
-.toolHeader:hover {
-  opacity: 0.8;
-}
-
-.toolHeader:active {
-  transform: scale(0.98);
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .toolName {
-  font-size: 0.95rem;
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
   flex: 1;
+  font-family: monospace;
 }
 
 .toolIcon {
-  font-size: 1rem;
-}
-
-.expandBtn {
-  background: none;
-  border: none;
-  font-size: 0.8rem;
-  color: inherit;
-  cursor: pointer;
-  padding: 0.25rem;
-  line-height: 1;
+  font-size: var(--font-xs);
 }
 
 .toolInput {
-  margin-top: 0.5rem;
-  animation: fadeIn 0.2s ease-out;
+  padding: var(--spacing-xs);
+  background: var(--color-bg-primary);
+  min-width: 0;
+  overflow: hidden;
 }
 
+/* Tool result block - bordered box style */
 .toolResultBlock {
-  background: #d4edda;
-  border: 1px solid #28a745;
-  border-radius: 4px;
-  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  margin: var(--spacing-xs) 0;
+  overflow: hidden;
 }
 
 .toolResultBlock.error {
-  background: #f8d7da;
-  border-color: #dc3545;
+  border-color: var(--color-error);
 }
 
 .toolResultHeader {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-  color: #155724;
-  font-size: 0.9rem;
-  cursor: pointer;
-  user-select: none;
-  padding: 0.25rem 0;
-  transition: opacity 0.2s ease, transform 0.1s ease;
-}
-
-.toolResultHeader:hover {
-  opacity: 0.8;
-}
-
-.toolResultHeader:active {
-  transform: scale(0.98);
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-xs);
 }
 
 .toolResultBlock.error .toolResultHeader {
-  color: #721c24;
+  background: var(--color-error-bg);
+  border-bottom-color: var(--color-error);
 }
 
 .resultIcon {
-  font-size: 1rem;
+  font-size: var(--font-xs);
 }
 
 .toolResultHeader span:not(.resultIcon):not(.expandBtn) {
   flex: 1;
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
 }
 
 .toolResultContent {
-  margin-top: 0.5rem;
-  animation: fadeIn 0.2s ease-out;
+  padding: var(--spacing-xs);
+  background: var(--color-bg-primary);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .unknownBlock {
-  color: #6c757d;
+  color: var(--color-text-muted);
   font-style: italic;
-}
-
-/* Mobile responsive styles */
-@media (max-width: 768px) {
-  .thinkingBlock {
-    padding: 0.6rem;
-  }
-
-  .thinkingHeader,
-  .toolHeader,
-  .toolResultHeader {
-    padding: 0.2rem 0;
-    font-size: 0.85rem;
-  }
-
-  .thinkingIcon,
-  .toolIcon,
-  .resultIcon {
-    font-size: 0.9rem;
-  }
-
-  .toolName {
-    font-size: 0.9rem;
-  }
-
-  .toolUseBlock,
-  .toolResultBlock {
-    padding: 0.6rem;
-  }
-
-  .toolInput,
-  .toolResultContent {
-    margin-top: 0.4rem;
-  }
-
-  pre {
-    font-size: 0.85rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .thinkingBlock,
-  .toolUseBlock,
-  .toolResultBlock {
-    padding: 0.5rem;
-  }
-
-  .thinkingHeader,
-  .toolHeader,
-  .toolResultHeader {
-    font-size: 0.8rem;
-  }
-
-  .thinkingIcon,
-  .toolIcon,
-  .resultIcon {
-    font-size: 0.85rem;
-  }
-
-  .toolName {
-    font-size: 0.85rem;
-  }
-
-  .expandBtn {
-    font-size: 0.75rem;
-    padding: 0.2rem;
-  }
-
-  pre {
-    font-size: 0.8rem;
-  }
+  font-size: var(--font-xs);
 }

@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import type { AgentNode, RunDetail } from '@/types';
 import MessageList from './MessageList';
 import styles from './AgentPanel.module.css';
@@ -7,32 +6,9 @@ interface AgentPanelProps {
   agent: AgentNode;
   run: RunDetail;
   depth?: number;
-  showThinking?: boolean;
-  expandAllAgents?: boolean;
-  expandAllTools?: boolean;
-  expandAllResults?: boolean;
 }
 
-function AgentPanel({
-  agent,
-  run,
-  depth = 0,
-  showThinking = true,
-  expandAllAgents = true,
-  expandAllTools = false,
-  expandAllResults = true,
-}: AgentPanelProps) {
-  // React to expandAllAgents changes, but allow manual override
-  const [expanded, setExpanded] = useState(expandAllAgents && depth < 2);
-
-  useEffect(() => {
-    setExpanded(expandAllAgents && depth < 2);
-  }, [expandAllAgents, depth]);
-
-  function toggleExpanded() {
-    setExpanded(!expanded);
-  }
-
+function AgentPanel({ agent, run, depth = 0 }: AgentPanelProps) {
   // Get color based on depth
   const colors = ['#007bff', '#6f42c1', '#28a745', '#fd7e14', '#dc3545', '#17a2b8'];
   const borderColor = colors[depth % colors.length];
@@ -48,7 +24,7 @@ function AgentPanel({
       className={`${styles.agentPanel} ${isDeeplyNested ? styles.deeplyNested : ''}`}
       style={{ marginLeft: `${indentation}px`, borderLeftColor: borderColor }}
     >
-      <div className={styles.agentHeader} onClick={toggleExpanded}>
+      <div className={styles.agentHeader}>
         <div className={styles.agentInfo}>
           <span className={styles.agentIcon}>🤖</span>
           {depth > 0 && (
@@ -69,48 +45,37 @@ function AgentPanel({
             </span>
           )}
         </div>
-        <button className={styles.expandBtn}>{expanded ? '▼' : '▶'}</button>
       </div>
 
-      {expanded && (
-        <div className={styles.agentContent}>
-          {agent.metadata.totalDurationMs && (
-            <div className={styles.agentMeta}>
-              <span>Duration: {(agent.metadata.totalDurationMs / 1000).toFixed(1)}s</span>
-              {agent.metadata.totalTokens && <span>Tokens: {agent.metadata.totalTokens.toLocaleString()}</span>}
-              {agent.metadata.totalToolUseCount && <span>Tools: {agent.metadata.totalToolUseCount}</span>}
-            </div>
-          )}
+      <div className={styles.agentContent}>
+        {agent.metadata.totalDurationMs && (
+          <div className={styles.agentMeta}>
+            <span>Duration: {(agent.metadata.totalDurationMs / 1000).toFixed(1)}s</span>
+            {agent.metadata.totalTokens && <span>Tokens: {agent.metadata.totalTokens.toLocaleString()}</span>}
+            {agent.metadata.totalToolUseCount && <span>Tools: {agent.metadata.totalToolUseCount}</span>}
+          </div>
+        )}
 
-          <MessageList
-            messages={agent.transcript}
-            agents={agent.children}
-            run={run}
-            showThinking={showThinking}
-            expandAllAgents={expandAllAgents}
-            expandAllTools={expandAllTools}
-            expandAllResults={expandAllResults}
-          />
+        <MessageList
+          messages={agent.transcript}
+          agents={agent.children}
+          run={run}
+        />
 
-          {/* Recursively render child agents */}
-          {agent.children.length > 0 && (
-            <div className={styles.childAgents}>
-              {agent.children.map((child, i) => (
-                <AgentPanel
-                  key={i}
-                  agent={child}
-                  run={run}
-                  depth={depth + 1}
-                  showThinking={showThinking}
-                  expandAllAgents={expandAllAgents}
-                  expandAllTools={expandAllTools}
-                  expandAllResults={expandAllResults}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        {/* Recursively render child agents */}
+        {agent.children.length > 0 && (
+          <div className={styles.childAgents}>
+            {agent.children.map((child, i) => (
+              <AgentPanel
+                key={i}
+                agent={child}
+                run={run}
+                depth={depth + 1}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

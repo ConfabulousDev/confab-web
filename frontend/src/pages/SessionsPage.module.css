@@ -1,105 +1,144 @@
-/* Override container width for sessions list */
 .container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
+  padding: var(--spacing-xl);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-lg);
 }
 
 .header h1 {
-  font-size: 1.75rem;
-  color: #222;
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
 }
 
-.btnLink {
-  color: #007bff;
-  text-decoration: none;
-  font-weight: 500;
+.tabs {
+  display: flex;
+  gap: var(--spacing-xs);
 }
 
-.btnLink:hover {
-  text-decoration: underline;
+.tab {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tab:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
+.tab.active {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border-dark);
+  color: var(--color-text-primary);
+  font-weight: var(--font-medium);
 }
 
 .card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 1.5rem;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .loading,
 .empty {
   text-align: center;
-  padding: 3rem 1rem;
-  color: #6c757d;
+  padding: var(--spacing-3xl) var(--spacing-lg);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
 }
 
 .sessionsTable {
   overflow-x: auto;
 }
 
-table {
+.sessionsTable table {
   width: 100%;
   border-collapse: collapse;
 }
 
-thead {
-  background: #f8f9fa;
+.sessionsTable thead {
+  background: var(--color-bg-secondary);
 }
 
-th {
+.sessionsTable th {
   text-align: left;
-  padding: 0.5rem 0.75rem;
-  font-weight: 600;
-  color: #495057;
-  border-bottom: 2px solid #dee2e6;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border);
 }
 
-td {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #dee2e6;
-  color: #212529;
-  font-size: 0.9rem;
+.sessionsTable td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+  height: 36px;
+  vertical-align: middle;
+}
+
+.sessionsTable tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .clickableRow {
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color var(--transition-fast);
 }
 
 .clickableRow:hover {
-  background: #e9ecef;
+  background: var(--color-bg-hover);
 }
 
-.sessionTitle {
-  color: #6c757d;
-  font-style: italic;
+.titleCell {
+  font-weight: var(--font-medium);
 }
 
-.sessionType {
-  color: #495057;
-  font-weight: 500;
+.untitled {
+  color: var(--color-text-muted);
 }
 
 .sessionId {
-  font-family: monospace;
-  background: #e9ecef;
-  padding: 0.2rem 0.4rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
 }
 
 .gitInfo {
-  color: #495057;
-  font-size: 0.875rem;
-  font-family: monospace;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.timestamp {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.sharedBadge {
+  display: inline-block;
+  margin-left: var(--spacing-sm);
+  padding: 2px var(--spacing-xs);
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
 }
 
 .alertFading {
@@ -107,40 +146,6 @@ td {
   transition: opacity 0.5s ease-out;
 }
 
-.filterSection {
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  background: #f8f9fa;
-  border-radius: 6px;
-}
-
-.checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  user-select: none;
-}
-
-.checkbox input[type="checkbox"] {
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
-}
-
-.checkbox span {
-  color: #495057;
-  font-size: 0.95rem;
-}
-
-.sharedBadge {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.1rem 0.4rem;
-  background: #e7f3ff;
-  color: #0056b3;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 4px;
-  white-space: nowrap;
+.successAlert {
+  margin-bottom: var(--spacing-lg);
 }

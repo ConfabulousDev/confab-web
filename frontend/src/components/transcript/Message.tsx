@@ -6,7 +6,6 @@ import {
   getToolNameForResult as getToolName,
   extractTextContent,
   formatTimestamp,
-  getRoleIcon,
   getRoleLabel,
 } from '@/services/messageParser';
 import ContentBlockComponent from './ContentBlock';
@@ -15,21 +14,18 @@ import styles from './Message.module.css';
 interface MessageProps {
   message: TranscriptLine;
   index: number;
-  showThinking?: boolean;
-  expandAllTools?: boolean;
-  expandAllResults?: boolean;
+  previousMessage?: TranscriptLine;
 }
 
-function Message({
-  message,
-  showThinking = true,
-  expandAllTools = false,
-  expandAllResults = true,
-}: MessageProps) {
+function Message({ message, previousMessage }: MessageProps) {
   const [copySuccess, setCopySuccess] = useState(false);
 
   // Parse message into structured data using service
   const messageData = useMemo(() => parseMessage(message), [message]);
+  const prevMessageData = useMemo(() => previousMessage ? parseMessage(previousMessage) : null, [previousMessage]);
+
+  // Check if this message is from a different speaker than the previous
+  const isDifferentSpeaker = prevMessageData && prevMessageData.role !== messageData.role;
 
   // Build tool name map from content blocks
   const toolNameMap = useMemo(() => buildToolNameMap(messageData.content), [messageData.content]);
@@ -49,44 +45,29 @@ function Message({
   }
 
   return (
-    <div className={`${styles.message} ${styles[`message-${messageData.role}`]} ${messageData.isToolResult ? styles.isToolResult : ''}`}>
-      <div className={styles.messageSidebar}>
-        <div className={styles.messageIcon}>{getRoleIcon(messageData.role)}</div>
+    <div className={`${styles.message} ${styles[`message-${messageData.role}`]} ${messageData.isToolResult ? styles.isToolResult : ''} ${isDifferentSpeaker ? styles.differentSpeaker : ''}`}>
+      <div className={styles.messageHeader}>
+        <span className={styles.messageRole}>{getRoleLabel(messageData.role, messageData.isToolResult)}</span>
+        <div className={styles.headerRight}>
+          {messageData.messageModel && (
+            <span className={styles.messageModel}>{messageData.messageModel.split('-').slice(-1)[0]}</span>
+          )}
+          {messageData.timestamp && <span className={styles.messageTimestamp}>{formatTimestamp(messageData.timestamp)}</span>}
+          <button className={styles.copyBtn} onClick={copyMessage} title="Copy message">
+            {copySuccess ? '✓' : '⎘'}
+          </button>
+        </div>
       </div>
 
-      <div className={styles.messageBody}>
-        <div className={styles.messageHeader}>
-          <div className={styles.messageMeta}>
-            <span className={styles.messageRole}>{getRoleLabel(messageData.role, messageData.isToolResult)}</span>
-            {messageData.timestamp && <span className={styles.messageTimestamp}>{formatTimestamp(messageData.timestamp)}</span>}
-            {messageData.messageModel && (
-              <span className={styles.messageModel}>{messageData.messageModel.split('-').slice(-1)[0]}</span>
-            )}
-          </div>
-          <div className={styles.messageActions}>
-            <div className={styles.messageBadges}>
-              {messageData.hasThinkingContent && <span className={`${styles.badge} ${styles.badgeThinking}`}>💭 Thinking</span>}
-              {messageData.hasToolUse && <span className={`${styles.badge} ${styles.badgeTools}`}>🛠️ Tools</span>}
-            </div>
-            <button className={styles.copyMessageBtn} onClick={copyMessage} title="Copy message">
-              {copySuccess ? '✓' : '📋'}
-            </button>
-          </div>
-        </div>
-
-        <div className={styles.messageContent}>
-          {messageData.content.map((block: ContentBlock, i: number) => (
-            <ContentBlockComponent
-              key={i}
-              block={block}
-              index={i}
-              toolName={getToolName(block, toolNameMap)}
-              showThinking={showThinking}
-              expandAllTools={expandAllTools}
-              expandAllResults={expandAllResults}
-            />
-          ))}
-        </div>
+      <div className={styles.messageContent}>
+        {messageData.content.map((block: ContentBlock, i: number) => (
+          <ContentBlockComponent
+            key={i}
+            block={block}
+            index={i}
+            toolName={getToolName(block, toolNameMap)}
+          />
+        ))}
       </div>
     </div>
   );

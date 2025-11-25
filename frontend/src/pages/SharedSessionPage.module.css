@@ -1,6 +1,6 @@
-/* Override container width for shared view */
+/* Container for shared view */
 .container {
-  max-width: 1200px;
+  padding: var(--spacing-xl);
 }
 
 /* Override loading style for this page */

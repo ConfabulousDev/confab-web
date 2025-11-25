@@ -1,222 +1,105 @@
 .agentPanel {
-  background: white;
-  border: 1px solid #dee2e6;
-  border-left: 3px solid;
-  border-radius: 4px;
-  margin-top: 1rem;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-left: 2px solid;
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-sm);
   overflow: hidden;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .agentPanel.deeplyNested {
-  border-left-width: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-left-width: 3px;
+  box-shadow: var(--shadow-sm);
 }
 
 .agentHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem;
-  background: #f8f9fa;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.2s ease;
-}
-
-.agentHeader:hover {
-  background: #e9ecef;
-}
-
-.agentHeader:active {
-  transform: scale(0.99);
+  padding: var(--spacing-sm);
+  background: var(--color-bg-secondary);
 }
 
 .agentInfo {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--spacing-sm);
   flex: 1;
 }
 
 .agentIcon {
-  font-size: 1.2rem;
+  font-size: var(--font-sm);
 }
 
 .depthIndicator {
-  font-size: 0.7rem;
-  font-weight: 700;
-  background: rgba(0, 0, 0, 0.1);
-  color: #495057;
-  padding: 0.1rem 0.4rem;
-  border-radius: 3px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-bold);
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  padding: 1px var(--spacing-xs);
+  border-radius: var(--radius-sm);
   font-family: monospace;
-  letter-spacing: 0.5px;
 }
 
 .agentLabel {
-  font-weight: 600;
-  color: #495057;
-  font-size: 0.95rem;
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
 }
 
 .messageCount {
-  color: #6c757d;
-  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
 }
 
 .childCount {
-  color: #6c757d;
-  font-size: 0.75rem;
-  background: #e9ecef;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  background: var(--color-bg-hover);
+  padding: 1px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-medium);
 }
 
 .agentStatus {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 1px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
   text-transform: uppercase;
 }
 
 .status-completed {
-  background: #d4edda;
-  color: #155724;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 .status-interrupted {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .status-error {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.expandBtn {
-  background: none;
-  border: none;
-  font-size: 0.9rem;
-  color: #6c757d;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  transition: transform 0.2s ease, color 0.2s ease;
-}
-
-.expandBtn:hover {
-  color: #495057;
-  transform: scale(1.1);
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
 }
 
 .agentContent {
-  padding: 1rem;
-  animation: slideDown 0.2s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  padding: var(--spacing-sm);
 }
 
 .agentMeta {
   display: flex;
-  gap: 1rem;
-  padding: 0.5rem;
-  background: #f8f9fa;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-  color: #6c757d;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xs);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
 }
 
 .childAgents {
-  margin-top: 1rem;
-}
-
-/* Mobile responsive styles */
-@media (max-width: 768px) {
-  .agentPanel {
-    margin-top: 0.75rem;
-  }
-
-  .agentHeader {
-    padding: 0.6rem;
-  }
-
-  .agentInfo {
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .agentIcon {
-    font-size: 1rem;
-  }
-
-  .agentLabel {
-    font-size: 0.9rem;
-  }
-
-  .messageCount,
-  .childCount {
-    font-size: 0.75rem;
-  }
-
-  .agentMeta {
-    padding: 0.4rem;
-    gap: 0.75rem;
-    font-size: 0.8rem;
-  }
-
-  .agentContent {
-    padding: 0.75rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .agentHeader {
-    padding: 0.5rem;
-  }
-
-  .agentInfo {
-    gap: 0.4rem;
-  }
-
-  .agentLabel {
-    font-size: 0.85rem;
-  }
-
-  .depthIndicator {
-    font-size: 0.65rem;
-    padding: 0.05rem 0.3rem;
-  }
-
-  .messageCount,
-  .childCount {
-    font-size: 0.7rem;
-  }
-
-  .agentStatus {
-    font-size: 0.7rem;
-    padding: 0.2rem 0.4rem;
-  }
-
-  .agentContent {
-    padding: 0.5rem;
-  }
-
-  .agentMeta {
-    font-size: 0.75rem;
-    padding: 0.3rem;
-    gap: 0.5rem;
-  }
+  margin-top: var(--spacing-sm);
 }

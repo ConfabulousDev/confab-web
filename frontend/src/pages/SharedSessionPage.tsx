@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import type { SessionDetail } from '@/types';
 import { formatDate } from '@/utils';
 import RunCard from '@/components/RunCard';
@@ -13,6 +14,10 @@ function SharedSessionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [errorType, setErrorType] = useState<ErrorType>(null);
+
+  // Dynamic page title
+  const pageTitle = session ? `Shared: ${session.session_id.substring(0, 8)}` : 'Shared Session';
+  useDocumentTitle(pageTitle);
 
   useEffect(() => {
     async function loadSharedSession() {

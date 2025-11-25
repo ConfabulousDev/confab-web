@@ -1,31 +1,31 @@
 .bashOutput {
   background: #1e1e1e;
   color: #d4d4d4;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: var(--font-xs);
   line-height: 1.5;
   position: relative;
 }
 
 .bashOutput.error {
-  border: 2px solid #dc3545;
+  border: 2px solid var(--color-error);
 }
 
 .copyBtn {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
   background: rgba(45, 45, 45, 0.9);
   border: 1px solid #555;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--spacing-xs);
+  font-size: var(--font-xs);
   cursor: pointer;
   z-index: 10;
-  transition: all 0.2s;
-  font-weight: 500;
+  transition: all var(--transition-fast);
+  font-weight: var(--font-medium);
   color: #d4d4d4;
 }
 
@@ -35,17 +35,13 @@
   color: #4ec9b0;
 }
 
-.copyBtn:active {
-  transform: scale(0.95);
-}
-
 .bashPrompt {
   background: #2d2d2d;
-  padding: 0.5rem 0.75rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
   border-bottom: 1px solid #3e3e3e;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .promptSymbol {
@@ -59,9 +55,7 @@
 }
 
 .bashContent {
-  padding: 0.75rem;
-  overflow-x: auto;
-  overflow-y: auto;
+  padding: var(--spacing-sm);
 }
 
 .bashContent pre {
@@ -76,8 +70,8 @@
 
 /* Custom scrollbar for bash output */
 .bashContent::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .bashContent::-webkit-scrollbar-track {
@@ -86,7 +80,7 @@
 
 .bashContent::-webkit-scrollbar-thumb {
   background: #555;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .bashContent::-webkit-scrollbar-thumb:hover {
@@ -95,12 +89,12 @@
 
 .exitCode {
   background: #2d2d2d;
-  padding: 0.5rem 0.75rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
   border-top: 1px solid #3e3e3e;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  gap: var(--spacing-xs);
+  font-size: var(--font-xs);
 }
 
 .exitLabel {
@@ -110,57 +104,4 @@
 .exitValue {
   color: #f48771;
   font-weight: bold;
-}
-
-/* Mobile responsive styles */
-@media (max-width: 768px) {
-  .copyBtn {
-    padding: 0.2rem 0.4rem;
-    font-size: 0.7rem;
-  }
-
-  .bashPrompt {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.85rem;
-  }
-
-  .bashContent {
-    padding: 0.6rem;
-  }
-
-  .bashContent pre {
-    font-size: 0.8rem;
-  }
-
-  .exitCode {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.75rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .copyBtn {
-    top: 0.25rem;
-    right: 0.25rem;
-    padding: 0.15rem 0.3rem;
-    font-size: 0.65rem;
-  }
-
-  .bashPrompt {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.8rem;
-  }
-
-  .bashContent {
-    padding: 0.5rem;
-  }
-
-  .bashContent pre {
-    font-size: 0.75rem;
-  }
-
-  .exitCode {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.7rem;
-  }
 }

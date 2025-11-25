@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSessions } from '@/hooks/useSessions';
-import { formatDate } from '@/utils/utils';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { formatRelativeTime } from '@/utils/utils';
 import { sortData, type SortDirection } from '@/utils/sorting';
 import SortableHeader from '@/components/SortableHeader';
 import Alert from '@/components/Alert';
@@ -10,10 +11,11 @@ import styles from './SessionsPage.module.css';
 type SortColumn = 'title' | 'session_id' | 'last_run_time';
 
 function SessionsPage() {
+  useDocumentTitle('Sessions');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [includeShared, setIncludeShared] = useState(false);
-  const { sessions, loading, error } = useSessions(includeShared);
+  const [showSharedWithMe, setShowSharedWithMe] = useState(false);
+  const { sessions, loading, error } = useSessions(showSharedWithMe);
   const [sortColumn, setSortColumn] = useState<SortColumn>('last_run_time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [successMessage, setSuccessMessage] = useState('');
@@ -46,15 +48,20 @@ function SessionsPage() {
     }
   };
 
-  // Sorted sessions - filter out empty sessions (0 byte transcripts)
+  // Sorted sessions - filter based on ownership and empty sessions
   const sortedSessions = useMemo(() => {
     return sortData({
       data: sessions,
       sortBy: sortColumn,
       direction: sortDirection,
-      filter: (s) => s.max_transcript_size > 0,
+      filter: (s) => {
+        // Filter out empty sessions
+        if (s.max_transcript_size <= 0) return false;
+        // Show only owned or only shared based on toggle
+        return showSharedWithMe ? !s.is_owner : s.is_owner;
+      },
     });
-  }, [sessions, sortColumn, sortDirection]);
+  }, [sessions, sortColumn, sortDirection, showSharedWithMe]);
 
   const handleRowClick = (session: typeof sessions[0]) => {
     // For shared sessions, use the share URL. For owned sessions, use normal URL
@@ -69,32 +76,41 @@ function SessionsPage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1>Sessions</h1>
-        <Link to="/" className={styles.btnLink}>
-          ← Back to Home
-        </Link>
+        <h1>{showSharedWithMe ? 'Shared with me' : 'Sessions'}</h1>
+        <div className={styles.tabs}>
+          <button
+            className={`${styles.tab} ${!showSharedWithMe ? styles.active : ''}`}
+            onClick={() => setShowSharedWithMe(false)}
+          >
+            My Sessions
+          </button>
+          <button
+            className={`${styles.tab} ${showSharedWithMe ? styles.active : ''}`}
+            onClick={() => setShowSharedWithMe(true)}
+          >
+            Shared with me
+          </button>
+        </div>
       </div>
 
-      {successMessage && <Alert variant="success" className={successFading ? styles.alertFading : ''}>✓ {successMessage}</Alert>}
+      {successMessage && (
+        <Alert
+          variant="success"
+          className={`${styles.successAlert} ${successFading ? styles.alertFading : ''}`}
+        >
+          {successMessage}
+        </Alert>
+      )}
       {error && <Alert variant="error">{error}</Alert>}
-
-      <div className={styles.filterSection}>
-        <label className={styles.checkbox}>
-          <input
-            type="checkbox"
-            checked={includeShared}
-            onChange={(e) => setIncludeShared(e.target.checked)}
-          />
-          <span>Include sessions shared with me</span>
-        </label>
-      </div>
 
       <div className={styles.card}>
         {loading ? (
           <p className={styles.loading}>Loading sessions...</p>
-        ) : sessions.length === 0 ? (
+        ) : sortedSessions.length === 0 ? (
           <p className={styles.empty}>
-            No sessions yet. Sessions will appear here after you use confab.
+            {showSharedWithMe
+              ? 'No sessions have been shared with you yet.'
+              : 'No sessions yet. Sessions will appear here after you use confab.'}
           </p>
         ) : (
           <div className={styles.sessionsTable}>
@@ -108,18 +124,18 @@ function SessionsPage() {
                     direction={sortDirection}
                     onSort={handleSort}
                   />
-                  <th>Git Repo</th>
-                  <th>Git Branch</th>
+                  <th>Repo</th>
+                  <th>Branch</th>
                   <SortableHeader
                     column="session_id"
-                    label="Session ID"
+                    label="ID"
                     currentColumn={sortColumn}
                     direction={sortDirection}
                     onSort={handleSort}
                   />
                   <SortableHeader
                     column="last_run_time"
-                    label="Last Activity"
+                    label="Activity"
                     currentColumn={sortColumn}
                     direction={sortDirection}
                     onSort={handleSort}
@@ -133,20 +149,15 @@ function SessionsPage() {
                     className={styles.clickableRow}
                     onClick={() => handleRowClick(session)}
                   >
-                    <td className={session.title ? '' : styles.sessionTitle}>
-                      {session.title || 'Untitled Session'}
-                      {!session.is_owner && (
-                        <span className={styles.sharedBadge} title={`Shared by ${session.shared_by_email}`}>
-                          {session.access_type === 'private_share' ? ' 🔒 Private' : ' 🔗 Public'}
-                        </span>
-                      )}
+                    <td className={styles.titleCell}>
+                      <span className={session.title ? '' : styles.untitled}>
+                        {session.title || 'Untitled'}
+                      </span>
                     </td>
-                    <td className={styles.gitInfo}>{session.git_repo || '—'}</td>
-                    <td className={styles.gitInfo}>{session.git_branch || '—'}</td>
-                    <td>
-                      <code className={styles.sessionId}>{session.session_id.substring(0, 8)}</code>
-                    </td>
-                    <td>{formatDate(session.last_run_time)}</td>
+                    <td className={styles.gitInfo}>{session.git_repo || ''}</td>
+                    <td className={styles.gitInfo}>{session.git_branch || ''}</td>
+                    <td className={styles.sessionId}>{session.session_id.substring(0, 8)}</td>
+                    <td className={styles.timestamp}>{formatRelativeTime(session.last_run_time)}</td>
                   </tr>
                 ))}
               </tbody>

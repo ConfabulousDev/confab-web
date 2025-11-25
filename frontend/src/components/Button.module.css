@@ -1,11 +1,11 @@
 .btn {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-md);
   border-radius: var(--radius-md);
-  font-size: var(--font-md);
+  font-size: var(--font-sm);
   font-weight: var(--font-medium);
   cursor: pointer;
-  border: none;
-  transition: all var(--transition-base);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
 }
 
 .btn:disabled {
@@ -23,28 +23,30 @@
 }
 
 .secondary {
-  background-color: var(--color-secondary);
-  color: white;
+  background-color: var(--color-bg-secondary);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .secondary:hover:not(:disabled) {
-  background-color: var(--color-secondary-hover);
+  background-color: var(--color-bg-hover);
 }
 
 .danger {
-  background-color: var(--color-danger);
-  color: white;
+  background-color: var(--color-bg-primary);
+  border-color: var(--color-error-border);
+  color: var(--color-error);
 }
 
 .danger:hover:not(:disabled) {
-  background-color: var(--color-danger-hover);
+  background-color: var(--color-error-bg);
 }
 
 .github {
   background-color: #24292e;
   color: white;
-  font-size: var(--font-base);
-  padding: 0.75rem var(--spacing-lg);
+  font-size: var(--font-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
 }
 
 .github:hover:not(:disabled) {
@@ -52,6 +54,6 @@
 }
 
 .sm {
-  padding: 0.35rem 0.75rem;
-  font-size: var(--font-sm);
+  padding: 2px var(--spacing-sm);
+  font-size: var(--font-xs);
 }

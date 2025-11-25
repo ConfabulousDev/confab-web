@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initCSRF } from '@/services/csrf';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 import './index.css';
 
 // Create a client
@@ -25,7 +27,13 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Outlet />
+        <div className="app-container">
+          <Header />
+          <main>
+            <Outlet />
+          </main>
+          <Footer />
+        </div>
       </QueryClientProvider>
     </ErrorBoundary>
   );

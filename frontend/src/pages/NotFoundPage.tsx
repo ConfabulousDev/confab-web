@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import styles from './NotFoundPage.module.css';
 
 function NotFoundPage() {
+  useDocumentTitle('Not Found');
   return (
     <div className={styles.container}>
       <div className={styles.content}>
