@@ -35,10 +35,6 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get backend-url flag: %w", err)
 	}
-	keyName, err := cmd.Flags().GetString("name")
-	if err != nil {
-		return fmt.Errorf("failed to get name flag: %w", err)
-	}
 
 	// Default backend URL
 	if backendURL == "" {
@@ -46,13 +42,12 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	// Default key name to hostname
-	if keyName == "" {
-		hostname, err := os.Hostname()
-		if err != nil {
-			keyName = "CLI"
-		} else {
-			keyName = hostname
-		}
+	var keyName string
+	hostname, err := os.Hostname()
+	if err != nil {
+		keyName = "CLI"
+	} else {
+		keyName = hostname
 	}
 
 	fmt.Println("=== Confab Setup ===")
@@ -296,5 +291,4 @@ func init() {
 	rootCmd.AddCommand(setupCmd)
 
 	setupCmd.Flags().String("backend-url", "", "Backend API URL (default: http://localhost:8080)")
-	setupCmd.Flags().String("name", "", "Name for this API key (default: hostname)")
 }
