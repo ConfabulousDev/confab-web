@@ -13,53 +13,38 @@ import (
 	"testing"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/types"
 )
 
-// TestSaveFromHook_ValidInput tests the happy path of the SessionEnd hook
+// setupTestEnv sets up a temp directory and configures environment for test isolation.
+// It returns the temp directory path. Call this at the start of each test.
+func setupTestEnv(t *testing.T) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+
+	// Isolate config file
+	t.Setenv("CONFAB_CONFIG_PATH", filepath.Join(tmpDir, "config.json"))
+
+	// Isolate log directory to avoid writing to ~/.confab/logs.
+	// Must reset FIRST, then set env var, so the next Init() picks up the new value.
+	logger.Reset()
+	t.Setenv("CONFAB_LOG_DIR", filepath.Join(tmpDir, "logs"))
+
+	return tmpDir
+}
+
+// TestSaveFromHook_ValidInput tests that saveFromHook outputs the hook response
+// and starts the background upload process. The actual upload is tested separately.
 func TestSaveFromHook_ValidInput(t *testing.T) {
 	// Setup: Create temp directory with transcript file
-	tmpDir := t.TempDir()
+	tmpDir := setupTestEnv(t)
 	transcriptPath := filepath.Join(tmpDir, "session-123.jsonl")
-
-	// Setup: Use temp config file to avoid polluting user's real config
-	testConfigPath := filepath.Join(tmpDir, "config.json")
-	t.Setenv("CONFAB_CONFIG_PATH", testConfigPath)
 
 	// Create a simple transcript file
 	transcriptContent := `{"type":"user","message":"test"}`
 	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0644); err != nil {
 		t.Fatalf("Failed to create transcript: %v", err)
-	}
-
-	// Setup: Mock HTTP server for upload endpoint
-	uploadCalled := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/sessions/save" {
-			t.Errorf("Unexpected path: %s", r.URL.Path)
-		}
-		if r.Method != "POST" {
-			t.Errorf("Expected POST, got %s", r.Method)
-		}
-		uploadCalled = true
-
-		// Return success response
-		response := map[string]interface{}{
-			"success":    true,
-			"session_id": "session-123",
-			"run_id":     1,
-		}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	// Setup: Configure upload with mock server
-	cfg := &config.UploadConfig{
-		BackendURL: server.URL,
-		APIKey:     "test-api-key-1234567890",
-	}
-	if err := config.SaveUploadConfig(cfg); err != nil {
-		t.Fatalf("Failed to save config: %v", err)
 	}
 
 	// Setup: Prepare hook input JSON
@@ -123,7 +108,7 @@ func TestSaveFromHook_ValidInput(t *testing.T) {
 	stdoutOutput := <-stdoutChan
 	stderrOutput := <-stderrChan
 
-	// Verify: No error returned (even if upload fails, it returns nil)
+	// Verify: No error returned
 	if err != nil {
 		t.Errorf("Expected nil error, got: %v", err)
 	}
@@ -138,11 +123,6 @@ func TestSaveFromHook_ValidInput(t *testing.T) {
 		t.Error("Expected hook response Continue=true")
 	}
 
-	// Verify: Upload was called
-	if !uploadCalled {
-		t.Error("Expected upload to be called")
-	}
-
 	// Verify: Stderr contains expected messages
 	if !strings.Contains(stderrOutput, "Confab: Capture Session") {
 		t.Error("Expected 'Confab: Capture Session' in stderr")
@@ -152,8 +132,71 @@ func TestSaveFromHook_ValidInput(t *testing.T) {
 	}
 }
 
+// TestRunBackgroundUpload_Success tests the actual upload logic
+func TestRunBackgroundUpload_Success(t *testing.T) {
+	tmpDir := setupTestEnv(t)
+	transcriptPath := filepath.Join(tmpDir, "session-123.jsonl")
+
+	// Create a simple transcript file
+	transcriptContent := `{"type":"user","message":"test"}`
+	if err := os.WriteFile(transcriptPath, []byte(transcriptContent), 0644); err != nil {
+		t.Fatalf("Failed to create transcript: %v", err)
+	}
+
+	// Setup: Mock HTTP server for upload endpoint
+	uploadCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/sessions/save" {
+			t.Errorf("Unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != "POST" {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+		uploadCalled = true
+
+		response := map[string]interface{}{
+			"success":    true,
+			"session_id": "session-123",
+			"run_id":     1,
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	// Setup: Configure upload with mock server
+	cfg := &config.UploadConfig{
+		BackendURL: server.URL,
+		APIKey:     "test-api-key-1234567890",
+	}
+	if err := config.SaveUploadConfig(cfg); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
+
+	// Prepare hook input JSON
+	hookInput := types.HookInput{
+		SessionID:      "session-123",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		Reason:         "user_exit",
+	}
+	hookInputJSON, _ := json.Marshal(hookInput)
+
+	// Execute
+	err := runBackgroundUpload(string(hookInputJSON))
+
+	// Verify
+	if err != nil {
+		t.Errorf("Expected nil error, got: %v", err)
+	}
+	if !uploadCalled {
+		t.Error("Expected upload to be called")
+	}
+}
+
 // TestSaveFromHook_InvalidJSON tests graceful handling of invalid input
 func TestSaveFromHook_InvalidJSON(t *testing.T) {
+	setupTestEnv(t)
+
 	// Setup: Capture stdin, stdout, stderr
 	oldStdin := os.Stdin
 	oldStdout := os.Stdout
@@ -226,12 +269,12 @@ func TestSaveFromHook_InvalidJSON(t *testing.T) {
 	}
 }
 
-// TestSaveFromHook_MissingTranscript tests handling of missing transcript file
-func TestSaveFromHook_MissingTranscript(t *testing.T) {
-	tmpDir := t.TempDir()
+// TestRunBackgroundUpload_MissingTranscript tests handling of missing transcript file
+func TestRunBackgroundUpload_MissingTranscript(t *testing.T) {
+	tmpDir := setupTestEnv(t)
 	missingPath := filepath.Join(tmpDir, "nonexistent.jsonl")
 
-	// Setup: Prepare hook input with missing transcript
+	// Prepare hook input with missing transcript
 	hookInput := types.HookInput{
 		SessionID:      "session-456",
 		TranscriptPath: missingPath,
@@ -240,81 +283,19 @@ func TestSaveFromHook_MissingTranscript(t *testing.T) {
 	}
 	hookInputJSON, _ := json.Marshal(hookInput)
 
-	// Setup: Capture stdin, stdout, stderr
-	oldStdin := os.Stdin
-	oldStdout := os.Stdout
-	oldStderr := os.Stderr
-	defer func() {
-		os.Stdin = oldStdin
-		os.Stdout = oldStdout
-		os.Stderr = oldStderr
-	}()
-
-	stdinReader, stdinWriter, _ := os.Pipe()
-	stdoutReader, stdoutWriter, _ := os.Pipe()
-	stderrReader, stderrWriter, _ := os.Pipe()
-
-	os.Stdin = stdinReader
-	os.Stdout = stdoutWriter
-	os.Stderr = stderrWriter
-
-	go func() {
-		stdinWriter.Write(hookInputJSON)
-		stdinWriter.Close()
-	}()
-
-	stdoutChan := make(chan string)
-	go func() {
-		var buf bytes.Buffer
-		io.Copy(&buf, stdoutReader)
-		stdoutChan <- buf.String()
-	}()
-
-	stderrChan := make(chan string)
-	go func() {
-		var buf bytes.Buffer
-		io.Copy(&buf, stderrReader)
-		stderrChan <- buf.String()
-	}()
-
 	// Execute
-	err := saveFromHook()
+	err := runBackgroundUpload(string(hookInputJSON))
 
-	stdoutWriter.Close()
-	stderrWriter.Close()
-
-	stdoutOutput := <-stdoutChan
-	stderrOutput := <-stderrChan
-
-	// Verify: Returns nil (graceful failure)
-	if err != nil {
-		t.Errorf("Expected nil error, got: %v", err)
-	}
-
-	// Verify: Valid hook response
-	var hookResponse types.HookResponse
-	if err := json.Unmarshal([]byte(stdoutOutput), &hookResponse); err != nil {
-		t.Fatalf("Failed to parse hook response: %v", err)
-	}
-
-	if !hookResponse.Continue {
-		t.Error("Expected Continue=true")
-	}
-
-	// Verify: Error about discovering files in stderr
-	if !strings.Contains(stderrOutput, "Error discovering files") {
-		t.Errorf("Expected discovery error in stderr, got: %s", stderrOutput)
+	// Verify: Returns error for missing transcript
+	if err == nil {
+		t.Error("Expected error for missing transcript, got nil")
 	}
 }
 
-// TestSaveFromHook_UploadFailure tests handling when upload fails
-func TestSaveFromHook_UploadFailure(t *testing.T) {
-	tmpDir := t.TempDir()
+// TestRunBackgroundUpload_UploadFailure tests handling when upload fails
+func TestRunBackgroundUpload_UploadFailure(t *testing.T) {
+	tmpDir := setupTestEnv(t)
 	transcriptPath := filepath.Join(tmpDir, "session-789.jsonl")
-
-	// Setup: Use temp config file to avoid polluting user's real config
-	testConfigPath := filepath.Join(tmpDir, "config.json")
-	t.Setenv("CONFAB_CONFIG_PATH", testConfigPath)
 
 	// Create transcript
 	if err := os.WriteFile(transcriptPath, []byte(`{"type":"test"}`), 0644); err != nil {
@@ -346,69 +327,14 @@ func TestSaveFromHook_UploadFailure(t *testing.T) {
 	}
 	hookInputJSON, _ := json.Marshal(hookInput)
 
-	// Capture I/O
-	oldStdin := os.Stdin
-	oldStdout := os.Stdout
-	oldStderr := os.Stderr
-	defer func() {
-		os.Stdin = oldStdin
-		os.Stdout = oldStdout
-		os.Stderr = oldStderr
-	}()
-
-	stdinReader, stdinWriter, _ := os.Pipe()
-	stdoutReader, stdoutWriter, _ := os.Pipe()
-	stderrReader, stderrWriter, _ := os.Pipe()
-
-	os.Stdin = stdinReader
-	os.Stdout = stdoutWriter
-	os.Stderr = stderrWriter
-
-	go func() {
-		stdinWriter.Write(hookInputJSON)
-		stdinWriter.Close()
-	}()
-
-	stdoutChan := make(chan string)
-	go func() {
-		var buf bytes.Buffer
-		io.Copy(&buf, stdoutReader)
-		stdoutChan <- buf.String()
-	}()
-
-	stderrChan := make(chan string)
-	go func() {
-		var buf bytes.Buffer
-		io.Copy(&buf, stderrReader)
-		stderrChan <- buf.String()
-	}()
-
 	// Execute
-	err := saveFromHook()
+	err := runBackgroundUpload(string(hookInputJSON))
 
-	stdoutWriter.Close()
-	stderrWriter.Close()
-
-	stdoutOutput := <-stdoutChan
-	stderrOutput := <-stderrChan
-
-	// Verify: Still returns nil (graceful)
-	if err != nil {
-		t.Errorf("Expected nil error, got: %v", err)
+	// Verify: Returns error for upload failure
+	if err == nil {
+		t.Error("Expected error for upload failure, got nil")
 	}
-
-	// Verify: Hook response valid
-	var hookResponse types.HookResponse
-	if err := json.Unmarshal([]byte(stdoutOutput), &hookResponse); err != nil {
-		t.Fatalf("Failed to parse hook response: %v", err)
-	}
-
-	if !hookResponse.Continue {
-		t.Error("Expected Continue=true even on upload failure")
-	}
-
-	// Verify: Error message about upload failure
-	if !strings.Contains(stderrOutput, "Cloud upload failed") {
-		t.Errorf("Expected upload failure message in stderr, got: %s", stderrOutput)
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("Expected error to mention status code 500, got: %v", err)
 	}
 }

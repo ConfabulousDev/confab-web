@@ -128,6 +128,16 @@ func Close() error {
 	return nil
 }
 
+// Reset resets the logger singleton, allowing re-initialization.
+// This is primarily useful for tests that need to change CONFAB_LOG_DIR.
+func Reset() {
+	if instance != nil && instance.file != nil {
+		instance.file.Close()
+	}
+	instance = nil
+	once = sync.Once{}
+}
+
 // SetLevel sets the minimum log level
 func (l *Logger) SetLevel(level Level) {
 	l.mu.Lock()

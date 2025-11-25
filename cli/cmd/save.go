@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
@@ -21,6 +23,7 @@ import (
 )
 
 var interactiveDuration string
+var bgUploadData string // Hidden flag for background upload mode
 
 var saveCmd = &cobra.Command{
 	Use:   "save [session-id...]",
@@ -37,6 +40,11 @@ Examples:
   confab save -i 5d              # Interactive: sessions from last 5 days
   confab save -i 12h             # Interactive: sessions from last 12 hours`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Background upload mode (called by detached process)
+		if bgUploadData != "" {
+			return runBackgroundUpload(bgUploadData)
+		}
+
 		// Interactive mode
 		if interactiveDuration != "" {
 			// Treat "all" as no filter
@@ -97,9 +105,12 @@ func saveSessionsByID(sessionIDs []string) error {
 	return nil
 }
 
-// saveFromHook handles the hook mode (reading from stdin)
+// saveFromHook handles the hook mode (reading from stdin).
+// It reads the hook input, sends the response immediately, then spawns a
+// detached background process to do the actual upload. This ensures the
+// upload continues even if the user spams Ctrl+C.
 func saveFromHook() error {
-	logger.Info("Starting session capture")
+	logger.Info("Starting session capture (hook mode)")
 
 	// Always output valid hook response, even on error
 	defer func() {
@@ -114,35 +125,103 @@ func saveFromHook() error {
 	fmt.Fprintln(os.Stderr, "=== Confab: Capture Session ===")
 	fmt.Fprintln(os.Stderr)
 
-	// Read hook input from stdin
+	// Read hook input from stdin (must do this before spawning background process)
 	hookInput, err := discovery.ReadHookInput()
 	if err != nil {
 		logger.ErrorPrint("Error reading hook input: %v", err)
-		return nil // Don't return error - let defer send success response
+		return nil
 	}
 
 	// Display session info
 	printSessionInfo(hookInput)
 
-	// Discover session files
-	files, err := discovery.DiscoverSessionFiles(hookInput)
+	// Serialize hook input to pass to background process
+	hookInputJSON, err := json.Marshal(hookInput)
 	if err != nil {
-		logger.ErrorPrint("Error discovering files: %v", err)
+		logger.ErrorPrint("Error serializing hook input: %v", err)
 		return nil
 	}
 
-	// Display discovered files
-	printDiscoveredFiles(files)
-
-	// Upload to cloud
-	if err := uploadSessionFiles(hookInput, files); err != nil {
-		return nil // Error already logged and displayed
+	// Spawn detached background process to do the upload
+	if err := spawnBackgroundUpload(string(hookInputJSON)); err != nil {
+		logger.ErrorPrint("Error spawning background upload: %v", err)
+		// Fall back to foreground upload
+		return runBackgroundUpload(string(hookInputJSON))
 	}
 
-	logger.Info("Session capture complete")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "=== Session Captured ===")
+	fmt.Fprintln(os.Stderr, "Upload started in background...")
+	logger.Info("Background upload spawned successfully")
 
+	return nil
+}
+
+// spawnBackgroundUpload starts a detached process to perform the upload.
+// The process is started in a new process group so it won't receive signals
+// from the parent's terminal.
+func spawnBackgroundUpload(hookInputJSON string) error {
+	// Get the path to the current executable
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	// Create the command with the background upload flag
+	cmd := exec.Command(executable, "save", "--bg-upload", hookInputJSON)
+
+	// Detach from parent process group so Ctrl+C doesn't kill it
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true, // Create new process group
+	}
+
+	// Redirect stdout/stderr to /dev/null (logs go to log file)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+
+	// Start the process (don't wait for it)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start background process: %w", err)
+	}
+
+	// Release the process so it continues after we exit
+	if err := cmd.Process.Release(); err != nil {
+		return fmt.Errorf("failed to release background process: %w", err)
+	}
+
+	return nil
+}
+
+// runBackgroundUpload performs the actual upload work.
+// Called either directly (as fallback) or by the detached background process.
+func runBackgroundUpload(hookInputJSON string) error {
+	logger.Info("Starting background upload")
+
+	// Parse the hook input
+	var hookInput types.HookInput
+	if err := json.Unmarshal([]byte(hookInputJSON), &hookInput); err != nil {
+		logger.Error("Error parsing hook input: %v", err)
+		return err
+	}
+
+	logger.Info("Uploading session %s", hookInput.SessionID)
+
+	// Discover session files
+	files, err := discovery.DiscoverSessionFiles(&hookInput)
+	if err != nil {
+		logger.Error("Error discovering files: %v", err)
+		return err
+	}
+
+	logger.Info("Discovered %d file(s)", len(files))
+
+	// Upload to cloud
+	sessionURL, err := upload.UploadToCloud(&hookInput, files)
+	if err != nil {
+		logger.Error("Cloud upload failed: %v", err)
+		return err
+	}
+
+	logger.Info("Upload complete: %s", sessionURL)
 	return nil
 }
 
@@ -309,5 +388,7 @@ func saveInteractive(durationStr string) error {
 
 func init() {
 	saveCmd.Flags().StringVarP(&interactiveDuration, "interactive", "i", "", "Interactive mode: select sessions to upload (optionally filter by duration, e.g., 5d, 12h)")
+	saveCmd.Flags().StringVar(&bgUploadData, "bg-upload", "", "Internal: background upload mode with JSON data")
+	saveCmd.Flags().MarkHidden("bg-upload")
 	rootCmd.AddCommand(saveCmd)
 }
