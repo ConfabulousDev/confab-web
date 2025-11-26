@@ -190,6 +190,24 @@
   overflow: hidden;
 }
 
+/* Image block - user-provided images */
+.imageBlock {
+  margin: var(--spacing-xs) 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.imageBlock img {
+  display: block;
+  max-width: 100%;
+  max-height: 500px;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
 .unknownBlock {
   color: var(--color-text-muted);
   font-style: italic;

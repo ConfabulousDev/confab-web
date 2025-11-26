@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
-import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock } from '@/types/transcript';
+import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock } from '@/types/transcript';
 import CodeBlock from './CodeBlock';
 import BashOutput from './BashOutput';
 import styles from './ContentBlock.module.css';
@@ -107,6 +107,19 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
             ))
           )}
         </div>
+      </div>
+    );
+  }
+
+  if (isImageBlock(block)) {
+    const src =
+      block.source.type === 'base64'
+        ? `data:${block.source.media_type};base64,${block.source.data}`
+        : block.source.url;
+
+    return (
+      <div className={styles.imageBlock}>
+        <img src={src} alt="User provided image" loading="lazy" />
       </div>
     );
   }

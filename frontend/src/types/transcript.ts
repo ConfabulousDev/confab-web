@@ -100,7 +100,7 @@ export interface TokenUsage {
 // Content Blocks
 // ============================================================================
 
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | ImageBlock;
 
 export interface TextBlock {
 	type: 'text';
@@ -138,6 +138,16 @@ export interface ToolResultBlock {
 	tool_use_id: string;
 	content: string | ContentBlock[];
 	is_error?: boolean;
+}
+
+export interface ImageBlock {
+	type: 'image';
+	source: {
+		type: 'base64' | 'url';
+		media_type: string;
+		data?: string; // For base64
+		url?: string; // For URL type
+	};
 }
 
 // ============================================================================
@@ -322,6 +332,10 @@ export function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
 
 export function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
 	return block.type === 'tool_result';
+}
+
+export function isImageBlock(block: ContentBlock): block is ImageBlock {
+	return block.type === 'image';
 }
 
 // ============================================================================
