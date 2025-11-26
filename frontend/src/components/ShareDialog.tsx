@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { SessionShare } from '@/types';
 import { sessionsAPI } from '@/services/api';
-import { useCopyToClipboard } from '@/hooks';
+import { useCopyToClipboard, useAuth } from '@/hooks';
 import { formatDate } from '@/utils';
 import { shareFormSchema, emailSchema, validateForm, getFieldError } from '@/schemas/validation';
 import type { ShareFormData } from '@/schemas/validation';
@@ -17,6 +17,7 @@ interface ShareDialogProps {
 }
 
 function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
+  const { user } = useAuth();
   const [shareVisibility, setShareVisibility] = useState<'public' | 'private'>('public');
   const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState('');
@@ -61,7 +62,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
   }
 
   function addEmail() {
-    const email = newEmail.trim();
+    const email = newEmail.trim().toLowerCase();
 
     if (!email) return;
 
@@ -72,7 +73,13 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
       return;
     }
 
-    if (invitedEmails.includes(email)) {
+    // Prevent self-invite
+    if (user?.email && email === user.email.toLowerCase()) {
+      setError('You cannot invite yourself');
+      return;
+    }
+
+    if (invitedEmails.some((e) => e.toLowerCase() === email)) {
       setError('Email already added');
       return;
     }

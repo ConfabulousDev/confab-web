@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -65,6 +66,16 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			return
 		}
 
+		// Get sharer info early so we can validate against self-invite
+		sharerCtx, sharerCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer sharerCancel()
+		sharer, err := database.GetUserByID(sharerCtx, userID)
+		if err != nil {
+			logger.Error("Failed to get sharer info", "error", err, "user_id", userID)
+			respondError(w, http.StatusInternalServerError, "Failed to get user info")
+			return
+		}
+
 		// Validate private shares have invited emails
 		if req.Visibility == "private" {
 			if len(req.InvitedEmails) == 0 {
@@ -75,10 +86,15 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				respondError(w, http.StatusBadRequest, "Maximum 50 invited emails allowed")
 				return
 			}
-			// Validate email formats
+			// Validate email formats and check for self-invite
+			sharerEmailLower := strings.ToLower(sharer.Email)
 			for _, invitedEmail := range req.InvitedEmails {
 				if !validation.IsValidEmail(invitedEmail) {
 					respondError(w, http.StatusBadRequest, "Invalid email format")
+					return
+				}
+				if strings.ToLower(invitedEmail) == sharerEmailLower {
+					respondError(w, http.StatusBadRequest, "You cannot invite yourself")
 					return
 				}
 			}
@@ -111,14 +127,6 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		// Create context with timeout for database operation
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
-
-		// Get sharer info for email
-		sharer, err := database.GetUserByID(ctx, userID)
-		if err != nil {
-			logger.Error("Failed to get sharer info", "error", err, "user_id", userID)
-			respondError(w, http.StatusInternalServerError, "Failed to get user info")
-			return
-		}
 
 		// Get session info for email (title)
 		session, err := database.GetSessionDetail(ctx, sessionID, userID)
