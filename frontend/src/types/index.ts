@@ -80,6 +80,7 @@ export type APIKey = {
 	id: number;
 	name: string;
 	created_at: string;
+	last_used_at?: string;
 };
 
 // Todo item from Claude Code todo list

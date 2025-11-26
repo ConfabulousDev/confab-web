@@ -164,7 +164,11 @@ function APIKeysPage() {
               <div key={key.id} className={styles.keyItem}>
                 <div className={styles.keyInfo}>
                   <h3>{key.name}</h3>
-                  <p className={styles.keyMeta}>Created {formatRelativeTime(key.created_at)}</p>
+                  <p className={styles.keyMeta}>
+                    Created {formatRelativeTime(key.created_at)}
+                    {' · '}
+                    {key.last_used_at ? `Last used ${formatRelativeTime(key.last_used_at)}` : 'Never used'}
+                  </p>
                 </div>
                 <Button
                   variant="danger"
