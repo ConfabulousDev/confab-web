@@ -5,7 +5,6 @@ import { useCopyToClipboard, useAuth } from '@/hooks';
 import { formatDate } from '@/utils';
 import { shareFormSchema, emailSchema, validateForm, getFieldError } from '@/schemas/validation';
 import type { ShareFormData } from '@/schemas/validation';
-import ErrorDisplay from './ErrorDisplay';
 import FormField from './FormField';
 import Button from './Button';
 import styles from './ShareDialog.module.css';
@@ -152,11 +151,6 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
         </div>
 
         <div className={styles.modalBody}>
-          {error && <ErrorDisplay message={error} />}
-          {validationErrors && getFieldError(validationErrors, 'invited_emails') && (
-            <ErrorDisplay message={getFieldError(validationErrors, 'invited_emails')!} />
-          )}
-
           {createdShareURL ? (
             <div className={styles.successMessage}>
               <h3>✓ Share Link Created</h3>
@@ -200,7 +194,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                 <FormField
                   label="Invite by email"
                   required
-                  error={getFieldError(validationErrors, 'invited_emails')}
+                  error={error || getFieldError(validationErrors, 'invited_emails')}
                 >
                   <div className={styles.emailInputGroup}>
                     <input

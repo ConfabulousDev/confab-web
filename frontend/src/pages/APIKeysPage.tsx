@@ -180,16 +180,6 @@ function APIKeysPage() {
         )}
       </div>
 
-      <div className={styles.help}>
-        <h3>Using API Keys</h3>
-        <p>Use your API key with the Confab CLI:</p>
-        <pre>
-          <code>confab configure --api-key &lt;your-key&gt;</code>
-        </pre>
-        <p>
-          Or use <code>confab login</code> for interactive authentication.
-        </p>
-      </div>
     </div>
   );
 }
