@@ -1,4 +1,4 @@
-// Zod validation schemas for forms and API responses
+// Zod validation schemas for form input validation
 import { z } from 'zod';
 
 // ============================================================================
@@ -11,16 +11,6 @@ export const emailSchema = z
   .min(1, 'Email is required')
   .email('Invalid email address')
   .max(255, 'Email is too long');
-
-export const externalIdSchema = z
-  .string()
-  .min(1, 'External ID is required')
-  .regex(/^[a-zA-Z0-9_-]+$/, 'Invalid external ID format');
-
-export const sessionIdSchema = z
-  .string()
-  .min(1, 'Session ID is required')
-  .uuid('Invalid session ID format (must be UUID)');
 
 // ============================================================================
 // Share Form Schemas
@@ -80,81 +70,6 @@ export const createAPIKeySchema = z.object({
 export type CreateAPIKeyData = z.infer<typeof createAPIKeySchema>;
 
 // ============================================================================
-// API Response Schemas (for runtime validation)
-// ============================================================================
-
-export const userSchema = z.object({
-  name: z.string(),
-  email: emailSchema,
-  avatar_url: z.string().url().optional(),
-});
-
-export const gitInfoSchema = z.object({
-  repo_url: z.string().optional(),
-  branch: z.string().optional(),
-  commit_sha: z.string().optional(),
-  commit_message: z.string().optional(),
-  author: z.string().optional(),
-  is_dirty: z.boolean().optional(),
-});
-
-export const fileDetailSchema = z.object({
-  id: z.number(),
-  file_path: z.string(),
-  file_type: z.string(),
-  size_bytes: z.number(),
-  s3_key: z.string().optional(),
-  s3_uploaded_at: z.string().optional(),
-});
-
-export const runDetailSchema = z.object({
-  id: z.number(),
-  end_timestamp: z.string(),
-  cwd: z.string(),
-  reason: z.string(),
-  transcript_path: z.string(),
-  s3_uploaded: z.boolean(),
-  git_info: gitInfoSchema.optional(),
-  files: z.array(fileDetailSchema),
-});
-
-export const sessionDetailSchema = z.object({
-  id: sessionIdSchema,
-  external_id: externalIdSchema,
-  first_seen: z.string(),
-  runs: z.array(runDetailSchema),
-});
-
-export const sessionSchema = z.object({
-  id: sessionIdSchema,
-  external_id: externalIdSchema,
-  first_seen: z.string(),
-  run_count: z.number(),
-  last_run_time: z.string(),
-  title: z.string().optional(),
-  session_type: z.string(),
-  max_transcript_size: z.number(),
-  git_repo: z.string().optional(),
-  git_branch: z.string().optional(),
-});
-
-export const sessionShareSchema = z.object({
-  id: z.number(),
-  share_token: z.string(),
-  visibility: shareVisibilitySchema,
-  invited_emails: z.array(z.string()).optional(),
-  expires_at: z.string().optional(),
-  created_at: z.string(),
-  last_accessed_at: z.string().optional(),
-});
-
-export const apiKeySchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  created_at: z.string(),
-});
-
-// ============================================================================
 // Utility Functions
 // ============================================================================
 
@@ -193,11 +108,4 @@ export function validateForm<T>(
  */
 export function getFieldError(errors: Record<string, string[]> | undefined, field: string): string | undefined {
   return errors?.[field]?.[0];
-}
-
-/**
- * Validate API response data
- */
-export function validateResponse<T>(schema: z.ZodSchema<T>, data: unknown): T {
-  return schema.parse(data);
 }

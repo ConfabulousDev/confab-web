@@ -1,6 +1,7 @@
 // Centralized API client with error handling and interceptors
+// TODO: Consider adding Zod runtime validation for API responses to catch
+// frontend/backend contract mismatches early (see schemas/validation.ts for existing schemas)
 import { getCSRFToken, initCSRF, clearCSRFToken } from './csrf';
-import type { z } from 'zod';
 
 /**
  * Handles authentication failures by clearing cached state and redirecting to home.
@@ -47,7 +48,6 @@ export class AuthenticationError extends APIError {
 interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
   skipCSRF?: boolean;
-  validateResponse?: z.ZodSchema<unknown>;
 }
 
 class APIClient {
@@ -104,7 +104,7 @@ class APIClient {
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<T> {
-    const { skipAuth, skipCSRF, validateResponse, ...fetchOptions } = options;
+    const { skipAuth, skipCSRF, ...fetchOptions } = options;
 
     const url = endpoint.startsWith('http')
       ? endpoint
@@ -146,23 +146,7 @@ class APIClient {
 
     try {
       const response = await fetch(url, config);
-      const data = await this.handleResponse<T>(response, endpoint);
-
-      // Optional runtime validation with Zod
-      if (validateResponse) {
-        try {
-          return validateResponse.parse(data) as T;
-        } catch (validationError) {
-          throw new APIError(
-            'Invalid response data from server',
-            response.status,
-            response.statusText,
-            validationError
-          );
-        }
-      }
-
-      return data;
+      return await this.handleResponse<T>(response, endpoint);
     } catch (error) {
       if (error instanceof APIError || error instanceof AuthenticationError) {
         throw error;

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   emailSchema,
-  sessionIdSchema,
   shareFormSchema,
   apiKeyNameSchema,
   createAPIKeySchema,
@@ -30,19 +29,6 @@ describe('validation schemas', () => {
     it('should reject emails that are too long', () => {
       const longEmail = 'a'.repeat(250) + '@example.com';
       expect(() => emailSchema.parse(longEmail)).toThrow('Email is too long');
-    });
-  });
-
-  describe('sessionIdSchema', () => {
-    it('should accept valid session IDs', () => {
-      expect(sessionIdSchema.parse('abc123')).toBe('abc123');
-      expect(sessionIdSchema.parse('session-123_test')).toBe('session-123_test');
-    });
-
-    it('should reject invalid session IDs', () => {
-      expect(() => sessionIdSchema.parse('')).toThrow('Session ID is required');
-      expect(() => sessionIdSchema.parse('invalid@session')).toThrow('Invalid session ID format');
-      expect(() => sessionIdSchema.parse('has spaces')).toThrow('Invalid session ID format');
     });
   });
 
