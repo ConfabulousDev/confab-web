@@ -24,7 +24,8 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 
 	// API key errors
-	ErrAPIKeyNotFound = errors.New("API key not found")
+	ErrAPIKeyNotFound    = errors.New("API key not found")
+	ErrAPIKeyLimitExceeded = errors.New("API key limit exceeded")
 
 	// Rate limiting errors
 	ErrRateLimitExceeded = errors.New("weekly upload limit exceeded")

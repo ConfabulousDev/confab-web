@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -61,6 +62,10 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		// Store in database
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
 		if err != nil {
+			if errors.Is(err, db.ErrAPIKeyLimitExceeded) {
+				respondError(w, http.StatusConflict, "API key limit reached. Please delete some existing keys before creating new ones.")
+				return
+			}
 			logger.Error("Failed to create API key in database", "error", err, "user_id", userID, "name", req.Name)
 			respondError(w, http.StatusInternalServerError, "Failed to create API key")
 			return

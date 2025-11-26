@@ -110,13 +110,37 @@ func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
 	return nil
 }
 
+// MaxAPIKeysPerUser is the maximum number of API keys a user can have
+const MaxAPIKeysPerUser = 100
+
+// CountAPIKeys returns the number of API keys for a user
+func (db *DB) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
+	query := `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`
+	var count int
+	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count API keys: %w", err)
+	}
+	return count, nil
+}
+
 // CreateAPIKeyWithReturn creates a new API key and returns the key ID and created_at
+// Returns ErrAPIKeyLimitExceeded if the user already has MaxAPIKeysPerUser keys
 func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
+	// Check if user has reached the limit
+	count, err := db.CountAPIKeys(ctx, userID)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	if count >= MaxAPIKeysPerUser {
+		return 0, time.Time{}, ErrAPIKeyLimitExceeded
+	}
+
 	query := `INSERT INTO api_keys (user_id, key_hash, name) VALUES ($1, $2, $3) RETURNING id, created_at`
 
 	var keyID int64
 	var createdAt time.Time
-	err := db.conn.QueryRowContext(ctx, query, userID, keyHash, name).Scan(&keyID, &createdAt)
+	err = db.conn.QueryRowContext(ctx, query, userID, keyHash, name).Scan(&keyID, &createdAt)
 	if err != nil {
 		return 0, time.Time{}, fmt.Errorf("failed to create API key: %w", err)
 	}

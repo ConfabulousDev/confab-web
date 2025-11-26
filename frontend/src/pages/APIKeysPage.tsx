@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { keysAPI } from '@/services/api';
+import { keysAPI, APIError } from '@/services/api';
 import { useDocumentTitle, useCopyToClipboard } from '@/hooks';
 import { formatRelativeTime } from '@/utils';
 import { createAPIKeySchema, validateForm, getFieldError } from '@/schemas/validation';
@@ -11,6 +11,8 @@ import ErrorDisplay from '@/components/ErrorDisplay';
 import Button from '@/components/Button';
 import Alert from '@/components/Alert';
 import styles from './APIKeysPage.module.css';
+
+const MAX_API_KEYS = 100;
 
 function APIKeysPage() {
   useDocumentTitle('API Keys');
@@ -93,7 +95,18 @@ function APIKeysPage() {
       )}
 
       {error && <ErrorDisplay message={error instanceof Error ? error.message : 'Failed to load API keys'} retry={refetch} />}
-      {createMutation.error && <Alert variant="error">{createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create key'}</Alert>}
+      {createMutation.error && (
+        <Alert variant="error">
+          {createMutation.error instanceof APIError && createMutation.error.status === 409 ? (
+            <>
+              <strong>API Key Limit Reached</strong>
+              <p>You have reached the maximum of {MAX_API_KEYS} API keys. Please delete some unused keys below before creating new ones.</p>
+            </>
+          ) : (
+            createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create key'
+          )}
+        </Alert>
+      )}
       {deleteMutation.error && <Alert variant="error">{deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete key'}</Alert>}
 
       <div className={styles.card}>

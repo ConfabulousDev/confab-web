@@ -936,6 +936,40 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		// Store in database
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, session.UserID, keyHash, keyName)
 		if err != nil {
+			if err == db.ErrAPIKeyLimitExceeded {
+				// Redirect to callback with error that CLI can handle
+				frontendURL := os.Getenv("FRONTEND_URL")
+				redirectURL := fmt.Sprintf("%s?error=api_key_limit_exceeded", callback)
+				logger.Warn("API key limit exceeded", "user_id", session.UserID)
+				// Also show a helpful page before redirecting
+				html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="5;url=%s">
+    <title>API Key Limit Reached - Confab</title>
+    <style>
+        body { font-family: system-ui; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #0f0f0f; color: #fff; }
+        .container { background: #1a1a1a; padding: 2.5rem; border-radius: 1rem; text-align: center; max-width: 500px; }
+        h1 { color: #ef4444; margin-bottom: 1rem; }
+        p { color: #888; margin-bottom: 1.5rem; }
+        a { color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>API Key Limit Reached</h1>
+        <p>You have reached the maximum of 100 API keys. Please delete some unused keys before creating new ones.</p>
+        <p><a href="%s/settings/api-keys">Manage your API keys</a></p>
+        <p style="font-size: 0.8rem;">Redirecting to CLI in 5 seconds...</p>
+    </div>
+</body>
+</html>`, redirectURL, frontendURL)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte(html))
+				return
+			}
 			logger.Error("Failed to create API key in database", "error", err, "user_id", session.UserID)
 			http.Error(w, "Failed to create API key", http.StatusInternalServerError)
 			return
@@ -1138,6 +1172,13 @@ func HandleDeviceToken(database *db.DB) http.HandlerFunc {
 		// Store API key
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, *dc.UserID, keyHash, dc.KeyName)
 		if err != nil {
+			if err == db.ErrAPIKeyLimitExceeded {
+				logger.Warn("API key limit exceeded during device flow", "user_id", *dc.UserID)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "api_key_limit_exceeded"})
+				return
+			}
 			logger.Error("Failed to create API key", "error", err, "user_id", *dc.UserID)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)

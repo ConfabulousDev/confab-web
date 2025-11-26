@@ -35,6 +35,25 @@ type DeviceCodeResponse struct {
 	Interval        int    `json:"interval"`
 }
 
+// APIKeyLimitError is returned when the user has too many API keys
+type APIKeyLimitError struct {
+	BackendURL string
+}
+
+func (e *APIKeyLimitError) Error() string {
+	// Extract the frontend URL from backend URL (remove any /api suffix and path)
+	frontendURL := e.BackendURL
+	// For fly.dev backend, the frontend is typically at the same domain
+	// For localhost:8080 backend, frontend is typically at localhost:5173
+	if frontendURL == "http://localhost:8080" {
+		frontendURL = "http://localhost:5173"
+	}
+	return fmt.Sprintf(`API key limit reached (maximum 100 keys).
+
+Please delete some unused API keys before creating a new one.
+Manage your keys at: %s/keys`, frontendURL)
+}
+
 // DeviceTokenResponse is the response from /auth/device/token
 type DeviceTokenResponse struct {
 	AccessToken string `json:"access_token,omitempty"`
@@ -168,6 +187,8 @@ func pollForToken(backendURL string, deviceCode *DeviceCodeResponse) (string, er
 		case "slow_down":
 			pollInterval += 5 * time.Second
 			continue
+		case "api_key_limit_exceeded":
+			return "", &APIKeyLimitError{BackendURL: backendURL}
 		case "":
 			if token.AccessToken != "" {
 				return token.AccessToken, nil
