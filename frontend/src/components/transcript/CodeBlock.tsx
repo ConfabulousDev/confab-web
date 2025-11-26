@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Prism from 'prismjs';
 import { useCopyToClipboard } from '@/hooks';
+import { stripAnsi } from '@/utils';
 
 // Import core languages
 import 'prismjs/components/prism-bash';
@@ -63,10 +64,11 @@ function CodeBlock({
     return div.innerHTML;
   }
 
-  // Check if code needs truncation
+  // Strip ANSI codes and check if code needs truncation
   const { displayCode, isTruncated } = useMemo(() => {
+    const cleanCode = stripAnsi(code);
     if (truncateLines > 0 && !showingFull) {
-      const lines = code.split('\n');
+      const lines = cleanCode.split('\n');
       if (lines.length > truncateLines) {
         return {
           displayCode: lines.slice(0, truncateLines).join('\n'),
@@ -75,7 +77,7 @@ function CodeBlock({
       }
     }
     return {
-      displayCode: code,
+      displayCode: cleanCode,
       isTruncated: false,
     };
   }, [code, truncateLines, showingFull]);

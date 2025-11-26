@@ -1,6 +1,17 @@
 // Shared utility functions for Confab frontend
 
 /**
+ * Strip ANSI escape codes from text.
+ * Handles color codes, cursor movement, clearing, and other terminal sequences.
+ */
+export function stripAnsi(text: string): string {
+	// Matches all ANSI escape sequences:
+	// - \x1b (or \u001b) followed by [ and any params ending in a letter
+	// - Also handles OSC sequences (\x1b]) and other escape types
+	return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][AB012]|\x1b[PX^_][^\x1b]*\x1b\\|\x1b.?/g, '');
+}
+
+/**
  * Format a date string for display
  */
 export function formatDate(dateStr: string): string {

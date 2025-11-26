@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock } from '@/types/transcript';
+import { stripAnsi } from '@/utils';
 import CodeBlock from './CodeBlock';
 import BashOutput from './BashOutput';
 import styles from './ContentBlock.module.css';
@@ -32,7 +33,8 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
 
   // Parse markdown and sanitize HTML
   function renderMarkdown(text: string): string {
-    const html = marked.parse(text) as string;
+    const cleaned = stripAnsi(text);
+    const html = marked.parse(cleaned) as string;
     return DOMPurify.sanitize(html, {
       ADD_ATTR: ['target'], // Allow target="_blank" on links
     });
@@ -62,7 +64,7 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
           <span className={styles.thinkingLabel}>Thinking</span>
         </div>
         <div className={styles.thinkingContent}>
-          <pre>{block.thinking}</pre>
+          <pre>{stripAnsi(block.thinking)}</pre>
         </div>
       </div>
     );

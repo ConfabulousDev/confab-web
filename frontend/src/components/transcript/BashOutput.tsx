@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useCopyToClipboard } from '@/hooks';
+import { stripAnsi } from '@/utils';
 import styles from './BashOutput.module.css';
 
 interface BashOutputProps {
@@ -12,15 +13,8 @@ interface BashOutputProps {
 function BashOutput({ output, command = '', exitCode = null, maxHeight = '400px' }: BashOutputProps) {
   const { copy, copied } = useCopyToClipboard();
 
-  // Parse ANSI color codes (basic support)
-  function parseANSI(text: string): string {
-    // Remove ANSI escape sequences for now
-    // In the future, we could convert them to HTML colors
-    return text.replace(/\x1b\[[0-9;]*m/g, '');
-  }
-
   // Format the output
-  const cleanOutput = useMemo(() => parseANSI(output), [output]);
+  const cleanOutput = useMemo(() => stripAnsi(output), [output]);
   const hasError = exitCode !== null && exitCode !== 0;
 
   return (

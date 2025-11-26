@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatBytes, formatDate, formatRelativeTime } from './utils';
+import { formatBytes, formatDate, formatRelativeTime, stripAnsi } from './utils';
 
 describe('formatBytes', () => {
   it('should format 0 bytes', () => {
@@ -76,5 +76,32 @@ describe('formatRelativeTime', () => {
   it('should format future days', () => {
     const future = new Date(Date.now() + 172800000).toISOString();
     expect(formatRelativeTime(future)).toBe('in 2d');
+  });
+});
+
+describe('stripAnsi', () => {
+  it('should strip color codes', () => {
+    expect(stripAnsi('\x1b[31mred\x1b[0m')).toBe('red');
+    expect(stripAnsi('\x1b[1;32mbold green\x1b[0m')).toBe('bold green');
+  });
+
+  it('should strip cursor movement codes', () => {
+    expect(stripAnsi('\x1b[2Jcleared\x1b[H')).toBe('cleared');
+    expect(stripAnsi('\x1b[10Aup 10 lines')).toBe('up 10 lines');
+  });
+
+  it('should handle text without ANSI codes', () => {
+    expect(stripAnsi('plain text')).toBe('plain text');
+    expect(stripAnsi('')).toBe('');
+  });
+
+  it('should handle multiple ANSI codes in sequence', () => {
+    expect(stripAnsi('\x1b[1m\x1b[31m\x1b[44mbold red on blue\x1b[0m')).toBe('bold red on blue');
+  });
+
+  it('should handle unicode escape notation', () => {
+    // This is how it appears in JSON strings
+    const input = 'prefix\x1b[32mgreen\x1b[0msuffix';
+    expect(stripAnsi(input)).toBe('prefixgreensuffix');
   });
 });

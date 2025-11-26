@@ -1,5 +1,5 @@
 // Re-export all utilities from utils.ts
-export { formatDate, formatBytes, formatRelativeTime } from './utils';
+export { formatDate, formatBytes, formatRelativeTime, stripAnsi } from './utils';
 
 // Re-export sorting utilities
 export { sortData, type SortDirection } from './sorting';
