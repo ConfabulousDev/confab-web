@@ -31,7 +31,7 @@ function APIKeysPage() {
   const createMutation = useMutation({
     mutationFn: (name: string) => keysAPI.create(name),
     onSuccess: (result) => {
-      setCreatedKey({ key: result.key, name: result.api_key.name });
+      setCreatedKey({ key: result.key, name: result.name });
       setNewKeyName('');
       setShowCreateForm(false);
       queryClient.invalidateQueries({ queryKey: ['apiKeys'] });

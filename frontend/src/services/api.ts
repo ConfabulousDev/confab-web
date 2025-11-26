@@ -268,7 +268,7 @@ export const keysAPI = {
   list: () => api.get<Array<import('@/types').APIKey>>('/keys'),
 
   create: (name: string) =>
-    api.post<{ key: string; api_key: import('@/types').APIKey }>('/keys', { name }),
+    api.post<{ id: number; key: string; name: string; created_at: string }>('/keys', { name }),
 
   delete: (keyId: number) => api.delete(`/keys/${keyId}`),
 };
