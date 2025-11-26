@@ -98,7 +98,6 @@ function APIKeysPage() {
 
       <div className={styles.card}>
         <div className={styles.cardHeader}>
-          <h2>Your API Keys</h2>
           {!showCreateForm && (
             <Button variant="primary" onClick={() => setShowCreateForm(true)}>
               + Create New Key
