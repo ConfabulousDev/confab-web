@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "validate-transcript": "npx tsx scripts/validate-transcript.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.10",

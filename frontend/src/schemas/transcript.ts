@@ -108,20 +108,26 @@ export const ThinkingMetadataSchema = z.object({
   triggers: z.array(z.string()),
 });
 
-export const ToolUseResultSchema = z.object({
-  status: z.string(), // 'completed' | 'interrupted' | 'error' - use string for forward compat
-  prompt: z.string(),
-  agentId: z.string(),
-  content: z.array(ContentBlockSchema),
-  totalDurationMs: z.number(),
-  totalTokens: z.number(),
-  totalToolUseCount: z.number(),
-  usage: TokenUsageSchema,
+// ToolUseResult contains tool-specific metadata about what the tool returned.
+// This is highly variable depending on the tool (Bash, Read, Grep, etc.) so we use
+// a flexible schema that accepts any structure.
+export const ToolUseResultSchema = z.union([
+  z.string(), // Error messages or simple results
+  z.record(z.string(), z.unknown()), // Tool-specific structured data
+]);
+
+// Todo item from TodoWrite tool
+export const TodoItemSchema = z.object({
+  content: z.string(),
+  status: z.string(), // 'pending' | 'in_progress' | 'completed'
+  activeForm: z.string(),
 });
 
 export const UserMessageSchema = BaseMessageSchema.extend({
   type: z.literal('user'),
   thinkingMetadata: ThinkingMetadataSchema.optional(),
+  slug: z.string().optional(), // Session slug for display
+  todos: z.array(TodoItemSchema).nullable().optional(), // Todo list state
   message: z.object({
     role: z.literal('user'),
     content: z.union([z.string(), z.array(ContentBlockSchema)]),
@@ -139,7 +145,7 @@ export const AssistantMessageSchema = BaseMessageSchema.extend({
     type: z.literal('message'),
     role: z.literal('assistant'),
     content: z.array(ContentBlockSchema),
-    stop_reason: z.string(), // 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' - use string for forward compat
+    stop_reason: z.string().nullable(), // 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | null
     stop_sequence: z.string().nullable(),
     usage: TokenUsageSchema,
   }),
@@ -233,6 +239,78 @@ export interface TranscriptParseResult {
 }
 
 /**
+ * Extract detailed errors from Zod issues, handling union errors specially.
+ * For union errors, we find the branch that matched the type and show its errors.
+ */
+function extractDetailedErrors(
+  issues: z.ZodIssue[],
+  messageType: string | undefined
+): Array<{ path: string; message: string; expected?: string; received?: string }> {
+  const errors: Array<{ path: string; message: string; expected?: string; received?: string }> = [];
+
+  for (const issue of issues) {
+    if (issue.code === 'invalid_union') {
+      // In Zod v4, invalid_union has `errors: ZodIssue[][]` - array of issue arrays for each branch
+      const branchErrors = issue.errors;
+      if (branchErrors && branchErrors.length > 0) {
+        // Find the best branch to show errors from
+        // Priority 1: Branch where the type matches (no type error means the type field was correct)
+        // Priority 2: Branch with fewest total errors
+        let bestBranchIssues: z.ZodIssue[] | undefined;
+        let minIssueCount = Infinity;
+
+        for (const branchIssueArray of branchErrors) {
+          // Check if this branch has a type mismatch error
+          const typeIssue = branchIssueArray.find(
+            (i: z.ZodIssue) => i.path.length === 1 && i.path[0] === 'type' && i.code === 'invalid_value'
+          );
+
+          if (!typeIssue) {
+            // No type error means this branch's type matched - this is our best match
+            bestBranchIssues = branchIssueArray;
+            break;
+          }
+
+          // Check if this branch expects our message type (even if it failed)
+          if (typeIssue.code === 'invalid_value') {
+            const expectedValues = typeIssue.values;
+            if (messageType && expectedValues.includes(messageType)) {
+              // This branch expects our type but has other errors
+              bestBranchIssues = branchIssueArray;
+              break;
+            }
+          }
+
+          // Track the branch with fewest errors as fallback
+          if (branchIssueArray.length < minIssueCount) {
+            minIssueCount = branchIssueArray.length;
+            bestBranchIssues = branchIssueArray;
+          }
+        }
+
+        if (bestBranchIssues) {
+          // Recursively extract errors from the best branch, excluding type mismatch errors
+          const filteredIssues = bestBranchIssues.filter(
+            (i: z.ZodIssue) => !(i.path.length === 1 && i.path[0] === 'type' && i.code === 'invalid_value')
+          );
+          errors.push(...extractDetailedErrors(filteredIssues, messageType));
+        }
+      }
+    } else {
+      // Regular error - format it directly
+      errors.push({
+        path: issue.path.length > 0 ? issue.path.join('.') : '(root)',
+        message: issue.message,
+        expected: 'expected' in issue ? String(issue.expected) : undefined,
+        received: 'received' in issue ? String(issue.received) : undefined,
+      });
+    }
+  }
+
+  return errors;
+}
+
+/**
  * Format a Zod error into a human-readable structure
  */
 function formatZodError(error: z.ZodError, rawJson: string, lineIndex: number): TranscriptValidationError {
@@ -247,16 +325,22 @@ function formatZodError(error: z.ZodError, rawJson: string, lineIndex: number): 
     // Ignore - raw JSON may not be valid
   }
 
+  // Extract detailed errors, handling union types specially
+  const detailedErrors = extractDetailedErrors(error.issues, messageType);
+
+  // If we couldn't extract detailed errors, fall back to showing the raw Zod error
+  const finalErrors = detailedErrors.length > 0 ? detailedErrors : error.issues.map((issue) => ({
+    path: issue.path.length > 0 ? issue.path.join('.') : '(root)',
+    message: issue.message,
+    expected: 'expected' in issue ? String(issue.expected) : undefined,
+    received: 'received' in issue ? String(issue.received) : undefined,
+  }));
+
   return {
     line: lineIndex + 1,
-    rawJson: rawJson.length > 200 ? rawJson.slice(0, 200) + '...' : rawJson,
+    rawJson, // Keep full raw JSON for debugging
     messageType,
-    errors: error.issues.map((issue) => ({
-      path: issue.path.length > 0 ? issue.path.join('.') : '(root)',
-      message: issue.message,
-      expected: 'expected' in issue ? String(issue.expected) : undefined,
-      received: 'received' in issue ? String(issue.received) : undefined,
-    })),
+    errors: finalErrors,
   };
 }
 

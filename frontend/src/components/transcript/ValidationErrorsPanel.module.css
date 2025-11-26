@@ -152,8 +152,8 @@
   font-family: monospace;
   overflow-x: auto;
   white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 150px;
+  word-break: break-word;
+  max-height: 400px;
   overflow-y: auto;
   margin: 0;
 }

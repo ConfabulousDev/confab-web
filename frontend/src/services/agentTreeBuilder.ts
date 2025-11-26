@@ -102,20 +102,23 @@ function findAgentReferences(
 			}
 
 			// Also check in the message's toolUseResult field (direct property)
-			if (message.toolUseResult?.agentId) {
-				const agentData = message.toolUseResult;
-				references.set(agentData.agentId, {
-					agentId: agentData.agentId,
-					toolUseId: result.tool_use_id,
-					parentMessageId: message.uuid,
-					prompt: agentData.prompt || '',
-					metadata: {
-						status: agentData.status,
-						totalDurationMs: agentData.totalDurationMs,
-						totalTokens: agentData.totalTokens,
-						totalToolUseCount: agentData.totalToolUseCount
-					}
-				});
+			// toolUseResult can be a string or an object - only check if it's an object with agentId
+			if (message.toolUseResult && typeof message.toolUseResult === 'object') {
+				const agentData = AgentToolUseResultSchema.safeParse(message.toolUseResult);
+				if (agentData.success && agentData.data.agentId) {
+					references.set(agentData.data.agentId, {
+						agentId: agentData.data.agentId,
+						toolUseId: result.tool_use_id,
+						parentMessageId: message.uuid,
+						prompt: agentData.data.prompt || '',
+						metadata: {
+							status: agentData.data.status,
+							totalDurationMs: agentData.data.totalDurationMs,
+							totalTokens: agentData.data.totalTokens,
+							totalToolUseCount: agentData.data.totalToolUseCount
+						}
+					});
+				}
 			}
 		}
 	}

@@ -70,7 +70,15 @@ function ValidationErrorsPanel({ errors }: ValidationErrorsPanelProps) {
                 ))}
                 <div className={styles.rawJson}>
                   <div className={styles.rawJsonLabel}>Raw JSON:</div>
-                  <pre className={styles.rawJsonContent}>{error.rawJson}</pre>
+                  <pre className={styles.rawJsonContent}>
+                    {(() => {
+                      try {
+                        return JSON.stringify(JSON.parse(error.rawJson), null, 2);
+                      } catch {
+                        return error.rawJson;
+                      }
+                    })()}
+                  </pre>
                 </div>
               </div>
             )}
