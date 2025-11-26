@@ -172,7 +172,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			"name", user.Name)
 
 		// Check email whitelist (if configured)
-		if !isEmailAllowed(user.Email) {
+		if !isEmailAllowed(ctx, database, user.Email) {
 			logger.Warn("Email not in whitelist", "email", user.Email)
 			// Redirect to frontend with error instead of showing raw HTTP error
 			frontendURL := os.Getenv("FRONTEND_URL")
@@ -554,7 +554,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			"name", user.Name)
 
 		// Check email whitelist
-		if !isEmailAllowed(user.Email) {
+		if !isEmailAllowed(ctx, database, user.Email) {
 			logger.Warn("Email not in whitelist", "email", user.Email)
 			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
 				frontendURL,
@@ -1492,10 +1492,12 @@ func isLocalhostURL(urlStr string) bool {
 	return true
 }
 
-// isEmailAllowed checks if an email is in the whitelist
-// If ALLOWED_EMAILS is not set, all emails are allowed (open registration)
-// If ALLOWED_EMAILS is set, only those emails can sign up/login
-func isEmailAllowed(email string) bool {
+// isEmailAllowed checks if an email is authorized to use the application
+// An email is allowed if:
+// 1. ALLOWED_EMAILS is not set (open registration), OR
+// 2. Email is in ALLOWED_EMAILS list, OR
+// 3. ALLOW_INVITED_EMAILS_AFTER_TS is set (and > 0) and the email was invited on or after that timestamp
+func isEmailAllowed(ctx context.Context, database *db.DB, email string) bool {
 	allowedEmailsEnv := os.Getenv("ALLOWED_EMAILS")
 
 	// If no whitelist configured, allow all emails
@@ -1508,14 +1510,36 @@ func isEmailAllowed(email string) bool {
 		return false
 	}
 
-	// Parse comma-separated list
+	// Parse comma-separated list and check hardcoded whitelist first (fast path)
 	allowedEmails := strings.Split(allowedEmailsEnv, ",")
-
-	// Check if email is in whitelist (case-insensitive)
 	emailLower := strings.ToLower(strings.TrimSpace(email))
 	for _, allowed := range allowedEmails {
 		allowedLower := strings.ToLower(strings.TrimSpace(allowed))
 		if allowedLower == emailLower {
+			return true
+		}
+	}
+
+	// Check if email was previously invited
+	// ALLOW_INVITED_EMAILS_AFTER_TS: only emails invited on or after this unix timestamp are allowed
+	// Set to a large value (e.g., 2000000000) to effectively disable invite-based login
+	allowInvitedAfterTS := os.Getenv("ALLOW_INVITED_EMAILS_AFTER_TS")
+	if allowInvitedAfterTS != "" && database != nil {
+		ts, err := strconv.ParseInt(allowInvitedAfterTS, 10, 64)
+		if err != nil {
+			logger.Warn("Invalid ALLOW_INVITED_EMAILS_AFTER_TS value", "value", allowInvitedAfterTS, "error", err)
+			return false
+		}
+
+		afterTime := time.Unix(ts, 0)
+		wasInvited, err := database.HasEmailBeenInvitedAfter(ctx, email, afterTime)
+		if err != nil {
+			// Fail closed - don't allow if we can't verify
+			logger.Warn("Failed to check invited email status", "email", email, "error", err)
+			return false
+		}
+		if wasInvited {
+			logger.Info("Email allowed via previous invite", "email", email)
 			return true
 		}
 	}

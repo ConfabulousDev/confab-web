@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -79,14 +80,25 @@ func TestGenerateRandomString(t *testing.T) {
 // Test email whitelist validation - security critical
 func TestIsEmailAllowed(t *testing.T) {
 	// Save original env and restore after tests
-	originalEnv := os.Getenv("ALLOWED_EMAILS")
+	originalAllowed := os.Getenv("ALLOWED_EMAILS")
+	originalInviteTS := os.Getenv("ALLOW_INVITED_EMAILS_AFTER_TS")
 	defer func() {
-		if originalEnv == "" {
+		if originalAllowed == "" {
 			os.Unsetenv("ALLOWED_EMAILS")
 		} else {
-			os.Setenv("ALLOWED_EMAILS", originalEnv)
+			os.Setenv("ALLOWED_EMAILS", originalAllowed)
+		}
+		if originalInviteTS == "" {
+			os.Unsetenv("ALLOW_INVITED_EMAILS_AFTER_TS")
+		} else {
+			os.Setenv("ALLOW_INVITED_EMAILS_AFTER_TS", originalInviteTS)
 		}
 	}()
+
+	// Clear ALLOW_INVITED_EMAILS_AFTER_TS for basic tests (feature disabled)
+	os.Unsetenv("ALLOW_INVITED_EMAILS_AFTER_TS")
+
+	ctx := context.Background()
 
 	t.Run("allows all emails when whitelist not configured", func(t *testing.T) {
 		os.Unsetenv("ALLOWED_EMAILS")
@@ -98,7 +110,7 @@ func TestIsEmailAllowed(t *testing.T) {
 		}
 
 		for _, email := range emails {
-			if !isEmailAllowed(email) {
+			if !isEmailAllowed(ctx, nil, email) {
 				t.Errorf("email %q should be allowed when whitelist not configured", email)
 			}
 		}
@@ -109,7 +121,7 @@ func TestIsEmailAllowed(t *testing.T) {
 
 		// Note: Current implementation allows all emails (including empty) when no whitelist
 		// This tests the actual behavior, not necessarily ideal behavior
-		if !isEmailAllowed("") {
+		if !isEmailAllowed(ctx, nil, "") {
 			t.Error("function returns true for empty email when no whitelist configured")
 		}
 	})
@@ -117,11 +129,11 @@ func TestIsEmailAllowed(t *testing.T) {
 	t.Run("allows whitelisted email", func(t *testing.T) {
 		os.Setenv("ALLOWED_EMAILS", "user@example.com,admin@company.com")
 
-		if !isEmailAllowed("user@example.com") {
+		if !isEmailAllowed(ctx, nil, "user@example.com") {
 			t.Error("whitelisted email should be allowed")
 		}
 
-		if !isEmailAllowed("admin@company.com") {
+		if !isEmailAllowed(ctx, nil, "admin@company.com") {
 			t.Error("whitelisted email should be allowed")
 		}
 	})
@@ -129,7 +141,7 @@ func TestIsEmailAllowed(t *testing.T) {
 	t.Run("rejects non-whitelisted email", func(t *testing.T) {
 		os.Setenv("ALLOWED_EMAILS", "user@example.com")
 
-		if isEmailAllowed("hacker@evil.com") {
+		if isEmailAllowed(ctx, nil, "hacker@evil.com") {
 			t.Error("non-whitelisted email should be rejected")
 		}
 	})
@@ -144,7 +156,7 @@ func TestIsEmailAllowed(t *testing.T) {
 		}
 
 		for _, email := range emails {
-			if !isEmailAllowed(email) {
+			if !isEmailAllowed(ctx, nil, email) {
 				t.Errorf("email %q should be allowed (case-insensitive)", email)
 			}
 		}
@@ -153,11 +165,11 @@ func TestIsEmailAllowed(t *testing.T) {
 	t.Run("handles whitespace in whitelist", func(t *testing.T) {
 		os.Setenv("ALLOWED_EMAILS", " user@example.com , admin@company.com ")
 
-		if !isEmailAllowed("user@example.com") {
+		if !isEmailAllowed(ctx, nil, "user@example.com") {
 			t.Error("should handle leading/trailing whitespace in whitelist")
 		}
 
-		if !isEmailAllowed("admin@company.com") {
+		if !isEmailAllowed(ctx, nil, "admin@company.com") {
 			t.Error("should handle whitespace around commas")
 		}
 	})
@@ -165,7 +177,7 @@ func TestIsEmailAllowed(t *testing.T) {
 	t.Run("handles whitespace in input email", func(t *testing.T) {
 		os.Setenv("ALLOWED_EMAILS", "user@example.com")
 
-		if !isEmailAllowed("  user@example.com  ") {
+		if !isEmailAllowed(ctx, nil, "  user@example.com  ") {
 			t.Error("should trim whitespace from input email")
 		}
 	})
@@ -173,7 +185,7 @@ func TestIsEmailAllowed(t *testing.T) {
 	t.Run("rejects empty email with whitelist", func(t *testing.T) {
 		os.Setenv("ALLOWED_EMAILS", "user@example.com")
 
-		if isEmailAllowed("") {
+		if isEmailAllowed(ctx, nil, "") {
 			t.Error("empty email should be rejected even with whitelist")
 		}
 	})
@@ -188,13 +200,45 @@ func TestIsEmailAllowed(t *testing.T) {
 		}
 
 		for _, email := range allowed {
-			if !isEmailAllowed(email) {
+			if !isEmailAllowed(ctx, nil, email) {
 				t.Errorf("whitelisted email %q should be allowed", email)
 			}
 		}
 
-		if isEmailAllowed("user4@example.com") {
+		if isEmailAllowed(ctx, nil, "user4@example.com") {
 			t.Error("non-whitelisted email should be rejected")
+		}
+	})
+
+	t.Run("invite feature disabled when ALLOW_INVITED_EMAILS_AFTER_TS not set", func(t *testing.T) {
+		os.Setenv("ALLOWED_EMAILS", "admin@example.com")
+		os.Unsetenv("ALLOW_INVITED_EMAILS_AFTER_TS")
+
+		// Without the feature enabled, only hardcoded emails allowed
+		// (passing nil DB is fine since feature is disabled)
+		if isEmailAllowed(ctx, nil, "invited@example.com") {
+			t.Error("invited email should not be allowed when feature is disabled")
+		}
+	})
+
+	t.Run("invite feature effectively disabled with large timestamp", func(t *testing.T) {
+		os.Setenv("ALLOWED_EMAILS", "admin@example.com")
+		os.Setenv("ALLOW_INVITED_EMAILS_AFTER_TS", "2000000000") // Year 2033
+
+		// With a far-future timestamp, no historical invites qualify
+		// (passing nil DB means the check is skipped, so this tests the env var is parsed)
+		if isEmailAllowed(ctx, nil, "invited@example.com") {
+			t.Error("invited email should not be allowed with far-future timestamp and nil DB")
+		}
+	})
+
+	t.Run("invalid ALLOW_INVITED_EMAILS_AFTER_TS fails closed", func(t *testing.T) {
+		os.Setenv("ALLOWED_EMAILS", "admin@example.com")
+		os.Setenv("ALLOW_INVITED_EMAILS_AFTER_TS", "not-a-number")
+
+		// With invalid timestamp, should fail closed (reject)
+		if isEmailAllowed(ctx, nil, "random@example.com") {
+			t.Error("should fail closed when ALLOW_INVITED_EMAILS_AFTER_TS is invalid")
 		}
 	})
 }

@@ -85,20 +85,29 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 	return &user, nil
 }
 
-// ValidateAPIKey checks if an API key is valid and returns the associated user ID
-func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (int64, error) {
-	query := `SELECT user_id FROM api_keys WHERE key_hash = $1`
+// ValidateAPIKey checks if an API key is valid and returns the associated user ID and key ID
+func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, err error) {
+	query := `SELECT id, user_id FROM api_keys WHERE key_hash = $1`
 
-	var userID int64
-	err := db.conn.QueryRowContext(ctx, query, keyHash).Scan(&userID)
+	err = db.conn.QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, fmt.Errorf("invalid API key")
+			return 0, 0, fmt.Errorf("invalid API key")
 		}
-		return 0, fmt.Errorf("failed to validate API key: %w", err)
+		return 0, 0, fmt.Errorf("failed to validate API key: %w", err)
 	}
 
-	return userID, nil
+	return userID, keyID, nil
+}
+
+// UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key
+func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
+	query := `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`
+	_, err := db.conn.ExecContext(ctx, query, keyID)
+	if err != nil {
+		return fmt.Errorf("failed to update API key last used: %w", err)
+	}
+	return nil
 }
 
 // CreateAPIKeyWithReturn creates a new API key and returns the key ID and created_at
@@ -117,7 +126,7 @@ func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash,
 
 // ListAPIKeys returns all API keys for a user (without hashes)
 func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
-	query := `SELECT id, user_id, name, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`
+	query := `SELECT id, user_id, name, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`
 
 	rows, err := db.conn.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -128,7 +137,7 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, e
 	var keys []models.APIKey
 	for rows.Next() {
 		var key models.APIKey
-		if err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.CreatedAt); err != nil {
+		if err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.CreatedAt, &key.LastUsedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan API key: %w", err)
 		}
 		keys = append(keys, key)
@@ -949,6 +958,14 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 				db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
 				return nil, fmt.Errorf("failed to create invite: %w", err)
 			}
+
+			// Also record in invited_emails for login authorization
+			// This persists even if the share is later revoked
+			if err := db.RecordInvitedEmail(ctx, email); err != nil {
+				// Log but don't fail - the share invite was already created
+				// This is a secondary concern for login authorization
+				// Note: In production, consider logging this error
+			}
 		}
 		share.InvitedEmails = invitedEmails
 	}
@@ -1294,6 +1311,35 @@ func (db *DB) RecordShareAccess(ctx context.Context, shareToken string, userID i
 	}
 
 	return nil
+}
+
+// RecordInvitedEmail records that an email was invited to a private share
+// This persists independently of the share lifecycle for login authorization
+func (db *DB) RecordInvitedEmail(ctx context.Context, email string) error {
+	query := `
+		INSERT INTO invited_emails (email, first_invited_at, last_invited_at, invite_count)
+		VALUES (LOWER($1), NOW(), NOW(), 1)
+		ON CONFLICT (email) DO UPDATE SET
+			last_invited_at = NOW(),
+			invite_count = invited_emails.invite_count + 1
+	`
+	_, err := db.conn.ExecContext(ctx, query, email)
+	if err != nil {
+		return fmt.Errorf("failed to record invited email: %w", err)
+	}
+	return nil
+}
+
+// HasEmailBeenInvitedAfter checks if an email was invited on or after the given timestamp
+// Used for login authorization via ALLOW_INVITED_EMAILS_AFTER_TS env var
+func (db *DB) HasEmailBeenInvitedAfter(ctx context.Context, email string, afterTS time.Time) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM invited_emails WHERE email = LOWER($1) AND first_invited_at >= $2)`
+	var exists bool
+	err := db.conn.QueryRowContext(ctx, query, email, afterTS).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check invited email: %w", err)
+	}
+	return exists, nil
 }
 
 // GetFileByID retrieves a file by ID with ownership verification

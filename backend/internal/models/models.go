@@ -50,11 +50,12 @@ type WebSession struct {
 
 // APIKey represents an API key for authentication
 type APIKey struct {
-	ID        int64     `json:"id"`
-	UserID    int64     `json:"user_id"`
-	KeyHash   string    `json:"-"` // Never expose the hash
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         int64      `json:"id"`
+	UserID     int64      `json:"user_id"`
+	KeyHash    string     `json:"-"` // Never expose the hash
+	Name       string     `json:"name"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 }
 
 // Session represents a session in Confab

@@ -73,11 +73,16 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 			keyHash := HashAPIKey(rawKey)
 
 			// Validate key in database
-			userID, err := database.ValidateAPIKey(r.Context(), keyHash)
+			userID, keyID, err := database.ValidateAPIKey(r.Context(), keyHash)
 			if err != nil {
 				http.Error(w, "Invalid API key", http.StatusUnauthorized)
 				return
 			}
+
+			// Update last used timestamp (fire and forget - don't block the request)
+			go func() {
+				_ = database.UpdateAPIKeyLastUsed(context.Background(), keyID)
+			}()
 
 			// Add user ID to request context
 			ctx := context.WithValue(r.Context(), userIDContextKey, userID)
