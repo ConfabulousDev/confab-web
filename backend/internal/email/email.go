@@ -234,23 +234,23 @@ func renderTextTemplate(params ShareInvitationParams) string {
 		title = "Untitled Session"
 	}
 
-	text := fmt.Sprintf(`Hi,
+	text := fmt.Sprintf(`%s (%s) shared a Confab session with you.
 
-%s (%s) has shared a Confab session with you:
+Confab is a tool for saving and sharing AI conversation transcripts.
 
-"%s"
+Session: %s
 
-View the session here: %s
+View it here: %s
 `, params.SharerName, params.SharerEmail, title, params.ShareURL)
 
 	if params.ExpiresAt != nil {
 		text += fmt.Sprintf("\nThis link expires on %s.\n", params.ExpiresAt.Format("January 2, 2006"))
 	}
 
-	// TODO: Add unsubscribe link for GDPR/CAN-SPAM compliance
 	text += `
 ---
-Confab - AI conversation sharing
+Confab · 548 Market St #835, San Francisco, CA 94104
+Unsubscribe: https://confab.fly.dev/unsubscribe
 `
 
 	return text
@@ -275,7 +275,11 @@ const htmlTemplate = `<!DOCTYPE html>
         <tr>
             <td style="padding: 20px;">
                 <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.4; color: #374151;">
-                    <strong>{{.SharerName}}</strong> ({{.SharerEmail}}) shared a session with you:
+                    <strong>{{.SharerName}}</strong> ({{.SharerEmail}}) shared a Confab session with you.
+                </p>
+
+                <p style="margin: 0 0 12px 0; font-size: 14px; line-height: 1.4; color: #6b7280;">
+                    Confab is a tool for saving and sharing AI conversation transcripts. Click below to view the shared session:
                 </p>
 
                 <div style="margin: 0 0 16px 0; padding: 12px; background-color: #f3f4f6; border-radius: 4px; border-left: 3px solid #6366f1;">
@@ -290,10 +294,12 @@ const htmlTemplate = `<!DOCTYPE html>
                     </tr>
                 </table>
 
-                {{if .ExpiresAt}}<p style="margin: 0 0 16px 0; font-size: 13px; color: #6b7280;">Expires {{.ExpiresAt}}</p>{{end}}
+                {{if .ExpiresAt}}<p style="margin: 0 0 16px 0; font-size: 13px; color: #6b7280;">This link expires on {{.ExpiresAt}}.</p>{{end}}
 
-                <!-- TODO: Add unsubscribe link for GDPR/CAN-SPAM compliance -->
-                <p style="margin: 16px 0 0 0; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">Confab</p>
+                <p style="margin: 16px 0 0 0; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; line-height: 1.5; color: #9ca3af;">
+                    Confab · 548 Market St #835, San Francisco, CA 94104<br>
+                    <a href="https://confab.fly.dev/unsubscribe" style="color: #9ca3af;">Unsubscribe</a>
+                </p>
             </td>
         </tr>
     </table>
