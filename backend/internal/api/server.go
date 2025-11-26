@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/csrf"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/email"
 	"github.com/santaclaude2025/confab/backend/internal/ratelimit"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
 )
@@ -38,20 +39,22 @@ type Server struct {
 	db                *db.DB
 	storage           *storage.S3Storage
 	oauthConfig       auth.OAuthConfig
-	frontendURL       string                // Base URL for the frontend (for building session URLs)
-	globalLimiter     ratelimit.RateLimiter // Global rate limiter for all requests
-	authLimiter       ratelimit.RateLimiter // Stricter limiter for auth endpoints
-	uploadLimiter     ratelimit.RateLimiter // Stricter limiter for uploads
-	validationLimiter ratelimit.RateLimiter // Moderate limiter for API key validation
+	emailService      *email.RateLimitedService // Email service for share invitations (may be nil)
+	frontendURL       string                    // Base URL for the frontend (for building session URLs)
+	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
+	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
+	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
+	validationLimiter ratelimit.RateLimiter     // Moderate limiter for API key validation
 }
 
 // NewServer creates a new API server
-func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuthConfig) *Server {
+func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuthConfig, emailService *email.RateLimitedService) *Server {
 	return &Server{
-		db:          database,
-		storage:     store,
-		oauthConfig: oauthConfig,
-		frontendURL: os.Getenv("FRONTEND_URL"),
+		db:           database,
+		storage:      store,
+		oauthConfig:  oauthConfig,
+		emailService: emailService,
+		frontendURL:  os.Getenv("FRONTEND_URL"),
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -250,7 +253,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
-			r.Post("/sessions/{id}/share", HandleCreateShare(s.db, frontendURL))
+			r.Post("/sessions/{id}/share", HandleCreateShare(s.db, frontendURL, s.emailService))
 			r.Get("/sessions/{id}/shares", HandleListShares(s.db))
 			r.Get("/shares", HandleListAllUserShares(s.db))
 			r.Delete("/shares/{shareToken}", HandleRevokeShare(s.db))

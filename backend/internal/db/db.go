@@ -733,8 +733,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 
 // SessionDetail represents detailed session information
 type SessionDetail struct {
-	ID         string      `json:"id"`          // UUID primary key for URL routing
-	ExternalID string      `json:"external_id"` // External system's session ID
+	ID         string      `json:"id"`              // UUID primary key for URL routing
+	ExternalID string      `json:"external_id"`     // External system's session ID
+	Title      *string     `json:"title,omitempty"` // Session title (may be nil)
 	FirstSeen  time.Time   `json:"first_seen"`
 	Runs       []RunDetail `json:"runs"`
 }
@@ -765,8 +766,8 @@ type FileDetail struct {
 func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int64) (*SessionDetail, error) {
 	// First, get the session and verify ownership
 	var session SessionDetail
-	sessionQuery := `SELECT id, external_id, first_seen FROM sessions WHERE id = $1 AND user_id = $2`
-	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(&session.ID, &session.ExternalID, &session.FirstSeen)
+	sessionQuery := `SELECT id, external_id, title, first_seen FROM sessions WHERE id = $1 AND user_id = $2`
+	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(&session.ID, &session.ExternalID, &session.Title, &session.FirstSeen)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound

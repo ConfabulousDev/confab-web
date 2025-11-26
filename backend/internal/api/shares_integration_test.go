@@ -43,7 +43,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 
 		// Execute handler
 		w := httptest.NewRecorder()
-		handler := HandleCreateShare(env.DB, "https://confab.dev")
+		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
 		handler(w, req)
 
 		// Assert response
@@ -98,7 +98,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		handler := HandleCreateShare(env.DB, "https://confab.dev")
+		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
 		handler(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)
@@ -146,7 +146,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		handler := HandleCreateShare(env.DB, "https://confab.dev")
+		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
 		handler(w, req)
 
 		testutil.AssertErrorResponse(t, w, http.StatusNotFound, "Session not found")
@@ -171,7 +171,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		handler := HandleCreateShare(env.DB, "https://confab.dev")
+		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
 		handler(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusBadRequest)
@@ -204,7 +204,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		handler := HandleCreateShare(env.DB, "https://confab.dev")
+		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
 		handler(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusBadRequest)

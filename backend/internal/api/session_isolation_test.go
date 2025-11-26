@@ -194,7 +194,7 @@ func TestSessionIsolation_Integration(t *testing.T) {
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		handler := HandleCreateShare(env.DB, "https://confab.dev")
+		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
 		handler(w, req)
 
 		// Bob should get 404 or 403 - session doesn't exist for him

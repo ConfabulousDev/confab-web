@@ -13,6 +13,7 @@ import (
 	"github.com/santaclaude2025/confab/backend/internal/api"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/email"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
 )
 
@@ -35,8 +36,17 @@ func main() {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 
+	// Initialize email service
+	resendService := email.NewResendService(
+		config.EmailConfig.APIKey,
+		config.EmailConfig.FromAddress,
+		config.EmailConfig.FromName,
+	)
+	emailService := email.NewRateLimitedService(resendService, config.EmailConfig.RateLimitPerHour)
+	log.Printf("Email service configured with Resend (rate limit: %d/hour)", config.EmailConfig.RateLimitPerHour)
+
 	// Create API server
-	server := api.NewServer(database, store, config.OAuthConfig)
+	server := api.NewServer(database, store, config.OAuthConfig, emailService)
 	router := server.SetupRoutes()
 
 	// HTTP server configuration
@@ -79,6 +89,14 @@ type Config struct {
 	WriteTimeout time.Duration
 	S3Config     storage.S3Config
 	OAuthConfig  auth.OAuthConfig
+	EmailConfig  EmailConfig
+}
+
+type EmailConfig struct {
+	APIKey           string
+	FromAddress      string
+	FromName         string
+	RateLimitPerHour int
 }
 
 func loadConfig() Config {
@@ -187,6 +205,27 @@ func loadConfig() Config {
 		log.Fatal("ALLOWED_ORIGINS is required (comma-separated list of allowed origins)")
 	}
 
+	// Validate required email configuration
+	resendAPIKey := os.Getenv("RESEND_API_KEY")
+	if resendAPIKey == "" {
+		log.Fatal("RESEND_API_KEY is required")
+	}
+
+	emailFromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
+	if emailFromAddress == "" {
+		log.Fatal("EMAIL_FROM_ADDRESS is required")
+	}
+
+	emailFromName := os.Getenv("EMAIL_FROM_NAME")
+	if emailFromName == "" {
+		emailFromName = "Confab"
+	}
+
+	emailRateLimitPerHour := 100 // Default: 100 emails per hour per user
+	if rateLimit := os.Getenv("EMAIL_RATE_LIMIT_PER_HOUR"); rateLimit != "" {
+		fmt.Sscanf(rateLimit, "%d", &emailRateLimitPerHour)
+	}
+
 	return Config{
 		Port:         port,
 		DatabaseURL:  databaseURL,
@@ -206,6 +245,12 @@ func loadConfig() Config {
 			GoogleClientID:     googleClientID,
 			GoogleClientSecret: googleClientSecret,
 			GoogleRedirectURL:  googleRedirectURL,
+		},
+		EmailConfig: EmailConfig{
+			APIKey:           resendAPIKey,
+			FromAddress:      emailFromAddress,
+			FromName:         emailFromName,
+			RateLimitPerHour: emailRateLimitPerHour,
 		},
 	}
 }

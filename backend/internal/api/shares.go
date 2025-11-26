@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/santaclaude2025/confab/backend/internal/email"
 	"github.com/santaclaude2025/confab/backend/internal/logger"
 	"github.com/santaclaude2025/confab/backend/internal/validation"
 )
@@ -30,10 +31,12 @@ type CreateShareResponse struct {
 	Visibility    string     `json:"visibility"`
 	InvitedEmails []string   `json:"invited_emails,omitempty"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	EmailsSent    bool       `json:"emails_sent"`              // True if all invitation emails were sent successfully
+	EmailFailures []string   `json:"email_failures,omitempty"` // List of emails that failed to send
 }
 
 // HandleCreateShare creates a new share for a session
-func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
+func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
@@ -73,9 +76,19 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 				return
 			}
 			// Validate email formats
-			for _, email := range req.InvitedEmails {
-				if !validation.IsValidEmail(email) {
+			for _, invitedEmail := range req.InvitedEmails {
+				if !validation.IsValidEmail(invitedEmail) {
 					respondError(w, http.StatusBadRequest, "Invalid email format")
+					return
+				}
+			}
+		}
+
+		// Check email rate limit before creating share (for private shares with email service)
+		if req.Visibility == "private" && emailService != nil {
+			if err := emailService.CheckRateLimit(userID, len(req.InvitedEmails)); err != nil {
+				if errors.Is(err, email.ErrRateLimitExceeded) {
+					respondError(w, http.StatusTooManyRequests, "Email rate limit exceeded. Try again later.")
 					return
 				}
 			}
@@ -99,6 +112,26 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
+		// Get sharer info for email
+		sharer, err := database.GetUserByID(ctx, userID)
+		if err != nil {
+			logger.Error("Failed to get sharer info", "error", err, "user_id", userID)
+			respondError(w, http.StatusInternalServerError, "Failed to get user info")
+			return
+		}
+
+		// Get session info for email (title)
+		session, err := database.GetSessionDetail(ctx, sessionID, userID)
+		if err != nil {
+			if errors.Is(err, db.ErrSessionNotFound) {
+				respondError(w, http.StatusNotFound, "Session not found")
+				return
+			}
+			logger.Error("Failed to get session info", "error", err, "user_id", userID, "session_id", sessionID)
+			respondError(w, http.StatusInternalServerError, "Failed to get session info")
+			return
+		}
+
 		// Create share in database
 		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.Visibility, expiresAt, req.InvitedEmails)
 		if err != nil {
@@ -118,6 +151,47 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 		// Build share URL (uses session ID in URL)
 		shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
 
+		// Send invitation emails for private shares
+		var emailsSent bool
+		var emailFailures []string
+		if req.Visibility == "private" && emailService != nil && len(req.InvitedEmails) > 0 {
+			emailsSent = true
+			sharerName := sharer.Email // Default to email
+			if sharer.Name != nil && *sharer.Name != "" {
+				sharerName = *sharer.Name
+			}
+
+			// Get session title (use external ID as fallback)
+			sessionTitle := session.ExternalID
+			if session.Title != nil && *session.Title != "" {
+				sessionTitle = *session.Title
+			}
+
+			for _, toEmail := range req.InvitedEmails {
+				emailParams := email.ShareInvitationParams{
+					ToEmail:      toEmail,
+					SharerName:   sharerName,
+					SharerEmail:  sharer.Email,
+					SessionTitle: sessionTitle,
+					ShareURL:     shareURL,
+					ExpiresAt:    expiresAt,
+				}
+
+				if err := emailService.SendShareInvitation(r.Context(), userID, emailParams); err != nil {
+					logger.Error("Failed to send share invitation email",
+						"error", err,
+						"to_email", toEmail,
+						"share_token", shareToken)
+					emailFailures = append(emailFailures, toEmail)
+					emailsSent = false
+				} else {
+					logger.Info("Share invitation email sent",
+						"to_email", toEmail,
+						"share_token", shareToken)
+				}
+			}
+		}
+
 		// Audit log: Share created
 		logger.Info("Share created",
 			"user_id", userID,
@@ -125,7 +199,9 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 			"share_token", shareToken,
 			"visibility", share.Visibility,
 			"invited_emails_count", len(share.InvitedEmails),
-			"expires_at", share.ExpiresAt)
+			"expires_at", share.ExpiresAt,
+			"emails_sent", emailsSent,
+			"email_failures_count", len(emailFailures))
 
 		// Return response
 		response := CreateShareResponse{
@@ -134,6 +210,8 @@ func HandleCreateShare(database *db.DB, frontendURL string) http.HandlerFunc {
 			Visibility:    share.Visibility,
 			InvitedEmails: share.InvitedEmails,
 			ExpiresAt:     share.ExpiresAt,
+			EmailsSent:    emailsSent && len(emailFailures) == 0,
+			EmailFailures: emailFailures,
 		}
 
 		respondJSON(w, http.StatusOK, response)
