@@ -67,6 +67,7 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     }, [messages, agentInsertionMap]);
 
     // Setup virtual scrolling with TanStack Virtual
+    // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
     const virtualizer = useVirtualizer({
       count: virtualItems.length,
       getScrollElement: () => parentRef.current,

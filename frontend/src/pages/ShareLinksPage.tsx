@@ -45,6 +45,7 @@ function ShareLinksPage() {
 
   useEffect(() => {
     fetchShares();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchShares is intentionally omitted; we only want to fetch on mount
   }, []);
 
   async function fetchShares() {

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import type { RunDetail, TodoItem } from '@/types';
+import { useState } from 'react';
+import type { RunDetail } from '@/types';
 import { formatBytes, getRepoWebURL, getCommitURL } from '@/utils';
+import { useTodos } from '@/hooks';
 import TranscriptViewer from './transcript/TranscriptViewer';
 import styles from './RunCard.module.css';
 
@@ -12,7 +13,7 @@ interface RunCardProps {
 }
 
 function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProps) {
-  const [todos, setTodos] = useState<{ agent_id: string; items: TodoItem[] }[]>([]);
+  const { todos } = useTodos({ run, shareToken, sessionId });
   const [expandedFiles, setExpandedFiles] = useState<Set<number>>(new Set());
 
   function toggleFileExpanded(fileId: number) {
@@ -26,57 +27,6 @@ function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProp
       return next;
     });
   }
-
-  // Extract agent ID from todo file path
-  // Format: {sessionID}-agent-{agentID}.json
-  function extractAgentID(filePath: string): string {
-    const fileName = filePath.split('/').pop() ?? '';
-    const match = fileName.match(/-agent-([^.]+)\.json$/);
-    return match?.[1] ?? 'unknown';
-  }
-
-  async function loadTodos() {
-    const todoFiles = run.files.filter((f) => f.file_type === 'todo');
-    if (todoFiles.length === 0) return;
-
-    const loadedTodos: { agent_id: string; items: TodoItem[] }[] = [];
-
-    for (const file of todoFiles) {
-      try {
-        // Fetch todo file content from backend
-        // Use shared endpoint if shareToken is provided
-        const url =
-          shareToken && sessionId
-            ? `/api/v1/sessions/${sessionId}/shared/${shareToken}/files/${file.id}/content`
-            : `/api/v1/runs/${run.id}/files/${file.id}/content`;
-        const response = await fetch(url, {
-          credentials: 'include',
-        });
-
-        if (!response.ok) continue;
-
-        const content = await response.text();
-        const items: TodoItem[] = JSON.parse(content);
-
-        // Only add if there are actual todos
-        if (items.length > 0) {
-          loadedTodos.push({
-            agent_id: extractAgentID(file.file_path),
-            items,
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load todo file:', file.file_path, err);
-      }
-    }
-
-    setTodos(loadedTodos);
-  }
-
-  useEffect(() => {
-    loadTodos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className={styles.runCard}>

@@ -1,10 +1,7 @@
-import { useState, useEffect } from 'react';
-import type { SessionShare } from '@/types';
-import { sessionsAPI } from '@/services/api';
-import { useCopyToClipboard, useAuth } from '@/hooks';
+import { useEffect } from 'react';
+import { useCopyToClipboard, useAuth, useShareDialog } from '@/hooks';
 import { formatDate } from '@/utils';
-import { shareFormSchema, emailSchema, validateForm, getFieldError } from '@/schemas/validation';
-import type { ShareFormData } from '@/schemas/validation';
+import { getFieldError } from '@/schemas/validation';
 import FormField from './FormField';
 import Button from './Button';
 import styles from './ShareDialog.module.css';
@@ -17,126 +14,40 @@ interface ShareDialogProps {
 
 function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
   const { user } = useAuth();
-  const [shareVisibility, setShareVisibility] = useState<'public' | 'private'>('public');
-  const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
-  const [newEmail, setNewEmail] = useState('');
-  const [expiresInDays, setExpiresInDays] = useState<number | null>(7);
-  const [createdShareURL, setCreatedShareURL] = useState('');
-  const [shares, setShares] = useState<SessionShare[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingShares, setLoadingShares] = useState(false);
-  const [error, setError] = useState('');
-  const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>();
   const { copy, copied } = useCopyToClipboard();
+
+  const {
+    visibility,
+    setVisibility,
+    invitedEmails,
+    newEmail,
+    setNewEmail,
+    expiresInDays,
+    setExpiresInDays,
+    createdShareURL,
+    shares,
+    loading,
+    loadingShares,
+    error,
+    validationErrors,
+    addEmail,
+    removeEmail,
+    createShare,
+    revokeShare,
+    resetForm,
+    fetchShares,
+  } = useShareDialog({
+    sessionId,
+    userEmail: user?.email,
+  });
 
   useEffect(() => {
     if (isOpen) {
       resetForm();
       fetchShares();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
-
-  function resetForm() {
-    setShareVisibility('public');
-    setInvitedEmails([]);
-    setNewEmail('');
-    setExpiresInDays(7);
-    setCreatedShareURL('');
-    setError('');
-    setValidationErrors(undefined);
-  }
-
-  async function fetchShares() {
-    setLoadingShares(true);
-    setError('');
-    try {
-      const data = await sessionsAPI.getShares(sessionId);
-      setShares(data);
-    } catch (err) {
-      console.error('Failed to load shares:', err);
-      setError('Failed to load existing shares');
-    } finally {
-      setLoadingShares(false);
-    }
-  }
-
-  function addEmail() {
-    const email = newEmail.trim().toLowerCase();
-
-    if (!email) return;
-
-    // Validate email with Zod
-    const result = emailSchema.safeParse(email);
-    if (!result.success) {
-      setError(result.error.issues[0]?.message ?? 'Invalid email');
-      return;
-    }
-
-    // Prevent self-invite
-    if (user?.email && email === user.email.toLowerCase()) {
-      setError('You cannot invite yourself');
-      return;
-    }
-
-    if (invitedEmails.some((e) => e.toLowerCase() === email)) {
-      setError('Email already added');
-      return;
-    }
-
-    setInvitedEmails([...invitedEmails, email]);
-    setNewEmail('');
-    setError('');
-    setValidationErrors(undefined);
-  }
-
-  function removeEmail(email: string) {
-    setInvitedEmails(invitedEmails.filter((e) => e !== email));
-  }
-
-  async function createShare() {
-    setLoading(true);
-    setError('');
-    setValidationErrors(undefined);
-
-    // Validate form data with Zod
-    const formData: ShareFormData = {
-      visibility: shareVisibility,
-      invited_emails: shareVisibility === 'private' ? invitedEmails : [],
-      expires_in_days: expiresInDays,
-    };
-
-    const validation = validateForm(shareFormSchema, formData);
-
-    if (!validation.success) {
-      setValidationErrors(validation.errors);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const result = await sessionsAPI.createShare(sessionId, validation.data);
-      setCreatedShareURL(result.share_url);
-      await fetchShares();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create share');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function revokeShare(shareToken: string) {
-    if (!confirm('Are you sure you want to revoke this share?')) {
-      return;
-    }
-
-    setError('');
-    try {
-      await sessionsAPI.revokeShare(shareToken);
-      await fetchShares();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to revoke share');
-    }
-  }
 
   if (!isOpen) return null;
 
@@ -175,22 +86,22 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                 <label>
                   <input
                     type="radio"
-                    checked={shareVisibility === 'public'}
-                    onChange={() => setShareVisibility('public')}
+                    checked={visibility === 'public'}
+                    onChange={() => setVisibility('public')}
                   />
                   <strong>Public</strong> - Anyone with link
                 </label>
                 <label>
                   <input
                     type="radio"
-                    checked={shareVisibility === 'private'}
-                    onChange={() => setShareVisibility('private')}
+                    checked={visibility === 'private'}
+                    onChange={() => setVisibility('private')}
                   />
                   <strong>Private</strong> - Invite specific people
                 </label>
               </div>
 
-              {shareVisibility === 'private' && (
+              {visibility === 'private' && (
                 <FormField
                   label="Invite by email"
                   required
@@ -200,10 +111,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                     <input
                       type="email"
                       value={newEmail}
-                      onChange={(e) => {
-                        setNewEmail(e.target.value);
-                        setError('');
-                      }}
+                      onChange={(e) => setNewEmail(e.target.value)}
                       placeholder="email@example.com"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
