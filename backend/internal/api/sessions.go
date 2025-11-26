@@ -281,19 +281,19 @@ func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
 	return nil
 }
 
-// sanitizeTitleText removes HTML tags and escapes HTML entities to prevent XSS
+// sanitizeTitleText removes HTML tags and decodes HTML entities
+// Note: We don't HTML-escape here because React automatically escapes text content.
+// Double-escaping would cause &gt; to display literally instead of as >
 func sanitizeTitleText(input string) string {
-	// First, remove all HTML tags using regex
+	// Remove all HTML tags using regex
 	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
 	cleaned := htmlTagRegex.ReplaceAllString(input, "")
 
-	// Unescape HTML entities (e.g., &lt; -> <) and then escape them again
-	// This handles cases like "&lt;script&gt;" -> "<script>" -> "&lt;script&gt;"
-	unescaped := html.UnescapeString(cleaned)
-	escaped := html.EscapeString(unescaped)
+	// Decode HTML entities (e.g., &lt; -> <, &gt; -> >)
+	decoded := html.UnescapeString(cleaned)
 
 	// Trim whitespace
-	return strings.TrimSpace(escaped)
+	return strings.TrimSpace(decoded)
 }
 
 // extractSessionMetadata parses the transcript JSONL to extract title and session type

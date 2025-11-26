@@ -243,20 +243,22 @@ func TestSanitizeString(t *testing.T) {
 }
 
 func TestSanitizeTitleText(t *testing.T) {
+	// Note: We don't HTML-escape output because React automatically escapes text content.
+	// The goal is to strip HTML tags and decode entities so titles display correctly.
 	tests := []struct {
 		name     string
 		input    string
 		expected string
 	}{
 		{
-			name:     "removes script tags and escapes content",
+			name:     "removes script tags",
 			input:    "<script>alert('xss')</script>",
-			expected: "alert(&#39;xss&#39;)",
+			expected: "alert('xss')",
 		},
 		{
 			name:     "removes script tags with surrounding text",
 			input:    "Hello <script>alert('xss')</script> World",
-			expected: "Hello alert(&#39;xss&#39;) World",
+			expected: "Hello alert('xss') World",
 		},
 		{
 			name:     "removes img tags with onerror",
@@ -269,19 +271,19 @@ func TestSanitizeTitleText(t *testing.T) {
 			expected: "Hello World",
 		},
 		{
-			name:     "escapes HTML entities and removes empty tags",
+			name:     "preserves special characters",
 			input:    "This & that < or > maybe",
-			expected: "This &amp; that  maybe",
+			expected: "This & that  maybe",
 		},
 		{
-			name:     "handles already escaped HTML entities",
+			name:     "decodes HTML entities",
 			input:    "&lt;script&gt;alert('xss')&lt;/script&gt;",
-			expected: "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
+			expected: "<script>alert('xss')</script>",
 		},
 		{
-			name:     "handles mixed tags and entities",
+			name:     "removes tags and preserves ampersand",
 			input:    "<script>alert('test')</script> & <b>bold</b>",
-			expected: "alert(&#39;test&#39;) &amp; bold",
+			expected: "alert('test') & bold",
 		},
 		{
 			name:     "trims whitespace",
@@ -306,7 +308,7 @@ func TestSanitizeTitleText(t *testing.T) {
 		{
 			name:     "handles data: protocol",
 			input:    `<img src="data:text/html,<script>alert('xss')</script>">`,
-			expected: "alert(&#39;xss&#39;)&#34;&gt;",
+			expected: `alert('xss')">`,
 		},
 		{
 			name:     "handles nested tags",
@@ -316,7 +318,12 @@ func TestSanitizeTitleText(t *testing.T) {
 		{
 			name:     "handles malformed tags",
 			input:    "<script<script>alert('xss')</script>",
-			expected: "alert(&#39;xss&#39;)",
+			expected: "alert('xss')",
+		},
+		{
+			name:     "preserves > in build output",
+			input:    "&gt; [frontend-builder 6/6] RUN npm run build",
+			expected: "> [frontend-builder 6/6] RUN npm run build",
 		},
 	}
 
@@ -325,19 +332,6 @@ func TestSanitizeTitleText(t *testing.T) {
 			result := sanitizeTitleText(tt.input)
 			if result != tt.expected {
 				t.Errorf("sanitizeTitleText(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-
-			// Verify no script tags remain
-			if strings.Contains(strings.ToLower(result), "<script") {
-				t.Errorf("sanitizeTitleText(%q) still contains <script tag: %q", tt.input, result)
-			}
-
-			// Verify no HTML tags remain
-			if strings.Contains(result, "<") && strings.Contains(result, ">") {
-				// Check if it's an escaped entity
-				if !strings.Contains(result, "&lt;") && !strings.Contains(result, "&gt;") {
-					t.Errorf("sanitizeTitleText(%q) may contain unescaped HTML tags: %q", tt.input, result)
-				}
 			}
 		})
 	}
