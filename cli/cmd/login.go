@@ -79,12 +79,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// defaultKeyName returns the hostname or "CLI" as fallback
+// defaultKeyName returns a descriptive name for the API key
 func defaultKeyName() string {
-	if hostname, err := os.Hostname(); err == nil {
-		return hostname
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		return "Confab CLI"
 	}
-	return "CLI"
+	return fmt.Sprintf("%s (Confab CLI)", hostname)
 }
 
 // doDeviceLogin performs the device code login flow and saves credentials
