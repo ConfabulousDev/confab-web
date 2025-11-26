@@ -1,4 +1,5 @@
 // Service for building agent tree structure from transcripts
+import { z } from 'zod';
 import type {
 	TranscriptLine,
 	AgentNode,
@@ -10,7 +11,7 @@ import {
 	isUserMessage,
 	isToolUseBlock,
 	getToolResults
-} from '@/types/transcript';
+} from '@/types';
 import { fetchTranscript } from './transcriptService';
 
 /**
@@ -19,11 +20,11 @@ import { fetchTranscript } from './transcriptService';
  */
 function extractAgentIdFromPath(filePath: string): string | null {
 	const match = filePath.match(/agent-([a-f0-9]{8})\.jsonl$/);
-	return match ? match[1] : null;
+	return match?.[1] ?? null;
 }
 
 interface AgentMetadata {
-	status?: 'completed' | 'interrupted' | 'error';
+	status?: string; // 'completed' | 'interrupted' | 'error' - use string for forward compat
 	totalDurationMs?: number;
 	totalTokens?: number;
 	totalToolUseCount?: number;
@@ -35,6 +36,32 @@ interface AgentReference {
 	parentMessageId: string;
 	prompt: string;
 	metadata: AgentMetadata;
+}
+
+// Schema for agent tool use result embedded in content blocks
+// Use passthrough() to preserve unknown fields for forward compatibility
+const AgentToolUseResultSchema = z.object({
+	agentId: z.string().optional(),
+	prompt: z.string().optional(),
+	status: z.string().optional(), // 'completed' | 'interrupted' | 'error' - use string for forward compat
+	totalDurationMs: z.number().optional(),
+	totalTokens: z.number().optional(),
+	totalToolUseCount: z.number().optional(),
+}).passthrough();
+
+const BlockWithToolUseResultSchema = z.object({
+	toolUseResult: AgentToolUseResultSchema,
+});
+
+type AgentToolUseResult = z.infer<typeof AgentToolUseResultSchema>;
+
+/**
+ * Extract agent data from a block that might have toolUseResult
+ */
+function extractAgentData(block: unknown): AgentToolUseResult | undefined {
+	const result = BlockWithToolUseResultSchema.safeParse(block);
+	if (!result.success) return undefined;
+	return result.data.toolUseResult;
 }
 
 /**
@@ -56,30 +83,20 @@ function findAgentReferences(
 			if (typeof result.content !== 'string' && Array.isArray(result.content)) {
 				// Content might be an array with toolUseResult
 				for (const block of result.content) {
-					if (typeof block === 'object' && block !== null && 'toolUseResult' in block) {
-						const agentData = (block as { toolUseResult?: {
-							agentId?: string;
-							prompt?: string;
-							status?: 'completed' | 'interrupted' | 'error';
-							totalDurationMs?: number;
-							totalTokens?: number;
-							totalToolUseCount?: number;
-						} }).toolUseResult;
-
-						if (agentData?.agentId) {
-							references.set(agentData.agentId, {
-								agentId: agentData.agentId,
-								toolUseId: result.tool_use_id,
-								parentMessageId: message.uuid,
-								prompt: agentData.prompt || '',
-								metadata: {
-									status: agentData.status,
-									totalDurationMs: agentData.totalDurationMs,
-									totalTokens: agentData.totalTokens,
-									totalToolUseCount: agentData.totalToolUseCount
-								}
-							});
-						}
+					const agentData = extractAgentData(block);
+					if (agentData?.agentId) {
+						references.set(agentData.agentId, {
+							agentId: agentData.agentId,
+							toolUseId: result.tool_use_id,
+							parentMessageId: message.uuid,
+							prompt: agentData.prompt || '',
+							metadata: {
+								status: agentData.status,
+								totalDurationMs: agentData.totalDurationMs,
+								totalTokens: agentData.totalTokens,
+								totalToolUseCount: agentData.totalToolUseCount
+							}
+						});
 					}
 				}
 			}
@@ -267,6 +284,7 @@ export function findAgentParentMessage(
 	// Walk backwards to find the assistant message with this tool_use_id
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const msg = messages[i];
+		if (!msg) continue;
 		if (isAssistantMessage(msg)) {
 			const hasToolUse = msg.message.content.some(
 				(block) => isToolUseBlock(block) && block.id === toolUseId

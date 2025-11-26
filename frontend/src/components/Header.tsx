@@ -11,7 +11,8 @@ function Header() {
   // Close menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target;
+      if (menuRef.current && target instanceof Node && !menuRef.current.contains(target)) {
         setMenuOpen(false);
       }
     }

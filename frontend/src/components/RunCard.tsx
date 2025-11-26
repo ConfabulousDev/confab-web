@@ -30,9 +30,9 @@ function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProp
   // Extract agent ID from todo file path
   // Format: {sessionID}-agent-{agentID}.json
   function extractAgentID(filePath: string): string {
-    const fileName = filePath.split('/').pop() || '';
+    const fileName = filePath.split('/').pop() ?? '';
     const match = fileName.match(/-agent-([^.]+)\.json$/);
-    return match ? match[1] : 'unknown';
+    return match?.[1] ?? 'unknown';
   }
 
   async function loadTodos() {

@@ -44,7 +44,8 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
 
       messages.forEach((message, index) => {
         // Add time separator if needed
-        if (shouldShowTimeSeparator(message, index > 0 ? messages[index - 1] : null)) {
+        const prevMessage = index > 0 ? messages[index - 1] : undefined;
+        if (shouldShowTimeSeparator(message, prevMessage ?? null)) {
           if ('timestamp' in message) {
             items.push({ type: 'separator', timestamp: message.timestamp });
           }
@@ -163,6 +164,7 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
             const item = virtualItems[virtualItem.index];
+            if (!item) return null;
 
             return (
               <div

@@ -5,7 +5,7 @@ import {
   extractTextContent,
   getRoleLabel,
 } from './messageParser';
-import type { UserMessage, AssistantMessage, ContentBlock } from '@/types/transcript';
+import type { UserMessage, AssistantMessage, ContentBlock } from '@/types';
 
 describe('messageParser', () => {
   describe('parseMessage', () => {

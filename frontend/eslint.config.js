@@ -19,5 +19,16 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Prevent explicit any - forces proper typing
+      '@typescript-eslint/no-explicit-any': 'error',
+      // Disallow all type assertions - forces proper validation at boundaries
+      '@typescript-eslint/consistent-type-assertions': [
+        'error',
+        {
+          assertionStyle: 'never',
+        },
+      ],
+    },
   },
 ])

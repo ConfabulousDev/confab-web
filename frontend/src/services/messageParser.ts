@@ -1,6 +1,6 @@
 // Message parsing service
 // Extracts display data from transcript messages
-import type { TranscriptLine, ContentBlock } from '@/types/transcript';
+import type { TranscriptLine, ContentBlock } from '@/types';
 import {
   isUserMessage,
   isAssistantMessage,
@@ -11,7 +11,7 @@ import {
   isToolResultMessage,
   hasThinking,
   usesTools,
-} from '@/types/transcript';
+} from '@/types';
 
 export interface ParsedMessageData {
   role: 'user' | 'assistant' | 'system';
@@ -57,9 +57,10 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
     content = [{ type: 'text', text: `📋 ${message.summary}` }];
   } else if (isFileHistorySnapshot(message)) {
     role = 'system';
-    const fileCount = Object.keys(message.snapshot.trackedFileBackups).length;
-    const fileList = Object.entries(message.snapshot.trackedFileBackups)
-      .map(([path, backup]) => `  • ${path} (v${backup.version})`)
+    const backups = message.snapshot.trackedFileBackups;
+    const fileCount = Object.keys(backups).length;
+    const fileList = Object.entries(backups)
+      .map(([path, backup]: [string, { version: number }]) => `  • ${path} (v${backup.version})`)
       .join('\n');
     const snapshotText = `📸 File Snapshot (${fileCount} ${fileCount === 1 ? 'file' : 'files'})\n${fileList}`;
     content = [{ type: 'text', text: snapshotText }];
@@ -70,16 +71,11 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
     const operationText = message.operation === 'enqueue' ? 'Added to queue' : 'Removed from queue';
     content = [{ type: 'text', text: `${operationEmoji} ${operationText}` }];
   } else {
-    // Fallback for unknown message types
-    console.warn('Unknown message type encountered:', message);
+    // Exhaustive check - should never reach here if Zod validation is working
+    const _exhaustiveCheck: never = message;
+    console.warn('Unknown message type encountered:', _exhaustiveCheck);
     role = 'system';
-    timestamp = 'timestamp' in message ? (message as { timestamp?: string }).timestamp : undefined;
-    content = [
-      {
-        type: 'text',
-        text: `⚠️ Unknown message type\n\`\`\`json\n${JSON.stringify(message, null, 2)}\n\`\`\``,
-      },
-    ];
+    content = [{ type: 'text', text: '⚠️ Unknown message type' }];
   }
 
   return {

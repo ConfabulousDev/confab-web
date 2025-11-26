@@ -8,6 +8,7 @@ export function stripAnsi(text: string): string {
 	// Matches all ANSI escape sequences:
 	// - \x1b (or \u001b) followed by [ and any params ending in a letter
 	// - Also handles OSC sequences (\x1b]) and other escape types
+	// eslint-disable-next-line no-control-regex
 	return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][AB012]|\x1b[PX^_][^\x1b]*\x1b\\|\x1b.?/g, '');
 }
 

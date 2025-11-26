@@ -177,9 +177,11 @@
   font-size: var(--font-xs);
 }
 
-.toolResultHeader span:not(.resultIcon):not(.expandBtn) {
+.toolNameLabel {
   flex: 1;
   font-weight: var(--font-medium);
+  font-family: monospace;
+  font-size: var(--font-xs);
   color: var(--color-text-secondary);
 }
 

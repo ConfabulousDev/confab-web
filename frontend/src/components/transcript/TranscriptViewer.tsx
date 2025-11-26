@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { RunDetail, TranscriptLine, AgentNode } from '@/types';
-import { fetchParsedTranscript } from '@/services/transcriptService';
+import { fetchParsedTranscript, type TranscriptValidationError } from '@/services/transcriptService';
 import { buildAgentTree } from '@/services/agentTreeBuilder';
 import MessageList from './MessageList';
+import ValidationErrorsPanel from './ValidationErrorsPanel';
 import styles from './TranscriptViewer.module.css';
 
 interface TranscriptViewerProps {
@@ -16,6 +17,7 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
   const [agents, setAgents] = useState<AgentNode[]>([]);
+  const [validationErrors, setValidationErrors] = useState<TranscriptValidationError[]>([]);
 
   // Batched rendering state
   const [renderingBatch, setRenderingBatch] = useState(false);
@@ -66,11 +68,13 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
       console.log(`⏱️ buildAgentTree took ${Math.round(t4 - t3)}ms`);
 
       setAgents(agentTree);
+      setValidationErrors(parsed.validationErrors);
 
       const total = performance.now() - t0;
       console.log(`⏱️ Data load complete: ${Math.round(total)}ms`, {
         messageCount: parsed.messages.length,
         agentCount: agentTree.length,
+        validationErrorCount: parsed.validationErrors.length,
       });
 
       // Start batched rendering
@@ -134,14 +138,25 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
               </div>
             </div>
           ) : (
-            <div className={styles.transcriptMeta}>
-              <span>{messages.length} messages</span>
-              {agents.length > 0 && (
-                <span>
-                  {agents.length} agent{agents.length === 1 ? '' : 's'}
-                </span>
+            <>
+              <div className={styles.transcriptMeta}>
+                <span>{messages.length} messages</span>
+                {agents.length > 0 && (
+                  <span>
+                    {agents.length} agent{agents.length === 1 ? '' : 's'}
+                  </span>
+                )}
+                {validationErrors.length > 0 && (
+                  <span className={styles.errorCount}>
+                    {validationErrors.length} parse error{validationErrors.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+
+              {validationErrors.length > 0 && (
+                <ValidationErrorsPanel errors={validationErrors} />
               )}
-            </div>
+            </>
           )}
 
           <MessageList

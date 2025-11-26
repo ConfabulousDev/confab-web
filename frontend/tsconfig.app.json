@@ -34,7 +34,12 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    /* Stricter type safety - prevent unvalidated data at boundaries */
+    "noImplicitAny": true,                    /* Already in strict, but explicit */
+    "noImplicitReturns": true,                /* Catch missing returns */
+    "noUncheckedIndexedAccess": true          /* Arrays/records return T | undefined */
   },
   "include": ["src"]
 }

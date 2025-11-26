@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -10,16 +10,20 @@ function HomePage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [authError, setAuthError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Check for auth error from OAuth callback
+  // Extract auth error from URL params (computed, not state)
+  const authError = useMemo(() => {
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
-
     if (error) {
-      setAuthError(errorDescription || 'Authentication failed. Please try again.');
-      // Clear error params from URL
+      return errorDescription || 'Authentication failed. Please try again.';
+    }
+    return null;
+  }, [searchParams]);
+
+  // Clear error params from URL after displaying
+  useEffect(() => {
+    if (searchParams.has('error')) {
       searchParams.delete('error');
       searchParams.delete('error_description');
       setSearchParams(searchParams, { replace: true });

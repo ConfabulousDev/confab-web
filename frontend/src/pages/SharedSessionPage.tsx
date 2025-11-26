@@ -53,7 +53,7 @@ function SharedSessionPage() {
         const data = await response.json();
         setSession(data);
         setLoading(false);
-      } catch (err) {
+      } catch {
         setError('Failed to load shared session');
         setErrorType('general');
         setLoading(false);
@@ -123,9 +123,12 @@ function SharedSessionPage() {
 
       {/* Session Metadata */}
       {(() => {
-        const latestRun: RunDetail | undefined = session.runs.reduce((latest, run) =>
-          new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
-        , session.runs[0]);
+        const firstRun = session.runs[0];
+        const latestRun: RunDetail | undefined = firstRun
+          ? session.runs.reduce((latest, run) =>
+              new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
+            , firstRun)
+          : undefined;
 
         return (
           <>

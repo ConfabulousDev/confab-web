@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -15,16 +16,17 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { loading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  // Show nothing while loading - prevents flash of protected content
-  if (loading) {
-    return null;
-  }
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      const intendedPath = location.pathname + location.search;
+      const loginUrl = `/auth/login?redirect=${encodeURIComponent(intendedPath)}`;
+      window.location.href = loginUrl;
+    }
+  }, [loading, isAuthenticated, location.pathname, location.search]);
 
-  // Redirect to login if not authenticated, with redirect back to intended page
-  if (!isAuthenticated) {
-    const intendedPath = location.pathname + location.search;
-    const loginUrl = `/auth/login?redirect=${encodeURIComponent(intendedPath)}`;
-    window.location.href = loginUrl;
+  // Show nothing while loading or redirecting
+  if (loading || !isAuthenticated) {
     return null;
   }
 

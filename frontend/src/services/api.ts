@@ -1,7 +1,27 @@
-// Centralized API client with error handling and interceptors
-// TODO: Consider adding Zod runtime validation for API responses to catch
-// frontend/backend contract mismatches early (see schemas/validation.ts for existing schemas)
+// Centralized API client with error handling, interceptors, and Zod validation
+// All API responses are validated at runtime to ensure type safety
+import { z } from 'zod';
 import { getCSRFToken, initCSRF, clearCSRFToken } from './csrf';
+import {
+  SessionDetailSchema,
+  SessionListSchema,
+  SessionShareListSchema,
+  APIKeyListSchema,
+  CreateAPIKeyResponseSchema,
+  CreateShareResponseSchema,
+  UserSchema,
+  validateResponse,
+  type Session,
+  type SessionDetail,
+  type SessionShare,
+  type APIKey,
+  type CreateAPIKeyResponse,
+  type CreateShareResponse,
+  type User,
+} from '@/schemas/api';
+
+// Re-export types for consumers
+export type { Session, SessionDetail, SessionShare, APIKey, User } from '@/schemas/api';
 
 /**
  * Handles authentication failures by clearing cached state and redirecting to home.
@@ -17,12 +37,7 @@ export class APIError extends Error {
   statusText: string;
   data?: unknown;
 
-  constructor(
-    message: string,
-    status: number,
-    statusText: string,
-    data?: unknown
-  ) {
+  constructor(message: string, status: number, statusText: string, data?: unknown) {
     super(message);
     this.name = 'APIError';
     this.status = status;
@@ -45,9 +60,10 @@ export class AuthenticationError extends APIError {
   }
 }
 
-interface RequestOptions extends RequestInit {
+interface RequestOptions extends Omit<RequestInit, 'body'> {
   skipAuth?: boolean;
   skipCSRF?: boolean;
+  body?: unknown;
 }
 
 class APIClient {
@@ -57,7 +73,7 @@ class APIClient {
     this.baseURL = baseURL;
   }
 
-  private async handleResponse<T>(response: Response, endpoint: string): Promise<T> {
+  private async handleResponse(response: Response, endpoint: string): Promise<unknown> {
     // Handle authentication errors
     if (response.status === 401) {
       // Don't redirect for /me - it's expected to return 401 when not logged in
@@ -77,18 +93,13 @@ class APIClient {
         errorData = await response.text();
       }
 
-      throw new APIError(
-        `Request failed: ${response.statusText}`,
-        response.status,
-        response.statusText,
-        errorData
-      );
+      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
     }
 
     // Handle empty responses
     const contentType = response.headers.get('content-type');
     if (!contentType) {
-      return undefined as T;
+      return undefined;
     }
 
     // Parse JSON responses
@@ -97,18 +108,17 @@ class APIClient {
     }
 
     // Return text for other content types
-    return response.text() as T;
+    return response.text();
   }
 
-  async request<T>(
-    endpoint: string,
-    options: RequestOptions = {}
-  ): Promise<T> {
-    const { skipAuth, skipCSRF, ...fetchOptions } = options;
+  /**
+   * Make an HTTP request and return the raw response.
+   * Callers must validate/narrow the response type.
+   */
+  private async requestRaw(endpoint: string, options: RequestOptions = {}): Promise<unknown> {
+    const { skipAuth, skipCSRF, body: requestBody, ...fetchOptions } = options;
 
-    const url = endpoint.startsWith('http')
-      ? endpoint
-      : `${this.baseURL}${endpoint}`;
+    const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
 
     const headers = new Headers(fetchOptions.headers);
 
@@ -130,11 +140,11 @@ class APIClient {
 
     // Add JSON content type and stringify if body is an object
     let body: BodyInit | undefined;
-    if (fetchOptions.body && typeof fetchOptions.body === 'object') {
+    if (requestBody !== undefined && requestBody !== null && typeof requestBody === 'object') {
       headers.set('Content-Type', 'application/json');
-      body = JSON.stringify(fetchOptions.body);
-    } else {
-      body = fetchOptions.body ?? undefined;
+      body = JSON.stringify(requestBody);
+    } else if (typeof requestBody === 'string') {
+      body = requestBody;
     }
 
     const config: RequestInit = {
@@ -146,7 +156,7 @@ class APIClient {
 
     try {
       const response = await fetch(url, config);
-      return await this.handleResponse<T>(response, endpoint);
+      return this.handleResponse(response, endpoint);
     } catch (error) {
       if (error instanceof APIError || error instanceof AuthenticationError) {
         throw error;
@@ -161,66 +171,69 @@ class APIClient {
     }
   }
 
-  async get<T>(endpoint: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: 'GET' });
+  /**
+   * DELETE request that returns void
+   */
+  async deleteVoid(endpoint: string, options?: RequestOptions): Promise<void> {
+    await this.requestRaw(endpoint, { ...options, method: 'DELETE' });
   }
 
-  async post<T>(
+  /**
+   * GET request that returns string (for file content, etc.)
+   */
+  async getString(endpoint: string, options?: RequestOptions): Promise<string> {
+    const result = await this.requestRaw(endpoint, { ...options, method: 'GET' });
+    if (typeof result !== 'string') {
+      throw new Error(`Expected string response from ${endpoint}`);
+    }
+    return result;
+  }
+
+  /**
+   * Make a validated GET request
+   * @param endpoint - API endpoint
+   * @param schema - Zod schema to validate response
+   */
+  async getValidated<T>(endpoint: string, schema: z.ZodType<T>, options?: RequestOptions): Promise<T> {
+    const data = await this.requestRaw(endpoint, { ...options, method: 'GET' });
+    return validateResponse(schema, data, endpoint);
+  }
+
+  /**
+   * Make a validated POST request
+   * @param endpoint - API endpoint
+   * @param schema - Zod schema to validate response
+   * @param data - Request body
+   */
+  async postValidated<T>(
     endpoint: string,
+    schema: z.ZodType<T>,
     data?: unknown,
     options?: RequestOptions
   ): Promise<T> {
-    return this.request<T>(endpoint, {
+    const response = await this.requestRaw(endpoint, {
       ...options,
       method: 'POST',
-      body: data as BodyInit,
+      body: data,
     });
-  }
-
-  async put<T>(
-    endpoint: string,
-    data?: unknown,
-    options?: RequestOptions
-  ): Promise<T> {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: 'PUT',
-      body: data as BodyInit,
-    });
-  }
-
-  async delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
-  }
-
-  async patch<T>(
-    endpoint: string,
-    data?: unknown,
-    options?: RequestOptions
-  ): Promise<T> {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: 'PATCH',
-      body: data as BodyInit,
-    });
+    return validateResponse(schema, response, endpoint);
   }
 }
 
 // Export singleton instance
 export const api = new APIClient();
 
-// Export type-safe API methods for common endpoints
+// Export validated API methods for common endpoints
+// All responses are validated with Zod schemas at runtime
 export const sessionsAPI = {
-  list: (includeShared = false) =>
-    api.get<Array<import('@/types').Session>>(
-      `/sessions${includeShared ? '?include_shared=true' : ''}`
-    ),
+  list: (includeShared = false): Promise<Session[]> =>
+    api.getValidated(`/sessions${includeShared ? '?include_shared=true' : ''}`, SessionListSchema),
 
-  get: (sessionId: string) =>
-    api.get<import('@/types').SessionDetail>(`/sessions/${sessionId}`),
+  get: (sessionId: string): Promise<SessionDetail> =>
+    api.getValidated(`/sessions/${sessionId}`, SessionDetailSchema),
 
-  getShares: (sessionId: string) =>
-    api.get<Array<import('@/types').SessionShare>>(`/sessions/${sessionId}/shares`),
+  getShares: (sessionId: string): Promise<SessionShare[]> =>
+    api.getValidated(`/sessions/${sessionId}/shares`, SessionShareListSchema),
 
   createShare: (
     sessionId: string,
@@ -229,30 +242,33 @@ export const sessionsAPI = {
       invited_emails?: string[];
       expires_in_days?: number | null;
     }
-  ) =>
-    api.post<{ share_url: string }>(`/sessions/${sessionId}/share`, data),
+  ): Promise<CreateShareResponse> =>
+    api.postValidated(`/sessions/${sessionId}/share`, CreateShareResponseSchema, data),
 
-  revokeShare: (shareToken: string) =>
-    api.delete(`/shares/${shareToken}`),
+  revokeShare: (shareToken: string): Promise<void> => api.deleteVoid(`/shares/${shareToken}`),
 };
 
 export const authAPI = {
-  me: () => api.get<{ name: string; email: string; avatar_url: string }>('/me'),
+  me: (): Promise<User> => api.getValidated('/me', UserSchema),
 };
 
 export const filesAPI = {
-  getContent: (runId: number, fileId: number) =>
-    api.get<string>(`/runs/${runId}/files/${fileId}/content`),
+  getContent: (runId: number, fileId: number): Promise<string> =>
+    api.getString(`/runs/${runId}/files/${fileId}/content`),
 
-  getSharedContent: (sessionId: string, shareToken: string, fileId: number) =>
-    api.get<string>(`/sessions/${sessionId}/shared/${shareToken}/files/${fileId}/content`),
+  getSharedContent: (sessionId: string, shareToken: string, fileId: number): Promise<string> =>
+    api.getString(`/sessions/${sessionId}/shared/${shareToken}/files/${fileId}/content`),
 };
 
 export const keysAPI = {
-  list: () => api.get<Array<import('@/types').APIKey>>('/keys'),
+  list: (): Promise<APIKey[]> => api.getValidated('/keys', APIKeyListSchema),
 
-  create: (name: string) =>
-    api.post<{ id: number; key: string; name: string; created_at: string }>('/keys', { name }),
+  create: (name: string): Promise<CreateAPIKeyResponse> =>
+    api.postValidated('/keys', CreateAPIKeyResponseSchema, { name }),
 
-  delete: (keyId: number) => api.delete(`/keys/${keyId}`),
+  delete: (keyId: number): Promise<void> => api.deleteVoid(`/keys/${keyId}`),
+};
+
+export const sharesAPI = {
+  list: (): Promise<SessionShare[]> => api.getValidated('/shares', SessionShareListSchema),
 };

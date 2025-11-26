@@ -30,9 +30,12 @@ function SessionDetailPage() {
   const [deleting, setDeleting] = useState(false);
 
   // Always use the latest run (by end_timestamp)
-  const latestRun: RunDetail | undefined = session?.runs.reduce((latest, run) =>
-    new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
-  , session?.runs[0]);
+  const firstRun = session?.runs[0];
+  const latestRun: RunDetail | undefined = firstRun
+    ? session?.runs.reduce((latest, run) =>
+        new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
+      , firstRun)
+    : undefined;
 
   // Dynamic page title based on session
   const pageTitle = session ? `Session ${session.external_id.substring(0, 8)}` : 'Session';

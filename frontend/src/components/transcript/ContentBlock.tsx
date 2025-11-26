@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
-import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock } from '@/types/transcript';
+import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock } from '@/types';
 import { stripAnsi } from '@/utils';
 import CodeBlock from './CodeBlock';
 import BashOutput from './BashOutput';
@@ -22,19 +21,18 @@ interface ContentBlockProps {
 }
 
 function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockProps) {
-  const [toolName, setToolName] = useState(initialToolName);
-
-  // Track tool name from tool_use blocks
-  useEffect(() => {
-    if (isToolUseBlock(block)) {
-      setToolName(block.name);
-    }
-  }, [block]);
+  // Derive tool name from block if it's a tool_use block, otherwise use the passed-in name
+  const toolName = isToolUseBlock(block) ? block.name : initialToolName;
 
   // Parse markdown and sanitize HTML
   function renderMarkdown(text: string): string {
     const cleaned = stripAnsi(text);
-    const html = marked.parse(cleaned) as string;
+    // marked.parse returns string when async: false is configured
+    const html = marked.parse(cleaned);
+    if (typeof html !== 'string') {
+      // Should never happen with async: false, but satisfies TypeScript
+      return '';
+    }
     return DOMPurify.sanitize(html, {
       ADD_ATTR: ['target'], // Allow target="_blank" on links
     });
@@ -89,7 +87,7 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
       <div className={`${styles.toolResultBlock} ${block.is_error ? styles.error : ''}`}>
         <div className={styles.toolResultHeader}>
           <span className={styles.resultIcon}>{block.is_error ? '❌' : '✅'}</span>
-          <span>Tool Result</span>
+          {toolName && <span className={styles.toolNameLabel}>{toolName}</span>}
         </div>
         <div className={styles.toolResultContent}>
           {typeof block.content === 'string' ? (

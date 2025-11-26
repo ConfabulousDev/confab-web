@@ -1,91 +1,68 @@
 // Shared TypeScript types for Confab frontend
+// Types are derived from Zod schemas for runtime validation
 
-// Re-export transcript types
-export * from './transcript';
+// Re-export API types from schemas (these are validated at runtime)
+export type {
+  GitInfo,
+  FileDetail,
+  RunDetail,
+  Session,
+  SessionDetail,
+  SessionShare,
+  User,
+  APIKey,
+  CreateAPIKeyResponse,
+  CreateShareResponse,
+} from '@/schemas/api';
 
-// File detail within a run
-export type FileDetail = {
-	id: number;
-	file_path: string;
-	file_type: string;
-	size_bytes: number;
-	s3_key?: string;
-	s3_uploaded_at?: string;
-};
+// Re-export transcript types from schemas (these are validated at runtime)
+export type {
+  TranscriptLine,
+  ContentBlock,
+  TextBlock,
+  ThinkingBlock,
+  ToolUseBlock,
+  ToolResultBlock,
+  ImageBlock,
+  UserMessage,
+  AssistantMessage,
+  SystemMessage,
+  FileHistorySnapshot,
+  SummaryMessage,
+  QueueOperationMessage,
+} from '@/schemas/transcript';
 
-// Git repository information
-export type GitInfo = {
-	repo_url?: string;
-	branch?: string;
-	commit_sha?: string;
-	commit_message?: string;
-	author?: string;
-	is_dirty?: boolean;
-};
+// Re-export type guards
+export {
+  isTextBlock,
+  isThinkingBlock,
+  isToolUseBlock,
+  isToolResultBlock,
+  isImageBlock,
+  isUserMessage,
+  isAssistantMessage,
+  isSystemMessage,
+  isFileHistorySnapshot,
+  isSummaryMessage,
+  isQueueOperationMessage,
+} from '@/schemas/transcript';
 
-// Run detail with files
-export type RunDetail = {
-	id: number;
-	end_timestamp: string;
-	cwd: string;
-	reason: string;
-	transcript_path: string;
-	s3_uploaded: boolean;
-	git_info?: GitInfo;
-	files: FileDetail[];
-};
+// Re-export utility functions
+export {
+  hasThinking,
+  usesTools,
+  getToolUses,
+  isToolResultMessage,
+  getToolResults,
+  getPlainTextContent,
+} from '@/schemas/transcript';
 
-// Full session detail with runs
-export type SessionDetail = {
-	id: string; // UUID primary key
-	external_id: string; // External identifier (e.g., Claude Code session ID)
-	first_seen: string;
-	runs: RunDetail[];
-};
-
-// Session list item (summary)
-export type Session = {
-	id: string; // UUID primary key
-	external_id: string; // External identifier (e.g., Claude Code session ID)
-	first_seen: string;
-	run_count: number;
-	last_run_time: string;
-	title?: string;
-	session_type: string;
-	max_transcript_size: number; // Max transcript size across all runs (0 = empty session)
-	git_repo?: string; // Git repository from latest run (e.g., "org/repo") - extracted from git_info JSONB
-	git_branch?: string; // Git branch from latest run - extracted from git_info JSONB
-	is_owner: boolean; // Whether current user owns this session
-	access_type: 'owner' | 'private_share' | 'public_share'; // How user has access to this session
-	share_token?: string; // Share token if accessed via share
-	shared_by_email?: string; // Email of user who shared (for shared sessions)
-};
-
-// Share configuration
-export type SessionShare = {
-	id: number;
-	session_id: string; // UUID primary key for session
-	external_id: string; // External identifier (e.g., Claude Code session ID)
-	session_title?: string;
-	share_token: string;
-	visibility: 'public' | 'private';
-	invited_emails?: string[];
-	expires_at?: string;
-	created_at: string;
-	last_accessed_at?: string;
-};
-
-// API key
-export type APIKey = {
-	id: number;
-	name: string;
-	created_at: string;
-	last_used_at?: string;
-};
-
-// Todo item from Claude Code todo list
+// Todo item from Claude Code todo list (local type, not from API)
 export type TodoItem = {
-	content: string;
-	status: 'pending' | 'in_progress' | 'completed';
-	activeForm: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  activeForm: string;
 };
+
+// Agent tree node structure (used locally, not from API)
+export type { AgentNode, ParsedTranscript } from '@/services/transcriptService';

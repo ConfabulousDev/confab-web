@@ -12,10 +12,8 @@ const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
-// Loading fallback - minimal to avoid flash
-function PageLoader() {
-  return null;
-}
+// Loading fallback - minimal to avoid flash (inline to avoid separate component file)
+const PageLoader = null;
 
 export const router = createBrowserRouter([
   {
@@ -25,7 +23,7 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: (
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={PageLoader}>
             <HomePage />
           </Suspense>
         ),
@@ -33,7 +31,7 @@ export const router = createBrowserRouter([
       {
         path: 'sessions',
         element: (
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={PageLoader}>
             <ProtectedRoute>
               <SessionsPage />
             </ProtectedRoute>
@@ -43,7 +41,7 @@ export const router = createBrowserRouter([
       {
         path: 'sessions/:id',
         element: (
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={PageLoader}>
             <ProtectedRoute>
               <SessionDetailPage />
             </ProtectedRoute>
@@ -53,7 +51,7 @@ export const router = createBrowserRouter([
       {
         path: 'sessions/:sessionId/shared/:token',
         element: (
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={PageLoader}>
             <SharedSessionPage />
           </Suspense>
         ),
@@ -61,7 +59,7 @@ export const router = createBrowserRouter([
       {
         path: 'keys',
         element: (
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={PageLoader}>
             <ProtectedRoute>
               <APIKeysPage />
             </ProtectedRoute>
@@ -71,7 +69,7 @@ export const router = createBrowserRouter([
       {
         path: 'shares',
         element: (
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={PageLoader}>
             <ProtectedRoute>
               <ShareLinksPage />
             </ProtectedRoute>
@@ -81,7 +79,7 @@ export const router = createBrowserRouter([
       {
         path: '*',
         element: (
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={PageLoader}>
             <NotFoundPage />
           </Suspense>
         ),

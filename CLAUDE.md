@@ -11,7 +11,22 @@ cd backend && DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go
 
 # Backend unit tests only (skip integration tests)
 cd backend && go test -short ./...
+
+# Frontend
+cd frontend && npm run build && npm run lint && npm test
 ```
+
+## Frontend Development
+
+Always run build, lint, and test after every change:
+
+```bash
+cd frontend && npm run build && npm run lint && npm test
+```
+
+- **Build**: TypeScript compilation + Vite build. Catches type errors.
+- **Lint**: ESLint with strict rules. Must have 0 errors (warnings are OK).
+- **Test**: Vitest unit tests. All tests must pass.
 
 ## Finding Dead Code (Go)
 

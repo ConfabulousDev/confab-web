@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Prism from 'prismjs';
 import { useCopyToClipboard } from '@/hooks';
 import { stripAnsi } from '@/utils';
@@ -20,6 +20,31 @@ import 'prismjs/components/prism-markup'; // HTML/XML
 import 'prismjs/themes/prism.css';
 import styles from './CodeBlock.module.css';
 
+// Map common aliases to Prism language names
+const languageMap: Record<string, string> = {
+  js: 'javascript',
+  ts: 'typescript',
+  py: 'python',
+  sh: 'bash',
+  shell: 'bash',
+  yml: 'yaml',
+  html: 'markup',
+  xml: 'markup',
+  txt: 'plain',
+  text: 'plain',
+};
+
+function normalizeLanguage(lang: string): string {
+  const normalized = lang.toLowerCase().trim();
+  return languageMap[normalized] || normalized;
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 interface CodeBlockProps {
   code: string;
   language?: string;
@@ -37,32 +62,6 @@ function CodeBlock({
 }: CodeBlockProps) {
   const { copy, copied } = useCopyToClipboard();
   const [showingFull, setShowingFull] = useState(false);
-  const [highlightedCode, setHighlightedCode] = useState('');
-
-  // Map common aliases to Prism language names
-  const languageMap: Record<string, string> = {
-    js: 'javascript',
-    ts: 'typescript',
-    py: 'python',
-    sh: 'bash',
-    shell: 'bash',
-    yml: 'yaml',
-    html: 'markup',
-    xml: 'markup',
-    txt: 'plain',
-    text: 'plain',
-  };
-
-  function normalizeLanguage(lang: string): string {
-    const normalized = lang.toLowerCase().trim();
-    return languageMap[normalized] || normalized;
-  }
-
-  function escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
 
   // Strip ANSI codes and check if code needs truncation
   const { displayCode, isTruncated } = useMemo(() => {
@@ -82,22 +81,20 @@ function CodeBlock({
     };
   }, [code, truncateLines, showingFull]);
 
-  // Highlight code when displayCode or language changes
-  useEffect(() => {
+  // Highlight code synchronously via useMemo (not useEffect)
+  const highlightedCode = useMemo(() => {
     const lang = normalizeLanguage(language);
 
     // Check if language is supported
     if (lang === 'plain' || !Prism.languages[lang]) {
-      setHighlightedCode(escapeHtml(displayCode));
-      return;
+      return escapeHtml(displayCode);
     }
 
     try {
-      const highlighted = Prism.highlight(displayCode, Prism.languages[lang], lang);
-      setHighlightedCode(highlighted);
+      return Prism.highlight(displayCode, Prism.languages[lang], lang);
     } catch (e) {
       console.warn(`Failed to highlight code with language '${lang}':`, e);
-      setHighlightedCode(escapeHtml(displayCode));
+      return escapeHtml(displayCode);
     }
   }, [displayCode, language]);
 

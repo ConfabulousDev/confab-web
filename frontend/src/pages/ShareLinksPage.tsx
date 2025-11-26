@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { fetchWithCSRF } from '@/services/csrf';
+import { sharesAPI, sessionsAPI, AuthenticationError } from '@/services/api';
 import { useDocumentTitle, useCopyToClipboard, useSuccessMessage } from '@/hooks';
 import type { SessionShare } from '@/types';
 import { formatRelativeTime, sortData, type SortDirection } from '@/utils';
@@ -51,22 +51,13 @@ function ShareLinksPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/v1/shares', {
-        credentials: 'include',
-      });
-
-      if (response.status === 401) {
+      const data = await sharesAPI.list();
+      setShares(data);
+    } catch (err) {
+      if (err instanceof AuthenticationError) {
         navigate('/');
         return;
       }
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch shares');
-      }
-
-      const data: SessionShare[] = await response.json();
-      setShares(data);
-    } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load shares');
     } finally {
       setLoading(false);
@@ -80,14 +71,7 @@ function ShareLinksPage() {
 
     setError('');
     try {
-      const response = await fetchWithCSRF(`/api/v1/shares/${shareToken}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to revoke share');
-      }
-
+      await sessionsAPI.revokeShare(shareToken);
       setSuccessMessage('Share link revoked successfully');
       await fetchShares();
     } catch (err) {
