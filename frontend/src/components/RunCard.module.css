@@ -27,11 +27,6 @@
   margin: 0;
 }
 
-.timestamp {
-  color: var(--color-text-muted);
-  font-size: var(--font-xs);
-}
-
 .viewTranscriptBtn {
   padding: var(--spacing-xs) var(--spacing-md);
   background: var(--color-primary);

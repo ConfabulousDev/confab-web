@@ -20,7 +20,6 @@ function SessionDetailPage() {
   const {
     message: successMessage,
     fading: successFading,
-    setMessage: setSuccessMessage,
   } = useSuccessMessage();
 
   // Share dialog state
@@ -28,14 +27,12 @@ function SessionDetailPage() {
 
   // Delete dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteMode, setDeleteMode] = useState<'session' | 'version'>('session');
-  const [selectedDeleteRunIndex, setSelectedDeleteRunIndex] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Run selection state
-  const [selectedRunIndex, setSelectedRunIndex] = useState(0);
-
-  const selectedRun: RunDetail | undefined = session?.runs[selectedRunIndex];
+  // Always use the latest run (by end_timestamp)
+  const latestRun: RunDetail | undefined = session?.runs.reduce((latest, run) =>
+    new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
+  , session?.runs[0]);
 
   // Dynamic page title based on session
   const pageTitle = session ? `Session ${session.external_id.substring(0, 8)}` : 'Session';
@@ -57,14 +54,6 @@ function SessionDetailPage() {
       // Uses sessionsAPI which handles 401 globally via handleAuthFailure()
       const data = await sessionsAPI.get(sessionId);
       setSession(data);
-
-      // Set initial selection to the latest run by timestamp
-      if (data.runs && data.runs.length > 0) {
-        const latestIndex = data.runs.reduce((latestIdx, run, idx) => {
-          return new Date(run.end_timestamp) > new Date(data.runs[latestIdx].end_timestamp) ? idx : latestIdx;
-        }, 0);
-        setSelectedRunIndex(latestIndex);
-      }
     } catch (err) {
       // 401 is handled globally by the API client, so we only handle other errors here
       if (err instanceof APIError && err.status === 404) {
@@ -79,8 +68,6 @@ function SessionDetailPage() {
 
   function openDeleteDialog() {
     setShowDeleteDialog(true);
-    setDeleteMode('session');
-    setSelectedDeleteRunIndex(null);
     setError('');
   }
 
@@ -92,15 +79,11 @@ function SessionDetailPage() {
 
     try {
       const url = `/api/v1/sessions/${sessionId}`;
-      const body: { run_id?: number } =
-        deleteMode === 'version' && selectedDeleteRunIndex !== null
-          ? { run_id: session.runs[selectedDeleteRunIndex].id }
-          : {};
 
       const response = await fetchWithCSRF(url, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -108,19 +91,9 @@ function SessionDetailPage() {
         throw new Error(errorData.error || 'Failed to delete');
       }
 
-      const result = await response.json();
-
-      // If session was deleted (either directly or because it was the last version), redirect to sessions list
-      if (deleteMode === 'session' || result.session_deleted) {
-        // Invalidate sessions cache to ensure fresh data on sessions list page
-        queryClient.invalidateQueries({ queryKey: ['sessions'] });
-        navigate('/sessions?success=Session deleted successfully');
-      } else {
-        // Refresh the session to show updated state
-        await fetchSession();
-        setShowDeleteDialog(false);
-        setSuccessMessage('Version deleted successfully');
-      }
+      // Invalidate sessions cache to ensure fresh data on sessions list page
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      navigate('/sessions?success=Session deleted successfully');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
     } finally {
@@ -168,38 +141,14 @@ function SessionDetailPage() {
               <span className={styles.metaLabel}>First Seen:</span>
               <span className={styles.metaValue}>{formatRelativeTime(session.first_seen)}</span>
             </div>
-
-            {/* Version selector dropdown (only show if multiple runs) */}
-            {session.runs.length > 1 && (
-              <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>Select Version:</span>
-                <select
-                  id="run-select"
-                  value={selectedRunIndex}
-                  onChange={(e) => setSelectedRunIndex(Number(e.target.value))}
-                  className={styles.versionSelect}
-                >
-                  {session.runs.map((run, index) => {
-                    const isLatestRun = session.runs.every(
-                      (r) => new Date(run.end_timestamp) >= new Date(r.end_timestamp)
-                    );
-                    const isOldestRun = session.runs.every(
-                      (r) => new Date(run.end_timestamp) <= new Date(r.end_timestamp)
-                    );
-                    const label = isLatestRun ? 'latest' : isOldestRun ? 'started' : 'updated';
-                    return (
-                      <option key={index} value={index}>
-                        #{index + 1} {label} ({formatRelativeTime(run.end_timestamp)})
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            )}
+            <div className={styles.metaItem}>
+              <span className={styles.metaLabel}>Last Updated:</span>
+              <span className={styles.metaValue}>{latestRun && formatRelativeTime(latestRun.end_timestamp)}</span>
+            </div>
           </div>
 
-          {/* Display the selected run */}
-          {selectedRun && <RunCard run={selectedRun} index={selectedRunIndex} />}
+          {/* Display the latest run */}
+          {latestRun && <RunCard run={latestRun} />}
         </>
       ) : null}
 
@@ -230,78 +179,19 @@ function SessionDetailPage() {
             <div className={styles.modalBody}>
               {error && <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>}
 
-              <div className={styles.formGroup}>
-                <p>What would you like to delete?</p>
-
-                {session.runs.length > 1 ? (
-                  <>
-                    <label>
-                      <input
-                        type="radio"
-                        checked={deleteMode === 'session'}
-                        onChange={() => setDeleteMode('session')}
-                        disabled={deleting}
-                      />
-                      <strong>Entire session</strong> - Delete all {session.runs.length} versions
-                    </label>
-                    <label>
-                      <input
-                        type="radio"
-                        checked={deleteMode === 'version'}
-                        onChange={() => {
-                          setDeleteMode('version');
-                          setSelectedDeleteRunIndex(0);
-                        }}
-                        disabled={deleting}
-                      />
-                      <strong>Specific version</strong> - Delete one version only
-                    </label>
-
-                    {deleteMode === 'version' && (
-                      <div className={styles.formGroup} style={{ marginLeft: '1.5rem' }}>
-                        <label>Select version to delete:</label>
-                        <select
-                          value={selectedDeleteRunIndex ?? 0}
-                          onChange={(e) => setSelectedDeleteRunIndex(Number(e.target.value))}
-                          className={styles.versionSelect}
-                          disabled={deleting}
-                        >
-                          {session.runs.map((run, index) => {
-                            const isLatestRun = session.runs.every(
-                              (r) => new Date(run.end_timestamp) >= new Date(r.end_timestamp)
-                            );
-                            const isOldestRun = session.runs.every(
-                              (r) => new Date(run.end_timestamp) <= new Date(r.end_timestamp)
-                            );
-                            const label = isLatestRun ? 'latest' : isOldestRun ? 'started' : 'updated';
-                            return (
-                              <option key={index} value={index}>
-                                #{index + 1} {label} ({formatRelativeTime(run.end_timestamp)})
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p>
-                    This session has only one version. Deleting it will delete the entire session.
-                  </p>
-                )}
-              </div>
+              <p>Are you sure you want to delete this session?</p>
 
               <div className={styles.warningMessage}>
-                <strong>⚠️ Warning:</strong> This action cannot be undone. All associated files will be permanently deleted from storage.
+                <strong>Warning:</strong> This action cannot be undone. All associated files will be permanently deleted from storage.
               </div>
 
               <div className={styles.modalFooter}>
                 <button
                   className={`${styles.btn} ${styles.btnDanger}`}
                   onClick={handleDelete}
-                  disabled={deleting || (deleteMode === 'version' && selectedDeleteRunIndex === null)}
+                  disabled={deleting}
                 >
-                  {deleting ? 'Deleting...' : `Delete ${deleteMode === 'session' ? 'Session' : 'Version'}`}
+                  {deleting ? 'Deleting...' : 'Delete Session'}
                 </button>
                 <button
                   className={`${styles.btn} ${styles.btnSecondary}`}

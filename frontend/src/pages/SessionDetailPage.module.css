@@ -159,27 +159,6 @@
   font-weight: var(--font-medium);
 }
 
-.versionSelect {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-sm);
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
-  cursor: pointer;
-  transition: border-color var(--transition-fast);
-  min-width: 200px;
-}
-
-.versionSelect:hover {
-  border-color: var(--color-border-dark);
-}
-
-.versionSelect:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-
 /* Modal */
 .modalOverlay {
   position: fixed;

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import type { SessionDetail } from '@/types';
-import { formatDate } from '@/utils';
+import type { SessionDetail, RunDetail } from '@/types';
+import { formatDate, formatRelativeTime } from '@/utils';
 import RunCard from '@/components/RunCard';
 import styles from './SharedSessionPage.module.css';
 
@@ -122,23 +122,29 @@ function SharedSessionPage() {
       </div>
 
       {/* Session Metadata */}
-      <div className={styles.metaCard}>
-        <div className={styles.metaItem}>
-          <span className={styles.metaLabel}>First Seen:</span>
-          <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
-        </div>
-        <div className={styles.metaItem}>
-          <span className={styles.metaLabel}>Total Runs:</span>
-          <span className={styles.metaValue}>{session.runs.length}</span>
-        </div>
-      </div>
+      {(() => {
+        const latestRun: RunDetail | undefined = session.runs.reduce((latest, run) =>
+          new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
+        , session.runs[0]);
 
-      {/* Runs */}
-      <h2>Runs</h2>
+        return (
+          <>
+            <div className={styles.metaCard}>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>First Seen:</span>
+                <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>Last Updated:</span>
+                <span className={styles.metaValue}>{latestRun && formatRelativeTime(latestRun.end_timestamp)}</span>
+              </div>
+            </div>
 
-      {session.runs.map((run, index) => (
-        <RunCard key={index} run={run} index={index} showGitInfo={false} shareToken={token} sessionId={session.id} />
-      ))}
+            {/* Display the latest run */}
+            {latestRun && <RunCard run={latestRun} showGitInfo={false} shareToken={token} sessionId={session.id} />}
+          </>
+        );
+      })()}
     </div>
   );
 }

@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
 import type { RunDetail, TodoItem } from '@/types';
-import { formatRelativeTime, formatBytes, getRepoWebURL, getCommitURL } from '@/utils';
+import { formatBytes, getRepoWebURL, getCommitURL } from '@/utils';
 import TranscriptViewer from './transcript/TranscriptViewer';
 import styles from './RunCard.module.css';
 
 interface RunCardProps {
   run: RunDetail;
-  index: number;
   showGitInfo?: boolean;
   shareToken?: string;
   sessionId?: string;
 }
 
-function RunCard({ run, index, showGitInfo = true, shareToken, sessionId }: RunCardProps) {
+function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProps) {
   const [todos, setTodos] = useState<{ agent_id: string; items: TodoItem[] }[]>([]);
   const [showTranscript, setShowTranscript] = useState(false);
 
@@ -71,8 +70,7 @@ function RunCard({ run, index, showGitInfo = true, shareToken, sessionId }: RunC
     <div className={styles.runCard}>
       <div className={styles.runHeader}>
         <div className={styles.headerLeft}>
-          <h3>Version #{index + 1}</h3>
-          <span className={styles.timestamp}>{formatRelativeTime(run.end_timestamp)}</span>
+          <h3>Session Details</h3>
         </div>
         <button className={styles.viewTranscriptBtn} onClick={() => setShowTranscript(!showTranscript)}>
           {showTranscript ? 'Hide' : 'View'} Transcript
