@@ -13,7 +13,19 @@ interface RunCardProps {
 
 function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProps) {
   const [todos, setTodos] = useState<{ agent_id: string; items: TodoItem[] }[]>([]);
-  const [showTranscript, setShowTranscript] = useState(false);
+  const [expandedFiles, setExpandedFiles] = useState<Set<number>>(new Set());
+
+  function toggleFileExpanded(fileId: number) {
+    setExpandedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  }
 
   // Extract agent ID from todo file path
   // Format: {sessionID}-agent-{agentID}.json
@@ -72,9 +84,6 @@ function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProp
         <div className={styles.headerLeft}>
           <h3>Session Details</h3>
         </div>
-        <button className={styles.viewTranscriptBtn} onClick={() => setShowTranscript(!showTranscript)}>
-          {showTranscript ? 'Hide' : 'View'} Transcript
-        </button>
       </div>
 
       <div className={styles.runInfo}>
@@ -161,15 +170,33 @@ function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProp
         <div className={styles.filesSection}>
           <h4>Files ({run.files.length})</h4>
           <div className={styles.filesList}>
-            {run.files.map((file) => (
-              <div key={file.id} className={styles.fileItem}>
-                <div className={styles.fileInfo}>
-                  <span className={`${styles.fileType} ${styles[file.file_type]}`}>{file.file_type}</span>
-                  <code className={styles.filePath}>{file.file_path}</code>
+            {run.files.map((file) => {
+              const isExpandable = file.file_type === 'transcript';
+              const isExpanded = expandedFiles.has(file.id);
+
+              return (
+                <div key={file.id} className={styles.fileItemWrapper}>
+                  <div
+                    className={`${styles.fileItem} ${isExpandable ? styles.expandable : ''} ${isExpanded ? styles.expanded : ''}`}
+                    onClick={isExpandable ? () => toggleFileExpanded(file.id) : undefined}
+                  >
+                    <div className={styles.fileInfo}>
+                      {isExpandable && (
+                        <span className={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</span>
+                      )}
+                      <span className={`${styles.fileType} ${styles[file.file_type]}`}>{file.file_type}</span>
+                      <code className={styles.filePath}>{file.file_path}</code>
+                    </div>
+                    <span className={styles.fileSize}>{formatBytes(file.size_bytes)}</span>
+                  </div>
+                  {isExpanded && (
+                    <div className={styles.fileContent}>
+                      <TranscriptViewer run={run} shareToken={shareToken} sessionId={sessionId} />
+                    </div>
+                  )}
                 </div>
-                <span className={styles.fileSize}>{formatBytes(file.size_bytes)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -195,11 +222,6 @@ function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProp
         </div>
       )}
 
-      {showTranscript && (
-        <div className={styles.transcriptSection}>
-          <TranscriptViewer run={run} shareToken={shareToken} sessionId={sessionId} />
-        </div>
-      )}
     </div>
   );
 }

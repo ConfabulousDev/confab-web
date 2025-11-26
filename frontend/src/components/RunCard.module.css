@@ -27,21 +27,6 @@
   margin: 0;
 }
 
-.viewTranscriptBtn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--font-sm);
-  font-weight: var(--font-medium);
-  transition: background var(--transition-fast);
-}
-
-.viewTranscriptBtn:hover {
-  background: var(--color-primary-hover);
-}
 
 .runInfo {
   display: flex;
@@ -138,6 +123,11 @@
   gap: var(--spacing-xs);
 }
 
+.fileItemWrapper {
+  display: flex;
+  flex-direction: column;
+}
+
 .fileItem {
   display: flex;
   justify-content: space-between;
@@ -145,6 +135,34 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--color-bg-secondary);
   border-radius: var(--radius-md);
+}
+
+.fileItem.expandable {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.fileItem.expandable:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.fileItem.expanded {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.expandIcon {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  width: 1em;
+  flex-shrink: 0;
+}
+
+.fileContent {
+  border: 1px solid var(--color-border-light);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--color-bg-primary);
 }
 
 .fileInfo {
@@ -286,8 +304,3 @@
   text-decoration: line-through;
 }
 
-.transcriptSection {
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
-  border-top: 1px solid var(--color-border-light);
-}

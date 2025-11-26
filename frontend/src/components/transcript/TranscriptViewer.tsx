@@ -115,10 +115,6 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
 
   return (
     <div className={styles.transcriptViewer}>
-      <div className={styles.transcriptHeader}>
-        <h3>Transcript</h3>
-      </div>
-
       {loading ? (
         <div className={styles.loading}>Loading transcript...</div>
       ) : error ? (
