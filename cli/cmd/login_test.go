@@ -36,7 +36,7 @@ func TestRequestDeviceCode(t *testing.T) {
 			DeviceCode:      "device-code-123",
 			UserCode:        "ABCD-1234",
 			VerificationURI: "http://localhost/device",
-			ExpiresIn:       900,
+			ExpiresIn:       300,
 			Interval:        5,
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -56,8 +56,8 @@ func TestRequestDeviceCode(t *testing.T) {
 	if deviceCode.UserCode != "ABCD-1234" {
 		t.Errorf("Expected user_code 'ABCD-1234', got %s", deviceCode.UserCode)
 	}
-	if deviceCode.ExpiresIn != 900 {
-		t.Errorf("Expected expires_in 900, got %d", deviceCode.ExpiresIn)
+	if deviceCode.ExpiresIn != 300 {
+		t.Errorf("Expected expires_in 300, got %d", deviceCode.ExpiresIn)
 	}
 }
 

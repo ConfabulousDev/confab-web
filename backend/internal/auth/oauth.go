@@ -959,7 +959,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 
 const (
 	// DeviceCodeExpiry is how long a device code is valid
-	DeviceCodeExpiry = 15 * time.Minute
+	DeviceCodeExpiry = 5 * time.Minute
 	// DeviceCodePollInterval is the minimum interval between poll requests
 	DeviceCodePollInterval = 5 * time.Second
 )

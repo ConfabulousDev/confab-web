@@ -113,7 +113,7 @@ func doDeviceLogin(backendURL, keyName string) error {
 		logger.Debug("Failed to open browser: %v", err)
 	}
 
-	fmt.Printf("Waiting for authorization... (expires in %d seconds)\n", deviceCode.ExpiresIn)
+	fmt.Printf("Waiting for authorization... (expires in %d minutes)\n", deviceCode.ExpiresIn/60)
 
 	// Poll for token
 	apiKey, err := pollForToken(backendURL, deviceCode)
