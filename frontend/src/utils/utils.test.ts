@@ -57,4 +57,24 @@ describe('formatRelativeTime', () => {
     const past = new Date(Date.now() - 172800000).toISOString();
     expect(formatRelativeTime(past)).toBe('2d ago');
   });
+
+  it('should format future seconds', () => {
+    const future = new Date(Date.now() + 30000).toISOString();
+    expect(formatRelativeTime(future)).toBe('in 30s');
+  });
+
+  it('should format future minutes', () => {
+    const future = new Date(Date.now() + 120000).toISOString();
+    expect(formatRelativeTime(future)).toBe('in 2m');
+  });
+
+  it('should format future hours', () => {
+    const future = new Date(Date.now() + 7200000).toISOString();
+    expect(formatRelativeTime(future)).toBe('in 2h');
+  });
+
+  it('should format future days', () => {
+    const future = new Date(Date.now() + 172800000).toISOString();
+    expect(formatRelativeTime(future)).toBe('in 2d');
+  });
 });

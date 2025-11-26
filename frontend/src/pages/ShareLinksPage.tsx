@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchWithCSRF } from '@/services/csrf';
 import { useDocumentTitle, useCopyToClipboard, useSuccessMessage } from '@/hooks';
 import type { SessionShare } from '@/types';
-import { formatRelativeTime } from '@/utils';
+import { formatRelativeTime, sortData, type SortDirection } from '@/utils';
+import SortableHeader from '@/components/SortableHeader';
 import Alert from '@/components/Alert';
 import styles from './ShareLinksPage.module.css';
+
+type SortColumn = 'session_title' | 'visibility' | 'created_at' | 'expires_at';
 
 function ShareLinksPage() {
   useDocumentTitle('Share Links');
@@ -19,6 +22,26 @@ function ShareLinksPage() {
   const { copy, message: copyMessage } = useCopyToClipboard({
     successMessage: 'Link copied to clipboard!',
   });
+  const [sortColumn, setSortColumn] = useState<SortColumn>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      // Default to descending for dates, ascending for others
+      setSortDirection(column === 'created_at' || column === 'expires_at' ? 'desc' : 'asc');
+    }
+  };
+
+  const sortedShares = useMemo(() => {
+    return sortData({
+      data: shares,
+      sortBy: sortColumn,
+      direction: sortDirection,
+    });
+  }, [shares, sortColumn, sortDirection]);
 
   useEffect(() => {
     fetchShares();
@@ -100,16 +123,40 @@ function ShareLinksPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Session</th>
-                  <th>Visibility</th>
+                  <SortableHeader
+                    column="session_title"
+                    label="Session"
+                    currentColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    column="visibility"
+                    label="Visibility"
+                    currentColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
                   <th>Invited Emails</th>
-                  <th>Expires</th>
-                  <th>Created</th>
+                  <SortableHeader
+                    column="created_at"
+                    label="Created"
+                    currentColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    column="expires_at"
+                    label="Expires"
+                    currentColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {shares.map((share) => {
+                {sortedShares.map((share) => {
                   const shareURL = getShareURL(share.session_id, share.share_token);
                   const isExpired = share.expires_at && new Date(share.expires_at) < new Date();
 
@@ -133,6 +180,7 @@ function ShareLinksPage() {
                           ? share.invited_emails.join(', ')
                           : '—'}
                       </td>
+                      <td className={styles.timestamp}>{formatRelativeTime(share.created_at)}</td>
                       <td>
                         {share.expires_at ? (
                           <span className={isExpired ? styles.expired : styles.timestamp}>
@@ -143,7 +191,6 @@ function ShareLinksPage() {
                           <span className={styles.neverExpires}>Never</span>
                         )}
                       </td>
-                      <td className={styles.timestamp}>{formatRelativeTime(share.created_at)}</td>
                       <td>
                         <div className={styles.actions}>
                           <button
