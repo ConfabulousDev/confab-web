@@ -125,7 +125,12 @@ func ReadFilesForUpload(files []types.SessionFile) ([]FileUpload, error) {
 
 		// Redact content if redaction is enabled
 		if r != nil {
-			content = r.RedactBytes(content)
+			if f.Type == "transcript" {
+				// Use JSON-aware redaction for JSONL transcript files
+				content = r.RedactJSONL(content)
+			} else {
+				content = r.RedactBytes(content)
+			}
 		}
 
 		fileUploads = append(fileUploads, FileUpload{

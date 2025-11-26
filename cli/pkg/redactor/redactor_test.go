@@ -1,6 +1,7 @@
 package redactor
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -422,4 +423,229 @@ func TestRedactBytes(t *testing.T) {
 	if string(result) != string(expected) {
 		t.Errorf("Expected:\n%s\nGot:\n%s", expected, result)
 	}
+}
+
+// TestRedactJSONL tests JSON-aware redaction of JSONL content
+func TestRedactJSONL(t *testing.T) {
+	config := Config{
+		Patterns: []Pattern{
+			{
+				Name:    "API Key",
+				Pattern: `sk-[A-Za-z0-9]{10}`,
+				Type:    "api_key",
+			},
+		},
+	}
+
+	redactor, err := NewRedactor(config)
+	if err != nil {
+		t.Fatalf("Failed to create redactor: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple string field",
+			input:    `{"message":"My key is sk-1234567890"}`,
+			expected: `{"message":"My key is [REDACTED:API_KEY]"}`,
+		},
+		{
+			name:     "Multiple lines",
+			input:    "{\"a\":\"sk-1234567890\"}\n{\"b\":\"sk-abcdefghij\"}",
+			expected: "{\"a\":\"[REDACTED:API_KEY]\"}\n{\"b\":\"[REDACTED:API_KEY]\"}",
+		},
+		{
+			name:     "Nested object",
+			input:    `{"outer":{"inner":"sk-1234567890"}}`,
+			expected: `{"outer":{"inner":"[REDACTED:API_KEY]"}}`,
+		},
+		{
+			name:     "Array of strings",
+			input:    `{"keys":["sk-1234567890","sk-abcdefghij"]}`,
+			expected: `{"keys":["[REDACTED:API_KEY]","[REDACTED:API_KEY]"]}`,
+		},
+		{
+			name:     "Mixed types preserved",
+			input:    `{"str":"sk-1234567890","num":42,"bool":true,"null":null}`,
+			expected: `{"bool":true,"null":null,"num":42,"str":"[REDACTED:API_KEY]"}`,
+		},
+		{
+			name:     "Empty lines preserved",
+			input:    "{\"a\":\"test\"}\n\n{\"b\":\"sk-1234567890\"}",
+			expected: "{\"a\":\"test\"}\n\n{\"b\":\"[REDACTED:API_KEY]\"}",
+		},
+		{
+			name:     "No secrets - unchanged",
+			input:    `{"message":"hello world"}`,
+			expected: `{"message":"hello world"}`,
+		},
+		{
+			name:     "Deeply nested",
+			input:    `{"a":{"b":{"c":{"d":"sk-1234567890"}}}}`,
+			expected: `{"a":{"b":{"c":{"d":"[REDACTED:API_KEY]"}}}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := redactor.RedactJSONL([]byte(tt.input))
+			if string(result) != tt.expected {
+				t.Errorf("Expected:\n%s\nGot:\n%s", tt.expected, string(result))
+			}
+		})
+	}
+}
+
+// TestRedactJSONLPreservesValidJSON verifies that output is always valid JSON
+func TestRedactJSONLPreservesValidJSON(t *testing.T) {
+	config := Config{
+		Patterns: []Pattern{
+			{
+				Name:    "API Key",
+				Pattern: `sk-[A-Za-z0-9]{10}`,
+				Type:    "api_key",
+			},
+		},
+	}
+
+	redactor, err := NewRedactor(config)
+	if err != nil {
+		t.Fatalf("Failed to create redactor: %v", err)
+	}
+
+	// Input with special characters that could break JSON if not handled properly
+	input := `{"message":"Key: sk-1234567890\nWith newline","quote":"He said \"sk-abcdefghij\""}`
+	result := redactor.RedactJSONL([]byte(input))
+
+	// Verify result is valid JSON
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Errorf("Result is not valid JSON: %v\nResult: %s", err, string(result))
+	}
+
+	// Verify secrets are redacted
+	if strings.Contains(string(result), "sk-1234567890") {
+		t.Error("API key should be redacted")
+	}
+	if strings.Contains(string(result), "sk-abcdefghij") {
+		t.Error("API key in quoted string should be redacted")
+	}
+}
+
+// TestRedactJSONLInvalidJSON tests fallback behavior for invalid JSON lines
+func TestRedactJSONLInvalidJSON(t *testing.T) {
+	config := Config{
+		Patterns: []Pattern{
+			{
+				Name:    "API Key",
+				Pattern: `sk-[A-Za-z0-9]{10}`,
+				Type:    "api_key",
+			},
+		},
+	}
+
+	redactor, err := NewRedactor(config)
+	if err != nil {
+		t.Fatalf("Failed to create redactor: %v", err)
+	}
+
+	// Invalid JSON line should fall back to text-based redaction
+	input := "not valid json with sk-1234567890"
+	result := redactor.RedactJSONL([]byte(input))
+
+	expected := "not valid json with [REDACTED:API_KEY]"
+	if string(result) != expected {
+		t.Errorf("Expected:\n%s\nGot:\n%s", expected, string(result))
+	}
+}
+
+// TestRedactJSONLMixedValidInvalid tests JSONL with mix of valid and invalid lines
+func TestRedactJSONLMixedValidInvalid(t *testing.T) {
+	config := Config{
+		Patterns: []Pattern{
+			{
+				Name:    "API Key",
+				Pattern: `sk-[A-Za-z0-9]{10}`,
+				Type:    "api_key",
+			},
+		},
+	}
+
+	redactor, err := NewRedactor(config)
+	if err != nil {
+		t.Fatalf("Failed to create redactor: %v", err)
+	}
+
+	input := "{\"key\":\"sk-1234567890\"}\nnot json sk-abcdefghij\n{\"other\":\"sk-0987654321\"}"
+	result := redactor.RedactJSONL([]byte(input))
+
+	// First line: valid JSON, should be parsed and redacted
+	// Second line: invalid JSON, should fall back to text redaction
+	// Third line: valid JSON, should be parsed and redacted
+	resultStr := string(result)
+
+	if strings.Contains(resultStr, "sk-1234567890") {
+		t.Error("First API key should be redacted")
+	}
+	if strings.Contains(resultStr, "sk-abcdefghij") {
+		t.Error("Second API key should be redacted (text fallback)")
+	}
+	if strings.Contains(resultStr, "sk-0987654321") {
+		t.Error("Third API key should be redacted")
+	}
+}
+
+// BenchmarkRedactBytes benchmarks text-based redaction
+func BenchmarkRedactBytes(b *testing.B) {
+	config := Config{Patterns: GetDefaultPatterns()}
+	redactor, _ := NewRedactor(config)
+
+	// Generate realistic JSONL content (~1MB)
+	input := generateTestJSONL(1000)
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(input)))
+	for i := 0; i < b.N; i++ {
+		redactor.RedactBytes(input)
+	}
+}
+
+// BenchmarkRedactJSONL benchmarks JSON-aware redaction
+func BenchmarkRedactJSONL(b *testing.B) {
+	config := Config{Patterns: GetDefaultPatterns()}
+	redactor, _ := NewRedactor(config)
+
+	// Generate realistic JSONL content (~1MB)
+	input := generateTestJSONL(1000)
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(input)))
+	for i := 0; i < b.N; i++ {
+		redactor.RedactJSONL(input)
+	}
+}
+
+// generateTestJSONL creates realistic transcript-like JSONL for benchmarking
+func generateTestJSONL(lines int) []byte {
+	var builder strings.Builder
+	for i := 0; i < lines; i++ {
+		// Mix of message types similar to real transcripts
+		switch i % 4 {
+		case 0:
+			builder.WriteString(`{"type":"user","timestamp":"2024-01-15T10:00:00Z","message":{"role":"user","content":"Please help me with this code that uses sk-ant-api03-xxxxxxxxxxxxxxxxxxxxx for authentication"}}`)
+		case 1:
+			builder.WriteString(`{"type":"assistant","timestamp":"2024-01-15T10:00:01Z","message":{"role":"assistant","content":[{"type":"text","text":"I'll help you with that. Here's the updated code with proper error handling and validation."}]}}`)
+		case 2:
+			builder.WriteString(`{"type":"tool_use","timestamp":"2024-01-15T10:00:02Z","tool":"bash","input":{"command":"echo $OPENAI_KEY"},"output":"sk-1234567890abcdefghijklmnopqrstuvwxyz123456"}`)
+		case 3:
+			builder.WriteString(`{"type":"result","timestamp":"2024-01-15T10:00:03Z","data":{"nested":{"deeply":{"value":"Some text with postgres://user:secretpass@localhost:5432/db connection string"}}}}`)
+		}
+		if i < lines-1 {
+			builder.WriteByte('\n')
+		}
+	}
+	return []byte(builder.String())
 }
