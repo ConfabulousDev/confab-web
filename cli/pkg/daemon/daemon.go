@@ -75,7 +75,20 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	logger.Info("Daemon starting: transcript=%s interval=%v", d.transcriptPath, d.syncInterval)
 
-	// Save state immediately so duplicate detection works even if backend is down
+	// Setup signal handling as early as possible to catch signals during
+	// initialization (waiting for transcript, backend init).
+	// See daemon_test.go for rationale.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+	// Wait for transcript file to exist before doing anything else.
+	// Don't save state or set up panic handlers until we have a transcript.
+	if err := d.waitForTranscript(ctx, sigCh); err != nil {
+		return err
+	}
+
+	// Save state for duplicate detection. Done after transcript exists so we
+	// don't leave stale state files for sessions that never produced transcripts.
 	d.state = NewState(d.externalID, d.transcriptPath, d.cwd)
 	if err := d.state.Save(); err != nil {
 		logger.Warn("Failed to save initial state: %v", err)
@@ -94,17 +107,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 			panic(r)
 		}
 	}()
-
-	// Setup signal handling as early as possible to catch signals during
-	// initialization (waiting for transcript, backend init).
-	// See daemon_test.go for rationale.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
-
-	// Wait for transcript file to exist (fresh sessions may not have it yet)
-	if err := d.waitForTranscript(ctx, sigCh); err != nil {
-		return err
-	}
 
 	// Create watcher (starts tracking files immediately, even before backend connects)
 	watcher := NewWatcher(d.transcriptPath)
