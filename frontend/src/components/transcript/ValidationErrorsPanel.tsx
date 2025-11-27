@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { TranscriptValidationError } from '@/services/transcriptService';
+import { useToggleSet } from '@/hooks';
 import styles from './ValidationErrorsPanel.module.css';
 
 interface ValidationErrorsPanelProps {
@@ -8,21 +9,9 @@ interface ValidationErrorsPanelProps {
 
 function ValidationErrorsPanel({ errors }: ValidationErrorsPanelProps) {
   const [expanded, setExpanded] = useState(false);
-  const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set());
+  const expandedErrors = useToggleSet<number>();
 
   if (errors.length === 0) return null;
-
-  function toggleError(index: number) {
-    setExpandedErrors((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
-  }
 
   const displayErrors = expanded ? errors : errors.slice(0, 3);
 
@@ -46,7 +35,7 @@ function ValidationErrorsPanel({ errors }: ValidationErrorsPanelProps) {
       <div className={styles.errorList}>
         {displayErrors.map((error, index) => (
           <div key={index} className={styles.errorItem}>
-            <div className={styles.errorHeader} onClick={() => toggleError(index)}>
+            <div className={styles.errorHeader} onClick={() => expandedErrors.toggle(index)}>
               <span className={styles.lineNumber}>Line {error.line}</span>
               {error.messageType && <span className={styles.messageType}>type: {error.messageType}</span>}
               <span className={styles.errorSummary}>

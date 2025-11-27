@@ -12,15 +12,17 @@ export function stripAnsi(text: string): string {
 	return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][AB012]|\x1b[PX^_][^\x1b]*\x1b\\|\x1b.?/g, '');
 }
 
+/** Parse date string, normalizing to UTC if no timezone specified */
+function parseDate(dateStr: string): Date {
+	const normalized = dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
+	return new Date(normalized);
+}
+
 /**
  * Format a date string for display
  */
 export function formatDate(dateStr: string): string {
-	// Ensure we're parsing the date correctly regardless of timezone format
-	// If the string ends with 'Z', it's UTC. Otherwise, treat it as UTC by appending 'Z'
-	const normalizedDateStr = dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
-	const date = new Date(normalizedDateStr);
-	return date.toLocaleString();
+	return parseDate(dateStr).toLocaleString();
 }
 
 /**
@@ -38,10 +40,7 @@ export function formatBytes(bytes: number): string {
  * Format a date as relative time (e.g., "5m ago" or "in 5m")
  */
 export function formatRelativeTime(dateStr: string): string {
-	// Ensure we're parsing the date correctly regardless of timezone format
-	// If the string ends with 'Z', it's UTC. Otherwise, treat it as UTC by appending 'Z'
-	const normalizedDateStr = dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
-	const date = new Date(normalizedDateStr);
+	const date = parseDate(dateStr);
 	const now = new Date();
 	const diff = now.getTime() - date.getTime();
 

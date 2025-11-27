@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import type { RunDetail } from '@/types';
 import { formatBytes, getRepoWebURL, getCommitURL } from '@/utils';
-import { useTodos } from '@/hooks';
+import { useTodos, useToggleSet } from '@/hooks';
 import TranscriptViewer from './transcript/TranscriptViewer';
 import styles from './RunCard.module.css';
 
@@ -14,19 +13,7 @@ interface RunCardProps {
 
 function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProps) {
   const { todos } = useTodos({ run, shareToken, sessionId });
-  const [expandedFiles, setExpandedFiles] = useState<Set<number>>(new Set());
-
-  function toggleFileExpanded(fileId: number) {
-    setExpandedFiles((prev) => {
-      const next = new Set(prev);
-      if (next.has(fileId)) {
-        next.delete(fileId);
-      } else {
-        next.add(fileId);
-      }
-      return next;
-    });
-  }
+  const expandedFiles = useToggleSet<number>();
 
   return (
     <div className={styles.runCard}>
@@ -128,7 +115,7 @@ function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProp
                 <div key={file.id} className={styles.fileItemWrapper}>
                   <div
                     className={`${styles.fileItem} ${isExpandable ? styles.expandable : ''} ${isExpanded ? styles.expanded : ''}`}
-                    onClick={isExpandable ? () => toggleFileExpanded(file.id) : undefined}
+                    onClick={isExpandable ? () => expandedFiles.toggle(file.id) : undefined}
                   >
                     <div className={styles.fileInfo}>
                       {isExpandable && (

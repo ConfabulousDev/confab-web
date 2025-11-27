@@ -49,12 +49,6 @@ export interface AgentNode {
 }
 
 /**
- * In-memory cache for fetched transcripts
- * Key: `${runId}-${fileId}`
- */
-const transcriptCache = new Map<string, TranscriptLine[]>();
-
-/**
  * Options for fetching transcript content
  */
 export interface FetchOptions {
@@ -125,14 +119,6 @@ export function parseJSONL(jsonl: string): TranscriptParseResult {
   };
 }
 
-/**
- * Legacy parse function that returns only messages (for backward compatibility)
- * @deprecated Use parseJSONL which returns TranscriptParseResult with errors
- */
-export function parseJSONLMessages(jsonl: string): TranscriptLine[] {
-  return parseJSONL(jsonl).messages;
-}
-
 /** Cache entry includes both messages and errors */
 interface CacheEntry {
   messages: TranscriptLine[];
@@ -198,9 +184,6 @@ export async function fetchTranscriptWithErrors(
   // Cache the result
   transcriptCacheV2.set(cacheKey, entry);
 
-  // Also update legacy cache for backward compat
-  transcriptCache.set(cacheKey, parseResult.messages);
-
   return entry;
 }
 
@@ -244,7 +227,6 @@ export async function fetchParsedTranscript(
  * Useful for forcing a refresh
  */
 export function clearTranscriptCache(): void {
-  transcriptCache.clear();
   transcriptCacheV2.clear();
 }
 
@@ -253,7 +235,6 @@ export function clearTranscriptCache(): void {
  */
 export function clearTranscriptFromCache(runId: number, fileId: number): void {
   const cacheKey = `${runId}-${fileId}`;
-  transcriptCache.delete(cacheKey);
   transcriptCacheV2.delete(cacheKey);
 }
 

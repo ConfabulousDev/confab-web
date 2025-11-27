@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import App from './App';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -12,78 +12,24 @@ const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
-// Loading fallback - minimal to avoid flash (inline to avoid separate component file)
-const PageLoader = null;
+/** Wrap a page component with Suspense and optional ProtectedRoute */
+function page(component: ReactNode, isProtected = false) {
+  const wrapped = isProtected ? <ProtectedRoute>{component}</ProtectedRoute> : component;
+  return <Suspense fallback={null}>{wrapped}</Suspense>;
+}
 
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <App />,
     children: [
-      {
-        index: true,
-        element: (
-          <Suspense fallback={PageLoader}>
-            <HomePage />
-          </Suspense>
-        ),
-      },
-      {
-        path: 'sessions',
-        element: (
-          <Suspense fallback={PageLoader}>
-            <ProtectedRoute>
-              <SessionsPage />
-            </ProtectedRoute>
-          </Suspense>
-        ),
-      },
-      {
-        path: 'sessions/:id',
-        element: (
-          <Suspense fallback={PageLoader}>
-            <ProtectedRoute>
-              <SessionDetailPage />
-            </ProtectedRoute>
-          </Suspense>
-        ),
-      },
-      {
-        path: 'sessions/:sessionId/shared/:token',
-        element: (
-          <Suspense fallback={PageLoader}>
-            <SharedSessionPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: 'keys',
-        element: (
-          <Suspense fallback={PageLoader}>
-            <ProtectedRoute>
-              <APIKeysPage />
-            </ProtectedRoute>
-          </Suspense>
-        ),
-      },
-      {
-        path: 'shares',
-        element: (
-          <Suspense fallback={PageLoader}>
-            <ProtectedRoute>
-              <ShareLinksPage />
-            </ProtectedRoute>
-          </Suspense>
-        ),
-      },
-      {
-        path: '*',
-        element: (
-          <Suspense fallback={PageLoader}>
-            <NotFoundPage />
-          </Suspense>
-        ),
-      },
+      { index: true, element: page(<HomePage />) },
+      { path: 'sessions', element: page(<SessionsPage />, true) },
+      { path: 'sessions/:id', element: page(<SessionDetailPage />, true) },
+      { path: 'sessions/:sessionId/shared/:token', element: page(<SharedSessionPage />) },
+      { path: 'keys', element: page(<APIKeysPage />, true) },
+      { path: 'shares', element: page(<ShareLinksPage />, true) },
+      { path: '*', element: page(<NotFoundPage />) },
     ],
   },
 ]);

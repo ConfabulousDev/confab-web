@@ -16,7 +16,6 @@ marked.use({
 
 interface ContentBlockProps {
   block: ContentBlockType;
-  index?: number;
   toolName?: string;
 }
 

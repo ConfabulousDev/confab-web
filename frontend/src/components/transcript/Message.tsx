@@ -14,7 +14,7 @@ import styles from './Message.module.css';
 
 interface MessageProps {
   message: TranscriptLine;
-  index: number;
+  index?: number;
   previousMessage?: TranscriptLine;
 }
 
@@ -57,7 +57,6 @@ function Message({ message, previousMessage }: MessageProps) {
           <ContentBlockComponent
             key={i}
             block={block}
-            index={i}
             toolName={getToolName(block, toolNameMap)}
           />
         ))}
