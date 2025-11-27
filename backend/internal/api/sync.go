@@ -284,17 +284,22 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Download and concatenate all chunks
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
+	// Download all chunks first (fail fast if any chunk is missing)
+	var allData [][]byte
 	for _, key := range chunkKeys {
 		data, err := s.storage.Download(storageCtx, key)
 		if err != nil {
-			// Log but continue - partial response is better than nothing
 			logger.Error("Failed to download chunk", "error", err, "key", key)
-			continue
+			respondStorageError(w, err, "Failed to download file chunk")
+			return
 		}
+		allData = append(allData, data)
+	}
+
+	// All chunks downloaded successfully - write response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	for _, data := range allData {
 		w.Write(data)
 	}
 }
