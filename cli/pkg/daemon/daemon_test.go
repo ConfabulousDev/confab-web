@@ -13,8 +13,7 @@ import (
 // because sending real signals affects the entire test process.
 //
 // OS signal handler placement is verified by code review - see Run() in daemon.go
-// where signal.Notify is called before EnsureAuthenticated to catch signals
-// during initialization.
+// where signal.Notify is called early to catch signals during initialization.
 
 // TestDaemonStopsOnContextCancel verifies the daemon exits cleanly on context cancel.
 func TestDaemonStopsOnContextCancel(t *testing.T) {

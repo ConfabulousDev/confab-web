@@ -96,19 +96,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}()
 
 	// Setup signal handling as early as possible to catch signals during
-	// initialization (auth, waiting for transcript, backend init).
+	// initialization (waiting for transcript, backend init).
 	// See daemon_test.go for rationale.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
-
-	// Get authenticated config
-	uploadCfg, err := config.EnsureAuthenticated()
-	if err != nil {
-		return fmt.Errorf("not authenticated: %w", err)
-	}
-
-	// Initialize sync client
-	client := sync.NewClient(uploadCfg)
 
 	// Wait for transcript file to exist (fresh sessions may not have it yet)
 	if err := d.waitForTranscript(ctx, sigCh); err != nil {
@@ -119,7 +110,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	watcher := NewWatcher(d.transcriptPath)
 
 	// Try initial connection to backend (non-blocking if it fails)
-	if err := d.tryInit(client, watcher); err != nil {
+	// Auth is checked lazily here, not at startup
+	if err := d.tryInit(watcher); err != nil {
 		logger.Warn("Backend init failed (will retry): %v", err)
 	}
 
@@ -143,7 +135,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		case <-ticker.C:
 			// If not initialized yet, try to connect to backend
 			if d.syncer == nil {
-				if err := d.tryInit(client, watcher); err != nil {
+				if err := d.tryInit(watcher); err != nil {
 					logger.Warn("Backend init failed (will retry): %v", err)
 					continue
 				}
@@ -195,8 +187,17 @@ func (d *Daemon) waitForTranscript(ctx context.Context, sigCh chan os.Signal) er
 	}
 }
 
-// tryInit attempts to initialize the sync session with the backend
-func (d *Daemon) tryInit(client *sync.Client, watcher *Watcher) error {
+// tryInit attempts to initialize the sync session with the backend.
+// Auth is checked here lazily, not at daemon startup.
+func (d *Daemon) tryInit(watcher *Watcher) error {
+	// Get authenticated config (lazy - only when we need to talk to backend)
+	cfg, err := config.EnsureAuthenticated()
+	if err != nil {
+		return fmt.Errorf("not authenticated: %w", err)
+	}
+
+	client := sync.NewClient(cfg)
+
 	// Extract git info from transcript (source of truth), fall back to detecting from cwd
 	var gitInfoJSON json.RawMessage
 	gitInfo, _ := git.ExtractGitInfoFromTranscript(d.transcriptPath)
