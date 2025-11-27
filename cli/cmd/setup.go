@@ -30,7 +30,11 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get backend-url flag: %w", err)
 	}
-	backendURLSpecified := backendURL != ""
+
+	// Apply default backend URL early so we can compare against saved config
+	if backendURL == "" {
+		backendURL = "http://localhost:8080"
+	}
 
 	fmt.Println("=== Confab Setup ===")
 	fmt.Println()
@@ -39,13 +43,8 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	needsLogin := true
 	cfg, err := config.GetUploadConfig()
 	if err == nil && cfg.APIKey != "" {
-		// If no backend URL specified on command line, use the saved one
-		if !backendURLSpecified && cfg.BackendURL != "" {
-			backendURL = cfg.BackendURL
-		}
-
-		// Check if backend URL matches (or no URL specified yet)
-		if cfg.BackendURL == backendURL || (!backendURLSpecified && cfg.BackendURL != "") {
+		// Check if backend URL matches
+		if cfg.BackendURL == backendURL {
 			fmt.Println("Checking existing authentication...")
 			if err := verifyAPIKey(cfg); err == nil {
 				logger.Info("Existing API key is valid, skipping login")
@@ -62,11 +61,6 @@ func runSetup(cmd *cobra.Command, args []string) error {
 			fmt.Println("Backend URL changed, need to re-authenticate")
 			fmt.Println()
 		}
-	}
-
-	// Apply default backend URL if still not set
-	if backendURL == "" {
-		backendURL = "http://localhost:8080"
 	}
 
 	// Login if needed
