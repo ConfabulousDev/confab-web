@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,8 +17,11 @@ import (
 )
 
 const (
-	// DefaultSyncInterval is how often the daemon syncs files
+	// DefaultSyncInterval is the base interval for syncing files
 	DefaultSyncInterval = 30 * time.Second
+
+	// syncIntervalJitter is random jitter added to sync interval (0 to this value)
+	syncIntervalJitter = 5 * time.Second
 
 	// initialWaitTimeout is how long to wait for transcript file to appear
 	initialWaitTimeout = 60 * time.Second
@@ -113,31 +117,34 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	// Try initial connection to backend (non-blocking if it fails)
 	// Auth is checked lazily here, not at startup
-	if err := d.tryInit(watcher); err != nil {
+	if err := d.tryInitAndSyncAll(watcher); err != nil {
 		logger.Warn("Backend init failed (will retry): %v", err)
 	}
 
-	// Start main loop - handles init retries and sync cycles
-	ticker := time.NewTicker(d.syncInterval)
-	defer ticker.Stop()
-
 	logger.Info("Daemon running: pid=%d", os.Getpid())
 
+	// Main loop with jittered interval (30-35s) to avoid thundering herd
 	for {
+		jitter := time.Duration(rand.Int63n(int64(syncIntervalJitter)))
+		timer := time.NewTimer(d.syncInterval + jitter)
+
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return d.shutdown("context cancelled")
 
 		case <-d.stopCh:
+			timer.Stop()
 			return d.shutdown("stop requested")
 
 		case sig := <-sigCh:
+			timer.Stop()
 			return d.shutdown(fmt.Sprintf("signal %v", sig))
 
-		case <-ticker.C:
+		case <-timer.C:
 			// If not initialized yet, try to connect to backend
 			if d.syncer == nil {
-				if err := d.tryInit(watcher); err != nil {
+				if err := d.tryInitAndSyncAll(watcher); err != nil {
 					logger.Warn("Backend init failed (will retry): %v", err)
 					continue
 				}
@@ -189,9 +196,9 @@ func (d *Daemon) waitForTranscript(ctx context.Context, sigCh chan os.Signal) er
 	}
 }
 
-// tryInit attempts to initialize the sync session with the backend.
-// Auth is checked here lazily, not at daemon startup.
-func (d *Daemon) tryInit(watcher *Watcher) error {
+// tryInitAndSyncAll attempts to initialize the sync session with the backend
+// and performs an initial sync. Auth is checked here lazily, not at daemon startup.
+func (d *Daemon) tryInitAndSyncAll(watcher *Watcher) error {
 	// Get authenticated config (lazy - only when we need to talk to backend)
 	cfg, err := config.EnsureAuthenticated()
 	if err != nil {
