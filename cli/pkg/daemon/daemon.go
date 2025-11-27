@@ -95,6 +95,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}()
 
+	// Setup signal handling as early as possible to catch signals during
+	// initialization (auth, waiting for transcript, backend init).
+	// See daemon_test.go for rationale.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
 	// Get authenticated config
 	uploadCfg, err := config.EnsureAuthenticated()
 	if err != nil {
@@ -103,10 +109,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	// Initialize sync client
 	client := sync.NewClient(uploadCfg)
-
-	// Setup signal handling
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
 	// Wait for transcript file to exist (fresh sessions may not have it yet)
 	if err := d.waitForTranscript(ctx, sigCh); err != nil {
