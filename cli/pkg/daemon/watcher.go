@@ -19,10 +19,12 @@ type TrackedFile struct {
 
 // Watcher tracks files and detects new content
 type Watcher struct {
-	transcriptPath string
-	transcriptDir  string
-	files          map[string]*TrackedFile
-	knownAgentIDs  map[string]bool
+	transcriptPath      string
+	transcriptDir       string
+	files               map[string]*TrackedFile
+	knownAgentIDs       map[string]bool
+	lastScannedLine     int  // last line scanned for agent IDs
+	initialScanComplete bool // whether we've done the initial full scan
 }
 
 // NewWatcher creates a new file watcher for a session
@@ -148,7 +150,8 @@ func (w *Watcher) UpdateLastSynced(fileName string, lastLine int) {
 	}
 }
 
-// scanForAgentIDs parses the transcript for agent ID references
+// scanForAgentIDs parses the transcript for agent ID references.
+// On first call, scans the entire file. On subsequent calls, only scans new lines.
 func (w *Watcher) scanForAgentIDs() ([]string, error) {
 	file, err := os.Open(w.transcriptPath)
 	if err != nil {
@@ -156,11 +159,20 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 	}
 	defer file.Close()
 
-	seen := make(map[string]bool)
 	var agentIDs []string
+	lineNum := 0
+	startLine := 0
+	if w.initialScanComplete {
+		startLine = w.lastScannedLine
+	}
 
 	scanner := types.NewJSONLScanner(file)
 	for scanner.Scan() {
+		lineNum++
+		if lineNum <= startLine {
+			continue // skip already-scanned lines
+		}
+
 		var message map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &message); err != nil {
 			continue
@@ -175,8 +187,7 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 		// Check toolUseResult.agentId at root level
 		if toolUseResult, ok := message["toolUseResult"].(map[string]interface{}); ok {
 			if agentID, ok := toolUseResult["agentId"].(string); ok {
-				if isValidAgentID(agentID) && !seen[agentID] {
-					seen[agentID] = true
+				if isValidAgentID(agentID) && !w.knownAgentIDs[agentID] {
 					agentIDs = append(agentIDs, agentID)
 				}
 			}
@@ -191,8 +202,7 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 							if resultContent, ok := blockMap["content"].(map[string]interface{}); ok {
 								if toolUseResult, ok := resultContent["toolUseResult"].(map[string]interface{}); ok {
 									if agentID, ok := toolUseResult["agentId"].(string); ok {
-										if isValidAgentID(agentID) && !seen[agentID] {
-											seen[agentID] = true
+										if isValidAgentID(agentID) && !w.knownAgentIDs[agentID] {
 											agentIDs = append(agentIDs, agentID)
 										}
 									}
@@ -208,6 +218,10 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("failed to scan transcript: %w", err)
 	}
+
+	// Update scan position
+	w.lastScannedLine = lineNum
+	w.initialScanComplete = true
 
 	return agentIDs, nil
 }
