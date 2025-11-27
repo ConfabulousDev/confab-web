@@ -8,36 +8,59 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/santaclaude2025/confab/pkg/config"
+)
+
+const (
+	// compressionThreshold is the minimum payload size to compress.
+	// Below this, compression overhead isn't worth it.
+	compressionThreshold = 1024 // 1KB
 )
 
 // Client is a configured HTTP client for making authenticated requests to the backend
 type Client struct {
 	cfg        *config.UploadConfig
 	httpClient *http.Client
+	encoder    *zstd.Encoder
 }
 
 // NewClient creates a new authenticated HTTP client
 func NewClient(cfg *config.UploadConfig, timeout time.Duration) *Client {
+	// Create zstd encoder with default compression level (good balance of speed/ratio)
+	encoder, _ := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault))
+
 	return &Client{
 		cfg: cfg,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
+		encoder: encoder,
 	}
 }
 
 // DoJSON performs an HTTP request with JSON body and parses JSON response
-// Automatically sets Content-Type, Authorization, and handles error responses
+// Automatically sets Content-Type, Authorization, and handles error responses.
+// Payloads larger than 1KB are compressed with zstd.
 func (c *Client) DoJSON(method, path string, reqBody, respBody interface{}) error {
 	// Marshal request body if provided
 	var bodyReader io.Reader
+	var contentEncoding string
+
 	if reqBody != nil {
 		payload, err := json.Marshal(reqBody)
 		if err != nil {
 			return fmt.Errorf("failed to marshal request: %w", err)
 		}
-		bodyReader = bytes.NewReader(payload)
+
+		// Compress if payload is large enough
+		if len(payload) >= compressionThreshold {
+			compressed := c.encoder.EncodeAll(payload, make([]byte, 0, len(payload)/2))
+			bodyReader = bytes.NewReader(compressed)
+			contentEncoding = "zstd"
+		} else {
+			bodyReader = bytes.NewReader(payload)
+		}
 	}
 
 	// Create request
@@ -50,6 +73,9 @@ func (c *Client) DoJSON(method, path string, reqBody, respBody interface{}) erro
 	// Set headers
 	if reqBody != nil {
 		req.Header.Set("Content-Type", "application/json")
+		if contentEncoding != "" {
+			req.Header.Set("Content-Encoding", contentEncoding)
+		}
 	}
 	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 

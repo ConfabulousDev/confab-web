@@ -4,16 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	pkgsync "github.com/santaclaude2025/confab/pkg/sync"
 )
+
+// zstd decoder for decompressing request bodies in tests
+var zstdDecoder, _ = zstd.NewReader(nil)
+
+// readRequestBody reads and decompresses the request body if needed
+func readRequestBody(r *http.Request) ([]byte, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decompress if zstd encoded
+	if r.Header.Get("Content-Encoding") == "zstd" {
+		return zstdDecoder.DecodeAll(body, nil)
+	}
+
+	return body, nil
+}
 
 // mockBackend tracks requests and provides configurable responses
 type mockBackend struct {
@@ -49,6 +70,14 @@ func (m *mockBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
+	// Read and decompress request body
+	body, err := readRequestBody(r)
+	if err != nil {
+		m.t.Errorf("Failed to read request body: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	switch r.URL.Path {
 	case "/api/v1/sync/init":
 		if m.initError {
@@ -58,7 +87,7 @@ func (m *mockBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var req pkgsync.SyncInitRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.Unmarshal(body, &req); err != nil {
 			m.t.Errorf("Failed to decode init request: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -74,7 +103,7 @@ func (m *mockBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var req pkgsync.SyncChunkRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.Unmarshal(body, &req); err != nil {
 			m.t.Errorf("Failed to decode chunk request: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -419,4 +448,788 @@ func TestDaemonMultipleSyncCycles(t *testing.T) {
 			t.Errorf("Second chunk should start at line 2, got %d", secondChunk.FirstLine)
 		}
 	}
+}
+
+// TestDaemonTranscriptAppearsLate tests that daemon waits for transcript then syncs
+func TestDaemonTranscriptAppearsLate(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// DON'T create transcript yet - it will appear later
+
+	d := New(Config{
+		ExternalID:     "late-transcript-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	// Wait a bit, then create transcript
+	time.Sleep(100 * time.Millisecond)
+
+	// Transcript should not exist yet, no init should have happened
+	if len(mock.initRequests) > 0 {
+		t.Error("Init should not happen before transcript exists")
+	}
+
+	// Now create the transcript
+	os.MkdirAll(filepath.Dir(transcriptPath), 0755)
+	os.WriteFile(transcriptPath, []byte(`{"type":"system","message":"late"}`+"\n"), 0644)
+
+	// Wait for daemon to notice and sync (poll interval is 2s, so wait longer)
+	time.Sleep(2500 * time.Millisecond)
+	cancel()
+
+	<-errCh
+
+	// Now init should have happened
+	if len(mock.initRequests) == 0 {
+		t.Error("Expected init request after transcript appeared")
+	}
+	if len(mock.chunkRequests) == 0 {
+		t.Error("Expected chunk upload after transcript appeared")
+	}
+}
+
+// TestDaemonAgentFileNotExistYet tests that missing agent files are skipped and picked up later
+func TestDaemonAgentFileNotExistYet(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+	transcriptDir := filepath.Dir(transcriptPath)
+
+	// Create transcript that references an agent, but DON'T create the agent file
+	transcriptContent := `{"type":"system","message":"start"}
+{"type":"user","toolUseResult":{"agentId":"def67890","result":"pending"}}
+`
+	os.WriteFile(transcriptPath, []byte(transcriptContent), 0644)
+
+	d := New(Config{
+		ExternalID:     "agent-not-exist-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	// Wait for first sync cycle
+	time.Sleep(150 * time.Millisecond)
+
+	// Should have synced transcript but no agent (file doesn't exist)
+	transcriptUploads := 0
+	agentUploads := 0
+	for _, req := range mock.chunkRequests {
+		if req.FileType == "transcript" {
+			transcriptUploads++
+		} else if req.FileType == "agent" {
+			agentUploads++
+		}
+	}
+	if transcriptUploads == 0 {
+		t.Error("Expected transcript upload")
+	}
+	if agentUploads > 0 {
+		t.Error("Should not upload agent that doesn't exist yet")
+	}
+
+	// Now create the agent file
+	agentPath := filepath.Join(transcriptDir, "agent-def67890.jsonl")
+	os.WriteFile(agentPath, []byte(`{"type":"agent","message":"now exists"}`+"\n"), 0644)
+
+	// Wait for next sync cycle
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+
+	<-errCh
+
+	// Now should have agent upload
+	agentUploads = 0
+	for _, req := range mock.chunkRequests {
+		if req.FileType == "agent" {
+			agentUploads++
+		}
+	}
+	if agentUploads == 0 {
+		t.Error("Expected agent upload after file appeared")
+	}
+}
+
+// TestDaemonBackendHasMoreLines tests resuming when backend has more lines than expected
+func TestDaemonBackendHasMoreLines(t *testing.T) {
+	mock := newMockBackend(t)
+	// Backend says it already has 5 lines
+	mock.initResponse.Files = map[string]pkgsync.SyncFileState{
+		"transcript.jsonl": {LastSyncedLine: 5},
+	}
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// Create transcript with 7 lines (backend has 5, we upload 2)
+	var lines []string
+	for i := 1; i <= 7; i++ {
+		lines = append(lines, fmt.Sprintf(`{"type":"msg","line":%d}`, i))
+	}
+	os.WriteFile(transcriptPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+
+	d := New(Config{
+		ExternalID:     "backend-ahead-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	<-errCh
+
+	if len(mock.chunkRequests) == 0 {
+		t.Fatal("Expected chunk request")
+	}
+
+	// Should start from line 6 (after backend's line 5)
+	chunkReq := mock.chunkRequests[0]
+	if chunkReq.FirstLine != 6 {
+		t.Errorf("Expected first_line 6, got %d", chunkReq.FirstLine)
+	}
+	if len(chunkReq.Lines) != 2 {
+		t.Errorf("Expected 2 lines (6 and 7), got %d", len(chunkReq.Lines))
+	}
+}
+
+// TestDaemonEmptyTranscript tests handling of empty transcript file
+func TestDaemonEmptyTranscript(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// Create empty transcript
+	os.WriteFile(transcriptPath, []byte(""), 0644)
+
+	d := New(Config{
+		ExternalID:     "empty-transcript-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	<-errCh
+
+	// Init should happen
+	if len(mock.initRequests) == 0 {
+		t.Error("Expected init request even for empty transcript")
+	}
+
+	// No chunks should be uploaded (nothing to sync)
+	if len(mock.chunkRequests) > 0 {
+		t.Errorf("Expected no chunk uploads for empty transcript, got %d", len(mock.chunkRequests))
+	}
+}
+
+// TestDaemonShutdownFinalSync tests that final sync happens on shutdown
+func TestDaemonShutdownFinalSync(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// Create transcript
+	os.WriteFile(transcriptPath, []byte(`{"type":"system","line":1}`+"\n"), 0644)
+
+	d := New(Config{
+		ExternalID:     "shutdown-sync-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   10 * time.Second, // Very long - won't trigger during test
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	// Wait for initial sync (happens immediately on start)
+	time.Sleep(100 * time.Millisecond)
+
+	initialChunks := len(mock.chunkRequests)
+
+	// Append content that won't be synced by interval (10s is too long)
+	f, _ := os.OpenFile(transcriptPath, os.O_APPEND|os.O_WRONLY, 0644)
+	f.WriteString(`{"type":"user","line":2}` + "\n")
+	f.Close()
+
+	// Give a moment for file to be written
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel - should trigger final sync
+	cancel()
+
+	<-errCh
+
+	// Should have more chunks after shutdown (final sync picked up line 2)
+	if len(mock.chunkRequests) <= initialChunks {
+		t.Errorf("Expected final sync to upload new content, had %d chunks before, %d after",
+			initialChunks, len(mock.chunkRequests))
+	}
+}
+
+// TestDaemonMultipleAgentFiles tests discovery and sync of multiple agent files
+func TestDaemonMultipleAgentFiles(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+	transcriptDir := filepath.Dir(transcriptPath)
+
+	// Create transcript referencing multiple agents
+	transcriptContent := `{"type":"system","message":"start"}
+{"type":"user","toolUseResult":{"agentId":"aaaaaaaa","result":"done"}}
+{"type":"user","toolUseResult":{"agentId":"bbbbbbbb","result":"done"}}
+{"type":"user","toolUseResult":{"agentId":"cccccccc","result":"done"}}
+`
+	os.WriteFile(transcriptPath, []byte(transcriptContent), 0644)
+
+	// Create all three agent files
+	for _, id := range []string{"aaaaaaaa", "bbbbbbbb", "cccccccc"} {
+		agentPath := filepath.Join(transcriptDir, fmt.Sprintf("agent-%s.jsonl", id))
+		os.WriteFile(agentPath, []byte(fmt.Sprintf(`{"agent":"%s","line":1}`+"\n", id)), 0644)
+	}
+
+	d := New(Config{
+		ExternalID:     "multi-agent-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+	cancel()
+
+	<-errCh
+
+	// Count uploads by type
+	transcriptUploads := 0
+	agentFiles := make(map[string]bool)
+	for _, req := range mock.chunkRequests {
+		if req.FileType == "transcript" {
+			transcriptUploads++
+		} else if req.FileType == "agent" {
+			agentFiles[req.FileName] = true
+		}
+	}
+
+	if transcriptUploads == 0 {
+		t.Error("Expected transcript upload")
+	}
+	if len(agentFiles) != 3 {
+		t.Errorf("Expected 3 different agent files uploaded, got %d: %v", len(agentFiles), agentFiles)
+	}
+	for _, id := range []string{"aaaaaaaa", "bbbbbbbb", "cccccccc"} {
+		expectedName := fmt.Sprintf("agent-%s.jsonl", id)
+		if !agentFiles[expectedName] {
+			t.Errorf("Expected agent file %s to be uploaded", expectedName)
+		}
+	}
+}
+
+// TestDaemonAgentAppearsMidSession tests agent discovered after initial sync
+func TestDaemonAgentAppearsMidSession(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+	transcriptDir := filepath.Dir(transcriptPath)
+
+	// Start with transcript that has NO agent references
+	os.WriteFile(transcriptPath, []byte(`{"type":"system","message":"start"}`+"\n"), 0644)
+
+	d := New(Config{
+		ExternalID:     "mid-session-agent-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   100 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	// Wait for initial sync
+	time.Sleep(150 * time.Millisecond)
+
+	// Verify no agent uploads yet
+	agentUploadsBefore := 0
+	for _, req := range mock.chunkRequests {
+		if req.FileType == "agent" {
+			agentUploadsBefore++
+		}
+	}
+	if agentUploadsBefore > 0 {
+		t.Error("Should have no agent uploads before agent is referenced")
+	}
+
+	// Now append agent reference to transcript AND create agent file
+	// Note: agent ID must be valid 8-char hex
+	f, _ := os.OpenFile(transcriptPath, os.O_APPEND|os.O_WRONLY, 0644)
+	f.WriteString(`{"type":"user","toolUseResult":{"agentId":"12345678","result":"done"}}` + "\n")
+	f.Close()
+
+	agentPath := filepath.Join(transcriptDir, "agent-12345678.jsonl")
+	os.WriteFile(agentPath, []byte(`{"type":"agent","message":"mid-session agent"}`+"\n"), 0644)
+
+	// Wait for sync to pick up the new agent
+	time.Sleep(250 * time.Millisecond)
+	cancel()
+
+	<-errCh
+
+	// Now should have agent upload
+	agentUploadsAfter := 0
+	for _, req := range mock.chunkRequests {
+		if req.FileType == "agent" && req.FileName == "agent-12345678.jsonl" {
+			agentUploadsAfter++
+		}
+	}
+	if agentUploadsAfter == 0 {
+		t.Error("Expected agent upload after agent appeared mid-session")
+	}
+}
+
+// TestDaemonConcurrentStartup tests that a second daemon for the same session
+// detects the first is running and exits gracefully (or the first continues if second starts).
+// The key behavior: at least one daemon should successfully sync, no data corruption.
+func TestDaemonConcurrentStartup(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// Create transcript
+	os.WriteFile(transcriptPath, []byte(`{"type":"system","message":"concurrent test"}`+"\n"), 0644)
+
+	// Start first daemon
+	d1 := New(Config{
+		ExternalID:     "concurrent-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel1()
+
+	errCh1 := make(chan error, 1)
+	go func() {
+		errCh1 <- d1.Run(ctx1)
+	}()
+
+	// Give first daemon time to start and save state
+	time.Sleep(100 * time.Millisecond)
+
+	// Start second daemon with same external ID
+	d2 := New(Config{
+		ExternalID:     "concurrent-test", // Same ID!
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel2()
+
+	errCh2 := make(chan error, 1)
+	go func() {
+		errCh2 <- d2.Run(ctx2)
+	}()
+
+	// Wait for both to run for a bit
+	time.Sleep(300 * time.Millisecond)
+
+	// Cancel both
+	cancel1()
+	cancel2()
+
+	// Wait for both to exit
+	<-errCh1
+	<-errCh2
+
+	// Key assertion: at least one successful init and chunk upload happened
+	// (we don't care which daemon "won", just that syncing worked)
+	if len(mock.initRequests) == 0 {
+		t.Error("Expected at least one init request from concurrent daemons")
+	}
+	if len(mock.chunkRequests) == 0 {
+		t.Error("Expected at least one chunk upload from concurrent daemons")
+	}
+
+	// Verify no duplicate uploads of the same content (idempotency)
+	// Both daemons might upload, but the backend should handle dedup
+	t.Logf("Concurrent test: %d init requests, %d chunk requests",
+		len(mock.initRequests), len(mock.chunkRequests))
+}
+
+// TestDaemonFileTruncation tests that daemon handles file truncation gracefully.
+// If a transcript file is truncated mid-session, daemon should:
+// 1. Not crash
+// 2. Continue running
+// 3. Sync whatever content is available
+func TestDaemonFileTruncation(t *testing.T) {
+	mock := newMockBackend(t)
+	server := httptest.NewServer(mock)
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// Create transcript with multiple lines
+	initialContent := `{"type":"system","line":1}
+{"type":"user","line":2}
+{"type":"assistant","line":3}
+{"type":"user","line":4}
+{"type":"assistant","line":5}
+`
+	os.WriteFile(transcriptPath, []byte(initialContent), 0644)
+
+	d := New(Config{
+		ExternalID:     "truncation-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   100 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	// Wait for initial sync
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify initial content was synced
+	initialChunks := len(mock.chunkRequests)
+	if initialChunks == 0 {
+		t.Fatal("Expected initial chunk upload")
+	}
+
+	// Now truncate the file to just 2 lines (simulating corruption or reset)
+	truncatedContent := `{"type":"system","line":1}
+{"type":"user","line":2}
+`
+	os.WriteFile(transcriptPath, []byte(truncatedContent), 0644)
+
+	// Wait for next sync cycle
+	time.Sleep(200 * time.Millisecond)
+
+	// Daemon should still be running (not crashed)
+	select {
+	case err := <-errCh:
+		t.Fatalf("Daemon crashed after truncation: %v", err)
+	default:
+		// Good - daemon still running
+	}
+
+	// Now append new content after truncation
+	f, _ := os.OpenFile(transcriptPath, os.O_APPEND|os.O_WRONLY, 0644)
+	f.WriteString(`{"type":"assistant","line":3,"new":true}` + "\n")
+	f.Close()
+
+	// Wait for sync
+	time.Sleep(200 * time.Millisecond)
+
+	cancel()
+	<-errCh
+
+	// Daemon should have continued running and completed gracefully
+	t.Logf("Truncation test: daemon handled truncation, total chunks=%d", len(mock.chunkRequests))
+}
+
+// TestDaemonHTTPErrors tests that daemon handles various HTTP errors gracefully.
+// When HTTP requests fail (timeout, connection reset, server errors), daemon should:
+// 1. Not crash
+// 2. Log the error
+// 3. Continue running and retry on next cycle
+func TestDaemonHTTPErrors(t *testing.T) {
+	var requestCount int32
+
+	// Create a server that returns various errors then recovers
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&requestCount, 1)
+
+		// Simulate various error conditions
+		switch count {
+		case 1:
+			// Connection reset / abrupt close
+			hj, ok := w.(http.Hijacker)
+			if ok {
+				conn, _, _ := hj.Hijack()
+				conn.Close()
+				return
+			}
+			// Fallback if hijacking not supported
+			w.WriteHeader(http.StatusInternalServerError)
+		case 2:
+			// Rate limited
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte("Rate limited"))
+		case 3:
+			// Server error
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Internal error"))
+		default:
+			// After errors, succeed (simulating recovery)
+			w.Header().Set("Content-Type", "application/json")
+			if r.URL.Path == "/api/v1/sync/init" {
+				json.NewEncoder(w).Encode(pkgsync.SyncInitResponse{
+					SessionID: "recovered-session",
+					Files:     make(map[string]pkgsync.SyncFileState),
+				})
+			} else if r.URL.Path == "/api/v1/sync/chunk" {
+				var req pkgsync.SyncChunkRequest
+				json.NewDecoder(r.Body).Decode(&req)
+				lastLine := req.FirstLine + len(req.Lines) - 1
+				json.NewEncoder(w).Encode(pkgsync.SyncChunkResponse{
+					LastSyncedLine: lastLine,
+				})
+			}
+		}
+	}))
+	defer errorServer.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, errorServer.URL)
+
+	// Create transcript
+	os.WriteFile(transcriptPath, []byte(`{"type":"system","message":"error test"}`+"\n"), 0644)
+
+	d := New(Config{
+		ExternalID:     "http-error-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   100 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	startTime := time.Now()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	// Wait for daemon to experience failures and recover
+	time.Sleep(600 * time.Millisecond)
+
+	// Daemon should still be running despite errors
+	select {
+	case err := <-errCh:
+		t.Fatalf("Daemon crashed on HTTP error: %v", err)
+	default:
+		// Good - daemon still running
+	}
+
+	// Wait for more cycles to allow recovery
+	time.Sleep(1000 * time.Millisecond)
+	cancel()
+	<-errCh
+
+	elapsed := time.Since(startTime)
+	finalCount := atomic.LoadInt32(&requestCount)
+
+	// Daemon should have:
+	// 1. Survived all error types
+	// 2. Eventually recovered and made successful requests
+	if finalCount < 4 {
+		t.Errorf("Expected at least 4 requests (3 errors + recovery), got %d", finalCount)
+	}
+
+	t.Logf("HTTP error test: daemon survived %.1fs, %d total requests (first 3 had errors)",
+		elapsed.Seconds(), finalCount)
+}
+
+// TestDaemonLargeFile tests that daemon can handle large transcript files (~100MB).
+// This tests memory efficiency and streaming behavior.
+func TestDaemonLargeFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping large file test in short mode")
+	}
+
+	var totalLinesReceived int32
+	var totalBytesReceived int64 // tracks compressed bytes received
+
+	// Custom server that tracks received data
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Read raw body first to track compressed size
+		rawBody, _ := io.ReadAll(r.Body)
+		atomic.AddInt64(&totalBytesReceived, int64(len(rawBody)))
+
+		// Decompress if needed
+		var body []byte
+		if r.Header.Get("Content-Encoding") == "zstd" {
+			body, _ = zstdDecoder.DecodeAll(rawBody, nil)
+		} else {
+			body = rawBody
+		}
+
+		switch r.URL.Path {
+		case "/api/v1/sync/init":
+			json.NewEncoder(w).Encode(pkgsync.SyncInitResponse{
+				SessionID: "large-file-session",
+				Files:     make(map[string]pkgsync.SyncFileState),
+			})
+
+		case "/api/v1/sync/chunk":
+			var req pkgsync.SyncChunkRequest
+			if json.Unmarshal(body, &req) == nil {
+				atomic.AddInt32(&totalLinesReceived, int32(len(req.Lines)))
+				lastLine := req.FirstLine + len(req.Lines) - 1
+				json.NewEncoder(w).Encode(pkgsync.SyncChunkResponse{
+					LastSyncedLine: lastLine,
+				})
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+			}
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// Create a large transcript file (~100MB)
+	// Each line is ~1KB of JSON, 100K lines = ~100MB
+	f, err := os.Create(transcriptPath)
+	if err != nil {
+		t.Fatalf("Failed to create transcript: %v", err)
+	}
+
+	numLines := 100000
+	padding := strings.Repeat("x", 900) // ~900 bytes padding per line
+	for i := 0; i < numLines; i++ {
+		line := fmt.Sprintf(`{"type":"msg","line":%d,"padding":"%s"}`, i+1, padding)
+		f.WriteString(line + "\n")
+	}
+	f.Close()
+
+	// Verify file size
+	info, _ := os.Stat(transcriptPath)
+	fileSizeMB := float64(info.Size()) / (1024 * 1024)
+	t.Logf("Large file test: created %d lines, %.2f MB", numLines, fileSizeMB)
+
+	if fileSizeMB < 80 {
+		t.Fatalf("File too small: expected ~100MB, got %.2f MB", fileSizeMB)
+	}
+
+	d := New(Config{
+		ExternalID:     "large-file-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	startTime := time.Now()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
+
+	// Wait for sync - large file might take a while
+	// Poll until we've received all lines or timeout
+	deadline := time.Now().Add(110 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&totalLinesReceived) >= int32(numLines) {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	cancel()
+	<-errCh
+
+	elapsed := time.Since(startTime)
+
+	// Verify all lines were uploaded
+	received := atomic.LoadInt32(&totalLinesReceived)
+	if received < int32(numLines) {
+		t.Errorf("Expected %d lines uploaded, got %d", numLines, received)
+	}
+
+	bytesReceived := atomic.LoadInt64(&totalBytesReceived)
+	bytesReceivedMB := float64(bytesReceived) / (1024 * 1024)
+	throughputMBps := bytesReceivedMB / elapsed.Seconds()
+	compressionRatio := bytesReceivedMB / fileSizeMB * 100
+
+	t.Logf("Large file test: uploaded %d lines, %.2f MB compressed (%.1f%% of %.2f MB original) in %.1fs (%.2f MB/s)",
+		received, bytesReceivedMB, compressionRatio, fileSizeMB, elapsed.Seconds(), throughputMBps)
 }

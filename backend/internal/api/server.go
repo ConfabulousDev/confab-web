@@ -208,18 +208,19 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Check which sessions exist (for backfill deduplication)
 			r.Post("/sessions/check", HandleCheckSessions(s))
 
-			// Upload endpoints with user-based rate limiting
+			// Sync endpoints with user-based rate limiting and zstd decompression
 			r.Group(func(r chi.Router) {
 				// Rate limit by user ID (not IP) to allow backfill of many sessions
 				r.Use(ratelimit.MiddlewareWithKey(s.uploadLimiter, ratelimit.UserKeyFunc(auth.GetUserIDContextKey())))
 				// Decompress zstd-compressed request bodies
 				r.Use(decompressMiddleware())
-				// Legacy save endpoint removed - use sync API instead
+
+				// Incremental sync endpoints (for daemon-based uploads)
+				r.Post("/sync/init", s.handleSyncInit)
+				r.Post("/sync/chunk", s.handleSyncChunk)
 			})
 
-			// Incremental sync endpoints (for daemon-based uploads)
-			r.Post("/sync/init", s.handleSyncInit)
-			r.Post("/sync/chunk", s.handleSyncChunk)
+			// Read endpoint doesn't need rate limiting or decompression
 			r.Get("/sync/file", s.handleSyncFileRead)
 		})
 

@@ -80,9 +80,21 @@ func (w *Watcher) CheckForNewFiles() ([]*TrackedFile, error) {
 		return nil, err
 	}
 
-	var newFiles []*TrackedFile
+	// Add newly discovered agent IDs to known set
 	for _, agentID := range agentIDs {
+		w.knownAgentIDs[agentID] = true
+	}
+
+	// Check all known agent IDs for files that now exist
+	var newFiles []*TrackedFile
+	for agentID := range w.knownAgentIDs {
 		agentFileName := fmt.Sprintf("agent-%s.jsonl", agentID)
+
+		// Skip if already being tracked
+		if _, tracked := w.files[agentFileName]; tracked {
+			continue
+		}
+
 		agentPath := filepath.Join(w.transcriptDir, agentFileName)
 
 		// Check if file exists on disk
@@ -153,6 +165,7 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 	defer file.Close()
 
 	var agentIDs []string
+	seen := make(map[string]bool) // track duplicates within this scan
 	lineNum := 0
 	startLine := 0
 	if w.initialScanComplete {
@@ -180,8 +193,8 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 		// Check toolUseResult.agentId at root level
 		if toolUseResult, ok := message["toolUseResult"].(map[string]interface{}); ok {
 			if agentID, ok := toolUseResult["agentId"].(string); ok {
-				if isValidAgentID(agentID) && !w.knownAgentIDs[agentID] {
-					w.knownAgentIDs[agentID] = true
+				if isValidAgentID(agentID) && !seen[agentID] {
+					seen[agentID] = true
 					agentIDs = append(agentIDs, agentID)
 				}
 			}
@@ -196,8 +209,8 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 							if resultContent, ok := blockMap["content"].(map[string]interface{}); ok {
 								if toolUseResult, ok := resultContent["toolUseResult"].(map[string]interface{}); ok {
 									if agentID, ok := toolUseResult["agentId"].(string); ok {
-										if isValidAgentID(agentID) && !w.knownAgentIDs[agentID] {
-											w.knownAgentIDs[agentID] = true
+										if isValidAgentID(agentID) && !seen[agentID] {
+											seen[agentID] = true
 											agentIDs = append(agentIDs, agentID)
 										}
 									}

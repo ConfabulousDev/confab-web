@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/storage"
@@ -369,6 +371,93 @@ func TestBrotliCompression(t *testing.T) {
 
 		if len(decompressed) == 0 {
 			t.Error("expected non-empty decompressed error response")
+		}
+	})
+}
+
+// TestZstdRequestDecompression tests that zstd-compressed request bodies are decompressed
+func TestZstdRequestDecompression(t *testing.T) {
+	// Test the decompressMiddleware directly
+	var receivedBody []byte
+
+	// Create a simple handler that captures the request body
+	captureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Wrap with decompression middleware
+	handler := decompressMiddleware()(captureHandler)
+
+	t.Run("decompresses zstd-encoded request body", func(t *testing.T) {
+		// Create test payload
+		payload := map[string]interface{}{
+			"session_id": "test-session",
+			"lines":      []string{"line1", "line2", "line3"},
+		}
+		jsonPayload, _ := json.Marshal(payload)
+
+		// Compress with zstd
+		encoder, _ := zstd.NewWriter(nil)
+		compressed := encoder.EncodeAll(jsonPayload, nil)
+
+		// Create request with compressed body
+		req := httptest.NewRequest("POST", "/test", bytes.NewReader(compressed))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "zstd")
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", w.Code)
+		}
+
+		// Verify the handler received decompressed JSON
+		var received map[string]interface{}
+		if err := json.Unmarshal(receivedBody, &received); err != nil {
+			t.Fatalf("failed to parse received body as JSON: %v", err)
+		}
+
+		if received["session_id"] != "test-session" {
+			t.Errorf("expected session_id 'test-session', got %v", received["session_id"])
+		}
+
+		t.Logf("Zstd decompression: %d bytes -> %d bytes", len(compressed), len(receivedBody))
+	})
+
+	t.Run("passes through uncompressed request body", func(t *testing.T) {
+		// Create uncompressed request
+		payload := map[string]string{"msg": "hello"}
+		jsonPayload, _ := json.Marshal(payload)
+
+		req := httptest.NewRequest("POST", "/test", bytes.NewReader(jsonPayload))
+		req.Header.Set("Content-Type", "application/json")
+		// No Content-Encoding header
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", w.Code)
+		}
+
+		// Verify body was passed through unchanged
+		if string(receivedBody) != string(jsonPayload) {
+			t.Errorf("expected body to pass through unchanged")
+		}
+	})
+
+	t.Run("rejects unsupported Content-Encoding", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/test", strings.NewReader("test"))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "deflate") // unsupported
+
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("expected status 415 for unsupported encoding, got %d", w.Code)
 		}
 	})
 }
