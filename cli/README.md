@@ -139,6 +139,16 @@ This affects:
 - Projects directory: `$CONFAB_CLAUDE_DIR/projects/`
 - Todos directory: `$CONFAB_CLAUDE_DIR/todos/`
 
+## Known Limitations
+
+### Log Rotation Not Multi-Process Safe
+
+The logger uses lumberjack for log rotation, which is not designed for multiple processes writing to the same log file simultaneously. Individual log writes are atomic (via OS-level `O_APPEND`), but the rotation logic can race when multiple CLI processes (e.g., `save` and `daemon`) both try to rotate at the same moment the file hits 1MB.
+
+**Practical impact:** Low - this edge case requires heavy concurrent logging at the exact rotation threshold. Normal usage is unaffected.
+
+**Relevant code:** `cli/pkg/logger/logger.go`
+
 ## License
 
 MIT
