@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -893,6 +895,114 @@ func TestDeleteSessionWithChunks_Integration(t *testing.T) {
 		_, err := env.Storage.Download(env.Ctx, s3Key1)
 		if err == nil {
 			t.Error("expected S3 chunk to be deleted")
+		}
+	})
+}
+
+// =============================================================================
+// Race condition test for FindOrCreateSyncSession
+// =============================================================================
+
+func TestSyncInit_RaceCondition_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("concurrent init requests for same session all succeed", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		const numGoroutines = 10
+		externalID := "race-test-session"
+
+		// Channel to collect results
+		type result struct {
+			sessionID string
+			err       error
+		}
+		results := make(chan result, numGoroutines)
+
+		// Start barrier to ensure all goroutines start simultaneously
+		start := make(chan struct{})
+
+		// Spawn concurrent requests
+		for i := 0; i < numGoroutines; i++ {
+			go func() {
+				// Wait for start signal
+				<-start
+
+				reqBody := SyncInitRequest{
+					ExternalID:     externalID,
+					TranscriptPath: "/home/user/project/transcript.jsonl",
+					CWD:            "/home/user/project",
+				}
+
+				req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
+				w := httptest.NewRecorder()
+
+				server := &Server{db: env.DB, storage: env.Storage}
+				server.handleSyncInit(w, req)
+
+				if w.Code != http.StatusOK {
+					results <- result{err: fmt.Errorf("status %d: %s", w.Code, w.Body.String())}
+					return
+				}
+
+				var resp SyncInitResponse
+				if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+					results <- result{err: err}
+					return
+				}
+
+				results <- result{sessionID: resp.SessionID}
+			}()
+		}
+
+		// Release all goroutines at once
+		close(start)
+
+		// Collect results
+		var sessionIDs []string
+		var errors []error
+		for i := 0; i < numGoroutines; i++ {
+			r := <-results
+			if r.err != nil {
+				errors = append(errors, r.err)
+			} else {
+				sessionIDs = append(sessionIDs, r.sessionID)
+			}
+		}
+
+		// All requests should succeed
+		if len(errors) > 0 {
+			t.Errorf("expected all requests to succeed, got %d errors: %v", len(errors), errors)
+		}
+
+		// All requests should return the same session ID
+		if len(sessionIDs) != numGoroutines {
+			t.Errorf("expected %d session IDs, got %d", numGoroutines, len(sessionIDs))
+		}
+
+		firstID := sessionIDs[0]
+		for i, id := range sessionIDs {
+			if id != firstID {
+				t.Errorf("session ID mismatch: goroutine 0 got %s, goroutine %d got %s", firstID, i, id)
+			}
+		}
+
+		// Verify only one session exists in database
+		var sessionCount int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM sessions WHERE external_id = $1 AND user_id = $2",
+			externalID, user.ID)
+		if err := row.Scan(&sessionCount); err != nil {
+			t.Fatalf("failed to query sessions: %v", err)
+		}
+		if sessionCount != 1 {
+			t.Errorf("expected exactly 1 session in database, got %d", sessionCount)
 		}
 	})
 }
