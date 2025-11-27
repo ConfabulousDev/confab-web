@@ -40,6 +40,7 @@ type Daemon struct {
 	transcriptPath string
 	cwd            string
 	syncInterval   time.Duration
+	syncJitter     time.Duration
 
 	state   *State
 	syncer  *Syncer
@@ -49,10 +50,11 @@ type Daemon struct {
 
 // Config holds daemon configuration
 type Config struct {
-	ExternalID     string
-	TranscriptPath string
-	CWD            string
-	SyncInterval   time.Duration
+	ExternalID       string
+	TranscriptPath   string
+	CWD              string
+	SyncInterval     time.Duration
+	SyncIntervalJitter time.Duration // 0 to disable jitter (for testing)
 }
 
 // New creates a new daemon instance
@@ -62,11 +64,18 @@ func New(cfg Config) *Daemon {
 		interval = DefaultSyncInterval
 	}
 
+	jitter := cfg.SyncIntervalJitter
+	if jitter == 0 && cfg.SyncInterval == 0 {
+		// Only use default jitter if using default interval
+		jitter = syncIntervalJitter
+	}
+
 	return &Daemon{
 		externalID:     cfg.ExternalID,
 		transcriptPath: cfg.TranscriptPath,
 		cwd:            cfg.CWD,
 		syncInterval:   interval,
+		syncJitter:     jitter,
 		stopCh:         make(chan struct{}),
 		doneCh:         make(chan struct{}),
 	}
@@ -123,9 +132,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	logger.Info("Daemon running: pid=%d", os.Getpid())
 
-	// Main loop with jittered interval (30-35s) to avoid thundering herd
+	// Main loop with jittered interval to avoid thundering herd
 	for {
-		jitter := time.Duration(rand.Int63n(int64(syncIntervalJitter)))
+		var jitter time.Duration
+		if d.syncJitter > 0 {
+			jitter = time.Duration(rand.Int63n(int64(d.syncJitter)))
+		}
 		timer := time.NewTimer(d.syncInterval + jitter)
 
 		select {
