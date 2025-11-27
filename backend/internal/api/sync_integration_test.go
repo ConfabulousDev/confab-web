@@ -385,14 +385,14 @@ func TestHandleSyncChunk_Integration(t *testing.T) {
 		testutil.VerifyFileInS3(t, env, expectedS3Key)
 	})
 
-	t.Run("handles idempotent re-upload (same line range overwrites)", func(t *testing.T) {
+	t.Run("rejects overlapping chunk (re-upload of same lines)", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-idempotent")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-overlap")
 
 		lines := []string{
-			`{"type":"user","message":"Original content"}`,
+			`{"type":"user","message":"Hello"}`,
 		}
 
 		reqBody := SyncChunkRequest{
@@ -411,26 +411,64 @@ func TestHandleSyncChunk_Integration(t *testing.T) {
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
-		// Re-upload same range (idempotent - should overwrite)
-		updatedLines := []string{
-			`{"type":"user","message":"Updated content"}`,
+		// Try to re-upload same range - should be rejected as overlap
+		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w = httptest.NewRecorder()
+
+		server.handleSyncChunk(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusBadRequest)
+
+		var resp map[string]string
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		if !strings.Contains(resp["error"], "first_line must be 2") {
+			t.Errorf("expected error about first_line must be 2, got: %s", resp["error"])
+		}
+	})
+
+	t.Run("rejects chunk with gap (skipped lines)", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-gap")
+
+		// Upload first chunk (lines 1-2)
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines: []string{
+				`{"type":"user","message":"Line 1"}`,
+				`{"type":"assistant","message":"Line 2"}`,
+			},
 		}
 
-		reqBody.Lines = updatedLines
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncChunk(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Try to upload chunk starting at line 5 (gap - should start at 3)
+		reqBody.FirstLine = 5
+		reqBody.Lines = []string{`{"type":"user","message":"Line 5"}`}
 
 		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
 		w = httptest.NewRecorder()
 
 		server.handleSyncChunk(w, req)
 
-		testutil.AssertStatus(t, w, http.StatusOK)
+		testutil.AssertStatus(t, w, http.StatusBadRequest)
 
-		// Verify S3 has updated content
-		expectedS3Key := buildChunkS3Key(user.ID, "test-session-idempotent", "transcript.jsonl", 1, 1)
-		content := testutil.VerifyFileInS3(t, env, expectedS3Key)
+		var resp map[string]string
+		testutil.ParseJSONResponse(t, w, &resp)
 
-		if !strings.Contains(string(content), "Updated content") {
-			t.Error("expected S3 to contain updated content after idempotent re-upload")
+		if !strings.Contains(resp["error"], "first_line must be 3") {
+			t.Errorf("expected error about first_line must be 3, got: %s", resp["error"])
 		}
 	})
 

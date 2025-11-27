@@ -170,6 +170,31 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get current sync state to validate chunk continuity
+	syncState, err := s.db.GetSyncFileState(dbCtx, req.SessionID, req.FileName)
+	expectedFirstLine := 1
+	if err == nil {
+		// File exists - next chunk must continue from where we left off
+		expectedFirstLine = syncState.LastSyncedLine + 1
+	} else if !errors.Is(err, db.ErrFileNotFound) {
+		logger.Error("Failed to get sync state", "error", err, "session_id", req.SessionID, "file_name", req.FileName)
+		respondError(w, http.StatusInternalServerError, "Failed to get sync state")
+		return
+	}
+	// ErrFileNotFound is fine - it's a new file, expectedFirstLine stays 1
+
+	// Validate chunk continuity (no gaps, no overlaps)
+	if req.FirstLine != expectedFirstLine {
+		logger.Warn("Chunk continuity error",
+			"session_id", req.SessionID,
+			"file_name", req.FileName,
+			"expected_first_line", expectedFirstLine,
+			"actual_first_line", req.FirstLine)
+		respondError(w, http.StatusBadRequest,
+			fmt.Sprintf("first_line must be %d (got %d) - chunks must be contiguous", expectedFirstLine, req.FirstLine))
+		return
+	}
+
 	// Build chunk content (lines joined by newlines, with trailing newline)
 	var content bytes.Buffer
 	for _, line := range req.Lines {
