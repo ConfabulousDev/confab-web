@@ -251,13 +251,6 @@ func showSyncStatus() error {
 		fmt.Printf("  PID:     %d\n", state.PID)
 		fmt.Printf("  Started: %s\n", state.StartedAt.Format(time.RFC3339))
 		fmt.Printf("  Path:    %s\n", state.TranscriptPath)
-
-		if len(state.Files) > 0 {
-			fmt.Printf("  Files:\n")
-			for name, fileState := range state.Files {
-				fmt.Printf("    - %s: %d lines synced\n", name, fileState.LastSyncedLine)
-			}
-		}
 		fmt.Println()
 	}
 

@@ -20,15 +20,9 @@ const (
 
 // Daemon is the background sync process.
 //
-// NOTE: There is a race condition where multiple daemons could be spawned for
-// the same session if Claude Code is started twice in quick succession. The
-// check in syncStartFromHook() looks for an existing state file, but the state
-// file is only written after the daemon initializes. If two hooks run before
-// either daemon writes its state, both will spawn. The backend's chunk
-// continuity validation will reject duplicate/overlapping chunks, so data
-// integrity is preserved, but it's wasteful. A proper fix would use a lock
-// file before spawning, but this edge case is rare enough to not warrant the
-// added complexity.
+// The daemon is resilient to backend unavailability - it will keep running
+// and retry connecting to the backend on each sync interval. Once connected,
+// it will sync any accumulated changes.
 type Daemon struct {
 	externalID     string
 	transcriptPath string
@@ -71,6 +65,26 @@ func (d *Daemon) Run(ctx context.Context) error {
 	logger.Info("Daemon starting: external_id=%s transcript=%s interval=%v",
 		d.externalID, d.transcriptPath, d.syncInterval)
 
+	// Save state immediately so duplicate detection works even if backend is down
+	d.state = NewState(d.externalID, d.transcriptPath, d.cwd)
+	if err := d.state.Save(); err != nil {
+		logger.Warn("Failed to save initial state: %v", err)
+	}
+
+	// Log panics before crashing. We skip final sync since the program is in an
+	// undefined state, but we do delete the state file to avoid blocking future
+	// daemon spawns. We log the panic since this CLI runs on many local machines
+	// and we need the logs for debugging.
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("Daemon panic: %v", r)
+			if d.state != nil {
+				d.state.Delete()
+			}
+			panic(r)
+		}
+	}()
+
 	// Get authenticated config
 	uploadCfg, err := config.EnsureAuthenticated()
 	if err != nil {
@@ -80,49 +94,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// Initialize sync client
 	client := sync.NewClient(uploadCfg)
 
-	// Initialize or resume session with backend
-	initResp, err := client.Init(d.externalID, d.transcriptPath, d.cwd)
-	if err != nil {
-		return fmt.Errorf("failed to init sync session: %w", err)
-	}
-
-	logger.Info("Sync session initialized: session_id=%s existing_files=%d",
-		initResp.SessionID, len(initResp.Files))
-
-	// Create watcher and initialize from backend state
+	// Create watcher (starts tracking files immediately, even before backend connects)
 	watcher := NewWatcher(d.transcriptPath)
-	backendState := make(map[string]FileState)
-	for fileName, state := range initResp.Files {
-		backendState[fileName] = FileState{LastSyncedLine: state.LastSyncedLine}
-	}
-	watcher.InitFromState(backendState)
-
-	// Create local state
-	d.state = NewState(d.externalID, initResp.SessionID, d.transcriptPath, d.cwd)
-	for fileName, state := range backendState {
-		d.state.UpdateFileState(fileName, state.LastSyncedLine)
-	}
-
-	// Save initial state
-	if err := d.state.Save(); err != nil {
-		logger.Warn("Failed to save initial state: %v", err)
-	}
-
-	// Create syncer
-	d.syncer = NewSyncer(client, initResp.SessionID, watcher, d.state)
 
 	// Setup signal handling
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
-	// Do initial sync
-	if chunks, err := d.syncer.SyncAll(); err != nil {
-		logger.Warn("Initial sync had errors: %v", err)
-	} else if chunks > 0 {
-		logger.Info("Initial sync complete: chunks=%d", chunks)
+	// Try initial connection to backend (non-blocking if it fails)
+	if err := d.tryInit(client, watcher); err != nil {
+		logger.Warn("Backend init failed (will retry): %v", err)
 	}
 
-	// Start sync loop
+	// Start main loop - handles init retries and sync cycles
 	ticker := time.NewTicker(d.syncInterval)
 	defer ticker.Stop()
 
@@ -140,13 +124,54 @@ func (d *Daemon) Run(ctx context.Context) error {
 			return d.shutdown(fmt.Sprintf("signal %v", sig))
 
 		case <-ticker.C:
-			if chunks, err := d.syncer.SyncAll(); err != nil {
-				logger.Warn("Sync cycle had errors: %v", err)
-			} else if chunks > 0 {
-				logger.Debug("Sync cycle complete: chunks=%d", chunks)
+			// If not initialized yet, try to connect to backend
+			if d.syncer == nil {
+				if err := d.tryInit(client, watcher); err != nil {
+					logger.Warn("Backend init failed (will retry): %v", err)
+					continue
+				}
+			}
+
+			// Sync if initialized
+			if d.syncer != nil {
+				if chunks, err := d.syncer.SyncAll(); err != nil {
+					logger.Warn("Sync cycle had errors: %v", err)
+				} else if chunks > 0 {
+					logger.Debug("Sync cycle complete: chunks=%d", chunks)
+				}
 			}
 		}
 	}
+}
+
+// tryInit attempts to initialize the sync session with the backend
+func (d *Daemon) tryInit(client *sync.Client, watcher *Watcher) error {
+	initResp, err := client.Init(d.externalID, d.transcriptPath, d.cwd)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("Sync session initialized: session_id=%s existing_files=%d",
+		initResp.SessionID, len(initResp.Files))
+
+	// Initialize watcher from backend state
+	backendState := make(map[string]FileState)
+	for fileName, state := range initResp.Files {
+		backendState[fileName] = FileState{LastSyncedLine: state.LastSyncedLine}
+	}
+	watcher.InitFromState(backendState)
+
+	// Create syncer
+	d.syncer = NewSyncer(client, initResp.SessionID, watcher)
+
+	// Do initial sync immediately
+	if chunks, err := d.syncer.SyncAll(); err != nil {
+		logger.Warn("Initial sync had errors: %v", err)
+	} else if chunks > 0 {
+		logger.Info("Initial sync complete: chunks=%d", chunks)
+	}
+
+	return nil
 }
 
 // Stop signals the daemon to stop

@@ -13,16 +13,14 @@ type Syncer struct {
 	client    *sync.Client
 	sessionID string
 	watcher   *Watcher
-	state     *State
 }
 
 // NewSyncer creates a new syncer
-func NewSyncer(client *sync.Client, sessionID string, watcher *Watcher, state *State) *Syncer {
+func NewSyncer(client *sync.Client, sessionID string, watcher *Watcher) *Syncer {
 	return &Syncer{
 		client:    client,
 		sessionID: sessionID,
 		watcher:   watcher,
-		state:     state,
 	}
 }
 
@@ -53,11 +51,6 @@ func (s *Syncer) SyncAll() (int, error) {
 		totalChunks += chunks
 	}
 
-	// Save state after sync
-	if err := s.state.Save(); err != nil {
-		logger.Warn("Failed to save state: %v", err)
-	}
-
 	return totalChunks, nil
 }
 
@@ -82,9 +75,8 @@ func (s *Syncer) syncFile(file *TrackedFile) (int, error) {
 		return 0, fmt.Errorf("failed to upload chunk: %w", err)
 	}
 
-	// Update local state
+	// Update watcher state
 	s.watcher.UpdateLastSynced(fileName, lastLine)
-	s.state.UpdateFileState(fileName, lastLine)
 
 	logger.Debug("Synced file: file=%s first_line=%d last_line=%d lines=%d",
 		fileName, firstLine, lastLine, len(lines))

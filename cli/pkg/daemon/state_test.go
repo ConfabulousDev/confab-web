@@ -8,13 +8,10 @@ import (
 )
 
 func TestNewState(t *testing.T) {
-	state := NewState("ext-123", "sess-456", "/path/to/transcript.jsonl", "/work/dir")
+	state := NewState("ext-123", "/path/to/transcript.jsonl", "/work/dir")
 
 	if state.ExternalID != "ext-123" {
 		t.Errorf("expected ExternalID 'ext-123', got %q", state.ExternalID)
-	}
-	if state.SessionID != "sess-456" {
-		t.Errorf("expected SessionID 'sess-456', got %q", state.SessionID)
 	}
 	if state.TranscriptPath != "/path/to/transcript.jsonl" {
 		t.Errorf("expected TranscriptPath '/path/to/transcript.jsonl', got %q", state.TranscriptPath)
@@ -25,37 +22,8 @@ func TestNewState(t *testing.T) {
 	if state.PID != os.Getpid() {
 		t.Errorf("expected PID %d, got %d", os.Getpid(), state.PID)
 	}
-	if state.Files == nil {
-		t.Error("expected Files map to be initialized")
-	}
 	if time.Since(state.StartedAt) > time.Second {
 		t.Error("expected StartedAt to be recent")
-	}
-}
-
-func TestState_FileState(t *testing.T) {
-	state := NewState("ext-123", "sess-456", "/path/to/transcript.jsonl", "/work/dir")
-
-	// Get state for non-existent file
-	fs := state.GetFileState("transcript.jsonl")
-	if fs.LastSyncedLine != 0 {
-		t.Errorf("expected LastSyncedLine 0 for new file, got %d", fs.LastSyncedLine)
-	}
-
-	// Update file state
-	state.UpdateFileState("transcript.jsonl", 100)
-
-	fs = state.GetFileState("transcript.jsonl")
-	if fs.LastSyncedLine != 100 {
-		t.Errorf("expected LastSyncedLine 100, got %d", fs.LastSyncedLine)
-	}
-
-	// Update again
-	state.UpdateFileState("transcript.jsonl", 200)
-
-	fs = state.GetFileState("transcript.jsonl")
-	if fs.LastSyncedLine != 200 {
-		t.Errorf("expected LastSyncedLine 200, got %d", fs.LastSyncedLine)
 	}
 }
 
@@ -69,9 +37,7 @@ func TestState_SaveAndLoad(t *testing.T) {
 	defer os.Setenv("HOME", origHome)
 
 	// Create and save state
-	state := NewState("test-external-id", "test-session-id", "/path/to/transcript.jsonl", "/work/dir")
-	state.UpdateFileState("transcript.jsonl", 50)
-	state.UpdateFileState("agent-abc12345.jsonl", 25)
+	state := NewState("test-external-id", "/path/to/transcript.jsonl", "/work/dir")
 
 	if err := state.Save(); err != nil {
 		t.Fatalf("failed to save state: %v", err)
@@ -96,14 +62,8 @@ func TestState_SaveAndLoad(t *testing.T) {
 	if loaded.ExternalID != "test-external-id" {
 		t.Errorf("expected ExternalID 'test-external-id', got %q", loaded.ExternalID)
 	}
-	if loaded.SessionID != "test-session-id" {
-		t.Errorf("expected SessionID 'test-session-id', got %q", loaded.SessionID)
-	}
-	if loaded.GetFileState("transcript.jsonl").LastSyncedLine != 50 {
-		t.Errorf("expected transcript LastSyncedLine 50, got %d", loaded.GetFileState("transcript.jsonl").LastSyncedLine)
-	}
-	if loaded.GetFileState("agent-abc12345.jsonl").LastSyncedLine != 25 {
-		t.Errorf("expected agent LastSyncedLine 25, got %d", loaded.GetFileState("agent-abc12345.jsonl").LastSyncedLine)
+	if loaded.TranscriptPath != "/path/to/transcript.jsonl" {
+		t.Errorf("expected TranscriptPath '/path/to/transcript.jsonl', got %q", loaded.TranscriptPath)
 	}
 }
 
@@ -136,7 +96,7 @@ func TestState_Delete(t *testing.T) {
 	defer os.Setenv("HOME", origHome)
 
 	// Create and save state
-	state := NewState("delete-test-id", "sess-id", "/path", "/cwd")
+	state := NewState("delete-test-id", "/path", "/cwd")
 	if err := state.Save(); err != nil {
 		t.Fatalf("failed to save state: %v", err)
 	}
@@ -159,7 +119,7 @@ func TestState_Delete(t *testing.T) {
 }
 
 func TestState_IsDaemonRunning(t *testing.T) {
-	state := NewState("ext-id", "sess-id", "/path", "/cwd")
+	state := NewState("ext-id", "/path", "/cwd")
 
 	// Current process should be running
 	if !state.IsDaemonRunning() {
@@ -194,13 +154,13 @@ func TestListAllStates(t *testing.T) {
 	defer os.Setenv("HOME", origHome)
 
 	// Create a few states
-	state1 := NewState("list-test-1", "sess-1", "/path1", "/cwd1")
+	state1 := NewState("list-test-1", "/path1", "/cwd1")
 	state1.Save()
 
-	state2 := NewState("list-test-2", "sess-2", "/path2", "/cwd2")
+	state2 := NewState("list-test-2", "/path2", "/cwd2")
 	state2.Save()
 
-	state3 := NewState("list-test-3", "sess-3", "/path3", "/cwd3")
+	state3 := NewState("list-test-3", "/path3", "/cwd3")
 	state3.Save()
 
 	// List all states

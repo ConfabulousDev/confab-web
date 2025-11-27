@@ -16,25 +16,21 @@ type FileState struct {
 
 // State represents the daemon's persistent state
 type State struct {
-	ExternalID     string               `json:"external_id"`
-	SessionID      string               `json:"session_id"`
-	TranscriptPath string               `json:"transcript_path"`
-	CWD            string               `json:"cwd"`
-	PID            int                  `json:"pid"`
-	StartedAt      time.Time            `json:"started_at"`
-	Files          map[string]FileState `json:"files"`
+	ExternalID     string    `json:"external_id"`
+	TranscriptPath string    `json:"transcript_path"`
+	CWD            string    `json:"cwd"`
+	PID            int       `json:"pid"`
+	StartedAt      time.Time `json:"started_at"`
 }
 
 // NewState creates a new daemon state
-func NewState(externalID, sessionID, transcriptPath, cwd string) *State {
+func NewState(externalID, transcriptPath, cwd string) *State {
 	return &State{
 		ExternalID:     externalID,
-		SessionID:      sessionID,
 		TranscriptPath: transcriptPath,
 		CWD:            cwd,
 		PID:            os.Getpid(),
 		StartedAt:      time.Now(),
-		Files:          make(map[string]FileState),
 	}
 }
 
@@ -125,19 +121,6 @@ func (s *State) Delete() error {
 	}
 
 	return nil
-}
-
-// GetFileState returns the sync state for a file, or zero state if not tracked
-func (s *State) GetFileState(fileName string) FileState {
-	if state, ok := s.Files[fileName]; ok {
-		return state
-	}
-	return FileState{LastSyncedLine: 0}
-}
-
-// UpdateFileState updates the sync state for a file
-func (s *State) UpdateFileState(fileName string, lastSyncedLine int) {
-	s.Files[fileName] = FileState{LastSyncedLine: lastSyncedLine}
 }
 
 // IsDaemonRunning checks if the daemon process is still alive
