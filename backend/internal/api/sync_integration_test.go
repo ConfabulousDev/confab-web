@@ -904,7 +904,7 @@ func TestDeleteSessionWithChunks_Integration(t *testing.T) {
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		handler := HandleDeleteSessionOrRun(env.DB, env.Storage)
+		handler := HandleDeleteSession(env.DB, env.Storage)
 		handler(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)

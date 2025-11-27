@@ -1,134 +1,133 @@
-import type { RunDetail } from '@/types';
-import { formatBytes, getRepoWebURL, getCommitURL } from '@/utils';
+import type { SessionDetail, SyncFileDetail } from '@/types';
+import { getRepoWebURL, getCommitURL } from '@/utils';
 import { useTodos, useToggleSet } from '@/hooks';
 import TranscriptViewer from './transcript/TranscriptViewer';
-import styles from './RunCard.module.css';
+import styles from './SessionCard.module.css';
 
-interface RunCardProps {
-  run: RunDetail;
+interface SessionCardProps {
+  session: SessionDetail;
   showGitInfo?: boolean;
   shareToken?: string;
-  sessionId?: string;
 }
 
-function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProps) {
-  const { todos } = useTodos({ run, shareToken, sessionId });
-  const expandedFiles = useToggleSet<number>();
+function SessionCard({ session, showGitInfo = true, shareToken }: SessionCardProps) {
+  const { todos } = useTodos({ session, shareToken });
+  const expandedFiles = useToggleSet<string>();
 
   return (
-    <div className={styles.runCard}>
-      <div className={styles.runHeader}>
+    <div className={styles.sessionCard}>
+      <div className={styles.sessionHeader}>
         <div className={styles.headerLeft}>
           <h3>Session Details</h3>
         </div>
       </div>
 
-      <div className={styles.runInfo}>
-        <div className={styles.infoRow}>
-          <span className={styles.label}>Working Directory:</span>
-          <code className={styles.value}>{run.cwd}</code>
-        </div>
-        <div className={styles.infoRow}>
-          <span className={styles.label}>End Reason:</span>
-          <span className={styles.value}>{run.reason}</span>
-        </div>
-        <div className={styles.infoRow}>
-          <span className={styles.label}>Transcript:</span>
-          <code className={styles.value}>{run.transcript_path}</code>
-        </div>
+      <div className={styles.sessionInfo}>
+        {session.cwd && (
+          <div className={styles.infoRow}>
+            <span className={styles.label}>Working Directory:</span>
+            <code className={styles.value}>{session.cwd}</code>
+          </div>
+        )}
+        {session.transcript_path && (
+          <div className={styles.infoRow}>
+            <span className={styles.label}>Transcript:</span>
+            <code className={styles.value}>{session.transcript_path}</code>
+          </div>
+        )}
       </div>
 
-      {showGitInfo && run.git_info && (
+      {showGitInfo && session.git_info && (
         <div className={styles.gitInfoSection}>
           <h4>Git Information</h4>
           <div className={styles.gitInfo}>
-            {run.git_info.repo_url && (
+            {session.git_info.repo_url && (
               <div className={styles.infoRow}>
                 <span className={styles.label}>Repository:</span>
-                {getRepoWebURL(run.git_info.repo_url) ? (
+                {getRepoWebURL(session.git_info.repo_url) ? (
                   <a
-                    href={getRepoWebURL(run.git_info.repo_url)!}
+                    href={getRepoWebURL(session.git_info.repo_url)!}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`${styles.value} ${styles.link}`}
                   >
-                    {run.git_info.repo_url}
+                    {session.git_info.repo_url}
                   </a>
                 ) : (
-                  <code className={styles.value}>{run.git_info.repo_url}</code>
+                  <code className={styles.value}>{session.git_info.repo_url}</code>
                 )}
               </div>
             )}
 
-            {run.git_info.branch && (
+            {session.git_info.branch && (
               <div className={styles.infoRow}>
                 <span className={styles.label}>Branch:</span>
-                <code className={styles.value}>{run.git_info.branch}</code>
-                {run.git_info.is_dirty && <span className={styles.dirtyBadge}>⚠ Uncommitted changes</span>}
+                <code className={styles.value}>{session.git_info.branch}</code>
+                {session.git_info.is_dirty && <span className={styles.dirtyBadge}>Uncommitted changes</span>}
               </div>
             )}
 
-            {run.git_info.commit_sha && (
+            {session.git_info.commit_sha && (
               <div className={styles.infoRow}>
                 <span className={styles.label}>Commit:</span>
-                {getCommitURL(run.git_info) ? (
+                {getCommitURL(session.git_info) ? (
                   <a
-                    href={getCommitURL(run.git_info)!}
+                    href={getCommitURL(session.git_info)!}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`${styles.value} ${styles.link}`}
                   >
-                    <code>{run.git_info.commit_sha.substring(0, 7)}</code>
+                    <code>{session.git_info.commit_sha.substring(0, 7)}</code>
                   </a>
                 ) : (
-                  <code className={styles.value}>{run.git_info.commit_sha.substring(0, 7)}</code>
+                  <code className={styles.value}>{session.git_info.commit_sha.substring(0, 7)}</code>
                 )}
               </div>
             )}
 
-            {run.git_info.commit_message && (
+            {session.git_info.commit_message && (
               <div className={styles.infoRow}>
                 <span className={styles.label}>Message:</span>
-                <span className={styles.value}>{run.git_info.commit_message}</span>
+                <span className={styles.value}>{session.git_info.commit_message}</span>
               </div>
             )}
 
-            {run.git_info.author && (
+            {session.git_info.author && (
               <div className={styles.infoRow}>
                 <span className={styles.label}>Author:</span>
-                <span className={styles.value}>{run.git_info.author}</span>
+                <span className={styles.value}>{session.git_info.author}</span>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {run.files && run.files.length > 0 && (
+      {session.files && session.files.length > 0 && (
         <div className={styles.filesSection}>
-          <h4>Files ({run.files.length})</h4>
+          <h4>Files ({session.files.length})</h4>
           <div className={styles.filesList}>
-            {run.files.map((file) => {
+            {session.files.map((file: SyncFileDetail) => {
               const isExpandable = file.file_type === 'transcript';
-              const isExpanded = expandedFiles.has(file.id);
+              const isExpanded = expandedFiles.has(file.file_name);
 
               return (
-                <div key={file.id} className={styles.fileItemWrapper}>
+                <div key={file.file_name} className={styles.fileItemWrapper}>
                   <div
                     className={`${styles.fileItem} ${isExpandable ? styles.expandable : ''} ${isExpanded ? styles.expanded : ''}`}
-                    onClick={isExpandable ? () => expandedFiles.toggle(file.id) : undefined}
+                    onClick={isExpandable ? () => expandedFiles.toggle(file.file_name) : undefined}
                   >
                     <div className={styles.fileInfo}>
                       {isExpandable && (
                         <span className={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</span>
                       )}
                       <span className={`${styles.fileType} ${styles[file.file_type]}`}>{file.file_type}</span>
-                      <code className={styles.filePath}>{file.file_path}</code>
+                      <code className={styles.filePath}>{file.file_name}</code>
                     </div>
-                    <span className={styles.fileSize}>{formatBytes(file.size_bytes)}</span>
+                    <span className={styles.fileLines}>{file.last_synced_line} lines</span>
                   </div>
                   {isExpanded && (
                     <div className={styles.fileContent}>
-                      <TranscriptViewer run={run} shareToken={shareToken} sessionId={sessionId} />
+                      <TranscriptViewer session={session} shareToken={shareToken} />
                     </div>
                   )}
                 </div>
@@ -163,4 +162,4 @@ function RunCard({ run, showGitInfo = true, shareToken, sessionId }: RunCardProp
   );
 }
 
-export default RunCard;
+export default SessionCard;

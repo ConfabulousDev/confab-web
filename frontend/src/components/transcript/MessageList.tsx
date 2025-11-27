@@ -1,6 +1,6 @@
 import { useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TranscriptLine, AgentNode, RunDetail } from '@/types';
+import type { TranscriptLine, AgentNode, SessionDetail } from '@/types';
 import { getAgentInsertionIndex } from '@/services/agentTreeBuilder';
 import Message from './Message';
 import AgentPanel from './AgentPanel';
@@ -15,7 +15,7 @@ type VirtualItem =
 interface MessageListProps {
   messages: TranscriptLine[];
   agents: AgentNode[];
-  run: RunDetail;
+  session: SessionDetail;
 }
 
 export interface MessageListHandle {
@@ -23,7 +23,7 @@ export interface MessageListHandle {
 }
 
 const MessageList = forwardRef<MessageListHandle, MessageListProps>(
-  ({ messages, agents, run }, ref) => {
+  ({ messages, agents, session }, ref) => {
     const parentRef = useRef<HTMLDivElement>(null);
 
     // Build a map of where to insert agents
@@ -196,7 +196,7 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                   </div>
                 ) : item.type === 'agent' ? (
                   <div className={styles.agentWrapper}>
-                    <AgentPanel agent={item.agent} run={run} depth={0} />
+                    <AgentPanel agent={item.agent} session={session} depth={0} />
                   </div>
                 ) : null}
               </div>

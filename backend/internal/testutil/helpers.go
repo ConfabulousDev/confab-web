@@ -125,45 +125,22 @@ func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, externa
 	return sessionID
 }
 
-// CreateTestRun creates a run in the database for testing
-// sessionID is the UUID primary key of the session
-func CreateTestRun(t *testing.T, env *TestEnvironment, sessionID string, reason, cwd, transcriptPath string) int64 {
+// CreateTestSyncFile creates a sync_file in the database for testing
+func CreateTestSyncFile(t *testing.T, env *TestEnvironment, sessionID string, fileName, fileType string, lastSyncedLine int) {
 	t.Helper()
 
 	query := `
-		INSERT INTO runs (session_id, transcript_path, cwd, reason, source, end_timestamp, last_activity)
-		VALUES ($1, $2, $3, $4, 'hook', NOW(), NOW())
-		RETURNING id
+		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, updated_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (session_id, file_name) DO UPDATE SET
+			last_synced_line = EXCLUDED.last_synced_line,
+			updated_at = NOW()
 	`
 
-	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, transcriptPath, cwd, reason)
-	err := row.Scan(&id)
+	_, err := env.DB.Exec(env.Ctx, query, sessionID, fileName, fileType, lastSyncedLine)
 	if err != nil {
-		t.Fatalf("failed to create test run: %v", err)
+		t.Fatalf("failed to create test sync file: %v", err)
 	}
-
-	return id
-}
-
-// CreateTestFile creates a file in the database for testing
-func CreateTestFile(t *testing.T, env *TestEnvironment, runID int64, filePath, fileType, s3Key string, sizeBytes int64) int64 {
-	t.Helper()
-
-	query := `
-		INSERT INTO files (run_id, file_path, file_type, s3_key, size_bytes)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`
-
-	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, runID, filePath, fileType, s3Key, sizeBytes)
-	err := row.Scan(&id)
-	if err != nil {
-		t.Fatalf("failed to create test file: %v", err)
-	}
-
-	return id
 }
 
 // CreateTestShare creates a share in the database for testing
@@ -218,18 +195,6 @@ func CreateTestAPIKey(t *testing.T, env *TestEnvironment, userID int64, keyHash,
 	}
 
 	return id
-}
-
-// BackdateRun updates the created_at timestamp of a run to a specific time
-// This is useful for testing time-based features like rate limiting
-func BackdateRun(t *testing.T, env *TestEnvironment, runID int64, timestamp time.Time) {
-	t.Helper()
-
-	query := `UPDATE runs SET created_at = $1 WHERE id = $2`
-	_, err := env.DB.Exec(env.Ctx, query, timestamp, runID)
-	if err != nil {
-		t.Fatalf("failed to backdate run: %v", err)
-	}
 }
 
 // GenerateShareToken generates a random share token for testing (32 hex chars)

@@ -187,158 +187,7 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 	return nil
 }
 
-// SaveSessionResult contains the result of saving a session
-type SaveSessionResult struct {
-	RunID       int64
-	ID          string // UUID primary key of the session
-	SessionType string // Normalized session type (for S3 path)
-}
-
-// CreateSessionRun creates a session and run record, returning the IDs needed for S3 uploads
-// This is step 1 of the upload flow: create run -> upload to S3 -> add files
-func (db *DB) CreateSessionRun(ctx context.Context, userID int64, req *models.SaveSessionRequest, source string) (*SaveSessionResult, error) {
-	tx, err := db.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	now := time.Now().UTC()
-
-	// Generate a new UUID for the session (only used if this is a new session)
-	newSessionUUID := uuid.New().String()
-
-	// Insert session if doesn't exist, or update title if provided
-	// Returns the session's UUID primary key for use in the run
-	sessionType := req.SessionType
-	if sessionType == "" {
-		sessionType = "Claude Code" // Default
-	}
-	sessionSQL := `
-		INSERT INTO sessions (id, user_id, external_id, first_seen, title, session_type)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (user_id, session_type, external_id) DO UPDATE SET
-			title = CASE WHEN EXCLUDED.title IS NOT NULL AND EXCLUDED.title != '' THEN EXCLUDED.title ELSE sessions.title END
-		RETURNING id
-	`
-	var sessionID string
-	err = tx.QueryRowContext(ctx, sessionSQL, newSessionUUID, userID, req.ExternalID, now, req.Title, sessionType).Scan(&sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert session: %w", err)
-	}
-
-	// Marshal GitInfo to JSON for JSONB column
-	var gitInfoJSON interface{} = nil // Explicitly nil for NULL in database
-	if req.GitInfo != nil {
-		jsonBytes, err := json.Marshal(req.GitInfo)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal git_info: %w", err)
-		}
-		gitInfoJSON = jsonBytes
-	}
-
-	// Always insert a new run (s3_uploaded starts as false, updated after files added)
-	runSQL := `
-		INSERT INTO runs (session_id, transcript_path, cwd, reason, end_timestamp, s3_uploaded, git_info, source, last_activity)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id
-	`
-	if source == "" {
-		source = "hook"
-	}
-
-	var runID int64
-	err = tx.QueryRowContext(ctx, runSQL,
-		sessionID,
-		req.TranscriptPath,
-		req.CWD,
-		req.Reason,
-		now,
-		false, // s3_uploaded starts as false
-		gitInfoJSON,
-		source,
-		req.LastActivity, // CLI always provides this field
-	).Scan(&runID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert run: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return &SaveSessionResult{
-		RunID:       runID,
-		ID:          sessionID,
-		SessionType: sessionType,
-	}, nil
-}
-
-// AddFilesToRun adds file records to an existing run after S3 upload
-// This is step 2 of the upload flow: create run -> upload to S3 -> add files
-func (db *DB) AddFilesToRun(ctx context.Context, runID int64, files []models.FileUpload, s3Keys map[string]string) error {
-	tx, err := db.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	now := time.Now().UTC()
-
-	// Insert files linked to this run
-	fileSQL := `
-		INSERT INTO files (run_id, file_path, file_type, size_bytes, s3_key, s3_uploaded_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`
-	for _, f := range files {
-		s3Key, uploaded := s3Keys[f.Path]
-		var s3UploadedAt *time.Time
-		var s3KeyPtr *string
-		if uploaded {
-			s3UploadedAt = &now
-			s3KeyPtr = &s3Key
-		}
-
-		_, err = tx.ExecContext(ctx, fileSQL, runID, f.Path, f.Type, f.SizeBytes, s3KeyPtr, s3UploadedAt)
-		if err != nil {
-			return fmt.Errorf("failed to insert file: %w", err)
-		}
-	}
-
-	// Update run to mark S3 as uploaded if any files were uploaded
-	if len(s3Keys) > 0 {
-		_, err = tx.ExecContext(ctx, `UPDATE runs SET s3_uploaded = true WHERE id = $1`, runID)
-		if err != nil {
-			return fmt.Errorf("failed to update run s3_uploaded: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
-}
-
-// DeleteRun deletes a run record (used for cleanup if S3 upload fails)
-func (db *DB) DeleteRun(ctx context.Context, runID int64) error {
-	_, err := db.conn.ExecContext(ctx, `DELETE FROM runs WHERE id = $1`, runID)
-	if err != nil {
-		return fmt.Errorf("failed to delete run: %w", err)
-	}
-	return nil
-}
-
-// TODO: Implement GC strategy for orphaned S3 objects
-// When the upload flow fails between S3 upload and AddFilesToRun, we may have:
-// 1. S3 objects that were uploaded but no corresponding file records
-// 2. Run records with s3_uploaded=false that never got files added
-//
-// Potential GC approaches:
-// - Periodic job to scan S3 objects and compare against files table
-// - S3 lifecycle policy to delete objects older than X days without DB references
-// - Track upload_started_at on runs and delete runs stuck in "uploading" state
-// - Use S3 object tags to mark objects as "pending" until DB record confirmed
+// NOTE: Legacy CreateSessionRun, AddFilesToRun, DeleteRun removed - using sync API instead
 
 // FindOrCreateUserByOAuth finds or creates a user by OAuth provider identity.
 // It handles account linking: if an identity doesn't exist but the email matches
@@ -526,24 +375,25 @@ func extractRepoName(repoURL string) *string {
 
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
-	ID                string    `json:"id"`                        // UUID primary key for URL routing
-	ExternalID        string    `json:"external_id"`               // External system's session ID (e.g., Claude Code's ID)
-	FirstSeen         time.Time `json:"first_seen"`
-	RunCount          int       `json:"run_count"`
-	LastRunTime       time.Time `json:"last_run_time"`
-	Title             *string   `json:"title,omitempty"`
-	SessionType       string    `json:"session_type"`
-	MaxTranscriptSize int64     `json:"max_transcript_size"`       // Max transcript size across all runs (0 = empty session)
-	GitRepo           *string   `json:"git_repo,omitempty"`        // Git repository from latest run (e.g., "org/repo") - extracted from git_info JSONB
-	GitBranch         *string   `json:"git_branch,omitempty"`      // Git branch from latest run - extracted from git_info JSONB
-	IsOwner           bool      `json:"is_owner"`                  // true if user owns this session
-	AccessType        string    `json:"access_type"`               // "owner" | "private_share" | "public_share"
-	ShareToken        *string   `json:"share_token,omitempty"`     // share token if accessed via share
-	SharedByEmail     *string   `json:"shared_by_email,omitempty"` // email of user who shared (if not owner)
+	ID            string     `json:"id"`                        // UUID primary key for URL routing
+	ExternalID    string     `json:"external_id"`               // External system's session ID (e.g., Claude Code's ID)
+	FirstSeen     time.Time  `json:"first_seen"`
+	FileCount     int        `json:"file_count"`                // Number of sync files
+	LastSyncTime  *time.Time `json:"last_sync_time,omitempty"`  // Last sync timestamp
+	Title         *string    `json:"title,omitempty"`
+	SessionType   string     `json:"session_type"`
+	TotalLines    int64      `json:"total_lines"`               // Sum of last_synced_line across all files
+	GitRepo       *string    `json:"git_repo,omitempty"`        // Git repository (e.g., "org/repo") - extracted from git_info JSONB
+	GitBranch     *string    `json:"git_branch,omitempty"`      // Git branch - extracted from git_info JSONB
+	IsOwner       bool       `json:"is_owner"`                  // true if user owns this session
+	AccessType    string     `json:"access_type"`               // "owner" | "private_share" | "public_share"
+	ShareToken    *string    `json:"share_token,omitempty"`     // share token if accessed via share
+	SharedByEmail *string    `json:"shared_by_email,omitempty"` // email of user who shared (if not owner)
 }
 
 // ListUserSessions returns all sessions for a user
 // If includeShared is true, also includes sessions shared with the user (private shares and accessed public shares)
+// Uses sync_files table for file counts and sync state
 func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared bool) ([]SessionListItem, error) {
 	// Get user's email for private share matching
 	var userEmail string
@@ -554,84 +404,60 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 
 	var query string
 	if !includeShared {
-		// Original query - only owned sessions
+		// Only owned sessions - using sync_files for file counts
 		query = `
-			WITH latest_runs AS (
-				SELECT DISTINCT ON (session_id)
-					session_id,
-					git_info->>'repo_url' as git_repo_url,
-					git_info->>'branch' as git_branch
-				FROM runs
-				ORDER BY session_id, last_activity DESC
-			)
 			SELECT
 				s.id,
 				s.external_id,
 				s.first_seen,
-				COUNT(r.id) as run_count,
-				COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+				COALESCE(sf_stats.file_count, 0) as file_count,
+				s.last_message_at,
 				s.title,
 				s.session_type,
-				COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
-				latest_runs.git_repo_url,
-				latest_runs.git_branch,
+				COALESCE(sf_stats.total_lines, 0) as total_lines,
+				s.git_info->>'repo_url' as git_repo_url,
+				s.git_info->>'branch' as git_branch,
 				true as is_owner,
 				'owner' as access_type,
 				NULL::text as share_token,
 				NULL::text as shared_by_email
 			FROM sessions s
-			LEFT JOIN runs r ON s.id = r.session_id
 			LEFT JOIN (
-				SELECT run_id, MAX(size_bytes) as max_size
-				FROM files
-				WHERE file_type = 'transcript'
-				GROUP BY run_id
-			) transcript_sizes ON r.id = transcript_sizes.run_id
-			LEFT JOIN latest_runs ON s.id = latest_runs.session_id
+				SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+				FROM sync_files
+				GROUP BY session_id
+			) sf_stats ON s.id = sf_stats.session_id
 			WHERE s.user_id = $1
-			GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type, latest_runs.git_repo_url, latest_runs.git_branch
-			ORDER BY last_run_time DESC
+			ORDER BY COALESCE(s.last_message_at, s.first_seen) DESC
 		`
 	} else {
 		// Include owned + shared sessions via UNION
 		query = `
-			WITH latest_runs AS (
-				SELECT DISTINCT ON (session_id)
-					session_id,
-					git_info->>'repo_url' as git_repo_url,
-					git_info->>'branch' as git_branch
-				FROM runs
-				ORDER BY session_id, last_activity DESC
-			),
+			WITH
 			-- User's own sessions
 			owned_sessions AS (
 				SELECT
 					s.id,
 					s.external_id,
 					s.first_seen,
-					COUNT(r.id) as run_count,
-					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+					COALESCE(sf_stats.file_count, 0) as file_count,
+					s.last_message_at,
 					s.title,
 					s.session_type,
-					COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
-					latest_runs.git_repo_url,
-					latest_runs.git_branch,
+					COALESCE(sf_stats.total_lines, 0) as total_lines,
+					s.git_info->>'repo_url' as git_repo_url,
+					s.git_info->>'branch' as git_branch,
 					true as is_owner,
 					'owner' as access_type,
 					NULL::text as share_token,
 					NULL::text as shared_by_email
 				FROM sessions s
-				LEFT JOIN runs r ON s.id = r.session_id
 				LEFT JOIN (
-					SELECT run_id, MAX(size_bytes) as max_size
-					FROM files
-					WHERE file_type = 'transcript'
-					GROUP BY run_id
-				) transcript_sizes ON r.id = transcript_sizes.run_id
-				LEFT JOIN latest_runs ON s.id = latest_runs.session_id
+					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+					FROM sync_files
+					GROUP BY session_id
+				) sf_stats ON s.id = sf_stats.session_id
 				WHERE s.user_id = $1
-				GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type,
-				         latest_runs.git_repo_url, latest_runs.git_branch
 			),
 			-- Private shares (invited by email)
 			private_shares AS (
@@ -639,13 +465,13 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.id,
 					s.external_id,
 					s.first_seen,
-					COUNT(r.id) as run_count,
-					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+					COALESCE(sf_stats.file_count, 0) as file_count,
+					s.last_message_at,
 					s.title,
 					s.session_type,
-					COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
-					latest_runs.git_repo_url,
-					latest_runs.git_branch,
+					COALESCE(sf_stats.total_lines, 0) as total_lines,
+					s.git_info->>'repo_url' as git_repo_url,
+					s.git_info->>'branch' as git_branch,
 					false as is_owner,
 					'private_share' as access_type,
 					sh.share_token,
@@ -654,20 +480,15 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_invites si ON sh.id = si.share_id
 				JOIN users u ON s.user_id = u.id
-				LEFT JOIN runs r ON s.id = r.session_id
 				LEFT JOIN (
-					SELECT run_id, MAX(size_bytes) as max_size
-					FROM files
-					WHERE file_type = 'transcript'
-					GROUP BY run_id
-				) transcript_sizes ON r.id = transcript_sizes.run_id
-				LEFT JOIN latest_runs ON s.id = latest_runs.session_id
+					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+					FROM sync_files
+					GROUP BY session_id
+				) sf_stats ON s.id = sf_stats.session_id
 				WHERE sh.visibility = 'private'
 				  AND LOWER(si.email) = LOWER($2)
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
-				GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type,
-				         latest_runs.git_repo_url, latest_runs.git_branch, sh.share_token, u.email
 			),
 			-- Public shares accessed by user
 			public_shares AS (
@@ -675,13 +496,13 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.id,
 					s.external_id,
 					s.first_seen,
-					COUNT(r.id) as run_count,
-					COALESCE(MAX(r.last_activity), s.first_seen) as last_run_time,
+					COALESCE(sf_stats.file_count, 0) as file_count,
+					s.last_message_at,
 					s.title,
 					s.session_type,
-					COALESCE(MAX(transcript_sizes.max_size), 0) as max_transcript_size,
-					latest_runs.git_repo_url,
-					latest_runs.git_branch,
+					COALESCE(sf_stats.total_lines, 0) as total_lines,
+					s.git_info->>'repo_url' as git_repo_url,
+					s.git_info->>'branch' as git_branch,
 					false as is_owner,
 					'public_share' as access_type,
 					sh.share_token,
@@ -690,27 +511,24 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_accesses sa ON sh.id = sa.share_id
 				JOIN users u ON s.user_id = u.id
-				LEFT JOIN runs r ON s.id = r.session_id
 				LEFT JOIN (
-					SELECT run_id, MAX(size_bytes) as max_size
-					FROM files
-					WHERE file_type = 'transcript'
-					GROUP BY run_id
-				) transcript_sizes ON r.id = transcript_sizes.run_id
-				LEFT JOIN latest_runs ON s.id = latest_runs.session_id
+					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+					FROM sync_files
+					GROUP BY session_id
+				) sf_stats ON s.id = sf_stats.session_id
 				WHERE sh.visibility = 'public'
 				  AND sa.user_id = $1
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
-				GROUP BY s.id, s.external_id, s.first_seen, s.title, s.session_type,
-				         latest_runs.git_repo_url, latest_runs.git_branch, sh.share_token, u.email
 			)
-			SELECT * FROM owned_sessions
-			UNION ALL
-			SELECT * FROM private_shares
-			UNION ALL
-			SELECT * FROM public_shares
-			ORDER BY last_run_time DESC
+			SELECT * FROM (
+				SELECT * FROM owned_sessions
+				UNION ALL
+				SELECT * FROM private_shares
+				UNION ALL
+				SELECT * FROM public_shares
+			) combined
+			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
 	}
 
@@ -734,11 +552,11 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 			&session.ID,
 			&session.ExternalID,
 			&session.FirstSeen,
-			&session.RunCount,
-			&session.LastRunTime,
+			&session.FileCount,
+			&session.LastSyncTime,
 			&session.Title,
 			&session.SessionType,
-			&session.MaxTranscriptSize,
+			&session.TotalLines,
 			&gitRepoURL,
 			&session.GitBranch,
 			&session.IsOwner,
@@ -764,43 +582,48 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 	return sessions, nil
 }
 
-// SessionDetail represents detailed session information
+// SessionDetail represents detailed session information (sync-based model)
 type SessionDetail struct {
-	ID         string      `json:"id"`              // UUID primary key for URL routing
-	ExternalID string      `json:"external_id"`     // External system's session ID
-	Title      *string     `json:"title,omitempty"` // Session title (may be nil)
-	FirstSeen  time.Time   `json:"first_seen"`
-	Runs       []RunDetail `json:"runs"`
+	ID             string           `json:"id"`                        // UUID primary key for URL routing
+	ExternalID     string           `json:"external_id"`               // External system's session ID
+	Title          *string          `json:"title,omitempty"`           // Session title (may be nil)
+	FirstSeen      time.Time        `json:"first_seen"`
+	CWD            *string          `json:"cwd,omitempty"`             // Working directory
+	TranscriptPath *string          `json:"transcript_path,omitempty"` // Original transcript path
+	GitInfo        interface{}      `json:"git_info,omitempty"`        // Git metadata
+	LastSyncAt     *time.Time       `json:"last_sync_at,omitempty"`    // Last sync timestamp
+	Files          []SyncFileDetail `json:"files"`                     // Sync files
 }
 
-// RunDetail represents a run with its files
-type RunDetail struct {
-	ID             int64        `json:"id"`
-	EndTimestamp   time.Time    `json:"end_timestamp"`
-	CWD            string       `json:"cwd"`
-	Reason         string       `json:"reason"`
-	TranscriptPath string       `json:"transcript_path"`
-	S3Uploaded     bool         `json:"s3_uploaded"`
-	GitInfo        interface{}  `json:"git_info,omitempty"`
-	Files          []FileDetail `json:"files"`
-}
-
-// FileDetail represents a file in a run
-type FileDetail struct {
-	ID           int64      `json:"id"`
-	FilePath     string     `json:"file_path"`
-	FileType     string     `json:"file_type"`
-	SizeBytes    int64      `json:"size_bytes"`
-	S3Key        *string    `json:"s3_key,omitempty"`
-	S3UploadedAt *time.Time `json:"s3_uploaded_at,omitempty"`
+// SyncFileDetail represents a synced file
+type SyncFileDetail struct {
+	FileName       string    `json:"file_name"`
+	FileType       string    `json:"file_type"`
+	LastSyncedLine int       `json:"last_synced_line"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // GetSessionDetail returns detailed information about a session by its UUID primary key
+// Uses sync_files table for file information
 func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int64) (*SessionDetail, error) {
-	// First, get the session and verify ownership
+	// Get the session with all metadata and verify ownership
 	var session SessionDetail
-	sessionQuery := `SELECT id, external_id, title, first_seen FROM sessions WHERE id = $1 AND user_id = $2`
-	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(&session.ID, &session.ExternalID, &session.Title, &session.FirstSeen)
+	var gitInfoBytes []byte
+	sessionQuery := `
+		SELECT id, external_id, title, first_seen, cwd, transcript_path, git_info, last_sync_at
+		FROM sessions
+		WHERE id = $1 AND user_id = $2
+	`
+	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(
+		&session.ID,
+		&session.ExternalID,
+		&session.Title,
+		&session.FirstSeen,
+		&session.CWD,
+		&session.TranscriptPath,
+		&gitInfoBytes,
+		&session.LastSyncAt,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
@@ -812,69 +635,42 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	// Get all runs for this session
-	runsQuery := `
-		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded, git_info
-		FROM runs
+	// Unmarshal git_info JSONB if present
+	if len(gitInfoBytes) > 0 {
+		if err := json.Unmarshal(gitInfoBytes, &session.GitInfo); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
+		}
+	}
+
+	// Get sync files for this session
+	filesQuery := `
+		SELECT file_name, file_type, last_synced_line, updated_at
+		FROM sync_files
 		WHERE session_id = $1
-		ORDER BY end_timestamp ASC
+		ORDER BY file_type DESC, file_name ASC
 	`
 
-	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionID)
+	rows, err := db.conn.QueryContext(ctx, filesQuery, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query runs: %w", err)
+		return nil, fmt.Errorf("failed to query sync files: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var run RunDetail
-		var gitInfoBytes []byte
-		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &gitInfoBytes); err != nil {
-			return nil, fmt.Errorf("failed to scan run: %w", err)
+		var file SyncFileDetail
+		if err := rows.Scan(&file.FileName, &file.FileType, &file.LastSyncedLine, &file.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan sync file: %w", err)
 		}
-
-		// Unmarshal git_info JSONB if present
-		if len(gitInfoBytes) > 0 {
-			if err := json.Unmarshal(gitInfoBytes, &run.GitInfo); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
-			}
-		}
-
-		// Get files for this run
-		filesQuery := `
-			SELECT id, file_path, file_type, size_bytes, s3_key, s3_uploaded_at
-			FROM files
-			WHERE run_id = $1
-			ORDER BY file_type DESC, file_path ASC
-		`
-
-		fileRows, err := db.conn.QueryContext(ctx, filesQuery, run.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query files: %w", err)
-		}
-		defer fileRows.Close()
-
-		for fileRows.Next() {
-			var file FileDetail
-			if err := fileRows.Scan(&file.ID, &file.FilePath, &file.FileType, &file.SizeBytes, &file.S3Key, &file.S3UploadedAt); err != nil {
-				fileRows.Close()
-				return nil, fmt.Errorf("failed to scan file: %w", err)
-			}
-			run.Files = append(run.Files, file)
-		}
-
-		if err := fileRows.Err(); err != nil {
-			fileRows.Close()
-			return nil, fmt.Errorf("error iterating files: %w", err)
-		}
-
-		fileRows.Close()
-
-		session.Runs = append(session.Runs, run)
+		session.Files = append(session.Files, file)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating runs: %w", err)
+		return nil, fmt.Errorf("error iterating sync files: %w", err)
+	}
+
+	// Ensure Files is never nil (JSON marshals nil slice as null, but we want [])
+	if session.Files == nil {
+		session.Files = []SyncFileDetail{}
 	}
 
 	return &session, nil
@@ -1175,6 +971,7 @@ func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) 
 }
 
 // GetSharedSession returns session detail via share token (sessionID is the UUID primary key)
+// Uses sync_files table for file information
 func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken string, viewerEmail *string) (*SessionDetail, error) {
 	// Get share and verify it belongs to this session
 	var share SessionShare
@@ -1222,10 +1019,23 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 		`UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`,
 		share.ID)
 
-	// Get session detail (no ownership check since share verified)
+	// Get session detail with all metadata (no ownership check since share verified)
 	var session SessionDetail
-	sessionQuery := `SELECT id, external_id, first_seen FROM sessions WHERE id = $1`
-	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(&session.ID, &session.ExternalID, &session.FirstSeen)
+	var gitInfoBytes []byte
+	sessionQuery := `
+		SELECT id, external_id, title, first_seen, cwd, transcript_path, git_info, last_sync_at
+		FROM sessions WHERE id = $1
+	`
+	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(
+		&session.ID,
+		&session.ExternalID,
+		&session.Title,
+		&session.FirstSeen,
+		&session.CWD,
+		&session.TranscriptPath,
+		&gitInfoBytes,
+		&session.LastSyncAt,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
@@ -1237,69 +1047,42 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	// Get runs
-	runsQuery := `
-		SELECT id, end_timestamp, cwd, reason, transcript_path, s3_uploaded, git_info
-		FROM runs
+	// Unmarshal git_info JSONB if present
+	if len(gitInfoBytes) > 0 {
+		if err := json.Unmarshal(gitInfoBytes, &session.GitInfo); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
+		}
+	}
+
+	// Get sync files for this session
+	filesQuery := `
+		SELECT file_name, file_type, last_synced_line, updated_at
+		FROM sync_files
 		WHERE session_id = $1
-		ORDER BY end_timestamp ASC
+		ORDER BY file_type DESC, file_name ASC
 	`
 
-	rows, err := db.conn.QueryContext(ctx, runsQuery, sessionID)
+	rows, err := db.conn.QueryContext(ctx, filesQuery, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query runs: %w", err)
+		return nil, fmt.Errorf("failed to query sync files: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var run RunDetail
-		var gitInfoBytes []byte
-		if err := rows.Scan(&run.ID, &run.EndTimestamp, &run.CWD, &run.Reason, &run.TranscriptPath, &run.S3Uploaded, &gitInfoBytes); err != nil {
-			return nil, fmt.Errorf("failed to scan run: %w", err)
+		var file SyncFileDetail
+		if err := rows.Scan(&file.FileName, &file.FileType, &file.LastSyncedLine, &file.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan sync file: %w", err)
 		}
-
-		// Unmarshal git_info JSONB if present
-		if len(gitInfoBytes) > 0 {
-			if err := json.Unmarshal(gitInfoBytes, &run.GitInfo); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
-			}
-		}
-
-		// Get files
-		filesQuery := `
-			SELECT id, file_path, file_type, size_bytes, s3_key, s3_uploaded_at
-			FROM files
-			WHERE run_id = $1
-			ORDER BY file_type DESC, file_path ASC
-		`
-
-		fileRows, err := db.conn.QueryContext(ctx, filesQuery, run.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query files: %w", err)
-		}
-		defer fileRows.Close()
-
-		for fileRows.Next() {
-			var file FileDetail
-			if err := fileRows.Scan(&file.ID, &file.FilePath, &file.FileType, &file.SizeBytes, &file.S3Key, &file.S3UploadedAt); err != nil {
-				fileRows.Close()
-				return nil, fmt.Errorf("failed to scan file: %w", err)
-			}
-			run.Files = append(run.Files, file)
-		}
-
-		if err := fileRows.Err(); err != nil {
-			fileRows.Close()
-			return nil, fmt.Errorf("error iterating files: %w", err)
-		}
-
-		fileRows.Close()
-
-		session.Runs = append(session.Runs, run)
+		session.Files = append(session.Files, file)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating runs: %w", err)
+		return nil, fmt.Errorf("error iterating sync files: %w", err)
+	}
+
+	// Ensure Files is never nil (JSON marshals nil slice as null, but we want [])
+	if session.Files == nil {
+		session.Files = []SyncFileDetail{}
 	}
 
 	return &session, nil
@@ -1366,234 +1149,7 @@ func (db *DB) HasEmailBeenInvitedAfter(ctx context.Context, email string, afterT
 	return exists, nil
 }
 
-// GetFileByID retrieves a file by ID with ownership verification
-func (db *DB) GetFileByID(ctx context.Context, fileID int64, userID int64) (*FileDetail, error) {
-	// Join through runs and sessions to verify ownership
-	query := `
-		SELECT f.id, f.file_path, f.file_type, f.size_bytes, f.s3_key, f.s3_uploaded_at
-		FROM files f
-		JOIN runs r ON f.run_id = r.id
-		JOIN sessions s ON r.session_id = s.id
-		WHERE f.id = $1 AND s.user_id = $2
-	`
-
-	var file FileDetail
-	err := db.conn.QueryRowContext(ctx, query, fileID, userID).Scan(
-		&file.ID,
-		&file.FilePath,
-		&file.FileType,
-		&file.SizeBytes,
-		&file.S3Key,
-		&file.S3UploadedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// Could be either not found or unauthorized - keeping combined for security
-			return nil, ErrUnauthorized
-		}
-		return nil, fmt.Errorf("failed to get file: %w", err)
-	}
-
-	return &file, nil
-}
-
-// GetSharedFileByID retrieves a file by ID via share token (for shared sessions)
-func (db *DB) GetSharedFileByID(ctx context.Context, sessionID string, shareToken string, fileID int64, viewerEmail *string) (*FileDetail, error) {
-	// First validate the share token
-	var share SessionShare
-	shareQuery := `SELECT id, session_id, visibility, expires_at
-	               FROM session_shares
-	               WHERE share_token = $1 AND session_id = $2`
-
-	err := db.conn.QueryRowContext(ctx, shareQuery, shareToken, sessionID).Scan(
-		&share.ID, &share.SessionID, &share.Visibility, &share.ExpiresAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrShareNotFound
-		}
-		return nil, fmt.Errorf("failed to get share: %w", err)
-	}
-
-	// Check expiration
-	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now().UTC()) {
-		return nil, ErrShareExpired
-	}
-
-	// Check private share access
-	if share.Visibility == "private" {
-		if viewerEmail == nil {
-			return nil, ErrUnauthorized
-		}
-		// Check if viewer is invited
-		var count int
-		inviteQuery := `SELECT COUNT(*) FROM session_share_invites
-		                WHERE share_id = $1 AND email = $2`
-		err = db.conn.QueryRowContext(ctx, inviteQuery, share.ID, *viewerEmail).Scan(&count)
-		if err != nil || count == 0 {
-			return nil, ErrUnauthorized
-		}
-	}
-
-	// Get file, verifying it belongs to the shared session
-	fileQuery := `
-		SELECT f.id, f.file_path, f.file_type, f.size_bytes, f.s3_key, f.s3_uploaded_at
-		FROM files f
-		JOIN runs r ON f.run_id = r.id
-		WHERE f.id = $1 AND r.session_id = $2
-	`
-
-	var file FileDetail
-	err = db.conn.QueryRowContext(ctx, fileQuery, fileID, sessionID).Scan(
-		&file.ID,
-		&file.FilePath,
-		&file.FileType,
-		&file.SizeBytes,
-		&file.S3Key,
-		&file.S3UploadedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrFileNotFound
-		}
-		return nil, fmt.Errorf("failed to get file: %w", err)
-	}
-
-	// Update last accessed timestamp
-	updateQuery := `UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`
-	db.conn.ExecContext(ctx, updateQuery, share.ID)
-
-	return &file, nil
-}
-
-// GetRunS3Keys retrieves all S3 keys for files in a specific run
-// Also verifies ownership and returns the session UUID and run count
-func (db *DB) GetRunS3Keys(ctx context.Context, runID int64, userID int64) (sessionID string, runCount int, s3Keys []string, err error) {
-	// Verify ownership by joining through sessions and get run count
-	ownershipQuery := `
-		SELECT s.id, COUNT(r2.id) as run_count
-		FROM runs r
-		JOIN sessions s ON r.session_id = s.id
-		LEFT JOIN runs r2 ON s.id = r2.session_id
-		WHERE r.id = $1 AND s.user_id = $2
-		GROUP BY s.id
-	`
-	err = db.conn.QueryRowContext(ctx, ownershipQuery, runID, userID).Scan(&sessionID, &runCount)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", 0, nil, ErrUnauthorized
-		}
-		return "", 0, nil, fmt.Errorf("failed to verify ownership: %w", err)
-	}
-
-	// Get all S3 keys for files in this run
-	query := `SELECT s3_key FROM files WHERE run_id = $1 AND s3_key IS NOT NULL`
-	rows, err := db.conn.QueryContext(ctx, query, runID)
-	if err != nil {
-		return "", 0, nil, fmt.Errorf("failed to query S3 keys: %w", err)
-	}
-	defer rows.Close()
-
-	s3Keys = []string{}
-	for rows.Next() {
-		var s3Key string
-		if err := rows.Scan(&s3Key); err != nil {
-			return "", 0, nil, fmt.Errorf("failed to scan S3 key: %w", err)
-		}
-		s3Keys = append(s3Keys, s3Key)
-	}
-
-	if err := rows.Err(); err != nil {
-		return "", 0, nil, fmt.Errorf("error iterating S3 keys: %w", err)
-	}
-
-	return sessionID, runCount, s3Keys, nil
-}
-
-// GetSessionS3Keys retrieves all S3 keys for all files in all runs of a session
-// Also verifies ownership via session UUID lookup
-func (db *DB) GetSessionS3Keys(ctx context.Context, sessionID string, userID int64) ([]string, error) {
-	// Verify session exists for this user
-	var exists bool
-	err := db.conn.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1 AND user_id = $2)`,
-		sessionID, userID).Scan(&exists)
-	if err != nil {
-		// Handle invalid UUID format
-		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
-			return nil, ErrSessionNotFound
-		}
-		return nil, fmt.Errorf("failed to verify session: %w", err)
-	}
-	if !exists {
-		return nil, ErrSessionNotFound
-	}
-
-	// Get all S3 keys for all files in all runs of this session
-	query := `
-		SELECT f.s3_key
-		FROM files f
-		JOIN runs r ON f.run_id = r.id
-		WHERE r.session_id = $1 AND f.s3_key IS NOT NULL
-	`
-	rows, err := db.conn.QueryContext(ctx, query, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query S3 keys: %w", err)
-	}
-	defer rows.Close()
-
-	s3Keys := []string{}
-	for rows.Next() {
-		var s3Key string
-		if err := rows.Scan(&s3Key); err != nil {
-			return nil, fmt.Errorf("failed to scan S3 key: %w", err)
-		}
-		s3Keys = append(s3Keys, s3Key)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating S3 keys: %w", err)
-	}
-
-	return s3Keys, nil
-}
-
-// DeleteRunFromDB deletes a single run from the database
-// S3 objects must be deleted BEFORE calling this function
-// If this is the only run for the session, the session is also deleted
-func (db *DB) DeleteRunFromDB(ctx context.Context, runID int64, userID int64, sessionID string, runCount int) error {
-	tx, err := db.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Delete the run (CASCADE will delete files)
-	deleteRunQuery := `DELETE FROM runs WHERE id = $1`
-	result, err := tx.ExecContext(ctx, deleteRunQuery, runID)
-	if err != nil {
-		return fmt.Errorf("failed to delete run: %w", err)
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return ErrRunNotFound
-	}
-
-	// If this was the only run, delete the session too
-	if runCount == 1 {
-		deleteSessionQuery := `DELETE FROM sessions WHERE id = $1 AND user_id = $2`
-		_, err = tx.ExecContext(ctx, deleteSessionQuery, sessionID, userID)
-		if err != nil {
-			return fmt.Errorf("failed to delete session: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
-}
+// NOTE: Legacy file-by-ID and run-based functions removed - using sync API instead
 
 // DeleteSessionFromDB deletes an entire session and all its runs from the database
 // S3 objects must be deleted BEFORE calling this function
@@ -1623,56 +1179,8 @@ func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string, userID 
 	return nil
 }
 
-// CountUserRunsInLastWeek returns the number of runs uploaded by a user in the last 7 days
-func (db *DB) CountUserRunsInLastWeek(ctx context.Context, userID int64) (int, error) {
-	query := `
-		SELECT COUNT(*)
-		FROM runs r
-		JOIN sessions s ON r.session_id = s.id
-		WHERE s.user_id = $1 AND r.created_at >= NOW() - INTERVAL '7 days'
-	`
-
-	var count int
-	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count runs: %w", err)
-	}
-
-	return count, nil
-}
-
-// WeeklyUsage represents a user's weekly upload usage statistics
-type WeeklyUsage struct {
-	CurrentCount int       `json:"runs_uploaded"`
-	Limit        int       `json:"limit"`
-	Remaining    int       `json:"remaining"`
-	PeriodStart  time.Time `json:"period_start"`
-	PeriodEnd    time.Time `json:"period_end"`
-}
-
-// GetUserWeeklyUsage returns detailed weekly usage statistics for a user
-func (db *DB) GetUserWeeklyUsage(ctx context.Context, userID int64, maxRunsPerWeek int) (*WeeklyUsage, error) {
-	count, err := db.CountUserRunsInLastWeek(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	periodStart := now.Add(-7 * 24 * time.Hour)
-
-	remaining := maxRunsPerWeek - count
-	if remaining < 0 {
-		remaining = 0
-	}
-
-	return &WeeklyUsage{
-		CurrentCount: count,
-		Limit:        maxRunsPerWeek,
-		Remaining:    remaining,
-		PeriodStart:  periodStart,
-		PeriodEnd:    now,
-	}, nil
-}
+// NOTE: CountUserRunsInLastWeek and GetUserWeeklyUsage removed - legacy rate limiting
+// Sync API uses different rate limiting strategy
 
 // ============================================================================
 // Device Code Flow (for CLI authentication)
@@ -1787,29 +1295,41 @@ type SyncFileState struct {
 	LastSyncedLine int    `json:"last_synced_line"`
 }
 
+// SyncSessionParams contains parameters for creating/updating a sync session
+type SyncSessionParams struct {
+	ExternalID     string
+	TranscriptPath string
+	CWD            string
+	GitInfo        json.RawMessage // Optional: JSONB for git metadata
+}
+
 // FindOrCreateSyncSession finds an existing session by external_id or creates a new one
 // Returns the session UUID and current sync state for all files
 // Uses catch-and-retry to handle race conditions on concurrent creates
-func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, externalID, transcriptPath, cwd string) (sessionID string, files map[string]SyncFileState, err error) {
+// Also updates session metadata (cwd, transcript_path, git_info) on each call
+func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params SyncSessionParams) (sessionID string, files map[string]SyncFileState, err error) {
 	selectQuery := `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = 'Claude Code'`
 
 	// Try to find existing session first
-	err = db.conn.QueryRowContext(ctx, selectQuery, userID, externalID).Scan(&sessionID)
+	err = db.conn.QueryRowContext(ctx, selectQuery, userID, params.ExternalID).Scan(&sessionID)
 	if err == nil {
-		// Session exists - get current sync state
+		// Session exists - update metadata and get sync state
+		if err := db.updateSessionMetadata(ctx, sessionID, params); err != nil {
+			return "", nil, fmt.Errorf("failed to update session metadata: %w", err)
+		}
 		return db.getSyncFilesForSession(ctx, sessionID)
 	}
 	if err != sql.ErrNoRows {
 		return "", nil, fmt.Errorf("failed to find session: %w", err)
 	}
 
-	// Session not found - try to create it
+	// Session not found - try to create it with metadata
 	sessionID = uuid.New().String()
 	insertQuery := `
-		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type)
-		VALUES ($1, $2, $3, NOW(), 'Claude Code')
+		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at)
+		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW())
 	`
-	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, externalID)
+	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo)
 	if err == nil {
 		// Successfully created - new session has no synced files
 		return sessionID, make(map[string]SyncFileState), nil
@@ -1818,14 +1338,32 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, externa
 	// Check if it's a unique constraint violation (race condition - another request created it)
 	if isUniqueViolation(err) {
 		// Retry the SELECT - session was created by concurrent request
-		err = db.conn.QueryRowContext(ctx, selectQuery, userID, externalID).Scan(&sessionID)
+		err = db.conn.QueryRowContext(ctx, selectQuery, userID, params.ExternalID).Scan(&sessionID)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to find session after conflict: %w", err)
+		}
+		// Update metadata for the existing session
+		if err := db.updateSessionMetadata(ctx, sessionID, params); err != nil {
+			return "", nil, fmt.Errorf("failed to update session metadata: %w", err)
 		}
 		return db.getSyncFilesForSession(ctx, sessionID)
 	}
 
 	return "", nil, fmt.Errorf("failed to create session: %w", err)
+}
+
+// updateSessionMetadata updates the metadata fields on an existing session
+func (db *DB) updateSessionMetadata(ctx context.Context, sessionID string, params SyncSessionParams) error {
+	query := `
+		UPDATE sessions
+		SET cwd = COALESCE($2, cwd),
+		    transcript_path = COALESCE($3, transcript_path),
+		    git_info = COALESCE($4, git_info),
+		    last_sync_at = NOW()
+		WHERE id = $1
+	`
+	_, err := db.conn.ExecContext(ctx, query, sessionID, params.CWD, params.TranscriptPath, params.GitInfo)
+	return err
 }
 
 // getSyncFilesForSession retrieves sync state for all files in a session
@@ -1888,18 +1426,57 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 
 // UpdateSyncFileState updates the high-water mark for a file's sync state
 // Creates the sync_file record if it doesn't exist (upsert)
-func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int) error {
-	query := `
+// If lastMessageAt is provided and newer than current, updates session.last_message_at
+// If title is provided and session has no title, sets the session title
+func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, title string) error {
+	// Update sync_files table
+	syncQuery := `
 		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, updated_at)
 		VALUES ($1, $2, $3, $4, NOW())
 		ON CONFLICT (session_id, file_name) DO UPDATE SET
 			last_synced_line = $4,
 			updated_at = NOW()
 	`
-	_, err := db.conn.ExecContext(ctx, query, sessionID, fileName, fileType, lastSyncedLine)
+	_, err := db.conn.ExecContext(ctx, syncQuery, sessionID, fileName, fileType, lastSyncedLine)
 	if err != nil {
 		return fmt.Errorf("failed to update sync file state: %w", err)
 	}
+
+	// Update session metadata (last_message_at, title, last_sync_at)
+	if lastMessageAt != nil || title != "" {
+		// Build dynamic update query based on what we have
+		sessionQuery := `
+			UPDATE sessions
+			SET last_sync_at = NOW()
+		`
+		args := []interface{}{sessionID}
+		argIdx := 2
+
+		if lastMessageAt != nil {
+			sessionQuery += fmt.Sprintf(", last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < $%d THEN $%d ELSE last_message_at END", argIdx, argIdx)
+			args = append(args, lastMessageAt)
+			argIdx++
+		}
+
+		if title != "" {
+			sessionQuery += fmt.Sprintf(", title = COALESCE(title, $%d)", argIdx)
+			args = append(args, title)
+		}
+
+		sessionQuery += " WHERE id = $1"
+		_, err = db.conn.ExecContext(ctx, sessionQuery, args...)
+		if err != nil {
+			return fmt.Errorf("failed to update session metadata: %w", err)
+		}
+	} else {
+		// Still update last_sync_at even without message timestamp or title
+		sessionQuery := `UPDATE sessions SET last_sync_at = NOW() WHERE id = $1`
+		_, err = db.conn.ExecContext(ctx, sessionQuery, sessionID)
+		if err != nil {
+			return fmt.Errorf("failed to update session last_sync_at: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -1941,4 +1518,18 @@ func (db *DB) GetSyncFileNames(ctx context.Context, sessionID string) ([]string,
 	}
 
 	return fileNames, nil
+}
+
+// GetSessionOwnerAndExternalID returns the user_id and external_id for a session
+// Used for S3 path construction when accessing shared sessions
+func (db *DB) GetSessionOwnerAndExternalID(ctx context.Context, sessionID string) (userID int64, externalID string, err error) {
+	query := `SELECT user_id, external_id FROM sessions WHERE id = $1`
+	err = db.conn.QueryRowContext(ctx, query, sessionID).Scan(&userID, &externalID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, "", ErrSessionNotFound
+		}
+		return 0, "", fmt.Errorf("failed to get session: %w", err)
+	}
+	return userID, externalID, nil
 }

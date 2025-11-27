@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { sessionsAPI, AuthenticationError } from '@/services/api';
 import type { Session } from '@/types';
-import { useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
 
 interface UseSessionsReturn {
   sessions: Session[];
@@ -16,20 +14,12 @@ interface UseSessionsReturn {
  * @param includeShared - Whether to include sessions shared with the user (default: false)
  */
 export function useSessions(includeShared = false): UseSessionsReturn {
-  const navigate = useNavigate();
-
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['sessions', includeShared],
     queryFn: () => sessionsAPI.list(includeShared),
   });
 
-  // Redirect on auth error
-  useEffect(() => {
-    if (error instanceof AuthenticationError) {
-      navigate('/');
-    }
-  }, [error, navigate]);
-
+  // Auth errors are handled globally by the API client
   return {
     sessions: data ?? [],
     loading: isLoading,

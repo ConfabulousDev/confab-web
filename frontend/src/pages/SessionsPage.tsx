@@ -6,14 +6,14 @@ import SortableHeader from '@/components/SortableHeader';
 import Alert from '@/components/Alert';
 import styles from './SessionsPage.module.css';
 
-type SortColumn = 'title' | 'external_id' | 'last_run_time';
+type SortColumn = 'title' | 'external_id' | 'last_sync_time';
 
 function SessionsPage() {
   useDocumentTitle('Sessions');
   const navigate = useNavigate();
   const [showSharedWithMe, setShowSharedWithMe] = useState(false);
   const { sessions, loading, error } = useSessions(showSharedWithMe);
-  const [sortColumn, setSortColumn] = useState<SortColumn>('last_run_time');
+  const [sortColumn, setSortColumn] = useState<SortColumn>('last_sync_time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
@@ -22,9 +22,9 @@ function SessionsPage() {
       // Toggle direction if clicking the same column
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      // New column: default to ascending (except last_run_time defaults to descending)
+      // New column: default to ascending (except last_sync_time defaults to descending)
       setSortColumn(column);
-      setSortDirection(column === 'last_run_time' ? 'desc' : 'asc');
+      setSortDirection(column === 'last_sync_time' ? 'desc' : 'asc');
     }
   };
 
@@ -36,7 +36,7 @@ function SessionsPage() {
       direction: sortDirection,
       filter: (s) => {
         // Filter out empty sessions
-        if (s.max_transcript_size <= 0) return false;
+        if (s.total_lines <= 0) return false;
         // Show only owned or only shared based on toggle
         return showSharedWithMe ? !s.is_owner : s.is_owner;
       },
@@ -114,7 +114,7 @@ function SessionsPage() {
                     onSort={handleSort}
                   />
                   <SortableHeader
-                    column="last_run_time"
+                    column="last_sync_time"
                     label="Activity"
                     currentColumn={sortColumn}
                     direction={sortDirection}
@@ -137,7 +137,7 @@ function SessionsPage() {
                     <td className={styles.gitInfo}>{session.git_repo || ''}</td>
                     <td className={styles.gitInfo}>{session.git_branch || ''}</td>
                     <td className={styles.sessionId}>{session.external_id.substring(0, 8)}</td>
-                    <td className={styles.timestamp}>{formatRelativeTime(session.last_run_time)}</td>
+                    <td className={styles.timestamp}>{session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}</td>
                   </tr>
                 ))}
               </tbody>

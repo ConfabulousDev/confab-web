@@ -3,378 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"html"
 	"net/http"
 	"regexp"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/logger"
-	"github.com/santaclaude2025/confab/backend/internal/models"
 )
-
-// Validation limits for session uploads
-const (
-	MaxRequestBodySize   = 200 * 1024 * 1024 // 200MB total request size
-	MaxFileSize          = 50 * 1024 * 1024  // 50MB per file
-	MaxFiles             = 100               // Maximum number of files per session
-	MaxExternalIDLength  = 256               // Max external ID length
-	MaxPathLength        = 1024              // Max file path length
-	MaxReasonLength      = 10000             // Max reason text length
-	MaxCWDLength         = 4096              // Max current working directory length
-	MinExternalIDLength  = 1                 // Min external ID length
-	MaxRunsPerWeek       = 200               // Maximum runs (versions) a user can upload per week
-)
-
-// handleSaveSession processes session upload requests
-func (s *Server) handleSaveSession(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user ID
-	userID, ok := auth.GetUserID(r.Context())
-	if !ok {
-		respondError(w, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
-
-	// Check weekly rate limit BEFORE processing upload
-	rateLimitCtx, rateLimitCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer rateLimitCancel()
-
-	runCount, err := s.db.CountUserRunsInLastWeek(rateLimitCtx, userID)
-	if err != nil {
-		logger.Error("Failed to check rate limit", "error", err, "user_id", userID)
-		respondError(w, http.StatusInternalServerError, "Failed to check upload limit")
-		return
-	}
-
-	if runCount >= MaxRunsPerWeek {
-		logger.Warn("Rate limit exceeded",
-			"user_id", userID,
-			"run_count", runCount,
-			"limit", MaxRunsPerWeek)
-		respondError(w, http.StatusTooManyRequests,
-			fmt.Sprintf("Weekly upload limit exceeded. You have uploaded %d/%d runs in the last 7 days. Please try again later.", runCount, MaxRunsPerWeek))
-		return
-	}
-
-	// Limit request body size to prevent memory exhaustion
-	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
-
-	// Parse request body
-	var req models.SaveSessionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Check if error is due to request too large (type-safe check)
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			respondError(w, http.StatusRequestEntityTooLarge,
-				fmt.Sprintf("Request body too large (max %d MB)", MaxRequestBodySize/(1024*1024)))
-			return
-		}
-		respondError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	// Validate request with detailed error messages
-	if err := validateSaveSessionRequest(&req); err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// Extract session metadata from transcript
-	title, sessionType := extractSessionMetadata(req.Files)
-	req.Title = title
-	req.SessionType = sessionType
-
-	logger.Info("Processing session save",
-		"user_id", userID,
-		"external_id", req.ExternalID,
-		"file_count", len(req.Files),
-		"title", title,
-		"session_type", sessionType)
-
-	// Step 1: Create session and run in database to get runID for S3 paths
-	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer dbCancel()
-
-	result, err := s.db.CreateSessionRun(dbCtx, userID, &req, "hook")
-	if err != nil {
-		logger.Error("Failed to create session/run",
-			"error", err,
-			"user_id", userID,
-			"external_id", req.ExternalID)
-		respondError(w, http.StatusInternalServerError, "Failed to create session record")
-		return
-	}
-
-	logger.Debug("Created session/run",
-		"session_id", result.ID,
-		"run_id", result.RunID,
-		"session_type", result.SessionType)
-
-	// Step 2: Upload files to S3 using runID in path
-	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
-	defer storageCancel()
-
-	s3Keys := make(map[string]string)
-	for _, file := range req.Files {
-		if len(file.Content) == 0 {
-			logger.Warn("Empty file content", "file_path", file.Path, "external_id", req.ExternalID)
-			continue
-		}
-
-		// S3 path: {user_id}/{session_type}/{external_id}/{run_id}/{filename}
-		s3Key, err := s.storage.Upload(storageCtx, userID, result.SessionType, req.ExternalID, result.RunID, file.Path, file.Content)
-		if err != nil {
-			logger.Error("File upload failed",
-				"error", err,
-				"user_id", userID,
-				"external_id", req.ExternalID,
-				"run_id", result.RunID,
-				"file_path", file.Path)
-			// Clean up the run record since S3 upload failed
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), DatabaseTimeout)
-			if cleanupErr := s.db.DeleteRun(cleanupCtx, result.RunID); cleanupErr != nil {
-				logger.Error("Failed to cleanup run after S3 failure", "error", cleanupErr, "run_id", result.RunID)
-			}
-			cleanupCancel()
-			respondStorageError(w, err, "Failed to upload files to storage")
-			return
-		}
-
-		s3Keys[file.Path] = s3Key
-		logger.Debug("File uploaded", "file_path", file.Path, "s3_key", s3Key)
-	}
-
-	// Step 3: Add file records to the run
-	filesCtx, filesCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer filesCancel()
-
-	if err := s.db.AddFilesToRun(filesCtx, result.RunID, req.Files, s3Keys); err != nil {
-		logger.Error("Failed to add files to run",
-			"error", err,
-			"user_id", userID,
-			"external_id", req.ExternalID,
-			"run_id", result.RunID)
-		// Note: S3 objects are orphaned here - will need GC strategy
-		respondError(w, http.StatusInternalServerError, "Failed to save file metadata")
-		return
-	}
-
-	// Build session URL using the UUID primary key
-	sessionURL := s.frontendURL + "/sessions/" + result.ID
-
-	// Audit log: Session saved successfully
-	logger.Info("Session saved successfully",
-		"user_id", userID,
-		"external_id", req.ExternalID,
-		"session_id", result.ID,
-		"run_id", result.RunID,
-		"file_count", len(s3Keys))
-
-	// Return success response
-	respondJSON(w, http.StatusOK, models.SaveSessionResponse{
-		Success:    true,
-		ID:         result.ID,
-		ExternalID: req.ExternalID,
-		RunID:      result.RunID,
-		SessionURL: sessionURL,
-		Message:    "Session saved successfully",
-	})
-}
-
-// validateSaveSessionRequest validates session upload request
-func validateSaveSessionRequest(req *models.SaveSessionRequest) error {
-	// Validate external ID
-	if req.ExternalID == "" {
-		return fmt.Errorf("external_id is required")
-	}
-	if len(req.ExternalID) < MinExternalIDLength || len(req.ExternalID) > MaxExternalIDLength {
-		return fmt.Errorf("external_id must be between %d and %d characters", MinExternalIDLength, MaxExternalIDLength)
-	}
-	if !utf8.ValidString(req.ExternalID) {
-		return fmt.Errorf("external_id must be valid UTF-8")
-	}
-
-	// Validate transcript path
-	if req.TranscriptPath == "" {
-		return fmt.Errorf("transcript_path is required")
-	}
-	if len(req.TranscriptPath) > MaxPathLength {
-		return fmt.Errorf("transcript_path too long (max %d characters)", MaxPathLength)
-	}
-	if !utf8.ValidString(req.TranscriptPath) {
-		return fmt.Errorf("transcript_path must be valid UTF-8")
-	}
-
-	// Validate CWD (optional but if provided must be valid)
-	if req.CWD != "" {
-		if len(req.CWD) > MaxCWDLength {
-			return fmt.Errorf("cwd too long (max %d characters)", MaxCWDLength)
-		}
-		if !utf8.ValidString(req.CWD) {
-			return fmt.Errorf("cwd must be valid UTF-8")
-		}
-	}
-
-	// Validate reason (optional but if provided must be valid)
-	if req.Reason != "" {
-		if len(req.Reason) > MaxReasonLength {
-			return fmt.Errorf("reason too long (max %d characters)", MaxReasonLength)
-		}
-		if !utf8.ValidString(req.Reason) {
-			return fmt.Errorf("reason must be valid UTF-8")
-		}
-	}
-
-	// Validate files array
-	if len(req.Files) == 0 {
-		return fmt.Errorf("files array cannot be empty")
-	}
-	if len(req.Files) > MaxFiles {
-		return fmt.Errorf("too many files (max %d, got %d)", MaxFiles, len(req.Files))
-	}
-
-	// Validate each file
-	var totalSize int64
-	for i, file := range req.Files {
-		// Validate path
-		if file.Path == "" {
-			return fmt.Errorf("file[%d]: path is required", i)
-		}
-		if len(file.Path) > MaxPathLength {
-			return fmt.Errorf("file[%d]: path too long (max %d characters)", i, MaxPathLength)
-		}
-		if !utf8.ValidString(file.Path) {
-			return fmt.Errorf("file[%d]: path must be valid UTF-8", i)
-		}
-
-		// Check for path traversal attempts
-		if strings.Contains(file.Path, "..") {
-			return fmt.Errorf("file[%d]: path contains invalid sequence '..'", i)
-		}
-
-		// Validate content size
-		contentSize := int64(len(file.Content))
-		if contentSize > MaxFileSize {
-			return fmt.Errorf("file[%d]: content too large (max %d MB, got %d MB)",
-				i, MaxFileSize/(1024*1024), contentSize/(1024*1024))
-		}
-
-		// Track total size
-		totalSize += contentSize
-		if totalSize > MaxRequestBodySize {
-			return fmt.Errorf("total file content too large (max %d MB)", MaxRequestBodySize/(1024*1024))
-		}
-
-		// Validate SizeBytes matches actual content (if provided)
-		if file.SizeBytes > 0 && file.SizeBytes != contentSize {
-			logger.Warn("File size mismatch",
-				"file_index", i,
-				"file_path", file.Path,
-				"declared_size", file.SizeBytes,
-				"actual_size", contentSize)
-		}
-	}
-
-	return nil
-}
-
-// sanitizeTitleText removes HTML tags and decodes HTML entities
-// Note: We don't HTML-escape here because React automatically escapes text content.
-// Double-escaping would cause &gt; to display literally instead of as >
-func sanitizeTitleText(input string) string {
-	// Remove all HTML tags using regex
-	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
-	cleaned := htmlTagRegex.ReplaceAllString(input, "")
-
-	// Decode HTML entities (e.g., &lt; -> <, &gt; -> >)
-	decoded := html.UnescapeString(cleaned)
-
-	// Trim whitespace
-	return strings.TrimSpace(decoded)
-}
-
-// extractSessionMetadata parses the transcript JSONL to extract title and session type
-func extractSessionMetadata(files []models.FileUpload) (title string, sessionType string) {
-	// Find the transcript file
-	var transcriptContent []byte
-	for _, file := range files {
-		if file.Type == "transcript" {
-			transcriptContent = file.Content
-			break
-		}
-	}
-
-	if len(transcriptContent) == 0 {
-		return "", "Claude Code"
-	}
-
-	// Parse JSONL to find summary, user message, and version info
-	lines := strings.Split(string(transcriptContent), "\n")
-	var firstUserMessage string
-
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		var entry map[string]interface{}
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
-
-		// Extract session type from version field (if present)
-		if sessionType == "" {
-			if version, ok := entry["version"].(string); ok && version != "" {
-				// For now, all sessions with version field are Claude Code
-				sessionType = "Claude Code"
-			}
-		}
-
-		msgType, _ := entry["type"].(string)
-
-		// Priority 1: Extract title from summary (best quality)
-		if title == "" && msgType == "summary" {
-			if summary, ok := entry["summary"].(string); ok && summary != "" {
-				title = sanitizeTitleText(summary)
-			}
-		}
-
-		// Collect first user message as fallback
-		if firstUserMessage == "" && msgType == "user" {
-			if message, ok := entry["message"].(map[string]interface{}); ok {
-				if content, ok := message["content"].(string); ok && content != "" {
-					// Use first 100 characters as fallback title
-					sanitized := sanitizeTitleText(content)
-					if len(sanitized) > 100 {
-						firstUserMessage = sanitized[:100]
-					} else {
-						firstUserMessage = sanitized
-					}
-				}
-			}
-		}
-
-		// Stop once we have both summary title and session type
-		if title != "" && sessionType != "" {
-			break
-		}
-	}
-
-	// Fallback to first user message if no summary found
-	if title == "" && firstUserMessage != "" {
-		title = firstUserMessage
-	}
-
-	// Set defaults if not found
-	if sessionType == "" {
-		sessionType = "Claude Code"
-	}
-
-	return title, sessionType
-}
 
 // HandleCheckSessions checks which external IDs already exist for the user
 func HandleCheckSessions(s *Server) http.HandlerFunc {
@@ -442,23 +78,70 @@ func HandleCheckSessions(s *Server) http.HandlerFunc {
 	}
 }
 
-// sanitizeString sanitizes user input strings
-// Removes null bytes and non-printable characters that could cause issues
-func sanitizeString(s string) string {
-	// Remove null bytes (can cause issues in logs and database)
-	s = strings.ReplaceAll(s, "\x00", "")
+// sanitizeTitleText removes HTML tags and decodes HTML entities
+// Note: We don't HTML-escape here because React automatically escapes text content.
+// Double-escaping would cause &gt; to display literally instead of as >
+func sanitizeTitleText(input string) string {
+	// Remove all HTML tags using regex
+	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
+	cleaned := htmlTagRegex.ReplaceAllString(input, "")
 
-	// Keep valid UTF-8 runes only
-	if !utf8.ValidString(s) {
-		// Convert to valid UTF-8 by replacing invalid sequences
-		v := make([]rune, 0, len(s))
-		for _, r := range s {
-			if r != utf8.RuneError {
-				v = append(v, r)
-			}
-		}
-		s = string(v)
+	// Decode HTML entities (e.g., &lt; -> <, &gt; -> >)
+	decoded := html.UnescapeString(cleaned)
+
+	// Trim whitespace
+	return strings.TrimSpace(decoded)
+}
+
+// extractSessionTitle parses the first few lines of a transcript to extract a title
+func extractSessionTitle(content []byte) string {
+	if len(content) == 0 {
+		return ""
 	}
 
-	return s
+	// Parse JSONL to find summary or first user message
+	lines := strings.Split(string(content), "\n")
+	var firstUserMessage string
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		var entry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		msgType, _ := entry["type"].(string)
+
+		// Priority 1: Extract title from summary (best quality)
+		if msgType == "summary" {
+			if summary, ok := entry["summary"].(string); ok && summary != "" {
+				return sanitizeTitleText(summary)
+			}
+		}
+
+		// Collect first user message as fallback
+		if firstUserMessage == "" && msgType == "user" {
+			if message, ok := entry["message"].(map[string]interface{}); ok {
+				if content, ok := message["content"].(string); ok && content != "" {
+					// Use first 100 characters as fallback title
+					sanitized := sanitizeTitleText(content)
+					if len(sanitized) > 100 {
+						firstUserMessage = sanitized[:100]
+					} else {
+						firstUserMessage = sanitized
+					}
+				}
+			}
+		}
+
+		// Stop once we have a summary
+		if msgType == "summary" {
+			break
+		}
+	}
+
+	return firstUserMessage
 }

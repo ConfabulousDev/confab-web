@@ -252,12 +252,21 @@ export const authAPI = {
   me: (): Promise<User> => api.getValidated('/me', UserSchema),
 };
 
-export const filesAPI = {
-  getContent: (runId: number, fileId: number): Promise<string> =>
-    api.getString(`/runs/${runId}/files/${fileId}/content`),
+/**
+ * Sync file API - access file content via sync API
+ */
+export const syncFilesAPI = {
+  /**
+   * Get file content for an owned session
+   */
+  getContent: (sessionId: string, fileName: string): Promise<string> =>
+    api.getString(`/sync/file?session_id=${encodeURIComponent(sessionId)}&file_name=${encodeURIComponent(fileName)}`),
 
-  getSharedContent: (sessionId: string, shareToken: string, fileId: number): Promise<string> =>
-    api.getString(`/sessions/${sessionId}/shared/${shareToken}/files/${fileId}/content`),
+  /**
+   * Get file content for a shared session
+   */
+  getSharedContent: (sessionId: string, shareToken: string, fileName: string): Promise<string> =>
+    api.getString(`/sessions/${sessionId}/shared/${shareToken}/sync/file?file_name=${encodeURIComponent(fileName)}`),
 };
 
 export const keysAPI = {

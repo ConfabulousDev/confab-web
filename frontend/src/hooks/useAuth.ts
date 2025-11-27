@@ -24,17 +24,22 @@ export function useAuth(): UseAuthReturn {
     queryFn: authAPI.me,
     retry: false, // Don't retry on auth errors
     staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnMount: false, // Don't refetch when new components mount
+    refetchOnReconnect: false, // Don't refetch on reconnect
   });
+
+  // Consider authenticated if we have cached user data, even during refetch
+  const hasUser = user !== undefined && user !== null;
 
   return {
     user: user ?? null,
-    loading: isLoading,
+    loading: isLoading, // Only true on initial load, not refetches
     error: error instanceof AuthenticationError
       ? null // Not authenticated is not an error
       : error instanceof Error
         ? error.message
         : null,
-    isAuthenticated: user !== undefined && user !== null,
+    isAuthenticated: hasUser,
     refetch,
   };
 }

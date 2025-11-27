@@ -1,14 +1,14 @@
-import type { AgentNode, RunDetail } from '@/types';
+import type { AgentNode, SessionDetail } from '@/types';
 import MessageList from './MessageList';
 import styles from './AgentPanel.module.css';
 
 interface AgentPanelProps {
   agent: AgentNode;
-  run: RunDetail;
+  session: SessionDetail;
   depth?: number;
 }
 
-function AgentPanel({ agent, run, depth = 0 }: AgentPanelProps) {
+function AgentPanel({ agent, session, depth = 0 }: AgentPanelProps) {
   // Get color based on depth
   const colors = ['#007bff', '#6f42c1', '#28a745', '#fd7e14', '#dc3545', '#17a2b8'];
   const borderColor = colors[depth % colors.length];
@@ -59,7 +59,7 @@ function AgentPanel({ agent, run, depth = 0 }: AgentPanelProps) {
         <MessageList
           messages={agent.transcript}
           agents={agent.children}
-          run={run}
+          session={session}
         />
 
         {/* Recursively render child agents */}
@@ -69,7 +69,7 @@ function AgentPanel({ agent, run, depth = 0 }: AgentPanelProps) {
               <AgentPanel
                 key={i}
                 agent={child}
-                run={run}
+                session={session}
                 depth={depth + 1}
               />
             ))}

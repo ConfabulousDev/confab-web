@@ -4,8 +4,7 @@
 // Re-export API types from schemas (these are validated at runtime)
 export type {
   GitInfo,
-  FileDetail,
-  RunDetail,
+  SyncFileDetail,
   Session,
   SessionDetail,
   SessionShare,

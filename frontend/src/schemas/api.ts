@@ -15,24 +15,11 @@ export const GitInfoSchema = z.object({
   is_dirty: z.boolean().optional(),
 });
 
-export const FileDetailSchema = z.object({
-  id: z.number(),
-  file_path: z.string(),
+export const SyncFileDetailSchema = z.object({
+  file_name: z.string(),
   file_type: z.string(),
-  size_bytes: z.number(),
-  s3_key: z.string().optional(),
-  s3_uploaded_at: z.string().optional(),
-});
-
-export const RunDetailSchema = z.object({
-  id: z.number(),
-  end_timestamp: z.string(),
-  cwd: z.string(),
-  reason: z.string(),
-  transcript_path: z.string(),
-  s3_uploaded: z.boolean(),
-  git_info: GitInfoSchema.optional(),
-  files: z.array(FileDetailSchema),
+  last_synced_line: z.number(),
+  updated_at: z.string(),
 });
 
 // ============================================================================
@@ -43,37 +30,42 @@ export const SessionSchema = z.object({
   id: z.string(),
   external_id: z.string(),
   first_seen: z.string(),
-  run_count: z.number(),
-  last_run_time: z.string(),
-  title: z.string().optional(),
+  file_count: z.number(),
+  last_sync_time: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
   session_type: z.string(),
-  max_transcript_size: z.number(),
-  git_repo: z.string().optional(),
-  git_branch: z.string().optional(),
+  total_lines: z.number(),
+  git_repo: z.string().nullable().optional(),
+  git_branch: z.string().nullable().optional(),
   is_owner: z.boolean(),
   access_type: z.enum(['owner', 'private_share', 'public_share']),
-  share_token: z.string().optional(),
-  shared_by_email: z.string().optional(),
+  share_token: z.string().nullable().optional(),
+  shared_by_email: z.string().nullable().optional(),
 });
 
 export const SessionDetailSchema = z.object({
   id: z.string(),
   external_id: z.string(),
+  title: z.string().nullable().optional(),
   first_seen: z.string(),
-  runs: z.array(RunDetailSchema),
+  cwd: z.string().nullable().optional(),
+  transcript_path: z.string().nullable().optional(),
+  git_info: GitInfoSchema.nullable().optional(),
+  last_sync_at: z.string().nullable().optional(),
+  files: z.array(SyncFileDetailSchema),
 });
 
 export const SessionShareSchema = z.object({
   id: z.number(),
   session_id: z.string(),
   external_id: z.string(),
-  session_title: z.string().optional(),
+  session_title: z.string().nullable().optional(),
   share_token: z.string(),
   visibility: z.enum(['public', 'private']),
-  invited_emails: z.array(z.string()).optional(),
-  expires_at: z.string().optional(),
+  invited_emails: z.array(z.string()).nullable().optional(),
+  expires_at: z.string().nullable().optional(),
   created_at: z.string(),
-  last_accessed_at: z.string().optional(),
+  last_accessed_at: z.string().nullable().optional(),
 });
 
 // ============================================================================
@@ -94,7 +86,7 @@ export const APIKeySchema = z.object({
   id: z.number(),
   name: z.string(),
   created_at: z.string(),
-  last_used_at: z.string().optional(),
+  last_used_at: z.string().nullable().optional(),
 });
 
 export const CreateAPIKeyResponseSchema = z.object({
@@ -125,8 +117,7 @@ export const APIKeyListSchema = z.array(APIKeySchema);
 // ============================================================================
 
 export type GitInfo = z.infer<typeof GitInfoSchema>;
-export type FileDetail = z.infer<typeof FileDetailSchema>;
-export type RunDetail = z.infer<typeof RunDetailSchema>;
+export type SyncFileDetail = z.infer<typeof SyncFileDetailSchema>;
 export type Session = z.infer<typeof SessionSchema>;
 export type SessionDetail = z.infer<typeof SessionDetailSchema>;
 export type SessionShare = z.infer<typeof SessionShareSchema>;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { RunDetail, TranscriptLine, AgentNode } from '@/types';
+import type { SessionDetail, TranscriptLine, AgentNode } from '@/types';
 import { fetchParsedTranscript, type TranscriptValidationError } from '@/services/transcriptService';
 import { buildAgentTree } from '@/services/agentTreeBuilder';
 import MessageList from './MessageList';
@@ -7,12 +7,11 @@ import ValidationErrorsPanel from './ValidationErrorsPanel';
 import styles from './TranscriptViewer.module.css';
 
 interface TranscriptViewerProps {
-  run: RunDetail;
+  session: SessionDetail;
   shareToken?: string;
-  sessionId?: string;
 }
 
-function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps) {
+function TranscriptViewer({ session, shareToken }: TranscriptViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
@@ -46,24 +45,20 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
     const t0 = performance.now();
     try {
       // Find transcript file
-      const transcriptFile = run.files.find((f) => f.file_type === 'transcript');
+      const transcriptFile = session.files.find((f) => f.file_type === 'transcript');
       if (!transcriptFile) {
         throw new Error('No transcript file found');
       }
 
-      // Fetch and parse transcript
-      // Use provided sessionId or fall back to transcript_path (for non-shared views)
-      const effectiveSessionId = sessionId || run.transcript_path;
-
+      // Fetch and parse transcript using session ID and file name
       const t1 = performance.now();
-      const parsed = await fetchParsedTranscript(run.id, transcriptFile.id, effectiveSessionId, shareToken);
+      const parsed = await fetchParsedTranscript(session.id, transcriptFile.file_name, shareToken);
       const t2 = performance.now();
       console.log(`⏱️ fetchParsedTranscript took ${Math.round(t2 - t1)}ms`);
 
       // Build agent tree
-      const shareOptions = shareToken && sessionId ? { sessionId, shareToken } : undefined;
       const t3 = performance.now();
-      const agentTree = await buildAgentTree(run.id, parsed.messages, run.files, shareOptions);
+      const agentTree = await buildAgentTree(session.id, parsed.messages, session.files, shareToken);
       const t4 = performance.now();
       console.log(`⏱️ buildAgentTree took ${Math.round(t4 - t3)}ms`);
 
@@ -162,7 +157,7 @@ function TranscriptViewer({ run, shareToken, sessionId }: TranscriptViewerProps)
           <MessageList
             messages={messages}
             agents={agents}
-            run={run}
+            session={session}
           />
         </div>
       )}

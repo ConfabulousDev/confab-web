@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/santaclaude2025/confab/backend/internal/auth"
 	"github.com/santaclaude2025/confab/backend/internal/db"
 	"github.com/santaclaude2025/confab/backend/internal/logger"
@@ -20,9 +22,10 @@ import (
 
 // SyncInitRequest is the request body for POST /api/v1/sync/init
 type SyncInitRequest struct {
-	ExternalID     string `json:"external_id"`
-	TranscriptPath string `json:"transcript_path"`
-	CWD            string `json:"cwd"`
+	ExternalID     string          `json:"external_id"`
+	TranscriptPath string          `json:"transcript_path"`
+	CWD            string          `json:"cwd"`
+	GitInfo        json.RawMessage `json:"git_info,omitempty"` // Optional git metadata
 }
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
@@ -85,7 +88,13 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
-	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, req.ExternalID, req.TranscriptPath, req.CWD)
+	params := db.SyncSessionParams{
+		ExternalID:     req.ExternalID,
+		TranscriptPath: req.TranscriptPath,
+		CWD:            req.CWD,
+		GitInfo:        req.GitInfo,
+	}
+	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {
 		logger.Error("Failed to find/create sync session", "error", err, "user_id", userID, "external_id", req.ExternalID)
 		respondError(w, http.StatusInternalServerError, "Failed to initialize sync session")
@@ -196,10 +205,28 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build chunk content (lines joined by newlines, with trailing newline)
+	// Also extract metadata from transcript lines (timestamp, title)
 	var content bytes.Buffer
+	var latestTimestamp *time.Time
+	var extractedTitle string
 	for _, line := range req.Lines {
 		content.WriteString(line)
 		content.WriteString("\n")
+
+		// Try to extract metadata from transcript lines
+		if req.FileType == "transcript" {
+			if ts := extractTimestampFromLine(line); ts != nil {
+				if latestTimestamp == nil || ts.After(*latestTimestamp) {
+					latestTimestamp = ts
+				}
+			}
+			// Extract title from summary or first user message
+			if extractedTitle == "" {
+				if title := extractTitleFromLine(line); title != "" {
+					extractedTitle = title
+				}
+			}
+		}
 	}
 
 	// Calculate last line number
@@ -222,11 +249,11 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update sync state in DB
+	// Update sync state in DB (includes session's last_message_at if we found timestamps)
 	updateCtx, updateCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer updateCancel()
 
-	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine); err != nil {
+	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, extractedTitle); err != nil {
 		logger.Error("Failed to update sync state",
 			"error", err,
 			"session_id", req.SessionID,
@@ -322,7 +349,9 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// All chunks downloaded successfully - write response
-	w.Header().Set("Content-Type", "application/json")
+	// Use text/plain for JSONL files (multiple JSON objects, one per line)
+	// This prevents the frontend from trying to parse the entire response as a single JSON object
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	for _, data := range allData {
 		w.Write(data)
@@ -365,4 +394,207 @@ func parseChunkKey(key string) (int, int, bool) {
 	}
 
 	return first, last, true
+}
+
+// handleSharedSyncFileRead reads and concatenates all chunks for a file via share token
+// GET /api/v1/sessions/{id}/shared/{shareToken}/sync/file?file_name=...
+func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request) {
+	// Get params from URL
+	sessionID := chi.URLParam(r, "id")
+	shareToken := chi.URLParam(r, "shareToken")
+	fileName := r.URL.Query().Get("file_name")
+
+	if sessionID == "" {
+		respondError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+	if shareToken == "" {
+		respondError(w, http.StatusBadRequest, "share_token is required")
+		return
+	}
+	if fileName == "" {
+		respondError(w, http.StatusBadRequest, "file_name is required")
+		return
+	}
+
+	// Verify share access
+	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer dbCancel()
+
+	// Get viewer email if authenticated (for private shares)
+	var viewerEmail *string
+	cookie, err := r.Cookie("confab_session")
+	if err == nil {
+		webSession, err := s.db.GetWebSession(dbCtx, cookie.Value)
+		if err == nil {
+			user, err := s.db.GetUserByID(dbCtx, webSession.UserID)
+			if err == nil && user != nil {
+				viewerEmail = &user.Email
+			}
+		}
+	}
+
+	// Verify share and get session (this validates share token, expiration, and private access)
+	session, err := s.db.GetSharedSession(dbCtx, sessionID, shareToken, viewerEmail)
+	if err != nil {
+		if errors.Is(err, db.ErrShareNotFound) || errors.Is(err, db.ErrSessionNotFound) {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+		if errors.Is(err, db.ErrShareExpired) {
+			respondError(w, http.StatusGone, "Share expired")
+			return
+		}
+		if errors.Is(err, db.ErrUnauthorized) || errors.Is(err, db.ErrForbidden) {
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+		logger.Error("Failed to verify share access", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to verify share")
+		return
+	}
+
+	// Get the session's user_id and external_id for S3 path
+	sessionUserID, externalID, err := s.db.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+	if err != nil {
+		logger.Error("Failed to get session info", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to get session info")
+		return
+	}
+
+	// Verify file exists in this session
+	fileExists := false
+	for _, file := range session.Files {
+		if file.FileName == fileName {
+			fileExists = true
+			break
+		}
+	}
+	if !fileExists {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// List and download all chunks for this file
+	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
+	defer storageCancel()
+
+	chunkKeys, err := s.storage.ListChunks(storageCtx, sessionUserID, externalID, fileName)
+	if err != nil {
+		logger.Error("Failed to list chunks", "error", err, "session_id", sessionID, "file_name", fileName)
+		respondStorageError(w, err, "Failed to list chunks")
+		return
+	}
+
+	if len(chunkKeys) == 0 {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Download all chunks
+	var allData [][]byte
+	for _, key := range chunkKeys {
+		data, err := s.storage.Download(storageCtx, key)
+		if err != nil {
+			logger.Error("Failed to download chunk", "error", err, "key", key)
+			respondStorageError(w, err, "Failed to download file chunk")
+			return
+		}
+		allData = append(allData, data)
+	}
+
+	logger.Info("Shared sync file read",
+		"session_id", sessionID,
+		"share_token", shareToken,
+		"file_name", fileName,
+		"chunk_count", len(chunkKeys),
+		"viewer_email", viewerEmail)
+
+	// Write response
+	// Use text/plain for JSONL files (multiple JSON objects, one per line)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	for _, data := range allData {
+		w.Write(data)
+	}
+}
+
+// extractTitleFromLine extracts a title from a JSONL line
+// Looks for summary messages (type: "summary") or first user message
+// Returns empty string if no title found
+func extractTitleFromLine(line string) string {
+	// Quick check - must have "type" field
+	if !strings.Contains(line, `"type"`) {
+		return ""
+	}
+
+	// Parse enough to determine message type and extract title
+	var entry struct {
+		Type    string `json:"type"`
+		Summary string `json:"summary"` // For summary messages
+		Message struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"message"` // For regular messages
+	}
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return ""
+	}
+
+	// Priority 1: Summary messages have explicit summaries
+	if entry.Type == "summary" && entry.Summary != "" {
+		// Truncate long summaries
+		if len(entry.Summary) > 100 {
+			return entry.Summary[:100] + "..."
+		}
+		return entry.Summary
+	}
+
+	// Priority 2: First user message content (first line)
+	if entry.Type == "user" && entry.Message.Role == "user" && entry.Message.Content != "" {
+		// Take first line and truncate
+		content := entry.Message.Content
+		if idx := strings.Index(content, "\n"); idx > 0 {
+			content = content[:idx]
+		}
+		if len(content) > 100 {
+			return content[:100] + "..."
+		}
+		return content
+	}
+
+	return ""
+}
+
+// extractTimestampFromLine parses a JSONL line and extracts the timestamp field if present
+// Returns nil if no timestamp found or parsing fails
+func extractTimestampFromLine(line string) *time.Time {
+	// Quick check to avoid parsing lines without timestamp
+	if !strings.Contains(line, `"timestamp"`) {
+		return nil
+	}
+
+	// Parse just enough to get the timestamp
+	var entry struct {
+		Timestamp string `json:"timestamp"`
+	}
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return nil
+	}
+
+	if entry.Timestamp == "" {
+		return nil
+	}
+
+	// Parse ISO 8601 timestamp
+	ts, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+	if err != nil {
+		// Try alternative formats
+		ts, err = time.Parse(time.RFC3339, entry.Timestamp)
+		if err != nil {
+			return nil
+		}
+	}
+
+	return &ts
 }

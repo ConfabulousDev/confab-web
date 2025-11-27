@@ -4,7 +4,7 @@ import type {
 	TranscriptLine,
 	AgentNode,
 	AssistantMessage,
-	FileDetail
+	SyncFileDetail
 } from '@/types';
 import {
 	isAssistantMessage,
@@ -18,8 +18,8 @@ import { fetchTranscript } from './transcriptService';
  * Extract agent ID from filename
  * Format: agent-{8-char-hex}.jsonl -> "0da5686d"
  */
-function extractAgentIdFromPath(filePath: string): string | null {
-	const match = filePath.match(/agent-([a-f0-9]{8})\.jsonl$/);
+function extractAgentIdFromPath(fileName: string): string | null {
+	const match = fileName.match(/agent-([a-f0-9]{8})\.jsonl$/);
 	return match?.[1] ?? null;
 }
 
@@ -130,16 +130,16 @@ function findAgentReferences(
  * Build agent tree recursively
  */
 async function buildAgentNodeRecursive(
-	runId: number,
+	sessionId: string,
 	agentId: string,
-	agentFile: FileDetail,
+	agentFile: SyncFileDetail,
 	parentToolUseId: string,
 	parentMessageId: string,
 	metadata: AgentMetadata,
-	agentFileMap: Map<string, FileDetail>,
+	agentFileMap: Map<string, SyncFileDetail>,
 	depth: number = 0,
 	maxDepth: number = 10,
-	shareOptions?: { sessionId: string; shareToken: string }
+	shareToken?: string
 ): Promise<AgentNode> {
 	// Prevent infinite recursion
 	if (depth >= maxDepth) {
@@ -155,7 +155,7 @@ async function buildAgentNodeRecursive(
 	}
 
 	// Load agent transcript
-	const transcript = await fetchTranscript(runId, agentFile.id, shareOptions);
+	const transcript = await fetchTranscript(sessionId, agentFile.file_name, { shareToken });
 
 	// Find sub-agents spawned by this agent
 	const subAgentRefs = findAgentReferences(transcript);
@@ -172,7 +172,7 @@ async function buildAgentNodeRecursive(
 		}
 
 		const promise = buildAgentNodeRecursive(
-			runId,
+			sessionId,
 			subAgentId,
 			subAgentFile,
 			refData.toolUseId,
@@ -181,7 +181,7 @@ async function buildAgentNodeRecursive(
 			agentFileMap,
 			depth + 1,
 			maxDepth,
-			shareOptions
+			shareToken
 		).catch((e) => {
 			console.error(`Failed to load sub-agent ${subAgentId}:`, e);
 			return null;
@@ -210,21 +210,21 @@ async function buildAgentNodeRecursive(
 }
 
 /**
- * Build complete agent tree from run files
+ * Build complete agent tree from session files
  */
 export async function buildAgentTree(
-	runId: number,
+	sessionId: string,
 	mainTranscript: TranscriptLine[],
-	allFiles: FileDetail[],
-	shareOptions?: { sessionId: string; shareToken: string }
+	allFiles: SyncFileDetail[],
+	shareToken?: string
 ): Promise<AgentNode[]> {
 	// Find all agent files
 	const agentFiles = allFiles.filter((f) => f.file_type === 'agent');
 
-	// Create map of agentId -> FileDetail
-	const agentFileMap = new Map<string, FileDetail>();
+	// Create map of agentId -> SyncFileDetail
+	const agentFileMap = new Map<string, SyncFileDetail>();
 	for (const file of agentFiles) {
-		const agentId = extractAgentIdFromPath(file.file_path);
+		const agentId = extractAgentIdFromPath(file.file_name);
 		if (agentId) {
 			agentFileMap.set(agentId, file);
 		}
@@ -245,7 +245,7 @@ export async function buildAgentTree(
 		}
 
 		const promise = buildAgentNodeRecursive(
-			runId,
+			sessionId,
 			agentId,
 			agentFile,
 			refData.toolUseId,
@@ -254,7 +254,7 @@ export async function buildAgentTree(
 			agentFileMap, // Pass the map for recursive lookups
 			0, // Start at depth 0
 			10, // Max depth
-			shareOptions
+			shareToken
 		).catch((e) => {
 			console.error(`Failed to load agent ${agentId}:`, e);
 			return null;

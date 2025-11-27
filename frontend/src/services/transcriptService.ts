@@ -7,6 +7,7 @@ import {
   parseTranscriptLineWithError,
   formatValidationErrorsForLog,
 } from '@/schemas/transcript';
+import { syncFilesAPI } from './api';
 
 // Re-export types for consumers
 export type { TranscriptLine, TranscriptValidationError, TranscriptParseResult } from '@/schemas/transcript';
@@ -52,37 +53,24 @@ export interface AgentNode {
  * Options for fetching transcript content
  */
 export interface FetchOptions {
-  sessionId?: string;
+  sessionId: string;
   shareToken?: string;
 }
 
 /**
- * Fetch transcript content from backend API
+ * Fetch transcript content from backend API via sync file endpoint
  * Supports both authenticated and shared (public) access
  */
 export async function fetchTranscriptContent(
-  runId: number,
-  fileId: number,
-  options?: FetchOptions
+  sessionId: string,
+  fileName: string,
+  shareToken?: string
 ): Promise<string> {
-  let url: string;
-
-  // Use shared endpoint if share token is provided
-  if (options?.shareToken && options?.sessionId) {
-    url = `/api/v1/sessions/${options.sessionId}/shared/${options.shareToken}/files/${fileId}/content`;
+  if (shareToken) {
+    return syncFilesAPI.getSharedContent(sessionId, shareToken, fileName);
   } else {
-    url = `/api/v1/runs/${runId}/files/${fileId}/content`;
+    return syncFilesAPI.getContent(sessionId, fileName);
   }
-
-  const response = await fetch(url, {
-    credentials: 'include',
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch transcript: ${response.status} ${response.statusText}`);
-  }
-
-  return await response.text();
 }
 
 /**
@@ -125,7 +113,7 @@ interface CacheEntry {
   errors: TranscriptValidationError[];
 }
 
-/** In-memory cache for parsed transcripts */
+/** In-memory cache for parsed transcripts - keyed by sessionId-fileName */
 const transcriptCacheV2 = new Map<string, CacheEntry>();
 
 /**
@@ -134,11 +122,11 @@ const transcriptCacheV2 = new Map<string, CacheEntry>();
  * Returns only messages for backward compatibility - use fetchTranscriptWithErrors for full result
  */
 export async function fetchTranscript(
-  runId: number,
-  fileId: number,
-  options: { skipCache?: boolean; sessionId?: string; shareToken?: string } = {}
+  sessionId: string,
+  fileName: string,
+  options: { skipCache?: boolean; shareToken?: string } = {}
 ): Promise<TranscriptLine[]> {
-  const result = await fetchTranscriptWithErrors(runId, fileId, options);
+  const result = await fetchTranscriptWithErrors(sessionId, fileName, options);
   return result.messages;
 }
 
@@ -147,11 +135,11 @@ export async function fetchTranscript(
  * Returns both successfully parsed messages and structured validation errors
  */
 export async function fetchTranscriptWithErrors(
-  runId: number,
-  fileId: number,
-  options: { skipCache?: boolean; sessionId?: string; shareToken?: string } = {}
+  sessionId: string,
+  fileName: string,
+  options: { skipCache?: boolean; shareToken?: string } = {}
 ): Promise<CacheEntry> {
-  const cacheKey = `${runId}-${fileId}`;
+  const cacheKey = `${sessionId}-${fileName}`;
 
   // Check cache first
   if (!options.skipCache && transcriptCacheV2.has(cacheKey)) {
@@ -162,10 +150,7 @@ export async function fetchTranscriptWithErrors(
 
   // Fetch and parse
   const t0 = performance.now();
-  const content = await fetchTranscriptContent(runId, fileId, {
-    sessionId: options.sessionId,
-    shareToken: options.shareToken,
-  });
+  const content = await fetchTranscriptContent(sessionId, fileName, options.shareToken);
   const t1 = performance.now();
   console.log(
     `    ⏱️ Network fetch took ${Math.round(t1 - t0)}ms (${Math.round((content.length / 1024 / 1024) * 10) / 10}MB)`
@@ -191,13 +176,12 @@ export async function fetchTranscriptWithErrors(
  * Fetch and parse a complete transcript with metadata
  */
 export async function fetchParsedTranscript(
-  runId: number,
-  fileId: number,
   sessionId: string,
+  fileName: string,
   shareToken?: string
 ): Promise<ParsedTranscript> {
   const t0 = performance.now();
-  const { messages, errors } = await fetchTranscriptWithErrors(runId, fileId, { sessionId, shareToken });
+  const { messages, errors } = await fetchTranscriptWithErrors(sessionId, fileName, { shareToken });
   const t1 = performance.now();
   console.log(`  ⏱️ fetchTranscript (network + parse) took ${Math.round(t1 - t0)}ms for ${messages.length} messages`);
 
@@ -233,8 +217,8 @@ export function clearTranscriptCache(): void {
 /**
  * Clear a specific transcript from cache
  */
-export function clearTranscriptFromCache(runId: number, fileId: number): void {
-  const cacheKey = `${runId}-${fileId}`;
+export function clearTranscriptFromCache(sessionId: string, fileName: string): void {
+  const cacheKey = `${sessionId}-${fileName}`;
   transcriptCacheV2.delete(cacheKey);
 }
 

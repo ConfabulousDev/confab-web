@@ -135,7 +135,7 @@ func TestHandleGetSession_Integration(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 
-	t.Run("returns session details successfully", func(t *testing.T) {
+	t.Run("returns session details with sync files", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
@@ -143,12 +143,9 @@ func TestHandleGetSession_Integration(t *testing.T) {
 
 		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
-		// Create a run for the session
-		runID := testutil.CreateTestRun(t, env, sessionID, "Test reason", "/home/test", "transcript.jsonl")
-
-		// Create files for the run
-		testutil.CreateTestFile(t, env, runID, "transcript.jsonl", "transcript", "s3-key-1", 100)
-		testutil.CreateTestFile(t, env, runID, "agent.jsonl", "agent", "s3-key-2", 200)
+		// Create sync files for the session
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+		testutil.CreateTestSyncFile(t, env, sessionID, "agent.jsonl", "agent", 200)
 
 		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, user.ID)
 
@@ -170,16 +167,26 @@ func TestHandleGetSession_Integration(t *testing.T) {
 			t.Errorf("expected external_id %s, got %s", externalID, session.ExternalID)
 		}
 
-		if len(session.Runs) == 0 {
-			t.Error("expected at least one run")
-		} else {
-			if session.Runs[0].Reason != "Test reason" {
-				t.Errorf("expected reason 'Test reason', got %s", session.Runs[0].Reason)
-			}
+		if len(session.Files) != 2 {
+			t.Errorf("expected 2 files, got %d", len(session.Files))
+		}
 
-			if len(session.Runs[0].Files) != 2 {
-				t.Errorf("expected 2 files, got %d", len(session.Runs[0].Files))
-			}
+		// Verify files
+		filesByName := make(map[string]db.SyncFileDetail)
+		for _, f := range session.Files {
+			filesByName[f.FileName] = f
+		}
+
+		if f, ok := filesByName["transcript.jsonl"]; !ok {
+			t.Error("expected transcript.jsonl file")
+		} else if f.LastSyncedLine != 100 {
+			t.Errorf("expected 100 synced lines, got %d", f.LastSyncedLine)
+		}
+
+		if f, ok := filesByName["agent.jsonl"]; !ok {
+			t.Error("expected agent.jsonl file")
+		} else if f.LastSyncedLine != 200 {
+			t.Errorf("expected 200 synced lines, got %d", f.LastSyncedLine)
 		}
 	})
 

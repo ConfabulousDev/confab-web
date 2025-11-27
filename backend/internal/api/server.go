@@ -214,7 +214,7 @@ func (s *Server) SetupRoutes() http.Handler {
 				r.Use(ratelimit.MiddlewareWithKey(s.uploadLimiter, ratelimit.UserKeyFunc(auth.GetUserIDContextKey())))
 				// Decompress zstd-compressed request bodies
 				r.Use(decompressMiddleware())
-				r.Post("/sessions/save", s.handleSaveSession)
+				// Legacy save endpoint removed - use sync API instead
 			})
 
 			// Incremental sync endpoints (for daemon-based uploads)
@@ -237,7 +237,7 @@ func (s *Server) SetupRoutes() http.Handler {
 				})
 			})
 			r.Get("/me", s.handleGetMe)
-			r.Get("/usage/weekly", s.handleGetWeeklyUsage)
+			// Legacy weekly usage endpoint removed
 
 			// API key management
 			r.Post("/keys", HandleCreateAPIKey(s.db))
@@ -248,12 +248,11 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions", HandleListSessions(s.db))
 			r.Get("/sessions/{id}", HandleGetSession(s.db))
 
-			// Session deletion
-			r.Delete("/sessions/{id}", HandleDeleteSessionOrRun(s.db, s.storage))
-			r.Delete("/runs/{runId}", HandleDeleteRun(s.db, s.storage))
+			// Sync file read (same handler, different auth)
+			r.Get("/sync/file", s.handleSyncFileRead)
 
-			// File content
-			r.Get("/runs/{runId}/files/{fileId}/content", HandleGetFileContent(s.db, s.storage))
+			// Session deletion
+			r.Delete("/sessions/{id}", HandleDeleteSession(s.db, s.storage))
 
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
@@ -266,7 +265,8 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// Public shared session access (no auth for public, optional auth for private)
 		r.Get("/sessions/{id}/shared/{shareToken}", HandleGetSharedSession(s.db))
-		r.Get("/sessions/{id}/shared/{shareToken}/files/{fileId}/content", HandleGetSharedFileContent(s.db, s.storage))
+		// Shared sync file access endpoint
+		r.Get("/sessions/{id}/shared/{shareToken}/sync/file", s.handleSharedSyncFileRead)
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)

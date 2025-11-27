@@ -4,9 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
 import { sessionsAPI, APIError } from '@/services/api';
 import { useDocumentTitle, useSuccessMessage } from '@/hooks';
-import type { SessionDetail, RunDetail } from '@/types';
+import type { SessionDetail } from '@/types';
 import { formatRelativeTime } from '@/utils';
-import RunCard from '@/components/RunCard';
+import SessionCard from '@/components/SessionCard';
 import ShareDialog from '@/components/ShareDialog';
 import styles from './SessionDetailPage.module.css';
 
@@ -28,14 +28,6 @@ function SessionDetailPage() {
   // Delete dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  // Always use the latest run (by end_timestamp)
-  const firstRun = session?.runs[0];
-  const latestRun: RunDetail | undefined = firstRun
-    ? session?.runs.reduce((latest, run) =>
-        new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
-      , firstRun)
-    : undefined;
 
   // Dynamic page title based on session
   const pageTitle = session ? `Session ${session.external_id.substring(0, 8)}` : 'Session';
@@ -127,7 +119,7 @@ function SessionDetailPage() {
 
       {successMessage && (
         <div className={`${styles.alert} ${styles.alertSuccess} ${successFading ? styles.alertFading : ''}`}>
-          ✓ {successMessage}
+          {successMessage}
         </div>
       )}
 
@@ -144,14 +136,16 @@ function SessionDetailPage() {
               <span className={styles.metaLabel}>First Synced:</span>
               <span className={styles.metaValue}>{formatRelativeTime(session.first_seen)}</span>
             </div>
-            <div className={styles.metaItem}>
-              <span className={styles.metaLabel}>Latest Sync:</span>
-              <span className={styles.metaValue}>{latestRun && formatRelativeTime(latestRun.end_timestamp)}</span>
-            </div>
+            {session.last_sync_at && (
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>Latest Sync:</span>
+                <span className={styles.metaValue}>{formatRelativeTime(session.last_sync_at)}</span>
+              </div>
+            )}
           </div>
 
-          {/* Display the latest run */}
-          {latestRun && <RunCard run={latestRun} />}
+          {/* Display the session details */}
+          <SessionCard session={session} />
         </>
       ) : null}
 

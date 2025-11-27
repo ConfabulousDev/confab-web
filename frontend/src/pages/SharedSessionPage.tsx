@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import type { SessionDetail, RunDetail } from '@/types';
+import type { SessionDetail } from '@/types';
 import { formatDate, formatRelativeTime } from '@/utils';
-import RunCard from '@/components/RunCard';
+import SessionCard from '@/components/SessionCard';
 import styles from './SharedSessionPage.module.css';
 
 type ErrorType = 'not_found' | 'expired' | 'forbidden' | 'general' | null;
@@ -122,32 +122,21 @@ function SharedSessionPage() {
       </div>
 
       {/* Session Metadata */}
-      {(() => {
-        const firstRun = session.runs[0];
-        const latestRun: RunDetail | undefined = firstRun
-          ? session.runs.reduce((latest, run) =>
-              new Date(run.end_timestamp) > new Date(latest.end_timestamp) ? run : latest
-            , firstRun)
-          : undefined;
+      <div className={styles.metaCard}>
+        <div className={styles.metaItem}>
+          <span className={styles.metaLabel}>First Synced:</span>
+          <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
+        </div>
+        {session.last_sync_at && (
+          <div className={styles.metaItem}>
+            <span className={styles.metaLabel}>Latest Sync:</span>
+            <span className={styles.metaValue}>{formatRelativeTime(session.last_sync_at)}</span>
+          </div>
+        )}
+      </div>
 
-        return (
-          <>
-            <div className={styles.metaCard}>
-              <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>First Synced:</span>
-                <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
-              </div>
-              <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>Latest Sync:</span>
-                <span className={styles.metaValue}>{latestRun && formatRelativeTime(latestRun.end_timestamp)}</span>
-              </div>
-            </div>
-
-            {/* Display the latest run */}
-            {latestRun && <RunCard run={latestRun} showGitInfo={false} shareToken={token} sessionId={session.id} />}
-          </>
-        );
-      })()}
+      {/* Display the session details */}
+      <SessionCard session={session} showGitInfo={false} shareToken={token} />
     </div>
   );
 }
