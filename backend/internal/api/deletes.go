@@ -120,7 +120,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 			return
 		}
 
-		// Step 1: Get all S3 keys (with ownership verification)
+		// Step 1: Get all S3 keys and external_id (with ownership verification)
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
@@ -142,10 +142,23 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 			return
 		}
 
+		// Get external_id for chunk deletion
+		externalID, err := database.VerifySessionOwnership(dbCtx, sessionID, userID)
+		if err != nil {
+			// Ownership was already verified above, so this shouldn't fail
+			logger.Error("Failed to get external_id for session",
+				"error", err,
+				"user_id", userID,
+				"session_id", sessionID)
+			respondError(w, http.StatusInternalServerError, "Failed to retrieve session information")
+			return
+		}
+
 		// Step 2: Delete from S3 first (critical: must succeed before DB deletion)
 		storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 		defer storageCancel()
 
+		// Delete regular files
 		for _, s3Key := range s3Keys {
 			if err := store.Delete(storageCtx, s3Key); err != nil {
 				logger.Error("Failed to delete S3 object",
@@ -157,6 +170,16 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 				return
 			}
 			logger.Debug("S3 object deleted", "s3_key", s3Key)
+		}
+
+		// Delete incremental sync chunks (if any)
+		if err := store.DeleteAllSessionChunks(storageCtx, userID, externalID); err != nil {
+			logger.Error("Failed to delete session chunks",
+				"error", err,
+				"user_id", userID,
+				"session_id", sessionID,
+				"external_id", externalID)
+			// Continue anyway - chunks will be orphaned but session deletion should proceed
 		}
 
 		// Step 3: Delete from database (only after S3 deletion succeeds)

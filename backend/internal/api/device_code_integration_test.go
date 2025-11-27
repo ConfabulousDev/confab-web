@@ -64,8 +64,8 @@ func TestHandleDeviceCode_Integration(t *testing.T) {
 			t.Errorf("expected verification_uri 'http://localhost:8080/auth/device', got %s", resp.VerificationURI)
 		}
 
-		if resp.ExpiresIn != 900 { // 15 minutes
-			t.Errorf("expected expires_in 900, got %d", resp.ExpiresIn)
+		if resp.ExpiresIn != 300 { // 5 minutes (DeviceCodeExpiry)
+			t.Errorf("expected expires_in 300, got %d", resp.ExpiresIn)
 		}
 
 		if resp.Interval != 5 {

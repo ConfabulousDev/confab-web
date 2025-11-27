@@ -216,6 +216,11 @@ func (s *Server) SetupRoutes() http.Handler {
 				r.Use(decompressMiddleware())
 				r.Post("/sessions/save", s.handleSaveSession)
 			})
+
+			// Incremental sync endpoints (for daemon-based uploads)
+			r.Post("/sync/init", s.handleSyncInit)
+			r.Post("/sync/chunk", s.handleSyncChunk)
+			r.Get("/sync/file", s.handleSyncFileRead)
 		})
 
 		// Protected routes for web dashboard (require web session)

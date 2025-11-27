@@ -1775,3 +1775,149 @@ func (db *DB) CleanupExpiredDeviceCodes(ctx context.Context) (int64, error) {
 	rows, _ := result.RowsAffected()
 	return rows, nil
 }
+
+// ============================================================================
+// Incremental Sync (for daemon-based session uploads)
+// ============================================================================
+
+// SyncFileState represents the sync state for a single file
+type SyncFileState struct {
+	FileName       string `json:"file_name"`
+	FileType       string `json:"file_type"`
+	LastSyncedLine int    `json:"last_synced_line"`
+}
+
+// FindOrCreateSyncSession finds an existing session by external_id or creates a new one
+// Returns the session UUID and current sync state for all files
+func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, externalID, transcriptPath, cwd string) (sessionID string, files map[string]SyncFileState, err error) {
+	// Try to find existing session
+	query := `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = 'Claude Code'`
+	err = db.conn.QueryRowContext(ctx, query, userID, externalID).Scan(&sessionID)
+
+	if err == sql.ErrNoRows {
+		// Create new session
+		sessionID = uuid.New().String()
+		insertQuery := `
+			INSERT INTO sessions (id, user_id, external_id, first_seen, session_type)
+			VALUES ($1, $2, $3, NOW(), 'Claude Code')
+		`
+		_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, externalID)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to create session: %w", err)
+		}
+
+		// New session has no synced files
+		return sessionID, make(map[string]SyncFileState), nil
+	}
+
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to find session: %w", err)
+	}
+
+	// Session exists - get current sync state
+	files = make(map[string]SyncFileState)
+	filesQuery := `SELECT file_name, file_type, last_synced_line FROM sync_files WHERE session_id = $1`
+	rows, err := db.conn.QueryContext(ctx, filesQuery, sessionID)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to query sync files: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var state SyncFileState
+		if err := rows.Scan(&state.FileName, &state.FileType, &state.LastSyncedLine); err != nil {
+			return "", nil, fmt.Errorf("failed to scan sync file: %w", err)
+		}
+		files[state.FileName] = state
+	}
+
+	if err := rows.Err(); err != nil {
+		return "", nil, fmt.Errorf("error iterating sync files: %w", err)
+	}
+
+	return sessionID, files, nil
+}
+
+// VerifySessionOwnership checks if a session exists and is owned by the user
+// Returns the external_id if found, or an error
+func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, userID int64) (externalID string, err error) {
+	query := `SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`
+	err = db.conn.QueryRowContext(ctx, query, sessionID, userID).Scan(&externalID)
+	if err == sql.ErrNoRows {
+		// Check if session exists at all (for 404 vs 403 distinction)
+		var exists bool
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)`
+		if checkErr := db.conn.QueryRowContext(ctx, checkQuery, sessionID).Scan(&exists); checkErr != nil {
+			return "", fmt.Errorf("failed to check session existence: %w", checkErr)
+		}
+		if exists {
+			return "", ErrForbidden
+		}
+		return "", ErrSessionNotFound
+	}
+	if err != nil {
+		// Handle invalid UUID format
+		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
+			return "", ErrSessionNotFound
+		}
+		return "", fmt.Errorf("failed to verify session ownership: %w", err)
+	}
+	return externalID, nil
+}
+
+// UpdateSyncFileState updates the high-water mark for a file's sync state
+// Creates the sync_file record if it doesn't exist (upsert)
+func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int) error {
+	query := `
+		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, updated_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (session_id, file_name) DO UPDATE SET
+			last_synced_line = $4,
+			updated_at = NOW()
+	`
+	_, err := db.conn.ExecContext(ctx, query, sessionID, fileName, fileType, lastSyncedLine)
+	if err != nil {
+		return fmt.Errorf("failed to update sync file state: %w", err)
+	}
+	return nil
+}
+
+// GetSyncFileState retrieves the sync state for a specific file
+func (db *DB) GetSyncFileState(ctx context.Context, sessionID, fileName string) (*SyncFileState, error) {
+	query := `SELECT file_name, file_type, last_synced_line FROM sync_files WHERE session_id = $1 AND file_name = $2`
+	var state SyncFileState
+	err := db.conn.QueryRowContext(ctx, query, sessionID, fileName).Scan(&state.FileName, &state.FileType, &state.LastSyncedLine)
+	if err == sql.ErrNoRows {
+		return nil, ErrFileNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sync file state: %w", err)
+	}
+	return &state, nil
+}
+
+// GetSyncChunkKeys returns all S3 keys for chunks of a session (for deletion)
+// This queries the sync_files table to know which files have chunks, then builds the S3 prefix
+func (db *DB) GetSyncFileNames(ctx context.Context, sessionID string) ([]string, error) {
+	query := `SELECT file_name FROM sync_files WHERE session_id = $1`
+	rows, err := db.conn.QueryContext(ctx, query, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sync files: %w", err)
+	}
+	defer rows.Close()
+
+	var fileNames []string
+	for rows.Next() {
+		var fileName string
+		if err := rows.Scan(&fileName); err != nil {
+			return nil, fmt.Errorf("failed to scan file name: %w", err)
+		}
+		fileNames = append(fileNames, fileName)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating file names: %w", err)
+	}
+
+	return fileNames, nil
+}

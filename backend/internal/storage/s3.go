@@ -179,3 +179,84 @@ func containsAny(s string, substrs []string) bool {
 	}
 	return false
 }
+
+// ============================================================================
+// Incremental Sync - Chunk Operations
+// ============================================================================
+
+// UploadChunk uploads a chunk file for incremental sync
+// Key format: {user_id}/claude-code/{external_id}/chunks/{file_name}/chunk_{first:08d}_{last:08d}.jsonl
+func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, fileName string, firstLine, lastLine int, data []byte) (string, error) {
+	key := fmt.Sprintf("%d/claude-code/%s/chunks/%s/chunk_%08d_%08d.jsonl",
+		userID, externalID, fileName, firstLine, lastLine)
+
+	reader := bytes.NewReader(data)
+	_, err := s.client.PutObject(ctx, s.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
+		ContentType: "application/json",
+	})
+	if err != nil {
+		return "", classifyStorageError(err, "upload chunk")
+	}
+
+	return key, nil
+}
+
+// ListChunks lists all chunk files for a given session and file name
+// Returns keys sorted by name (which gives correct line order due to zero-padded naming)
+func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fileName string) ([]string, error) {
+	prefix := fmt.Sprintf("%d/claude-code/%s/chunks/%s/", userID, externalID, fileName)
+
+	var keys []string
+	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+
+	for obj := range objectCh {
+		if obj.Err != nil {
+			return nil, classifyStorageError(obj.Err, "list chunks")
+		}
+		keys = append(keys, obj.Key)
+	}
+
+	// Keys are already sorted by ListObjects (lexicographic order)
+	// Due to zero-padded line numbers, this gives correct order
+	return keys, nil
+}
+
+// DeleteChunks deletes all chunks for a session/file
+func (s *S3Storage) DeleteChunks(ctx context.Context, userID int64, externalID, fileName string) error {
+	keys, err := s.ListChunks(ctx, userID, externalID, fileName)
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+		if err := s.Delete(ctx, key); err != nil {
+			return fmt.Errorf("failed to delete chunk %s: %w", key, err)
+		}
+	}
+
+	return nil
+}
+
+// DeleteAllSessionChunks deletes all chunks for all files in a session
+func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, externalID string) error {
+	prefix := fmt.Sprintf("%d/claude-code/%s/chunks/", userID, externalID)
+
+	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+
+	for obj := range objectCh {
+		if obj.Err != nil {
+			return classifyStorageError(obj.Err, "list session chunks")
+		}
+		if err := s.Delete(ctx, obj.Key); err != nil {
+			return fmt.Errorf("failed to delete chunk %s: %w", obj.Key, err)
+		}
+	}
+
+	return nil
+}
