@@ -211,7 +211,7 @@ func syncStopFromHook() error {
 		return nil
 	}
 
-	// Signal daemon to stop
+	// Signal daemon to stop (it will do final sync in background)
 	if err := daemon.StopDaemon(hookInput.SessionID); err != nil {
 		logger.Warn("Could not stop daemon: %v", err)
 		fmt.Fprintf(os.Stderr, "Note: %v\n", err)
@@ -219,13 +219,9 @@ func syncStopFromHook() error {
 		fmt.Fprintln(os.Stderr, "Falling back to full session upload...")
 		// TODO: call existing save logic here
 	} else {
-		fmt.Fprintln(os.Stderr, "Daemon signaled to stop (will perform final sync)")
+		fmt.Fprintln(os.Stderr, "Daemon signaled to stop (final sync in background)")
 	}
 
-	// Wait briefly for daemon to do final sync
-	time.Sleep(2 * time.Second)
-
-	fmt.Fprintln(os.Stderr)
 	return nil
 }
 
