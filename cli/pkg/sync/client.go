@@ -1,0 +1,89 @@
+package sync
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/http"
+)
+
+// Client handles communication with the sync API endpoints
+type Client struct {
+	httpClient *http.Client
+}
+
+// NewClient creates a new sync API client
+func NewClient(cfg *config.UploadConfig) *Client {
+	return &Client{
+		httpClient: http.NewClient(cfg, 30*time.Second),
+	}
+}
+
+// SyncInitRequest is the request body for POST /api/v1/sync/init
+type SyncInitRequest struct {
+	ExternalID     string `json:"external_id"`
+	TranscriptPath string `json:"transcript_path"`
+	CWD            string `json:"cwd"`
+}
+
+// SyncInitResponse is the response for POST /api/v1/sync/init
+type SyncInitResponse struct {
+	SessionID string                   `json:"session_id"`
+	Files     map[string]SyncFileState `json:"files"`
+}
+
+// SyncFileState represents the sync state for a single file
+type SyncFileState struct {
+	LastSyncedLine int `json:"last_synced_line"`
+}
+
+// SyncChunkRequest is the request body for POST /api/v1/sync/chunk
+type SyncChunkRequest struct {
+	SessionID string   `json:"session_id"`
+	FileName  string   `json:"file_name"`
+	FileType  string   `json:"file_type"`
+	FirstLine int      `json:"first_line"`
+	Lines     []string `json:"lines"`
+}
+
+// SyncChunkResponse is the response for POST /api/v1/sync/chunk
+type SyncChunkResponse struct {
+	LastSyncedLine int `json:"last_synced_line"`
+}
+
+// Init initializes or resumes a sync session
+// Returns the session ID and current sync state for all files
+func (c *Client) Init(externalID, transcriptPath, cwd string) (*SyncInitResponse, error) {
+	req := SyncInitRequest{
+		ExternalID:     externalID,
+		TranscriptPath: transcriptPath,
+		CWD:            cwd,
+	}
+
+	var resp SyncInitResponse
+	if err := c.httpClient.Post("/api/v1/sync/init", req, &resp); err != nil {
+		return nil, fmt.Errorf("sync init failed: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// UploadChunk uploads a chunk of lines for a file
+// Returns the new last synced line number
+func (c *Client) UploadChunk(sessionID, fileName, fileType string, firstLine int, lines []string) (int, error) {
+	req := SyncChunkRequest{
+		SessionID: sessionID,
+		FileName:  fileName,
+		FileType:  fileType,
+		FirstLine: firstLine,
+		Lines:     lines,
+	}
+
+	var resp SyncChunkResponse
+	if err := c.httpClient.Post("/api/v1/sync/chunk", req, &resp); err != nil {
+		return 0, fmt.Errorf("chunk upload failed: %w", err)
+	}
+
+	return resp.LastSyncedLine, nil
+}

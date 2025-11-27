@@ -330,3 +330,127 @@ func isConfabCommand(command string) bool {
 	// Check if the executable is exactly "confab"
 	return baseName == "confab"
 }
+
+// InstallSyncHooks installs hooks for incremental sync daemon
+// This installs both SessionStart (to start daemon) and SessionEnd (to stop daemon)
+func InstallSyncHooks() error {
+	binaryPath, err := GetBinaryPath()
+	if err != nil {
+		return fmt.Errorf("failed to get binary path: %w", err)
+	}
+
+	syncStartHook := Hook{
+		Type:    "command",
+		Command: fmt.Sprintf("%s sync start", binaryPath),
+	}
+
+	syncStopHook := Hook{
+		Type:    "command",
+		Command: fmt.Sprintf("%s sync stop", binaryPath),
+	}
+
+	return AtomicUpdateSettings(func(settings *ClaudeSettings) error {
+		// Install SessionStart hook
+		installHookForEvent(settings, "SessionStart", syncStartHook)
+
+		// Install SessionEnd hook
+		installHookForEvent(settings, "SessionEnd", syncStopHook)
+
+		return nil
+	})
+}
+
+// installHookForEvent installs a hook for a specific event type
+func installHookForEvent(settings *ClaudeSettings, eventName string, hook Hook) {
+	eventHooks := settings.Hooks[eventName]
+
+	// Check if hook is already installed
+	for i, matcher := range eventHooks {
+		if matcher.Matcher == "*" {
+			// Check if confab is already in the hooks
+			for j, existingHook := range matcher.Hooks {
+				if existingHook.Type == "command" && isConfabCommand(existingHook.Command) {
+					// Already installed, update it
+					settings.Hooks[eventName][i].Hooks[j] = hook
+					return
+				}
+			}
+			// Add to existing matcher
+			settings.Hooks[eventName][i].Hooks = append(matcher.Hooks, hook)
+			return
+		}
+	}
+
+	// No matching matcher found, create new one
+	newMatcher := HookMatcher{
+		Matcher: "*",
+		Hooks:   []Hook{hook},
+	}
+	settings.Hooks[eventName] = append(eventHooks, newMatcher)
+}
+
+// UninstallSyncHooks removes the sync daemon hooks
+func UninstallSyncHooks() error {
+	return AtomicUpdateSettings(func(settings *ClaudeSettings) error {
+		uninstallHookForEvent(settings, "SessionStart")
+		uninstallHookForEvent(settings, "SessionEnd")
+		return nil
+	})
+}
+
+// uninstallHookForEvent removes confab hooks from a specific event type
+func uninstallHookForEvent(settings *ClaudeSettings, eventName string) {
+	eventHooks := settings.Hooks[eventName]
+	if len(eventHooks) == 0 {
+		return
+	}
+
+	var updated []HookMatcher
+	for _, matcher := range eventHooks {
+		var remainingHooks []Hook
+		for _, hook := range matcher.Hooks {
+			if hook.Type != "command" || !isConfabCommand(hook.Command) {
+				remainingHooks = append(remainingHooks, hook)
+			}
+		}
+		if len(remainingHooks) > 0 {
+			matcher.Hooks = remainingHooks
+			updated = append(updated, matcher)
+		}
+	}
+	settings.Hooks[eventName] = updated
+}
+
+// IsSyncHooksInstalled checks if sync daemon hooks are installed
+func IsSyncHooksInstalled() (bool, error) {
+	settings, err := ReadSettings()
+	if err != nil {
+		return false, fmt.Errorf("failed to read settings: %w", err)
+	}
+
+	// Check for SessionStart hook
+	hasStart := false
+	for _, matcher := range settings.Hooks["SessionStart"] {
+		for _, hook := range matcher.Hooks {
+			if hook.Type == "command" && isConfabCommand(hook.Command) &&
+				strings.Contains(hook.Command, "sync start") {
+				hasStart = true
+				break
+			}
+		}
+	}
+
+	// Check for SessionEnd hook
+	hasEnd := false
+	for _, matcher := range settings.Hooks["SessionEnd"] {
+		for _, hook := range matcher.Hooks {
+			if hook.Type == "command" && isConfabCommand(hook.Command) &&
+				strings.Contains(hook.Command, "sync stop") {
+				hasEnd = true
+				break
+			}
+		}
+	}
+
+	return hasStart && hasEnd, nil
+}
