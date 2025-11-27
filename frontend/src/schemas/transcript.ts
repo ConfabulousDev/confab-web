@@ -83,7 +83,7 @@ export const TokenUsageSchema = z.object({
     })
     .optional(),
   output_tokens: z.number(),
-  service_tier: z.string().optional(),
+  service_tier: z.string().nullable().optional(),
 });
 
 // ============================================================================
@@ -137,7 +137,7 @@ export const UserMessageSchema = BaseMessageSchema.extend({
 
 export const AssistantMessageSchema = BaseMessageSchema.extend({
   type: z.literal('assistant'),
-  requestId: z.string(),
+  requestId: z.string().optional(), // Optional for synthetic error messages
   agentId: z.string().optional(),
   message: z.object({
     model: z.string(),

@@ -134,11 +134,11 @@ function SharedSessionPage() {
           <>
             <div className={styles.metaCard}>
               <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>First Seen:</span>
+                <span className={styles.metaLabel}>First Synced:</span>
                 <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
               </div>
               <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>Last Updated:</span>
+                <span className={styles.metaLabel}>Latest Sync:</span>
                 <span className={styles.metaValue}>{latestRun && formatRelativeTime(latestRun.end_timestamp)}</span>
               </div>
             </div>
