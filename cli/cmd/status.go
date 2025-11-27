@@ -20,19 +20,19 @@ var statusCmd = &cobra.Command{
 		fmt.Println("=== Confab: Status ===")
 		fmt.Println()
 
-		// Check hook installation
-		hookInstalled, err := config.IsHookInstalled()
+		// Check sync hooks installation
+		hooksInstalled, err := config.IsSyncHooksInstalled()
 		if err != nil {
 			logger.Error("Failed to check hook status: %v", err)
 			return fmt.Errorf("failed to check hook status: %w", err)
 		}
 
-		logger.Info("Hook installed: %v", hookInstalled)
-		if hookInstalled {
-			fmt.Println("Hook Status: ✓ Installed")
+		logger.Info("Sync hooks installed: %v", hooksInstalled)
+		if hooksInstalled {
+			fmt.Println("Sync Hooks: ✓ Installed")
 		} else {
-			fmt.Println("Hook Status: ✗ Not installed")
-			fmt.Println("Run 'confab init' to install the SessionEnd hook.")
+			fmt.Println("Sync Hooks: ✗ Not installed")
+			fmt.Println("Run 'confab init' to install sync hooks.")
 		}
 
 		fmt.Println()

@@ -12,12 +12,12 @@ import (
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
-	Short: "Set up confab (login + install hook)",
+	Short: "Set up confab (login + install hooks)",
 	Long: `Complete setup for confab in one command.
 
 This command:
 1. Authenticates with the cloud backend (if not already logged in)
-2. Installs the SessionEnd hook to automatically capture sessions
+2. Installs sync hooks (SessionStart + SessionEnd) for incremental upload
 
 If you're already authenticated with a valid API key, the login step is skipped.`,
 	RunE: runSetup,
@@ -73,31 +73,32 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
-	// Install hook
+	// Install sync hooks
 	if needsLogin {
-		fmt.Println("Step 2/2: Installing hook")
+		fmt.Println("Step 2/2: Installing sync hooks")
 	} else {
-		fmt.Println("Installing hook...")
+		fmt.Println("Installing sync hooks...")
 	}
 	fmt.Println()
 
-	if err := config.InstallHook(); err != nil {
-		logger.Error("Failed to install hook: %v", err)
-		return fmt.Errorf("failed to install hook: %w", err)
+	if err := config.InstallSyncHooks(); err != nil {
+		logger.Error("Failed to install sync hooks: %v", err)
+		return fmt.Errorf("failed to install sync hooks: %w", err)
 	}
 
 	settingsPath, _ := config.GetSettingsPath()
-	logger.Info("Hook installed in %s", settingsPath)
-	fmt.Printf("✓ Hook installed in %s\n", settingsPath)
+	logger.Info("Sync hooks installed in %s", settingsPath)
+	fmt.Printf("✓ Sync hooks installed in %s\n", settingsPath)
 	fmt.Println()
 
 	fmt.Println("=== Setup Complete ===")
 	fmt.Println()
-	fmt.Println("Confab will now automatically capture your Claude Code sessions.")
+	fmt.Println("Confab will now sync your sessions incrementally during active use.")
+	fmt.Println("Data uploads every 30 seconds, with a final sync at session end.")
 	fmt.Println()
 	fmt.Println("Try it out:")
 	fmt.Println("  1. Start a new Claude Code session")
-	fmt.Println("  2. When you end the session, it will be uploaded automatically")
+	fmt.Println("  2. Your session data will sync in the background")
 	fmt.Println("  3. Run 'confab status' to check your setup")
 
 	return nil

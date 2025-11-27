@@ -18,7 +18,17 @@ const (
 	DefaultSyncInterval = 30 * time.Second
 )
 
-// Daemon is the background sync process
+// Daemon is the background sync process.
+//
+// NOTE: There is a race condition where multiple daemons could be spawned for
+// the same session if Claude Code is started twice in quick succession. The
+// check in syncStartFromHook() looks for an existing state file, but the state
+// file is only written after the daemon initializes. If two hooks run before
+// either daemon writes its state, both will spawn. The backend's chunk
+// continuity validation will reject duplicate/overlapping chunks, so data
+// integrity is preserved, but it's wasteful. A proper fix would use a lock
+// file before spawning, but this edge case is rare enough to not warrant the
+// added complexity.
 type Daemon struct {
 	externalID     string
 	transcriptPath string
