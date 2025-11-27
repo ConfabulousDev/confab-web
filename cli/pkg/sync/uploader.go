@@ -2,11 +2,13 @@ package sync
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/git"
 	"github.com/santaclaude2025/confab/pkg/redactor"
 	"github.com/santaclaude2025/confab/pkg/types"
 )
@@ -48,8 +50,17 @@ func NewUploader(cfg *config.UploadConfig) (*Uploader, error) {
 //
 // Returns the internal session ID on success.
 func (u *Uploader) UploadSession(externalID, transcriptPath, cwd string, files []types.SessionFile) (string, error) {
+	// Extract git info from transcript (source of truth), fall back to detecting from cwd
+	var gitInfoJSON json.RawMessage
+	if gitInfo, _ := git.ExtractGitInfoFromTranscript(transcriptPath); gitInfo != nil {
+		gitInfoJSON, _ = json.Marshal(gitInfo)
+	} else if gitInfo, _ := git.DetectGitInfo(cwd); gitInfo != nil {
+		// Fallback: detect from directory if transcript doesn't have git info
+		gitInfoJSON, _ = json.Marshal(gitInfo)
+	}
+
 	// Initialize sync session
-	initResp, err := u.client.Init(externalID, transcriptPath, cwd)
+	initResp, err := u.client.Init(externalID, transcriptPath, cwd, gitInfoJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to init sync session: %w", err)
 	}

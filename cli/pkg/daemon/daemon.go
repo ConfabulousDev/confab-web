@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
+	"github.com/santaclaude2025/confab/pkg/git"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/sync"
 )
@@ -16,6 +18,12 @@ import (
 const (
 	// DefaultSyncInterval is how often the daemon syncs files
 	DefaultSyncInterval = 30 * time.Second
+
+	// initialWaitTimeout is how long to wait for transcript file to appear
+	initialWaitTimeout = 60 * time.Second
+
+	// initialWaitPollInterval is how often to check for transcript file
+	initialWaitPollInterval = 1 * time.Second
 )
 
 // Daemon is the background sync process.
@@ -96,12 +104,17 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// Initialize sync client
 	client := sync.NewClient(uploadCfg)
 
-	// Create watcher (starts tracking files immediately, even before backend connects)
-	watcher := NewWatcher(d.transcriptPath)
-
 	// Setup signal handling
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+	// Wait for transcript file to exist (fresh sessions may not have it yet)
+	if err := d.waitForTranscript(ctx, sigCh); err != nil {
+		return err
+	}
+
+	// Create watcher (starts tracking files immediately, even before backend connects)
+	watcher := NewWatcher(d.transcriptPath)
 
 	// Try initial connection to backend (non-blocking if it fails)
 	if err := d.tryInit(client, watcher); err != nil {
@@ -146,9 +159,59 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
+// waitForTranscript waits for the transcript file to exist before proceeding.
+// For fresh sessions, Claude Code may not have written the transcript yet.
+func (d *Daemon) waitForTranscript(ctx context.Context, sigCh chan os.Signal) error {
+	// Check if file already exists
+	if _, err := os.Stat(d.transcriptPath); err == nil {
+		return nil
+	}
+
+	logger.Info("Waiting for transcript file to appear...")
+
+	ticker := time.NewTicker(initialWaitPollInterval)
+	defer ticker.Stop()
+
+	timeout := time.After(initialWaitTimeout)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for transcript")
+		case <-d.stopCh:
+			return fmt.Errorf("stop requested while waiting for transcript")
+		case sig := <-sigCh:
+			return fmt.Errorf("received signal %v while waiting for transcript", sig)
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for transcript file after %v", initialWaitTimeout)
+		case <-ticker.C:
+			if _, err := os.Stat(d.transcriptPath); err == nil {
+				logger.Info("Transcript file appeared")
+				return nil
+			}
+		}
+	}
+}
+
 // tryInit attempts to initialize the sync session with the backend
 func (d *Daemon) tryInit(client *sync.Client, watcher *Watcher) error {
-	initResp, err := client.Init(d.externalID, d.transcriptPath, d.cwd)
+	// Extract git info from transcript (source of truth), fall back to detecting from cwd
+	var gitInfoJSON json.RawMessage
+	gitInfo, _ := git.ExtractGitInfoFromTranscript(d.transcriptPath)
+	if gitInfo == nil {
+		// Fallback: detect from directory if transcript doesn't have git info
+		gitInfo, _ = git.DetectGitInfo(d.cwd)
+	}
+	if gitInfo != nil {
+		if data, err := json.Marshal(gitInfo); err != nil {
+			logger.Warn("Failed to marshal git info: %v", err)
+		} else {
+			gitInfoJSON = data
+			logger.Debug("Git info: branch=%s repo=%s", gitInfo.Branch, gitInfo.RepoURL)
+		}
+	}
+
+	initResp, err := client.Init(d.externalID, d.transcriptPath, d.cwd, gitInfoJSON)
 	if err != nil {
 		return err
 	}

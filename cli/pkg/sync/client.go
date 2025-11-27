@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -22,9 +23,10 @@ func NewClient(cfg *config.UploadConfig) *Client {
 
 // SyncInitRequest is the request body for POST /api/v1/sync/init
 type SyncInitRequest struct {
-	ExternalID     string `json:"external_id"`
-	TranscriptPath string `json:"transcript_path"`
-	CWD            string `json:"cwd"`
+	ExternalID     string          `json:"external_id"`
+	TranscriptPath string          `json:"transcript_path"`
+	CWD            string          `json:"cwd"`
+	GitInfo        json.RawMessage `json:"git_info,omitempty"`
 }
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
@@ -54,11 +56,12 @@ type SyncChunkResponse struct {
 
 // Init initializes or resumes a sync session
 // Returns the session ID and current sync state for all files
-func (c *Client) Init(externalID, transcriptPath, cwd string) (*SyncInitResponse, error) {
+func (c *Client) Init(externalID, transcriptPath, cwd string, gitInfo json.RawMessage) (*SyncInitResponse, error) {
 	req := SyncInitRequest{
 		ExternalID:     externalID,
 		TranscriptPath: transcriptPath,
 		CWD:            cwd,
+		GitInfo:        gitInfo,
 	}
 
 	var resp SyncInitResponse
