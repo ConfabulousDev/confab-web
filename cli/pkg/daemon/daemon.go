@@ -160,8 +160,10 @@ func (d *Daemon) shutdown(reason string) error {
 		logger.Info("Performing final sync...")
 		if chunks, err := d.syncer.SyncAll(); err != nil {
 			logger.Error("Final sync had errors: %v", err)
-		} else {
+		} else if chunks > 0 {
 			logger.Info("Final sync complete: chunks=%d", chunks)
+		} else {
+			logger.Info("Final sync complete: already up to date")
 		}
 
 		// Log final stats
