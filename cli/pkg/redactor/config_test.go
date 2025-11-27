@@ -268,8 +268,9 @@ func TestInitializeDefaultConfig(t *testing.T) {
 		if pattern.Name == "" {
 			t.Errorf("Pattern %d has empty name", i)
 		}
-		if pattern.Pattern == "" {
-			t.Errorf("Pattern %d has empty pattern", i)
+		// Must have at least one of Pattern or FieldPattern
+		if pattern.Pattern == "" && pattern.FieldPattern == "" {
+			t.Errorf("Pattern %d has neither pattern nor field_pattern", i)
 		}
 		if pattern.Type == "" {
 			t.Errorf("Pattern %d has empty type", i)

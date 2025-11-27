@@ -15,6 +15,13 @@ const (
 // GetDefaultPatterns returns the default high-precision redaction patterns
 func GetDefaultPatterns() []Pattern {
 	return []Pattern{
+		// Field-based patterns - match sensitive field names and redact entire value
+		{
+			Name:         "Sensitive Field Names",
+			FieldPattern: `(?i)^(password|passwd|secret|api_key|apikey|api_secret|token|auth_token|access_token|refresh_token|private_key|credential|credentials)$`,
+			Type:         "sensitive_field",
+		},
+		// Value-based patterns - match distinctive secret formats anywhere
 		{
 			Name:    "Anthropic API Key",
 			Pattern: `sk-ant-api\d{2}-[A-Za-z0-9_-]{95}`,

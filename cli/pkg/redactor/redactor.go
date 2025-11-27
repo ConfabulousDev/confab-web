@@ -17,6 +17,7 @@ type Redactor struct {
 // compiledPattern represents a compiled regex pattern with metadata
 type compiledPattern struct {
 	regex        *regexp.Regexp
+	fieldRegex   *regexp.Regexp // nil means apply to all string values
 	patternType  string
 	captureGroup int
 }
@@ -26,16 +27,35 @@ func NewRedactor(config Config) (*Redactor, error) {
 	patterns := make([]compiledPattern, 0, len(config.Patterns))
 
 	for _, p := range config.Patterns {
-		regex, err := regexp.Compile(p.Pattern)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compile pattern '%s': %w", p.Name, err)
-		}
-
-		patterns = append(patterns, compiledPattern{
-			regex:        regex,
+		cp := compiledPattern{
 			patternType:  p.Type,
 			captureGroup: p.CaptureGroup,
-		})
+		}
+
+		// Compile value pattern if provided
+		if p.Pattern != "" {
+			regex, err := regexp.Compile(p.Pattern)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compile pattern '%s': %w", p.Name, err)
+			}
+			cp.regex = regex
+		}
+
+		// Compile field pattern if provided
+		if p.FieldPattern != "" {
+			fieldRegex, err := regexp.Compile(p.FieldPattern)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compile field pattern '%s': %w", p.Name, err)
+			}
+			cp.fieldRegex = fieldRegex
+		}
+
+		// Validate: must have at least one of Pattern or FieldPattern
+		if cp.regex == nil && cp.fieldRegex == nil {
+			return nil, fmt.Errorf("pattern '%s' must have either pattern or field_pattern", p.Name)
+		}
+
+		patterns = append(patterns, cp)
 	}
 
 	return &Redactor{
@@ -126,27 +146,116 @@ func (r *Redactor) RedactJSONL(input []byte) []byte {
 	return result.Bytes()
 }
 
-// redactValue recursively redacts string values in a JSON structure
-func (r *Redactor) redactValue(v interface{}) interface{} {
+// RedactJSONLine redacts a single JSON line, parsing it and applying redaction
+// to string values only. Returns the redacted JSON. If the input is not valid
+// JSON, falls back to text-based redaction.
+func (r *Redactor) RedactJSONLine(line string) string {
+	// Try to parse as JSON
+	var data interface{}
+	if err := json.Unmarshal([]byte(line), &data); err != nil {
+		// Not valid JSON, fall back to text-based redaction (value patterns only)
+		return r.redactTextValuePatternsOnly(line)
+	}
+
+	// Recursively redact string values
+	redacted := r.redactValueWithFieldContext(data, "")
+
+	// Re-serialize
+	output, err := json.Marshal(redacted)
+	if err != nil {
+		// Shouldn't happen, but fall back to original if it does
+		return line
+	}
+
+	return string(output)
+}
+
+// redactTextValuePatternsOnly applies only value-based patterns (no field patterns)
+// to plain text. This is the safe fallback for non-JSON content.
+func (r *Redactor) redactTextValuePatternsOnly(input string) string {
+	result := input
+	for _, p := range r.patterns {
+		// Skip field-based patterns for text mode
+		if p.fieldRegex != nil {
+			continue
+		}
+		if p.regex == nil {
+			continue
+		}
+		if p.captureGroup > 0 {
+			result = r.redactCaptureGroup(result, p)
+		} else {
+			result = r.redactFullMatch(result, p)
+		}
+	}
+	return result
+}
+
+// redactValueWithFieldContext recursively redacts string values in a JSON structure,
+// tracking the current field name for field-based pattern matching.
+func (r *Redactor) redactValueWithFieldContext(v interface{}, fieldName string) interface{} {
 	switch val := v.(type) {
 	case string:
-		return r.Redact(val)
+		return r.redactStringValue(val, fieldName)
 	case map[string]interface{}:
 		result := make(map[string]interface{}, len(val))
 		for k, v := range val {
-			result[k] = r.redactValue(v)
+			result[k] = r.redactValueWithFieldContext(v, k)
 		}
 		return result
 	case []interface{}:
 		result := make([]interface{}, len(val))
 		for i, v := range val {
-			result[i] = r.redactValue(v)
+			// Array elements inherit parent field name for field-based matching
+			result[i] = r.redactValueWithFieldContext(v, fieldName)
 		}
 		return result
 	default:
 		// Numbers, bools, null - return as-is
 		return val
 	}
+}
+
+// redactStringValue applies redaction patterns to a string value, considering
+// both value-based and field-based patterns.
+func (r *Redactor) redactStringValue(value, fieldName string) string {
+	result := value
+
+	for _, p := range r.patterns {
+		if p.fieldRegex != nil {
+			// Field-based pattern: only apply if field name matches
+			if fieldName == "" || !p.fieldRegex.MatchString(fieldName) {
+				continue
+			}
+			// Field matches - redact the value
+			if p.regex != nil {
+				// Apply value regex to matching field
+				if p.captureGroup > 0 {
+					result = r.redactCaptureGroup(result, p)
+				} else {
+					result = r.redactFullMatch(result, p)
+				}
+			} else {
+				// No value regex - redact entire value
+				result = fmt.Sprintf("[REDACTED:%s]", strings.ToUpper(p.patternType))
+			}
+		} else if p.regex != nil {
+			// Value-based pattern: apply to all string values
+			if p.captureGroup > 0 {
+				result = r.redactCaptureGroup(result, p)
+			} else {
+				result = r.redactFullMatch(result, p)
+			}
+		}
+	}
+
+	return result
+}
+
+// redactValue recursively redacts string values in a JSON structure
+// Deprecated: Use redactValueWithFieldContext for field-aware redaction
+func (r *Redactor) redactValue(v interface{}) interface{} {
+	return r.redactValueWithFieldContext(v, "")
 }
 
 // redactFullMatch replaces the entire match with a redaction marker

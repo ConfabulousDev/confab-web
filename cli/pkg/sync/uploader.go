@@ -98,9 +98,9 @@ func (u *Uploader) uploadFile(sessionID, filePath, fileName, fileType string, la
 
 		line := scanner.Text()
 
-		// Apply redaction if enabled
+		// Apply redaction if enabled (JSON-aware to preserve structure)
 		if u.redactor != nil {
-			line = u.redactor.Redact(line)
+			line = u.redactor.RedactJSONLine(line)
 		}
 
 		lines = append(lines, line)
