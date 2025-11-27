@@ -1789,33 +1789,48 @@ type SyncFileState struct {
 
 // FindOrCreateSyncSession finds an existing session by external_id or creates a new one
 // Returns the session UUID and current sync state for all files
+// Uses catch-and-retry to handle race conditions on concurrent creates
 func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, externalID, transcriptPath, cwd string) (sessionID string, files map[string]SyncFileState, err error) {
-	// Try to find existing session
-	query := `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = 'Claude Code'`
-	err = db.conn.QueryRowContext(ctx, query, userID, externalID).Scan(&sessionID)
+	selectQuery := `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = 'Claude Code'`
 
-	if err == sql.ErrNoRows {
-		// Create new session
-		sessionID = uuid.New().String()
-		insertQuery := `
-			INSERT INTO sessions (id, user_id, external_id, first_seen, session_type)
-			VALUES ($1, $2, $3, NOW(), 'Claude Code')
-		`
-		_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, externalID)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed to create session: %w", err)
-		}
-
-		// New session has no synced files
-		return sessionID, make(map[string]SyncFileState), nil
+	// Try to find existing session first
+	err = db.conn.QueryRowContext(ctx, selectQuery, userID, externalID).Scan(&sessionID)
+	if err == nil {
+		// Session exists - get current sync state
+		return db.getSyncFilesForSession(ctx, sessionID)
 	}
-
-	if err != nil {
+	if err != sql.ErrNoRows {
 		return "", nil, fmt.Errorf("failed to find session: %w", err)
 	}
 
-	// Session exists - get current sync state
-	files = make(map[string]SyncFileState)
+	// Session not found - try to create it
+	sessionID = uuid.New().String()
+	insertQuery := `
+		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type)
+		VALUES ($1, $2, $3, NOW(), 'Claude Code')
+	`
+	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, externalID)
+	if err == nil {
+		// Successfully created - new session has no synced files
+		return sessionID, make(map[string]SyncFileState), nil
+	}
+
+	// Check if it's a unique constraint violation (race condition - another request created it)
+	if isUniqueViolation(err) {
+		// Retry the SELECT - session was created by concurrent request
+		err = db.conn.QueryRowContext(ctx, selectQuery, userID, externalID).Scan(&sessionID)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to find session after conflict: %w", err)
+		}
+		return db.getSyncFilesForSession(ctx, sessionID)
+	}
+
+	return "", nil, fmt.Errorf("failed to create session: %w", err)
+}
+
+// getSyncFilesForSession retrieves sync state for all files in a session
+func (db *DB) getSyncFilesForSession(ctx context.Context, sessionID string) (string, map[string]SyncFileState, error) {
+	files := make(map[string]SyncFileState)
 	filesQuery := `SELECT file_name, file_type, last_synced_line FROM sync_files WHERE session_id = $1`
 	rows, err := db.conn.QueryContext(ctx, filesQuery, sessionID)
 	if err != nil {
@@ -1836,6 +1851,12 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, externa
 	}
 
 	return sessionID, files, nil
+}
+
+// isUniqueViolation checks if the error is a PostgreSQL unique constraint violation
+func isUniqueViolation(err error) bool {
+	// PostgreSQL error code 23505 = unique_violation
+	return strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "unique constraint")
 }
 
 // VerifySessionOwnership checks if a session exists and is owned by the user
