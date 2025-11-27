@@ -11,8 +11,8 @@ import (
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/discovery"
 	"github.com/santaclaude2025/confab/pkg/picker"
+	"github.com/santaclaude2025/confab/pkg/sync"
 	"github.com/santaclaude2025/confab/pkg/types"
-	"github.com/santaclaude2025/confab/pkg/upload"
 	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -58,6 +58,12 @@ func saveSessionsByID(sessionIDs []string) error {
 		return err
 	}
 
+	// Create uploader
+	uploader, err := sync.NewUploader(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create uploader: %w", err)
+	}
+
 	for _, sessionID := range sessionIDs {
 		// Handle partial session IDs (first 8 chars)
 		fullSessionID, transcriptPath, err := discovery.FindSessionByID(sessionID)
@@ -71,21 +77,21 @@ func saveSessionsByID(sessionIDs []string) error {
 		// Create hook input for discovery
 		hookInput := types.NewHookInput(fullSessionID, transcriptPath, filepath.Dir(transcriptPath), "manual")
 
-		// Discover and upload
+		// Discover files
 		files, err := discovery.DiscoverSessionFiles(hookInput)
 		if err != nil {
 			fmt.Printf("  Error discovering files: %v\n", err)
 			continue
 		}
 
-		sessionURL, err := upload.UploadToCloudWithConfig(cfg, hookInput, files)
+		// Upload using sync API
+		_, err = uploader.UploadSession(fullSessionID, transcriptPath, hookInput.CWD, files)
 		if err != nil {
 			fmt.Printf("  Error uploading: %v\n", err)
 			continue
 		}
 
 		fmt.Printf("  ✓ Uploaded (%d files)\n", len(files))
-		fmt.Printf("  %s\n", sessionURL)
 	}
 
 	return nil
@@ -180,6 +186,12 @@ func saveInteractive(durationStr string) error {
 		return nil
 	}
 
+	// Create uploader
+	uploader, err := sync.NewUploader(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create uploader: %w", err)
+	}
+
 	// Upload selected sessions
 	fmt.Printf("\nUploading %d session(s)...\n", len(selected))
 	for _, session := range selected {
@@ -193,14 +205,13 @@ func saveInteractive(durationStr string) error {
 			continue
 		}
 
-		sessionURL, err := upload.UploadToCloudWithConfig(cfg, hookInput, files)
+		_, err = uploader.UploadSession(session.SessionID, session.TranscriptPath, hookInput.CWD, files)
 		if err != nil {
 			fmt.Printf("error: %v\n", err)
 			continue
 		}
 
 		fmt.Printf("✓ (%d files)\n", len(files))
-		fmt.Printf("    %s\n", sessionURL)
 	}
 
 	fmt.Println("\nDone.")

@@ -12,8 +12,8 @@ import (
 	"github.com/santaclaude2025/confab/pkg/discovery"
 	confabhttp "github.com/santaclaude2025/confab/pkg/http"
 	"github.com/santaclaude2025/confab/pkg/logger"
+	"github.com/santaclaude2025/confab/pkg/sync"
 	"github.com/santaclaude2025/confab/pkg/types"
-	"github.com/santaclaude2025/confab/pkg/upload"
 	"github.com/santaclaude2025/confab/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -181,11 +181,19 @@ func confirmUpload(count int) bool {
 
 // uploadSessionsWithProgress uploads sessions and displays progress
 func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.SessionInfo) (succeeded, failed int) {
+	// Create uploader once for all sessions
+	uploader, err := sync.NewUploader(cfg)
+	if err != nil {
+		logger.Error("Failed to create uploader: %v", err)
+		fmt.Printf("Error creating uploader: %v\n", err)
+		return 0, len(sessions)
+	}
+
 	fmt.Println()
 	for i, session := range sessions {
 		fmt.Printf("\rUploading... [%d/%d] %s", i+1, len(sessions), utils.TruncateSecret(session.SessionID, 8, 0))
 
-		err := uploadSession(cfg, session)
+		err := uploadSession(uploader, session)
 		if err != nil {
 			logger.Error("Failed to upload session %s: %v", session.SessionID, err)
 			fmt.Printf("\n  Error uploading %s: %v\n", utils.TruncateSecret(session.SessionID, 8, 0), err)
@@ -233,8 +241,8 @@ func checkSessionsExist(cfg *config.UploadConfig, sessionIDs []string) ([]string
 	return result.Existing, nil
 }
 
-// uploadSession uploads a single session to the backend using shared upload package
-func uploadSession(cfg *config.UploadConfig, session discovery.SessionInfo) error {
+// uploadSession uploads a single session using the sync uploader
+func uploadSession(uploader *sync.Uploader, session discovery.SessionInfo) error {
 	// Create a hook input for discovery
 	hookInput := types.NewHookInput(session.SessionID, session.TranscriptPath, filepath.Dir(session.TranscriptPath), "backfill")
 
@@ -244,8 +252,7 @@ func uploadSession(cfg *config.UploadConfig, session discovery.SessionInfo) erro
 		return fmt.Errorf("failed to discover session files for %s: %w", session.SessionID, err)
 	}
 
-	// Use UploadToCloudWithConfig to ensure timestamp extraction happens
-	// Backfill doesn't print URLs since it uploads many sessions
-	_, err = upload.UploadToCloudWithConfig(cfg, hookInput, files)
+	// Upload using sync API
+	_, err = uploader.UploadSession(session.SessionID, session.TranscriptPath, hookInput.CWD, files)
 	return err
 }
