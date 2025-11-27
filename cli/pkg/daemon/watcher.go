@@ -82,17 +82,10 @@ func (w *Watcher) CheckForNewFiles() ([]*TrackedFile, error) {
 
 	var newFiles []*TrackedFile
 	for _, agentID := range agentIDs {
-		if w.knownAgentIDs[agentID] {
-			continue
-		}
-
-		// New agent discovered
-		w.knownAgentIDs[agentID] = true
-
 		agentFileName := fmt.Sprintf("agent-%s.jsonl", agentID)
 		agentPath := filepath.Join(w.transcriptDir, agentFileName)
 
-		// Check if file exists
+		// Check if file exists on disk
 		if _, err := os.Stat(agentPath); err != nil {
 			continue // Agent file doesn't exist yet
 		}
@@ -188,6 +181,7 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 		if toolUseResult, ok := message["toolUseResult"].(map[string]interface{}); ok {
 			if agentID, ok := toolUseResult["agentId"].(string); ok {
 				if isValidAgentID(agentID) && !w.knownAgentIDs[agentID] {
+					w.knownAgentIDs[agentID] = true
 					agentIDs = append(agentIDs, agentID)
 				}
 			}
@@ -203,6 +197,7 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 								if toolUseResult, ok := resultContent["toolUseResult"].(map[string]interface{}); ok {
 									if agentID, ok := toolUseResult["agentId"].(string); ok {
 										if isValidAgentID(agentID) && !w.knownAgentIDs[agentID] {
+											w.knownAgentIDs[agentID] = true
 											agentIDs = append(agentIDs, agentID)
 										}
 									}
