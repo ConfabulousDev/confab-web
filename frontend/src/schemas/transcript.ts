@@ -193,7 +193,7 @@ export const QueueOperationMessageSchema = z.object({
   type: z.literal('queue-operation'),
   operation: z.string(),
   timestamp: z.string(),
-  content: z.string(),
+  content: z.string().optional(),
   sessionId: z.string(),
 });
 
