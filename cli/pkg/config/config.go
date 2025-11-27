@@ -392,14 +392,15 @@ func installHookForEvent(settings *ClaudeSettings, eventName string, hook Hook) 
 // UninstallSyncHooks removes the sync daemon hooks
 func UninstallSyncHooks() error {
 	return AtomicUpdateSettings(func(settings *ClaudeSettings) error {
-		uninstallHookForEvent(settings, "SessionStart")
-		uninstallHookForEvent(settings, "SessionEnd")
+		uninstallSyncHookForEvent(settings, "SessionStart", "sync start")
+		uninstallSyncHookForEvent(settings, "SessionEnd", "sync stop")
 		return nil
 	})
 }
 
-// uninstallHookForEvent removes confab hooks from a specific event type
-func uninstallHookForEvent(settings *ClaudeSettings, eventName string) {
+// uninstallSyncHookForEvent removes sync hooks from a specific event type
+// It removes hooks that either match isConfabCommand OR contain the syncCommand string
+func uninstallSyncHookForEvent(settings *ClaudeSettings, eventName, syncCommand string) {
 	eventHooks := settings.Hooks[eventName]
 	if len(eventHooks) == 0 {
 		return
@@ -409,7 +410,10 @@ func uninstallHookForEvent(settings *ClaudeSettings, eventName string) {
 	for _, matcher := range eventHooks {
 		var remainingHooks []Hook
 		for _, hook := range matcher.Hooks {
-			if hook.Type != "command" || !isConfabCommand(hook.Command) {
+			// Remove hooks that are confab commands OR contain the sync command string
+			isSyncHook := hook.Type == "command" &&
+				(isConfabCommand(hook.Command) || strings.Contains(hook.Command, syncCommand))
+			if !isSyncHook {
 				remainingHooks = append(remainingHooks, hook)
 			}
 		}

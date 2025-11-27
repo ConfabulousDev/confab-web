@@ -382,3 +382,312 @@ type customError struct {
 func (e *customError) Error() string {
 	return e.msg
 }
+
+func TestInstallSyncHooks(t *testing.T) {
+	// Create temp directory for test
+	tmpDir := t.TempDir()
+
+	// Set up test environment
+	oldEnv := os.Getenv(ClaudeStateDirEnv)
+	os.Setenv(ClaudeStateDirEnv, tmpDir)
+	defer os.Setenv(ClaudeStateDirEnv, oldEnv)
+
+	// Create settings directory
+	os.MkdirAll(tmpDir, 0755)
+
+	// Install sync hooks
+	err := InstallSyncHooks()
+	if err != nil {
+		t.Fatalf("InstallSyncHooks failed: %v", err)
+	}
+
+	// Verify hooks were installed
+	settings, err := ReadSettings()
+	if err != nil {
+		t.Fatalf("ReadSettings failed: %v", err)
+	}
+
+	// Check SessionStart hook - look for "sync start" in command
+	// (Note: in tests, binary path won't be "confab" but the test binary)
+	startHooks := settings.Hooks["SessionStart"]
+	if len(startHooks) == 0 {
+		t.Error("Expected SessionStart hooks to be installed")
+	} else {
+		found := false
+		for _, matcher := range startHooks {
+			for _, hook := range matcher.Hooks {
+				if hook.Type == "command" && contains(hook.Command, "sync start") {
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Error("SessionStart 'sync start' hook not found")
+		}
+	}
+
+	// Check SessionEnd hook - look for "sync stop" in command
+	endHooks := settings.Hooks["SessionEnd"]
+	if len(endHooks) == 0 {
+		t.Error("Expected SessionEnd hooks to be installed")
+	} else {
+		found := false
+		for _, matcher := range endHooks {
+			for _, hook := range matcher.Hooks {
+				if hook.Type == "command" && contains(hook.Command, "sync stop") {
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Error("SessionEnd 'sync stop' hook not found")
+		}
+	}
+}
+
+func TestIsSyncHooksInstalled(t *testing.T) {
+	// Create temp directory for test
+	tmpDir := t.TempDir()
+
+	// Set up test environment
+	oldEnv := os.Getenv(ClaudeStateDirEnv)
+	os.Setenv(ClaudeStateDirEnv, tmpDir)
+	defer os.Setenv(ClaudeStateDirEnv, oldEnv)
+
+	os.MkdirAll(tmpDir, 0755)
+
+	// Initially not installed - check directly since IsSyncHooksInstalled
+	// relies on isConfabCommand which won't work with test binary
+	settings, err := ReadSettings()
+	if err != nil {
+		t.Fatalf("ReadSettings failed: %v", err)
+	}
+	if hasSyncHooks(settings) {
+		t.Error("Expected sync hooks to not be installed initially")
+	}
+
+	// Install sync hooks
+	if err := InstallSyncHooks(); err != nil {
+		t.Fatalf("InstallSyncHooks failed: %v", err)
+	}
+
+	// Now should be installed
+	settings, err = ReadSettings()
+	if err != nil {
+		t.Fatalf("ReadSettings failed: %v", err)
+	}
+	if !hasSyncHooks(settings) {
+		t.Error("Expected sync hooks to be installed after InstallSyncHooks")
+	}
+}
+
+// hasSyncHooks checks if sync hooks are present by looking for sync start/stop commands
+// This is a test helper that doesn't rely on isConfabCommand
+func hasSyncHooks(settings *ClaudeSettings) bool {
+	hasStart := false
+	for _, matcher := range settings.Hooks["SessionStart"] {
+		for _, hook := range matcher.Hooks {
+			if hook.Type == "command" && contains(hook.Command, "sync start") {
+				hasStart = true
+				break
+			}
+		}
+	}
+
+	hasEnd := false
+	for _, matcher := range settings.Hooks["SessionEnd"] {
+		for _, hook := range matcher.Hooks {
+			if hook.Type == "command" && contains(hook.Command, "sync stop") {
+				hasEnd = true
+				break
+			}
+		}
+	}
+
+	return hasStart && hasEnd
+}
+
+func TestUninstallSyncHooks(t *testing.T) {
+	// Create temp directory for test
+	tmpDir := t.TempDir()
+
+	// Set up test environment
+	oldEnv := os.Getenv(ClaudeStateDirEnv)
+	os.Setenv(ClaudeStateDirEnv, tmpDir)
+	defer os.Setenv(ClaudeStateDirEnv, oldEnv)
+
+	os.MkdirAll(tmpDir, 0755)
+
+	// Install sync hooks first
+	if err := InstallSyncHooks(); err != nil {
+		t.Fatalf("InstallSyncHooks failed: %v", err)
+	}
+
+	// Verify installed
+	settings, _ := ReadSettings()
+	if !hasSyncHooks(settings) {
+		t.Fatal("Sync hooks should be installed before testing uninstall")
+	}
+
+	// Uninstall
+	if err := UninstallSyncHooks(); err != nil {
+		t.Fatalf("UninstallSyncHooks failed: %v", err)
+	}
+
+	// Verify uninstalled - check for sync start/stop commands
+	settings, err := ReadSettings()
+	if err != nil {
+		t.Fatalf("ReadSettings failed: %v", err)
+	}
+
+	// Check SessionStart - should not contain sync start
+	for _, matcher := range settings.Hooks["SessionStart"] {
+		for _, hook := range matcher.Hooks {
+			if contains(hook.Command, "sync start") {
+				t.Error("Found 'sync start' hook in SessionStart after uninstall")
+			}
+		}
+	}
+
+	// Check SessionEnd - should not contain sync stop
+	for _, matcher := range settings.Hooks["SessionEnd"] {
+		for _, hook := range matcher.Hooks {
+			if contains(hook.Command, "sync stop") {
+				t.Error("Found 'sync stop' hook in SessionEnd after uninstall")
+			}
+		}
+	}
+}
+
+func TestInstallSyncHooks_PreservesOtherHooks(t *testing.T) {
+	// Create temp directory for test
+	tmpDir := t.TempDir()
+
+	// Set up test environment
+	oldEnv := os.Getenv(ClaudeStateDirEnv)
+	os.Setenv(ClaudeStateDirEnv, tmpDir)
+	defer os.Setenv(ClaudeStateDirEnv, oldEnv)
+
+	os.MkdirAll(tmpDir, 0755)
+
+	// Install some other hook first
+	err := AtomicUpdateSettings(func(settings *ClaudeSettings) error {
+		settings.Hooks["SessionEnd"] = []HookMatcher{
+			{
+				Matcher: "*",
+				Hooks: []Hook{
+					{Type: "command", Command: "/usr/bin/other-tool log"},
+				},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to install other hook: %v", err)
+	}
+
+	// Install sync hooks
+	if err := InstallSyncHooks(); err != nil {
+		t.Fatalf("InstallSyncHooks failed: %v", err)
+	}
+
+	// Verify other hook is preserved
+	settings, err := ReadSettings()
+	if err != nil {
+		t.Fatalf("ReadSettings failed: %v", err)
+	}
+
+	foundOther := false
+	foundSyncStop := false
+	for _, matcher := range settings.Hooks["SessionEnd"] {
+		for _, hook := range matcher.Hooks {
+			if hook.Command == "/usr/bin/other-tool log" {
+				foundOther = true
+			}
+			if contains(hook.Command, "sync stop") {
+				foundSyncStop = true
+			}
+		}
+	}
+
+	if !foundOther {
+		t.Error("Other hook was not preserved after InstallSyncHooks")
+	}
+	if !foundSyncStop {
+		t.Error("Sync stop hook was not installed")
+	}
+}
+
+func TestInstallSyncHooks_UpdatesExistingConfab(t *testing.T) {
+	// Create temp directory for test
+	tmpDir := t.TempDir()
+
+	// Set up test environment
+	oldEnv := os.Getenv(ClaudeStateDirEnv)
+	os.Setenv(ClaudeStateDirEnv, tmpDir)
+	defer os.Setenv(ClaudeStateDirEnv, oldEnv)
+
+	os.MkdirAll(tmpDir, 0755)
+
+	// Install old-style save hook (simulating existing confab installation)
+	err := AtomicUpdateSettings(func(settings *ClaudeSettings) error {
+		settings.Hooks["SessionEnd"] = []HookMatcher{
+			{
+				Matcher: "*",
+				Hooks: []Hook{
+					{Type: "command", Command: "/old/path/confab save"},
+				},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Failed to install old hook: %v", err)
+	}
+
+	// Install sync hooks (should update the existing confab hook)
+	if err := InstallSyncHooks(); err != nil {
+		t.Fatalf("InstallSyncHooks failed: %v", err)
+	}
+
+	// Verify the hook was updated to sync stop
+	settings, err := ReadSettings()
+	if err != nil {
+		t.Fatalf("ReadSettings failed: %v", err)
+	}
+
+	// Should have sync stop, not save
+	foundSyncStop := false
+	foundOldSave := false
+	for _, matcher := range settings.Hooks["SessionEnd"] {
+		for _, hook := range matcher.Hooks {
+			if contains(hook.Command, "sync stop") {
+				foundSyncStop = true
+			}
+			if hook.Command == "/old/path/confab save" {
+				foundOldSave = true
+			}
+		}
+	}
+
+	if !foundSyncStop {
+		t.Error("Expected sync stop hook to be installed")
+	}
+	if foundOldSave {
+		t.Error("Old save hook should have been replaced")
+	}
+}
+
+// Helper function
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
+}
+
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
