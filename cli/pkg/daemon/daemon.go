@@ -23,7 +23,7 @@ const (
 	initialWaitTimeout = 60 * time.Second
 
 	// initialWaitPollInterval is how often to check for transcript file
-	initialWaitPollInterval = 1 * time.Second
+	initialWaitPollInterval = 2 * time.Second
 )
 
 // Daemon is the background sync process.
