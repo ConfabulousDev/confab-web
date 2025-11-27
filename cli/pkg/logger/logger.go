@@ -55,7 +55,8 @@ type Logger struct {
 	logPath    string
 	level      Level
 	mu         sync.Mutex
-	alsoStderr bool // Also write to stderr
+	alsoStderr bool   // Also write to stderr
+	sessionCtx string // Session context prefix (e.g., "session=abc123")
 }
 
 var (
@@ -152,6 +153,37 @@ func (l *Logger) SetAlsoStderr(enabled bool) {
 	l.alsoStderr = enabled
 }
 
+// SetSessionContext sets a session context that will be included in all log lines.
+// Pass empty string to clear the context.
+func (l *Logger) SetSessionContext(ctx string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.sessionCtx = ctx
+}
+
+// SetSession sets session IDs that will be included in all log lines.
+// externalID is the Claude Code session ID, sessionID is the Confab backend session ID.
+// Either can be empty if not yet known.
+func (l *Logger) SetSession(externalID, sessionID string) {
+	var ctx string
+	if externalID != "" && sessionID != "" {
+		ctx = fmt.Sprintf("[ext=%s sess=%s]", shortID(externalID), shortID(sessionID))
+	} else if externalID != "" {
+		ctx = fmt.Sprintf("[ext=%s]", shortID(externalID))
+	} else if sessionID != "" {
+		ctx = fmt.Sprintf("[sess=%s]", shortID(sessionID))
+	}
+	l.SetSessionContext(ctx)
+}
+
+// shortID returns first 8 chars of an ID for brevity in logs
+func shortID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
 // log writes a log message at the specified level
 func (l *Logger) log(level Level, format string, args ...interface{}) {
 	if level < l.level {
@@ -163,7 +195,13 @@ func (l *Logger) log(level Level, format string, args ...interface{}) {
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	message := fmt.Sprintf(format, args...)
-	logLine := fmt.Sprintf("[%s] %s: %s\n", timestamp, level, message)
+
+	var logLine string
+	if l.sessionCtx != "" {
+		logLine = fmt.Sprintf("[%s] %s %s: %s\n", timestamp, l.sessionCtx, level, message)
+	} else {
+		logLine = fmt.Sprintf("[%s] %s: %s\n", timestamp, level, message)
+	}
 
 	// Write to log file
 	if l.logger != nil {
@@ -257,4 +295,9 @@ func WarnPrint(format string, args ...interface{}) {
 // ErrorPrint logs an error AND prints to stderr for user visibility
 func ErrorPrint(format string, args ...interface{}) {
 	Get().ErrorPrint(format, args...)
+}
+
+// SetSession sets session IDs that will be included in all log lines
+func SetSession(externalID, sessionID string) {
+	Get().SetSession(externalID, sessionID)
 }

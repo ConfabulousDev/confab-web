@@ -62,8 +62,10 @@ func New(cfg Config) *Daemon {
 
 // Run starts the daemon and blocks until stopped
 func (d *Daemon) Run(ctx context.Context) error {
-	logger.Info("Daemon starting: external_id=%s transcript=%s interval=%v",
-		d.externalID, d.transcriptPath, d.syncInterval)
+	// Set session context for all log lines
+	logger.SetSession(d.externalID, "")
+
+	logger.Info("Daemon starting: transcript=%s interval=%v", d.transcriptPath, d.syncInterval)
 
 	// Save state immediately so duplicate detection works even if backend is down
 	d.state = NewState(d.externalID, d.transcriptPath, d.cwd)
@@ -151,8 +153,10 @@ func (d *Daemon) tryInit(client *sync.Client, watcher *Watcher) error {
 		return err
 	}
 
-	logger.Info("Sync session initialized: session_id=%s existing_files=%d",
-		initResp.SessionID, len(initResp.Files))
+	// Update session context now that we have the backend session ID
+	logger.SetSession(d.externalID, initResp.SessionID)
+
+	logger.Info("Sync session initialized: existing_files=%d", len(initResp.Files))
 
 	// Initialize watcher from backend state
 	backendState := make(map[string]FileState)
