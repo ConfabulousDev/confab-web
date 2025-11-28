@@ -28,6 +28,7 @@ type HookInput struct {
 	PermissionMode string `json:"permission_mode"`
 	HookEventName  string `json:"hook_event_name"`
 	Reason         string `json:"reason"`
+	ParentPID      int    `json:"parent_pid,omitempty"` // Claude Code process ID (set by confab, not Claude Code)
 }
 
 // NewHookInput creates a HookInput for manual session uploads
@@ -48,6 +49,14 @@ type HookResponse struct {
 	Continue       bool   `json:"continue"`
 	StopReason     string `json:"stopReason"`
 	SuppressOutput bool   `json:"suppressOutput"`
+}
+
+// InboxEvent represents an event written to the daemon's inbox file.
+// The inbox is a JSONL file where each line is an event.
+type InboxEvent struct {
+	Type      string     `json:"type"`                 // Event type: "session_end"
+	Timestamp time.Time  `json:"timestamp"`            // When the event was written
+	HookInput *HookInput `json:"hook_input,omitempty"` // Full hook payload for session events
 }
 
 // SessionFile represents a file discovered for a session

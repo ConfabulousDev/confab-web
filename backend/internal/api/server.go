@@ -218,6 +218,7 @@ func (s *Server) SetupRoutes() http.Handler {
 				// Incremental sync endpoints (for daemon-based uploads)
 				r.Post("/sync/init", s.handleSyncInit)
 				r.Post("/sync/chunk", s.handleSyncChunk)
+				r.Post("/sync/event", s.handleSyncEvent)
 			})
 
 			// Read endpoint doesn't need rate limiting or decompression

@@ -1533,3 +1533,24 @@ func (db *DB) GetSessionOwnerAndExternalID(ctx context.Context, sessionID string
 	}
 	return userID, externalID, nil
 }
+
+// SessionEventParams contains parameters for inserting a session event
+type SessionEventParams struct {
+	SessionID      string
+	EventType      string
+	EventTimestamp time.Time
+	Payload        json.RawMessage
+}
+
+// InsertSessionEvent inserts a new event into the session_events table
+func (db *DB) InsertSessionEvent(ctx context.Context, params SessionEventParams) error {
+	query := `
+		INSERT INTO session_events (session_id, event_type, event_timestamp, payload)
+		VALUES ($1, $2, $3, $4)
+	`
+	_, err := db.conn.ExecContext(ctx, query, params.SessionID, params.EventType, params.EventTimestamp, params.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to insert session event: %w", err)
+	}
+	return nil
+}

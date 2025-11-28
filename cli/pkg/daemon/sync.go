@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/sync"
+	"github.com/santaclaude2025/confab/pkg/types"
 )
 
 // Syncer handles syncing files to the backend
@@ -92,4 +95,23 @@ func (s *Syncer) GetSyncStats() map[string]int {
 		stats[fileName] = file.LastSyncedLine
 	}
 	return stats
+}
+
+// SendSessionEndEvent sends a session_end event to the backend
+func (s *Syncer) SendSessionEndEvent(hookInput *types.HookInput, eventTimestamp time.Time) error {
+	if hookInput == nil {
+		return nil // No event to send
+	}
+
+	payload, err := json.Marshal(hookInput)
+	if err != nil {
+		return fmt.Errorf("failed to marshal hook input: %w", err)
+	}
+
+	if err := s.client.SendEvent(s.sessionID, "session_end", eventTimestamp, payload); err != nil {
+		return fmt.Errorf("failed to send session_end event: %w", err)
+	}
+
+	logger.Info("Sent session_end event: session_id=%s", s.sessionID)
+	return nil
 }

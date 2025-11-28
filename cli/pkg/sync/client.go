@@ -54,6 +54,19 @@ type SyncChunkResponse struct {
 	LastSyncedLine int `json:"last_synced_line"`
 }
 
+// SyncEventRequest is the request body for POST /api/v1/sync/event
+type SyncEventRequest struct {
+	SessionID string          `json:"session_id"`
+	EventType string          `json:"event_type"`
+	Timestamp time.Time       `json:"timestamp"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
+// SyncEventResponse is the response for POST /api/v1/sync/event
+type SyncEventResponse struct {
+	Success bool `json:"success"`
+}
+
 // Init initializes or resumes a sync session
 // Returns the session ID and current sync state for all files
 func (c *Client) Init(externalID, transcriptPath, cwd string, gitInfo json.RawMessage) (*SyncInitResponse, error) {
@@ -89,4 +102,21 @@ func (c *Client) UploadChunk(sessionID, fileName, fileType string, firstLine int
 	}
 
 	return resp.LastSyncedLine, nil
+}
+
+// SendEvent sends a session lifecycle event to the backend
+func (c *Client) SendEvent(sessionID, eventType string, timestamp time.Time, payload json.RawMessage) error {
+	req := SyncEventRequest{
+		SessionID: sessionID,
+		EventType: eventType,
+		Timestamp: timestamp,
+		Payload:   payload,
+	}
+
+	var resp SyncEventResponse
+	if err := c.httpClient.Post("/api/v1/sync/event", req, &resp); err != nil {
+		return fmt.Errorf("send event failed: %w", err)
+	}
+
+	return nil
 }

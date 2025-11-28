@@ -53,6 +53,19 @@ type SyncChunkResponse struct {
 	LastSyncedLine int `json:"last_synced_line"`
 }
 
+// SyncEventRequest is the request body for POST /api/v1/sync/event
+type SyncEventRequest struct {
+	SessionID string          `json:"session_id"`
+	EventType string          `json:"event_type"` // "session_end"
+	Timestamp time.Time       `json:"timestamp"`  // When the event occurred
+	Payload   json.RawMessage `json:"payload"`    // Full event payload (e.g., HookInput)
+}
+
+// SyncEventResponse is the response for POST /api/v1/sync/event
+type SyncEventResponse struct {
+	Success bool `json:"success"`
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -373,6 +386,82 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(merged)
+}
+
+// handleSyncEvent records a session lifecycle event
+// POST /api/v1/sync/event
+func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
+	// Get authenticated user
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	// Parse request
+	var req SyncEventRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	// Validate required fields
+	if req.SessionID == "" {
+		respondError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+	if req.EventType == "" {
+		respondError(w, http.StatusBadRequest, "event_type is required")
+		return
+	}
+	if req.EventType != "session_end" {
+		respondError(w, http.StatusBadRequest, "invalid event_type: must be 'session_end'")
+		return
+	}
+	if req.Timestamp.IsZero() {
+		respondError(w, http.StatusBadRequest, "timestamp is required")
+		return
+	}
+
+	// Verify session ownership
+	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer dbCancel()
+
+	_, err := s.db.VerifySessionOwnership(dbCtx, req.SessionID, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrSessionNotFound) {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+		if errors.Is(err, db.ErrForbidden) {
+			respondError(w, http.StatusForbidden, "Access denied")
+			return
+		}
+		logger.Error("Failed to verify session ownership", "error", err, "session_id", req.SessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to verify session")
+		return
+	}
+
+	// Insert event
+	err = s.db.InsertSessionEvent(dbCtx, db.SessionEventParams{
+		SessionID:      req.SessionID,
+		EventType:      req.EventType,
+		EventTimestamp: req.Timestamp,
+		Payload:        req.Payload,
+	})
+	if err != nil {
+		logger.Error("Failed to insert session event", "error", err, "session_id", req.SessionID, "event_type", req.EventType)
+		respondError(w, http.StatusInternalServerError, "Failed to record event")
+		return
+	}
+
+	logger.Info("Session event recorded",
+		"user_id", userID,
+		"session_id", req.SessionID,
+		"event_type", req.EventType,
+		"timestamp", req.Timestamp)
+
+	respondJSON(w, http.StatusOK, SyncEventResponse{Success: true})
 }
 
 // ============================================================================

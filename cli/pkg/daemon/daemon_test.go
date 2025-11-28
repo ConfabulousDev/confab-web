@@ -2,10 +2,13 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/santaclaude2025/confab/pkg/types"
 )
 
 // These tests verify daemon lifecycle and shutdown behavior via context
@@ -213,6 +216,173 @@ func TestWaitForTranscriptRespectsStopChannel(t *testing.T) {
 		t.Logf("daemon exited with: %v", err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("daemon did not exit when stopped during waitForTranscript")
+	}
+}
+
+func TestWriteInboxEvent(t *testing.T) {
+	tmpDir := t.TempDir()
+	inboxPath := filepath.Join(tmpDir, "test.inbox.jsonl")
+
+	hookInput := &types.HookInput{
+		SessionID:      "test-session-123",
+		TranscriptPath: "/path/to/transcript.jsonl",
+		CWD:            "/work/dir",
+		Reason:         "test_reason",
+		HookEventName:  "SessionEnd",
+	}
+
+	// Write event
+	err := writeInboxEvent(inboxPath, "session_end", hookInput)
+	if err != nil {
+		t.Fatalf("failed to write inbox event: %v", err)
+	}
+
+	// Verify file exists
+	data, err := os.ReadFile(inboxPath)
+	if err != nil {
+		t.Fatalf("failed to read inbox file: %v", err)
+	}
+
+	// Parse and verify
+	var event types.InboxEvent
+	if err := json.Unmarshal(data[:len(data)-1], &event); err != nil { // -1 to remove newline
+		t.Fatalf("failed to parse inbox event: %v", err)
+	}
+
+	if event.Type != "session_end" {
+		t.Errorf("expected Type 'session_end', got %q", event.Type)
+	}
+	if event.HookInput == nil {
+		t.Fatal("expected HookInput to be set")
+	}
+	if event.HookInput.SessionID != "test-session-123" {
+		t.Errorf("expected SessionID 'test-session-123', got %q", event.HookInput.SessionID)
+	}
+	if event.HookInput.Reason != "test_reason" {
+		t.Errorf("expected Reason 'test_reason', got %q", event.HookInput.Reason)
+	}
+}
+
+func TestWriteInboxEvent_MultipleEvents(t *testing.T) {
+	tmpDir := t.TempDir()
+	inboxPath := filepath.Join(tmpDir, "test.inbox.jsonl")
+
+	// Write multiple events
+	for i := 0; i < 3; i++ {
+		hookInput := &types.HookInput{
+			SessionID: "session-" + string(rune('A'+i)),
+			Reason:    "reason-" + string(rune('1'+i)),
+		}
+		if err := writeInboxEvent(inboxPath, "session_end", hookInput); err != nil {
+			t.Fatalf("failed to write event %d: %v", i, err)
+		}
+	}
+
+	// Read and count lines
+	data, _ := os.ReadFile(inboxPath)
+	lines := 0
+	for _, b := range data {
+		if b == '\n' {
+			lines++
+		}
+	}
+	if lines != 3 {
+		t.Errorf("expected 3 lines, got %d", lines)
+	}
+}
+
+func TestDaemon_ReadInboxEvents(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	// Create sync dir
+	syncDir := filepath.Join(tmpDir, ".confab", "sync")
+	os.MkdirAll(syncDir, 0755)
+
+	// Create a daemon with state
+	d := &Daemon{
+		externalID: "inbox-read-test",
+		state:      NewState("inbox-read-test", "/path", "/cwd", 0),
+	}
+
+	// Write some events to inbox
+	hookInput1 := &types.HookInput{SessionID: "session-1", Reason: "reason1"}
+	hookInput2 := &types.HookInput{SessionID: "session-2", Reason: "reason2"}
+	writeInboxEvent(d.state.InboxPath, "session_end", hookInput1)
+	writeInboxEvent(d.state.InboxPath, "other_event", hookInput2)
+
+	// Read events
+	events := d.readInboxEvents()
+
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+
+	if events[0].Type != "session_end" {
+		t.Errorf("expected first event type 'session_end', got %q", events[0].Type)
+	}
+	if events[0].HookInput.Reason != "reason1" {
+		t.Errorf("expected first event reason 'reason1', got %q", events[0].HookInput.Reason)
+	}
+
+	if events[1].Type != "other_event" {
+		t.Errorf("expected second event type 'other_event', got %q", events[1].Type)
+	}
+}
+
+func TestDaemon_ReadInboxEvents_NoFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	d := &Daemon{
+		externalID: "no-inbox-test",
+		state:      NewState("no-inbox-test", "/path", "/cwd", 0),
+	}
+
+	// Should return nil when inbox doesn't exist
+	events := d.readInboxEvents()
+	if events != nil {
+		t.Errorf("expected nil events when inbox doesn't exist, got %v", events)
+	}
+}
+
+func TestDaemon_CleanupInbox(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	// Create sync dir
+	syncDir := filepath.Join(tmpDir, ".confab", "sync")
+	os.MkdirAll(syncDir, 0755)
+
+	d := &Daemon{
+		externalID: "cleanup-test",
+		state:      NewState("cleanup-test", "/path", "/cwd", 0),
+	}
+
+	// Create inbox file
+	hookInput := &types.HookInput{SessionID: "test"}
+	writeInboxEvent(d.state.InboxPath, "session_end", hookInput)
+
+	// Verify it exists
+	if _, err := os.Stat(d.state.InboxPath); err != nil {
+		t.Fatalf("inbox file not created: %v", err)
+	}
+
+	// Cleanup
+	d.cleanupInbox()
+
+	// Verify it's deleted
+	if _, err := os.Stat(d.state.InboxPath); !os.IsNotExist(err) {
+		t.Error("expected inbox file to be deleted")
 	}
 }
 

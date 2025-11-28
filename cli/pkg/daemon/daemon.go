@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/santaclaude2025/confab/pkg/git"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/sync"
+	"github.com/santaclaude2025/confab/pkg/types"
 )
 
 const (
@@ -35,10 +37,15 @@ const (
 // The daemon is resilient to backend unavailability - it will keep running
 // and retry connecting to the backend on each sync interval. Once connected,
 // it will sync any accumulated changes.
+//
+// If ParentPID is set, the daemon monitors the parent process and shuts down
+// gracefully when it exits. This handles cases where Claude Code crashes or
+// is killed without firing the SessionEnd hook.
 type Daemon struct {
 	externalID     string
 	transcriptPath string
 	cwd            string
+	parentPID      int
 	syncInterval   time.Duration
 	syncJitter     time.Duration
 
@@ -50,10 +57,11 @@ type Daemon struct {
 
 // Config holds daemon configuration
 type Config struct {
-	ExternalID       string
-	TranscriptPath   string
-	CWD              string
-	SyncInterval     time.Duration
+	ExternalID         string
+	TranscriptPath     string
+	CWD                string
+	ParentPID          int           // Claude Code process ID to monitor (0 to disable)
+	SyncInterval       time.Duration
 	SyncIntervalJitter time.Duration // 0 to disable jitter (for testing)
 }
 
@@ -74,6 +82,7 @@ func New(cfg Config) *Daemon {
 		externalID:     cfg.ExternalID,
 		transcriptPath: cfg.TranscriptPath,
 		cwd:            cfg.CWD,
+		parentPID:      cfg.ParentPID,
 		syncInterval:   interval,
 		syncJitter:     jitter,
 		stopCh:         make(chan struct{}),
@@ -102,7 +111,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	// Save state for duplicate detection. Done after transcript exists so we
 	// don't leave stale state files for sessions that never produced transcripts.
-	d.state = NewState(d.externalID, d.transcriptPath, d.cwd)
+	d.state = NewState(d.externalID, d.transcriptPath, d.cwd, d.parentPID)
 	if err := d.state.Save(); err != nil {
 		logger.Warn("Failed to save initial state: %v", err)
 	}
@@ -130,7 +139,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 		logger.Warn("Backend init failed (will retry): %v", err)
 	}
 
-	logger.Info("Daemon running: pid=%d", os.Getpid())
+	if d.parentPID > 0 {
+		logger.Info("Daemon running: pid=%d parent_pid=%d", os.Getpid(), d.parentPID)
+	} else {
+		logger.Info("Daemon running: pid=%d (no parent monitoring)", os.Getpid())
+	}
 
 	// Main loop with jittered interval to avoid thundering herd
 	for {
@@ -154,6 +167,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 			return d.shutdown(fmt.Sprintf("signal %v", sig))
 
 		case <-timer.C:
+			// Check if parent Claude Code process is still running.
+			// If it crashed or was killed, shut down gracefully.
+			if d.parentPID > 0 && !isProcessRunning(d.parentPID) {
+				timer.Stop()
+				return d.shutdown("parent process exited")
+			}
+
 			// If not initialized yet, try to connect to backend
 			if d.syncer == nil {
 				if err := d.tryInitAndSyncAll(watcher); err != nil {
@@ -281,6 +301,18 @@ func (d *Daemon) shutdown(reason string) error {
 
 	logger.Info("Daemon shutting down: reason=%s", reason)
 
+	// Read inbox events (e.g., SessionEnd payload from sync stop)
+	// We need to extract the session_end event to send to backend after final sync
+	events := d.readInboxEvents()
+	var sessionEndEvent *types.InboxEvent
+	for _, event := range events {
+		logger.Info("Processing inbox event: type=%s", event.Type)
+		if event.Type == "session_end" && event.HookInput != nil {
+			logger.Debug("SessionEnd event: reason=%s", event.HookInput.Reason)
+			sessionEndEvent = &event
+		}
+	}
+
 	// Final sync
 	if d.syncer != nil {
 		logger.Info("Performing final sync...")
@@ -297,10 +329,19 @@ func (d *Daemon) shutdown(reason string) error {
 		for file, lines := range stats {
 			logger.Info("Final state: file=%s lines_synced=%d", file, lines)
 		}
+
+		// Send session_end event to backend (after final sync completes)
+		if sessionEndEvent != nil {
+			if err := d.syncer.SendSessionEndEvent(sessionEndEvent.HookInput, sessionEndEvent.Timestamp); err != nil {
+				logger.Error("Failed to send session_end event: %v", err)
+				// Don't fail shutdown for this - the sync already completed
+			}
+		}
 	}
 
-	// Clean up state file
+	// Clean up state and inbox files
 	if d.state != nil {
+		d.cleanupInbox()
 		if err := d.state.Delete(); err != nil {
 			logger.Warn("Failed to delete state file: %v", err)
 		}
@@ -310,8 +351,53 @@ func (d *Daemon) shutdown(reason string) error {
 	return nil
 }
 
-// StopDaemon sends SIGTERM to a running daemon by external ID
-func StopDaemon(externalID string) error {
+// readInboxEvents reads all events from the inbox file
+func (d *Daemon) readInboxEvents() []types.InboxEvent {
+	if d.state == nil || d.state.InboxPath == "" {
+		return nil
+	}
+
+	f, err := os.Open(d.state.InboxPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Warn("Failed to open inbox file: %v", err)
+		}
+		return nil
+	}
+	defer f.Close()
+
+	var events []types.InboxEvent
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var event types.InboxEvent
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			logger.Warn("Failed to parse inbox event: %v", err)
+			continue
+		}
+		events = append(events, event)
+	}
+
+	if err := scanner.Err(); err != nil {
+		logger.Warn("Error reading inbox file: %v", err)
+	}
+
+	return events
+}
+
+// cleanupInbox removes the inbox file
+func (d *Daemon) cleanupInbox() {
+	if d.state == nil || d.state.InboxPath == "" {
+		return
+	}
+	if err := os.Remove(d.state.InboxPath); err != nil && !os.IsNotExist(err) {
+		logger.Warn("Failed to delete inbox file: %v", err)
+	}
+}
+
+// StopDaemon sends SIGTERM to a running daemon by external ID.
+// If hookInput is provided, it writes a session_end event to the daemon's inbox
+// before signaling, so the daemon can access the full SessionEnd payload.
+func StopDaemon(externalID string, hookInput *types.HookInput) error {
 	state, err := LoadState(externalID)
 	if err != nil {
 		return fmt.Errorf("failed to load state: %w", err)
@@ -326,6 +412,14 @@ func StopDaemon(externalID string) error {
 		return fmt.Errorf("daemon not running (stale state cleaned up)")
 	}
 
+	// Write event to inbox before signaling (daemon reads on shutdown)
+	if hookInput != nil && state.InboxPath != "" {
+		if err := writeInboxEvent(state.InboxPath, "session_end", hookInput); err != nil {
+			logger.Warn("Failed to write inbox event: %v", err)
+			// Continue anyway - daemon can still do final sync without the event
+		}
+	}
+
 	// Send SIGTERM
 	process, err := os.FindProcess(state.PID)
 	if err != nil {
@@ -337,5 +431,32 @@ func StopDaemon(externalID string) error {
 	}
 
 	logger.Info("Sent SIGTERM to daemon: pid=%d", state.PID)
+	return nil
+}
+
+// writeInboxEvent appends an event to the inbox JSONL file
+func writeInboxEvent(inboxPath string, eventType string, hookInput *types.HookInput) error {
+	event := types.InboxEvent{
+		Type:      eventType,
+		Timestamp: time.Now(),
+		HookInput: hookInput,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	// Append to file (create if doesn't exist)
+	f, err := os.OpenFile(inboxPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open inbox file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		return fmt.Errorf("failed to write event: %w", err)
+	}
+
 	return nil
 }

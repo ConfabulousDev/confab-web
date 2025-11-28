@@ -20,16 +20,24 @@ type State struct {
 	TranscriptPath string    `json:"transcript_path"`
 	CWD            string    `json:"cwd"`
 	PID            int       `json:"pid"`
+	ParentPID      int       `json:"parent_pid,omitempty"` // Claude Code process ID
+	InboxPath      string    `json:"inbox_path"`           // Path to event inbox (JSONL)
 	StartedAt      time.Time `json:"started_at"`
 }
 
-// NewState creates a new daemon state
-func NewState(externalID, transcriptPath, cwd string) *State {
+// NewState creates a new daemon state.
+// parentPID is the Claude Code process ID to monitor (0 to disable monitoring).
+func NewState(externalID, transcriptPath, cwd string, parentPID int) *State {
+	// InboxPath is deterministic but stored in state as source of truth
+	inboxPath, _ := GetInboxPath(externalID)
+
 	return &State{
 		ExternalID:     externalID,
 		TranscriptPath: transcriptPath,
 		CWD:            cwd,
 		PID:            os.Getpid(),
+		ParentPID:      parentPID,
+		InboxPath:      inboxPath,
 		StartedAt:      time.Now(),
 	}
 }
@@ -41,6 +49,15 @@ func GetStatePath(externalID string) (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 	return filepath.Join(home, ".confab", "sync", externalID+".json"), nil
+}
+
+// GetInboxPath returns the path to the event inbox file for a given external ID
+func GetInboxPath(externalID string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".confab", "sync", externalID+".inbox.jsonl"), nil
 }
 
 // GetSyncDir returns the path to the sync state directory
@@ -125,11 +142,21 @@ func (s *State) Delete() error {
 
 // IsDaemonRunning checks if the daemon process is still alive
 func (s *State) IsDaemonRunning() bool {
-	if s.PID <= 0 {
+	return isProcessRunning(s.PID)
+}
+
+// IsParentRunning checks if the parent Claude Code process is still alive
+func (s *State) IsParentRunning() bool {
+	return isProcessRunning(s.ParentPID)
+}
+
+// isProcessRunning checks if a process with the given PID is still alive
+func isProcessRunning(pid int) bool {
+	if pid <= 0 {
 		return false
 	}
 
-	process, err := os.FindProcess(s.PID)
+	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
 	}

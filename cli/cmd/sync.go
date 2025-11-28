@@ -118,6 +118,10 @@ func syncStartFromHook() error {
 		return nil
 	}
 
+	// Capture Claude Code's PID (our parent) so daemon can detect if it crashes.
+	// This hook is invoked by Claude Code, so os.Getppid() gives us Claude Code's PID.
+	hookInput.ParentPID = os.Getppid()
+
 	// Serialize hook input to pass to daemon
 	hookInputJSON, err := json.Marshal(hookInput)
 	if err != nil {
@@ -180,6 +184,7 @@ func runDaemon(hookInputJSON string) error {
 		ExternalID:     hookInput.SessionID,
 		TranscriptPath: hookInput.TranscriptPath,
 		CWD:            hookInput.CWD,
+		ParentPID:      hookInput.ParentPID,
 		SyncInterval:   daemon.DefaultSyncInterval,
 	}
 
@@ -212,7 +217,8 @@ func syncStopFromHook() error {
 	}
 
 	// Signal daemon to stop (it will do final sync in background)
-	if err := daemon.StopDaemon(hookInput.SessionID); err != nil {
+	// Pass hookInput so daemon can access the full SessionEnd payload
+	if err := daemon.StopDaemon(hookInput.SessionID, hookInput); err != nil {
 		logger.Warn("Could not stop daemon: %v", err)
 		fmt.Fprintf(os.Stderr, "Note: %v\n", err)
 		// Fall back to regular save
