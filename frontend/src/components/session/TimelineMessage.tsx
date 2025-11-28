@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
-import { isTextBlock } from '@/types';
+import { isTextBlock, isFileHistorySnapshot } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
 import styles from './TimelineMessage.module.css';
@@ -30,8 +30,12 @@ function getRoleLabel(message: TranscriptLine): string {
       return 'System';
     case 'summary':
       return 'Summary';
+    case 'file-history-snapshot':
+      return 'File Snapshot';
+    case 'queue-operation':
+      return 'Queue';
     default:
-      return 'System';
+      return 'Unknown';
   }
 }
 
@@ -150,6 +154,41 @@ function getToolNameForResult(block: ContentBlock, toolNameMap: Map<string, stri
   return '';
 }
 
+/**
+ * Render file history snapshot content
+ */
+function FileSnapshotContent({ message }: { message: TranscriptLine }) {
+  if (!isFileHistorySnapshot(message)) return null;
+
+  const files = Object.keys(message.snapshot.trackedFileBackups);
+  const fileCount = files.length;
+
+  if (fileCount === 0) {
+    return <div className={styles.snapshotEmpty}>No files tracked</div>;
+  }
+
+  return (
+    <div className={styles.snapshotContent}>
+      <div className={styles.snapshotSummary}>
+        {fileCount} {fileCount === 1 ? 'file' : 'files'} tracked
+      </div>
+      <div className={styles.snapshotFiles}>
+        {files.map((filePath) => {
+          const backup = message.snapshot.trackedFileBackups[filePath];
+          return (
+            <div key={filePath} className={styles.snapshotFile}>
+              <span className={styles.snapshotFilePath}>{filePath}</span>
+              {backup && backup.version > 0 && (
+                <span className={styles.snapshotFileVersion}>v{backup.version}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TimelineMessage({ message, toolNameMap, previousMessage }: TimelineMessageProps) {
   const { copy, copied } = useCopyToClipboard();
 
@@ -208,13 +247,17 @@ function TimelineMessage({ message, toolNameMap, previousMessage }: TimelineMess
       </div>
 
       <div className={styles.content}>
-        {contentBlocks.map((block, i) => (
-          <ContentBlockComponent
-            key={i}
-            block={block}
-            toolName={getToolNameForResult(block, toolNameMap)}
-          />
-        ))}
+        {message.type === 'file-history-snapshot' ? (
+          <FileSnapshotContent message={message} />
+        ) : (
+          contentBlocks.map((block, i) => (
+            <ContentBlockComponent
+              key={i}
+              block={block}
+              toolName={getToolNameForResult(block, toolNameMap)}
+            />
+          ))
+        )}
       </div>
     </div>
   );
