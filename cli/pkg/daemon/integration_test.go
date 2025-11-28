@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1232,4 +1233,163 @@ func TestDaemonLargeFile(t *testing.T) {
 
 	t.Logf("Large file test: uploaded %d lines, %.2f MB compressed (%.1f%% of %.2f MB original) in %.1fs (%.2f MB/s)",
 		received, bytesReceivedMB, compressionRatio, fileSizeMB, elapsed.Seconds(), throughputMBps)
+}
+
+// TestDaemonBackendRollback tests that daemon respects backend's lastSyncedLine even if lower.
+// Scenario: client synced lines 1-10, then backend "forgets" and reports lastSyncedLine=5.
+// Expected: client re-uploads lines 6-10 from the backend's reported position.
+func TestDaemonBackendRollback(t *testing.T) {
+	var initCount int32
+	var chunkRequests []pkgsync.SyncChunkRequest
+	var mu sync.Mutex
+
+	// Server that simulates a "rollback" - first reports lines synced, then fewer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		body, _ := readRequestBody(r)
+
+		switch r.URL.Path {
+		case "/api/v1/sync/init":
+			count := atomic.AddInt32(&initCount, 1)
+
+			var lastSynced int
+			if count == 1 {
+				// First init: backend has nothing
+				lastSynced = 0
+			} else {
+				// Subsequent inits: backend "rolled back" to line 3
+				// (simulates data loss, restore from backup, etc.)
+				lastSynced = 3
+			}
+
+			json.NewEncoder(w).Encode(pkgsync.SyncInitResponse{
+				SessionID: "rollback-test-session",
+				Files: map[string]pkgsync.SyncFileState{
+					"transcript.jsonl": {LastSyncedLine: lastSynced},
+				},
+			})
+
+		case "/api/v1/sync/chunk":
+			var req pkgsync.SyncChunkRequest
+			if err := json.Unmarshal(body, &req); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			mu.Lock()
+			chunkRequests = append(chunkRequests, req)
+			mu.Unlock()
+
+			lastLine := req.FirstLine + len(req.Lines) - 1
+			json.NewEncoder(w).Encode(pkgsync.SyncChunkResponse{
+				LastSyncedLine: lastLine,
+			})
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tmpDir, transcriptPath := setupTestEnv(t, server.URL)
+
+	// Create transcript with 6 lines
+	transcriptContent := `{"type":"system","line":1}
+{"type":"user","line":2}
+{"type":"assistant","line":3}
+{"type":"user","line":4}
+{"type":"assistant","line":5}
+{"type":"user","line":6}
+`
+	os.WriteFile(transcriptPath, []byte(transcriptContent), 0644)
+
+	// First daemon run: syncs all 6 lines
+	d1 := New(Config{
+		ExternalID:     "rollback-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 2*time.Second)
+	errCh1 := make(chan error, 1)
+	go func() {
+		errCh1 <- d1.Run(ctx1)
+	}()
+
+	// Wait for initial sync
+	time.Sleep(200 * time.Millisecond)
+	cancel1()
+	<-errCh1
+
+	// Verify first sync uploaded all 6 lines from line 1
+	mu.Lock()
+	firstSyncChunks := len(chunkRequests)
+	var firstChunkFirstLine int
+	var firstChunkLines int
+	if firstSyncChunks > 0 {
+		firstChunkFirstLine = chunkRequests[0].FirstLine
+		firstChunkLines = len(chunkRequests[0].Lines)
+	}
+	mu.Unlock()
+
+	if firstSyncChunks == 0 {
+		t.Fatal("Expected chunk upload on first sync")
+	}
+	if firstChunkFirstLine != 1 {
+		t.Errorf("First sync should start at line 1, got %d", firstChunkFirstLine)
+	}
+	if firstChunkLines != 6 {
+		t.Errorf("First sync should upload 6 lines, got %d", firstChunkLines)
+	}
+
+	t.Logf("First sync: uploaded %d lines starting at line %d", firstChunkLines, firstChunkFirstLine)
+
+	// Now start a NEW daemon (simulating restart)
+	// Backend will report lastSyncedLine=3 (rolled back from 6)
+	d2 := New(Config{
+		ExternalID:     "rollback-test",
+		TranscriptPath: transcriptPath,
+		CWD:            tmpDir,
+		SyncInterval:   50 * time.Millisecond,
+	})
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+	errCh2 := make(chan error, 1)
+	go func() {
+		errCh2 <- d2.Run(ctx2)
+	}()
+
+	// Wait for second sync
+	time.Sleep(200 * time.Millisecond)
+	cancel2()
+	<-errCh2
+
+	// Check that second daemon re-uploaded from line 4 (respecting backend's lastSyncedLine=3)
+	mu.Lock()
+	totalChunks := len(chunkRequests)
+	var secondChunkFirstLine int
+	var secondChunkLines int
+	if totalChunks > firstSyncChunks {
+		secondChunk := chunkRequests[firstSyncChunks] // First chunk from second daemon
+		secondChunkFirstLine = secondChunk.FirstLine
+		secondChunkLines = len(secondChunk.Lines)
+	}
+	mu.Unlock()
+
+	if totalChunks <= firstSyncChunks {
+		t.Fatal("Expected chunk upload on second sync after rollback")
+	}
+
+	// Key assertion: second daemon should start from line 4 (after backend's line 3)
+	if secondChunkFirstLine != 4 {
+		t.Errorf("After rollback, expected re-upload from line 4, got line %d", secondChunkFirstLine)
+	}
+	if secondChunkLines != 3 {
+		t.Errorf("After rollback, expected 3 lines (4,5,6), got %d", secondChunkLines)
+	}
+
+	t.Logf("Second sync (after rollback): uploaded %d lines starting at line %d",
+		secondChunkLines, secondChunkFirstLine)
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/types"
 )
 
@@ -181,6 +182,7 @@ func (w *Watcher) scanForAgentIDs() ([]string, error) {
 
 		var message map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &message); err != nil {
+			logger.Debug("Skipping malformed JSON at line %d: %v", lineNum, err)
 			continue
 		}
 

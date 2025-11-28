@@ -95,10 +95,10 @@ func (u *Uploader) uploadFile(sessionID, filePath, fileName, fileType string, la
 	// Read all lines
 	var lines []string
 	scanner := bufio.NewScanner(file)
-	// Increase buffer size for large lines (transcripts can have big tool results)
+	// Allow large lines (transcripts can have big tool results)
+	// Start with default 64KB buffer, let it grow up to 10MB if needed
 	const maxLineSize = 10 * 1024 * 1024 // 10MB
-	buf := make([]byte, maxLineSize)
-	scanner.Buffer(buf, maxLineSize)
+	scanner.Buffer(make([]byte, bufio.MaxScanTokenSize), maxLineSize)
 
 	lineNum := 0
 	for scanner.Scan() {

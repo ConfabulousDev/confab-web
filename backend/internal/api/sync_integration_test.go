@@ -845,6 +845,174 @@ func TestHandleSyncFileRead_Integration(t *testing.T) {
 
 		testutil.AssertStatus(t, w, http.StatusBadRequest)
 	})
+
+	t.Run("merges overlapping chunks correctly", func(t *testing.T) {
+		// This test simulates the scenario where:
+		// 1. Client uploads chunk 1-5
+		// 2. S3 write succeeds but DB update fails
+		// 3. Client retries and uploads chunk 1-10
+		// 4. Now S3 has two overlapping chunks
+		// 5. Read should merge them, preferring the more complete chunk
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		externalID := "overlap-test-session"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
+
+		// Directly upload overlapping chunks to S3 (bypassing API validation)
+		// This simulates the partial failure scenario
+		ctx := context.Background()
+
+		// First chunk: lines 1-5 (the "failed" upload that wrote to S3 but didn't update DB)
+		chunk1Data := []byte(`{"line":1,"chunk":"old"}
+{"line":2,"chunk":"old"}
+{"line":3,"chunk":"old"}
+{"line":4,"chunk":"old"}
+{"line":5,"chunk":"old"}
+`)
+		_, err := env.Storage.UploadChunk(ctx, user.ID, externalID, "transcript.jsonl", 1, 5, chunk1Data)
+		if err != nil {
+			t.Fatalf("failed to upload chunk 1: %v", err)
+		}
+
+		// Second chunk: lines 1-10 (the retry that succeeded)
+		chunk2Data := []byte(`{"line":1,"chunk":"new"}
+{"line":2,"chunk":"new"}
+{"line":3,"chunk":"new"}
+{"line":4,"chunk":"new"}
+{"line":5,"chunk":"new"}
+{"line":6,"chunk":"new"}
+{"line":7,"chunk":"new"}
+{"line":8,"chunk":"new"}
+{"line":9,"chunk":"new"}
+{"line":10,"chunk":"new"}
+`)
+		_, err = env.Storage.UploadChunk(ctx, user.ID, externalID, "transcript.jsonl", 1, 10, chunk2Data)
+		if err != nil {
+			t.Fatalf("failed to upload chunk 2: %v", err)
+		}
+
+		// Update sync state in DB (as if the second upload succeeded)
+		_, err = env.DB.Exec(env.Ctx,
+			`INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line)
+			 VALUES ($1, 'transcript.jsonl', 'transcript', 10)`,
+			sessionID)
+		if err != nil {
+			t.Fatalf("failed to insert sync file: %v", err)
+		}
+
+		// Read merged file
+		req := testutil.AuthenticatedRequest(t, "GET",
+			"/api/v1/sync/file?session_id="+sessionID+"&file_name=transcript.jsonl", nil, user.ID)
+
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncFileRead(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify content: should have 10 lines, all from "new" chunk
+		body := w.Body.String()
+		lines := strings.Split(strings.TrimSpace(body), "\n")
+
+		if len(lines) != 10 {
+			t.Errorf("expected 10 lines, got %d: %v", len(lines), lines)
+		}
+
+		// All lines should come from the "new" chunk (extends further)
+		for i, line := range lines {
+			if !strings.Contains(line, `"chunk":"new"`) {
+				t.Errorf("line %d should be from 'new' chunk, got: %s", i+1, line)
+			}
+			expectedLineNum := fmt.Sprintf(`"line":%d`, i+1)
+			if !strings.Contains(line, expectedLineNum) {
+				t.Errorf("line %d should contain %s, got: %s", i+1, expectedLineNum, line)
+			}
+		}
+	})
+
+	t.Run("merges partially overlapping chunks correctly", func(t *testing.T) {
+		// Scenario: chunk 1-5, then chunk 3-10 (partial overlap on 3-5)
+		// Should take lines 1-2 from first, lines 3-10 from second
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		externalID := "partial-overlap-session"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
+
+		ctx := context.Background()
+
+		// First chunk: lines 1-5
+		chunk1Data := []byte(`{"line":1,"source":"A"}
+{"line":2,"source":"A"}
+{"line":3,"source":"A"}
+{"line":4,"source":"A"}
+{"line":5,"source":"A"}
+`)
+		_, err := env.Storage.UploadChunk(ctx, user.ID, externalID, "transcript.jsonl", 1, 5, chunk1Data)
+		if err != nil {
+			t.Fatalf("failed to upload chunk 1: %v", err)
+		}
+
+		// Second chunk: lines 3-10 (overlaps on 3-5, extends to 10)
+		chunk2Data := []byte(`{"line":3,"source":"B"}
+{"line":4,"source":"B"}
+{"line":5,"source":"B"}
+{"line":6,"source":"B"}
+{"line":7,"source":"B"}
+{"line":8,"source":"B"}
+{"line":9,"source":"B"}
+{"line":10,"source":"B"}
+`)
+		_, err = env.Storage.UploadChunk(ctx, user.ID, externalID, "transcript.jsonl", 3, 10, chunk2Data)
+		if err != nil {
+			t.Fatalf("failed to upload chunk 2: %v", err)
+		}
+
+		// Update sync state
+		_, err = env.DB.Exec(env.Ctx,
+			`INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line)
+			 VALUES ($1, 'transcript.jsonl', 'transcript', 10)`,
+			sessionID)
+		if err != nil {
+			t.Fatalf("failed to insert sync file: %v", err)
+		}
+
+		// Read merged file
+		req := testutil.AuthenticatedRequest(t, "GET",
+			"/api/v1/sync/file?session_id="+sessionID+"&file_name=transcript.jsonl", nil, user.ID)
+
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncFileRead(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		body := w.Body.String()
+		lines := strings.Split(strings.TrimSpace(body), "\n")
+
+		if len(lines) != 10 {
+			t.Errorf("expected 10 lines, got %d", len(lines))
+		}
+
+		// Lines 1-2 should come from "A" (only chunk covering them)
+		// Lines 3-10 should come from "B" (extends further than A)
+		expectedSources := []string{"A", "A", "B", "B", "B", "B", "B", "B", "B", "B"}
+		for i, line := range lines {
+			expectedSource := fmt.Sprintf(`"source":"%s"`, expectedSources[i])
+			if !strings.Contains(line, expectedSource) {
+				t.Errorf("line %d: expected source %s, got: %s", i+1, expectedSources[i], line)
+			}
+		}
+	})
 }
 
 // =============================================================================

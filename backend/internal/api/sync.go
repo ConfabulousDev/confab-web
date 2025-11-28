@@ -336,26 +336,43 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Download all chunks first (fail fast if any chunk is missing)
-	var allData [][]byte
+	// Download all chunks and parse their line ranges
+	chunks := make([]chunkInfo, 0, len(chunkKeys))
 	for _, key := range chunkKeys {
+		firstLine, lastLine, ok := parseChunkKey(key)
+		if !ok {
+			logger.Warn("Skipping chunk with unparseable key", "key", key)
+			continue
+		}
+
 		data, err := s.storage.Download(storageCtx, key)
 		if err != nil {
 			logger.Error("Failed to download chunk", "error", err, "key", key)
 			respondStorageError(w, err, "Failed to download file chunk")
 			return
 		}
-		allData = append(allData, data)
+
+		chunks = append(chunks, chunkInfo{
+			key:       key,
+			firstLine: firstLine,
+			lastLine:  lastLine,
+			data:      data,
+		})
 	}
 
-	// All chunks downloaded successfully - write response
+	if len(chunks) == 0 {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Merge chunks, handling any overlaps from partial upload failures
+	merged := mergeChunks(chunks)
+
+	// Write response
 	// Use text/plain for JSONL files (multiple JSON objects, one per line)
-	// This prevents the frontend from trying to parse the entire response as a single JSON object
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	for _, data := range allData {
-		w.Write(data)
-	}
+	w.Write(merged)
 }
 
 // ============================================================================
@@ -394,6 +411,106 @@ func parseChunkKey(key string) (int, int, bool) {
 	}
 
 	return first, last, true
+}
+
+// chunkInfo holds parsed chunk metadata
+type chunkInfo struct {
+	key       string
+	firstLine int
+	lastLine  int
+	data      []byte
+}
+
+// mergeChunks takes downloaded chunks and merges them, handling overlaps.
+// Uses a simple array indexed by line number - each chunk's lines are written
+// to the array, and later chunks overwrite earlier ones for the same line.
+// The final array is then concatenated into the result.
+//
+// If overlapping lines have different content (shouldn't happen normally),
+// a warning is logged since this may indicate data corruption.
+func mergeChunks(chunks []chunkInfo) []byte {
+	if len(chunks) == 0 {
+		return nil
+	}
+	if len(chunks) == 1 {
+		return chunks[0].data
+	}
+
+	// Find max line number
+	maxLine := 0
+	for _, c := range chunks {
+		if c.lastLine > maxLine {
+			maxLine = c.lastLine
+		}
+	}
+
+	// Build array indexed by line number (0-indexed, so line 1 is at index 0)
+	lines := make([][]byte, maxLine)
+
+	// Populate array from each chunk (last write wins)
+	for _, c := range chunks {
+		chunkLines := splitLines(c.data)
+		for i, line := range chunkLines {
+			lineNum := c.firstLine + i // 1-based line number
+			if lineNum >= 1 && lineNum <= maxLine {
+				idx := lineNum - 1
+				// Check for conflicting content on overlap
+				if lines[idx] != nil && !bytesEqual(lines[idx], line) {
+					logger.Warn("Chunk overlap with differing content",
+						"line_num", lineNum,
+						"chunk", c.key,
+						"old_len", len(lines[idx]),
+						"new_len", len(line))
+				}
+				lines[idx] = line
+			}
+		}
+	}
+
+	// Build result from array
+	var result []byte
+	for _, line := range lines {
+		if line != nil {
+			result = append(result, line...)
+			result = append(result, '\n')
+		}
+	}
+
+	return result
+}
+
+// bytesEqual compares two byte slices for equality
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// splitLines splits data into lines, preserving each line's content without the newline
+func splitLines(data []byte) [][]byte {
+	if len(data) == 0 {
+		return nil
+	}
+
+	var lines [][]byte
+	start := 0
+	for i := 0; i < len(data); i++ {
+		if data[i] == '\n' {
+			lines = append(lines, data[start:i])
+			start = i + 1
+		}
+	}
+	// Handle last line if no trailing newline
+	if start < len(data) {
+		lines = append(lines, data[start:])
+	}
+	return lines
 }
 
 // handleSharedSyncFileRead reads and concatenates all chunks for a file via share token
@@ -491,32 +608,50 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Download all chunks
-	var allData [][]byte
+	// Download all chunks and parse their line ranges
+	chunks := make([]chunkInfo, 0, len(chunkKeys))
 	for _, key := range chunkKeys {
+		firstLine, lastLine, ok := parseChunkKey(key)
+		if !ok {
+			logger.Warn("Skipping chunk with unparseable key", "key", key)
+			continue
+		}
+
 		data, err := s.storage.Download(storageCtx, key)
 		if err != nil {
 			logger.Error("Failed to download chunk", "error", err, "key", key)
 			respondStorageError(w, err, "Failed to download file chunk")
 			return
 		}
-		allData = append(allData, data)
+
+		chunks = append(chunks, chunkInfo{
+			key:       key,
+			firstLine: firstLine,
+			lastLine:  lastLine,
+			data:      data,
+		})
 	}
+
+	if len(chunks) == 0 {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Merge chunks, handling any overlaps from partial upload failures
+	merged := mergeChunks(chunks)
 
 	logger.Info("Shared sync file read",
 		"session_id", sessionID,
 		"share_token", shareToken,
 		"file_name", fileName,
-		"chunk_count", len(chunkKeys),
+		"chunk_count", len(chunks),
 		"viewer_email", viewerEmail)
 
 	// Write response
 	// Use text/plain for JSONL files (multiple JSON objects, one per line)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	for _, data := range allData {
-		w.Write(data)
-	}
+	w.Write(merged)
 }
 
 // extractTitleFromLine extracts a title from a JSONL line
