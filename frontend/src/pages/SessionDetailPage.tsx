@@ -5,8 +5,7 @@ import { fetchWithCSRF } from '@/services/csrf';
 import { sessionsAPI, APIError } from '@/services/api';
 import { useDocumentTitle, useSuccessMessage } from '@/hooks';
 import type { SessionDetail } from '@/types';
-import { formatRelativeTime } from '@/utils';
-import SessionCard from '@/components/SessionCard';
+import { SessionViewer } from '@/components/session';
 import ShareDialog from '@/components/ShareDialog';
 import styles from './SessionDetailPage.module.css';
 
@@ -30,7 +29,9 @@ function SessionDetailPage() {
   const [deleting, setDeleting] = useState(false);
 
   // Dynamic page title based on session
-  const pageTitle = session ? `Session ${session.external_id.substring(0, 8)}` : 'Session';
+  const pageTitle = session
+    ? session.title || `Session ${session.external_id.substring(0, 8)}`
+    : 'Session';
   useDocumentTitle(pageTitle);
 
   useEffect(() => {
@@ -46,11 +47,9 @@ function SessionDetailPage() {
     setLoading(true);
     setError('');
     try {
-      // Uses sessionsAPI which handles 401 globally via handleAuthFailure()
       const data = await sessionsAPI.get(sessionId);
       setSession(data);
     } catch (err) {
-      // 401 is handled globally by the API client, so we only handle other errors here
       if (err instanceof APIError && err.status === 404) {
         setError('Session not found');
       } else {
@@ -86,7 +85,6 @@ function SessionDetailPage() {
         throw new Error(errorData.error || 'Failed to delete');
       }
 
-      // Invalidate sessions cache to ensure fresh data on sessions list page
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       navigate('/sessions?success=Session deleted successfully');
     } catch (err) {
@@ -96,58 +94,45 @@ function SessionDetailPage() {
     }
   }
 
-  return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div>
-          <h1>Session Detail</h1>
-          {session && (
-            <p className={styles.sessionId}>
-              <strong>Session ID:</strong> <code>{session.external_id}</code>
-            </p>
-          )}
-        </div>
-        <div className={styles.headerActions}>
-          <button className={`${styles.btn} ${styles.btnShare}`} onClick={() => setShowShareDialog(true)}>
-            Share
-          </button>
-          <button className={`${styles.btn} ${styles.btnDanger}`} onClick={openDeleteDialog}>
-            Delete
-          </button>
+  // Render loading state
+  if (loading) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loadingState}>
+          <p>Loading session...</p>
         </div>
       </div>
+    );
+  }
 
+  // Render error state
+  if (error) {
+    return (
+      <div className={styles.container}>
+        <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>
+      </div>
+    );
+  }
+
+  // Render session viewer
+  if (!session) {
+    return null;
+  }
+
+  return (
+    <div className={styles.container}>
       {successMessage && (
         <div className={`${styles.alert} ${styles.alertSuccess} ${successFading ? styles.alertFading : ''}`}>
           {successMessage}
         </div>
       )}
 
-      {error ? (
-        <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>
-      ) : loading ? (
-        <div className={styles.card}>
-          <p className={styles.loading}>Loading session...</p>
-        </div>
-      ) : session ? (
-        <>
-          <div className={styles.metaCard}>
-            <div className={styles.metaItem}>
-              <span className={styles.metaLabel}>First Synced:</span>
-              <span className={styles.metaValue}>{formatRelativeTime(session.first_seen)}</span>
-            </div>
-            {session.last_sync_at && (
-              <div className={styles.metaItem}>
-                <span className={styles.metaLabel}>Latest Sync:</span>
-                <span className={styles.metaValue}>{formatRelativeTime(session.last_sync_at)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Display the session details */}
-          <SessionCard session={session} />
-        </>
-      ) : null}
+      <SessionViewer
+        session={session}
+        onShare={() => setShowShareDialog(true)}
+        onDelete={openDeleteDialog}
+        isOwner={true}
+      />
 
       {/* Share Dialog Modal */}
       {sessionId && (
@@ -159,7 +144,7 @@ function SessionDetailPage() {
       )}
 
       {/* Delete Dialog Modal */}
-      {showDeleteDialog && session && (
+      {showDeleteDialog && (
         <div className={styles.modalOverlay} onClick={() => !deleting && setShowDeleteDialog(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>

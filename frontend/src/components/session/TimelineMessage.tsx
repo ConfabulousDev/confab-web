@@ -1,0 +1,238 @@
+import { useMemo } from 'react';
+import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
+import { isTextBlock } from '@/types';
+import { useCopyToClipboard } from '@/hooks';
+import ContentBlockComponent from '@/components/transcript/ContentBlock';
+import styles from './TimelineMessage.module.css';
+
+interface TimelineMessageProps {
+  message: TranscriptLine;
+  toolNameMap: Map<string, string>;
+  previousMessage?: TranscriptLine;
+}
+
+/**
+ * Get role label for display
+ */
+function getRoleLabel(message: TranscriptLine): string {
+  switch (message.type) {
+    case 'user': {
+      const content = message.message.content;
+      if (Array.isArray(content)) {
+        const hasToolResult = content.some((block) => block.type === 'tool_result');
+        if (hasToolResult) return 'Tool';
+      }
+      return 'User';
+    }
+    case 'assistant':
+      return 'Assistant';
+    case 'system':
+      return 'System';
+    case 'summary':
+      return 'Summary';
+    default:
+      return 'System';
+  }
+}
+
+/**
+ * Get the CSS class for message type styling
+ */
+function getStyleClass(type: TranscriptLine['type']): string {
+  // Map hyphenated types to camelCase CSS class names
+  switch (type) {
+    case 'file-history-snapshot':
+      return 'fileHistorySnapshot';
+    case 'queue-operation':
+      return 'queueOperation';
+    default:
+      return type;
+  }
+}
+
+/**
+ * Format timestamp for display
+ */
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+
+interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  service_tier?: string | null;
+}
+
+/**
+ * Format token count for display (total of input + output)
+ */
+function formatTokens(usage: TokenUsage): string {
+  const total = usage.input_tokens + usage.output_tokens;
+  if (total >= 1000) {
+    return `${(total / 1000).toFixed(1)}k tokens`;
+  }
+  return `${total} ${total === 1 ? 'token' : 'tokens'}`;
+}
+
+/**
+ * Build detailed tooltip for token usage
+ */
+function buildTokenTooltip(usage: TokenUsage): string {
+  const lines: string[] = [];
+
+  lines.push(`Input: ${usage.input_tokens.toLocaleString()}`);
+  lines.push(`Output: ${usage.output_tokens.toLocaleString()}`);
+
+  if (usage.cache_creation_input_tokens) {
+    lines.push(`Cache created: ${usage.cache_creation_input_tokens.toLocaleString()}`);
+  }
+  if (usage.cache_read_input_tokens) {
+    lines.push(`Cache read: ${usage.cache_read_input_tokens.toLocaleString()}`);
+  }
+  if (usage.service_tier) {
+    lines.push(`Tier: ${usage.service_tier}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Get content blocks from a message
+ */
+function getContentBlocks(message: TranscriptLine): ContentBlock[] {
+  switch (message.type) {
+    case 'user': {
+      const content = message.message.content;
+      if (typeof content === 'string') {
+        return [{ type: 'text', text: content }];
+      }
+      return content;
+    }
+    case 'assistant':
+      return message.message.content;
+    case 'system':
+      return [{ type: 'text', text: message.content }];
+    case 'summary':
+      return [{ type: 'text', text: message.summary }];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Extract plain text for copying
+ */
+function extractTextContent(blocks: ContentBlock[]): string {
+  return blocks
+    .filter(isTextBlock)
+    .map((block: TextBlock) => block.text)
+    .join('\n');
+}
+
+/**
+ * Get tool name for a tool result block
+ */
+function getToolNameForResult(block: ContentBlock, toolNameMap: Map<string, string>): string {
+  if (block.type === 'tool_result') {
+    return toolNameMap.get(block.tool_use_id) || '';
+  }
+  if (block.type === 'tool_use') {
+    return block.name;
+  }
+  return '';
+}
+
+function TimelineMessage({ message, toolNameMap, previousMessage }: TimelineMessageProps) {
+  const { copy, copied } = useCopyToClipboard();
+
+  const styleClass = getStyleClass(message.type);
+  const roleLabel = getRoleLabel(message);
+  const contentBlocks = useMemo(() => getContentBlocks(message), [message]);
+
+  // Get timestamp if available
+  const timestamp = 'timestamp' in message ? message.timestamp : undefined;
+
+  // Get token usage for assistant messages
+  const tokenUsage = message.type === 'assistant' ? message.message.usage : undefined;
+
+  // Get model for assistant messages
+  const model = message.type === 'assistant' ? message.message.model : undefined;
+
+  // Get agent ID for sub-agent messages
+  const agentId = message.type === 'assistant' ? message.agentId : undefined;
+
+  // Check if this is from a different role than the previous message
+  const previousRole = previousMessage ? getRoleLabel(previousMessage) : null;
+  const isDifferentRole = previousRole !== roleLabel;
+
+  // Copy message content
+  function handleCopy() {
+    const text = extractTextContent(contentBlocks);
+    copy(text);
+  }
+
+  return (
+    <div
+      className={`${styles.message} ${styles[styleClass]} ${isDifferentRole ? styles.newSpeaker : ''}`}
+    >
+      <div className={styles.header}>
+        <div className={styles.headerLeft}>
+          <span className={styles.role}>{roleLabel}</span>
+          {agentId && <span className={styles.agentBadge}>{agentId}</span>}
+          {timestamp && <span className={styles.timestamp}>{formatTimestamp(timestamp)}</span>}
+        </div>
+        <div className={styles.headerRight}>
+          {tokenUsage && (
+            <span className={styles.tokens} title={buildTokenTooltip(tokenUsage)}>
+              {formatTokens(tokenUsage)}
+            </span>
+          )}
+          {model && <span className={styles.model}>{extractModelVariant(model)}</span>}
+          <button
+            className={styles.copyBtn}
+            onClick={handleCopy}
+            title="Copy message"
+            aria-label="Copy message"
+          >
+            {copied ? '✓' : '⎘'}
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.content}>
+        {contentBlocks.map((block, i) => (
+          <ContentBlockComponent
+            key={i}
+            block={block}
+            toolName={getToolNameForResult(block, toolNameMap)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Extract short model variant from full model name
+ */
+function extractModelVariant(model: string): string {
+  const variants = ['sonnet', 'opus', 'haiku'];
+  for (const variant of variants) {
+    if (model.toLowerCase().includes(variant)) {
+      return variant;
+    }
+  }
+  // Return last segment
+  const parts = model.split('-');
+  return parts[parts.length - 1] || model;
+}
+
+export default TimelineMessage;

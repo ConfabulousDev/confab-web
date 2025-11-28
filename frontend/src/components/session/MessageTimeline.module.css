@@ -1,0 +1,51 @@
+/* Message timeline - virtualized scrollable list */
+.timeline {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--spacing-md) var(--spacing-xl);
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--spacing-xl);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.emptyState p {
+  margin: 0;
+}
+
+.emptyHint {
+  font-size: var(--font-xs);
+  margin-top: var(--spacing-xs) !important;
+}
+
+/* Time separator between message groups */
+.timeSeparator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) 0;
+}
+
+.separatorLine {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.separatorText {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}

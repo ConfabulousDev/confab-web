@@ -1,0 +1,45 @@
+/* Main session viewer container - full height layout */
+.sessionViewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg);
+}
+
+/* Two-column layout for sidebar + timeline */
+.mainContent {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Timeline container takes remaining space */
+.timelineContainer {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Loading and error states */
+.loading,
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--spacing-xl);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+
+.error {
+  color: var(--color-error-text);
+  background: var(--color-error-bg);
+  margin: var(--spacing-lg);
+  border-radius: var(--radius-lg);
+  height: auto;
+}
