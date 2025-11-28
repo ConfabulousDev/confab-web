@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,10 @@ const (
 	// Below this, compression overhead isn't worth it.
 	compressionThreshold = 1024 // 1KB
 )
+
+// ErrUnauthorized is returned when the server returns 401 or 403.
+// This typically means the API key is invalid or expired.
+var ErrUnauthorized = errors.New("unauthorized")
 
 // Client is a configured HTTP client for making authenticated requests to the backend
 type Client struct {
@@ -93,6 +98,9 @@ func (c *Client) DoJSON(method, path string, reqBody, respBody interface{}) erro
 	}
 
 	// Check status code
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("%w: status %d: %s", ErrUnauthorized, resp.StatusCode, string(body))
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("http request failed with status %d: %s", resp.StatusCode, string(body))
 	}

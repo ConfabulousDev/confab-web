@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -132,5 +133,54 @@ func TestClient_CompressionRatio(t *testing.T) {
 	// Expect at least 50% reduction for repetitive JSON
 	if ratio > 50 {
 		t.Errorf("expected at least 50%% compression, got %.1f%%", ratio)
+	}
+}
+
+func TestClient_ErrUnauthorized(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		wantErr    bool
+		wantUnauth bool
+	}{
+		{"401 returns ErrUnauthorized", http.StatusUnauthorized, true, true},
+		{"403 returns ErrUnauthorized", http.StatusForbidden, true, true},
+		{"404 returns error but not ErrUnauthorized", http.StatusNotFound, true, false},
+		{"500 returns error but not ErrUnauthorized", http.StatusInternalServerError, true, false},
+		{"200 returns no error", http.StatusOK, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				w.Write([]byte(`{"error":"test error"}`))
+			}))
+			defer server.Close()
+
+			client := NewClient(&config.UploadConfig{
+				BackendURL: server.URL,
+				APIKey:     "test-key",
+			}, 0)
+
+			var resp map[string]interface{}
+			err := client.Get("/test", &resp)
+
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+
+			if tt.wantUnauth {
+				if !errors.Is(err, ErrUnauthorized) {
+					t.Errorf("expected ErrUnauthorized, got %v", err)
+				}
+			} else if err != nil && errors.Is(err, ErrUnauthorized) {
+				t.Errorf("did not expect ErrUnauthorized for status %d", tt.statusCode)
+			}
+		})
 	}
 }

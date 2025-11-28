@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/git"
+	"github.com/santaclaude2025/confab/pkg/http"
 	"github.com/santaclaude2025/confab/pkg/logger"
 	"github.com/santaclaude2025/confab/pkg/sync"
 	"github.com/santaclaude2025/confab/pkg/types"
@@ -186,6 +188,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 			if d.syncer != nil {
 				if chunks, err := d.syncer.SyncAll(); err != nil {
 					logger.Warn("Sync cycle had errors: %v", err)
+					// If auth failed, reset syncer to force config re-read on next cycle.
+					// User may have re-authenticated with a new API key.
+					if errors.Is(err, http.ErrUnauthorized) {
+						logger.Info("Auth failed, will re-read config on next cycle")
+						d.syncer = nil
+					}
 				} else if chunks > 0 {
 					logger.Debug("Sync cycle complete: chunks=%d", chunks)
 				}
