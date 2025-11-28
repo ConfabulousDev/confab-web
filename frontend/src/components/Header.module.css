@@ -96,6 +96,47 @@
   background: var(--color-bg-hover);
 }
 
+.loginDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--spacing-xs);
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+}
+
+.loginIconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.loginIconBtn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-text-muted);
+  transform: scale(1.05);
+}
+
+.loginIconBtn svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-text-primary);
+}
+
 .dropdown {
   position: absolute;
   top: 100%;
