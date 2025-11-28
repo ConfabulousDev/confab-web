@@ -1,6 +1,8 @@
 -- Rollback initial schema
 -- Drop tables in reverse dependency order
 
+DROP TABLE IF EXISTS sync_files;
+DROP TABLE IF EXISTS invited_emails;
 DROP TABLE IF EXISTS device_codes;
 DROP TABLE IF EXISTS session_share_accesses;
 DROP TABLE IF EXISTS session_share_invites;
