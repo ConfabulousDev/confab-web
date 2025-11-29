@@ -38,9 +38,9 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Return empty array if no sessions
+		// Ensure non-nil slice for JSON encoding
 		if sessions == nil {
-			sessions = []db.SessionListItem{}
+			sessions = make([]db.SessionListItem, 0)
 		}
 
 		respondJSON(w, http.StatusOK, sessions)

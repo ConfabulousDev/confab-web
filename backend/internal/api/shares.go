@@ -266,11 +266,6 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		// Success log
 		logger.Info("Shares listed", "user_id", userID, "session_id", sessionID, "count", len(shares))
 
-		// Return empty array if no shares
-		if shares == nil {
-			shares = []db.SessionShare{}
-		}
-
 		respondJSON(w, http.StatusOK, shares)
 	}
 }
@@ -427,11 +422,6 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 
 		// Success log
 		logger.Info("All user shares listed", "user_id", userID, "count", len(shares))
-
-		// Return empty array if no shares
-		if shares == nil {
-			shares = []db.ShareWithSessionInfo{}
-		}
 
 		respondJSON(w, http.StatusOK, shares)
 	}

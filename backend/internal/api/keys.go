@@ -49,7 +49,7 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		}
 
 		// Generate API key
-		apiKey, keyHash, err := auth.GenerateAndHashAPIKey()
+		apiKey, keyHash, err := auth.GenerateAPIKey()
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Failed to generate API key")
 			return
@@ -109,9 +109,9 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 		// Success log
 		logger.Info("API keys listed", "user_id", userID, "count", len(keys))
 
-		// Return empty array if no keys
+		// Ensure non-nil slice for JSON encoding
 		if keys == nil {
-			keys = []models.APIKey{}
+			keys = make([]models.APIKey, 0)
 		}
 
 		respondJSON(w, http.StatusOK, keys)

@@ -40,11 +40,6 @@ func GenerateAPIKey() (string, string, error) {
 	return rawKey, keyHash, nil
 }
 
-// GenerateAndHashAPIKey is an alias for GenerateAPIKey for clarity
-func GenerateAndHashAPIKey() (string, string, error) {
-	return GenerateAPIKey()
-}
-
 // HashAPIKey hashes an API key for validation
 func HashAPIKey(rawKey string) string {
 	hash := sha256.Sum256([]byte(rawKey))

@@ -544,7 +544,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 	}
 	defer rows.Close()
 
-	var sessions []SessionListItem
+	sessions := make([]SessionListItem, 0)
 	for rows.Next() {
 		var session SessionListItem
 		var gitRepoURL *string // Full URL from git_info JSONB
@@ -628,21 +628,35 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
 		}
-		// Handle invalid UUID format (PostgreSQL returns error for invalid UUIDs)
-		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
+		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	// Unmarshal git_info JSONB if present
-	if len(gitInfoBytes) > 0 {
-		if err := json.Unmarshal(gitInfoBytes, &session.GitInfo); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
-		}
+	// Unmarshal git_info and load sync files
+	if err := db.unmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
+		return nil, err
+	}
+	if err := db.loadSessionSyncFiles(ctx, &session); err != nil {
+		return nil, err
 	}
 
-	// Get sync files for this session
+	return &session, nil
+}
+
+// unmarshalSessionGitInfo unmarshals git_info JSONB if present
+func (db *DB) unmarshalSessionGitInfo(session *SessionDetail, gitInfoBytes []byte) error {
+	if len(gitInfoBytes) > 0 {
+		if err := json.Unmarshal(gitInfoBytes, &session.GitInfo); err != nil {
+			return fmt.Errorf("failed to unmarshal git_info: %w", err)
+		}
+	}
+	return nil
+}
+
+// loadSessionSyncFiles loads sync files for a session
+func (db *DB) loadSessionSyncFiles(ctx context.Context, session *SessionDetail) error {
 	filesQuery := `
 		SELECT file_name, file_type, last_synced_line, updated_at
 		FROM sync_files
@@ -650,30 +664,26 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		ORDER BY file_type DESC, file_name ASC
 	`
 
-	rows, err := db.conn.QueryContext(ctx, filesQuery, sessionID)
+	rows, err := db.conn.QueryContext(ctx, filesQuery, session.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query sync files: %w", err)
+		return fmt.Errorf("failed to query sync files: %w", err)
 	}
 	defer rows.Close()
 
+	session.Files = make([]SyncFileDetail, 0)
 	for rows.Next() {
 		var file SyncFileDetail
 		if err := rows.Scan(&file.FileName, &file.FileType, &file.LastSyncedLine, &file.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan sync file: %w", err)
+			return fmt.Errorf("failed to scan sync file: %w", err)
 		}
 		session.Files = append(session.Files, file)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating sync files: %w", err)
+		return fmt.Errorf("error iterating sync files: %w", err)
 	}
 
-	// Ensure Files is never nil (JSON marshals nil slice as null, but we want [])
-	if session.Files == nil {
-		session.Files = []SyncFileDetail{}
-	}
-
-	return &session, nil
+	return nil
 }
 
 // CheckSessionsExist checks which external IDs exist for a user
@@ -743,8 +753,7 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
 		}
-		// Handle invalid UUID format (PostgreSQL returns error for invalid UUIDs)
-		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
+		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to verify session: %w", err)
@@ -804,8 +813,7 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
 		}
-		// Handle invalid UUID format
-		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
+		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to verify session: %w", err)
@@ -823,7 +831,7 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 	}
 	defer rows.Close()
 
-	var shares []SessionShare
+	shares := make([]SessionShare, 0)
 	for rows.Next() {
 		var share SessionShare
 		err := rows.Scan(&share.ID, &share.SessionID, &share.ShareToken,
@@ -835,30 +843,10 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 
 		// Get invited emails for private shares
 		if share.Visibility == "private" {
-			emailRows, err := db.conn.QueryContext(ctx,
-				`SELECT email FROM session_share_invites WHERE share_id = $1 ORDER BY email`,
-				share.ID)
+			emails, err := db.loadShareInvitedEmails(ctx, share.ID)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get invites: %w", err)
+				return nil, err
 			}
-			defer emailRows.Close()
-
-			var emails []string
-			for emailRows.Next() {
-				var email string
-				if err := emailRows.Scan(&email); err != nil {
-					emailRows.Close()
-					return nil, fmt.Errorf("failed to scan email: %w", err)
-				}
-				emails = append(emails, email)
-			}
-
-			if err := emailRows.Err(); err != nil {
-				emailRows.Close()
-				return nil, fmt.Errorf("error iterating emails: %w", err)
-			}
-
-			emailRows.Close()
 			share.InvitedEmails = emails
 		}
 
@@ -898,7 +886,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 	}
 	defer rows.Close()
 
-	var shares []ShareWithSessionInfo
+	shares := make([]ShareWithSessionInfo, 0)
 	for rows.Next() {
 		var share ShareWithSessionInfo
 		err := rows.Scan(
@@ -912,30 +900,10 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 
 		// Get invited emails for private shares
 		if share.Visibility == "private" {
-			emailRows, err := db.conn.QueryContext(ctx,
-				`SELECT email FROM session_share_invites WHERE share_id = $1 ORDER BY email`,
-				share.ID)
+			emails, err := db.loadShareInvitedEmails(ctx, share.ID)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get invites: %w", err)
+				return nil, err
 			}
-			defer emailRows.Close()
-
-			var emails []string
-			for emailRows.Next() {
-				var email string
-				if err := emailRows.Scan(&email); err != nil {
-					emailRows.Close()
-					return nil, fmt.Errorf("failed to scan email: %w", err)
-				}
-				emails = append(emails, email)
-			}
-
-			if err := emailRows.Err(); err != nil {
-				emailRows.Close()
-				return nil, fmt.Errorf("error iterating emails: %w", err)
-			}
-
-			emailRows.Close()
 			share.InvitedEmails = emails
 		}
 
@@ -1040,49 +1008,18 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 		if err == sql.ErrNoRows {
 			return nil, ErrSessionNotFound
 		}
-		// Handle invalid UUID format
-		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
+		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	// Unmarshal git_info JSONB if present
-	if len(gitInfoBytes) > 0 {
-		if err := json.Unmarshal(gitInfoBytes, &session.GitInfo); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal git_info: %w", err)
-		}
+	// Unmarshal git_info and load sync files
+	if err := db.unmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
+		return nil, err
 	}
-
-	// Get sync files for this session
-	filesQuery := `
-		SELECT file_name, file_type, last_synced_line, updated_at
-		FROM sync_files
-		WHERE session_id = $1
-		ORDER BY file_type DESC, file_name ASC
-	`
-
-	rows, err := db.conn.QueryContext(ctx, filesQuery, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query sync files: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var file SyncFileDetail
-		if err := rows.Scan(&file.FileName, &file.FileType, &file.LastSyncedLine, &file.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan sync file: %w", err)
-		}
-		session.Files = append(session.Files, file)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating sync files: %w", err)
-	}
-
-	// Ensure Files is never nil (JSON marshals nil slice as null, but we want [])
-	if session.Files == nil {
-		session.Files = []SyncFileDetail{}
+	if err := db.loadSessionSyncFiles(ctx, &session); err != nil {
+		return nil, err
 	}
 
 	return &session, nil
@@ -1397,6 +1334,37 @@ func isUniqueViolation(err error) bool {
 	return strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "unique constraint")
 }
 
+// isInvalidUUIDError checks if the error is a PostgreSQL invalid UUID format error
+func isInvalidUUIDError(err error) bool {
+	return strings.Contains(err.Error(), "invalid input syntax for type uuid")
+}
+
+// loadShareInvitedEmails loads the invited emails for a private share
+func (db *DB) loadShareInvitedEmails(ctx context.Context, shareID int64) ([]string, error) {
+	rows, err := db.conn.QueryContext(ctx,
+		`SELECT email FROM session_share_invites WHERE share_id = $1 ORDER BY email`,
+		shareID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invites: %w", err)
+	}
+	defer rows.Close()
+
+	var emails []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, fmt.Errorf("failed to scan email: %w", err)
+		}
+		emails = append(emails, email)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating emails: %w", err)
+	}
+
+	return emails, nil
+}
+
 // VerifySessionOwnership checks if a session exists and is owned by the user
 // Returns the external_id if found, or an error
 func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, userID int64) (externalID string, err error) {
@@ -1415,8 +1383,7 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 		return "", ErrSessionNotFound
 	}
 	if err != nil {
-		// Handle invalid UUID format
-		if strings.Contains(err.Error(), "invalid input syntax for type uuid") {
+		if isInvalidUUIDError(err) {
 			return "", ErrSessionNotFound
 		}
 		return "", fmt.Errorf("failed to verify session ownership: %w", err)
