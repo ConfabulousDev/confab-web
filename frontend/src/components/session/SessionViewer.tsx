@@ -122,7 +122,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true 
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
 
-        <div className={styles.timelineContainer}>
+        <div className={`${styles.timelineContainer} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
           {loading ? (
             <div className={styles.loading}>Loading transcript...</div>
           ) : error ? (

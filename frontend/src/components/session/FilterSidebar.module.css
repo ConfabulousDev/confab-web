@@ -1,4 +1,4 @@
-/* Filter sidebar - collapsible left panel */
+/* Filter sidebar - collapsible left panel, fixed position to stay in view */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -9,6 +9,10 @@
   transition: width var(--transition-base);
   overflow-x: hidden;
   overflow-y: auto;
+  position: fixed;
+  top: 48px; /* Below header */
+  bottom: 0;
+  z-index: var(--z-sticky);
 }
 
 .sidebar.collapsed {
@@ -187,13 +191,9 @@
   color: var(--color-text-muted);
 }
 
-/* Responsive - hide sidebar on small screens */
+/* Responsive - adjust sidebar on small screens */
 @media (max-width: 768px) {
   .sidebar {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
     z-index: var(--z-dropdown);
     box-shadow: var(--shadow-lg);
   }
