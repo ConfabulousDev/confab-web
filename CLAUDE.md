@@ -3,9 +3,6 @@
 ## Running Tests
 
 ```bash
-# CLI
-cd cli && go test ./...
-
 # Backend (requires Orbstack/Docker for integration tests)
 cd backend && DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./...
 
@@ -15,6 +12,8 @@ cd backend && go test -short ./...
 # Frontend
 cd frontend && npm run build && npm run lint && npm test
 ```
+
+Note: CLI is in a separate repo: https://github.com/santaclaude2025/confab-cli
 
 ## Frontend Development
 
@@ -30,7 +29,7 @@ cd frontend && npm run build && npm run lint && npm test
 
 ## Finding Dead Code (Go)
 
-Two complementary tools for detecting unused code in the `backend/` and `cli/` directories:
+Two complementary tools for detecting unused code in the `backend/` directory:
 
 ### staticcheck
 

@@ -2,22 +2,23 @@
 
 Archive and search your Claude Code sessions in the cloud.
 
-**Monorepo containing:**
-- **[cli/](cli/)** - Command-line tool for capturing and uploading sessions
+**This repo contains:**
 - **[backend/](backend/)** - Cloud backend service (PostgreSQL + MinIO)
-- **[frontend-new/](frontend-new/)** - React web dashboard with GitHub OAuth
+- **[frontend/](frontend/)** - React web dashboard with GitHub OAuth
+
+**See also:** [confab-cli](https://github.com/santaclaude2025/confab-cli) - Command-line tool for capturing and uploading sessions
 
 ## Quick Start
 
 ### Install CLI
 
 ```bash
-git clone https://github.com/santaclaude2025/confab.git
-cd confab/cli
+git clone https://github.com/santaclaude2025/confab-cli.git
+cd confab-cli
 ./install.sh
 ```
 
-The CLI captures sessions via hook and uploads to the cloud backend. See [cli/README.md](cli/README.md) for details.
+The CLI captures sessions via hook and uploads to the cloud backend. See [confab-cli README](https://github.com/santaclaude2025/confab-cli#readme) for details.
 
 ### Run Backend + Frontend (Development)
 
@@ -44,7 +45,7 @@ See [backend/README.md](backend/README.md) for deployment.
 
 ```
 ┌──────────────────┐
-│   Confab CLI     │ ← Runs on user's machine
+│   Confab CLI     │ ← Runs on user's machine (separate repo)
 │                  │   - Captures sessions via SessionEnd hook
 │  ~/.confab/      │   - Uploads to cloud backend
 └────────┬─────────┘
@@ -70,14 +71,6 @@ See [backend/README.md](backend/README.md) for deployment.
 
 ## Features
 
-### CLI
-- Automatic session capture via SessionEnd hook
-- Agent sidechain tracking
-- Session resumption support
-- Cloud upload with compression (zstd)
-- Redaction support for sensitive data
-- Structured logging
-
 ### Backend
 - PostgreSQL 18 database
 - MinIO S3-compatible storage
@@ -98,11 +91,6 @@ See [backend/README.md](backend/README.md) for deployment.
 
 ```
 confab/
-├── cli/                    # CLI tool (Go)
-│   ├── cmd/               # Commands (configure, login, save, etc.)
-│   ├── pkg/               # Packages (config, discovery, upload, redactor)
-│   └── README.md
-│
 ├── backend/               # Backend service (Go)
 │   ├── cmd/server/       # Server entry point
 │   ├── internal/         # Internal packages
@@ -115,7 +103,7 @@ confab/
 │   ├── docker-compose.yml
 │   └── README.md
 │
-├── frontend-new/          # React web dashboard
+├── frontend/              # React web dashboard
 │   ├── src/pages/        # Pages and routes
 │   ├── src/services/     # API client
 │   └── README.md
@@ -123,14 +111,11 @@ confab/
 └── docs/                  # Additional documentation
 ```
 
+See also: [confab-cli](https://github.com/santaclaude2025/confab-cli) (separate repo)
+
 ## Development
 
 ```bash
-# CLI development
-cd cli
-go build
-make test
-
 # Backend development
 cd backend
 docker-compose up -d
@@ -138,7 +123,7 @@ go run cmd/server/main.go
 go test ./...
 
 # Frontend development
-cd frontend-new
+cd frontend
 npm install
 npm run dev
 npm test
