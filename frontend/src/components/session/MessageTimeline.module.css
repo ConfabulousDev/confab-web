@@ -4,6 +4,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--spacing-md) var(--spacing-xl);
+  overscroll-behavior: contain;
 }
 
 /* Empty state */
