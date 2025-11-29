@@ -28,7 +28,7 @@ function ScrollNavButtons({
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    const handleScroll = () => {
+    const updateButtonVisibility = () => {
       const { scrollTop, scrollHeight, clientHeight } = scrollElement;
       const atTop = scrollTop < threshold;
       const atBottom = scrollTop + clientHeight >= scrollHeight - threshold;
@@ -37,17 +37,25 @@ function ScrollNavButtons({
       setShowBottomButton(!atBottom);
     };
 
-    scrollElement.addEventListener('scroll', handleScroll);
-    handleScroll(); // Initial check
+    scrollElement.addEventListener('scroll', updateButtonVisibility);
 
-    return () => scrollElement.removeEventListener('scroll', handleScroll);
+    // Use ResizeObserver to detect when content size changes
+    const resizeObserver = new ResizeObserver(updateButtonVisibility);
+    resizeObserver.observe(scrollElement);
+
+    updateButtonVisibility(); // Initial check
+
+    return () => {
+      scrollElement.removeEventListener('scroll', updateButtonVisibility);
+      resizeObserver.disconnect();
+    };
   }, [scrollRef, threshold]);
 
   const scrollToTop = useCallback(() => {
     if (onScrollToTop) {
       onScrollToTop();
     } else {
-      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollRef.current?.scrollTo({ top: 0 });
     }
   }, [scrollRef, onScrollToTop]);
 
@@ -55,7 +63,7 @@ function ScrollNavButtons({
     if (onScrollToBottom) {
       onScrollToBottom();
     } else if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight });
     }
   }, [scrollRef, onScrollToBottom]);
 
