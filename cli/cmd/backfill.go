@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/santaclaude2025/confab/pkg/config"
 	"github.com/santaclaude2025/confab/pkg/discovery"
@@ -22,9 +21,7 @@ var backfillCmd = &cobra.Command{
 	Use:   "backfill",
 	Short: "Upload historical sessions from ~/.claude to cloud",
 	Long: `Scans ~/.claude/projects/ for existing session transcripts and uploads
-them to the cloud backend. Sessions modified within the last 20 minutes are skipped
-(likely still in progress). Use 'confab save <session-id>' to force upload
-a specific session.`,
+them to the cloud backend.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger.Info("Starting backfill")
 		fmt.Println("=== Confab: Backfill Historical Sessions ===")
@@ -56,22 +53,18 @@ a specific session.`,
 		fmt.Printf("Found %d session(s)\n", len(sessions))
 		fmt.Println()
 
-		// Filter sessions by age (20 minute threshold)
-		threshold := time.Now().Add(-20 * time.Minute)
-		oldSessions, recentSessions := filterSessionsByAge(sessions, threshold)
-
 		// Determine which sessions need uploading
-		toUpload, alreadySynced, err := determineSessionsToUpload(cfg, oldSessions)
+		toUpload, alreadySynced, err := determineSessionsToUpload(cfg, sessions)
 		if err != nil {
 			logger.Error("Failed to check existing sessions: %v", err)
 			return fmt.Errorf("failed to check existing sessions: %w", err)
 		}
 
-		logger.Debug("Sessions to upload: %d, already synced: %d, recent (skipped): %d",
-			len(toUpload), len(alreadySynced), len(recentSessions))
+		logger.Debug("Sessions to upload: %d, already synced: %d",
+			len(toUpload), len(alreadySynced))
 
 		// Print summary
-		printBackfillSummary(toUpload, alreadySynced, recentSessions)
+		printBackfillSummary(toUpload, alreadySynced)
 
 		if len(toUpload) == 0 {
 			fmt.Println()
@@ -86,41 +79,41 @@ a specific session.`,
 		}
 
 		// Upload with progress
-		succeeded, failed := uploadSessionsWithProgress(cfg, toUpload)
+		succeeded, failed, skippedActive := uploadSessionsWithProgress(cfg, toUpload)
 
 		// Print final summary
-		logger.Info("Backfill complete: %d succeeded, %d failed", succeeded, failed)
-		if failed > 0 {
-			fmt.Printf("Uploaded %d session(s), %d failed.\n", succeeded, failed)
+		logger.Info("Backfill complete: %d succeeded, %d failed, %d skipped (active)", succeeded, failed, skippedActive)
+		if failed > 0 || skippedActive > 0 {
+			fmt.Printf("Uploaded %d session(s)", succeeded)
+			if failed > 0 {
+				fmt.Printf(", %d failed", failed)
+			}
+			if skippedActive > 0 {
+				fmt.Printf(", %d skipped (already being synced)", skippedActive)
+			}
+			fmt.Println(".")
 		} else {
 			fmt.Printf("Uploaded %d session(s).\n", succeeded)
+		}
+
+		if skippedActive > 0 {
+			fmt.Println("\nNote: Some sessions were skipped because they're being actively synced")
+			fmt.Println("by the daemon. This is normal for recent/in-progress sessions.")
 		}
 
 		return nil
 	},
 }
 
-// filterSessionsByAge separates sessions into old and recent based on threshold
-func filterSessionsByAge(sessions []discovery.SessionInfo, threshold time.Time) (old, recent []discovery.SessionInfo) {
-	for _, s := range sessions {
-		if s.ModTime.Before(threshold) {
-			old = append(old, s)
-		} else {
-			recent = append(recent, s)
-		}
-	}
-	return old, recent
-}
-
 // determineSessionsToUpload checks server for existing sessions and returns what needs uploading
-func determineSessionsToUpload(cfg *config.UploadConfig, oldSessions []discovery.SessionInfo) (toUpload []discovery.SessionInfo, alreadySynced []string, err error) {
-	if len(oldSessions) == 0 {
+func determineSessionsToUpload(cfg *config.UploadConfig, sessions []discovery.SessionInfo) (toUpload []discovery.SessionInfo, alreadySynced []string, err error) {
+	if len(sessions) == 0 {
 		return nil, nil, nil
 	}
 
 	// Extract session IDs
-	sessionIDs := make([]string, len(oldSessions))
-	for i, s := range oldSessions {
+	sessionIDs := make([]string, len(sessions))
+	for i, s := range sessions {
 		sessionIDs[i] = s.SessionID
 	}
 
@@ -137,7 +130,7 @@ func determineSessionsToUpload(cfg *config.UploadConfig, oldSessions []discovery
 	}
 
 	// Separate sessions into already synced vs to upload
-	for _, s := range oldSessions {
+	for _, s := range sessions {
 		if existingSet[s.SessionID] {
 			alreadySynced = append(alreadySynced, s.SessionID)
 		} else {
@@ -148,32 +141,12 @@ func determineSessionsToUpload(cfg *config.UploadConfig, oldSessions []discovery
 	return toUpload, alreadySynced, nil
 }
 
-// printBackfillSummary displays what will be uploaded and what's skipped
-func printBackfillSummary(toUpload []discovery.SessionInfo, alreadySynced []string, recentSessions []discovery.SessionInfo) {
-	// Print sync summary
+// printBackfillSummary displays what will be uploaded
+func printBackfillSummary(toUpload []discovery.SessionInfo, alreadySynced []string) {
 	if len(alreadySynced) > 0 {
 		fmt.Printf("Already synced: %d\n", len(alreadySynced))
 	}
 	fmt.Printf("To upload: %d\n", len(toUpload))
-
-	// Show skipped recent sessions
-	if len(recentSessions) > 0 {
-		fmt.Println()
-		fmt.Printf("Skipping %d recent session(s) (modified < 20 minutes ago):\n", len(recentSessions))
-		for _, s := range recentSessions {
-			ago := time.Since(s.ModTime).Round(time.Minute)
-			sessionID := utils.TruncateSecret(s.SessionID, 8, 0)
-			if s.Title != "" {
-				title := utils.TruncateEnd(s.Title, 50)
-				fmt.Printf("  %s\n", title)
-				fmt.Printf("    %s  modified %s ago\n", sessionID, ago)
-			} else {
-				fmt.Printf("  %s  %-20s  modified %s ago\n", sessionID, utils.TruncateWithEllipsis(s.ProjectPath, 20), ago)
-			}
-		}
-		fmt.Println()
-		fmt.Println("To upload a skipped session later, run: confab save <session-id>")
-	}
 }
 
 // confirmUpload prompts user to confirm uploading sessions
@@ -187,13 +160,13 @@ func confirmUpload(count int) bool {
 }
 
 // uploadSessionsWithProgress uploads sessions and displays progress
-func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.SessionInfo) (succeeded, failed int) {
+func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.SessionInfo) (succeeded, failed, skippedActive int) {
 	// Create uploader once for all sessions
 	uploader, err := sync.NewUploader(cfg)
 	if err != nil {
 		logger.Error("Failed to create uploader: %v", err)
 		fmt.Printf("Error creating uploader: %v\n", err)
-		return 0, len(sessions)
+		return 0, len(sessions), 0
 	}
 
 	fmt.Println()
@@ -208,8 +181,14 @@ func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.S
 		err := uploadSession(uploader, session)
 		if err != nil {
 			logger.Error("Failed to upload session %s: %v", session.SessionID, err)
-			fmt.Printf("\n  Error uploading %s: %v\n", utils.TruncateSecret(session.SessionID, 8, 0), err)
-			failed++
+			// Check if this is a sync conflict (session being actively synced)
+			if strings.Contains(err.Error(), "first_line must be") {
+				skippedActive++
+				logger.Debug("Session %s appears to be actively syncing, skipped", session.SessionID)
+			} else {
+				fmt.Printf("\n  Error uploading %s: %v\n", utils.TruncateSecret(session.SessionID, 8, 0), err)
+				failed++
+			}
 		} else {
 			logger.Debug("Uploaded session %s", session.SessionID)
 			succeeded++
@@ -219,7 +198,7 @@ func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.S
 	fmt.Printf("\rUploading... [%d/%d] Done.                                        \n", len(sessions), len(sessions))
 	fmt.Println()
 
-	return succeeded, failed
+	return succeeded, failed, skippedActive
 }
 
 func init() {
