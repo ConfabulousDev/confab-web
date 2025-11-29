@@ -13,9 +13,10 @@ interface SessionViewerProps {
   onShare?: () => void;
   onDelete?: () => void;
   isOwner?: boolean;
+  isShared?: boolean;
 }
 
-function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true }: SessionViewerProps) {
+function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true, isShared = false }: SessionViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
@@ -112,6 +113,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true 
           onShare={onShare}
           onDelete={onDelete}
           isOwner={isOwner}
+          isShared={isShared}
         />
       </div>
 

@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import type { SessionDetail } from '@/types';
-import { formatDate, formatRelativeTime } from '@/utils';
-import SessionCard from '@/components/SessionCard';
+import { SessionViewer } from '@/components/session';
 import styles from './SharedSessionPage.module.css';
 
 type ErrorType = 'not_found' | 'expired' | 'forbidden' | 'general' | null;
@@ -103,40 +102,12 @@ function SharedSessionPage() {
 
   return (
     <div className={styles.container}>
-      {/* Share Banner */}
-      <div className={styles.shareBanner}>
-        <span className={styles.shareIcon}>📤</span>
-        <span>
-          <strong>Shared Session</strong>
-        </span>
-      </div>
-
-      {/* Session Header */}
-      <div className={styles.header}>
-        <div>
-          <h1>Session Detail</h1>
-          <p className={styles.sessionId}>
-            <strong>Session ID:</strong> <code>{session.external_id}</code>
-          </p>
-        </div>
-      </div>
-
-      {/* Session Metadata */}
-      <div className={styles.metaCard}>
-        <div className={styles.metaItem}>
-          <span className={styles.metaLabel}>First Synced:</span>
-          <span className={styles.metaValue}>{formatDate(session.first_seen)}</span>
-        </div>
-        {session.last_sync_at && (
-          <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>Latest Sync:</span>
-            <span className={styles.metaValue}>{formatRelativeTime(session.last_sync_at)}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Display the session details */}
-      <SessionCard session={session} showGitInfo={false} shareToken={token} />
+      <SessionViewer
+        session={session}
+        shareToken={token}
+        isOwner={false}
+        isShared={true}
+      />
     </div>
   );
 }

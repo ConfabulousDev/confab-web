@@ -12,6 +12,7 @@ interface SessionHeaderProps {
   onShare?: () => void;
   onDelete?: () => void;
   isOwner?: boolean;
+  isShared?: boolean;
 }
 
 /**
@@ -117,6 +118,7 @@ function SessionHeader({
   onShare,
   onDelete,
   isOwner = true,
+  isShared = false,
 }: SessionHeaderProps) {
   const { copy, copied } = useCopyToClipboard();
   const displayTitle = title || `Session ${externalId.substring(0, 8)}`;
@@ -231,7 +233,16 @@ function SessionHeader({
         </div>
       </div>
 
-      {isOwner && (
+      {isShared ? (
+        <div className={styles.sharedIndicator}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+            <polyline points="16 6 12 2 8 6" />
+            <line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+          <span>Shared Session</span>
+        </div>
+      ) : isOwner && (
         <div className={styles.actions}>
           {onShare && (
             <button className={styles.btnShare} onClick={onShare}>
