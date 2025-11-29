@@ -7,7 +7,7 @@
   background: var(--color-bg-primary);
   position: sticky;
   top: 0;
-  z-index: var(--z-sticky);
+  z-index: calc(var(--z-sticky) + 10); /* Above fixed sidebar */
 }
 
 .logo {
