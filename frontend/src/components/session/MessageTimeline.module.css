@@ -10,14 +10,13 @@
 
 /* Floating navigation buttons */
 .navButtons {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  position: fixed;
+  bottom: var(--spacing-xl);
+  right: var(--spacing-xl);
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
-  float: right;
-  margin-right: calc(-1 * var(--spacing-md));
+  gap: var(--spacing-sm);
 }
 
 .navButton {
