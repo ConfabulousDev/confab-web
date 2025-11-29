@@ -154,18 +154,17 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
 
   const scrollToTop = () => {
     if (parentRef.current) {
-      console.log('before scrollTop:', parentRef.current.scrollTop);
-      parentRef.current.scrollTop = 0;
-      console.log('after scrollTop:', parentRef.current.scrollTop);
+      const el = parentRef.current;
+      console.log('scrollToTop - scrollHeight:', el.scrollHeight, 'clientHeight:', el.clientHeight, 'offsetHeight:', el.offsetHeight);
+      el.scrollTop = 0;
     }
   };
 
   const scrollToBottom = () => {
     if (parentRef.current) {
-      const maxScroll = parentRef.current.scrollHeight - parentRef.current.clientHeight;
-      console.log('before scrollTop:', parentRef.current.scrollTop, 'maxScroll:', maxScroll);
-      parentRef.current.scrollTop = maxScroll;
-      console.log('after scrollTop:', parentRef.current.scrollTop);
+      const el = parentRef.current;
+      console.log('scrollToBottom - scrollHeight:', el.scrollHeight, 'clientHeight:', el.clientHeight, 'offsetHeight:', el.offsetHeight);
+      el.scrollTop = el.scrollHeight;
     }
   };
 
