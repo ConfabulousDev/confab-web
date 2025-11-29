@@ -101,17 +101,19 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true 
 
   return (
     <div className={styles.sessionViewer}>
-      <SessionHeader
-        title={session.title ?? undefined}
-        externalId={session.external_id}
-        model={sessionMeta.model}
-        durationMs={sessionMeta.durationMs}
-        sessionDate={sessionMeta.sessionDate}
-        gitInfo={session.git_info}
-        onShare={onShare}
-        onDelete={onDelete}
-        isOwner={isOwner}
-      />
+      <div className={`${styles.headerContainer} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
+        <SessionHeader
+          title={session.title ?? undefined}
+          externalId={session.external_id}
+          model={sessionMeta.model}
+          durationMs={sessionMeta.durationMs}
+          sessionDate={sessionMeta.sessionDate}
+          gitInfo={session.git_info}
+          onShare={onShare}
+          onDelete={onDelete}
+          isOwner={isOwner}
+        />
+      </div>
 
       <div className={styles.mainContent}>
         <FilterSidebar

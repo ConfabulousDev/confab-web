@@ -7,6 +7,16 @@
   background: var(--color-bg);
 }
 
+/* Header container - needs margin to account for fixed sidebar */
+.headerContainer {
+  margin-left: 220px; /* Match sidebar width */
+  transition: margin-left var(--transition-base);
+}
+
+.headerContainer.sidebarCollapsed {
+  margin-left: 48px; /* Match collapsed sidebar width */
+}
+
 /* Two-column layout for sidebar + timeline */
 .mainContent {
   display: flex;
