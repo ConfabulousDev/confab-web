@@ -153,11 +153,11 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   }, [virtualItems.length]);
 
   const scrollToTop = () => {
-    virtualizer.scrollToIndex(0, { align: 'start', behavior: 'smooth' });
+    parentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const scrollToBottom = () => {
-    virtualizer.scrollToIndex(virtualItems.length - 1, { align: 'end', behavior: 'smooth' });
+    parentRef.current?.scrollTo({ top: parentRef.current.scrollHeight, behavior: 'smooth' });
   };
 
   if (messages.length === 0) {
