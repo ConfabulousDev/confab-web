@@ -1,6 +1,8 @@
 /* Message timeline - virtualized scrollable list */
 .timeline {
   flex: 1;
+  min-height: 0;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--spacing-md) var(--spacing-xl);
