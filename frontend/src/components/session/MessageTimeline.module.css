@@ -10,48 +10,6 @@
   position: relative;
 }
 
-/* Floating navigation buttons */
-.navButtons {
-  position: fixed;
-  bottom: var(--spacing-xl);
-  right: var(--spacing-xl);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.navButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-primary);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-sm);
-}
-
-.navButton:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
-  border-color: var(--color-border-dark);
-}
-
-.navButton svg {
-  display: block;
-}
-
-.navButton.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
 /* Empty state */
 .emptyState {
   display: flex;

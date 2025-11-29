@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessions, useDocumentTitle, useSuccessMessage } from '@/hooks';
 import { formatRelativeTime, sortData, type SortDirection } from '@/utils';
 import SortableHeader from '@/components/SortableHeader';
+import ScrollNavButtons from '@/components/ScrollNavButtons';
 import Alert from '@/components/Alert';
 import styles from './SessionsPage.module.css';
 
@@ -11,6 +12,7 @@ type SortColumn = 'title' | 'external_id' | 'last_sync_time';
 function SessionsPage() {
   useDocumentTitle('Sessions');
   const navigate = useNavigate();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [showSharedWithMe, setShowSharedWithMe] = useState(false);
   const { sessions, loading, error } = useSessions(showSharedWithMe);
   const [sortColumn, setSortColumn] = useState<SortColumn>('last_sync_time');
@@ -54,7 +56,8 @@ function SessionsPage() {
   };
 
   return (
-    <div className={styles.container}>
+    <div ref={containerRef} className={styles.container}>
+      <ScrollNavButtons scrollRef={containerRef} />
       <div className={styles.header}>
         <h1>{showSharedWithMe ? 'Shared with me' : 'Sessions'}</h1>
         <div className={styles.tabs}>

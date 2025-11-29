@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, useEffect } from 'react';
+import { useMemo, useRef, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
 import TimelineMessage from './TimelineMessage';
+import ScrollNavButtons from '@/components/ScrollNavButtons';
 import styles from './MessageTimeline.module.css';
 
 interface MessageTimelineProps {
@@ -75,8 +76,6 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
 
 function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const [showTopButton, setShowTopButton] = useState(false);
-  const [showBottomButton, setShowBottomButton] = useState(true);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
@@ -130,35 +129,46 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
     overscan: 5,
   });
 
-  // Track scroll position to show/hide navigation buttons
-  useEffect(() => {
-    const scrollElement = parentRef.current;
-    if (!scrollElement) return;
+  const scrollToTop = useCallback(() => {
+    const scrollWithRetry = (attempts = 0) => {
+      virtualizer.scrollToIndex(0, { align: 'start' });
 
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollElement;
-      const atTop = scrollTop < 100;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 100;
-
-      setShowTopButton(!atTop);
-      setShowBottomButton(!atBottom);
+      if (attempts < 5) {
+        requestAnimationFrame(() => {
+          const items = virtualizer.getVirtualItems();
+          const firstVisible = items[0];
+          if (!firstVisible || firstVisible.index > 0) {
+            scrollWithRetry(attempts + 1);
+          }
+        });
+      }
     };
 
-    scrollElement.addEventListener('scroll', handleScroll);
-    handleScroll(); // Initial check
+    scrollWithRetry();
+  }, [virtualizer]);
 
-    return () => scrollElement.removeEventListener('scroll', handleScroll);
-  }, [virtualItems.length]);
+  const scrollToBottom = useCallback(() => {
+    const lastIndex = virtualItems.length - 1;
 
-  const scrollToTop = () => {
-    parentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+    // With dynamic sizes, scrollToIndex may not reach the true end on first try
+    // because item sizes are estimated until measured. We retry until the last
+    // item is actually visible.
+    const scrollWithRetry = (attempts = 0) => {
+      virtualizer.scrollToIndex(lastIndex, { align: 'end' });
 
-  const scrollToBottom = () => {
-    if (parentRef.current) {
-      parentRef.current.scrollTo({ top: parentRef.current.scrollHeight, behavior: 'smooth' });
-    }
-  };
+      if (attempts < 5) {
+        requestAnimationFrame(() => {
+          const items = virtualizer.getVirtualItems();
+          const lastVisible = items[items.length - 1];
+          if (!lastVisible || lastVisible.index < lastIndex) {
+            scrollWithRetry(attempts + 1);
+          }
+        });
+      }
+    };
+
+    scrollWithRetry();
+  }, [virtualizer, virtualItems.length]);
 
   if (messages.length === 0) {
     return (
@@ -171,35 +181,11 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
 
   return (
     <div ref={parentRef} className={styles.timeline}>
-      {/* Floating navigation buttons */}
-      <div className={styles.navButtons}>
-        {showTopButton && (
-          <button
-            className={styles.navButton}
-            onClick={scrollToTop}
-            title="Go to beginning"
-            aria-label="Go to beginning"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="17 11 12 6 7 11" />
-              <polyline points="17 18 12 13 7 18" />
-            </svg>
-          </button>
-        )}
-        {showBottomButton && (
-          <button
-            className={styles.navButton}
-            onClick={scrollToBottom}
-            title="Go to end"
-            aria-label="Go to end"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="7 13 12 18 17 13" />
-              <polyline points="7 6 12 11 17 6" />
-            </svg>
-          </button>
-        )}
-      </div>
+      <ScrollNavButtons
+        scrollRef={parentRef}
+        onScrollToTop={scrollToTop}
+        onScrollToBottom={scrollToBottom}
+      />
 
       <div
         style={{
