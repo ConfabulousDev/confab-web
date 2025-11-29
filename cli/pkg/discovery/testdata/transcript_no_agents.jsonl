@@ -1,3 +1,0 @@
-{"type": "assistant", "message": {"content": [{"type": "text", "text": "Hello!"}]}}
-{"type": "user", "message": {"content": [{"type": "text", "text": "Hi there"}]}}
-{"type": "assistant", "message": {"content": [{"type": "text", "text": "How can I help?"}]}}

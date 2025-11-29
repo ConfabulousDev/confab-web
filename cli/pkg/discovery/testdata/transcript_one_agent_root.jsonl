@@ -1,3 +1,0 @@
-{"type": "assistant", "message": {"content": [{"type": "text", "text": "Let me search for that."}]}}
-{"type": "user", "toolUseResult": {"agentId": "96f3c489", "result": "Found 5 files"}}
-{"type": "assistant", "message": {"content": [{"type": "text", "text": "I found 5 files."}]}}
