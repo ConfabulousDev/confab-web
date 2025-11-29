@@ -359,6 +359,7 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 // respondJSON writes a JSON response
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
 }
