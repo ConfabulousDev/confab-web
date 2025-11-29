@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
-import { sessionsAPI, APIError } from '@/services/api';
-import { useDocumentTitle, useSuccessMessage } from '@/hooks';
+import { sessionsAPI } from '@/services/api';
+import { useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
 import type { SessionDetail } from '@/types';
 import { SessionViewer } from '@/components/session';
 import ShareDialog from '@/components/ShareDialog';
@@ -13,9 +13,6 @@ function SessionDetailPage() {
   const { id: sessionId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const {
     message: successMessage,
     fading: successFading,
@@ -27,6 +24,18 @@ function SessionDetailPage() {
   // Delete dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  // Fetch session using the shared hook
+  const fetchSession = useCallback(async (): Promise<SessionDetail> => {
+    if (!sessionId) throw new Error('No session ID');
+    return sessionsAPI.get(sessionId);
+  }, [sessionId]);
+
+  const { session, loading, error } = useLoadSession({
+    fetchSession,
+    deps: [sessionId],
+  });
 
   // Dynamic page title based on session
   const pageTitle = session
@@ -34,42 +43,16 @@ function SessionDetailPage() {
     : 'Session';
   useDocumentTitle(pageTitle);
 
-  useEffect(() => {
-    if (sessionId) {
-      fetchSession();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
-
-  async function fetchSession() {
-    if (!sessionId) return;
-
-    setLoading(true);
-    setError('');
-    try {
-      const data = await sessionsAPI.get(sessionId);
-      setSession(data);
-    } catch (err) {
-      if (err instanceof APIError && err.status === 404) {
-        setError('Session not found');
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to load session');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function openDeleteDialog() {
     setShowDeleteDialog(true);
-    setError('');
+    setDeleteError('');
   }
 
   async function handleDelete() {
     if (!sessionId || !session) return;
 
     setDeleting(true);
-    setError('');
+    setDeleteError('');
 
     try {
       const url = `/api/v1/sessions/${sessionId}`;
@@ -88,7 +71,7 @@ function SessionDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       navigate('/sessions?success=Session deleted successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete');
     } finally {
       setDeleting(false);
     }
@@ -159,7 +142,7 @@ function SessionDetailPage() {
             </div>
 
             <div className={styles.modalBody}>
-              {error && <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>}
+              {deleteError && <div className={`${styles.alert} ${styles.alertError}`}>{deleteError}</div>}
 
               <p>Are you sure you want to delete this session?</p>
 

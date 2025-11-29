@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useCopyToClipboard, useAuth, useShareDialog } from '@/hooks';
-import { formatDate } from '@/utils';
+import { formatDateString } from '@/utils';
 import { getFieldError } from '@/schemas/validation';
 import FormField from './FormField';
 import Button from './Button';
@@ -186,7 +186,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                       <span className={styles.invited}>{share.invited_emails.join(', ')}</span>
                     )}
                     {share.expires_at ? (
-                      <span className={styles.expires}>Expires: {formatDate(share.expires_at)}</span>
+                      <span className={styles.expires}>Expires: {formatDateString(share.expires_at)}</span>
                     ) : (
                       <span className={styles.neverExpires}>Never expires</span>
                     )}

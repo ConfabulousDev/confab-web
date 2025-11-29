@@ -12,19 +12,6 @@ export function stripAnsi(text: string): string {
 	return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][AB012]|\x1b[PX^_][^\x1b]*\x1b\\|\x1b.?/g, '');
 }
 
-/** Parse date string, normalizing to UTC if no timezone specified */
-function parseDate(dateStr: string): Date {
-	const normalized = dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
-	return new Date(normalized);
-}
-
-/**
- * Format a date string for display
- */
-export function formatDate(dateStr: string): string {
-	return parseDate(dateStr).toLocaleString();
-}
-
 /**
  * Format bytes into human-readable size
  */
@@ -34,29 +21,4 @@ export function formatBytes(bytes: number): string {
 	const sizes = ['B', 'KB', 'MB', 'GB'];
 	const i = Math.floor(Math.log(bytes) / Math.log(k));
 	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
-
-/**
- * Format a date as relative time (e.g., "5m ago" or "in 5m")
- */
-export function formatRelativeTime(dateStr: string): string {
-	const date = parseDate(dateStr);
-	const now = new Date();
-	const diff = now.getTime() - date.getTime();
-
-	const absDiff = Math.abs(diff);
-	const seconds = Math.floor(absDiff / 1000);
-	const minutes = Math.floor(seconds / 60);
-	const hours = Math.floor(minutes / 60);
-	const days = Math.floor(hours / 24);
-
-	const isFuture = diff < 0;
-	const suffix = isFuture ? '' : ' ago';
-	const prefix = isFuture ? 'in ' : '';
-
-	if (days > 0) return `${prefix}${days}d${suffix}`;
-	if (hours > 0) return `${prefix}${hours}h${suffix}`;
-	if (minutes > 0) return `${prefix}${minutes}m${suffix}`;
-	if (seconds > 0) return `${prefix}${seconds}s${suffix}`;
-	return 'just now';
 }

@@ -1,79 +1,53 @@
-import { useState, useEffect } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
-import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import { useDocumentTitle, useLoadSession } from '@/hooks';
+import type { SessionErrorType } from '@/hooks';
 import type { SessionDetail } from '@/types';
 import { SessionViewer } from '@/components/session';
 import styles from './SharedSessionPage.module.css';
 
-type ErrorType = 'not_found' | 'expired' | 'forbidden' | 'general' | null;
+function getErrorIcon(type: SessionErrorType): string {
+  switch (type) {
+    case 'not_found':
+      return '🔍';
+    case 'expired':
+      return '⏰';
+    case 'forbidden':
+      return '🚫';
+    default:
+      return '⚠️';
+  }
+}
 
 function SharedSessionPage() {
   const { sessionId, token } = useParams<{ sessionId: string; token: string }>();
-  const location = useLocation();
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [errorType, setErrorType] = useState<ErrorType>(null);
+
+  const fetchSharedSession = useCallback(async (): Promise<SessionDetail> => {
+    const response = await fetch(`/api/v1/sessions/${sessionId}/shared/${token}`, {
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      // Throw response-like object so hook can handle status codes
+      throw { status: response.status };
+    }
+
+    return response.json();
+  }, [sessionId, token]);
+
+  const handleAuthRequired = useCallback((redirectPath: string) => {
+    window.location.href = `/auth/login?redirect=${encodeURIComponent(redirectPath)}`;
+  }, []);
+
+  const { session, loading, error, errorType } = useLoadSession({
+    fetchSession: fetchSharedSession,
+    onAuthRequired: handleAuthRequired,
+    deps: [sessionId, token],
+  });
 
   // Dynamic page title
   const pageTitle = session ? `Shared: ${session.external_id.substring(0, 8)}` : 'Shared Session';
   useDocumentTitle(pageTitle);
-
-  useEffect(() => {
-    async function loadSharedSession() {
-      try {
-        const response = await fetch(`/api/v1/sessions/${sessionId}/shared/${token}`, {
-          credentials: 'include',
-        });
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            setErrorType('not_found');
-            setError('Share not found');
-          } else if (response.status === 410) {
-            setErrorType('expired');
-            setError('This share link has expired');
-          } else if (response.status === 401) {
-            // Redirect to login, preserving the current URL to return after auth
-            const intendedPath = location.pathname + location.search;
-            window.location.href = `/auth/login?redirect=${encodeURIComponent(intendedPath)}`;
-            return;
-          } else if (response.status === 403) {
-            setErrorType('forbidden');
-            setError('You are not authorized to view this share');
-          } else {
-            setErrorType('general');
-            setError('Failed to load shared session');
-          }
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        setSession(data);
-        setLoading(false);
-      } catch {
-        setError('Failed to load shared session');
-        setErrorType('general');
-        setLoading(false);
-      }
-    }
-
-    loadSharedSession();
-  }, [sessionId, token, location.pathname, location.search]);
-
-  function getErrorIcon(type: ErrorType): string {
-    switch (type) {
-      case 'not_found':
-        return '🔍';
-      case 'expired':
-        return '⏰';
-      case 'forbidden':
-        return '🚫';
-      default:
-        return '⚠️';
-    }
-  }
 
   if (loading) {
     return (

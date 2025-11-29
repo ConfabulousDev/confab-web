@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { formatBytes, formatDate, formatRelativeTime, stripAnsi } from './utils';
+import { formatBytes, stripAnsi } from './utils';
+import { formatDateString, formatRelativeTime } from './formatting';
 
 describe('formatBytes', () => {
   it('should format 0 bytes', () => {
@@ -18,16 +19,16 @@ describe('formatBytes', () => {
   });
 });
 
-describe('formatDate', () => {
+describe('formatDateString', () => {
   it('should format ISO date string', () => {
     const date = '2024-01-15T10:30:00Z';
-    const result = formatDate(date);
+    const result = formatDateString(date);
     expect(result).toContain('2024');
   });
 
   it('should handle date without Z suffix', () => {
     const date = '2024-01-15T10:30:00';
-    const result = formatDate(date);
+    const result = formatDateString(date);
     expect(result).toBeTruthy();
   });
 });
