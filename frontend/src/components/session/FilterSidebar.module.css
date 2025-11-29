@@ -10,9 +10,9 @@
   overflow-x: hidden;
   overflow-y: auto;
   position: fixed;
-  top: 48px; /* Below header */
+  top: 48px; /* Below main header */
   bottom: 0;
-  z-index: var(--z-sticky);
+  z-index: calc(var(--z-sticky) - 1); /* Below main header */
 }
 
 .sidebar.collapsed {
