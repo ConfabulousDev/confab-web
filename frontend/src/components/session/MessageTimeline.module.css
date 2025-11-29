@@ -45,6 +45,11 @@
   display: block;
 }
 
+.navButton.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Empty state */
 .emptyState {
   display: flex;

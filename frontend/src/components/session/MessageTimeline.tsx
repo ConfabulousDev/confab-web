@@ -75,8 +75,10 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
 
 function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const [showTopButton, setShowTopButton] = useState(false);
-  const [showBottomButton, setShowBottomButton] = useState(true);
+  const [_showTopButton, setShowTopButton] = useState(false);
+  const [_showBottomButton, setShowBottomButton] = useState(true);
+  void _showTopButton;
+  void _showBottomButton;
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
@@ -171,32 +173,28 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
     <div ref={parentRef} className={styles.timeline}>
       {/* Floating navigation buttons */}
       <div className={styles.navButtons}>
-        {showTopButton && (
-          <button
-            className={styles.navButton}
-            onClick={scrollToTop}
-            title="Go to beginning"
-            aria-label="Go to beginning"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="17 11 12 6 7 11" />
-              <polyline points="17 18 12 13 7 18" />
-            </svg>
-          </button>
-        )}
-        {showBottomButton && (
-          <button
-            className={styles.navButton}
-            onClick={scrollToBottom}
-            title="Go to end"
-            aria-label="Go to end"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="7 13 12 18 17 13" />
-              <polyline points="7 6 12 11 17 6" />
-            </svg>
-          </button>
-        )}
+        <button
+          className={styles.navButton}
+          onClick={scrollToTop}
+          title="Go to beginning"
+          aria-label="Go to beginning"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="17 11 12 6 7 11" />
+            <polyline points="17 18 12 13 7 18" />
+          </svg>
+        </button>
+        <button
+          className={styles.navButton}
+          onClick={scrollToBottom}
+          title="Go to end"
+          aria-label="Go to end"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="7 13 12 18 17 13" />
+            <polyline points="7 6 12 11 17 6" />
+          </svg>
+        </button>
       </div>
 
       <div
