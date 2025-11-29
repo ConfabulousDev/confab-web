@@ -11,6 +11,9 @@
 .headerContainer {
   margin-left: 220px; /* Match sidebar width */
   transition: margin-left var(--transition-base);
+  position: relative;
+  z-index: calc(var(--z-sticky) + 1); /* Above the fixed sidebar */
+  background: var(--color-bg-primary);
 }
 
 .headerContainer.sidebarCollapsed {
