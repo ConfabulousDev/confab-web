@@ -26,6 +26,18 @@ func TruncateWithEllipsis(s string, maxLen int) string {
 	return "..." + s[len(s)-maxLen+3:]
 }
 
+// TruncateEnd shortens a string for display by keeping the beginning
+// and adding ellipsis at the end if it exceeds maxLen
+func TruncateEnd(s string, maxLen int) string {
+	if maxLen < 4 {
+		maxLen = 4
+	}
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
 // HTTP client timeouts
 const (
 	// DefaultHTTPTimeout is used for quick API calls like validation

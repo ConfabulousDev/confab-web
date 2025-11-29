@@ -162,7 +162,14 @@ func printBackfillSummary(toUpload []discovery.SessionInfo, alreadySynced []stri
 		fmt.Printf("Skipping %d recent session(s) (modified < 20 minutes ago):\n", len(recentSessions))
 		for _, s := range recentSessions {
 			ago := time.Since(s.ModTime).Round(time.Minute)
-			fmt.Printf("  %s  %-20s  modified %s ago\n", utils.TruncateSecret(s.SessionID, 8, 0), utils.TruncateWithEllipsis(s.ProjectPath, 20), ago)
+			sessionID := utils.TruncateSecret(s.SessionID, 8, 0)
+			if s.Title != "" {
+				title := utils.TruncateEnd(s.Title, 50)
+				fmt.Printf("  %s\n", title)
+				fmt.Printf("    %s  modified %s ago\n", sessionID, ago)
+			} else {
+				fmt.Printf("  %s  %-20s  modified %s ago\n", sessionID, utils.TruncateWithEllipsis(s.ProjectPath, 20), ago)
+			}
 		}
 		fmt.Println()
 		fmt.Println("To upload a skipped session later, run: confab save <session-id>")
@@ -191,7 +198,12 @@ func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.S
 
 	fmt.Println()
 	for i, session := range sessions {
-		fmt.Printf("\rUploading... [%d/%d] %s", i+1, len(sessions), utils.TruncateSecret(session.SessionID, 8, 0))
+		// Show title if available, otherwise session ID
+		displayName := utils.TruncateSecret(session.SessionID, 8, 0)
+		if session.Title != "" {
+			displayName = utils.TruncateEnd(session.Title, 40)
+		}
+		fmt.Printf("\rUploading... [%d/%d] %s", i+1, len(sessions), displayName)
 
 		err := uploadSession(uploader, session)
 		if err != nil {
@@ -204,7 +216,7 @@ func uploadSessionsWithProgress(cfg *config.UploadConfig, sessions []discovery.S
 		}
 	}
 
-	fmt.Printf("\rUploading... [%d/%d] Done.                    \n", len(sessions), len(sessions))
+	fmt.Printf("\rUploading... [%d/%d] Done.                                        \n", len(sessions), len(sessions))
 	fmt.Println()
 
 	return succeeded, failed

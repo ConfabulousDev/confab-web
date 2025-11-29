@@ -19,6 +19,7 @@ type SessionInfo struct {
 	ProjectPath    string // Relative path from projects dir
 	ModTime        time.Time
 	SizeBytes      int64
+	Title          string // Extracted from transcript (summary or first user message)
 }
 
 // GetProjectsDir returns the path to the Claude projects directory
@@ -176,5 +177,6 @@ func parseSessionFromPath(path string, d os.DirEntry, projectsDir string) *Sessi
 		ProjectPath:    relPath,
 		ModTime:        info.ModTime(),
 		SizeBytes:      info.Size(),
+		Title:          ExtractSessionTitle(path),
 	}
 }

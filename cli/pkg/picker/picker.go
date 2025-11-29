@@ -50,13 +50,23 @@ func PickSessions(sessions []discovery.SessionInfo) ([]discovery.SessionInfo, er
 		return nil, nil
 	}
 
-	// Display numbered list
+	// Display numbered list with title as primary identifier
 	fmt.Println("\nAvailable sessions:")
 	for i, session := range sessions {
 		sessionID := utils.TruncateSecret(session.SessionID, 8, 0)
-		project := utils.TruncateWithEllipsis(session.ProjectPath, 35)
 		age := formatAge(session.ModTime)
-		fmt.Printf("  %2d)  %s  %-35s  %s\n", i+1, sessionID, project, age)
+
+		if session.Title != "" {
+			// Two-line format: title on first line, details on second
+			title := utils.TruncateEnd(session.Title, 60)
+			project := utils.TruncateWithEllipsis(session.ProjectPath, 35)
+			fmt.Printf("  %2d)  %s\n", i+1, title)
+			fmt.Printf("       %s  %-35s  %s\n", sessionID, project, age)
+		} else {
+			// Fallback: single line with session ID as primary
+			project := utils.TruncateWithEllipsis(session.ProjectPath, 35)
+			fmt.Printf("  %2d)  %s  %-35s  %s\n", i+1, sessionID, project, age)
+		}
 	}
 
 	// Prompt for selection
