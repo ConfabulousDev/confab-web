@@ -276,7 +276,7 @@ func (l *InMemoryRateLimiter) cleanup() {
 // internal/api/server.go:NewServer()
 globalLimiter: NewInMemoryRateLimiter(100, 200)
 authLimiter: NewInMemoryRateLimiter(0.167, 5)
-uploadLimiter: NewInMemoryRateLimiter(0.278, 200)
+uploadLimiter: NewInMemoryRateLimiter(2.78, 2000)
 validationLimiter: NewInMemoryRateLimiter(0.5, 10)
 ```
 
