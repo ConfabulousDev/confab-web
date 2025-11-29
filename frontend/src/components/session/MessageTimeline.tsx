@@ -153,16 +153,19 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   }, [virtualItems.length]);
 
   const scrollToTop = () => {
-    console.log('scrollToTop', parentRef.current, parentRef.current?.scrollHeight);
     if (parentRef.current) {
+      console.log('before scrollTop:', parentRef.current.scrollTop);
       parentRef.current.scrollTop = 0;
+      console.log('after scrollTop:', parentRef.current.scrollTop);
     }
   };
 
   const scrollToBottom = () => {
-    console.log('scrollToBottom', parentRef.current, parentRef.current?.scrollHeight);
     if (parentRef.current) {
-      parentRef.current.scrollTop = parentRef.current.scrollHeight;
+      const maxScroll = parentRef.current.scrollHeight - parentRef.current.clientHeight;
+      console.log('before scrollTop:', parentRef.current.scrollTop, 'maxScroll:', maxScroll);
+      parentRef.current.scrollTop = maxScroll;
+      console.log('after scrollTop:', parentRef.current.scrollTop);
     }
   };
 
