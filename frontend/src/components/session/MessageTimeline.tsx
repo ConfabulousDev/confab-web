@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
 import TimelineMessage from './TimelineMessage';
@@ -75,6 +75,8 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
 
 function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const [showTopButton, setShowTopButton] = useState(false);
+  const [showBottomButton, setShowBottomButton] = useState(true);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
@@ -128,6 +130,34 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
     overscan: 5,
   });
 
+  // Track scroll position to show/hide navigation buttons
+  useEffect(() => {
+    const scrollElement = parentRef.current;
+    if (!scrollElement) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollElement;
+      const atTop = scrollTop < 100;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 100;
+
+      setShowTopButton(!atTop);
+      setShowBottomButton(!atBottom);
+    };
+
+    scrollElement.addEventListener('scroll', handleScroll);
+    handleScroll(); // Initial check
+
+    return () => scrollElement.removeEventListener('scroll', handleScroll);
+  }, [virtualItems.length]);
+
+  const scrollToTop = () => {
+    virtualizer.scrollToIndex(0, { align: 'start', behavior: 'smooth' });
+  };
+
+  const scrollToBottom = () => {
+    virtualizer.scrollToIndex(virtualItems.length - 1, { align: 'end', behavior: 'smooth' });
+  };
+
   if (messages.length === 0) {
     return (
       <div className={styles.emptyState}>
@@ -139,6 +169,36 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
 
   return (
     <div ref={parentRef} className={styles.timeline}>
+      {/* Floating navigation buttons */}
+      <div className={styles.navButtons}>
+        {showTopButton && (
+          <button
+            className={styles.navButton}
+            onClick={scrollToTop}
+            title="Go to beginning"
+            aria-label="Go to beginning"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="17 11 12 6 7 11" />
+              <polyline points="17 18 12 13 7 18" />
+            </svg>
+          </button>
+        )}
+        {showBottomButton && (
+          <button
+            className={styles.navButton}
+            onClick={scrollToBottom}
+            title="Go to end"
+            aria-label="Go to end"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="7 13 12 18 17 13" />
+              <polyline points="7 6 12 11 17 6" />
+            </svg>
+          </button>
+        )}
+      </div>
+
       <div
         style={{
           height: `${virtualizer.getTotalSize()}px`,
