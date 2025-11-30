@@ -10,7 +10,7 @@ function Footer() {
         <a href="/terms">Terms</a>
       </div>
       <div className={styles.copyright}>
-        © {new Date().getFullYear()} Confab
+        © {new Date().getFullYear()} Confabulous
       </div>
     </footer>
   );

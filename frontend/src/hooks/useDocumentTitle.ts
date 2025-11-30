@@ -1,15 +1,15 @@
 import { useEffect } from 'react';
 
 /**
- * Sets the document title. Appends "| Confab" suffix unless title is just "Confab".
+ * Sets the document title. Appends "| Confabulous" suffix unless title is just "Confabulous".
  */
 export function useDocumentTitle(title: string) {
   useEffect(() => {
-    const fullTitle = title === 'Confab' ? title : `${title} | Confab`;
+    const fullTitle = title === 'Confabulous' ? title : `${title} | Confabulous`;
     document.title = fullTitle;
 
     return () => {
-      document.title = 'Confab';
+      document.title = 'Confabulous';
     };
   }, [title]);
 }

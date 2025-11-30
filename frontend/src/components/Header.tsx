@@ -36,7 +36,7 @@ function Header() {
   if (!isAuthenticated) {
     return (
       <header className={styles.header}>
-        <Link to="/" className={styles.logo}>Confab</Link>
+        <Link to="/" className={styles.logo}>Confabulous</Link>
         <div className={styles.right} ref={menuRef}>
           <button
             className={styles.loginBtn}

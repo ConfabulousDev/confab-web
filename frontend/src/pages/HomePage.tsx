@@ -29,7 +29,7 @@ const SearchIcon = (
 );
 
 function HomePage() {
-  useDocumentTitle('Confab');
+  useDocumentTitle('Confabulous');
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
