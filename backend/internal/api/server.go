@@ -340,20 +340,37 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 		// This prevents path traversal attacks like /../../../etc/passwd
 		if !strings.HasPrefix(fullPath, cleanStaticDir) {
 			// Path escapes static directory, serve index.html instead
-			http.ServeFile(w, r, filepath.Join(cleanStaticDir, "index.html"))
+			serveIndexHTML(w, r, cleanStaticDir)
 			return
 		}
 
 		// Check if file exists
 		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 			// File doesn't exist, serve index.html for SPA routing
-			http.ServeFile(w, r, filepath.Join(cleanStaticDir, "index.html"))
+			serveIndexHTML(w, r, cleanStaticDir)
 			return
+		}
+
+		// Set cache headers based on file type
+		// Vite adds content hashes to asset filenames, so they can be cached forever
+		// index.html must never be cached so browsers get fresh asset references
+		if strings.HasPrefix(requestPath, "/assets/") {
+			// Hashed assets - cache for 1 year (immutable)
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else if requestPath == "/" || requestPath == "/index.html" {
+			// HTML - never cache
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		}
 
 		// File exists, serve it
 		fileServer.ServeHTTP(w, r)
 	}
+}
+
+// serveIndexHTML serves index.html with no-cache headers for SPA routing
+func serveIndexHTML(w http.ResponseWriter, r *http.Request, staticDir string) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
 }
 
 // respondJSON writes a JSON response
