@@ -1,6 +1,9 @@
 /* Import global CSS variables */
 @import './styles/variables.css';
 
+/* Import Pacifico font for logo */
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
+
 /* Reset and base styles */
 *,
 *::before,
