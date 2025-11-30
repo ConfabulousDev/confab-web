@@ -234,3 +234,244 @@ func TestParseChunkKey(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractTitleFromLine(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "summary message",
+			line: `{"type":"summary","summary":"This is a session summary"}`,
+			want: "This is a session summary",
+		},
+		{
+			name: "summary message truncated",
+			line: `{"type":"summary","summary":"` + strings.Repeat("a", 150) + `"}`,
+			want: strings.Repeat("a", 100) + "...",
+		},
+		{
+			name: "user message with string content",
+			line: `{"type":"user","message":{"role":"user","content":"Hello, how are you?"}}`,
+			want: "Hello, how are you?",
+		},
+		{
+			name: "user message with string content truncated",
+			line: `{"type":"user","message":{"role":"user","content":"` + strings.Repeat("b", 150) + `"}}`,
+			want: strings.Repeat("b", 100) + "...",
+		},
+		{
+			name: "user message with multiline string content",
+			line: `{"type":"user","message":{"role":"user","content":"First line\nSecond line\nThird line"}}`,
+			want: "First line",
+		},
+		{
+			name: "user message with array content containing text",
+			line: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello from array"}]}}`,
+			want: "Hello from array",
+		},
+		{
+			name: "user message with array content - image then text",
+			line: `{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64"}},{"type":"text","text":"Description after image"}]}}`,
+			want: "Description after image",
+		},
+		{
+			name: "user message with array content - only image",
+			line: `{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"abc"}}]}}`,
+			want: "",
+		},
+		{
+			name: "user message with array content - multiple text blocks",
+			line: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"First text"},{"type":"text","text":"Second text"}]}}`,
+			want: "First text",
+		},
+		{
+			name: "user message with array content - text truncated",
+			line: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"` + strings.Repeat("c", 150) + `"}]}}`,
+			want: strings.Repeat("c", 100) + "...",
+		},
+		{
+			name: "user message with array content - multiline text",
+			line: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Line one\nLine two"}]}}`,
+			want: "Line one",
+		},
+		{
+			name: "assistant message ignored",
+			line: `{"type":"assistant","message":{"role":"assistant","content":"I can help with that"}}`,
+			want: "",
+		},
+		{
+			name: "empty summary",
+			line: `{"type":"summary","summary":""}`,
+			want: "",
+		},
+		{
+			name: "no type field",
+			line: `{"foo":"bar"}`,
+			want: "",
+		},
+		{
+			name: "invalid json",
+			line: `not json`,
+			want: "",
+		},
+		{
+			name: "empty line",
+			line: "",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTitleFromLine(tt.line)
+			if got != tt.want {
+				t.Errorf("extractTitleFromLine() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractTextFromMessage(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry map[string]interface{}
+		want  string
+	}{
+		{
+			name: "string content",
+			entry: map[string]interface{}{
+				"message": map[string]interface{}{
+					"content": "Hello world",
+				},
+			},
+			want: "Hello world",
+		},
+		{
+			name: "array content with text block",
+			entry: map[string]interface{}{
+				"message": map[string]interface{}{
+					"content": []interface{}{
+						map[string]interface{}{"type": "text", "text": "Array text"},
+					},
+				},
+			},
+			want: "Array text",
+		},
+		{
+			name: "array content with image then text",
+			entry: map[string]interface{}{
+				"message": map[string]interface{}{
+					"content": []interface{}{
+						map[string]interface{}{"type": "image", "source": map[string]interface{}{}},
+						map[string]interface{}{"type": "text", "text": "After image"},
+					},
+				},
+			},
+			want: "After image",
+		},
+		{
+			name: "array content with only image",
+			entry: map[string]interface{}{
+				"message": map[string]interface{}{
+					"content": []interface{}{
+						map[string]interface{}{"type": "image", "source": map[string]interface{}{}},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "no message field",
+			entry: map[string]interface{}{
+				"type": "user",
+			},
+			want: "",
+		},
+		{
+			name: "nil content",
+			entry: map[string]interface{}{
+				"message": map[string]interface{}{
+					"content": nil,
+				},
+			},
+			want: "",
+		},
+		{
+			name: "empty string content",
+			entry: map[string]interface{}{
+				"message": map[string]interface{}{
+					"content": "",
+				},
+			},
+			want: "",
+		},
+		{
+			name: "empty array content",
+			entry: map[string]interface{}{
+				"message": map[string]interface{}{
+					"content": []interface{}{},
+				},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTextFromMessage(tt.entry)
+			if got != tt.want {
+				t.Errorf("extractTextFromMessage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractSessionTitle(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "summary takes priority",
+			content: `{"type":"user","message":{"role":"user","content":"First question"}}` + "\n" + `{"type":"summary","summary":"Session about questions"}`,
+			want:    "Session about questions",
+		},
+		{
+			name:    "falls back to first user text",
+			content: `{"type":"user","message":{"role":"user","content":"What is Go?"}}` + "\n" + `{"type":"assistant","message":{"role":"assistant","content":"Go is a language"}}`,
+			want:    "What is Go?",
+		},
+		{
+			name:    "skips image-only message finds later text",
+			content: `{"type":"user","message":{"role":"user","content":[{"type":"image","source":{}}]}}` + "\n" + `{"type":"user","message":{"role":"user","content":"Here is my question"}}`,
+			want:    "Here is my question",
+		},
+		{
+			name:    "multimodal message with text after image",
+			content: `{"type":"user","message":{"role":"user","content":[{"type":"image","source":{}},{"type":"text","text":"Describe this image"}]}}`,
+			want:    "Describe this image",
+		},
+		{
+			name:    "empty content",
+			content: "",
+			want:    "",
+		},
+		{
+			name:    "only image messages",
+			content: `{"type":"user","message":{"role":"user","content":[{"type":"image","source":{}}]}}`,
+			want:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractSessionTitle([]byte(tt.content))
+			if got != tt.want {
+				t.Errorf("extractSessionTitle() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

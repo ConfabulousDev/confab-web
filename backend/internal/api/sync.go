@@ -744,7 +744,7 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 }
 
 // extractTitleFromLine extracts a title from a JSONL line
-// Looks for summary messages (type: "summary") or first user message
+// Looks for summary messages (type: "summary") or first text content in user messages
 // Returns empty string if no title found
 func extractTitleFromLine(line string) string {
 	// Quick check - must have "type" field
@@ -752,39 +752,72 @@ func extractTitleFromLine(line string) string {
 		return ""
 	}
 
-	// Parse enough to determine message type and extract title
-	var entry struct {
-		Type    string `json:"type"`
-		Summary string `json:"summary"` // For summary messages
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"` // For regular messages
-	}
+	// Parse as generic map to handle both string and array content
+	var entry map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &entry); err != nil {
 		return ""
 	}
 
+	msgType, _ := entry["type"].(string)
+
 	// Priority 1: Summary messages have explicit summaries
-	if entry.Type == "summary" && entry.Summary != "" {
-		// Truncate long summaries
-		if len(entry.Summary) > 100 {
-			return entry.Summary[:100] + "..."
+	if msgType == "summary" {
+		if summary, ok := entry["summary"].(string); ok && summary != "" {
+			// Truncate long summaries
+			if len(summary) > 100 {
+				return summary[:100] + "..."
+			}
+			return summary
 		}
-		return entry.Summary
+		return ""
 	}
 
-	// Priority 2: First user message content (first line)
-	if entry.Type == "user" && entry.Message.Role == "user" && entry.Message.Content != "" {
-		// Take first line and truncate
-		content := entry.Message.Content
-		if idx := strings.Index(content, "\n"); idx > 0 {
-			content = content[:idx]
+	// Priority 2: First text content from user message
+	if msgType == "user" {
+		if text := extractTextFromMessage(entry); text != "" {
+			// Take first line and truncate
+			if idx := strings.Index(text, "\n"); idx > 0 {
+				text = text[:idx]
+			}
+			if len(text) > 100 {
+				return text[:100] + "..."
+			}
+			return text
 		}
-		if len(content) > 100 {
-			return content[:100] + "..."
+	}
+
+	return ""
+}
+
+// extractTextFromMessage extracts the first text content from a message entry
+// Handles both string content and array content (multimodal messages)
+func extractTextFromMessage(entry map[string]interface{}) string {
+	message, ok := entry["message"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	content := message["content"]
+	if content == nil {
+		return ""
+	}
+
+	// Case 1: content is a string
+	if str, ok := content.(string); ok {
+		return str
+	}
+
+	// Case 2: content is an array of content blocks (multimodal)
+	if arr, ok := content.([]interface{}); ok {
+		for _, block := range arr {
+			if blockMap, ok := block.(map[string]interface{}); ok {
+				if blockType, _ := blockMap["type"].(string); blockType == "text" {
+					if text, ok := blockMap["text"].(string); ok && text != "" {
+						return text
+					}
+				}
+			}
 		}
-		return content
 	}
 
 	return ""

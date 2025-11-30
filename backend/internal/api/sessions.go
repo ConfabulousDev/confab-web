@@ -99,9 +99,9 @@ func extractSessionTitle(content []byte) string {
 		return ""
 	}
 
-	// Parse JSONL to find summary or first user message
+	// Parse JSONL to find summary or first text content
 	lines := strings.Split(string(content), "\n")
-	var firstUserMessage string
+	var firstTextContent string
 
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
@@ -122,26 +122,19 @@ func extractSessionTitle(content []byte) string {
 			}
 		}
 
-		// Collect first user message as fallback
-		if firstUserMessage == "" && msgType == "user" {
-			if message, ok := entry["message"].(map[string]interface{}); ok {
-				if content, ok := message["content"].(string); ok && content != "" {
-					// Use first 100 characters as fallback title
-					sanitized := sanitizeTitleText(content)
-					if len(sanitized) > 100 {
-						firstUserMessage = sanitized[:100]
-					} else {
-						firstUserMessage = sanitized
-					}
+		// Collect first text content as fallback (from any user message)
+		if firstTextContent == "" && msgType == "user" {
+			if text := extractTextFromMessage(entry); text != "" {
+				// Use first 100 characters as fallback title
+				sanitized := sanitizeTitleText(text)
+				if len(sanitized) > 100 {
+					firstTextContent = sanitized[:100]
+				} else {
+					firstTextContent = sanitized
 				}
 			}
 		}
-
-		// Stop once we have a summary
-		if msgType == "summary" {
-			break
-		}
 	}
 
-	return firstUserMessage
+	return firstTextContent
 }
