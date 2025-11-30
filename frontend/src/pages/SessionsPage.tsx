@@ -207,7 +207,7 @@ function SessionsPage() {
                 className={`${styles.tab} ${!showSharedWithMe ? styles.active : ''}`}
                 onClick={() => setShowSharedWithMe(false)}
               >
-                My Sessions
+                Mine
               </button>
               <button
                 className={`${styles.tab} ${showSharedWithMe ? styles.active : ''}`}
