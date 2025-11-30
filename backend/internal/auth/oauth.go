@@ -722,78 +722,77 @@ func HandleLoginSelector() http.HandlerFunc {
     <style>
         * { box-sizing: border-box; }
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            background: #0f0f0f;
-            color: #fff;
+            background: #fafafa;
+            color: #1a1a1a;
         }
         .container {
-            background: #1a1a1a;
+            background: #fff;
             padding: 2.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border-radius: 6px;
+            border: 1px solid #e5e5e5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             text-align: center;
             max-width: 400px;
             width: 90%;
         }
         h1 {
             margin: 0 0 0.5rem 0;
-            font-size: 1.5rem;
-            color: #fff;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a1a1a;
         }
         p {
-            color: #888;
-            margin: 0 0 2rem 0;
-            font-size: 0.9rem;
+            color: #666;
+            margin: 0 0 1.5rem 0;
+            font-size: 0.875rem;
         }
         .buttons {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 0.75rem;
         }
         .btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.75rem;
-            padding: 0.875rem 1.5rem;
-            border: none;
-            border-radius: 0.5rem;
-            font-size: 1rem;
+            gap: 0.5rem;
+            padding: 0.625rem 1rem;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            font-size: 0.875rem;
             font-weight: 500;
             cursor: pointer;
             text-decoration: none;
-            transition: transform 0.1s, box-shadow 0.1s;
+            transition: all 0.15s ease;
         }
         .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-        .btn:active {
-            transform: translateY(0);
+            border-color: #ccc;
         }
         .btn-github {
             background: #24292e;
             color: #fff;
-            border: 1px solid #444;
+            border-color: #24292e;
         }
         .btn-github:hover {
-            background: #2f363d;
+            background: #1b1f23;
+            border-color: #1b1f23;
         }
         .btn-google {
             background: #fff;
-            color: #333;
+            color: #1a1a1a;
         }
         .btn-google:hover {
             background: #f5f5f5;
         }
         .icon {
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
         }
     </style>
 </head>
@@ -949,11 +948,11 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
     <meta http-equiv="refresh" content="5;url=%s">
     <title>API Key Limit Reached - Confab</title>
     <style>
-        body { font-family: system-ui; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #0f0f0f; color: #fff; }
-        .container { background: #1a1a1a; padding: 2.5rem; border-radius: 1rem; text-align: center; max-width: 500px; }
-        h1 { color: #ef4444; margin-bottom: 1rem; }
-        p { color: #888; margin-bottom: 1.5rem; }
-        a { color: #60a5fa; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #fafafa; color: #1a1a1a; }
+        .container { background: #fff; padding: 2.5rem; border-radius: 6px; border: 1px solid #e5e5e5; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; max-width: 500px; }
+        h1 { color: #dc2626; font-size: 1.25rem; font-weight: 600; margin-bottom: 0.75rem; }
+        p { color: #666; font-size: 0.875rem; margin-bottom: 1rem; }
+        a { color: #0066cc; }
     </style>
 </head>
 <body>
@@ -961,7 +960,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
         <h1>API Key Limit Reached</h1>
         <p>You have reached the maximum of 100 API keys. Please delete some unused keys before creating new ones.</p>
         <p><a href="%s/settings/api-keys">Manage your API keys</a></p>
-        <p style="font-size: 0.8rem;">Redirecting to CLI in 5 seconds...</p>
+        <p style="font-size: 0.75rem; color: #999;">Redirecting to CLI in 5 seconds...</p>
     </div>
 </body>
 </html>`, redirectURL, frontendURL)
@@ -1312,72 +1311,75 @@ func generateDevicePageHTML(prefilledCode string) string {
     <style>
         * { box-sizing: border-box; }
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            background: #0f0f0f;
-            color: #fff;
+            background: #fafafa;
+            color: #1a1a1a;
         }
         .container {
-            background: #1a1a1a;
+            background: #fff;
             padding: 2.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border-radius: 6px;
+            border: 1px solid #e5e5e5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             text-align: center;
             max-width: 400px;
             width: 90%%;
         }
         h1 {
             margin: 0 0 0.5rem 0;
-            font-size: 1.5rem;
-            color: #fff;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a1a1a;
         }
         p {
-            color: #888;
+            color: #666;
             margin: 0 0 1.5rem 0;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
         }
         form {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 0.75rem;
         }
         input[type="text"] {
-            padding: 1rem;
-            font-size: 1.5rem;
+            padding: 0.75rem;
+            font-size: 1.25rem;
             text-align: center;
-            letter-spacing: 0.3em;
+            letter-spacing: 0.2em;
             text-transform: uppercase;
-            border: 2px solid #333;
-            border-radius: 0.5rem;
-            background: #0f0f0f;
-            color: #fff;
-            font-family: monospace;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            background: #fff;
+            color: #1a1a1a;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
         }
         input[type="text"]:focus {
             outline: none;
-            border-color: #60a5fa;
+            border-color: #0066cc;
         }
         button {
-            padding: 1rem;
-            font-size: 1rem;
+            padding: 0.625rem 1rem;
+            font-size: 0.875rem;
             font-weight: 500;
             border: none;
-            border-radius: 0.5rem;
-            background: #3b82f6;
+            border-radius: 4px;
+            background: #0066cc;
             color: #fff;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: background 0.15s ease;
         }
         button:hover {
-            background: #2563eb;
+            background: #0052a3;
         }
         .hint {
-            font-size: 0.8rem;
-            color: #666;
+            font-size: 0.75rem;
+            color: #999;
+            margin-top: 1rem;
         }
     </style>
 </head>
@@ -1398,10 +1400,10 @@ func generateDevicePageHTML(prefilledCode string) string {
 
 func generateDeviceResultHTML(success bool, message string) string {
 	icon := "✗"
-	iconColor := "#ef4444"
+	iconColor := "#dc2626"
 	if success {
 		icon = "✓"
-		iconColor = "#10b981"
+		iconColor = "#16a34a"
 	}
 
 	// Add link to frontend on success
@@ -1422,52 +1424,55 @@ func generateDeviceResultHTML(success bool, message string) string {
     <style>
         * { box-sizing: border-box; }
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            background: #0f0f0f;
-            color: #fff;
+            background: #fafafa;
+            color: #1a1a1a;
         }
         .container {
-            background: #1a1a1a;
+            background: #fff;
             padding: 2.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border-radius: 6px;
+            border: 1px solid #e5e5e5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             text-align: center;
             max-width: 400px;
             width: 90%%;
         }
         .icon {
-            font-size: 4rem;
+            font-size: 3rem;
             color: %s;
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
         }
         h1 {
-            margin: 0 0 1rem 0;
-            font-size: 1.5rem;
-            color: #fff;
+            margin: 0 0 0.5rem 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a1a1a;
         }
         p {
-            color: #888;
+            color: #666;
             margin: 0;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
         }
         .home-link {
             display: inline-block;
             margin-top: 1.5rem;
-            padding: 0.75rem 1.5rem;
-            background: #3b82f6;
+            padding: 0.625rem 1rem;
+            background: #0066cc;
             color: #fff;
             text-decoration: none;
-            border-radius: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
             font-weight: 500;
-            transition: background 0.2s;
+            transition: background 0.15s ease;
         }
         .home-link:hover {
-            background: #2563eb;
+            background: #0052a3;
         }
     </style>
 </head>

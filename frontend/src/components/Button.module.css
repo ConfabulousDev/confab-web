@@ -1,4 +1,8 @@
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-md);
   border-radius: var(--radius-md);
   font-size: var(--font-sm);
@@ -6,6 +10,10 @@
   cursor: pointer;
   border: 1px solid transparent;
   transition: all var(--transition-fast);
+}
+
+.btn svg {
+  flex-shrink: 0;
 }
 
 .btn:disabled {

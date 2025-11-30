@@ -1,0 +1,170 @@
+/* Page sidebar - collapsible left panel, fixed position */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  background: var(--color-bg-primary);
+  border-right: 1px solid var(--color-border);
+  flex-shrink: 0;
+  transition: width var(--transition-base);
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: fixed;
+  top: 48px; /* Below main header */
+  bottom: 0;
+  z-index: calc(var(--z-sticky) - 1);
+}
+
+.sidebar.collapsed {
+  width: 48px;
+}
+
+/* Header with title and collapse button */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  min-height: 48px;
+}
+
+.title {
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.collapseBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.collapseBtn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.collapseBtn span {
+  display: flex;
+  transition: transform var(--transition-base);
+}
+
+.collapseBtn .rotated {
+  transform: rotate(180deg);
+}
+
+/* When collapsed, center the button */
+.collapsed .header {
+  justify-content: center;
+  padding: var(--spacing-md) var(--spacing-sm);
+}
+
+/* Content area */
+.content {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-sm);
+  gap: 2px;
+}
+
+/* Individual sidebar item */
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  width: 100%;
+  color: var(--color-text-secondary);
+}
+
+.item:hover:not(.disabled) {
+  background: var(--color-bg-hover);
+}
+
+.item.active {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* When collapsed, center the icon */
+.collapsed .item {
+  justify-content: center;
+  padding: var(--spacing-sm);
+}
+
+/* Item icon */
+.itemIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.itemIcon svg {
+  display: block;
+}
+
+/* Item label */
+.itemLabel {
+  flex: 1;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+}
+
+/* Item count badge */
+.itemCount {
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  color: var(--color-text-muted);
+  background: var(--color-bg-secondary);
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  min-width: 24px;
+  text-align: center;
+}
+
+.item.active .itemCount {
+  background: var(--color-bg-primary);
+}
+
+/* Responsive - adjust sidebar on small screens */
+@media (max-width: 768px) {
+  .sidebar {
+    z-index: var(--z-dropdown);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.collapsed {
+    width: 0;
+    border-right: none;
+  }
+}

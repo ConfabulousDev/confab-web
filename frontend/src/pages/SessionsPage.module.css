@@ -1,3 +1,26 @@
+/* Page wrapper - full height with sidebar layout */
+.pageWrapper {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg);
+}
+
+/* Main content area - needs margin for fixed sidebar */
+.mainContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-left: 220px;
+  transition: margin-left var(--transition-base);
+}
+
+.mainContent.sidebarCollapsed {
+  margin-left: 48px;
+}
+
+/* Scrollable content container */
 .container {
   padding: var(--spacing-xl);
   flex: 1;
@@ -5,19 +28,7 @@
   overflow-y: auto;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.header h1 {
-  font-size: var(--font-lg);
-  font-weight: var(--font-semibold);
-  color: var(--color-text-primary);
-}
-
+/* Tabs styling */
 .tabs {
   display: flex;
   gap: var(--spacing-xs);
@@ -46,12 +57,21 @@
   font-weight: var(--font-medium);
 }
 
+/* Sidebar divider */
+.sidebarDivider {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--spacing-sm) 0;
+}
+
+/* Card container */
 .card {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
 }
 
+/* Loading and empty states */
 .loading,
 .empty {
   text-align: center;
@@ -60,6 +80,7 @@
   font-size: var(--font-sm);
 }
 
+/* Table styles */
 .sessionsTable {
   overflow-x: auto;
 }
@@ -132,18 +153,7 @@
   white-space: nowrap;
 }
 
-.sharedBadge {
-  display: inline-block;
-  margin-left: var(--spacing-sm);
-  padding: 2px var(--spacing-xs);
-  background: var(--color-accent-light);
-  color: var(--color-accent);
-  font-size: var(--font-xs);
-  font-weight: var(--font-medium);
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-}
-
+/* Alert styling */
 .alertFading {
   opacity: 0;
   transition: opacity 0.5s ease-out;
@@ -151,4 +161,15 @@
 
 .successAlert {
   margin-bottom: var(--spacing-lg);
+}
+
+/* Responsive - collapse sidebar on small screens */
+@media (max-width: 768px) {
+  .mainContent {
+    margin-left: 0;
+  }
+
+  .mainContent.sidebarCollapsed {
+    margin-left: 0;
+  }
 }

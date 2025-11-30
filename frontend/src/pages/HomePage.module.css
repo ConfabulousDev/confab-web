@@ -3,11 +3,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 .errorAlert {
-  max-width: 600px;
-  margin: 0 auto var(--spacing-xl) auto;
+  margin-bottom: var(--spacing-xl);
 }
 
 /* Hero Section */
@@ -29,6 +30,7 @@
   color: var(--color-text-secondary);
   max-width: 500px;
   margin: 0 auto;
+  line-height: var(--leading-relaxed);
 }
 
 /* Features Section */
@@ -37,18 +39,26 @@
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: var(--spacing-xl);
   padding: var(--spacing-xl) 0;
-  max-width: 900px;
-  margin: 0 auto;
 }
 
 .feature {
   text-align: center;
   padding: var(--spacing-lg);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .featureIcon {
-  font-size: var(--font-2xl);
-  margin-bottom: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
 }
 
 .feature h3 {
@@ -61,15 +71,15 @@
 .feature p {
   font-size: var(--font-sm);
   color: var(--color-text-secondary);
-  line-height: 1.5;
+  line-height: var(--leading-relaxed);
+  margin: 0;
 }
 
 /* How It Works Section */
 .howItWorks {
   padding: var(--spacing-xl) 0;
   border-top: 1px solid var(--color-border);
-  max-width: 800px;
-  margin: 0 auto;
+  margin-top: var(--spacing-xl);
 }
 
 .howItWorks h2 {
@@ -115,6 +125,7 @@
 
 .step code {
   display: block;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
   font-size: var(--font-xs);
   background: var(--color-bg-secondary);
   padding: var(--spacing-xs) var(--spacing-sm);
@@ -125,10 +136,15 @@
 .step p {
   font-size: var(--font-xs);
   color: var(--color-text-muted);
+  margin: 0;
 }
 
 /* Mobile */
 @media (max-width: 600px) {
+  .container {
+    padding: var(--spacing-lg);
+  }
+
   .hero {
     padding: var(--spacing-xl) var(--spacing-md);
   }
