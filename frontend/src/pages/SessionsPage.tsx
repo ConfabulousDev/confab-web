@@ -199,23 +199,24 @@ function SessionsPage() {
 
       <div className={`${styles.mainContent} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
         <PageHeader
-          title={showSharedWithMe ? 'Shared with me' : 'Sessions'}
-          subtitle={`${sortedSessions.length} session${sortedSessions.length !== 1 ? 's' : ''}`}
-          actions={
-            <div className={styles.tabs}>
-              <button
-                className={`${styles.tab} ${!showSharedWithMe ? styles.active : ''}`}
-                onClick={() => setShowSharedWithMe(false)}
-              >
-                Mine
-              </button>
-              <button
-                className={`${styles.tab} ${showSharedWithMe ? styles.active : ''}`}
-                onClick={() => setShowSharedWithMe(true)}
-              >
-                Shared with me
-              </button>
-            </div>
+          leftContent={
+            <>
+              <div className={styles.tabs}>
+                <button
+                  className={`${styles.tab} ${!showSharedWithMe ? styles.active : ''}`}
+                  onClick={() => setShowSharedWithMe(false)}
+                >
+                  Mine
+                </button>
+                <button
+                  className={`${styles.tab} ${showSharedWithMe ? styles.active : ''}`}
+                  onClick={() => setShowSharedWithMe(true)}
+                >
+                  Shared with me
+                </button>
+              </div>
+              <span className={styles.sessionCount}>{sortedSessions.length} session{sortedSessions.length !== 1 ? 's' : ''}</span>
+            </>
           }
         />
 

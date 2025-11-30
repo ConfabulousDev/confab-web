@@ -36,6 +36,12 @@
   color: var(--color-text-muted);
 }
 
+.leftContent {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
 /* Metadata row */
 .metadata {
   display: flex;

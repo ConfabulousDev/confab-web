@@ -56,6 +56,11 @@
   font-weight: var(--font-medium);
 }
 
+.sessionCount {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+}
+
 /* Sidebar divider */
 .sidebarDivider {
   height: 1px;
