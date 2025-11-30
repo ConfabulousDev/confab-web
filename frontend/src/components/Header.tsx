@@ -76,7 +76,7 @@ function Header() {
 
   return (
     <header className={styles.header}>
-      <Link to="/" className={styles.logo}>Confab</Link>
+      <Link to="/" className={styles.logo}>Confabulous</Link>
 
       <nav className={styles.nav}>
         <Link to="/sessions" className={styles.navLink}>Sessions</Link>
