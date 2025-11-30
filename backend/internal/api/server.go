@@ -420,7 +420,7 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 				// - script-src 'self' 'unsafe-inline': Allow inline scripts (React apps may need this)
 				// - style-src 'self' 'unsafe-inline': Allow inline styles
 				w.Header().Set("Content-Security-Policy",
-					"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+					"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'")
 			} else {
 				// Strict CSP for API-only mode
 				// - script-src 'self': Only execute scripts from same origin
