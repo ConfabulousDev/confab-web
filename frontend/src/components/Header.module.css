@@ -11,8 +11,9 @@
 }
 
 .logo {
-  font-size: var(--font-base);
-  font-weight: var(--font-semibold);
+  font-family: 'Pacifico', cursive;
+  font-size: 1.5rem;
+  font-weight: normal;
   color: var(--color-text-primary);
   text-decoration: none;
 }
