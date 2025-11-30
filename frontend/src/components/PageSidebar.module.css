@@ -1,22 +1,21 @@
-/* Page sidebar - collapsible left panel, fixed position */
+/* Page sidebar - collapsible left panel */
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: 220px;
+  width: auto;
+  min-width: 180px;
+  max-width: 320px;
   background: var(--color-bg-primary);
   border-right: 1px solid var(--color-border);
   flex-shrink: 0;
-  transition: width var(--transition-base);
   overflow-x: hidden;
   overflow-y: auto;
-  position: fixed;
-  top: 48px; /* Below main header */
-  bottom: 0;
-  z-index: calc(var(--z-sticky) - 1);
+  height: 100%;
 }
 
 .sidebar.collapsed {
   width: 48px;
+  min-width: 48px;
 }
 
 /* Header with title and collapse button */
@@ -27,6 +26,10 @@
   padding: var(--spacing-md);
   border-bottom: 1px solid var(--color-border);
   min-height: 48px;
+  position: sticky;
+  top: 0;
+  background: var(--color-bg-primary);
+  z-index: 1;
 }
 
 .title {
@@ -156,15 +159,12 @@
   background: var(--color-bg-primary);
 }
 
-/* Responsive - adjust sidebar on small screens */
+/* Responsive - hide sidebar on small screens when collapsed */
 @media (max-width: 768px) {
-  .sidebar {
-    z-index: var(--z-dropdown);
-    box-shadow: var(--shadow-lg);
-  }
-
   .sidebar.collapsed {
     width: 0;
+    min-width: 0;
     border-right: none;
+    overflow: hidden;
   }
 }

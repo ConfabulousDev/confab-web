@@ -6,18 +6,17 @@
   background: var(--color-bg);
 }
 
-/* Main content area - needs margin for fixed sidebar */
+/* Main content area - flexbox handles sidebar width automatically */
 .mainContent {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  margin-left: 220px;
-  transition: margin-left var(--transition-base);
+  min-width: 0; /* Allow content to shrink below intrinsic width */
 }
 
 .mainContent.sidebarCollapsed {
-  margin-left: 48px;
+  /* No longer needed - flexbox handles this */
 }
 
 /* Scrollable content container */
@@ -163,13 +162,9 @@
   margin-bottom: var(--spacing-lg);
 }
 
-/* Responsive - collapse sidebar on small screens */
+/* Responsive adjustments */
 @media (max-width: 768px) {
-  .mainContent {
-    margin-left: 0;
-  }
-
-  .mainContent.sidebarCollapsed {
-    margin-left: 0;
+  .container {
+    padding: var(--spacing-md);
   }
 }
