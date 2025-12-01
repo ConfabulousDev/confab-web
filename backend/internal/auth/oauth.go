@@ -178,7 +178,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
 				frontendURL,
-				url.QueryEscape("Your email is not authorized to use this application. Please contact the administrator."))
+				url.QueryEscape("Your email is not authorized to use this application."))
 			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}
@@ -558,7 +558,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			logger.Warn("Email not in whitelist", "email", user.Email)
 			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
 				frontendURL,
-				url.QueryEscape("Your email is not authorized to use this application. Please contact the administrator."))
+				url.QueryEscape("Your email is not authorized to use this application."))
 			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}

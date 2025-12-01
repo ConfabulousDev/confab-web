@@ -1,9 +1,28 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import Alert from '@/components/Alert';
 import styles from './HomePage.module.css';
+
+const SUPPORT_EMAIL = 'help@confabulous.dev';
+
+interface AuthError {
+  type: string;
+  message: string;
+}
+
+// Helper to extract auth error from URL - used for lazy state initialization
+function getInitialAuthError(searchParams: URLSearchParams): AuthError | null {
+  const error = searchParams.get('error');
+  if (error) {
+    return {
+      type: error,
+      message: searchParams.get('error_description') || 'Authentication failed. Please try again.',
+    };
+  }
+  return null;
+}
 
 // SVG Icons
 const TerminalIcon = (
@@ -34,17 +53,11 @@ function HomePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Extract auth error from URL params (computed, not state)
-  const authError = useMemo(() => {
-    const error = searchParams.get('error');
-    const errorDescription = searchParams.get('error_description');
-    if (error) {
-      return errorDescription || 'Authentication failed. Please try again.';
-    }
-    return null;
-  }, [searchParams]);
+  // Extract auth error from URL params into state on initial render.
+  // Using lazy initialization ensures we capture the error before the URL is cleaned.
+  const [authError] = useState(() => getInitialAuthError(searchParams));
 
-  // Clear error params from URL after displaying
+  // Clear error params from URL after initial render
   useEffect(() => {
     if (searchParams.has('error')) {
       searchParams.delete('error');
@@ -70,7 +83,11 @@ function HomePage() {
       <div className={styles.container}>
         {authError && (
           <Alert variant="error" className={styles.errorAlert}>
-            {authError}
+            {authError.type === 'access_denied' ? (
+              <>Please request access <a href={`mailto:${SUPPORT_EMAIL}`}>here</a>.</>
+            ) : (
+              authError.message
+            )}
           </Alert>
         )}
 
