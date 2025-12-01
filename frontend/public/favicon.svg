@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Lobster&amp;display=swap');
+    </style>
+  </defs>
   <rect width="32" height="32" rx="6" fill="#1a1a1a"/>
-  <text x="16" y="23" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="600" fill="#ffffff" text-anchor="middle">C</text>
+  <text x="16" y="24" font-family="Lobster, cursive" font-size="22" fill="#ffffff" text-anchor="middle">C</text>
 </svg>
