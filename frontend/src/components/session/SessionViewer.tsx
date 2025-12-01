@@ -22,9 +22,9 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Filter state - all categories visible by default
+  // Filter state - user, assistant, system visible by default
   const [visibleCategories, setVisibleCategories] = useState<Set<MessageCategory>>(
-    new Set(['user', 'assistant', 'system', 'file-history-snapshot', 'summary', 'queue-operation'])
+    new Set(['user', 'assistant', 'system'])
   );
 
   // Compute category counts
