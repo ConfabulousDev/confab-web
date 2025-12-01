@@ -2,9 +2,10 @@ import styles from './PageSidebar.module.css';
 
 interface PageSidebarProps {
   title: string;
-  collapsed: boolean;
-  onToggleCollapse: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   children: React.ReactNode;
+  collapsible?: boolean;
 }
 
 const CollapseIcon = (
@@ -22,24 +23,29 @@ const CollapseIcon = (
 
 function PageSidebar({
   title,
-  collapsed,
+  collapsed = false,
   onToggleCollapse,
   children,
+  collapsible = true,
 }: PageSidebarProps) {
+  const isCollapsed = collapsible && collapsed;
+
   return (
-    <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
+    <aside className={`${styles.sidebar} ${isCollapsed ? styles.collapsed : ''}`}>
       <div className={styles.header}>
-        {!collapsed && <h2 className={styles.title}>{title}</h2>}
-        <button
-          className={styles.collapseBtn}
-          onClick={onToggleCollapse}
-          title={collapsed ? `Expand ${title.toLowerCase()}` : `Collapse ${title.toLowerCase()}`}
-          aria-label={collapsed ? `Expand ${title.toLowerCase()}` : `Collapse ${title.toLowerCase()}`}
-        >
-          <span className={collapsed ? styles.rotated : ''}>
-            {CollapseIcon}
-          </span>
-        </button>
+        {!isCollapsed && <h2 className={styles.title}>{title}</h2>}
+        {collapsible && (
+          <button
+            className={styles.collapseBtn}
+            onClick={onToggleCollapse}
+            title={isCollapsed ? `Expand ${title.toLowerCase()}` : `Collapse ${title.toLowerCase()}`}
+            aria-label={isCollapsed ? `Expand ${title.toLowerCase()}` : `Collapse ${title.toLowerCase()}`}
+          >
+            <span className={isCollapsed ? styles.rotated : ''}>
+              {CollapseIcon}
+            </span>
+          </button>
+        )}
       </div>
 
       <div className={styles.content}>

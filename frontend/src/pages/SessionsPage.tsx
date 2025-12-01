@@ -45,7 +45,6 @@ function SessionsPage() {
   const [sortColumn, setSortColumn] = useState<SortColumn>('last_sync_time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { message: successMessage, fading: successFading } = useSuccessMessage();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
 
@@ -142,8 +141,7 @@ function SessionsPage() {
     <div className={styles.pageWrapper}>
       <PageSidebar
         title="Filters"
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        collapsible={false}
       >
         {/* All Sessions */}
         <SidebarItem
@@ -155,13 +153,12 @@ function SessionsPage() {
             setSelectedRepo(null);
             setSelectedBranch(null);
           }}
-          collapsed={sidebarCollapsed}
         />
 
         {/* Repos section */}
         {repos.length > 0 && (
           <>
-            {!sidebarCollapsed && <div className={styles.sidebarDivider} />}
+            <div className={styles.sidebarDivider} />
             {repos.map((repo) => (
               <SidebarItem
                 key={repo}
@@ -170,7 +167,6 @@ function SessionsPage() {
                 count={repoCounts[repo] || 0}
                 active={selectedRepo === repo}
                 onClick={() => handleRepoClick(repo)}
-                collapsed={sidebarCollapsed}
               />
             ))}
           </>
@@ -179,7 +175,7 @@ function SessionsPage() {
         {/* Branches section - only show when a repo is selected */}
         {selectedRepo && branches.length > 0 && (
           <>
-            {!sidebarCollapsed && <div className={styles.sidebarDivider} />}
+            <div className={styles.sidebarDivider} />
             {branches
               .filter((branch) => (branchCounts[branch] ?? 0) > 0)
               .map((branch) => (
@@ -190,14 +186,13 @@ function SessionsPage() {
                   count={branchCounts[branch] || 0}
                   active={selectedBranch === branch}
                   onClick={() => setSelectedBranch(selectedBranch === branch ? null : branch)}
-                  collapsed={sidebarCollapsed}
                 />
               ))}
           </>
         )}
       </PageSidebar>
 
-      <div className={`${styles.mainContent} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
+      <div className={styles.mainContent}>
         <PageHeader
           leftContent={
             <>
