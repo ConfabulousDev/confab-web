@@ -84,7 +84,7 @@ function HomePage() {
         {authError && (
           <Alert variant="error" className={styles.errorAlert}>
             {authError.type === 'access_denied' ? (
-              <>Please request access <a href={`mailto:${SUPPORT_EMAIL}`}>here</a>.</>
+              <>Please request access <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Requesting access to Confabulous')}`}>here</a>.</>
             ) : (
               authError.message
             )}
