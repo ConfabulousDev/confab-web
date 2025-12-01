@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/logger"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/logger"
 )
 
 // handleGetMe returns the current authenticated user's info

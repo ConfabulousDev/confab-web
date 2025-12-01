@@ -6,19 +6,19 @@ Archive and search your Claude Code sessions in the cloud.
 - **[backend/](backend/)** - Cloud backend service (PostgreSQL + MinIO)
 - **[frontend/](frontend/)** - React web dashboard with GitHub OAuth
 
-**See also:** [confab-cli](https://github.com/santaclaude2025/confab-cli) - Command-line tool for capturing and uploading sessions
+**See also:** [confab-cli](https://github.com/ConfabulousDev/confab-cli) - Command-line tool for capturing and uploading sessions
 
 ## Quick Start
 
 ### Install CLI
 
 ```bash
-git clone https://github.com/santaclaude2025/confab-cli.git
+git clone https://github.com/ConfabulousDev/confab-cli.git
 cd confab-cli
 ./install.sh
 ```
 
-The CLI captures sessions via hook and uploads to the cloud backend. See [confab-cli README](https://github.com/santaclaude2025/confab-cli#readme) for details.
+The CLI captures sessions via hook and uploads to the cloud backend. See [confab-cli README](https://github.com/ConfabulousDev/confab-cli#readme) for details.
 
 ### Run Backend + Frontend (Development)
 
@@ -111,7 +111,7 @@ confab/
 └── docs/                  # Additional documentation
 ```
 
-See also: [confab-cli](https://github.com/santaclaude2025/confab-cli) (separate repo)
+See also: [confab-cli](https://github.com/ConfabulousDev/confab-cli) (separate repo)
 
 ## Development
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/santaclaude2025/confab/backend/internal/models"
-	"github.com/santaclaude2025/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab/backend/internal/models"
+	"github.com/ConfabulousDev/confab/backend/internal/testutil"
 )
 
 func TestFindOrCreateUserByOAuth_NewUser(t *testing.T) {

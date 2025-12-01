@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/santaclaude2025/confab/backend/internal/db"
-	"github.com/santaclaude2025/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab/backend/internal/testutil"
 )
 
 // TestHandleListSessions_Integration tests listing sessions with real database

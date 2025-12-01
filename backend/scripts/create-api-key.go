@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/db"
 )
 
 func main() {

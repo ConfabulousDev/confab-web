@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/santaclaude2025/confab/backend/internal/db"
-	"github.com/santaclaude2025/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab/backend/internal/testutil"
 )
 
 // makeDeviceCode creates a 64-character device code for testing

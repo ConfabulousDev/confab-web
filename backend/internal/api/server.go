@@ -16,11 +16,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/gorilla/csrf"
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/db"
-	"github.com/santaclaude2025/confab/backend/internal/email"
-	"github.com/santaclaude2025/confab/backend/internal/ratelimit"
-	"github.com/santaclaude2025/confab/backend/internal/storage"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab/backend/internal/email"
+	"github.com/ConfabulousDev/confab/backend/internal/ratelimit"
+	"github.com/ConfabulousDev/confab/backend/internal/storage"
 )
 
 // Operation timeout constants

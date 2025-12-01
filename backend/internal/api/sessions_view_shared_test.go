@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/santaclaude2025/confab/backend/internal/api"
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/db"
-	"github.com/santaclaude2025/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab/backend/internal/api"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab/backend/internal/testutil"
 )
 
 func TestListSessionsWithSharedSessions(t *testing.T) {

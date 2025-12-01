@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/testutil"
 )
 
 // TestValidateAPIKey_ValidKey tests successful API key validation

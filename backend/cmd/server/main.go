@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/santaclaude2025/confab/backend/internal/api"
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/db"
-	"github.com/santaclaude2025/confab/backend/internal/email"
-	"github.com/santaclaude2025/confab/backend/internal/storage"
+	"github.com/ConfabulousDev/confab/backend/internal/api"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab/backend/internal/email"
+	"github.com/ConfabulousDev/confab/backend/internal/storage"
 )
 
 func main() {

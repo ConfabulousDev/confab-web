@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"github.com/santaclaude2025/confab/backend/internal/validation"
+	"github.com/ConfabulousDev/confab/backend/internal/validation"
 )
 
 // Test share token generation - security critical

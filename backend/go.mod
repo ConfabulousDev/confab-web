@@ -1,4 +1,4 @@
-module github.com/santaclaude2025/confab/backend
+module github.com/ConfabulousDev/confab/backend
 
 go 1.25.4
 

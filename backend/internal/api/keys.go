@@ -8,10 +8,10 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/db"
-	"github.com/santaclaude2025/confab/backend/internal/logger"
-	"github.com/santaclaude2025/confab/backend/internal/models"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab/backend/internal/logger"
+	"github.com/ConfabulousDev/confab/backend/internal/models"
 )
 
 // CreateAPIKeyRequest is the request body for creating an API key

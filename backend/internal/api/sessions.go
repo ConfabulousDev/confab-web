@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/santaclaude2025/confab/backend/internal/auth"
-	"github.com/santaclaude2025/confab/backend/internal/logger"
+	"github.com/ConfabulousDev/confab/backend/internal/auth"
+	"github.com/ConfabulousDev/confab/backend/internal/logger"
 )
 
 // HandleCheckSessions checks which external IDs already exist for the user

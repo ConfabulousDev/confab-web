@@ -13,7 +13,7 @@ cd backend && go test -short ./...
 cd frontend && npm run build && npm run lint && npm test
 ```
 
-Note: CLI is in a separate repo: https://github.com/santaclaude2025/confab-cli
+Note: CLI is in a separate repo: https://github.com/ConfabulousDev/confab-cli
 
 ## Frontend Development
 

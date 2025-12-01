@@ -9,7 +9,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
-	"github.com/santaclaude2025/confab/backend/internal/db/migrations"
+	"github.com/ConfabulousDev/confab/backend/internal/db/migrations"
 )
 
 // RunMigrations applies all database migrations using golang-migrate.
