@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab/backend/internal/auth"
-	"github.com/ConfabulousDev/confab/backend/internal/db"
-	"github.com/ConfabulousDev/confab/backend/internal/email"
-	"github.com/ConfabulousDev/confab/backend/internal/logger"
-	"github.com/ConfabulousDev/confab/backend/internal/validation"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/email"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // CreateShareRequest is the request body for creating a share

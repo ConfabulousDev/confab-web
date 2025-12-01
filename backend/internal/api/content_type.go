@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ConfabulousDev/confab/backend/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
 // validateContentType middleware ensures POST/PUT/PATCH requests have proper Content-Type

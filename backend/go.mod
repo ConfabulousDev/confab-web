@@ -1,4 +1,4 @@
-module github.com/ConfabulousDev/confab/backend
+module github.com/ConfabulousDev/confab-web
 
 go 1.25.4
 

@@ -457,4 +457,4 @@ After deployment:
 - **Fly.io Docs**: https://fly.io/docs
 - **Fly.io Community**: https://community.fly.io
 - **Neon.tech Docs**: https://neon.tech/docs
-- **Confab Issues**: https://github.com/ConfabulousDev/confab/issues
+- **Confab Issues**: https://github.com/ConfabulousDev/confab-web/issues

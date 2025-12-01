@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ConfabulousDev/confab/backend/internal/api"
-	"github.com/ConfabulousDev/confab/backend/internal/auth"
-	"github.com/ConfabulousDev/confab/backend/internal/db"
-	"github.com/ConfabulousDev/confab/backend/internal/email"
-	"github.com/ConfabulousDev/confab/backend/internal/storage"
+	"github.com/ConfabulousDev/confab-web/internal/api"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/email"
+	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
 func main() {

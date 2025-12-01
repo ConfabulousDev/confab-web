@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ConfabulousDev/confab/backend/internal/auth"
-	"github.com/ConfabulousDev/confab/backend/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // AuthenticatedRequest creates an HTTP request with user authentication context

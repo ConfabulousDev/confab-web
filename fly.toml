@@ -26,8 +26,8 @@ primary_region = 'sjc'
   S3_ENDPOINT = "fly.storage.tigris.dev"
   S3_USE_SSL = "true"
 
-  ALLOWED_EMAILS = "jackie.tung@gmail.com,santa.claude.2025@gmail.com"
-  ALLOW_INVITED_EMAILS_AFTER_TS=1
+  ALLOWED_EMAILS = "santa.claude.2025@gmail.com"
+  ALLOW_INVITED_EMAILS_AFTER_TS=3000000000
 
   # Email Configuration (required - for share invitations)
   # Note: RESEND_API_KEY must be set as a Fly secret: fly secrets set RESEND_API_KEY=re_xxx

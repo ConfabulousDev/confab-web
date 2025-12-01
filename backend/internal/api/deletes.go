@@ -6,10 +6,10 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab/backend/internal/auth"
-	"github.com/ConfabulousDev/confab/backend/internal/db"
-	"github.com/ConfabulousDev/confab/backend/internal/logger"
-	"github.com/ConfabulousDev/confab/backend/internal/storage"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
 // HandleDeleteSession deletes an entire session and all associated S3 chunks

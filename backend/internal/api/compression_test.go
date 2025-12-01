@@ -12,9 +12,9 @@ import (
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/zstd"
-	"github.com/ConfabulousDev/confab/backend/internal/auth"
-	"github.com/ConfabulousDev/confab/backend/internal/db"
-	"github.com/ConfabulousDev/confab/backend/internal/storage"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
 // TestCompressionMiddleware tests that gzip compression is applied to responses

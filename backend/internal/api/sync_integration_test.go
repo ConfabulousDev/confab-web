@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
 // =============================================================================

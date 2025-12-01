@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/ConfabulousDev/confab/backend/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // DB wraps a PostgreSQL database connection
@@ -346,7 +346,7 @@ func (db *DB) DeleteWebSession(ctx context.Context, sessionID string) error {
 
 // extractRepoName extracts the org/repo from a git URL
 // Examples:
-//   - "https://github.com/ConfabulousDev/confab.git" -> "ConfabulousDev/confab"
+//   - "https://github.com/ConfabulousDev/confab-web.git" -> "ConfabulousDev/confab"
 //   - "git@github.com:ConfabulousDev/confab.git" -> "ConfabulousDev/confab"
 func extractRepoName(repoURL string) *string {
 	// Remove .git suffix if present

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ConfabulousDev/confab/backend/internal/db"
-	"github.com/ConfabulousDev/confab/backend/internal/logger"
-	"github.com/ConfabulousDev/confab/backend/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 const (

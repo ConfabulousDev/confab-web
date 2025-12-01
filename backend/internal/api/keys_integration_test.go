@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab/backend/internal/testutil"
-	"github.com/ConfabulousDev/confab/backend/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/testutil"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // TestHandleCreateAPIKey_Integration tests API key creation with real database

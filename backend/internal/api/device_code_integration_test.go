@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ConfabulousDev/confab/backend/internal/auth"
-	"github.com/ConfabulousDev/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
 // TestHandleDeviceCode_Integration tests device code creation with real database

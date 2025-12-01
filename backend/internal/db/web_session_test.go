@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ConfabulousDev/confab/backend/internal/testutil"
+	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
 // TestCreateWebSession tests creating a new web session

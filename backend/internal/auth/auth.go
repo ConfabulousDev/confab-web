@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ConfabulousDev/confab/backend/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db"
 )
 
 type contextKey string
