@@ -44,8 +44,8 @@ fly storage create
 2. Click "New OAuth App"
 3. Fill in:
    - **Application name**: Confab Production
-   - **Homepage URL**: `https://confab.fly.dev`
-   - **Authorization callback URL**: `https://confab.fly.dev/auth/github/callback`
+   - **Homepage URL**: `https://confabulous.dev`
+   - **Authorization callback URL**: `https://confabulous.dev/auth/github/callback`
 4. Click "Register application"
 5. Save **Client ID** and **Client Secret**
 
@@ -120,18 +120,18 @@ fly open
 
 ### Check Health
 ```bash
-curl https://confab.fly.dev/health
+curl https://confabulous.dev/health
 # Expected: {"status":"ok"}
 ```
 
 ### Check Frontend
 ```bash
-open https://confab.fly.dev
+open https://confabulous.dev
 # Should see React frontend
 ```
 
 ### Test Login
-1. Go to https://confab.fly.dev
+1. Go to https://confabulous.dev
 2. Click "Login with GitHub"
 3. Authorize app
 4. Should redirect back and be logged in
@@ -145,9 +145,9 @@ open https://confab.fly.dev
 ```toml
 [env]
   STATIC_FILES_DIR = "/app/static"              # Enables frontend serving
-  FRONTEND_URL = "https://confab.fly.dev"       # OAuth redirect target
-  ALLOWED_ORIGINS = "https://confab.fly.dev"    # CORS whitelist
-  GITHUB_REDIRECT_URL = "https://confab.fly.dev/auth/github/callback"
+  FRONTEND_URL = "https://confabulous.dev"       # OAuth redirect target
+  ALLOWED_ORIGINS = "https://confabulous.dev"    # CORS whitelist
+  GITHUB_REDIRECT_URL = "https://confabulous.dev/auth/github/callback"
   S3_ENDPOINT = "https://fly.storage.tigris.dev"
   S3_USE_SSL = "true"
 ```
@@ -322,7 +322,7 @@ ping your-db.neon.tech
 
 ```bash
 # Verify callback URL matches GitHub OAuth app:
-# GitHub: https://confab.fly.dev/auth/github/callback
+# GitHub: https://confabulous.dev/auth/github/callback
 # fly.toml: GITHUB_REDIRECT_URL should match exactly
 ```
 

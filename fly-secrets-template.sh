@@ -18,7 +18,7 @@ fly secrets set \
 
 # 2. GitHub OAuth (from https://github.com/settings/developers)
 # Create at: https://github.com/settings/developers
-# Callback URL: https://confab.fly.dev/auth/github/callback
+# Callback URL: https://confabulous.dev/auth/github/callback
 echo "Setting GitHub OAuth credentials..."
 fly secrets set \
   GITHUB_CLIENT_ID="your_production_github_client_id" \

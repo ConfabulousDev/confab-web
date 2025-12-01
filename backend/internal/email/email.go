@@ -250,7 +250,7 @@ View it here: %s
 	text += `
 ---
 Confab · 548 Market St #835, San Francisco, CA 94104
-Unsubscribe: https://confab.fly.dev/unsubscribe
+Unsubscribe: https://confabulous.dev/unsubscribe
 `
 
 	return text
@@ -298,7 +298,7 @@ const htmlTemplate = `<!DOCTYPE html>
 
                 <p style="margin: 16px 0 0 0; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; line-height: 1.5; color: #9ca3af;">
                     Confab · 548 Market St #835, San Francisco, CA 94104<br>
-                    <a href="https://confab.fly.dev/unsubscribe" style="color: #9ca3af;">Unsubscribe</a>
+                    <a href="https://confabulous.dev/unsubscribe" style="color: #9ca3af;">Unsubscribe</a>
                 </p>
             </td>
         </tr>

@@ -100,6 +100,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(wwwRedirectMiddleware()) // Redirect www to apex domain
 	r.Use(securityHeadersMiddleware())
 
 	// Compression middleware: Brotli (preferred) + gzip (fallback)
@@ -451,6 +452,39 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 
 			// X-Permitted-Cross-Domain-Policies: Restricts Flash/PDF cross-domain access
 			w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// wwwRedirectMiddleware redirects www.confabulous.dev to confabulous.dev
+func wwwRedirectMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host := r.Host
+			// Strip port if present for comparison
+			if colonIdx := strings.LastIndex(host, ":"); colonIdx != -1 {
+				host = host[:colonIdx]
+			}
+
+			if strings.HasPrefix(host, "www.") {
+				// Build redirect URL with apex domain
+				newHost := strings.TrimPrefix(host, "www.")
+				// Preserve port if original request had one
+				if colonIdx := strings.LastIndex(r.Host, ":"); colonIdx != -1 {
+					newHost += r.Host[colonIdx:]
+				}
+
+				scheme := "https"
+				if r.TLS == nil && os.Getenv("INSECURE_DEV_MODE") == "true" {
+					scheme = "http"
+				}
+
+				newURL := scheme + "://" + newHost + r.URL.RequestURI()
+				http.Redirect(w, r, newURL, http.StatusMovedPermanently)
+				return
+			}
 
 			next.ServeHTTP(w, r)
 		})
