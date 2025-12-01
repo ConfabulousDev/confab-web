@@ -102,6 +102,8 @@
 
 .filterItem.active {
   background: var(--color-bg-secondary);
+  border-left: 3px solid currentColor;
+  padding-left: calc(var(--spacing-sm) - 3px);
 }
 
 .filterItem.disabled {
@@ -156,39 +158,33 @@
 
 /* Category-specific colors when active */
 .filterItem.user.active {
-  color: var(--color-success-text);
-}
-
-.filterItem.user.active .filterIcon {
-  color: var(--color-success);
+  color: #15803d; /* Stronger green */
+  background: #dcfce7;
 }
 
 .filterItem.assistant.active {
-  color: var(--color-text-primary);
+  color: #1d4ed8; /* Blue for assistant */
+  background: #dbeafe;
 }
 
 .filterItem.system.active {
-  color: var(--color-text-secondary);
+  color: #6b7280; /* Gray for system */
+  background: #f3f4f6;
 }
 
 .filterItem.fileHistorySnapshot.active {
-  color: var(--color-info-text);
-}
-
-.filterItem.fileHistorySnapshot.active .filterIcon {
-  color: var(--color-info);
+  color: #0369a1; /* Teal/cyan for file snapshots */
+  background: #e0f2fe;
 }
 
 .filterItem.summary.active {
   color: #7c3aed; /* Purple for summary */
-}
-
-.filterItem.summary.active .filterIcon {
-  color: #7c3aed;
+  background: #ede9fe;
 }
 
 .filterItem.queueOperation.active {
-  color: var(--color-text-muted);
+  color: #a16207; /* Amber for queue */
+  background: #fef3c7;
 }
 
 /* Responsive - adjust sidebar on small screens */
