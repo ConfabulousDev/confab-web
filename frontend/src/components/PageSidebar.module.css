@@ -18,13 +18,6 @@
   min-width: 48px;
 }
 
-.sidebar.fixed {
-  position: fixed;
-  top: 48px; /* Below main header */
-  bottom: 0;
-  z-index: calc(var(--z-sticky) - 1);
-}
-
 /* Header with title and collapse button */
 .header {
   display: flex;

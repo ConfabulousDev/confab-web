@@ -1,6 +1,5 @@
 import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
 import PageSidebar, { SidebarItem, type SidebarItemColor } from '../PageSidebar';
-import styles from './FilterSidebar.module.css';
 
 interface FilterSidebarProps {
   counts: MessageCategoryCounts;
@@ -105,35 +104,32 @@ function FilterSidebar({
   onToggleCollapse,
 }: FilterSidebarProps) {
   return (
-    <div className={styles.wrapper}>
-      <PageSidebar
-        title="Message Filters"
-        collapsed={collapsed}
-        onToggleCollapse={onToggleCollapse}
-        collapsible={true}
-        fixed={true}
-      >
-        {FILTER_ITEMS.map((item) => {
-          const count = counts[item.category];
-          const isVisible = visibleCategories.has(item.category);
-          const isDisabled = count === 0;
+    <PageSidebar
+      title="Message Filters"
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+      collapsible={true}
+    >
+      {FILTER_ITEMS.map((item) => {
+        const count = counts[item.category];
+        const isVisible = visibleCategories.has(item.category);
+        const isDisabled = count === 0;
 
-          return (
-            <SidebarItem
-              key={item.category}
-              icon={item.icon}
-              label={item.label}
-              count={count}
-              active={isVisible}
-              disabled={isDisabled}
-              onClick={() => onToggleCategory(item.category)}
-              collapsed={collapsed}
-              activeColor={item.activeColor}
-            />
-          );
-        })}
-      </PageSidebar>
-    </div>
+        return (
+          <SidebarItem
+            key={item.category}
+            icon={item.icon}
+            label={item.label}
+            count={count}
+            active={isVisible}
+            disabled={isDisabled}
+            onClick={() => onToggleCategory(item.category)}
+            collapsed={collapsed}
+            activeColor={item.activeColor}
+          />
+        );
+      })}
+    </PageSidebar>
   );
 }
 

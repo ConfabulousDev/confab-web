@@ -102,7 +102,15 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
 
   return (
     <div className={styles.sessionViewer}>
-      <div className={`${styles.headerContainer} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
+      <FilterSidebar
+        counts={categoryCounts}
+        visibleCategories={visibleCategories}
+        onToggleCategory={toggleCategory}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
+
+      <div className={styles.mainContent}>
         <SessionHeader
           title={session.title ?? undefined}
           externalId={session.external_id}
@@ -115,18 +123,8 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
           isOwner={isOwner}
           isShared={isShared}
         />
-      </div>
 
-      <div className={styles.mainContent}>
-        <FilterSidebar
-          counts={categoryCounts}
-          visibleCategories={visibleCategories}
-          onToggleCategory={toggleCategory}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
-
-        <div className={`${styles.timelineContainer} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
+        <div className={styles.timelineContainer}>
           {loading ? (
             <div className={styles.loading}>Loading transcript...</div>
           ) : error ? (

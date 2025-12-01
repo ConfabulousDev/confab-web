@@ -6,7 +6,6 @@ interface PageSidebarProps {
   onToggleCollapse?: () => void;
   children: React.ReactNode;
   collapsible?: boolean;
-  fixed?: boolean;
 }
 
 const CollapseIcon = (
@@ -28,13 +27,12 @@ function PageSidebar({
   onToggleCollapse,
   children,
   collapsible = true,
-  fixed = false,
 }: PageSidebarProps) {
   const isCollapsed = collapsible && collapsed;
   const showHeader = title || collapsible;
 
   return (
-    <aside className={`${styles.sidebar} ${isCollapsed ? styles.collapsed : ''} ${fixed ? styles.fixed : ''}`}>
+    <aside className={`${styles.sidebar} ${isCollapsed ? styles.collapsed : ''}`}>
       {showHeader && (
         <div className={styles.header}>
           {!isCollapsed && title && <h2 className={styles.title}>{title}</h2>}

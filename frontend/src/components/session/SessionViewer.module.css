@@ -1,49 +1,28 @@
-/* Main session viewer container - full height layout */
+/* Main session viewer container - flex layout with sidebar */
 .sessionViewer {
   display: flex;
-  flex-direction: column;
   height: 100%;
   min-height: 0;
   background: var(--color-bg);
 }
 
-/* Header container - needs margin to account for fixed sidebar */
-.headerContainer {
-  margin-left: 220px; /* Match sidebar width */
-  transition: margin-left var(--transition-base);
-  position: relative;
-  z-index: calc(var(--z-sticky) + 1); /* Above the fixed sidebar */
-  background: var(--color-bg-primary);
-}
-
-.headerContainer.sidebarCollapsed {
-  margin-left: 48px; /* Match collapsed sidebar width */
-}
-
-/* Two-column layout for sidebar + timeline */
+/* Main content area - flexbox handles sidebar width automatically */
 .mainContent {
-  display: flex;
   flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow: hidden;
-  position: relative;
+  min-width: 0; /* Allow content to shrink below intrinsic width */
 }
 
-/* Timeline container takes remaining space, with margin for fixed sidebar */
+/* Timeline container takes remaining space */
 .timelineContainer {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  margin-left: 220px; /* Match sidebar width */
-  transition: margin-left var(--transition-base);
-}
-
-.timelineContainer.sidebarCollapsed {
-  margin-left: 48px; /* Match collapsed sidebar width */
 }
 
 /* Loading and error states */
