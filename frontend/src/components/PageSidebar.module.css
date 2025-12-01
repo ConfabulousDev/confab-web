@@ -105,8 +105,10 @@
 }
 
 .item.active {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-left: 3px solid currentColor;
+  padding-left: calc(var(--spacing-sm) - 3px);
 }
 
 .item.disabled {
