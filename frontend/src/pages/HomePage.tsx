@@ -66,15 +66,16 @@ function HomePage() {
   }
 
   return (
-    <div className={styles.container}>
-      {authError && (
-        <Alert variant="error" className={styles.errorAlert}>
-          {authError}
-        </Alert>
-      )}
+    <div className={styles.wrapper}>
+      <div className={styles.container}>
+        {authError && (
+          <Alert variant="error" className={styles.errorAlert}>
+            {authError}
+          </Alert>
+        )}
 
-      {/* Hero Section */}
-      <section className={styles.hero}>
+        {/* Hero Section */}
+        <section className={styles.hero}>
         <h1 className={styles.title}>Record and share your Claude Code sessions</h1>
         <p className={styles.subtitle}>
           Capture coding conversations, review past sessions, and collaborate with your team.
@@ -121,6 +122,7 @@ function HomePage() {
           </div>
         </div>
       </section>
+      </div>
     </div>
   );
 }
