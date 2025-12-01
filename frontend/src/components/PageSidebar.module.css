@@ -18,6 +18,13 @@
   min-width: 48px;
 }
 
+.sidebar.fixed {
+  position: fixed;
+  top: 48px; /* Below main header */
+  bottom: 0;
+  z-index: calc(var(--z-sticky) - 1);
+}
+
 /* Header with title and collapse button */
 .header {
   display: flex;
@@ -105,10 +112,46 @@
 }
 
 .item.active {
-  background: #dbeafe;
-  color: #1d4ed8;
   border-left: 3px solid currentColor;
   padding-left: calc(var(--spacing-sm) - 3px);
+}
+
+/* Default active color (blue) */
+.item.active.default,
+.item.active:not(.green):not(.blue):not(.gray):not(.cyan):not(.purple):not(.amber) {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+/* Color variants for active state */
+.item.active.green {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.item.active.blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.item.active.gray {
+  background: #f9fafb;
+  color: #4b5563;
+}
+
+.item.active.cyan {
+  background: #f0f9ff;
+  color: #0284c7;
+}
+
+.item.active.purple {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.item.active.amber {
+  background: #fffbeb;
+  color: #d97706;
 }
 
 .item.disabled {

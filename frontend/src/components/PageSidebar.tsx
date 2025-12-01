@@ -6,6 +6,7 @@ interface PageSidebarProps {
   onToggleCollapse?: () => void;
   children: React.ReactNode;
   collapsible?: boolean;
+  fixed?: boolean;
 }
 
 const CollapseIcon = (
@@ -27,12 +28,13 @@ function PageSidebar({
   onToggleCollapse,
   children,
   collapsible = true,
+  fixed = false,
 }: PageSidebarProps) {
   const isCollapsed = collapsible && collapsed;
   const showHeader = title || collapsible;
 
   return (
-    <aside className={`${styles.sidebar} ${isCollapsed ? styles.collapsed : ''}`}>
+    <aside className={`${styles.sidebar} ${isCollapsed ? styles.collapsed : ''} ${fixed ? styles.fixed : ''}`}>
       {showHeader && (
         <div className={styles.header}>
           {!isCollapsed && title && <h2 className={styles.title}>{title}</h2>}
@@ -58,6 +60,8 @@ function PageSidebar({
   );
 }
 
+export type SidebarItemColor = 'default' | 'green' | 'blue' | 'gray' | 'cyan' | 'purple' | 'amber';
+
 export interface SidebarItemProps {
   icon: React.ReactNode;
   label: string;
@@ -66,6 +70,7 @@ export interface SidebarItemProps {
   disabled?: boolean;
   onClick?: () => void;
   collapsed?: boolean;
+  activeColor?: SidebarItemColor;
 }
 
 export function SidebarItem({
@@ -76,10 +81,13 @@ export function SidebarItem({
   disabled = false,
   onClick,
   collapsed = false,
+  activeColor = 'default',
 }: SidebarItemProps) {
+  const colorClass = active ? styles[activeColor] : '';
+
   return (
     <button
-      className={`${styles.item} ${active ? styles.active : ''} ${disabled ? styles.disabled : ''}`}
+      className={`${styles.item} ${active ? styles.active : ''} ${colorClass} ${disabled ? styles.disabled : ''}`}
       onClick={() => !disabled && onClick?.()}
       disabled={disabled}
       title={collapsed ? `${label}${count !== undefined ? ` (${count})` : ''}` : undefined}

@@ -1,4 +1,5 @@
 import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
+import PageSidebar, { SidebarItem, type SidebarItemColor } from '../PageSidebar';
 import styles from './FilterSidebar.module.css';
 
 interface FilterSidebarProps {
@@ -13,14 +14,14 @@ interface FilterItemConfig {
   category: MessageCategory;
   label: string;
   icon: React.ReactNode;
-  className: string; // CSS class name (camelCase for CSS modules)
+  activeColor: SidebarItemColor;
 }
 
 const FILTER_ITEMS: FilterItemConfig[] = [
   {
     category: 'user',
     label: 'User',
-    className: 'user',
+    activeColor: 'green',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -31,7 +32,7 @@ const FILTER_ITEMS: FilterItemConfig[] = [
   {
     category: 'assistant',
     label: 'Assistant',
-    className: 'assistant',
+    activeColor: 'blue',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="11" width="18" height="10" rx="2" />
@@ -45,7 +46,7 @@ const FILTER_ITEMS: FilterItemConfig[] = [
   {
     category: 'system',
     label: 'System',
-    className: 'system',
+    activeColor: 'gray',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="12" r="3" />
@@ -56,7 +57,7 @@ const FILTER_ITEMS: FilterItemConfig[] = [
   {
     category: 'file-history-snapshot',
     label: 'File Snapshot',
-    className: 'fileHistorySnapshot',
+    activeColor: 'cyan',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -69,7 +70,7 @@ const FILTER_ITEMS: FilterItemConfig[] = [
   {
     category: 'summary',
     label: 'Summary',
-    className: 'summary',
+    activeColor: 'purple',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <line x1="17" y1="10" x2="3" y2="10" />
@@ -82,7 +83,7 @@ const FILTER_ITEMS: FilterItemConfig[] = [
   {
     category: 'queue-operation',
     label: 'Queue',
-    className: 'queueOperation',
+    activeColor: 'amber',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <line x1="8" y1="6" x2="21" y2="6" />
@@ -104,55 +105,35 @@ function FilterSidebar({
   onToggleCollapse,
 }: FilterSidebarProps) {
   return (
-    <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
-      <div className={styles.header}>
-        {!collapsed && <h2 className={styles.title}>Message Filters</h2>}
-        <button
-          className={styles.collapseBtn}
-          onClick={onToggleCollapse}
-          title={collapsed ? 'Expand filters' : 'Collapse filters'}
-          aria-label={collapsed ? 'Expand filters' : 'Collapse filters'}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className={collapsed ? styles.rotated : ''}
-          >
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-      </div>
-
-      <div className={styles.filters}>
+    <div className={styles.wrapper}>
+      <PageSidebar
+        title="Message Filters"
+        collapsed={collapsed}
+        onToggleCollapse={onToggleCollapse}
+        collapsible={true}
+        fixed={true}
+      >
         {FILTER_ITEMS.map((item) => {
           const count = counts[item.category];
           const isVisible = visibleCategories.has(item.category);
           const isDisabled = count === 0;
 
           return (
-            <button
+            <SidebarItem
               key={item.category}
-              className={`${styles.filterItem} ${styles[item.className]} ${isVisible ? styles.active : ''} ${isDisabled ? styles.disabled : ''}`}
-              onClick={() => !isDisabled && onToggleCategory(item.category)}
+              icon={item.icon}
+              label={item.label}
+              count={count}
+              active={isVisible}
               disabled={isDisabled}
-              title={collapsed ? `${item.label} (${count})` : undefined}
-            >
-              <span className={styles.filterIcon}>{item.icon}</span>
-              {!collapsed && (
-                <>
-                  <span className={styles.filterLabel}>{item.label}</span>
-                  <span className={styles.filterCount}>{count}</span>
-                </>
-              )}
-            </button>
+              onClick={() => onToggleCategory(item.category)}
+              collapsed={collapsed}
+              activeColor={item.activeColor}
+            />
           );
         })}
-      </div>
-    </aside>
+      </PageSidebar>
+    </div>
   );
 }
 
