@@ -5,7 +5,7 @@ function Footer() {
     <footer className={styles.footer}>
       <div className={styles.links}>
         <a href="https://github.com/anthropics/confab" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a href="https://discord.gg/confab" target="_blank" rel="noopener noreferrer">Discord</a>
+        <a href="https://discord.gg/p6H7MQnQD8" target="_blank" rel="noopener noreferrer">Discord</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
       </div>
