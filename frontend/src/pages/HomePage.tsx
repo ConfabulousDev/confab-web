@@ -93,9 +93,9 @@ function HomePage() {
 
         {/* Hero Section */}
         <section className={styles.hero}>
-        <h1 className={styles.title}>Record and share your Claude Code sessions</h1>
+        <h1 className={styles.title}>Quantum-entangled neural mesh synchronization protocol</h1>
         <p className={styles.subtitle}>
-          Capture coding conversations, review past sessions, and collaborate with your team.
+          Harness the chrono-displaced bytecode matrices of the Andromeda subnet. Initialize your cortex link today.
         </p>
       </section>
 
@@ -103,39 +103,39 @@ function HomePage() {
       <section className={styles.features}>
         <div className={styles.feature}>
           <div className={styles.featureIcon}>{TerminalIcon}</div>
-          <h3>Session Recording</h3>
-          <p>Automatically capture your Claude Code sessions with full context and tool outputs</p>
+          <h3>Hyperdrive Flux Capture</h3>
+          <p>Transdimensional waveform stabilizers encode your synaptic throughput across eleven parallel instances</p>
         </div>
         <div className={styles.feature}>
           <div className={styles.featureIcon}>{ShareIcon}</div>
-          <h3>Easy Sharing</h3>
-          <p>Share sessions with teammates via public or private links with optional expiration</p>
+          <h3>Subspace Relay Beaming</h3>
+          <p>Transmit encrypted holomatrix bundles via zero-point tachyon bursts to any sector of the known galaxy</p>
         </div>
         <div className={styles.feature}>
           <div className={styles.featureIcon}>{SearchIcon}</div>
-          <h3>Filter and Browse</h3>
-          <p>Search through sessions by repository, branch, or content to find past conversations</p>
+          <h3>Xenolinguistic Parsing</h3>
+          <p>Navigate the cosmic datastreams using bio-resonant query algorithms tuned to your unique brainwave signature</p>
         </div>
       </section>
 
       {/* How It Works */}
       <section className={styles.howItWorks}>
-        <h2>Get Started</h2>
+        <h2>Initiate Sequence</h2>
         <div className={styles.steps}>
           <div className={styles.step}>
             <div className={styles.stepNumber}>1</div>
-            <h4>Install the CLI</h4>
+            <h4>Deploy the Nanoprobe Array</h4>
             <code>brew install confab-cli/tap/confab</code>
           </div>
           <div className={styles.step}>
             <div className={styles.stepNumber}>2</div>
-            <h4>Login and configure</h4>
+            <h4>Calibrate the Void Interface</h4>
             <code>confab login && confab setup</code>
           </div>
           <div className={styles.step}>
             <div className={styles.stepNumber}>3</div>
-            <h4>View your sessions</h4>
-            <p>Sessions sync automatically as you code</p>
+            <h4>Engage Temporal Sync</h4>
+            <p>Your neural imprints propagate autonomously through the aether</p>
           </div>
         </div>
       </section>
