@@ -110,6 +110,28 @@ func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
 	return nil
 }
 
+// CountUsers returns the total number of users in the system
+func (db *DB) CountUsers(ctx context.Context) (int, error) {
+	query := `SELECT COUNT(*) FROM users`
+	var count int
+	err := db.conn.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count users: %w", err)
+	}
+	return count, nil
+}
+
+// UserExistsByEmail checks if a user exists with the given email
+func (db *DB) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`
+	var exists bool
+	err := db.conn.QueryRowContext(ctx, query, email).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check user exists: %w", err)
+	}
+	return exists, nil
+}
+
 // MaxAPIKeysPerUser is the maximum number of API keys a user can have
 const MaxAPIKeysPerUser = 100
 
@@ -1072,18 +1094,6 @@ func (db *DB) RecordInvitedEmail(ctx context.Context, email string) error {
 		return fmt.Errorf("failed to record invited email: %w", err)
 	}
 	return nil
-}
-
-// HasEmailBeenInvitedAfter checks if an email was invited on or after the given timestamp
-// Used for login authorization via ALLOW_INVITED_EMAILS_AFTER_TS env var
-func (db *DB) HasEmailBeenInvitedAfter(ctx context.Context, email string, afterTS time.Time) (bool, error) {
-	query := `SELECT EXISTS(SELECT 1 FROM invited_emails WHERE email = LOWER($1) AND first_invited_at >= $2)`
-	var exists bool
-	err := db.conn.QueryRowContext(ctx, query, email, afterTS).Scan(&exists)
-	if err != nil {
-		return false, fmt.Errorf("failed to check invited email: %w", err)
-	}
-	return exists, nil
 }
 
 // NOTE: Legacy file-by-ID and run-based functions removed - using sync API instead

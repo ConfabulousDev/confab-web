@@ -30,14 +30,14 @@ fly secrets set \
   SESSION_SECRET_KEY="$(openssl rand -base64 32)" \
   CSRF_SECRET_KEY="$(openssl rand -base64 32)"
 
-# 4. Email Whitelist (optional - comma-separated)
-# Uncomment to restrict signup/login to specific emails
-# Leave commented for open registration
+# 4. User Limit (optional)
+# Maximum number of users allowed in the system (default: 50)
+# Set to 0 to block all new registrations
 echo ""
-echo "Email whitelist: SKIPPED (open registration)"
-echo "To restrict access, run:"
-echo "  fly secrets set ALLOWED_EMAILS=\"alice@example.com,bob@example.com\""
-# fly secrets set ALLOWED_EMAILS="alice@example.com,bob@example.com"
+echo "User limit: Using default (50 users)"
+echo "To change, run:"
+echo "  fly secrets set MAX_USERS=\"100\""
+# fly secrets set MAX_USERS="100"
 
 echo ""
 echo "✅ Done! Secrets set. App will restart automatically."

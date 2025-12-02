@@ -17,6 +17,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 const (
@@ -171,14 +172,23 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			"email", user.Email,
 			"name", user.Name)
 
-		// Check email whitelist (if configured)
-		if !isEmailAllowed(ctx, database, user.Email) {
-			logger.Warn("Email not in whitelist", "email", user.Email)
-			// Redirect to frontend with error instead of showing raw HTTP error
+		// Check user cap
+		allowed, err := CanUserLogin(ctx, database, user.Email)
+		if err != nil {
+			logger.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
+			frontendURL := os.Getenv("FRONTEND_URL")
+			errorURL := fmt.Sprintf("%s?error=server_error&error_description=%s",
+				frontendURL,
+				url.QueryEscape("An error occurred. Please try again later."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
+		if !allowed {
+			logger.Warn("User cap reached, login denied", "email", user.Email)
 			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
 				frontendURL,
-				url.QueryEscape("Your email is not authorized to use this application."))
+				url.QueryEscape("This application has reached its user limit. Please contact the administrator."))
 			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}
@@ -391,6 +401,13 @@ func getGitHubUser(accessToken string) (*GitHubUser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get verified email: %w", err)
 	}
+	// Normalize email to lowercase - emails are case-insensitive by convention (RFC 5321)
+	email = strings.ToLower(email)
+
+	// Validate email format
+	if !validation.IsValidEmail(email) {
+		return nil, fmt.Errorf("invalid email format from GitHub: %q", email)
+	}
 	user.Email = email
 
 	return &user, nil
@@ -553,12 +570,21 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			"email", user.Email,
 			"name", user.Name)
 
-		// Check email whitelist
-		if !isEmailAllowed(ctx, database, user.Email) {
-			logger.Warn("Email not in whitelist", "email", user.Email)
+		// Check user cap
+		allowed, err := CanUserLogin(ctx, database, user.Email)
+		if err != nil {
+			logger.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
+			errorURL := fmt.Sprintf("%s?error=server_error&error_description=%s",
+				frontendURL,
+				url.QueryEscape("An error occurred. Please try again later."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
+		if !allowed {
+			logger.Warn("User cap reached, login denied", "email", user.Email)
 			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
 				frontendURL,
-				url.QueryEscape("Your email is not authorized to use this application."))
+				url.QueryEscape("This application has reached its user limit. Please contact the administrator."))
 			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}
@@ -693,6 +719,14 @@ func getGoogleUser(accessToken string) (*GoogleUser, error) {
 	var user GoogleUser
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, err
+	}
+
+	// Normalize email to lowercase - emails are case-insensitive by convention (RFC 5321)
+	user.Email = strings.ToLower(user.Email)
+
+	// Validate email format
+	if !validation.IsValidEmail(user.Email) {
+		return nil, fmt.Errorf("invalid email format from Google: %q", user.Email)
 	}
 
 	return &user, nil
@@ -1538,57 +1572,54 @@ func isLocalhostURL(urlStr string) bool {
 	return true
 }
 
-// isEmailAllowed checks if an email is authorized to use the application
-// An email is allowed if:
-// 1. ALLOWED_EMAILS is not set (open registration), OR
-// 2. Email is in ALLOWED_EMAILS list, OR
-// 3. ALLOW_INVITED_EMAILS_AFTER_TS is set (and > 0) and the email was invited on or after that timestamp
-func isEmailAllowed(ctx context.Context, database *db.DB, email string) bool {
-	allowedEmailsEnv := os.Getenv("ALLOWED_EMAILS")
+// DefaultMaxUsers is the default maximum number of users allowed in the system
+const DefaultMaxUsers = 50
 
-	// If no whitelist configured, allow all emails
-	if allowedEmailsEnv == "" {
-		return true
+// CanUserLogin checks if a user can log in based on the user cap
+// Returns true if:
+// 1. User already exists (returning users always allowed), OR
+// 2. User count is below MAX_USERS cap (new users allowed if under cap)
+func CanUserLogin(ctx context.Context, database *db.DB, email string) (bool, error) {
+	if database == nil {
+		return false, fmt.Errorf("database is required")
 	}
 
-	// Empty email never allowed
-	if email == "" {
-		return false
+	// Validate email format (also rejects empty and whitespace-only emails)
+	if !validation.IsValidEmail(email) {
+		return false, nil
 	}
 
-	// Parse comma-separated list and check hardcoded whitelist first (fast path)
-	allowedEmails := strings.Split(allowedEmailsEnv, ",")
-	emailLower := strings.ToLower(strings.TrimSpace(email))
-	for _, allowed := range allowedEmails {
-		allowedLower := strings.ToLower(strings.TrimSpace(allowed))
-		if allowedLower == emailLower {
-			return true
-		}
+	// Check if user already exists - returning users always allowed
+	exists, err := database.UserExistsByEmail(ctx, email)
+	if err != nil {
+		logger.Warn("Failed to check if user exists", "email", email, "error", err)
+		return false, err
+	}
+	if exists {
+		return true, nil
 	}
 
-	// Check if email was previously invited
-	// ALLOW_INVITED_EMAILS_AFTER_TS: only emails invited on or after this unix timestamp are allowed
-	// Set to a large value (e.g., 2000000000) to effectively disable invite-based login
-	allowInvitedAfterTS := os.Getenv("ALLOW_INVITED_EMAILS_AFTER_TS")
-	if allowInvitedAfterTS != "" && database != nil {
-		ts, err := strconv.ParseInt(allowInvitedAfterTS, 10, 64)
+	// New user - check the user cap
+	maxUsers := DefaultMaxUsers
+	if maxUsersEnv := os.Getenv("MAX_USERS"); maxUsersEnv != "" {
+		parsed, err := strconv.Atoi(maxUsersEnv)
 		if err != nil {
-			logger.Warn("Invalid ALLOW_INVITED_EMAILS_AFTER_TS value", "value", allowInvitedAfterTS, "error", err)
-			return false
-		}
-
-		afterTime := time.Unix(ts, 0)
-		wasInvited, err := database.HasEmailBeenInvitedAfter(ctx, email, afterTime)
-		if err != nil {
-			// Fail closed - don't allow if we can't verify
-			logger.Warn("Failed to check invited email status", "email", email, "error", err)
-			return false
-		}
-		if wasInvited {
-			logger.Info("Email allowed via previous invite", "email", email)
-			return true
+			logger.Warn("Invalid MAX_USERS value, using default", "value", maxUsersEnv, "default", DefaultMaxUsers, "error", err)
+		} else {
+			maxUsers = parsed
 		}
 	}
 
-	return false
+	currentUsers, err := database.CountUsers(ctx)
+	if err != nil {
+		logger.Warn("Failed to count users", "error", err)
+		return false, err
+	}
+
+	if currentUsers >= maxUsers {
+		logger.Warn("User cap reached", "current", currentUsers, "max", maxUsers, "email", email)
+		return false, nil
+	}
+
+	return true, nil
 }

@@ -182,16 +182,6 @@ func loadConfig() Config {
 		log.Fatal("BUCKET_NAME is required")
 	}
 
-	// Validate required access control configuration
-	allowedEmails := os.Getenv("ALLOWED_EMAILS")
-	if allowedEmails == "" {
-		log.Fatal("ALLOWED_EMAILS is required (comma-separated list of allowed email addresses)")
-	}
-	allowInvitedAfterTS := os.Getenv("ALLOW_INVITED_EMAILS_AFTER_TS")
-	if allowInvitedAfterTS == "" {
-		log.Fatal("ALLOW_INVITED_EMAILS_AFTER_TS is required (unix timestamp; use large value like 2000000000 to disable)")
-	}
-
 	// Validate required database configuration
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
