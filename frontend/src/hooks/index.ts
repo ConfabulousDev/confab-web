@@ -9,4 +9,5 @@ export { useShareDialog } from './useShareDialog';
 export { useTodos } from './useTodos';
 export { useToggleSet } from './useToggleSet';
 export { useLoadSession } from './useLoadSession';
+export { useSessionFilters } from './useSessionFilters';
 export type { SessionErrorType } from './useLoadSession';

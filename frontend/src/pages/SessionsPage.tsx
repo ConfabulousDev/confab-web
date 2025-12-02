@@ -1,15 +1,13 @@
-import { useState, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSessions, useDocumentTitle, useSuccessMessage } from '@/hooks';
-import { formatRelativeTime, sortData, type SortDirection } from '@/utils';
+import { useSessions, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
+import { formatRelativeTime, sortData } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import PageSidebar, { SidebarItem } from '@/components/PageSidebar';
 import SortableHeader from '@/components/SortableHeader';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import Alert from '@/components/Alert';
 import styles from './SessionsPage.module.css';
-
-type SortColumn = 'title' | 'external_id' | 'last_sync_time';
 
 // SVG Icons
 const GitHubIcon = (
@@ -40,22 +38,19 @@ function SessionsPage() {
   useDocumentTitle('Sessions');
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [showSharedWithMe, setShowSharedWithMe] = useState(false);
+  const {
+    showSharedWithMe,
+    setShowSharedWithMe,
+    selectedRepo,
+    selectedBranch,
+    setSelectedBranch,
+    sortColumn,
+    sortDirection,
+    handleSort,
+    handleRepoClick,
+  } = useSessionFilters();
   const { sessions, loading, error } = useSessions(showSharedWithMe);
-  const [sortColumn, setSortColumn] = useState<SortColumn>('last_sync_time');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { message: successMessage, fading: successFading } = useSuccessMessage();
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
-
-  const handleSort = (column: SortColumn) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection(column === 'last_sync_time' ? 'desc' : 'asc');
-    }
-  };
 
   // Get unique repos and branches for filtering
   const { repos, branches } = useMemo(() => {
@@ -132,11 +127,6 @@ function SessionsPage() {
     }
   };
 
-  const handleRepoClick = (repo: string | null) => {
-    setSelectedRepo(repo);
-    setSelectedBranch(null); // Reset branch filter when repo changes
-  };
-
   return (
     <div className={styles.pageWrapper}>
       <PageSidebar collapsible={false}>
@@ -146,10 +136,7 @@ function SessionsPage() {
           label="All Sessions"
           count={totalCount}
           active={!selectedRepo && !selectedBranch}
-          onClick={() => {
-            setSelectedRepo(null);
-            setSelectedBranch(null);
-          }}
+          onClick={() => handleRepoClick(null)}
         />
 
         {/* Repos section */}
