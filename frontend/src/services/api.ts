@@ -1,7 +1,7 @@
 // Centralized API client with error handling, interceptors, and Zod validation
 // All API responses are validated at runtime to ensure type safety
 import { z } from 'zod';
-import { getCSRFToken, initCSRF, clearCSRFToken } from './csrf';
+import { getCSRFToken, initCSRF, clearCSRFToken, updateCSRFTokenFromResponse } from './csrf';
 import {
   SessionDetailSchema,
   SessionListSchema,
@@ -74,6 +74,9 @@ class APIClient {
   }
 
   private async handleResponse(response: Response, endpoint: string): Promise<unknown> {
+    // Update CSRF token from response header (keeps token fresh for next request)
+    updateCSRFTokenFromResponse(response);
+
     // Handle authentication errors
     if (response.status === 401) {
       // Don't redirect for /me - it's expected to return 401 when not logged in

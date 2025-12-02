@@ -52,6 +52,17 @@ export function clearCSRFToken(): void {
 }
 
 /**
+ * Updates the CSRF token from a response header
+ * Call this after every API response to keep the token fresh
+ */
+export function updateCSRFTokenFromResponse(response: Response): void {
+	const headerToken = response.headers.get('X-CSRF-Token');
+	if (headerToken) {
+		csrfToken = headerToken;
+	}
+}
+
+/**
  * Makes a fetch request with CSRF token automatically included
  * Use this for all POST, PUT, DELETE requests
  */
@@ -68,11 +79,8 @@ export async function fetchWithCSRF(
 	// Add CSRF token header for state-changing operations
 	const method = (options.method || 'GET').toUpperCase();
 	if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-		// If token is not initialized, try to fetch it first
+		// Initialize token if not present
 		if (!csrfToken) {
-			if (import.meta.env.DEV) {
-				console.warn('CSRF token not initialized, fetching now...');
-			}
 			await initCSRF();
 		}
 

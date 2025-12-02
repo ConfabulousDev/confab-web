@@ -810,13 +810,6 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 				return nil, fmt.Errorf("failed to create invite: %w", err)
 			}
 
-			// Also record in invited_emails for login authorization
-			// This persists even if the share is later revoked
-			if err := db.RecordInvitedEmail(ctx, email); err != nil {
-				// Log but don't fail - the share invite was already created
-				// This is a secondary concern for login authorization
-				// Note: In production, consider logging this error
-			}
 		}
 		share.InvitedEmails = invitedEmails
 	}
@@ -1079,22 +1072,6 @@ func (db *DB) RecordShareAccess(ctx context.Context, shareToken string, userID i
 	return nil
 }
 
-// RecordInvitedEmail records that an email was invited to a private share
-// This persists independently of the share lifecycle for login authorization
-func (db *DB) RecordInvitedEmail(ctx context.Context, email string) error {
-	query := `
-		INSERT INTO invited_emails (email, first_invited_at, last_invited_at, invite_count)
-		VALUES (LOWER($1), NOW(), NOW(), 1)
-		ON CONFLICT (email) DO UPDATE SET
-			last_invited_at = NOW(),
-			invite_count = invited_emails.invite_count + 1
-	`
-	_, err := db.conn.ExecContext(ctx, query, email)
-	if err != nil {
-		return fmt.Errorf("failed to record invited email: %w", err)
-	}
-	return nil
-}
 
 // NOTE: Legacy file-by-ID and run-based functions removed - using sync API instead
 

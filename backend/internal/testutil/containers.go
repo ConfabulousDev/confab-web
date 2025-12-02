@@ -160,7 +160,6 @@ func (e *TestEnvironment) CleanDB(t *testing.T) {
 		"files",
 		"runs",
 		"sessions",
-		"invited_emails",
 		"api_keys",
 		"device_codes",
 		"web_sessions",
