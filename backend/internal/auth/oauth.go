@@ -263,8 +263,13 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 				MaxAge: -1,
 			})
 			redirectURL := postLoginRedirect.Value
+			// SECURITY: Only allow relative paths to prevent open redirect attacks
+			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
+				logger.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
+				redirectURL = "/"
+			}
 			// If it's a frontend path (not a backend path like /device), prepend frontend URL
-			if strings.HasPrefix(redirectURL, "/") && !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
+			if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
 				redirectURL = os.Getenv("FRONTEND_URL") + redirectURL
 			}
 			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
@@ -650,8 +655,13 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 				MaxAge: -1,
 			})
 			redirectURL := postLoginRedirect.Value
+			// SECURITY: Only allow relative paths to prevent open redirect attacks
+			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
+				logger.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
+				redirectURL = "/"
+			}
 			// If it's a frontend path (not a backend path like /device), prepend frontend URL
-			if strings.HasPrefix(redirectURL, "/") && !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
+			if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
 				redirectURL = frontendURL + redirectURL
 			}
 			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
