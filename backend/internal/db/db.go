@@ -1397,7 +1397,8 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 // Creates the sync_file record if it doesn't exist (upsert)
 // If lastMessageAt is provided and newer than current, updates session.last_message_at
 // If title is provided (not nil), sets the session title (last write wins; empty string clears)
-func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, title *string) error {
+// If gitInfo is provided (not nil and not empty), updates session.git_info
+func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, title *string, gitInfo json.RawMessage) error {
 	// Update sync_files table
 	syncQuery := `
 		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, updated_at)
@@ -1411,8 +1412,8 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 		return fmt.Errorf("failed to update sync file state: %w", err)
 	}
 
-	// Update session metadata (last_message_at, title, last_sync_at)
-	if lastMessageAt != nil || title != nil {
+	// Update session metadata (last_message_at, title, git_info, last_sync_at)
+	if lastMessageAt != nil || title != nil || len(gitInfo) > 0 {
 		// Build dynamic update query based on what we have
 		sessionQuery := `
 			UPDATE sessions
@@ -1432,6 +1433,14 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 		if title != nil {
 			sessionQuery += fmt.Sprintf(", title = $%d", argIdx)
 			args = append(args, *title)
+			argIdx++
+		}
+
+		// GitInfo: if provided and not empty, update it
+		// This allows git info to be updated via chunk metadata
+		if len(gitInfo) > 0 {
+			sessionQuery += fmt.Sprintf(", git_info = $%d", argIdx)
+			args = append(args, gitInfo)
 		}
 
 		sessionQuery += " WHERE id = $1"

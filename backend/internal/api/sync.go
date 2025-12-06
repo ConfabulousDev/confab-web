@@ -40,14 +40,22 @@ type SyncFileStateResp struct {
 	LastSyncedLine int `json:"last_synced_line"`
 }
 
+// SyncChunkMetadata contains optional mutable metadata that can be updated with each chunk
+// This allows metadata like git info to be updated throughout the session lifecycle,
+// rather than only at init time.
+type SyncChunkMetadata struct {
+	GitInfo json.RawMessage `json:"git_info,omitempty"` // Git metadata (repo_url, branch, etc.)
+}
+
 // SyncChunkRequest is the request body for POST /api/v1/sync/chunk
 type SyncChunkRequest struct {
-	SessionID string   `json:"session_id"`
-	FileName  string   `json:"file_name"`
-	FileType  string   `json:"file_type"`
-	FirstLine int      `json:"first_line"`
-	Lines     []string `json:"lines"`
-	Title     *string  `json:"title,omitempty"` // Optional: pre-parsed title from CLI (nil=don't update, ""=clear, "x"=set)
+	SessionID string             `json:"session_id"`
+	FileName  string             `json:"file_name"`
+	FileType  string             `json:"file_type"`
+	FirstLine int                `json:"first_line"`
+	Lines     []string           `json:"lines"`
+	Title     *string            `json:"title,omitempty"`    // Optional: pre-parsed title from CLI (nil=don't update, ""=clear, "x"=set)
+	Metadata  *SyncChunkMetadata `json:"metadata,omitempty"` // Optional: mutable session metadata (git_info, etc.)
 }
 
 // SyncChunkResponse is the response for POST /api/v1/sync/chunk
@@ -262,7 +270,14 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	updateCtx, updateCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer updateCancel()
 
-	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, req.Title); err != nil {
+	// Extract git_info from metadata if present and this is a transcript file
+	// Only process metadata for transcript files, not agent/todo files
+	var gitInfo json.RawMessage
+	if req.Metadata != nil && req.FileType == "transcript" && len(req.Metadata.GitInfo) > 0 {
+		gitInfo = req.Metadata.GitInfo
+	}
+
+	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, req.Title, gitInfo); err != nil {
 		logger.Error("Failed to update sync state",
 			"error", err,
 			"session_id", req.SessionID,

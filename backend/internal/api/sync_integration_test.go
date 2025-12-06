@@ -680,6 +680,177 @@ func TestHandleSyncChunk_Integration(t *testing.T) {
 
 		testutil.AssertStatus(t, w, http.StatusUnauthorized)
 	})
+
+	t.Run("updates git_info from chunk metadata for transcript files", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-gitinfo")
+
+		// Upload chunk with metadata containing git_info
+		gitInfo := json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"feature-branch"}`)
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"user","message":"Hello"}`},
+			Metadata: &SyncChunkMetadata{
+				GitInfo: gitInfo,
+			},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncChunk(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify git_info was stored in the session
+		var storedGitInfo json.RawMessage
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT git_info FROM sessions WHERE id = $1",
+			sessionID)
+		if err := row.Scan(&storedGitInfo); err != nil {
+			t.Fatalf("failed to query session git_info: %v", err)
+		}
+
+		// Parse and verify git_info content
+		var gitData map[string]string
+		if err := json.Unmarshal(storedGitInfo, &gitData); err != nil {
+			t.Fatalf("failed to parse stored git_info: %v", err)
+		}
+
+		if gitData["repo_url"] != "https://github.com/test/repo.git" {
+			t.Errorf("expected repo_url 'https://github.com/test/repo.git', got %q", gitData["repo_url"])
+		}
+		if gitData["branch"] != "feature-branch" {
+			t.Errorf("expected branch 'feature-branch', got %q", gitData["branch"])
+		}
+	})
+
+	t.Run("updates git_info on subsequent chunks", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-gitinfo-update")
+
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// First chunk with initial git_info
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"user","message":"Hello"}`},
+			Metadata: &SyncChunkMetadata{
+				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"main"}`),
+			},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Second chunk with updated branch (simulating branch switch)
+		reqBody = SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 2,
+			Lines:     []string{`{"type":"assistant","message":"Hi!"}`},
+			Metadata: &SyncChunkMetadata{
+				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"feature-new"}`),
+			},
+		}
+
+		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w = httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify git_info reflects the latest update
+		var storedGitInfo json.RawMessage
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT git_info FROM sessions WHERE id = $1",
+			sessionID)
+		if err := row.Scan(&storedGitInfo); err != nil {
+			t.Fatalf("failed to query session git_info: %v", err)
+		}
+
+		var gitData map[string]string
+		if err := json.Unmarshal(storedGitInfo, &gitData); err != nil {
+			t.Fatalf("failed to parse stored git_info: %v", err)
+		}
+
+		if gitData["branch"] != "feature-new" {
+			t.Errorf("expected branch 'feature-new' after update, got %q", gitData["branch"])
+		}
+	})
+
+	t.Run("does not update git_info for agent files", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-agent-no-git")
+
+		// First set git_info via transcript
+		server := &Server{db: env.DB, storage: env.Storage}
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"user","message":"Hello"}`},
+			Metadata: &SyncChunkMetadata{
+				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"main"}`),
+			},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Upload agent file chunk with different git_info (should be ignored)
+		agentReq := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "agent-abc123.jsonl",
+			FileType:  "agent",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"tool_use"}`},
+			Metadata: &SyncChunkMetadata{
+				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"should-be-ignored"}`),
+			},
+		}
+
+		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", agentReq, user.ID)
+		w = httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify git_info still has original branch (agent metadata was ignored)
+		var storedGitInfo json.RawMessage
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT git_info FROM sessions WHERE id = $1",
+			sessionID)
+		if err := row.Scan(&storedGitInfo); err != nil {
+			t.Fatalf("failed to query session git_info: %v", err)
+		}
+
+		var gitData map[string]string
+		if err := json.Unmarshal(storedGitInfo, &gitData); err != nil {
+			t.Fatalf("failed to parse stored git_info: %v", err)
+		}
+
+		if gitData["branch"] != "main" {
+			t.Errorf("expected branch 'main' (agent metadata should be ignored), got %q", gitData["branch"])
+		}
+	})
 }
 
 // =============================================================================
