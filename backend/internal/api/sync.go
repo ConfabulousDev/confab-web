@@ -26,6 +26,7 @@ type SyncInitRequest struct {
 	TranscriptPath string          `json:"transcript_path"`
 	CWD            string          `json:"cwd"`
 	GitInfo        json.RawMessage `json:"git_info,omitempty"` // Optional git metadata
+	Title          *string         `json:"title,omitempty"`    // Optional: pre-parsed title from CLI (nil=don't set, ""=clear, "x"=set)
 }
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
@@ -46,6 +47,7 @@ type SyncChunkRequest struct {
 	FileType  string   `json:"file_type"`
 	FirstLine int      `json:"first_line"`
 	Lines     []string `json:"lines"`
+	Title     *string  `json:"title,omitempty"` // Optional: pre-parsed title from CLI (nil=don't update, ""=clear, "x"=set)
 }
 
 // SyncChunkResponse is the response for POST /api/v1/sync/chunk
@@ -106,6 +108,7 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		TranscriptPath: req.TranscriptPath,
 		CWD:            req.CWD,
 		GitInfo:        req.GitInfo,
+		Title:          req.Title,
 	}
 	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {
@@ -218,25 +221,18 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build chunk content (lines joined by newlines, with trailing newline)
-	// Also extract metadata from transcript lines (timestamp, title)
+	// Also extract timestamp metadata from transcript lines
 	var content bytes.Buffer
 	var latestTimestamp *time.Time
-	var extractedTitle string
 	for _, line := range req.Lines {
 		content.WriteString(line)
 		content.WriteString("\n")
 
-		// Try to extract metadata from transcript lines
+		// Try to extract timestamp from transcript lines
 		if req.FileType == "transcript" {
 			if ts := extractTimestampFromLine(line); ts != nil {
 				if latestTimestamp == nil || ts.After(*latestTimestamp) {
 					latestTimestamp = ts
-				}
-			}
-			// Extract title from summary or first user message
-			if extractedTitle == "" {
-				if title := extractTitleFromLine(line); title != "" {
-					extractedTitle = title
 				}
 			}
 		}
@@ -266,7 +262,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	updateCtx, updateCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer updateCancel()
 
-	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, extractedTitle); err != nil {
+	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, req.Title); err != nil {
 		logger.Error("Failed to update sync state",
 			"error", err,
 			"session_id", req.SessionID,
@@ -741,52 +737,6 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(merged)
-}
-
-// extractTitleFromLine extracts a title from a JSONL line
-// Looks for summary messages (type: "summary") or first text content in user messages
-// Returns empty string if no title found
-func extractTitleFromLine(line string) string {
-	// Quick check - must have "type" field
-	if !strings.Contains(line, `"type"`) {
-		return ""
-	}
-
-	// Parse as generic map to handle both string and array content
-	var entry map[string]interface{}
-	if err := json.Unmarshal([]byte(line), &entry); err != nil {
-		return ""
-	}
-
-	msgType, _ := entry["type"].(string)
-
-	// Priority 1: Summary messages have explicit summaries
-	if msgType == "summary" {
-		if summary, ok := entry["summary"].(string); ok && summary != "" {
-			// Truncate long summaries
-			if len(summary) > 100 {
-				return summary[:100] + "..."
-			}
-			return summary
-		}
-		return ""
-	}
-
-	// Priority 2: First text content from user message
-	if msgType == "user" {
-		if text := extractTextFromMessage(entry); text != "" {
-			// Take first line and truncate
-			if idx := strings.Index(text, "\n"); idx > 0 {
-				text = text[:idx]
-			}
-			if len(text) > 100 {
-				return text[:100] + "..."
-			}
-			return text
-		}
-	}
-
-	return ""
 }
 
 // extractTextFromMessage extracts the first text content from a message entry

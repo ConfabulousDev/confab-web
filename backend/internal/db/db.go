@@ -1225,6 +1225,7 @@ type SyncSessionParams struct {
 	TranscriptPath string
 	CWD            string
 	GitInfo        json.RawMessage // Optional: JSONB for git metadata
+	Title          *string         // Optional: nil=don't update, ""=clear, "x"=set to "x"
 }
 
 // FindOrCreateSyncSession finds an existing session by external_id or creates a new one
@@ -1250,10 +1251,15 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 	// Session not found - try to create it with metadata
 	sessionID = uuid.New().String()
 	insertQuery := `
-		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at)
-		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW())
+		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at, title)
+		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW(), $7)
 	`
-	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo)
+	// If Title is nil, pass nil to DB (NULL). If Title is non-nil (even empty string), pass the value.
+	var titleArg interface{}
+	if params.Title != nil {
+		titleArg = *params.Title
+	}
+	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo, titleArg)
 	if err == nil {
 		// Successfully created - new session has no synced files
 		return sessionID, make(map[string]SyncFileState), nil
@@ -1278,15 +1284,24 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 
 // updateSessionMetadata updates the metadata fields on an existing session
 func (db *DB) updateSessionMetadata(ctx context.Context, sessionID string, params SyncSessionParams) error {
+	// Build dynamic query - title is only set if explicitly provided (not nil)
 	query := `
 		UPDATE sessions
 		SET cwd = COALESCE($2, cwd),
 		    transcript_path = COALESCE($3, transcript_path),
 		    git_info = COALESCE($4, git_info),
 		    last_sync_at = NOW()
-		WHERE id = $1
 	`
-	_, err := db.conn.ExecContext(ctx, query, sessionID, params.CWD, params.TranscriptPath, params.GitInfo)
+	args := []interface{}{sessionID, params.CWD, params.TranscriptPath, params.GitInfo}
+
+	// Only update title if explicitly provided (not nil). Empty string clears title.
+	if params.Title != nil {
+		query += ", title = $5"
+		args = append(args, *params.Title)
+	}
+
+	query += " WHERE id = $1"
+	_, err := db.conn.ExecContext(ctx, query, args...)
 	return err
 }
 
@@ -1381,8 +1396,8 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 // UpdateSyncFileState updates the high-water mark for a file's sync state
 // Creates the sync_file record if it doesn't exist (upsert)
 // If lastMessageAt is provided and newer than current, updates session.last_message_at
-// If title is provided and session has no title, sets the session title
-func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, title string) error {
+// If title is provided (not nil), sets the session title (last write wins; empty string clears)
+func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, title *string) error {
 	// Update sync_files table
 	syncQuery := `
 		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, updated_at)
@@ -1397,7 +1412,7 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 	}
 
 	// Update session metadata (last_message_at, title, last_sync_at)
-	if lastMessageAt != nil || title != "" {
+	if lastMessageAt != nil || title != nil {
 		// Build dynamic update query based on what we have
 		sessionQuery := `
 			UPDATE sessions
@@ -1412,9 +1427,11 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 			argIdx++
 		}
 
-		if title != "" {
-			sessionQuery += fmt.Sprintf(", title = COALESCE(title, $%d)", argIdx)
-			args = append(args, title)
+		// Title: if provided (not nil), set it directly (last write wins)
+		// Empty string clears the title
+		if title != nil {
+			sessionQuery += fmt.Sprintf(", title = $%d", argIdx)
+			args = append(args, *title)
 		}
 
 		sessionQuery += " WHERE id = $1"
