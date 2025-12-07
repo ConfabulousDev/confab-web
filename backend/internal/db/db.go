@@ -1416,6 +1416,40 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 	return externalID, nil
 }
 
+// UpdateSessionSummary updates the summary field for a session identified by external_id
+// Returns ErrSessionNotFound if session doesn't exist, ErrForbidden if user doesn't own it
+func (db *DB) UpdateSessionSummary(ctx context.Context, externalID string, userID int64, summary string) error {
+	query := `
+		UPDATE sessions
+		SET summary = $1
+		WHERE external_id = $2 AND user_id = $3
+	`
+	result, err := db.conn.ExecContext(ctx, query, summary, externalID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update session summary: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		// Check if session exists but belongs to another user
+		var exists bool
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM sessions WHERE external_id = $1)`
+		if checkErr := db.conn.QueryRowContext(ctx, checkQuery, externalID).Scan(&exists); checkErr != nil {
+			return fmt.Errorf("failed to check session existence: %w", checkErr)
+		}
+		if exists {
+			return ErrForbidden
+		}
+		return ErrSessionNotFound
+	}
+
+	return nil
+}
+
 // UpdateSyncFileState updates the high-water mark for a file's sync state
 // Creates the sync_file record if it doesn't exist (upsert)
 // If lastMessageAt is provided and newer than current, updates session.last_message_at

@@ -224,6 +224,9 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Read endpoint doesn't need rate limiting or decompression
 			r.Get("/sync/file", s.handleSyncFileRead)
+
+			// Session metadata update (by external_id for CLI convenience)
+			r.Patch("/sessions/{external_id}/summary", s.handleUpdateSessionSummary)
 		})
 
 		// Protected routes for web dashboard (require web session)

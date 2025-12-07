@@ -836,3 +836,55 @@ func extractTimestampFromLine(line string) *time.Time {
 
 	return &ts
 }
+
+// UpdateSummaryRequest is the request body for PATCH /api/v1/sessions/{external_id}/summary
+type UpdateSummaryRequest struct {
+	Summary string `json:"summary"`
+}
+
+// handleUpdateSessionSummary updates the summary for a session by external_id
+// PATCH /api/v1/sessions/{external_id}/summary
+func (s *Server) handleUpdateSessionSummary(w http.ResponseWriter, r *http.Request) {
+	// Get authenticated user
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	// Get external_id from URL
+	externalID := chi.URLParam(r, "external_id")
+	if externalID == "" {
+		respondError(w, http.StatusBadRequest, "external_id is required")
+		return
+	}
+
+	// Parse request body
+	var req UpdateSummaryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Update summary in database
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	err := s.db.UpdateSessionSummary(ctx, externalID, userID, req.Summary)
+	if err != nil {
+		if errors.Is(err, db.ErrSessionNotFound) {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+		if errors.Is(err, db.ErrForbidden) {
+			respondError(w, http.StatusForbidden, "Access denied")
+			return
+		}
+		logger.Error("Failed to update session summary", "error", err, "user_id", userID, "external_id", externalID)
+		respondError(w, http.StatusInternalServerError, "Failed to update summary")
+		return
+	}
+
+	logger.Info("Session summary updated", "user_id", userID, "external_id", externalID)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
