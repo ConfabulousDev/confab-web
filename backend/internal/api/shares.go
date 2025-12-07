@@ -169,10 +169,12 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				sharerName = *sharer.Name
 			}
 
-			// Get session title (use external ID as fallback)
+			// Get session title (use summary, then first_user_message, then external ID as fallback)
 			sessionTitle := session.ExternalID
-			if session.Title != nil && *session.Title != "" {
-				sessionTitle = *session.Title
+			if session.Summary != nil && *session.Summary != "" {
+				sessionTitle = *session.Summary
+			} else if session.FirstUserMessage != nil && *session.FirstUserMessage != "" {
+				sessionTitle = *session.FirstUserMessage
 			}
 
 			for _, toEmail := range req.InvitedEmails {

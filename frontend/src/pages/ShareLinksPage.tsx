@@ -11,7 +11,7 @@ import Alert from '@/components/Alert';
 import Button from '@/components/Button';
 import styles from './ShareLinksPage.module.css';
 
-type SortColumn = 'session_title' | 'visibility' | 'created_at' | 'expires_at';
+type SortColumn = 'session_summary' | 'visibility' | 'created_at' | 'expires_at';
 type FilterType = 'all' | 'public' | 'private' | 'expired' | 'active';
 
 // SVG Icons
@@ -244,7 +244,7 @@ function ShareLinksPage() {
                   <thead>
                     <tr>
                       <SortableHeader
-                        column="session_title"
+                        column="session_summary"
                         label="Session"
                         currentColumn={sortColumn}
                         direction={sortDirection}
@@ -284,7 +284,7 @@ function ShareLinksPage() {
                         <tr key={share.share_token} className={isExpired ? styles.expiredRow : ''}>
                           <td>
                             <Link to={`/sessions/${share.session_id}`} className={styles.sessionLink}>
-                              {share.session_title || 'Untitled Session'}
+                              {share.session_summary || share.session_first_user_message || 'Untitled Session'}
                             </Link>
                             <div className={styles.sessionId}>
                               <code>{share.external_id.substring(0, 8)}</code>

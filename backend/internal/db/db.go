@@ -397,20 +397,21 @@ func extractRepoName(repoURL string) *string {
 
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
-	ID            string     `json:"id"`                        // UUID primary key for URL routing
-	ExternalID    string     `json:"external_id"`               // External system's session ID (e.g., Claude Code's ID)
-	FirstSeen     time.Time  `json:"first_seen"`
-	FileCount     int        `json:"file_count"`                // Number of sync files
-	LastSyncTime  *time.Time `json:"last_sync_time,omitempty"`  // Last sync timestamp
-	Title         *string    `json:"title,omitempty"`
-	SessionType   string     `json:"session_type"`
-	TotalLines    int64      `json:"total_lines"`               // Sum of last_synced_line across all files
-	GitRepo       *string    `json:"git_repo,omitempty"`        // Git repository (e.g., "org/repo") - extracted from git_info JSONB
-	GitBranch     *string    `json:"git_branch,omitempty"`      // Git branch - extracted from git_info JSONB
-	IsOwner       bool       `json:"is_owner"`                  // true if user owns this session
-	AccessType    string     `json:"access_type"`               // "owner" | "private_share" | "public_share"
-	ShareToken    *string    `json:"share_token,omitempty"`     // share token if accessed via share
-	SharedByEmail *string    `json:"shared_by_email,omitempty"` // email of user who shared (if not owner)
+	ID               string     `json:"id"`                           // UUID primary key for URL routing
+	ExternalID       string     `json:"external_id"`                  // External system's session ID (e.g., Claude Code's ID)
+	FirstSeen        time.Time  `json:"first_seen"`
+	FileCount        int        `json:"file_count"`                   // Number of sync files
+	LastSyncTime     *time.Time `json:"last_sync_time,omitempty"`     // Last sync timestamp
+	Summary          *string    `json:"summary,omitempty"`            // First summary from transcript
+	FirstUserMessage *string    `json:"first_user_message,omitempty"` // First user message
+	SessionType      string     `json:"session_type"`
+	TotalLines       int64      `json:"total_lines"`                  // Sum of last_synced_line across all files
+	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
+	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
+	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
+	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share"
+	ShareToken       *string    `json:"share_token,omitempty"`        // share token if accessed via share
+	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
 }
 
 // ListUserSessions returns all sessions for a user
@@ -434,7 +435,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				s.first_seen,
 				COALESCE(sf_stats.file_count, 0) as file_count,
 				s.last_message_at,
-				s.title,
+				s.summary,
+				s.first_user_message,
 				s.session_type,
 				COALESCE(sf_stats.total_lines, 0) as total_lines,
 				s.git_info->>'repo_url' as git_repo_url,
@@ -464,7 +466,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.first_seen,
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
-					s.title,
+					s.summary,
+					s.first_user_message,
 					s.session_type,
 					COALESCE(sf_stats.total_lines, 0) as total_lines,
 					s.git_info->>'repo_url' as git_repo_url,
@@ -489,7 +492,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.first_seen,
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
-					s.title,
+					s.summary,
+					s.first_user_message,
 					s.session_type,
 					COALESCE(sf_stats.total_lines, 0) as total_lines,
 					s.git_info->>'repo_url' as git_repo_url,
@@ -520,7 +524,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.first_seen,
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
-					s.title,
+					s.summary,
+					s.first_user_message,
 					s.session_type,
 					COALESCE(sf_stats.total_lines, 0) as total_lines,
 					s.git_info->>'repo_url' as git_repo_url,
@@ -576,7 +581,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 			&session.FirstSeen,
 			&session.FileCount,
 			&session.LastSyncTime,
-			&session.Title,
+			&session.Summary,
+			&session.FirstUserMessage,
 			&session.SessionType,
 			&session.TotalLines,
 			&gitRepoURL,
@@ -606,15 +612,16 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 
 // SessionDetail represents detailed session information (sync-based model)
 type SessionDetail struct {
-	ID             string           `json:"id"`                        // UUID primary key for URL routing
-	ExternalID     string           `json:"external_id"`               // External system's session ID
-	Title          *string          `json:"title,omitempty"`           // Session title (may be nil)
-	FirstSeen      time.Time        `json:"first_seen"`
-	CWD            *string          `json:"cwd,omitempty"`             // Working directory
-	TranscriptPath *string          `json:"transcript_path,omitempty"` // Original transcript path
-	GitInfo        interface{}      `json:"git_info,omitempty"`        // Git metadata
-	LastSyncAt     *time.Time       `json:"last_sync_at,omitempty"`    // Last sync timestamp
-	Files          []SyncFileDetail `json:"files"`                     // Sync files
+	ID               string           `json:"id"`                           // UUID primary key for URL routing
+	ExternalID       string           `json:"external_id"`                  // External system's session ID
+	Summary          *string          `json:"summary,omitempty"`            // First summary from transcript
+	FirstUserMessage *string          `json:"first_user_message,omitempty"` // First user message
+	FirstSeen        time.Time        `json:"first_seen"`
+	CWD              *string          `json:"cwd,omitempty"`                // Working directory
+	TranscriptPath   *string          `json:"transcript_path,omitempty"`    // Original transcript path
+	GitInfo          interface{}      `json:"git_info,omitempty"`           // Git metadata
+	LastSyncAt       *time.Time       `json:"last_sync_at,omitempty"`       // Last sync timestamp
+	Files            []SyncFileDetail `json:"files"`                        // Sync files
 }
 
 // SyncFileDetail represents a synced file
@@ -632,14 +639,15 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 	var session SessionDetail
 	var gitInfoBytes []byte
 	sessionQuery := `
-		SELECT id, external_id, title, first_seen, cwd, transcript_path, git_info, last_sync_at
+		SELECT id, external_id, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at
 		FROM sessions
 		WHERE id = $1 AND user_id = $2
 	`
 	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(
 		&session.ID,
 		&session.ExternalID,
-		&session.Title,
+		&session.Summary,
+		&session.FirstUserMessage,
 		&session.FirstSeen,
 		&session.CWD,
 		&session.TranscriptPath,
@@ -878,7 +886,8 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 // ShareWithSessionInfo includes both share and session details
 type ShareWithSessionInfo struct {
 	SessionShare
-	SessionTitle *string `json:"session_title,omitempty"`
+	SessionSummary          *string `json:"session_summary,omitempty"`
+	SessionFirstUserMessage *string `json:"session_first_user_message,omitempty"`
 }
 
 // ListAllUserShares returns all shares for a user across all sessions
@@ -888,7 +897,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 		SELECT
 			ss.id, ss.session_id, s.external_id, ss.share_token, ss.visibility,
 			ss.expires_at, ss.created_at, ss.last_accessed_at,
-			s.title
+			s.summary, s.first_user_message
 		FROM session_shares ss
 		JOIN sessions s ON ss.session_id = s.id
 		WHERE s.user_id = $1
@@ -907,7 +916,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 		err := rows.Scan(
 			&share.ID, &share.SessionID, &share.ExternalID, &share.ShareToken,
 			&share.Visibility, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
-			&share.SessionTitle,
+			&share.SessionSummary, &share.SessionFirstUserMessage,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan share: %w", err)
@@ -1006,13 +1015,14 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 	var session SessionDetail
 	var gitInfoBytes []byte
 	sessionQuery := `
-		SELECT id, external_id, title, first_seen, cwd, transcript_path, git_info, last_sync_at
+		SELECT id, external_id, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at
 		FROM sessions WHERE id = $1
 	`
 	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(
 		&session.ID,
 		&session.ExternalID,
-		&session.Title,
+		&session.Summary,
+		&session.FirstUserMessage,
 		&session.FirstSeen,
 		&session.CWD,
 		&session.TranscriptPath,
@@ -1221,11 +1231,12 @@ type SyncFileState struct {
 
 // SyncSessionParams contains parameters for creating/updating a sync session
 type SyncSessionParams struct {
-	ExternalID     string
-	TranscriptPath string
-	CWD            string
-	GitInfo        json.RawMessage // Optional: JSONB for git metadata
-	Title          *string         // Optional: nil=don't update, ""=clear, "x"=set to "x"
+	ExternalID       string
+	TranscriptPath   string
+	CWD              string
+	GitInfo          json.RawMessage // Optional: JSONB for git metadata
+	Summary          *string         // Optional: nil=don't update, ""=clear, "x"=set to "x"
+	FirstUserMessage *string         // Optional: nil=don't update, ""=clear, "x"=set to "x"
 }
 
 // FindOrCreateSyncSession finds an existing session by external_id or creates a new one
@@ -1251,15 +1262,18 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 	// Session not found - try to create it with metadata
 	sessionID = uuid.New().String()
 	insertQuery := `
-		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at, title)
-		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW(), $7)
+		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at, summary, first_user_message)
+		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW(), $7, $8)
 	`
-	// If Title is nil, pass nil to DB (NULL). If Title is non-nil (even empty string), pass the value.
-	var titleArg interface{}
-	if params.Title != nil {
-		titleArg = *params.Title
+	// If Summary/FirstUserMessage is nil, pass nil to DB (NULL). If non-nil (even empty string), pass the value.
+	var summaryArg, firstUserMessageArg interface{}
+	if params.Summary != nil {
+		summaryArg = *params.Summary
 	}
-	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo, titleArg)
+	if params.FirstUserMessage != nil {
+		firstUserMessageArg = *params.FirstUserMessage
+	}
+	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo, summaryArg, firstUserMessageArg)
 	if err == nil {
 		// Successfully created - new session has no synced files
 		return sessionID, make(map[string]SyncFileState), nil
@@ -1284,7 +1298,7 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 
 // updateSessionMetadata updates the metadata fields on an existing session
 func (db *DB) updateSessionMetadata(ctx context.Context, sessionID string, params SyncSessionParams) error {
-	// Build dynamic query - title is only set if explicitly provided (not nil)
+	// Build dynamic query - summary/first_user_message only set if explicitly provided (not nil)
 	query := `
 		UPDATE sessions
 		SET cwd = COALESCE($2, cwd),
@@ -1293,11 +1307,20 @@ func (db *DB) updateSessionMetadata(ctx context.Context, sessionID string, param
 		    last_sync_at = NOW()
 	`
 	args := []interface{}{sessionID, params.CWD, params.TranscriptPath, params.GitInfo}
+	argNum := 5
 
-	// Only update title if explicitly provided (not nil). Empty string clears title.
-	if params.Title != nil {
-		query += ", title = $5"
-		args = append(args, *params.Title)
+	// Only update summary if explicitly provided (not nil). Empty string clears it.
+	if params.Summary != nil {
+		query += fmt.Sprintf(", summary = $%d", argNum)
+		args = append(args, *params.Summary)
+		argNum++
+	}
+
+	// Only update first_user_message if explicitly provided (not nil). Empty string clears it.
+	if params.FirstUserMessage != nil {
+		query += fmt.Sprintf(", first_user_message = $%d", argNum)
+		args = append(args, *params.FirstUserMessage)
+		argNum++
 	}
 
 	query += " WHERE id = $1"
@@ -1396,9 +1419,9 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 // UpdateSyncFileState updates the high-water mark for a file's sync state
 // Creates the sync_file record if it doesn't exist (upsert)
 // If lastMessageAt is provided and newer than current, updates session.last_message_at
-// If title is provided (not nil), sets the session title (last write wins; empty string clears)
+// If summary/firstUserMessage is provided (not nil), sets them (last write wins; empty string clears)
 // If gitInfo is provided (not nil and not empty), updates session.git_info
-func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, title *string, gitInfo json.RawMessage) error {
+func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, summary, firstUserMessage *string, gitInfo json.RawMessage) error {
 	// Update sync_files table
 	syncQuery := `
 		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, updated_at)
@@ -1412,8 +1435,8 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 		return fmt.Errorf("failed to update sync file state: %w", err)
 	}
 
-	// Update session metadata (last_message_at, title, git_info, last_sync_at)
-	if lastMessageAt != nil || title != nil || len(gitInfo) > 0 {
+	// Update session metadata (last_message_at, summary, first_user_message, git_info, last_sync_at)
+	if lastMessageAt != nil || summary != nil || firstUserMessage != nil || len(gitInfo) > 0 {
 		// Build dynamic update query based on what we have
 		sessionQuery := `
 			UPDATE sessions
@@ -1428,11 +1451,19 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 			argIdx++
 		}
 
-		// Title: if provided (not nil), set it directly (last write wins)
-		// Empty string clears the title
-		if title != nil {
-			sessionQuery += fmt.Sprintf(", title = $%d", argIdx)
-			args = append(args, *title)
+		// Summary: if provided (not nil), set it directly (last write wins)
+		// Empty string clears it
+		if summary != nil {
+			sessionQuery += fmt.Sprintf(", summary = $%d", argIdx)
+			args = append(args, *summary)
+			argIdx++
+		}
+
+		// FirstUserMessage: if provided (not nil), set it directly (last write wins)
+		// Empty string clears it
+		if firstUserMessage != nil {
+			sessionQuery += fmt.Sprintf(", first_user_message = $%d", argIdx)
+			args = append(args, *firstUserMessage)
 			argIdx++
 		}
 
@@ -1449,7 +1480,7 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 			return fmt.Errorf("failed to update session metadata: %w", err)
 		}
 	} else {
-		// Still update last_sync_at even without message timestamp or title
+		// Still update last_sync_at even without message timestamp or summary
 		sessionQuery := `UPDATE sessions SET last_sync_at = NOW() WHERE id = $1`
 		_, err = db.conn.ExecContext(ctx, sessionQuery, sessionID)
 		if err != nil {

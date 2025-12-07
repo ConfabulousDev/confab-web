@@ -39,7 +39,7 @@ function SessionDetailPage() {
 
   // Dynamic page title based on session
   const pageTitle = session
-    ? session.title || `Session ${session.external_id.substring(0, 8)}`
+    ? session.summary || session.first_user_message || `Session ${session.external_id.substring(0, 8)}`
     : 'Session';
   useDocumentTitle(pageTitle);
 

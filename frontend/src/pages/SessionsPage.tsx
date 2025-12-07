@@ -229,7 +229,7 @@ function SessionsPage() {
                   <thead>
                     <tr>
                       <SortableHeader
-                        column="title"
+                        column="summary"
                         label="Title"
                         currentColumn={sortColumn}
                         direction={sortDirection}
@@ -261,8 +261,8 @@ function SessionsPage() {
                         onClick={() => handleRowClick(session)}
                       >
                         <td className={styles.titleCell}>
-                          <span className={session.title ? '' : styles.untitled}>
-                            {session.title || 'Untitled'}
+                          <span className={session.summary || session.first_user_message ? '' : styles.untitled}>
+                            {session.summary || session.first_user_message || 'Untitled'}
                           </span>
                         </td>
                         <td className={styles.gitInfo}>{session.git_repo || ''}</td>

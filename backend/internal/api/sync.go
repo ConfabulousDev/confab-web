@@ -22,11 +22,12 @@ import (
 
 // SyncInitRequest is the request body for POST /api/v1/sync/init
 type SyncInitRequest struct {
-	ExternalID     string          `json:"external_id"`
-	TranscriptPath string          `json:"transcript_path"`
-	CWD            string          `json:"cwd"`
-	GitInfo        json.RawMessage `json:"git_info,omitempty"` // Optional git metadata
-	Title          *string         `json:"title,omitempty"`    // Optional: pre-parsed title from CLI (nil=don't set, ""=clear, "x"=set)
+	ExternalID       string          `json:"external_id"`
+	TranscriptPath   string          `json:"transcript_path"`
+	CWD              string          `json:"cwd"`
+	GitInfo          json.RawMessage `json:"git_info,omitempty"`           // Optional git metadata
+	Summary          *string         `json:"summary,omitempty"`            // Optional: first summary from transcript (nil=don't set, ""=clear, "x"=set)
+	FirstUserMessage *string         `json:"first_user_message,omitempty"` // Optional: first user message (nil=don't set, ""=clear, "x"=set)
 }
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
@@ -44,18 +45,21 @@ type SyncFileStateResp struct {
 // This allows metadata like git info to be updated throughout the session lifecycle,
 // rather than only at init time.
 type SyncChunkMetadata struct {
-	GitInfo json.RawMessage `json:"git_info,omitempty"` // Git metadata (repo_url, branch, etc.)
+	GitInfo          json.RawMessage `json:"git_info,omitempty"`           // Git metadata (repo_url, branch, etc.)
+	Summary          *string         `json:"summary,omitempty"`            // First summary from transcript
+	FirstUserMessage *string         `json:"first_user_message,omitempty"` // First user message
 }
 
 // SyncChunkRequest is the request body for POST /api/v1/sync/chunk
 type SyncChunkRequest struct {
-	SessionID string             `json:"session_id"`
-	FileName  string             `json:"file_name"`
-	FileType  string             `json:"file_type"`
-	FirstLine int                `json:"first_line"`
-	Lines     []string           `json:"lines"`
-	Title     *string            `json:"title,omitempty"`    // Optional: pre-parsed title from CLI (nil=don't update, ""=clear, "x"=set)
-	Metadata  *SyncChunkMetadata `json:"metadata,omitempty"` // Optional: mutable session metadata (git_info, etc.)
+	SessionID        string             `json:"session_id"`
+	FileName         string             `json:"file_name"`
+	FileType         string             `json:"file_type"`
+	FirstLine        int                `json:"first_line"`
+	Lines            []string           `json:"lines"`
+	Summary          *string            `json:"summary,omitempty"`            // Optional: first summary (nil=don't update, ""=clear, "x"=set)
+	FirstUserMessage *string            `json:"first_user_message,omitempty"` // Optional: first user message (nil=don't update, ""=clear, "x"=set)
+	Metadata         *SyncChunkMetadata `json:"metadata,omitempty"`           // Optional: mutable session metadata (git_info, etc.)
 }
 
 // SyncChunkResponse is the response for POST /api/v1/sync/chunk
@@ -112,11 +116,12 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	params := db.SyncSessionParams{
-		ExternalID:     req.ExternalID,
-		TranscriptPath: req.TranscriptPath,
-		CWD:            req.CWD,
-		GitInfo:        req.GitInfo,
-		Title:          req.Title,
+		ExternalID:       req.ExternalID,
+		TranscriptPath:   req.TranscriptPath,
+		CWD:              req.CWD,
+		GitInfo:          req.GitInfo,
+		Summary:          req.Summary,
+		FirstUserMessage: req.FirstUserMessage,
 	}
 	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {
@@ -270,14 +275,25 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	updateCtx, updateCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer updateCancel()
 
-	// Extract git_info from metadata if present and this is a transcript file
+	// Extract metadata fields if present and this is a transcript file
 	// Only process metadata for transcript files, not agent/todo files
 	var gitInfo json.RawMessage
-	if req.Metadata != nil && req.FileType == "transcript" && len(req.Metadata.GitInfo) > 0 {
-		gitInfo = req.Metadata.GitInfo
+	summary := req.Summary
+	firstUserMessage := req.FirstUserMessage
+	if req.Metadata != nil && req.FileType == "transcript" {
+		if len(req.Metadata.GitInfo) > 0 {
+			gitInfo = req.Metadata.GitInfo
+		}
+		// Metadata fields override top-level fields if present
+		if req.Metadata.Summary != nil {
+			summary = req.Metadata.Summary
+		}
+		if req.Metadata.FirstUserMessage != nil {
+			firstUserMessage = req.Metadata.FirstUserMessage
+		}
 	}
 
-	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, req.Title, gitInfo); err != nil {
+	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, summary, firstUserMessage, gitInfo); err != nil {
 		logger.Error("Failed to update sync state",
 			"error", err,
 			"session_id", req.SessionID,

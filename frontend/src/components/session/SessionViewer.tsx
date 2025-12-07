@@ -112,7 +112,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
 
       <div className={styles.mainContent}>
         <SessionHeader
-          title={session.title ?? undefined}
+          title={session.summary ?? session.first_user_message ?? undefined}
           externalId={session.external_id}
           model={sessionMeta.model}
           durationMs={sessionMeta.durationMs}

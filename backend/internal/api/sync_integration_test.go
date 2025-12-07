@@ -1387,27 +1387,27 @@ func TestSyncInit_RaceCondition_Integration(t *testing.T) {
 // Note: Request/response types and buildChunkS3Key are defined in sync.go
 
 // =============================================================================
-// Title API Tests (TDD - these should fail until implementation is complete)
+// Summary/FirstUserMessage API Tests
 // =============================================================================
 
-func TestSyncInit_Title_Integration(t *testing.T) {
+func TestSyncInit_Summary_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
 
 	env := testutil.SetupTestEnvironment(t)
 
-	t.Run("title is set when provided in init request", func(t *testing.T) {
+	t.Run("summary and first_user_message are set when provided in init request", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
-		// Use map to include title field (not in current struct)
 		reqBody := map[string]interface{}{
-			"external_id":     "title-init-test",
-			"transcript_path": "/home/user/project/transcript.jsonl",
-			"cwd":             "/home/user/project",
-			"title":           "My Session Title",
+			"external_id":        "summary-init-test",
+			"transcript_path":    "/home/user/project/transcript.jsonl",
+			"cwd":                "/home/user/project",
+			"summary":            "My Session Summary",
+			"first_user_message": "Hello, help me with this",
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
@@ -1421,52 +1421,55 @@ func TestSyncInit_Title_Integration(t *testing.T) {
 		var resp SyncInitResponse
 		testutil.ParseJSONResponse(t, w, &resp)
 
-		// Verify title was stored in database
-		var title *string
+		// Verify summary and first_user_message were stored in database
+		var summary, firstUserMessage *string
 		row := env.DB.QueryRow(env.Ctx,
-			"SELECT title FROM sessions WHERE id = $1",
+			"SELECT summary, first_user_message FROM sessions WHERE id = $1",
 			resp.SessionID)
-		if err := row.Scan(&title); err != nil {
-			t.Fatalf("failed to query session title: %v", err)
+		if err := row.Scan(&summary, &firstUserMessage); err != nil {
+			t.Fatalf("failed to query session: %v", err)
 		}
 
-		if title == nil || *title != "My Session Title" {
-			t.Errorf("expected title 'My Session Title', got %v", title)
+		if summary == nil || *summary != "My Session Summary" {
+			t.Errorf("expected summary 'My Session Summary', got %v", summary)
+		}
+		if firstUserMessage == nil || *firstUserMessage != "Hello, help me with this" {
+			t.Errorf("expected first_user_message 'Hello, help me with this', got %v", firstUserMessage)
 		}
 	})
 }
 
-func TestSyncChunk_Title_Integration(t *testing.T) {
+func TestSyncChunk_Summary_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
 
 	env := testutil.SetupTestEnvironment(t)
 
-	t.Run("title last write wins - chunk overwrites previous title", func(t *testing.T) {
+	t.Run("summary last write wins - chunk overwrites previous summary", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-		sessionID := testutil.CreateTestSession(t, env, user.ID, "title-chunk-test")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "summary-chunk-test")
 
-		// Set initial title directly in DB
+		// Set initial summary directly in DB
 		_, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET title = $1 WHERE id = $2",
-			"Initial Title", sessionID)
+			"UPDATE sessions SET summary = $1 WHERE id = $2",
+			"Initial Summary", sessionID)
 		if err != nil {
-			t.Fatalf("failed to set initial title: %v", err)
+			t.Fatalf("failed to set initial summary: %v", err)
 		}
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Upload chunk with new title
+		// Upload chunk with new summary
 		reqBody := map[string]interface{}{
 			"session_id": sessionID,
 			"file_name":  "transcript.jsonl",
 			"file_type":  "transcript",
 			"first_line": 1,
 			"lines":      []string{`{"type":"user","message":"Hello"}`},
-			"title":      "Updated Title",
+			"summary":    "Updated Summary",
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
@@ -1475,33 +1478,33 @@ func TestSyncChunk_Title_Integration(t *testing.T) {
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
-		// Verify title was updated in database
-		var title *string
+		// Verify summary was updated in database
+		var summary *string
 		row := env.DB.QueryRow(env.Ctx,
-			"SELECT title FROM sessions WHERE id = $1",
+			"SELECT summary FROM sessions WHERE id = $1",
 			sessionID)
-		if err := row.Scan(&title); err != nil {
-			t.Fatalf("failed to query session title: %v", err)
+		if err := row.Scan(&summary); err != nil {
+			t.Fatalf("failed to query session summary: %v", err)
 		}
 
-		if title == nil || *title != "Updated Title" {
-			t.Errorf("expected title 'Updated Title', got %v", title)
+		if summary == nil || *summary != "Updated Summary" {
+			t.Errorf("expected summary 'Updated Summary', got %v", summary)
 		}
 	})
 
-	t.Run("title chunk overwrites init title", func(t *testing.T) {
+	t.Run("summary chunk overwrites init summary", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Init with title A
+		// Init with summary A
 		initBody := map[string]interface{}{
-			"external_id":     "title-overwrite-test",
+			"external_id":     "summary-overwrite-test",
 			"transcript_path": "/home/user/project/transcript.jsonl",
 			"cwd":             "/home/user/project",
-			"title":           "Title A",
+			"summary":         "Summary A",
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", initBody, user.ID)
@@ -1512,14 +1515,14 @@ func TestSyncChunk_Title_Integration(t *testing.T) {
 		var initResp SyncInitResponse
 		testutil.ParseJSONResponse(t, w, &initResp)
 
-		// Upload chunk with title B
+		// Upload chunk with summary B
 		chunkBody := map[string]interface{}{
 			"session_id": initResp.SessionID,
 			"file_name":  "transcript.jsonl",
 			"file_type":  "transcript",
 			"first_line": 1,
 			"lines":      []string{`{"type":"user","message":"Hello"}`},
-			"title":      "Title B",
+			"summary":    "Summary B",
 		}
 
 		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", chunkBody, user.ID)
@@ -1527,44 +1530,44 @@ func TestSyncChunk_Title_Integration(t *testing.T) {
 		server.handleSyncChunk(w, req)
 		testutil.AssertStatus(t, w, http.StatusOK)
 
-		// Verify title is B (not A)
-		var title *string
+		// Verify summary is B (not A)
+		var summary *string
 		row := env.DB.QueryRow(env.Ctx,
-			"SELECT title FROM sessions WHERE id = $1",
+			"SELECT summary FROM sessions WHERE id = $1",
 			initResp.SessionID)
-		if err := row.Scan(&title); err != nil {
-			t.Fatalf("failed to query session title: %v", err)
+		if err := row.Scan(&summary); err != nil {
+			t.Fatalf("failed to query session summary: %v", err)
 		}
 
-		if title == nil || *title != "Title B" {
-			t.Errorf("expected title 'Title B', got %v", title)
+		if summary == nil || *summary != "Summary B" {
+			t.Errorf("expected summary 'Summary B', got %v", summary)
 		}
 	})
 
-	t.Run("empty title clears existing title", func(t *testing.T) {
+	t.Run("empty summary clears existing summary", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-		sessionID := testutil.CreateTestSession(t, env, user.ID, "title-clear-test")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "summary-clear-test")
 
-		// Set initial title directly in DB
+		// Set initial summary directly in DB
 		_, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET title = $1 WHERE id = $2",
-			"Existing Title", sessionID)
+			"UPDATE sessions SET summary = $1 WHERE id = $2",
+			"Existing Summary", sessionID)
 		if err != nil {
-			t.Fatalf("failed to set initial title: %v", err)
+			t.Fatalf("failed to set initial summary: %v", err)
 		}
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Upload chunk with empty title (present but empty string)
+		// Upload chunk with empty summary (present but empty string)
 		reqBody := map[string]interface{}{
 			"session_id": sessionID,
 			"file_name":  "transcript.jsonl",
 			"file_type":  "transcript",
 			"first_line": 1,
 			"lines":      []string{`{"type":"user","message":"Hello"}`},
-			"title":      "", // Empty string - should clear title
+			"summary":    "", // Empty string - should clear summary
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
@@ -1573,45 +1576,45 @@ func TestSyncChunk_Title_Integration(t *testing.T) {
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
-		// Verify title was cleared (empty string or null)
-		var title *string
+		// Verify summary was cleared (empty string or null)
+		var summary *string
 		row := env.DB.QueryRow(env.Ctx,
-			"SELECT title FROM sessions WHERE id = $1",
+			"SELECT summary FROM sessions WHERE id = $1",
 			sessionID)
-		if err := row.Scan(&title); err != nil {
-			t.Fatalf("failed to query session title: %v", err)
+		if err := row.Scan(&summary); err != nil {
+			t.Fatalf("failed to query session summary: %v", err)
 		}
 
 		// Empty string means cleared - should be "" not nil, but nil is also acceptable
-		if title != nil && *title != "" {
-			t.Errorf("expected title to be cleared (empty or null), got %q", *title)
+		if summary != nil && *summary != "" {
+			t.Errorf("expected summary to be cleared (empty or null), got %q", *summary)
 		}
 	})
 
-	t.Run("absent title field preserves existing title", func(t *testing.T) {
+	t.Run("absent summary field preserves existing summary", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-		sessionID := testutil.CreateTestSession(t, env, user.ID, "title-preserve-test")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "summary-preserve-test")
 
-		// Set initial title directly in DB
+		// Set initial summary directly in DB
 		_, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET title = $1 WHERE id = $2",
-			"Preserved Title", sessionID)
+			"UPDATE sessions SET summary = $1 WHERE id = $2",
+			"Preserved Summary", sessionID)
 		if err != nil {
-			t.Fatalf("failed to set initial title: %v", err)
+			t.Fatalf("failed to set initial summary: %v", err)
 		}
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Upload chunk WITHOUT title field (using SyncChunkRequest struct, not map)
+		// Upload chunk WITHOUT summary field (using SyncChunkRequest struct, not map)
 		reqBody := SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"type":"user","message":"Hello"}`},
-			// No title field - should preserve existing
+			// No summary field - should preserve existing
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
@@ -1620,17 +1623,17 @@ func TestSyncChunk_Title_Integration(t *testing.T) {
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
-		// Verify title was NOT changed
-		var title *string
+		// Verify summary was NOT changed
+		var summary *string
 		row := env.DB.QueryRow(env.Ctx,
-			"SELECT title FROM sessions WHERE id = $1",
+			"SELECT summary FROM sessions WHERE id = $1",
 			sessionID)
-		if err := row.Scan(&title); err != nil {
-			t.Fatalf("failed to query session title: %v", err)
+		if err := row.Scan(&summary); err != nil {
+			t.Fatalf("failed to query session summary: %v", err)
 		}
 
-		if title == nil || *title != "Preserved Title" {
-			t.Errorf("expected title 'Preserved Title' to be preserved, got %v", title)
+		if summary == nil || *summary != "Preserved Summary" {
+			t.Errorf("expected summary 'Preserved Summary' to be preserved, got %v", summary)
 		}
 	})
 }

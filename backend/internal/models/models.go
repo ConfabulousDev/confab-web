@@ -60,12 +60,13 @@ type APIKey struct {
 
 // Session represents a session in Confab
 type Session struct {
-	ID          string    `json:"id"`          // UUID primary key
-	ExternalID  string    `json:"external_id"` // External system's session ID
-	UserID      int64     `json:"user_id"`
-	FirstSeen   time.Time `json:"first_seen"`
-	Title       *string   `json:"title,omitempty"`
-	SessionType string    `json:"session_type"`
+	ID               string    `json:"id"`          // UUID primary key
+	ExternalID       string    `json:"external_id"` // External system's session ID
+	UserID           int64     `json:"user_id"`
+	FirstSeen        time.Time `json:"first_seen"`
+	Summary          *string   `json:"summary,omitempty"`
+	FirstUserMessage *string   `json:"first_user_message,omitempty"`
+	SessionType      string    `json:"session_type"`
 }
 
 // Run represents a single execution/resumption of a session
@@ -93,15 +94,16 @@ type File struct {
 
 // SaveSessionRequest is the API request for saving a session
 type SaveSessionRequest struct {
-	ExternalID     string       `json:"external_id"`   // External system's session identifier
-	TranscriptPath string       `json:"transcript_path"`
-	CWD            string       `json:"cwd"`
-	Reason         string       `json:"reason"`
-	GitInfo        interface{}  `json:"git_info,omitempty"`
-	Files          []FileUpload `json:"files"`
-	Title          string       `json:"title,omitempty"`
-	SessionType    string       `json:"session_type,omitempty"`
-	LastActivity   time.Time    `json:"last_activity"` // Required field, always provided by CLI
+	ExternalID       string       `json:"external_id"`   // External system's session identifier
+	TranscriptPath   string       `json:"transcript_path"`
+	CWD              string       `json:"cwd"`
+	Reason           string       `json:"reason"`
+	GitInfo          interface{}  `json:"git_info,omitempty"`
+	Files            []FileUpload `json:"files"`
+	Summary          string       `json:"summary,omitempty"`
+	FirstUserMessage string       `json:"first_user_message,omitempty"`
+	SessionType      string       `json:"session_type,omitempty"`
+	LastActivity     time.Time    `json:"last_activity"` // Required field, always provided by CLI
 }
 
 // FileUpload represents a file to be uploaded

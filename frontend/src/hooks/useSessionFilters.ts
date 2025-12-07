@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useCallback, useMemo } from 'react';
 import type { SortDirection } from '@/utils';
 
-type SortColumn = 'title' | 'external_id' | 'last_sync_time';
+type SortColumn = 'summary' | 'external_id' | 'last_sync_time';
 
 interface SessionFilters {
   showSharedWithMe: boolean;
@@ -34,7 +34,7 @@ const DEFAULT_SORT_COLUMN: SortColumn = 'last_sync_time';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 
 function isValidSortColumn(value: string | null): value is SortColumn {
-  return value === 'title' || value === 'external_id' || value === 'last_sync_time';
+  return value === 'summary' || value === 'external_id' || value === 'last_sync_time';
 }
 
 function isValidSortDirection(value: string | null): value is SortDirection {
