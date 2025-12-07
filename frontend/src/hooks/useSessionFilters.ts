@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { SortDirection } from '@/utils';
 
 type SortColumn = 'summary' | 'external_id' | 'last_sync_time';
@@ -10,6 +10,7 @@ interface SessionFilters {
   selectedBranch: string | null;
   sortColumn: SortColumn;
   sortDirection: SortDirection;
+  showEmptySessions: boolean;
 }
 
 interface SessionFiltersActions {
@@ -20,6 +21,7 @@ interface SessionFiltersActions {
   setSortDirection: (value: SortDirection) => void;
   handleSort: (column: SortColumn) => void;
   handleRepoClick: (repo: string | null) => void;
+  toggleShowEmptySessions: () => void;
 }
 
 const PARAM_KEYS = {
@@ -44,6 +46,9 @@ function isValidSortDirection(value: string | null): value is SortDirection {
 export function useSessionFilters(): SessionFilters & SessionFiltersActions {
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Not persisted to URL - hidden dev feature
+  const [showEmptySessions, setShowEmptySessions] = useState(false);
+
   const filters = useMemo<SessionFilters>(() => {
     const sharedParam = searchParams.get(PARAM_KEYS.shared);
     const repoParam = searchParams.get(PARAM_KEYS.repo);
@@ -57,8 +62,9 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
       selectedBranch: branchParam,
       sortColumn: isValidSortColumn(sortParam) ? sortParam : DEFAULT_SORT_COLUMN,
       sortDirection: isValidSortDirection(dirParam) ? dirParam : DEFAULT_SORT_DIRECTION,
+      showEmptySessions,
     };
-  }, [searchParams]);
+  }, [searchParams, showEmptySessions]);
 
   const updateParams = useCallback(
     (updates: Partial<Record<keyof typeof PARAM_KEYS, string | null>>) => {
@@ -155,6 +161,10 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [updateParams]
   );
 
+  const toggleShowEmptySessions = useCallback(() => {
+    setShowEmptySessions((prev) => !prev);
+  }, []);
+
   return {
     ...filters,
     setShowSharedWithMe,
@@ -164,5 +174,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     setSortDirection,
     handleSort,
     handleRepoClick,
+    toggleShowEmptySessions,
   };
 }

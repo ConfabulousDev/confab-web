@@ -1,6 +1,7 @@
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessions, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { formatRelativeTime, sortData } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import PageSidebar, { SidebarItem } from '@/components/PageSidebar';
@@ -48,7 +49,15 @@ function SessionsPage() {
     sortDirection,
     handleSort,
     handleRepoClick,
+    showEmptySessions,
+    toggleShowEmptySessions,
   } = useSessionFilters();
+
+  // Hidden keyboard shortcut to toggle showing empty sessions (for dev/debugging)
+  const handleToggleEmptySessions = useCallback(() => {
+    toggleShowEmptySessions();
+  }, [toggleShowEmptySessions]);
+  useKeyboardShortcut('mod+shift+e', handleToggleEmptySessions);
   const { sessions, loading, error } = useSessions(showSharedWithMe);
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
@@ -75,8 +84,10 @@ function SessionsPage() {
       sortBy: sortColumn,
       direction: sortDirection,
       filter: (s) => {
-        // Filter out empty sessions
+        // Filter out sessions with no transcript data
         if (s.total_lines <= 0) return false;
+        // Filter out empty sessions (no title) unless showEmptySessions is enabled
+        if (!showEmptySessions && !s.summary && !s.first_user_message) return false;
         // Show only owned or only shared based on toggle
         if (showSharedWithMe ? s.is_owner : !s.is_owner) return false;
         // Filter by selected repo
@@ -86,24 +97,32 @@ function SessionsPage() {
         return true;
       },
     });
-  }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch]);
+  }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch, showEmptySessions]);
+
+  // Helper to check if a session passes the base filters (excluding repo/branch)
+  const passesBaseFilters = useCallback((s: typeof sessions[0]) => {
+    if (s.total_lines <= 0) return false;
+    if (!showEmptySessions && !s.summary && !s.first_user_message) return false;
+    if (showSharedWithMe ? s.is_owner : !s.is_owner) return false;
+    return true;
+  }, [showSharedWithMe, showEmptySessions]);
 
   // Count sessions per repo/branch
   const repoCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     sessions.forEach((s) => {
-      if (s.total_lines > 0 && (showSharedWithMe ? !s.is_owner : s.is_owner)) {
+      if (passesBaseFilters(s)) {
         const repo = s.git_repo || '';
         counts[repo] = (counts[repo] || 0) + 1;
       }
     });
     return counts;
-  }, [sessions, showSharedWithMe]);
+  }, [sessions, passesBaseFilters]);
 
   const branchCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     sessions.forEach((s) => {
-      if (s.total_lines > 0 && (showSharedWithMe ? !s.is_owner : s.is_owner)) {
+      if (passesBaseFilters(s)) {
         if (!selectedRepo || s.git_repo === selectedRepo) {
           const branch = s.git_branch || '';
           counts[branch] = (counts[branch] || 0) + 1;
@@ -111,13 +130,11 @@ function SessionsPage() {
       }
     });
     return counts;
-  }, [sessions, showSharedWithMe, selectedRepo]);
+  }, [sessions, passesBaseFilters, selectedRepo]);
 
   const totalCount = useMemo(() => {
-    return sessions.filter((s) =>
-      s.total_lines > 0 && (showSharedWithMe ? !s.is_owner : s.is_owner)
-    ).length;
-  }, [sessions, showSharedWithMe]);
+    return sessions.filter(passesBaseFilters).length;
+  }, [sessions, passesBaseFilters]);
 
   const handleRowClick = (session: typeof sessions[0]) => {
     if (session.is_owner) {
@@ -194,7 +211,10 @@ function SessionsPage() {
                   Shared with me
                 </button>
               </div>
-              <span className={styles.sessionCount}>{sortedSessions.length} session{sortedSessions.length !== 1 ? 's' : ''}</span>
+              <span className={styles.sessionCount}>
+                  {sortedSessions.length} session{sortedSessions.length !== 1 ? 's' : ''}
+                  {showEmptySessions && <span className={styles.devIndicator}> (showing empty)</span>}
+                </span>
             </>
           }
         />

@@ -10,4 +10,5 @@ export { useTodos } from './useTodos';
 export { useToggleSet } from './useToggleSet';
 export { useLoadSession } from './useLoadSession';
 export { useSessionFilters } from './useSessionFilters';
+export { useKeyboardShortcut } from './useKeyboardShortcut';
 export type { SessionErrorType } from './useLoadSession';

@@ -61,6 +61,11 @@
   color: var(--color-text-muted);
 }
 
+.devIndicator {
+  color: var(--color-warning);
+  font-style: italic;
+}
+
 /* Sidebar divider */
 .sidebarDivider {
   height: 1px;
