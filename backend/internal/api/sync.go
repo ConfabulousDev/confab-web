@@ -381,27 +381,10 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Download all chunks and parse their line ranges
-	chunks := make([]chunkInfo, 0, len(chunkKeys))
-	for _, key := range chunkKeys {
-		firstLine, lastLine, ok := parseChunkKey(key)
-		if !ok {
-			logger.Warn("Skipping chunk with unparseable key", "key", key)
-			continue
-		}
-
-		data, err := s.storage.Download(storageCtx, key)
-		if err != nil {
-			logger.Error("Failed to download chunk", "error", err, "key", key)
-			respondStorageError(w, err, "Failed to download file chunk")
-			return
-		}
-
-		chunks = append(chunks, chunkInfo{
-			key:       key,
-			firstLine: firstLine,
-			lastLine:  lastLine,
-			data:      data,
-		})
+	chunks, err := downloadChunks(storageCtx, s.storage, chunkKeys)
+	if err != nil {
+		respondStorageError(w, err, "Failed to download file chunk")
+		return
 	}
 
 	if len(chunks) == 0 {
@@ -539,6 +522,100 @@ type chunkInfo struct {
 	firstLine int
 	lastLine  int
 	data      []byte
+}
+
+// chunkDownloader is an interface for downloading chunks from storage
+type chunkDownloader interface {
+	Download(ctx context.Context, key string) ([]byte, error)
+}
+
+// maxParallelDownloads limits concurrent chunk downloads to avoid overwhelming S3
+const maxParallelDownloads = 5
+
+// chunkResult holds the result of a parallel chunk download
+type chunkResult struct {
+	index int
+	chunk chunkInfo
+	err   error
+}
+
+// downloadChunks downloads all chunks for the given keys in parallel and returns them as chunkInfo slices.
+// Keys with unparseable names are skipped with a warning log.
+// Downloads are limited to maxParallelDownloads concurrent operations.
+func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []string) ([]chunkInfo, error) {
+	if len(chunkKeys) == 0 {
+		return nil, nil
+	}
+
+	// Parse all keys first to filter out invalid ones
+	type keyInfo struct {
+		key       string
+		firstLine int
+		lastLine  int
+		index     int // original index for ordering
+	}
+	validKeys := make([]keyInfo, 0, len(chunkKeys))
+	for i, key := range chunkKeys {
+		firstLine, lastLine, ok := parseChunkKey(key)
+		if !ok {
+			logger.Warn("Skipping chunk with unparseable key", "key", key)
+			continue
+		}
+		validKeys = append(validKeys, keyInfo{key: key, firstLine: firstLine, lastLine: lastLine, index: i})
+	}
+
+	if len(validKeys) == 0 {
+		return nil, nil
+	}
+
+	// Use a semaphore pattern for bounded parallelism
+	results := make(chan chunkResult, len(validKeys))
+	sem := make(chan struct{}, maxParallelDownloads)
+
+	// Launch download goroutines
+	for i, ki := range validKeys {
+		go func(idx int, ki keyInfo) {
+			sem <- struct{}{}        // acquire semaphore
+			defer func() { <-sem }() // release semaphore
+
+			data, err := storage.Download(ctx, ki.key)
+			if err != nil {
+				logger.Error("Failed to download chunk", "error", err, "key", ki.key)
+				results <- chunkResult{index: idx, err: err}
+				return
+			}
+
+			results <- chunkResult{
+				index: idx,
+				chunk: chunkInfo{
+					key:       ki.key,
+					firstLine: ki.firstLine,
+					lastLine:  ki.lastLine,
+					data:      data,
+				},
+			}
+		}(i, ki)
+	}
+
+	// Collect results
+	chunks := make([]chunkInfo, len(validKeys))
+	var firstErr error
+	for range validKeys {
+		result := <-results
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+			}
+			continue
+		}
+		chunks[result.index] = result.chunk
+	}
+
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	return chunks, nil
 }
 
 // mergeChunks takes downloaded chunks and merges them, handling overlaps.
@@ -729,27 +806,10 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 	}
 
 	// Download all chunks and parse their line ranges
-	chunks := make([]chunkInfo, 0, len(chunkKeys))
-	for _, key := range chunkKeys {
-		firstLine, lastLine, ok := parseChunkKey(key)
-		if !ok {
-			logger.Warn("Skipping chunk with unparseable key", "key", key)
-			continue
-		}
-
-		data, err := s.storage.Download(storageCtx, key)
-		if err != nil {
-			logger.Error("Failed to download chunk", "error", err, "key", key)
-			respondStorageError(w, err, "Failed to download file chunk")
-			return
-		}
-
-		chunks = append(chunks, chunkInfo{
-			key:       key,
-			firstLine: firstLine,
-			lastLine:  lastLine,
-			data:      data,
-		})
+	chunks, err := downloadChunks(storageCtx, s.storage, chunkKeys)
+	if err != nil {
+		respondStorageError(w, err, "Failed to download file chunk")
+		return
 	}
 
 	if len(chunks) == 0 {

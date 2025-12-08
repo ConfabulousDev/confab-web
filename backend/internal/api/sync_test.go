@@ -1,7 +1,11 @@
 package api
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -328,6 +332,200 @@ func TestExtractTextFromMessage(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockStorage implements chunkDownloader for testing
+type mockStorage struct {
+	chunks       map[string][]byte
+	downloadFunc func(key string) ([]byte, error) // optional custom behavior
+	callCount    atomic.Int32
+}
+
+func (m *mockStorage) Download(ctx context.Context, key string) ([]byte, error) {
+	m.callCount.Add(1)
+	if m.downloadFunc != nil {
+		return m.downloadFunc(key)
+	}
+	if data, ok := m.chunks[key]; ok {
+		return data, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func TestDownloadChunks(t *testing.T) {
+	t.Run("downloads chunks in parallel and preserves order", func(t *testing.T) {
+		storage := &mockStorage{
+			chunks: map[string][]byte{
+				"chunk_00000001_00000002.jsonl": []byte("line1\nline2\n"),
+				"chunk_00000003_00000004.jsonl": []byte("line3\nline4\n"),
+				"chunk_00000005_00000006.jsonl": []byte("line5\nline6\n"),
+			},
+		}
+
+		keys := []string{
+			"chunk_00000001_00000002.jsonl",
+			"chunk_00000003_00000004.jsonl",
+			"chunk_00000005_00000006.jsonl",
+		}
+
+		chunks, err := downloadChunks(context.Background(), storage, keys)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(chunks) != 3 {
+			t.Fatalf("expected 3 chunks, got %d", len(chunks))
+		}
+
+		// Verify order is preserved
+		if chunks[0].firstLine != 1 || chunks[0].lastLine != 2 {
+			t.Errorf("chunk 0: expected lines 1-2, got %d-%d", chunks[0].firstLine, chunks[0].lastLine)
+		}
+		if chunks[1].firstLine != 3 || chunks[1].lastLine != 4 {
+			t.Errorf("chunk 1: expected lines 3-4, got %d-%d", chunks[1].firstLine, chunks[1].lastLine)
+		}
+		if chunks[2].firstLine != 5 || chunks[2].lastLine != 6 {
+			t.Errorf("chunk 2: expected lines 5-6, got %d-%d", chunks[2].firstLine, chunks[2].lastLine)
+		}
+	})
+
+	t.Run("skips unparseable keys", func(t *testing.T) {
+		storage := &mockStorage{
+			chunks: map[string][]byte{
+				"chunk_00000001_00000002.jsonl": []byte("line1\nline2\n"),
+			},
+		}
+
+		keys := []string{
+			"invalid_key.jsonl",
+			"chunk_00000001_00000002.jsonl",
+			"another_bad_key",
+		}
+
+		chunks, err := downloadChunks(context.Background(), storage, keys)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(chunks) != 1 {
+			t.Fatalf("expected 1 chunk, got %d", len(chunks))
+		}
+	})
+
+	t.Run("returns error on download failure", func(t *testing.T) {
+		storage := &mockStorage{
+			downloadFunc: func(key string) ([]byte, error) {
+				return nil, errors.New("download failed")
+			},
+		}
+
+		keys := []string{"chunk_00000001_00000002.jsonl"}
+
+		_, err := downloadChunks(context.Background(), storage, keys)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("returns nil for empty keys", func(t *testing.T) {
+		storage := &mockStorage{}
+
+		chunks, err := downloadChunks(context.Background(), storage, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunks != nil {
+			t.Errorf("expected nil, got %v", chunks)
+		}
+	})
+
+	t.Run("returns nil for all unparseable keys", func(t *testing.T) {
+		storage := &mockStorage{}
+
+		keys := []string{"bad1.jsonl", "bad2.jsonl"}
+
+		chunks, err := downloadChunks(context.Background(), storage, keys)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunks != nil {
+			t.Errorf("expected nil, got %v", chunks)
+		}
+	})
+
+	t.Run("large batch exceeding maxParallelDownloads", func(t *testing.T) {
+		// Create 12 chunks (more than maxParallelDownloads=5)
+		chunkData := make(map[string][]byte)
+		keys := make([]string, 12)
+		for i := 0; i < 12; i++ {
+			first := i*10 + 1
+			last := first + 9
+			key := fmt.Sprintf("chunk_%08d_%08d.jsonl", first, last)
+			keys[i] = key
+			chunkData[key] = []byte(fmt.Sprintf("data for chunk %d\n", i))
+		}
+
+		storage := &mockStorage{chunks: chunkData}
+
+		chunks, err := downloadChunks(context.Background(), storage, keys)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(chunks) != 12 {
+			t.Fatalf("expected 12 chunks, got %d", len(chunks))
+		}
+
+		// Verify all chunks downloaded in correct order
+		for i, chunk := range chunks {
+			expectedFirst := i*10 + 1
+			expectedLast := expectedFirst + 9
+			if chunk.firstLine != expectedFirst || chunk.lastLine != expectedLast {
+				t.Errorf("chunk %d: expected lines %d-%d, got %d-%d",
+					i, expectedFirst, expectedLast, chunk.firstLine, chunk.lastLine)
+			}
+		}
+
+		// Verify all downloads were called
+		if storage.callCount.Load() != 12 {
+			t.Errorf("expected 12 download calls, got %d", storage.callCount.Load())
+		}
+	})
+
+	t.Run("partial failures - returns first error", func(t *testing.T) {
+		downloadErr := errors.New("chunk 2 failed")
+		callCount := atomic.Int32{}
+
+		storage := &mockStorage{
+			downloadFunc: func(key string) ([]byte, error) {
+				callCount.Add(1)
+				// Fail on the second chunk
+				if strings.Contains(key, "00000003_00000004") {
+					return nil, downloadErr
+				}
+				return []byte("data\n"), nil
+			},
+		}
+
+		keys := []string{
+			"chunk_00000001_00000002.jsonl",
+			"chunk_00000003_00000004.jsonl",
+			"chunk_00000005_00000006.jsonl",
+		}
+
+		_, err := downloadChunks(context.Background(), storage, keys)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if err.Error() != downloadErr.Error() {
+			t.Errorf("expected error %q, got %q", downloadErr.Error(), err.Error())
+		}
+
+		// All downloads should still be attempted (we don't cancel on first error)
+		if callCount.Load() != 3 {
+			t.Errorf("expected 3 download attempts, got %d", callCount.Load())
+		}
+	})
 }
 
 func TestExtractSessionTitle(t *testing.T) {
