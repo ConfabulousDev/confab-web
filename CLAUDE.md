@@ -31,6 +31,17 @@ cd frontend && npm run build && npm run lint && npm test
 - **Lint**: ESLint with strict rules. Must have 0 errors (warnings are OK).
 - **Test**: Vitest unit tests. All tests must pass.
 
+### Storybook
+
+When adding or modifying frontend components, always add or update Storybook stories:
+
+```bash
+cd frontend && npm run build-storybook  # Verify stories build
+cd frontend && npm run storybook        # Run locally to preview
+```
+
+Stories live alongside components (e.g., `Component.stories.tsx` next to `Component.tsx`).
+
 ## Finding Dead Code (Go)
 
 Two complementary tools for detecting unused code in the `backend/` directory:

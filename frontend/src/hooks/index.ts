@@ -10,4 +10,5 @@ export { useToggleSet } from './useToggleSet';
 export { useLoadSession } from './useLoadSession';
 export { useSessionFilters } from './useSessionFilters';
 export { useKeyboardShortcut } from './useKeyboardShortcut';
+export { useSpinner } from './useSpinner';
 export type { SessionErrorType } from './useLoadSession';

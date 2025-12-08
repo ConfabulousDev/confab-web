@@ -1,6 +1,6 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import type { TranscriptLine } from '@/types';
-import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
+import { useKeyboardShortcut, useSpinner } from '@/hooks';
 import { calculateTokenStats, calculateEstimatedCost, formatTokenCount, formatCost } from '@/utils/tokenStats';
 import PageSidebar from '../PageSidebar';
 import styles from './SessionStatsSidebar.module.css';
@@ -8,28 +8,6 @@ import styles from './SessionStatsSidebar.module.css';
 interface SessionStatsSidebarProps {
   messages: TranscriptLine[];
   loading?: boolean;
-}
-
-// ASCII spinner frames
-const SPINNER_FRAMES = ['|', '/', '-', '\\'] as const;
-
-/**
- * Hook to create an ASCII spinner animation
- */
-function useSpinner(active: boolean): string {
-  const [frameIndex, setFrameIndex] = useState(0);
-
-  useEffect(() => {
-    if (!active) return;
-
-    const interval = setInterval(() => {
-      setFrameIndex((prev) => (prev + 1) % SPINNER_FRAMES.length);
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [active]);
-
-  return SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length] ?? '|';
 }
 
 // Placeholder stats for non-token sections
