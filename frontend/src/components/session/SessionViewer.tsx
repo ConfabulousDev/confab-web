@@ -101,7 +101,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
 
   return (
     <div className={styles.sessionViewer}>
-      <SessionStatsSidebar />
+      <SessionStatsSidebar messages={messages} loading={loading} />
 
       <div className={styles.mainContent}>
         <SessionHeader

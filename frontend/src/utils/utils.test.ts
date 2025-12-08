@@ -70,7 +70,8 @@ describe('formatRelativeTime', () => {
   });
 
   it('should format future hours', () => {
-    const future = new Date(Date.now() + 7200000).toISOString();
+    // Add buffer to avoid flaky test at boundary (2h + 1s)
+    const future = new Date(Date.now() + 7201000).toISOString();
     expect(formatRelativeTime(future)).toBe('in 2h');
   });
 
