@@ -686,11 +686,12 @@ func (db *DB) unmarshalSessionGitInfo(session *SessionDetail, gitInfoBytes []byt
 }
 
 // loadSessionSyncFiles loads sync files for a session
+// Excludes todo files - they are transient state not useful for transcript history
 func (db *DB) loadSessionSyncFiles(ctx context.Context, session *SessionDetail) error {
 	filesQuery := `
 		SELECT file_name, file_type, last_synced_line, updated_at
 		FROM sync_files
-		WHERE session_id = $1
+		WHERE session_id = $1 AND file_type != 'todo'
 		ORDER BY file_type DESC, file_name ASC
 	`
 

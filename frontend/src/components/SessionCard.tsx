@@ -1,6 +1,6 @@
 import type { SessionDetail, SyncFileDetail } from '@/types';
 import { getRepoWebURL, getCommitURL } from '@/utils';
-import { useTodos, useToggleSet } from '@/hooks';
+import { useToggleSet } from '@/hooks';
 import TranscriptViewer from './transcript/TranscriptViewer';
 import styles from './SessionCard.module.css';
 
@@ -11,7 +11,6 @@ interface SessionCardProps {
 }
 
 function SessionCard({ session, showGitInfo = true, shareToken }: SessionCardProps) {
-  const { todos } = useTodos({ session, shareToken });
   const expandedFiles = useToggleSet<string>();
 
   return (
@@ -134,27 +133,6 @@ function SessionCard({ session, showGitInfo = true, shareToken }: SessionCardPro
               );
             })}
           </div>
-        </div>
-      )}
-
-      {todos.length > 0 && (
-        <div className={styles.todosSection}>
-          <h4>Todo Lists ({todos.length})</h4>
-          {todos.map((todoGroup, i) => (
-            <div key={i} className={styles.todoGroup}>
-              <h5>Agent: {todoGroup.agent_id}</h5>
-              <div className={styles.todoList}>
-                {todoGroup.items.map((item, j) => (
-                  <div key={j} className={`${styles.todoItem} ${styles[`status-${item.status}`]}`}>
-                    <span className={styles.todoStatusIcon}>
-                      {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '⟳' : '○'}
-                    </span>
-                    <span className={styles.todoContent}>{item.content}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       )}
 

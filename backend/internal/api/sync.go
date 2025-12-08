@@ -180,6 +180,10 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "file_type is required")
 		return
 	}
+	if req.FileType == "todo" {
+		respondError(w, http.StatusBadRequest, "todo file sync is no longer supported")
+		return
+	}
 	if req.FirstLine < 1 {
 		respondError(w, http.StatusBadRequest, "first_line must be >= 1")
 		return

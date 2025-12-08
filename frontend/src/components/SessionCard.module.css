@@ -192,11 +192,6 @@
   color: var(--color-success-text);
 }
 
-.fileType.todo {
-  background: var(--color-warning-bg);
-  color: var(--color-warning-text);
-}
-
 .filePath {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
   font-size: var(--font-xs);
@@ -211,95 +206,4 @@
   font-size: var(--font-xs);
   white-space: nowrap;
   flex-shrink: 0;
-}
-
-.todosSection {
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
-  border-top: 1px solid var(--color-border-light);
-}
-
-.todosSection h4 {
-  font-size: var(--font-xs);
-  font-weight: var(--font-semibold);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 0 0 var(--spacing-sm) 0;
-}
-
-.todoGroup {
-  margin-bottom: var(--spacing-md);
-}
-
-.todoGroup:last-child {
-  margin-bottom: 0;
-}
-
-.todoGroup h5 {
-  font-size: var(--font-xs);
-  color: var(--color-text-muted);
-  margin: 0 0 var(--spacing-sm) 0;
-  font-weight: var(--font-medium);
-}
-
-.todoList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.todoItem {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-md);
-  border-left: 2px solid transparent;
-}
-
-.todoItem.status-pending {
-  border-left-color: var(--color-text-muted);
-}
-
-.todoItem.status-in_progress {
-  border-left-color: var(--color-accent);
-  background: var(--color-accent-light);
-}
-
-.todoItem.status-completed {
-  border-left-color: var(--color-success);
-  background: var(--color-success-bg);
-}
-
-.todoStatusIcon {
-  font-size: var(--font-sm);
-  line-height: 1.5;
-  min-width: 1rem;
-  text-align: center;
-}
-
-.todoItem.status-pending .todoStatusIcon {
-  color: var(--color-text-muted);
-}
-
-.todoItem.status-in_progress .todoStatusIcon {
-  color: var(--color-accent);
-}
-
-.todoItem.status-completed .todoStatusIcon {
-  color: var(--color-success);
-}
-
-.todoContent {
-  color: var(--color-text-primary);
-  font-size: var(--font-sm);
-  line-height: 1.5;
-  flex: 1;
-}
-
-.todoItem.status-completed .todoContent {
-  color: var(--color-text-muted);
-  text-decoration: line-through;
 }
