@@ -1,8 +1,10 @@
 import type { GitInfo } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import { formatDuration, formatDateTime, formatModelName } from '@/utils/formatting';
+import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
+import FilterDropdown from './FilterDropdown';
 import styles from './SessionHeader.module.css';
 
 // SVG Icons
@@ -63,6 +65,10 @@ interface SessionHeaderProps {
   onDelete?: () => void;
   isOwner?: boolean;
   isShared?: boolean;
+  // Filter props
+  categoryCounts: MessageCategoryCounts;
+  visibleCategories: Set<MessageCategory>;
+  onToggleCategory: (category: MessageCategory) => void;
 }
 
 function SessionHeader({
@@ -76,6 +82,9 @@ function SessionHeader({
   onDelete,
   isOwner = true,
   isShared = false,
+  categoryCounts,
+  visibleCategories,
+  onToggleCategory,
 }: SessionHeaderProps) {
   const { copy, copied } = useCopyToClipboard();
   const displayTitle = title || `Session ${externalId.substring(0, 8)}`;
@@ -108,25 +117,32 @@ function SessionHeader({
         </div>
       </div>
 
-      {isShared ? (
-        <div className={styles.sharedIndicator}>
-          {ShareIcon}
-          <span>Shared Session</span>
-        </div>
-      ) : isOwner && (
-        <div className={styles.actions}>
-          {onShare && (
-            <button className={styles.btnShare} onClick={onShare}>
-              Share
-            </button>
-          )}
-          {onDelete && (
-            <button className={styles.btnDelete} onClick={onDelete}>
-              Delete
-            </button>
-          )}
-        </div>
-      )}
+      <div className={styles.actions}>
+        <FilterDropdown
+          counts={categoryCounts}
+          visibleCategories={visibleCategories}
+          onToggleCategory={onToggleCategory}
+        />
+        {isShared ? (
+          <div className={styles.sharedIndicator}>
+            {ShareIcon}
+            <span>Shared Session</span>
+          </div>
+        ) : isOwner && (
+          <>
+            {onShare && (
+              <button className={styles.btnShare} onClick={onShare}>
+                Share
+              </button>
+            )}
+            {onDelete && (
+              <button className={styles.btnDelete} onClick={onDelete}>
+                Delete
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </header>
   );
 }

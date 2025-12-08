@@ -3,7 +3,7 @@ import type { SessionDetail, TranscriptLine } from '@/types';
 import { fetchParsedTranscript } from '@/services/transcriptService';
 import { countCategories, type MessageCategory } from './messageCategories';
 import SessionHeader from './SessionHeader';
-import FilterSidebar from './FilterSidebar';
+import SessionStatsSidebar from './SessionStatsSidebar';
 import MessageTimeline from './MessageTimeline';
 import styles from './SessionViewer.module.css';
 
@@ -20,7 +20,6 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Filter state - user, assistant, system visible by default
   const [visibleCategories, setVisibleCategories] = useState<Set<MessageCategory>>(
@@ -102,13 +101,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
 
   return (
     <div className={styles.sessionViewer}>
-      <FilterSidebar
-        counts={categoryCounts}
-        visibleCategories={visibleCategories}
-        onToggleCategory={toggleCategory}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
+      <SessionStatsSidebar />
 
       <div className={styles.mainContent}>
         <SessionHeader
@@ -122,6 +115,9 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
           onDelete={onDelete}
           isOwner={isOwner}
           isShared={isShared}
+          categoryCounts={categoryCounts}
+          visibleCategories={visibleCategories}
+          onToggleCategory={toggleCategory}
         />
 
         <div className={styles.timelineContainer}>
