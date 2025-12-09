@@ -203,7 +203,7 @@ function SessionsPage() {
                       <th>Branch</th>
                       <SortableHeader
                         column="external_id"
-                        label="ID"
+                        label="CC id"
                         currentColumn={sortColumn}
                         direction={sortDirection}
                         onSort={handleSort}
@@ -231,7 +231,12 @@ function SessionsPage() {
                         </td>
                         <td className={styles.gitInfo}>{session.git_repo || ''}</td>
                         <td className={styles.gitInfo}>{session.git_branch || ''}</td>
-                        <td className={styles.sessionId}>{session.external_id.substring(0, 8)}</td>
+                        <td
+                          className={styles.sessionId}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {session.external_id.substring(0, 8)}
+                        </td>
                         <td className={styles.timestamp}>{session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}</td>
                       </tr>
                     ))}
