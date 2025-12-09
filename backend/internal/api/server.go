@@ -34,6 +34,23 @@ const (
 	StorageTimeout = 30 * time.Second
 )
 
+// Request body size limits (t-shirt sizes)
+const (
+	MaxBodyXS = 2 * 1024        // 2KB - GET/DELETE safety buffer
+	MaxBodyS  = 16 * 1024       // 16KB - auth tokens, simple metadata
+	MaxBodyM  = 128 * 1024      // 128KB - API keys, shares, session updates
+	MaxBodyL  = 2 * 1024 * 1024 // 2MB - batch operations (sessions/check)
+	MaxBodyXL = 16 * 1024 * 1024 // 16MB - sync chunk uploads
+)
+
+// withMaxBody wraps a handler with a request body size limit
+func withMaxBody(limit int64, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		h(w, r)
+	}
+}
+
 // Server holds dependencies for API handlers
 type Server struct {
 	db                *db.DB
@@ -160,38 +177,38 @@ func (s *Server) SetupRoutes() http.Handler {
 	)
 
 	// Health check (no additional rate limiting needed)
-	r.Get("/health", s.handleHealth)
+	r.Get("/health", withMaxBody(MaxBodyXS, s.handleHealth))
 
 	// Root endpoint - only serve API info if not serving static frontend
 	staticDir := os.Getenv("STATIC_FILES_DIR")
 	if staticDir == "" {
-		r.Get("/", s.handleRoot)
+		r.Get("/", withMaxBody(MaxBodyXS, s.handleRoot))
 	}
 
 	// OAuth routes (public) - Apply stricter auth rate limiting
 	// Login selector (choose provider)
-	r.Get("/auth/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleLoginSelector()))
+	r.Get("/auth/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLoginSelector())))
 	// GitHub
-	r.Get("/auth/github/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig)))
-	r.Get("/auth/github/callback", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubCallback(s.oauthConfig, s.db)))
+	r.Get("/auth/github/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig))))
+	r.Get("/auth/github/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubCallback(s.oauthConfig, s.db))))
 	// Google
-	r.Get("/auth/google/login", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleLogin(s.oauthConfig)))
-	r.Get("/auth/google/callback", ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleCallback(s.oauthConfig, s.db)))
+	r.Get("/auth/google/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleLogin(s.oauthConfig))))
+	r.Get("/auth/google/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleCallback(s.oauthConfig, s.db))))
 	// Logout
-	r.Get("/auth/logout", ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db)))
+	r.Get("/auth/logout", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db))))
 
 	// CLI authorize (requires web session) - Apply auth rate limiting
-	r.Get("/auth/cli/authorize", ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db)))
+	r.Get("/auth/cli/authorize", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db))))
 
 	// Device code flow (for CLI on headless/remote machines)
 	backendURL := os.Getenv("BACKEND_URL")
 	if backendURL == "" {
 		backendURL = "http://localhost:8080" // Default for local dev
 	}
-	r.Post("/auth/device/code", ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceCode(s.db, backendURL)))
-	r.Post("/auth/device/token", ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db)))
-	r.Get("/auth/device", auth.HandleDevicePage(s.db))
-	r.Post("/auth/device/verify", ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db)))
+	r.Post("/auth/device/code", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceCode(s.db, backendURL))))
+	r.Post("/auth/device/token", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db))))
+	r.Get("/auth/device", withMaxBody(MaxBodyXS, auth.HandleDevicePage(s.db)))
+	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db))))
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -204,7 +221,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Use(auth.Middleware(s.db))
 
 			// API key validation endpoint with rate limiting to prevent abuse
-			r.Get("/auth/validate", ratelimit.HandlerFunc(s.validationLimiter, s.handleValidateAPIKey))
+			r.Get("/auth/validate", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.validationLimiter, s.handleValidateAPIKey)))
 
 			// Sync endpoints with user-based rate limiting and zstd decompression
 			r.Group(func(r chi.Router) {
@@ -214,19 +231,19 @@ func (s *Server) SetupRoutes() http.Handler {
 				r.Use(decompressMiddleware())
 
 				// Check which sessions exist (for backfill deduplication)
-				r.Post("/sessions/check", HandleCheckSessions(s))
+				r.Post("/sessions/check", withMaxBody(MaxBodyL, HandleCheckSessions(s)))
 
 				// Incremental sync endpoints (for daemon-based uploads)
-				r.Post("/sync/init", s.handleSyncInit)
-				r.Post("/sync/chunk", s.handleSyncChunk)
-				r.Post("/sync/event", s.handleSyncEvent)
+				r.Post("/sync/init", withMaxBody(MaxBodyM, s.handleSyncInit))
+				r.Post("/sync/chunk", withMaxBody(MaxBodyXL, s.handleSyncChunk))
+				r.Post("/sync/event", withMaxBody(MaxBodyM, s.handleSyncEvent))
 			})
 
 			// Read endpoint doesn't need rate limiting or decompression
-			r.Get("/sync/file", s.handleSyncFileRead)
+			r.Get("/sync/file", withMaxBody(MaxBodyXS, s.handleSyncFileRead))
 
 			// Session metadata update (by external_id for CLI convenience)
-			r.Patch("/sessions/{external_id}/summary", s.handleUpdateSessionSummary)
+			r.Patch("/sessions/{external_id}/summary", withMaxBody(MaxBodyM, s.handleUpdateSessionSummary))
 		})
 
 		// Protected routes for web dashboard (require web session)
@@ -236,43 +253,43 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Use(auth.SessionMiddleware(s.db))
 
 			// CSRF token endpoint - must be inside CSRF middleware to set cookie
-			r.Get("/csrf-token", func(w http.ResponseWriter, r *http.Request) {
+			r.Get("/csrf-token", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("X-CSRF-Token", csrf.Token(r))
 				respondJSON(w, http.StatusOK, map[string]string{
 					"csrf_token": csrf.Token(r),
 				})
-			})
-			r.Get("/me", s.handleGetMe)
+			}))
+			r.Get("/me", withMaxBody(MaxBodyXS, s.handleGetMe))
 			// Legacy weekly usage endpoint removed
 
 			// API key management
-			r.Post("/keys", HandleCreateAPIKey(s.db))
-			r.Get("/keys", HandleListAPIKeys(s.db))
-			r.Delete("/keys/{id}", HandleDeleteAPIKey(s.db))
+			r.Post("/keys", withMaxBody(MaxBodyM, HandleCreateAPIKey(s.db)))
+			r.Get("/keys", withMaxBody(MaxBodyXS, HandleListAPIKeys(s.db)))
+			r.Delete("/keys/{id}", withMaxBody(MaxBodyXS, HandleDeleteAPIKey(s.db)))
 
 			// Session viewing
-			r.Get("/sessions", HandleListSessions(s.db))
-			r.Get("/sessions/{id}", HandleGetSession(s.db))
+			r.Get("/sessions", withMaxBody(MaxBodyXS, HandleListSessions(s.db)))
+			r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
 
 			// Sync file read (same handler, different auth)
-			r.Get("/sync/file", s.handleSyncFileRead)
+			r.Get("/sync/file", withMaxBody(MaxBodyXS, s.handleSyncFileRead))
 
 			// Session deletion
-			r.Delete("/sessions/{id}", HandleDeleteSession(s.db, s.storage))
+			r.Delete("/sessions/{id}", withMaxBody(MaxBodyXS, HandleDeleteSession(s.db, s.storage)))
 
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
-			r.Post("/sessions/{id}/share", HandleCreateShare(s.db, frontendURL, s.emailService))
-			r.Get("/sessions/{id}/shares", HandleListShares(s.db))
-			r.Get("/shares", HandleListAllUserShares(s.db))
-			r.Delete("/shares/{shareToken}", HandleRevokeShare(s.db))
+			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService)))
+			r.Get("/sessions/{id}/shares", withMaxBody(MaxBodyXS, HandleListShares(s.db)))
+			r.Get("/shares", withMaxBody(MaxBodyXS, HandleListAllUserShares(s.db)))
+			r.Delete("/shares/{shareToken}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))
 		})
 
 		// Public shared session access (no auth for public, optional auth for private)
-		r.Get("/sessions/{id}/shared/{shareToken}", HandleGetSharedSession(s.db))
+		r.Get("/sessions/{id}/shared/{shareToken}", withMaxBody(MaxBodyXS, HandleGetSharedSession(s.db)))
 		// Shared sync file access endpoint
-		r.Get("/sessions/{id}/shared/{shareToken}/sync/file", s.handleSharedSyncFileRead)
+		r.Get("/sessions/{id}/shared/{shareToken}/sync/file", withMaxBody(MaxBodyXS, s.handleSharedSyncFileRead))
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)
