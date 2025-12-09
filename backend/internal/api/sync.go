@@ -572,9 +572,10 @@ const maxParallelDownloads = 5
 
 // chunkResult holds the result of a parallel chunk download
 type chunkResult struct {
-	index int
-	chunk chunkInfo
-	err   error
+	index    int
+	chunk    chunkInfo
+	err      error
+	duration time.Duration // time taken to download this chunk
 }
 
 // downloadChunks downloads all chunks for the given keys in parallel and returns them as chunkInfo slices.
@@ -616,15 +617,19 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 			sem <- struct{}{}        // acquire semaphore
 			defer func() { <-sem }() // release semaphore
 
+			start := time.Now()
 			data, err := storage.Download(ctx, ki.key)
+			elapsed := time.Since(start)
+
 			if err != nil {
 				logger.Error("Failed to download chunk", "error", err, "key", ki.key)
-				results <- chunkResult{index: idx, err: err}
+				results <- chunkResult{index: idx, err: err, duration: elapsed}
 				return
 			}
 
 			results <- chunkResult{
-				index: idx,
+				index:    idx,
+				duration: elapsed,
 				chunk: chunkInfo{
 					key:       ki.key,
 					firstLine: ki.firstLine,
@@ -635,11 +640,18 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 		}(i, ki)
 	}
 
-	// Collect results
+	// Collect results and track timing metrics
 	chunks := make([]chunkInfo, len(validKeys))
 	var firstErr error
+	var maxDuration time.Duration
+	var sumDuration time.Duration
+
 	for range validKeys {
 		result := <-results
+		sumDuration += result.duration
+		if result.duration > maxDuration {
+			maxDuration = result.duration
+		}
 		if result.err != nil {
 			if firstErr == nil {
 				firstErr = result.err
@@ -647,6 +659,22 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 			continue
 		}
 		chunks[result.index] = result.chunk
+	}
+
+	// Log parallel download performance metrics
+	// maxDuration = wall-clock time if downloads were fully parallel (limited by slowest)
+	// sumDuration = total time if downloads were sequential
+	// Improvement ratio = sumDuration / maxDuration (higher = better parallelization)
+	if len(validKeys) > 1 {
+		var ratio float64
+		if maxDuration > 0 {
+			ratio = float64(sumDuration) / float64(maxDuration)
+		}
+		logger.Info("Parallel chunk download metrics",
+			"chunk_count", len(validKeys),
+			"max_duration_ms", maxDuration.Milliseconds(),
+			"sum_duration_ms", sumDuration.Milliseconds(),
+			"speedup_ratio", fmt.Sprintf("%.2f", ratio))
 	}
 
 	if firstErr != nil {
