@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
 type contextKey string
@@ -76,7 +77,9 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 
 			// Update last used timestamp (fire and forget - don't block the request)
 			go func() {
-				_ = database.UpdateAPIKeyLastUsed(context.Background(), keyID)
+				if err := database.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
+					logger.Warn("Failed to update API key last used", "error", err, "key_id", keyID)
+				}
 			}()
 
 			// Add user ID to request context

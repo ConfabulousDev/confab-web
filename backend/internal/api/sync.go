@@ -14,6 +14,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
 // ============================================================================
@@ -237,6 +238,19 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Soft limit check on chunk count (if known)
+	// This is a soft limit - races may allow slightly exceeding it, but reads will self-heal
+	if syncState != nil && syncState.ChunkCount != nil && *syncState.ChunkCount >= storage.MaxChunksPerFile {
+		logger.Warn("Chunk limit exceeded",
+			"session_id", req.SessionID,
+			"file_name", req.FileName,
+			"chunk_count", *syncState.ChunkCount,
+			"limit", storage.MaxChunksPerFile)
+		respondError(w, http.StatusBadRequest,
+			fmt.Sprintf("File has too many chunks (limit: %d). Consider starting a new session.", storage.MaxChunksPerFile))
+		return
+	}
+
 	// Build chunk content (lines joined by newlines, with trailing newline)
 	// Also extract timestamp metadata from transcript lines
 	var content bytes.Buffer
@@ -378,6 +392,30 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	if len(chunkKeys) == 0 {
 		respondError(w, http.StatusNotFound, "File not found")
 		return
+	}
+
+	// Self-healing: update DB chunk_count if it differs from actual S3 count
+	// This corrects any drift from races or failed uploads
+	actualChunkCount := len(chunkKeys)
+	syncState, err := s.db.GetSyncFileState(dbCtx, sessionID, fileName)
+	if err == nil {
+		// Only update if chunk_count is nil (legacy) or doesn't match
+		if syncState.ChunkCount == nil || *syncState.ChunkCount != actualChunkCount {
+			if err := s.db.UpdateSyncFileChunkCount(dbCtx, sessionID, fileName, actualChunkCount); err != nil {
+				// Log but don't fail the read - this is best-effort healing
+				logger.Warn("Failed to self-heal chunk count",
+					"error", err,
+					"session_id", sessionID,
+					"file_name", fileName,
+					"actual_count", actualChunkCount)
+			} else {
+				logger.Debug("Self-healed chunk count",
+					"session_id", sessionID,
+					"file_name", fileName,
+					"old_count", syncState.ChunkCount,
+					"new_count", actualChunkCount)
+			}
+		}
 	}
 
 	// Download all chunks and parse their line ranges

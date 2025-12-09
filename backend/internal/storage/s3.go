@@ -22,7 +22,15 @@ var (
 
 	// ErrNetworkError indicates a network connectivity issue
 	ErrNetworkError = errors.New("network error")
+
+	// ErrTooManyChunks indicates a file has exceeded the maximum allowed chunks
+	ErrTooManyChunks = errors.New("file has too many chunks")
 )
+
+// MaxChunksPerFile is the maximum number of chunks allowed per file.
+// This is a sanity limit to prevent unbounded memory usage when listing chunks.
+// At 100 lines per chunk, this allows for 3 million lines per file.
+const MaxChunksPerFile = 30000
 
 // S3Config holds S3/MinIO configuration
 type S3Config struct {
@@ -203,6 +211,7 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, f
 
 // ListChunks lists all chunk files for a given session and file name
 // Returns keys sorted by name (which gives correct line order due to zero-padded naming)
+// Returns ErrTooManyChunks if the file exceeds MaxChunksPerFile.
 func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fileName string) ([]string, error) {
 	prefix := fmt.Sprintf("%d/claude-code/%s/chunks/%s/", userID, externalID, fileName)
 
@@ -217,6 +226,11 @@ func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fi
 			return nil, classifyStorageError(obj.Err, "list chunks")
 		}
 		keys = append(keys, obj.Key)
+
+		// Sanity check to prevent unbounded memory usage
+		if len(keys) > MaxChunksPerFile {
+			return nil, fmt.Errorf("list chunks: %w (limit: %d)", ErrTooManyChunks, MaxChunksPerFile)
+		}
 	}
 
 	// Keys are already sorted by ListObjects (lexicographic order)

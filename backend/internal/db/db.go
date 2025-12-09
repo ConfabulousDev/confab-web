@@ -1228,6 +1228,12 @@ type SyncFileState struct {
 	FileName       string `json:"file_name"`
 	FileType       string `json:"file_type"`
 	LastSyncedLine int    `json:"last_synced_line"`
+	// ChunkCount is an estimate of the number of S3 chunks for this file.
+	// nil means unknown (legacy), 0 means no chunks yet.
+	// NOTE: This is an estimate and may drift due to races or failed uploads.
+	// Do NOT use this to truncate key lists on read - always list actual S3 objects.
+	// The read path self-heals this value by comparing against actual S3 chunk count.
+	ChunkCount *int `json:"chunk_count"`
 }
 
 // SyncSessionParams contains parameters for creating/updating a sync session
@@ -1453,16 +1459,18 @@ func (db *DB) UpdateSessionSummary(ctx context.Context, externalID string, userI
 
 // UpdateSyncFileState updates the high-water mark for a file's sync state
 // Creates the sync_file record if it doesn't exist (upsert)
+// Increments chunk_count by 1 on each call (COALESCE handles NULL -> 1 for legacy files)
 // If lastMessageAt is provided and newer than current, updates session.last_message_at
 // If summary/firstUserMessage is provided (not nil), sets them (last write wins; empty string clears)
 // If gitInfo is provided (not nil and not empty), updates session.git_info
 func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, summary, firstUserMessage *string, gitInfo json.RawMessage) error {
-	// Update sync_files table
+	// Update sync_files table - increment chunk_count on each chunk upload
 	syncQuery := `
-		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, updated_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, chunk_count, updated_at)
+		VALUES ($1, $2, $3, $4, 1, NOW())
 		ON CONFLICT (session_id, file_name) DO UPDATE SET
 			last_synced_line = $4,
+			chunk_count = COALESCE(sync_files.chunk_count, 0) + 1,
 			updated_at = NOW()
 	`
 	_, err := db.conn.ExecContext(ctx, syncQuery, sessionID, fileName, fileType, lastSyncedLine)
@@ -1528,9 +1536,9 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 
 // GetSyncFileState retrieves the sync state for a specific file
 func (db *DB) GetSyncFileState(ctx context.Context, sessionID, fileName string) (*SyncFileState, error) {
-	query := `SELECT file_name, file_type, last_synced_line FROM sync_files WHERE session_id = $1 AND file_name = $2`
+	query := `SELECT file_name, file_type, last_synced_line, chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2`
 	var state SyncFileState
-	err := db.conn.QueryRowContext(ctx, query, sessionID, fileName).Scan(&state.FileName, &state.FileType, &state.LastSyncedLine)
+	err := db.conn.QueryRowContext(ctx, query, sessionID, fileName).Scan(&state.FileName, &state.FileType, &state.LastSyncedLine, &state.ChunkCount)
 	if err == sql.ErrNoRows {
 		return nil, ErrFileNotFound
 	}
@@ -1538,6 +1546,16 @@ func (db *DB) GetSyncFileState(ctx context.Context, sessionID, fileName string) 
 		return nil, fmt.Errorf("failed to get sync file state: %w", err)
 	}
 	return &state, nil
+}
+
+// UpdateSyncFileChunkCount sets the chunk_count for a file (used for self-healing on read)
+func (db *DB) UpdateSyncFileChunkCount(ctx context.Context, sessionID, fileName string, chunkCount int) error {
+	query := `UPDATE sync_files SET chunk_count = $3, updated_at = NOW() WHERE session_id = $1 AND file_name = $2`
+	_, err := db.conn.ExecContext(ctx, query, sessionID, fileName, chunkCount)
+	if err != nil {
+		return fmt.Errorf("failed to update chunk count: %w", err)
+	}
+	return nil
 }
 
 // GetSyncChunkKeys returns all S3 keys for chunks of a session (for deletion)

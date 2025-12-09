@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -1634,6 +1635,326 @@ func TestSyncChunk_Summary_Integration(t *testing.T) {
 
 		if summary == nil || *summary != "Preserved Summary" {
 			t.Errorf("expected summary 'Preserved Summary' to be preserved, got %v", summary)
+		}
+	})
+}
+
+// =============================================================================
+// Chunk Count Tracking and Limits
+// =============================================================================
+
+func TestHandleSyncChunk_ChunkCountTracking_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("increments chunk_count on each upload", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-chunk-count")
+
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload first chunk
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"user","message":"Line 1"}`},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify chunk_count is 1
+		var chunkCount *int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "transcript.jsonl")
+		if err := row.Scan(&chunkCount); err != nil {
+			t.Fatalf("failed to query chunk_count: %v", err)
+		}
+		if chunkCount == nil || *chunkCount != 1 {
+			t.Errorf("expected chunk_count 1 after first upload, got %v", chunkCount)
+		}
+
+		// Upload second chunk
+		reqBody.FirstLine = 2
+		reqBody.Lines = []string{`{"type":"assistant","message":"Line 2"}`}
+
+		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w = httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify chunk_count is 2
+		row = env.DB.QueryRow(env.Ctx,
+			"SELECT chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "transcript.jsonl")
+		if err := row.Scan(&chunkCount); err != nil {
+			t.Fatalf("failed to query chunk_count: %v", err)
+		}
+		if chunkCount == nil || *chunkCount != 2 {
+			t.Errorf("expected chunk_count 2 after second upload, got %v", chunkCount)
+		}
+	})
+
+	t.Run("rejects upload when chunk limit exceeded", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-chunk-limit")
+
+		// Insert sync_files record with chunk_count at limit
+		_, err := env.DB.Exec(env.Ctx,
+			`INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, chunk_count)
+			 VALUES ($1, 'transcript.jsonl', 'transcript', 100, $2)`,
+			sessionID, storage.MaxChunksPerFile)
+		if err != nil {
+			t.Fatalf("failed to insert sync file: %v", err)
+		}
+
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 101,
+			Lines:     []string{`{"type":"user","message":"Should be rejected"}`},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusBadRequest)
+
+		var resp map[string]string
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		if !strings.Contains(resp["error"], "too many chunks") {
+			t.Errorf("expected error about too many chunks, got: %s", resp["error"])
+		}
+	})
+
+	t.Run("allows upload when chunk_count is NULL (legacy file)", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-legacy-null")
+
+		// Insert sync_files record with NULL chunk_count (legacy)
+		_, err := env.DB.Exec(env.Ctx,
+			`INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, chunk_count)
+			 VALUES ($1, 'transcript.jsonl', 'transcript', 100, NULL)`,
+			sessionID)
+		if err != nil {
+			t.Fatalf("failed to insert sync file: %v", err)
+		}
+
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 101,
+			Lines:     []string{`{"type":"user","message":"Should be allowed"}`},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify chunk_count is now 1 (COALESCE(NULL, 0) + 1)
+		var chunkCount *int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "transcript.jsonl")
+		if err := row.Scan(&chunkCount); err != nil {
+			t.Fatalf("failed to query chunk_count: %v", err)
+		}
+		if chunkCount == nil || *chunkCount != 1 {
+			t.Errorf("expected chunk_count 1 after upload to legacy file, got %v", chunkCount)
+		}
+	})
+}
+
+func TestHandleSyncFileRead_SelfHealing_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("self-heals chunk_count from NULL to actual count", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		externalID := "test-selfheal-null"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
+
+		// Upload 3 chunks directly to S3
+		ctx := context.Background()
+		for i := 1; i <= 3; i++ {
+			firstLine := (i-1)*10 + 1
+			lastLine := i * 10
+			data := []byte(fmt.Sprintf(`{"chunk":%d}`, i) + "\n")
+			_, err := env.Storage.UploadChunk(ctx, user.ID, externalID, "transcript.jsonl", firstLine, lastLine, data)
+			if err != nil {
+				t.Fatalf("failed to upload chunk %d: %v", i, err)
+			}
+		}
+
+		// Insert sync_files record with NULL chunk_count (simulating legacy or drift)
+		_, err := env.DB.Exec(env.Ctx,
+			`INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, chunk_count)
+			 VALUES ($1, 'transcript.jsonl', 'transcript', 30, NULL)`,
+			sessionID)
+		if err != nil {
+			t.Fatalf("failed to insert sync file: %v", err)
+		}
+
+		// Read the file
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		req := testutil.AuthenticatedRequest(t, "GET",
+			fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=transcript.jsonl", sessionID),
+			nil, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncFileRead(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify chunk_count was self-healed to 3
+		var chunkCount *int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "transcript.jsonl")
+		if err := row.Scan(&chunkCount); err != nil {
+			t.Fatalf("failed to query chunk_count: %v", err)
+		}
+		if chunkCount == nil || *chunkCount != 3 {
+			t.Errorf("expected chunk_count to be self-healed to 3, got %v", chunkCount)
+		}
+	})
+
+	t.Run("self-heals chunk_count from incorrect value to actual count", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		externalID := "test-selfheal-wrong"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
+
+		// Upload 2 chunks directly to S3
+		ctx := context.Background()
+		for i := 1; i <= 2; i++ {
+			firstLine := (i-1)*10 + 1
+			lastLine := i * 10
+			data := []byte(fmt.Sprintf(`{"chunk":%d}`, i) + "\n")
+			_, err := env.Storage.UploadChunk(ctx, user.ID, externalID, "transcript.jsonl", firstLine, lastLine, data)
+			if err != nil {
+				t.Fatalf("failed to upload chunk %d: %v", i, err)
+			}
+		}
+
+		// Insert sync_files record with incorrect chunk_count (simulating drift)
+		_, err := env.DB.Exec(env.Ctx,
+			`INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, chunk_count)
+			 VALUES ($1, 'transcript.jsonl', 'transcript', 20, 5)`,
+			sessionID)
+		if err != nil {
+			t.Fatalf("failed to insert sync file: %v", err)
+		}
+
+		// Read the file
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		req := testutil.AuthenticatedRequest(t, "GET",
+			fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=transcript.jsonl", sessionID),
+			nil, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncFileRead(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify chunk_count was self-healed to 2 (actual count)
+		var chunkCount *int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "transcript.jsonl")
+		if err := row.Scan(&chunkCount); err != nil {
+			t.Fatalf("failed to query chunk_count: %v", err)
+		}
+		if chunkCount == nil || *chunkCount != 2 {
+			t.Errorf("expected chunk_count to be self-healed to 2, got %v", chunkCount)
+		}
+	})
+
+	t.Run("does not update chunk_count if already correct", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		externalID := "test-selfheal-correct"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
+
+		// Upload 2 chunks directly to S3
+		ctx := context.Background()
+		for i := 1; i <= 2; i++ {
+			firstLine := (i-1)*10 + 1
+			lastLine := i * 10
+			data := []byte(fmt.Sprintf(`{"chunk":%d}`, i) + "\n")
+			_, err := env.Storage.UploadChunk(ctx, user.ID, externalID, "transcript.jsonl", firstLine, lastLine, data)
+			if err != nil {
+				t.Fatalf("failed to upload chunk %d: %v", i, err)
+			}
+		}
+
+		// Insert sync_files record with correct chunk_count
+		_, err := env.DB.Exec(env.Ctx,
+			`INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, chunk_count, updated_at)
+			 VALUES ($1, 'transcript.jsonl', 'transcript', 20, 2, '2020-01-01 00:00:00')`,
+			sessionID)
+		if err != nil {
+			t.Fatalf("failed to insert sync file: %v", err)
+		}
+
+		// Read the file
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		req := testutil.AuthenticatedRequest(t, "GET",
+			fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=transcript.jsonl", sessionID),
+			nil, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncFileRead(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify chunk_count is still 2 and updated_at was NOT changed
+		// (since no healing was needed)
+		var chunkCount *int
+		var updatedAt string
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT chunk_count, updated_at::text FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "transcript.jsonl")
+		if err := row.Scan(&chunkCount, &updatedAt); err != nil {
+			t.Fatalf("failed to query chunk_count: %v", err)
+		}
+		if chunkCount == nil || *chunkCount != 2 {
+			t.Errorf("expected chunk_count to remain 2, got %v", chunkCount)
+		}
+		// Check updated_at wasn't touched (still the old value)
+		if !strings.HasPrefix(updatedAt, "2020-01-01") {
+			t.Errorf("expected updated_at to remain unchanged, got %s", updatedAt)
 		}
 	})
 }

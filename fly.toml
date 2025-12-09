@@ -29,9 +29,9 @@ primary_region = 'sjc'
   # Email Configuration (required - for share invitations)
   # Note: RESEND_API_KEY must be set as a Fly secret: fly secrets set RESEND_API_KEY=re_xxx
   # EMAIL_FROM_ADDRESS must match a verified domain in Resend
-  EMAIL_FROM_NAME = "Confab"
-  EMAIL_FROM_ADDRESS = "noreply@confab.jackietung.com"  # Update this to match your verified Resend domain
-  # EMAIL_RATE_LIMIT_PER_HOUR = "100"  # Default: 100 emails per hour per user
+  EMAIL_FROM_NAME = "Confabulous"
+  EMAIL_FROM_ADDRESS = "noreply@share.confabulous.dev"  # Update this to match your verified Resend domain
+  EMAIL_RATE_LIMIT_PER_HOUR = "100"
 
 [http_service]
   internal_port = 8080
