@@ -236,8 +236,6 @@ func renderTextTemplate(params ShareInvitationParams) string {
 
 	text := fmt.Sprintf(`%s (%s) shared a Confab session with you.
 
-Confab is a tool for saving and sharing AI conversation transcripts.
-
 Session: %s
 
 View it here: %s
@@ -249,7 +247,6 @@ View it here: %s
 
 	text += `
 ---
-Confab · 548 Market St #835, San Francisco, CA 94104
 Unsubscribe: https://confabulous.dev/unsubscribe
 `
 
@@ -269,37 +266,68 @@ const htmlTemplate = `<!DOCTYPE html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="x-apple-disable-message-reformatting">
+    <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <style>
+        @media screen and (max-width: 600px) {
+            .email-container { width: 100% !important; }
+            .email-padding { padding: 16px !important; }
+            .content-padding { padding: 20px 16px !important; }
+        }
+    </style>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #ffffff;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #fafafa; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #fafafa;">
         <tr>
-            <td style="padding: 20px;">
-                <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.4; color: #374151;">
-                    <strong>{{.SharerName}}</strong> ({{.SharerEmail}}) shared a Confab session with you.
-                </p>
-
-                <p style="margin: 0 0 12px 0; font-size: 14px; line-height: 1.4; color: #6b7280;">
-                    Confab is a tool for saving and sharing AI conversation transcripts. Click below to view the shared session:
-                </p>
-
-                <div style="margin: 0 0 16px 0; padding: 12px; background-color: #f3f4f6; border-radius: 4px; border-left: 3px solid #6366f1;">
-                    <span style="font-size: 15px; font-weight: 500; color: #111827;">{{if .SessionTitle}}{{.SessionTitle}}{{else}}Untitled Session{{end}}</span>
-                </div>
-
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 16px 0;">
+            <td class="email-padding" style="padding: 24px;" align="center">
+                <table role="presentation" class="email-container" width="560" cellspacing="0" cellpadding="0" border="0" style="max-width: 560px; width: 100%; background-color: #ffffff; border: 1px solid #e5e5e5; border-radius: 6px;">
+                    <!-- Header -->
                     <tr>
-                        <td style="border-radius: 4px; background-color: #6366f1;">
-                            <a href="{{.ShareURL}}" target="_blank" style="display: inline-block; padding: 10px 20px; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none;">View Session</a>
+                        <td style="padding: 16px 24px; border-bottom: 1px solid #e5e5e5;">
+                            <span style="font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 22px; color: #1a1a1a;">Confabulous</span>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td class="content-padding" style="padding: 24px;">
+                            <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.5; color: #1a1a1a;">
+                                <strong>{{.SharerName}}</strong> <span style="color: #666666;">({{.SharerEmail}})</span> shared a session with you:
+                            </p>
+
+                            <!-- Session preview block (styled like user message) -->
+                            <div style="margin: 0 0 20px 0; padding: 12px 16px; background-color: #f0fff4; border-radius: 6px; border: 1px solid #efefef; border-left: 3px solid #22863a;">
+                                <span style="font-size: 14px; color: #1a1a1a;">{{if .SessionTitle}}{{.SessionTitle}}{{else}}Untitled Session{{end}}</span>
+                            </div>
+
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 20px 0;">
+                                <tr>
+                                    <td style="border-radius: 4px; background-color: #0066cc;">
+                                        <a href="{{.ShareURL}}" target="_blank" style="display: inline-block; padding: 10px 20px; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none;">View Session</a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            {{if .ExpiresAt}}<p style="margin: 0; font-size: 13px; color: #999999;">This link expires on {{.ExpiresAt}}.</p>{{end}}
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 16px 24px; border-top: 1px solid #e5e5e5; background-color: #fafafa;">
+                            <p style="margin: 0; font-size: 12px; color: #999999;">
+                                <a href="https://confabulous.dev/unsubscribe" style="color: #999999; text-decoration: underline;">Unsubscribe</a>
+                            </p>
                         </td>
                     </tr>
                 </table>
-
-                {{if .ExpiresAt}}<p style="margin: 0 0 16px 0; font-size: 13px; color: #6b7280;">This link expires on {{.ExpiresAt}}.</p>{{end}}
-
-                <p style="margin: 16px 0 0 0; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; line-height: 1.5; color: #9ca3af;">
-                    Confab · 548 Market St #835, San Francisco, CA 94104<br>
-                    <a href="https://confabulous.dev/unsubscribe" style="color: #9ca3af;">Unsubscribe</a>
-                </p>
             </td>
         </tr>
     </table>
