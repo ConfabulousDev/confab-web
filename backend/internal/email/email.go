@@ -155,7 +155,7 @@ type resendRequest struct {
 
 // SendShareInvitation sends an invitation email via Resend
 func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInvitationParams) error {
-	subject := fmt.Sprintf("%s shared a Confab session with you", params.SharerName)
+	subject := fmt.Sprintf("%s shared a Claude Code session transcript with you", params.SharerName)
 
 	htmlBody, err := renderHTMLTemplate(params)
 	if err != nil {
@@ -234,7 +234,7 @@ func renderTextTemplate(params ShareInvitationParams) string {
 		title = "Untitled Session"
 	}
 
-	text := fmt.Sprintf(`%s (%s) shared a Confab session with you.
+	text := fmt.Sprintf(`%s (%s) shared a Claude Code session transcript with you.
 
 Session: %s
 
@@ -300,7 +300,7 @@ const htmlTemplate = `<!DOCTYPE html>
                     <tr>
                         <td class="content-padding" style="padding: 24px;">
                             <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.5; color: #1a1a1a;">
-                                <strong>{{.SharerName}}</strong> <span style="color: #666666;">({{.SharerEmail}})</span> shared a session with you:
+                                <strong>{{.SharerName}}</strong> <span style="color: #666666;">({{.SharerEmail}})</span> shared a Claude Code session transcript with you:
                             </p>
 
                             <!-- Session preview block (styled like user message) -->
