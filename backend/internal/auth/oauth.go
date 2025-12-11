@@ -328,6 +328,12 @@ func SessionMiddleware(database *db.DB) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Check if user is inactive
+			if session.UserStatus == models.UserStatusInactive {
+				http.Error(w, "Account deactivated", http.StatusForbidden)
+				return
+			}
+
 			// Add user ID to context
 			ctx := context.WithValue(r.Context(), userIDContextKey, session.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))

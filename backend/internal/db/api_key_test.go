@@ -30,7 +30,7 @@ func TestValidateAPIKey_ValidKey(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key
-	userID, keyID, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
+	userID, keyID, userStatus, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -40,6 +40,9 @@ func TestValidateAPIKey_ValidKey(t *testing.T) {
 	}
 	if keyID == 0 {
 		t.Error("expected non-zero keyID")
+	}
+	if userStatus != models.UserStatusActive {
+		t.Errorf("userStatus = %s, want %s", userStatus, models.UserStatusActive)
 	}
 
 	// Verify the raw key hashes to the same value
@@ -59,7 +62,7 @@ func TestValidateAPIKey_InvalidKey(t *testing.T) {
 	env.CleanDB(t)
 
 	// Try to validate a non-existent key
-	_, _, err := env.DB.ValidateAPIKey(context.Background(), "nonexistent_hash_12345")
+	_, _, _, err := env.DB.ValidateAPIKey(context.Background(), "nonexistent_hash_12345")
 	if err == nil {
 		t.Error("expected error for invalid API key")
 	}
@@ -86,7 +89,7 @@ func TestValidateAPIKey_MultipleKeys(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user2.ID, keyHash2, "User2 Key")
 
 	// Validate each key returns correct user
-	userID1, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash1)
+	userID1, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash1)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user1 failed: %v", err)
 	}
@@ -94,7 +97,7 @@ func TestValidateAPIKey_MultipleKeys(t *testing.T) {
 		t.Errorf("key1 returned userID = %d, want %d", userID1, user1.ID)
 	}
 
-	userID2, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash2)
+	userID2, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user2 failed: %v", err)
 	}
@@ -134,7 +137,7 @@ func TestCreateAPIKeyWithReturn(t *testing.T) {
 	}
 
 	// Verify key can be validated
-	userID, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -230,7 +233,7 @@ func TestDeleteAPIKey(t *testing.T) {
 	}
 
 	// Verify key no longer works
-	_, _, err = env.DB.ValidateAPIKey(context.Background(), keyHash)
+	_, _, _, err = env.DB.ValidateAPIKey(context.Background(), keyHash)
 	if err == nil {
 		t.Error("expected error after key deletion")
 	}
@@ -258,7 +261,7 @@ func TestDeleteAPIKey_WrongUser(t *testing.T) {
 	}
 
 	// Verify key still works
-	userID, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("key should still be valid: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 type contextKey string
@@ -69,9 +70,15 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 			keyHash := HashAPIKey(rawKey)
 
 			// Validate key in database
-			userID, keyID, err := database.ValidateAPIKey(r.Context(), keyHash)
+			userID, keyID, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
 			if err != nil {
 				http.Error(w, "Invalid API key", http.StatusUnauthorized)
+				return
+			}
+
+			// Check if user is inactive
+			if userStatus == models.UserStatusInactive {
+				http.Error(w, "Account deactivated", http.StatusForbidden)
 				return
 			}
 

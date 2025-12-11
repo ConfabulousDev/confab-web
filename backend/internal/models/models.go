@@ -51,10 +51,11 @@ type OAuthUserInfo struct {
 
 // WebSession represents a browser session (for OAuth)
 type WebSession struct {
-	ID        string    `json:"id"`
-	UserID    int64     `json:"user_id"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID         string     `json:"id"`
+	UserID     int64      `json:"user_id"`
+	UserStatus UserStatus `json:"-"` // For auth check, not serialized
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  time.Time  `json:"expires_at"`
 }
 
 // APIKey represents an API key for authentication

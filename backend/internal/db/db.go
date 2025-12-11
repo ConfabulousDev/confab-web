@@ -86,19 +86,24 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 	return &user, nil
 }
 
-// ValidateAPIKey checks if an API key is valid and returns the associated user ID and key ID
-func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, err error) {
-	query := `SELECT id, user_id FROM api_keys WHERE key_hash = $1`
+// ValidateAPIKey checks if an API key is valid and returns the associated user ID, key ID, and user status
+func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userStatus models.UserStatus, err error) {
+	query := `
+		SELECT ak.id, ak.user_id, u.status
+		FROM api_keys ak
+		JOIN users u ON ak.user_id = u.id
+		WHERE ak.key_hash = $1
+	`
 
-	err = db.conn.QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID)
+	err = db.conn.QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, 0, fmt.Errorf("invalid API key")
+			return 0, 0, "", fmt.Errorf("invalid API key")
 		}
-		return 0, 0, fmt.Errorf("failed to validate API key: %w", err)
+		return 0, 0, "", fmt.Errorf("failed to validate API key: %w", err)
 	}
 
-	return userID, keyID, nil
+	return userID, keyID, userStatus, nil
 }
 
 // UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key
@@ -441,14 +446,18 @@ func (db *DB) CreateWebSession(ctx context.Context, sessionID string, userID int
 
 // GetWebSession retrieves a web session by ID and validates it's not expired
 func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebSession, error) {
-	query := `SELECT id, user_id, created_at, expires_at
-	          FROM web_sessions
-	          WHERE id = $1 AND expires_at > NOW()`
+	query := `
+		SELECT ws.id, ws.user_id, u.status, ws.created_at, ws.expires_at
+		FROM web_sessions ws
+		JOIN users u ON ws.user_id = u.id
+		WHERE ws.id = $1 AND ws.expires_at > NOW()
+	`
 
 	var session models.WebSession
 	err := db.conn.QueryRowContext(ctx, query, sessionID).Scan(
 		&session.ID,
 		&session.UserID,
+		&session.UserStatus,
 		&session.CreatedAt,
 		&session.ExpiresAt,
 	)

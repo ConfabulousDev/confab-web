@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -376,6 +377,234 @@ func TestCanUserLogin(t *testing.T) {
 func TestCanUserLogin_DefaultConstant(t *testing.T) {
 	if auth.DefaultMaxUsers != 50 {
 		t.Errorf("DefaultMaxUsers = %d, want 50", auth.DefaultMaxUsers)
+	}
+}
+
+// TestValidateAPIKey_ActiveUser tests that active users can authenticate with API keys
+func TestValidateAPIKey_ActiveUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	// Create an active user
+	user := testutil.CreateTestUser(t, env, "active@example.com", "Active User")
+
+	// Create an API key
+	_, keyHash, err := auth.GenerateAPIKey()
+	if err != nil {
+		t.Fatalf("GenerateAPIKey failed: %v", err)
+	}
+	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
+
+	// Validate the key - should succeed with active status
+	userID, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	if err != nil {
+		t.Fatalf("ValidateAPIKey failed: %v", err)
+	}
+	if userID != user.ID {
+		t.Errorf("userID = %d, want %d", userID, user.ID)
+	}
+	if userStatus != models.UserStatusActive {
+		t.Errorf("userStatus = %s, want %s", userStatus, models.UserStatusActive)
+	}
+}
+
+// TestValidateAPIKey_InactiveUser tests that inactive users get status returned for rejection
+func TestValidateAPIKey_InactiveUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	// Create a user and deactivate them
+	user := testutil.CreateTestUser(t, env, "inactive@example.com", "Inactive User")
+	err := env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	if err != nil {
+		t.Fatalf("UpdateUserStatus failed: %v", err)
+	}
+
+	// Create an API key
+	_, keyHash, err := auth.GenerateAPIKey()
+	if err != nil {
+		t.Fatalf("GenerateAPIKey failed: %v", err)
+	}
+	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
+
+	// Validate the key - should return inactive status
+	userID, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	if err != nil {
+		t.Fatalf("ValidateAPIKey failed: %v", err)
+	}
+	if userID != user.ID {
+		t.Errorf("userID = %d, want %d", userID, user.ID)
+	}
+	if userStatus != models.UserStatusInactive {
+		t.Errorf("userStatus = %s, want %s", userStatus, models.UserStatusInactive)
+	}
+}
+
+// TestGetWebSession_ActiveUser tests that active users can authenticate with web sessions
+func TestGetWebSession_ActiveUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	// Create an active user
+	user := testutil.CreateTestUser(t, env, "active-web@example.com", "Active Web User")
+
+	// Create a web session
+	sessionID := "test-session-active-123"
+	expiresAt := time.Now().Add(24 * time.Hour)
+	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
+
+	// Get the session - should succeed with active status
+	session, err := env.DB.GetWebSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetWebSession failed: %v", err)
+	}
+	if session.UserID != user.ID {
+		t.Errorf("UserID = %d, want %d", session.UserID, user.ID)
+	}
+	if session.UserStatus != models.UserStatusActive {
+		t.Errorf("UserStatus = %s, want %s", session.UserStatus, models.UserStatusActive)
+	}
+}
+
+// TestGetWebSession_InactiveUser tests that inactive users get status returned for rejection
+func TestGetWebSession_InactiveUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	// Create a user and deactivate them
+	user := testutil.CreateTestUser(t, env, "inactive-web@example.com", "Inactive Web User")
+	err := env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	if err != nil {
+		t.Fatalf("UpdateUserStatus failed: %v", err)
+	}
+
+	// Create a web session
+	sessionID := "test-session-inactive-456"
+	expiresAt := time.Now().Add(24 * time.Hour)
+	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
+
+	// Get the session - should return inactive status
+	session, err := env.DB.GetWebSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetWebSession failed: %v", err)
+	}
+	if session.UserID != user.ID {
+		t.Errorf("UserID = %d, want %d", session.UserID, user.ID)
+	}
+	if session.UserStatus != models.UserStatusInactive {
+		t.Errorf("UserStatus = %s, want %s", session.UserStatus, models.UserStatusInactive)
+	}
+}
+
+// TestUserReactivation_FullLifecycle tests that a user can be deactivated and then reactivated
+func TestUserReactivation_FullLifecycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	// Create an active user with API key and web session
+	user := testutil.CreateTestUser(t, env, "lifecycle@example.com", "Lifecycle User")
+
+	_, keyHash, err := auth.GenerateAPIKey()
+	if err != nil {
+		t.Fatalf("GenerateAPIKey failed: %v", err)
+	}
+	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
+
+	sessionID := "test-session-lifecycle-789"
+	expiresAt := time.Now().Add(24 * time.Hour)
+	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
+
+	// Step 1: Verify user starts as active
+	_, _, apiStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	if err != nil {
+		t.Fatalf("ValidateAPIKey failed: %v", err)
+	}
+	if apiStatus != models.UserStatusActive {
+		t.Errorf("initial API key status = %s, want %s", apiStatus, models.UserStatusActive)
+	}
+
+	webSession, err := env.DB.GetWebSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetWebSession failed: %v", err)
+	}
+	if webSession.UserStatus != models.UserStatusActive {
+		t.Errorf("initial web session status = %s, want %s", webSession.UserStatus, models.UserStatusActive)
+	}
+
+	// Step 2: Deactivate user
+	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	if err != nil {
+		t.Fatalf("UpdateUserStatus (deactivate) failed: %v", err)
+	}
+
+	// Verify both auth methods return inactive
+	_, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
+	if err != nil {
+		t.Fatalf("ValidateAPIKey after deactivation failed: %v", err)
+	}
+	if apiStatus != models.UserStatusInactive {
+		t.Errorf("deactivated API key status = %s, want %s", apiStatus, models.UserStatusInactive)
+	}
+
+	webSession, err = env.DB.GetWebSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetWebSession after deactivation failed: %v", err)
+	}
+	if webSession.UserStatus != models.UserStatusInactive {
+		t.Errorf("deactivated web session status = %s, want %s", webSession.UserStatus, models.UserStatusInactive)
+	}
+
+	// Step 3: Reactivate user
+	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusActive)
+	if err != nil {
+		t.Fatalf("UpdateUserStatus (reactivate) failed: %v", err)
+	}
+
+	// Verify both auth methods return active again
+	_, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
+	if err != nil {
+		t.Fatalf("ValidateAPIKey after reactivation failed: %v", err)
+	}
+	if apiStatus != models.UserStatusActive {
+		t.Errorf("reactivated API key status = %s, want %s", apiStatus, models.UserStatusActive)
+	}
+
+	webSession, err = env.DB.GetWebSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetWebSession after reactivation failed: %v", err)
+	}
+	if webSession.UserStatus != models.UserStatusActive {
+		t.Errorf("reactivated web session status = %s, want %s", webSession.UserStatus, models.UserStatusActive)
 	}
 }
 
