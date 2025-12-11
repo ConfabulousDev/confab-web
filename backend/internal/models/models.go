@@ -2,14 +2,23 @@ package models
 
 import "time"
 
+// UserStatus represents the status of a user account
+type UserStatus string
+
+const (
+	UserStatusActive   UserStatus = "active"
+	UserStatusInactive UserStatus = "inactive"
+)
+
 // User represents a confab user (OAuth-based)
 type User struct {
-	ID        int64     `json:"id"`
-	Email     string    `json:"email"`
-	Name      *string   `json:"name,omitempty"`
-	AvatarURL *string   `json:"avatar_url,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        int64      `json:"id"`
+	Email     string     `json:"email"`
+	Name      *string    `json:"name,omitempty"`
+	AvatarURL *string    `json:"avatar_url,omitempty"`
+	Status    UserStatus `json:"status"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // OAuthProvider represents supported OAuth providers

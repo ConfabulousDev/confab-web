@@ -64,7 +64,7 @@ func (db *DB) Conn() *sql.DB {
 
 // GetUserByID retrieves a user by ID
 func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
-	query := `SELECT id, email, name, avatar_url, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
 	err := db.conn.QueryRowContext(ctx, query, userID).Scan(
@@ -72,6 +72,7 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 		&user.Email,
 		&user.Name,
 		&user.AvatarURL,
+		&user.Status,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -223,14 +224,14 @@ func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUser
 
 	// 1. Try to find existing user by provider identity
 	query := `
-		SELECT u.id, u.email, u.name, u.avatar_url, u.created_at, u.updated_at
+		SELECT u.id, u.email, u.name, u.avatar_url, u.status, u.created_at, u.updated_at
 		FROM users u
 		JOIN user_identities i ON u.id = i.user_id
 		WHERE i.provider = $1 AND i.provider_id = $2
 	`
 	var user models.User
 	err = tx.QueryRowContext(ctx, query, info.Provider, info.ProviderID).Scan(
-		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
 	)
 
 	if err == nil {
@@ -259,9 +260,9 @@ func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUser
 	}
 
 	// 2. Identity not found - check if email exists (for account linking)
-	emailQuery := `SELECT id, email, name, avatar_url, created_at, updated_at FROM users WHERE email = $1`
+	emailQuery := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE email = $1`
 	err = tx.QueryRowContext(ctx, emailQuery, info.Email).Scan(
-		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
 	)
 
 	if err == nil {
@@ -294,12 +295,12 @@ func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUser
 
 	// 3. New user - create user and identity
 	insertUserSQL := `
-		INSERT INTO users (email, name, avatar_url, created_at, updated_at)
-		VALUES ($1, $2, $3, NOW(), NOW())
-		RETURNING id, email, name, avatar_url, created_at, updated_at
+		INSERT INTO users (email, name, avatar_url, status, created_at, updated_at)
+		VALUES ($1, $2, $3, 'active', NOW(), NOW())
+		RETURNING id, email, name, avatar_url, status, created_at, updated_at
 	`
 	err = tx.QueryRowContext(ctx, insertUserSQL, info.Email, info.Name, info.AvatarURL).Scan(
-		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)

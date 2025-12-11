@@ -77,16 +77,16 @@ func CreateTestUser(t *testing.T, env *TestEnvironment, email, name string) *mod
 
 	// Create user
 	userQuery := `
-		INSERT INTO users (email, name, avatar_url, created_at, updated_at)
-		VALUES ($1, $2, $3, NOW(), NOW())
-		RETURNING id, email, name, avatar_url, created_at, updated_at
+		INSERT INTO users (email, name, avatar_url, status, created_at, updated_at)
+		VALUES ($1, $2, $3, 'active', NOW(), NOW())
+		RETURNING id, email, name, avatar_url, status, created_at, updated_at
 	`
 
 	avatarURL := "https://github.com/avatar.png"
 
 	var user models.User
 	row := env.DB.QueryRow(env.Ctx, userQuery, email, name, avatarURL)
-	err := row.Scan(&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		t.Fatalf("failed to create test user: %v", err)
 	}
