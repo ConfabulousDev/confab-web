@@ -133,6 +133,111 @@ func (db *DB) UserExistsByEmail(ctx context.Context, email string) (bool, error)
 	return exists, nil
 }
 
+// ListAllUsers returns all users in the system, ordered by ID
+func (db *DB) ListAllUsers(ctx context.Context) ([]models.User, error) {
+	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users ORDER BY id`
+
+	rows, err := db.conn.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID,
+			&user.Email,
+			&user.Name,
+			&user.AvatarURL,
+			&user.Status,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
+}
+
+// UpdateUserStatus updates the status of a user (active/inactive)
+func (db *DB) UpdateUserStatus(ctx context.Context, userID int64, status models.UserStatus) error {
+	query := `UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2`
+
+	result, err := db.conn.ExecContext(ctx, query, status, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user status: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+// DeleteUser permanently deletes a user and all associated data (via CASCADE)
+// Note: S3 objects must be deleted separately before calling this function
+func (db *DB) DeleteUser(ctx context.Context, userID int64) error {
+	query := `DELETE FROM users WHERE id = $1`
+
+	result, err := db.conn.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+// GetUserSessionIDs returns all session IDs (UUIDs) for a user
+// Used for S3 cleanup before user deletion
+func (db *DB) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, error) {
+	query := `SELECT id FROM sessions WHERE user_id = $1`
+
+	rows, err := db.conn.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessionIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan session ID: %w", err)
+		}
+		sessionIDs = append(sessionIDs, id)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sessions: %w", err)
+	}
+
+	return sessionIDs, nil
+}
+
 // MaxAPIKeysPerUser is the maximum number of API keys a user can have
 const MaxAPIKeysPerUser = 100
 
