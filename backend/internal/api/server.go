@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/gorilla/csrf"
+	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/email"
@@ -209,6 +210,19 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Post("/auth/device/token", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db))))
 	r.Get("/auth/device", withMaxBody(MaxBodyXS, auth.HandleDevicePage(s.db)))
 	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db))))
+
+	// Admin routes (require web session + super admin)
+	adminHandlers := admin.NewHandlers(s.db, s.storage)
+	r.Route("/admin", func(r chi.Router) {
+		r.Use(csrfMiddleware)
+		r.Use(auth.SessionMiddleware(s.db))
+		r.Use(admin.Middleware(s.db))
+
+		r.Get("/users", withMaxBody(MaxBodyXS, adminHandlers.HandleListUsers))
+		r.Post("/users/{id}/deactivate", withMaxBody(MaxBodyXS, adminHandlers.HandleDeactivateUser))
+		r.Post("/users/{id}/activate", withMaxBody(MaxBodyXS, adminHandlers.HandleActivateUser))
+		r.Post("/users/{id}/delete", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteUser))
+	})
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
