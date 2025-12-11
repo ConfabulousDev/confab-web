@@ -2,10 +2,10 @@ package admin_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -134,15 +134,22 @@ func TestHandleListUsers(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	var resp struct {
-		Users []models.User `json:"users"`
+	// Check that response is HTML and contains all users
+	body := w.Body.String()
+	if !strings.Contains(body, "<!DOCTYPE html>") {
+		t.Error("expected HTML response")
 	}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
+	if !strings.Contains(body, "user1@example.com") {
+		t.Error("expected user1@example.com in response")
 	}
-
-	if len(resp.Users) != 3 {
-		t.Errorf("expected 3 users, got %d", len(resp.Users))
+	if !strings.Contains(body, "user2@example.com") {
+		t.Error("expected user2@example.com in response")
+	}
+	if !strings.Contains(body, "admin@example.com") {
+		t.Error("expected admin@example.com in response")
+	}
+	if !strings.Contains(body, "3 users") {
+		t.Error("expected '3 users' count in response")
 	}
 }
 
@@ -169,8 +176,9 @@ func TestHandleDeactivateUser(t *testing.T) {
 	w := httptest.NewRecorder()
 	handlers.HandleDeactivateUser(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+	// Should redirect on success
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("expected status %d, got %d. Body: %s", http.StatusSeeOther, w.Code, w.Body.String())
 	}
 
 	// Verify user is now inactive
@@ -209,8 +217,9 @@ func TestHandleActivateUser(t *testing.T) {
 	w := httptest.NewRecorder()
 	handlers.HandleActivateUser(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+	// Should redirect on success
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("expected status %d, got %d. Body: %s", http.StatusSeeOther, w.Code, w.Body.String())
 	}
 
 	// Verify user is now active
@@ -253,8 +262,9 @@ func TestHandleDeleteUser(t *testing.T) {
 	w := httptest.NewRecorder()
 	handlers.HandleDeleteUser(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+	// Should redirect on success
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("expected status %d, got %d. Body: %s", http.StatusSeeOther, w.Code, w.Body.String())
 	}
 
 	// Verify user no longer exists
@@ -292,8 +302,13 @@ func TestHandleDeleteUser_InvalidID(t *testing.T) {
 	w := httptest.NewRecorder()
 	handlers.HandleDeleteUser(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	// Should redirect to error page
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("expected status %d, got %d", http.StatusSeeOther, w.Code)
+	}
+	location := w.Header().Get("Location")
+	if !strings.Contains(location, "error=") {
+		t.Errorf("expected redirect with error param, got: %s", location)
 	}
 }
 
@@ -317,8 +332,12 @@ func TestHandleDeleteUser_NonExistentUser(t *testing.T) {
 	w := httptest.NewRecorder()
 	handlers.HandleDeleteUser(w, req)
 
-	// Should fail because user doesn't exist (no rows affected)
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d. Body: %s", http.StatusInternalServerError, w.Code, w.Body.String())
+	// Should redirect with error because user doesn't exist
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("expected status %d, got %d. Body: %s", http.StatusSeeOther, w.Code, w.Body.String())
+	}
+	location := w.Header().Get("Location")
+	if !strings.Contains(location, "error=") {
+		t.Errorf("expected redirect with error param, got: %s", location)
 	}
 }
