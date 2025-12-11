@@ -825,6 +825,10 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 			respondError(w, http.StatusGone, "Share expired")
 			return
 		}
+		if errors.Is(err, db.ErrOwnerInactive) {
+			respondError(w, http.StatusForbidden, "This session is no longer available")
+			return
+		}
 		if errors.Is(err, db.ErrUnauthorized) || errors.Is(err, db.ErrForbidden) {
 			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return

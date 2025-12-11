@@ -21,7 +21,8 @@ var (
 	ErrRunNotFound = errors.New("run not found")
 
 	// User errors
-	ErrUserNotFound = errors.New("user not found")
+	ErrUserNotFound   = errors.New("user not found")
+	ErrOwnerInactive  = errors.New("session owner is inactive")
 
 	// API key errors
 	ErrAPIKeyNotFound    = errors.New("API key not found")

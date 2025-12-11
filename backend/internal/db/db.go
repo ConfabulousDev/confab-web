@@ -1128,11 +1128,15 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 		share.ID)
 
 	// Get session detail with all metadata (no ownership check since share verified)
+	// Also check owner's status to block access if deactivated
 	var session SessionDetail
 	var gitInfoBytes []byte
+	var ownerStatus models.UserStatus
 	sessionQuery := `
-		SELECT id, external_id, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at
-		FROM sessions WHERE id = $1
+		SELECT s.id, s.external_id, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, u.status
+		FROM sessions s
+		JOIN users u ON s.user_id = u.id
+		WHERE s.id = $1
 	`
 	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(
 		&session.ID,
@@ -1144,6 +1148,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 		&session.TranscriptPath,
 		&gitInfoBytes,
 		&session.LastSyncAt,
+		&ownerStatus,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1153,6 +1158,11 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Check if session owner is deactivated
+	if ownerStatus == models.UserStatusInactive {
+		return nil, ErrOwnerInactive
 	}
 
 	// Unmarshal git_info and load sync files

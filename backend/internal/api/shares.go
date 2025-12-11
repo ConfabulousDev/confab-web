@@ -360,6 +360,10 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusGone, "Share expired")
 				return
 			}
+			if errors.Is(err, db.ErrOwnerInactive) {
+				respondError(w, http.StatusForbidden, "This session is no longer available")
+				return
+			}
 			if errors.Is(err, db.ErrUnauthorized) {
 				respondError(w, http.StatusUnauthorized, "Please log in to view this private share")
 				return
