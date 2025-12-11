@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback } from 'react';
 import type { TranscriptLine } from '@/types';
 import { useKeyboardShortcut, useSpinner } from '@/hooks';
 import { calculateTokenStats, calculateEstimatedCost, formatTokenCount, formatCost } from '@/utils/tokenStats';
+import { calculateCompactionStats } from '@/utils/compactionStats';
 import PageSidebar from '../PageSidebar';
 import styles from './SessionStatsSidebar.module.css';
 
@@ -61,6 +62,11 @@ const TOOLTIPS = {
     p50: 'Median compaction processing time',
     max: 'Longest compaction processing time',
   },
+  compaction: {
+    total: 'Total number of context compaction events',
+    auto: 'Compactions triggered automatically when context limit reached',
+    manual: 'Compactions triggered manually by user',
+  },
 };
 
 // Icons
@@ -75,6 +81,7 @@ const InfoIcon = (
 function SessionStatsSidebar({ messages, loading = false }: SessionStatsSidebarProps) {
   const tokenStats = useMemo(() => calculateTokenStats(messages), [messages]);
   const estimatedCost = useMemo(() => calculateEstimatedCost(messages), [messages]);
+  const compactionStats = useMemo(() => calculateCompactionStats(messages), [messages]);
   const [showDebugStats, setShowDebugStats] = useState(false);
   const spinner = useSpinner(loading);
 
@@ -137,6 +144,23 @@ function SessionStatsSidebar({ messages, loading = false }: SessionStatsSidebarP
             <span className={styles.statValue}>
               {renderValue(formatCost(estimatedCost))}
             </span>
+          </div>
+        </div>
+
+        {/* Compaction Section */}
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>Compaction</div>
+          <div className={styles.statRow} title={TOOLTIPS.compaction.total}>
+            <span className={styles.statLabel}>Total</span>
+            <span className={styles.statValue}>{renderValue(String(compactionStats.total))}</span>
+          </div>
+          <div className={styles.statRow} title={TOOLTIPS.compaction.auto}>
+            <span className={styles.statLabel}>Auto</span>
+            <span className={styles.statValue}>{renderValue(String(compactionStats.auto))}</span>
+          </div>
+          <div className={styles.statRow} title={TOOLTIPS.compaction.manual}>
+            <span className={styles.statLabel}>Manual</span>
+            <span className={styles.statValue}>{renderValue(String(compactionStats.manual))}</span>
           </div>
         </div>
 
