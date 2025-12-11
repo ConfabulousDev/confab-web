@@ -180,6 +180,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Health check (no additional rate limiting needed)
 	r.Get("/health", withMaxBody(MaxBodyXS, s.handleHealth))
 
+	// Public help pages
+	r.Get("/help/delete-account", withMaxBody(MaxBodyXS, s.handleDeleteAccountHelp))
+
 	// Root endpoint - only serve API info if not serving static frontend
 	staticDir := os.Getenv("STATIC_FILES_DIR")
 	if staticDir == "" {
@@ -321,6 +324,136 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
 	})
+}
+
+// handleDeleteAccountHelp serves a help page explaining how to request account deletion
+func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request) {
+	html := `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Your Account - Confab</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem;
+            background: #fafafa;
+            color: #1a1a1a;
+        }
+        .container {
+            background: #fff;
+            padding: 2.5rem;
+            border-radius: 6px;
+            border: 1px solid #e5e5e5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        .subtitle {
+            color: #666;
+            margin: 0 0 2rem 0;
+            font-size: 0.875rem;
+        }
+        h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 1.5rem 0 0.75rem 0;
+            color: #1a1a1a;
+        }
+        p {
+            color: #444;
+            line-height: 1.6;
+            margin: 0 0 1rem 0;
+            font-size: 0.9375rem;
+        }
+        ul {
+            margin: 0 0 1rem 0;
+            padding-left: 1.25rem;
+            color: #444;
+        }
+        li {
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+            font-size: 0.9375rem;
+        }
+        .email-link {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .email-link:hover {
+            text-decoration: underline;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 1rem;
+            margin: 1.5rem 0;
+        }
+        .warning p {
+            margin: 0;
+            color: #856404;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 1.5rem;
+            color: #666;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .back-link:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Delete Your Account</h1>
+        <p class="subtitle">Request permanent deletion of your Confab account</p>
+
+        <h2>How to Request Account Deletion</h2>
+        <p>To delete your account and all associated data, please send an email to:</p>
+        <p><a href="mailto:support@confabulous.dev?subject=Account%20Deletion%20Request" class="email-link">support@confabulous.dev</a></p>
+        <p>Include the email address associated with your Confab account in your request.</p>
+
+        <h2>What Will Be Deleted</h2>
+        <p>When your account is deleted, the following data will be permanently removed:</p>
+        <ul>
+            <li>Your user account and profile information</li>
+            <li>All Claude Code session transcripts you've uploaded</li>
+            <li>All API keys associated with your account</li>
+            <li>All session shares you've created</li>
+            <li>Any web sessions (you'll be logged out everywhere)</li>
+        </ul>
+
+        <div class="warning">
+            <p><strong>Warning:</strong> Account deletion is permanent and cannot be undone. Make sure to download any session transcripts you want to keep before requesting deletion.</p>
+        </div>
+
+        <h2>Processing Time</h2>
+        <p>We typically process account deletion requests within 7 business days. You'll receive a confirmation email once your account has been deleted.</p>
+
+        <a href="/" class="back-link">&larr; Back to Confab</a>
+    </div>
+</body>
+</html>`
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(html))
 }
 
 // handleValidateAPIKey validates the API key and returns user info
