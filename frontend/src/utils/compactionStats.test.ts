@@ -6,9 +6,9 @@ import type { TranscriptLine, SystemMessage, AssistantMessage, UserMessage } fro
 function createCompactBoundary(
   uuid: string,
   trigger: 'auto' | 'manual' | string | undefined,
-  preTokens = 100000,
-  timestamp?: string
+  options: { preTokens?: number; timestamp?: string; logicalParentUuid?: string } = {}
 ): SystemMessage {
+  const { preTokens = 100000, timestamp, logicalParentUuid } = options;
   const base: SystemMessage = {
     type: 'system',
     uuid,
@@ -24,6 +24,10 @@ function createCompactBoundary(
     isMeta: false,
     level: 'info',
   };
+
+  if (logicalParentUuid) {
+    base.logicalParentUuid = logicalParentUuid;
+  }
 
   if (trigger !== undefined) {
     base.compactMetadata = { trigger, preTokens };
@@ -81,11 +85,11 @@ function createAssistantMessage(uuid: string, timestamp?: string): AssistantMess
 }
 
 // Helper to create a user message
-function createUserMessage(uuid: string): UserMessage {
+function createUserMessage(uuid: string, timestamp?: string): UserMessage {
   return {
     type: 'user',
     uuid,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp ?? new Date().toISOString(),
     parentUuid: null,
     isSidechain: false,
     userType: 'external',
@@ -102,7 +106,7 @@ function createUserMessage(uuid: string): UserMessage {
 describe('calculateCompactionStats', () => {
   it('returns zeros for empty messages array', () => {
     const result = calculateCompactionStats([]);
-    expect(result).toEqual({ total: 0, auto: 0, manual: 0, avgResponseTimeMs: null });
+    expect(result).toEqual({ total: 0, auto: 0, manual: 0, avgCompactionTimeMs: null });
   });
 
   it('returns zeros when no compaction events exist', () => {
@@ -114,7 +118,7 @@ describe('calculateCompactionStats', () => {
     ];
 
     const result = calculateCompactionStats(messages);
-    expect(result).toEqual({ total: 0, auto: 0, manual: 0, avgResponseTimeMs: null });
+    expect(result).toEqual({ total: 0, auto: 0, manual: 0, avgCompactionTimeMs: null });
   });
 
   it('counts a single auto compaction', () => {
@@ -168,7 +172,7 @@ describe('calculateCompactionStats', () => {
     ];
 
     const result = calculateCompactionStats(messages);
-    expect(result).toEqual({ total: 1, auto: 0, manual: 0, avgResponseTimeMs: null });
+    expect(result).toEqual({ total: 1, auto: 0, manual: 0, avgCompactionTimeMs: null });
   });
 
   it('counts toward total when trigger has unknown value', () => {
@@ -177,7 +181,7 @@ describe('calculateCompactionStats', () => {
     ];
 
     const result = calculateCompactionStats(messages);
-    expect(result).toEqual({ total: 1, auto: 0, manual: 0, avgResponseTimeMs: null });
+    expect(result).toEqual({ total: 1, auto: 0, manual: 0, avgCompactionTimeMs: null });
   });
 
   it('ignores system messages with different subtypes', () => {
@@ -199,10 +203,10 @@ describe('calculateCompactionStats', () => {
       createUserMessage('1'),
       createAssistantMessage('2'),
       createSystemMessage('3', 'api_error'),
-      createCompactBoundary('4', 'auto', 150000),
+      createCompactBoundary('4', 'auto', { preTokens: 150000 }),
       createUserMessage('5'),
       createAssistantMessage('6'),
-      createCompactBoundary('7', 'manual', 160000),
+      createCompactBoundary('7', 'manual', { preTokens: 160000 }),
       createSystemMessage('8', 'api_error'),
       createAssistantMessage('9'),
     ];
@@ -213,61 +217,79 @@ describe('calculateCompactionStats', () => {
     expect(result.manual).toBe(1);
   });
 
-  // Response time tests
-  it('calculates avgResponseTimeMs for a single compaction', () => {
+  // Compaction time tests (logicalParent → compact_boundary)
+  it('calculates avgCompactionTimeMs for a single compaction', () => {
     const messages: TranscriptLine[] = [
-      createCompactBoundary('1', 'auto', 100000, '2025-12-11T16:54:33.000Z'),
-      createAssistantMessage('2', '2025-12-11T16:54:37.000Z'), // 4 seconds later
+      createAssistantMessage('parent-1', '2025-12-11T16:53:39.000Z'),
+      createCompactBoundary('boundary-1', 'auto', {
+        timestamp: '2025-12-11T16:54:33.000Z',
+        logicalParentUuid: 'parent-1',
+      }),
     ];
 
     const result = calculateCompactionStats(messages);
-    expect(result.avgResponseTimeMs).toBe(4000);
+    // 16:54:33 - 16:53:39 = 54 seconds
+    expect(result.avgCompactionTimeMs).toBe(54000);
   });
 
   it('calculates average across multiple compactions', () => {
     const messages: TranscriptLine[] = [
-      createCompactBoundary('1', 'auto', 100000, '2025-12-11T16:00:00.000Z'),
-      createAssistantMessage('2', '2025-12-11T16:00:02.000Z'), // 2 seconds
-      createCompactBoundary('3', 'auto', 100000, '2025-12-11T17:00:00.000Z'),
-      createAssistantMessage('4', '2025-12-11T17:00:06.000Z'), // 6 seconds
+      createAssistantMessage('parent-1', '2025-12-11T16:00:00.000Z'),
+      createCompactBoundary('boundary-1', 'auto', {
+        timestamp: '2025-12-11T16:00:10.000Z', // 10 seconds
+        logicalParentUuid: 'parent-1',
+      }),
+      createAssistantMessage('parent-2', '2025-12-11T17:00:00.000Z'),
+      createCompactBoundary('boundary-2', 'auto', {
+        timestamp: '2025-12-11T17:00:30.000Z', // 30 seconds
+        logicalParentUuid: 'parent-2',
+      }),
     ];
 
     const result = calculateCompactionStats(messages);
-    expect(result.avgResponseTimeMs).toBe(4000); // (2000 + 6000) / 2
+    expect(result.avgCompactionTimeMs).toBe(20000); // (10000 + 30000) / 2
   });
 
-  it('returns null avgResponseTimeMs when compaction has no following assistant message', () => {
+  it('returns null avgCompactionTimeMs when logicalParentUuid is missing', () => {
     const messages: TranscriptLine[] = [
-      createCompactBoundary('1', 'auto', 100000, '2025-12-11T16:54:33.000Z'),
-      // No assistant message after
+      createCompactBoundary('boundary-1', 'auto', {
+        timestamp: '2025-12-11T16:54:33.000Z',
+        // no logicalParentUuid
+      }),
     ];
 
     const result = calculateCompactionStats(messages);
-    expect(result.avgResponseTimeMs).toBeNull();
+    expect(result.avgCompactionTimeMs).toBeNull();
   });
 
-  it('finds first assistant message, skipping user messages', () => {
+  it('returns null avgCompactionTimeMs when logicalParent message not found', () => {
     const messages: TranscriptLine[] = [
-      createCompactBoundary('1', 'auto', 100000, '2025-12-11T16:00:00.000Z'),
-      createUserMessage('2'), // summary message (skipped)
-      createAssistantMessage('3', '2025-12-11T16:00:05.000Z'), // 5 seconds
+      createCompactBoundary('boundary-1', 'auto', {
+        timestamp: '2025-12-11T16:54:33.000Z',
+        logicalParentUuid: 'nonexistent-uuid',
+      }),
     ];
 
     const result = calculateCompactionStats(messages);
-    expect(result.avgResponseTimeMs).toBe(5000);
+    expect(result.avgCompactionTimeMs).toBeNull();
   });
 
-  it('only counts compactions that have a following assistant message in average', () => {
+  it('only counts compactions with valid logicalParent in average', () => {
     const messages: TranscriptLine[] = [
-      createCompactBoundary('1', 'auto', 100000, '2025-12-11T16:00:00.000Z'),
-      createAssistantMessage('2', '2025-12-11T16:00:04.000Z'), // 4 seconds
-      createCompactBoundary('3', 'auto', 100000, '2025-12-11T17:00:00.000Z'),
-      // No assistant after second compaction
+      createAssistantMessage('parent-1', '2025-12-11T16:00:00.000Z'),
+      createCompactBoundary('boundary-1', 'auto', {
+        timestamp: '2025-12-11T16:00:20.000Z', // 20 seconds
+        logicalParentUuid: 'parent-1',
+      }),
+      createCompactBoundary('boundary-2', 'auto', {
+        timestamp: '2025-12-11T17:00:00.000Z',
+        logicalParentUuid: 'nonexistent-uuid', // won't be counted
+      }),
     ];
 
     const result = calculateCompactionStats(messages);
     expect(result.total).toBe(2);
-    expect(result.avgResponseTimeMs).toBe(4000); // Only counts the first one
+    expect(result.avgCompactionTimeMs).toBe(20000); // Only counts the first one
   });
 });
 

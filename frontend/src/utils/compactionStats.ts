@@ -34,27 +34,36 @@ export interface CompactionStats {
   total: number;
   auto: number;
   manual: number;
-  avgResponseTimeMs: number | null; // Average time from compact_boundary to first assistant response
+  avgCompactionTimeMs: number | null; // Average time for compaction (logicalParent → compact_boundary)
 }
 
 /**
  * Calculate compaction stats by counting compact_boundary system messages.
  * Auto + Manual should equal Total.
  *
- * Also calculates average response time: the time from compact_boundary
- * to the first assistant message after it.
+ * Also calculates average compaction time: the time from the last message
+ * before compaction (logicalParentUuid) to the compact_boundary timestamp.
+ * This measures actual server-side summarization time.
  */
 export function calculateCompactionStats(messages: TranscriptLine[]): CompactionStats {
   const stats: CompactionStats = {
     total: 0,
     auto: 0,
     manual: 0,
-    avgResponseTimeMs: null,
+    avgCompactionTimeMs: null,
   };
 
-  const responseTimes: number[] = [];
+  // Build a map of uuid → timestamp for quick lookup
+  const timestampByUuid = new Map<string, string>();
+  for (const message of messages) {
+    if ('uuid' in message && 'timestamp' in message) {
+      timestampByUuid.set(message.uuid, message.timestamp);
+    }
+  }
 
-  for (const [i, message] of messages.entries()) {
+  const compactionTimes: number[] = [];
+
+  for (const message of messages) {
     if (message.type !== 'system' || message.subtype !== 'compact_boundary') {
       continue;
     }
@@ -67,20 +76,24 @@ export function calculateCompactionStats(messages: TranscriptLine[]): Compaction
       stats.manual++;
     }
 
-    // Find the first assistant message after this compact_boundary
-    const boundaryTime = new Date(message.timestamp).getTime();
-    const nextAssistant = messages.slice(i + 1).find((m) => m.type === 'assistant');
-    if (nextAssistant) {
-      const delta = new Date(nextAssistant.timestamp).getTime() - boundaryTime;
-      if (delta >= 0) {
-        responseTimes.push(delta);
+    // Calculate compaction time: logicalParent timestamp → compact_boundary timestamp
+    const logicalParentUuid = message.logicalParentUuid;
+    if (logicalParentUuid) {
+      const parentTimestamp = timestampByUuid.get(logicalParentUuid);
+      if (parentTimestamp) {
+        const startTime = new Date(parentTimestamp).getTime();
+        const endTime = new Date(message.timestamp).getTime();
+        const delta = endTime - startTime;
+        if (delta >= 0) {
+          compactionTimes.push(delta);
+        }
       }
     }
   }
 
-  if (responseTimes.length > 0) {
-    const sum = responseTimes.reduce((a, b) => a + b, 0);
-    stats.avgResponseTimeMs = Math.round(sum / responseTimes.length);
+  if (compactionTimes.length > 0) {
+    const sum = compactionTimes.reduce((a, b) => a + b, 0);
+    stats.avgCompactionTimeMs = Math.round(sum / compactionTimes.length);
   }
 
   return stats;

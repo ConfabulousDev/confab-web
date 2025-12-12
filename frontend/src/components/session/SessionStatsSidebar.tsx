@@ -66,7 +66,7 @@ const TOOLTIPS = {
     total: 'Total number of context compaction events',
     auto: 'Compactions triggered automatically when context limit reached',
     manual: 'Compactions triggered manually by user',
-    avgResponseTime: 'Average time from compaction to first assistant response',
+    avgCompactionTime: 'Average time for server-side summarization',
   },
 };
 
@@ -163,9 +163,9 @@ function SessionStatsSidebar({ messages, loading = false }: SessionStatsSidebarP
             <span className={styles.statLabel}>Manual</span>
             <span className={styles.statValue}>{renderValue(String(compactionStats.manual))}</span>
           </div>
-          <div className={styles.statRow} title={TOOLTIPS.compaction.avgResponseTime}>
-            <span className={styles.statLabel}>Avg response</span>
-            <span className={styles.statValue}>{renderValue(formatResponseTime(compactionStats.avgResponseTimeMs))}</span>
+          <div className={styles.statRow} title={TOOLTIPS.compaction.avgCompactionTime}>
+            <span className={styles.statLabel}>Avg time</span>
+            <span className={styles.statValue}>{renderValue(formatResponseTime(compactionStats.avgCompactionTimeMs))}</span>
           </div>
         </div>
 
