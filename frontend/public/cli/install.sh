@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
-set -x
 
 # Confab CLI Installer
 # Usage: curl -fsSL https://confabulous.dev/cli/install.sh | bash
