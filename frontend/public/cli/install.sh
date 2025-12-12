@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -x
 
 # Confab CLI Installer
 # Usage: curl -fsSL https://confabulous.dev/cli/install.sh | bash
@@ -36,27 +37,36 @@ detect_platform() {
     echo "${os}_${arch}"
 }
 
-# Download a file using curl or wget
-download() {
-    local url="$1"
+# Download a release asset by asset ID (for private repos) or direct URL (for public)
+download_asset() {
+    local asset_id="$1"
     local output="$2"
-    local auth_header=""
-
-    if [ -n "$CONFAB_GITHUB_TOKEN" ]; then
-        auth_header="Authorization: Bearer $CONFAB_GITHUB_TOKEN"
-    fi
 
     if command -v curl >/dev/null 2>&1; then
-        if [ -n "$auth_header" ]; then
-            curl -fsSL -H "$auth_header" "$url" -o "$output"
+        if [ -n "$CONFAB_GITHUB_TOKEN" ]; then
+            curl -fsSL \
+                -H "Authorization: Bearer $CONFAB_GITHUB_TOKEN" \
+                -H "Accept: application/octet-stream" \
+                "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${asset_id}" \
+                -o "$output"
         else
-            curl -fsSL "$url" -o "$output"
+            curl -fsSL \
+                -H "Accept: application/octet-stream" \
+                "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${asset_id}" \
+                -o "$output"
         fi
     elif command -v wget >/dev/null 2>&1; then
-        if [ -n "$auth_header" ]; then
-            wget -q --header="$auth_header" "$url" -O "$output"
+        if [ -n "$CONFAB_GITHUB_TOKEN" ]; then
+            wget -q \
+                --header="Authorization: Bearer $CONFAB_GITHUB_TOKEN" \
+                --header="Accept: application/octet-stream" \
+                "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${asset_id}" \
+                -O "$output"
         else
-            wget -q "$url" -O "$output"
+            wget -q \
+                --header="Accept: application/octet-stream" \
+                "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${asset_id}" \
+                -O "$output"
         fi
     else
         echo "Error: curl or wget is required"
@@ -114,15 +124,24 @@ verify_checksum() {
     fi
 }
 
+# Extract asset ID from release JSON for a given filename
+get_asset_id() {
+    local release_json="$1"
+    local filename="$2"
+    echo "$release_json" | grep -B3 "\"name\": \"${filename}\"" | grep '"id":' | head -1 | sed -E 's/.*"id": *([0-9]+).*/\1/'
+}
+
 main() {
-    local platform version archive_name archive_url checksum tmp_dir tmp_file
+    local platform version archive_name checksum tmp_dir tmp_file release_json archive_asset_id checksums_asset_id
 
     platform="$(detect_platform)"
     echo "Installing confab for ${platform}..."
 
-    # Get the latest version from GitHub releases
-    echo "Fetching latest version..."
-    version="$(fetch "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/')"
+    # Get the latest release info from GitHub API
+    echo "Fetching latest release..."
+    release_json="$(fetch "https://api.github.com/repos/${GITHUB_REPO}/releases/latest")"
+
+    version="$(echo "$release_json" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/')"
     if [ -z "$version" ]; then
         echo "Error: Failed to determine latest version"
         exit 1
@@ -134,15 +153,28 @@ main() {
     tmp_file="${tmp_dir}/${BINARY_NAME}"
     trap 'rm -rf "$tmp_dir"' EXIT
 
-    # Download archive from GitHub releases
+    # Get asset IDs for the archive and checksums
     archive_name="${BINARY_NAME}_${version}_${platform}.tar.gz"
-    archive_url="${RELEASES_URL}/download/v${version}/${archive_name}"
-    echo "Downloading ${archive_url}..."
-    download "$archive_url" "${tmp_dir}/${archive_name}"
+    archive_asset_id="$(get_asset_id "$release_json" "$archive_name")"
+    checksums_asset_id="$(get_asset_id "$release_json" "checksums.txt")"
 
-    # Download checksums file and extract checksum for our archive
-    checksums_url="${RELEASES_URL}/download/v${version}/checksums.txt"
-    checksum="$(fetch "$checksums_url" | grep "${archive_name}" | cut -d' ' -f1)"
+    if [ -z "$archive_asset_id" ]; then
+        echo "Error: Could not find asset ${archive_name} in release"
+        exit 1
+    fi
+    if [ -z "$checksums_asset_id" ]; then
+        echo "Error: Could not find checksums.txt in release"
+        exit 1
+    fi
+
+    # Download archive via GitHub API
+    echo "Downloading ${archive_name}..."
+    download_asset "$archive_asset_id" "${tmp_dir}/${archive_name}"
+
+    # Download checksums and extract checksum for our archive
+    echo "Fetching checksums..."
+    download_asset "$checksums_asset_id" "${tmp_dir}/checksums.txt"
+    checksum="$(grep "${archive_name}" "${tmp_dir}/checksums.txt" | cut -d' ' -f1)"
 
     if ! echo "$checksum" | grep -qE '^[a-fA-F0-9]{64}$'; then
         echo "Error: Failed to get checksum for ${archive_name}"
