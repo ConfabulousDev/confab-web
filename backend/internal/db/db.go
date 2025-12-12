@@ -1462,9 +1462,9 @@ func (db *DB) updateSessionMetadata(ctx context.Context, sessionID string, param
 		argNum++
 	}
 
-	// Only update first_user_message if explicitly provided (not nil). Empty string clears it.
+	// Only update first_user_message if explicitly provided (not nil) and not already set (first write wins).
 	if params.FirstUserMessage != nil {
-		query += fmt.Sprintf(", first_user_message = $%d", argNum)
+		query += fmt.Sprintf(", first_user_message = COALESCE(first_user_message, $%d)", argNum)
 		args = append(args, *params.FirstUserMessage)
 		argNum++
 	}
@@ -1641,10 +1641,10 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 			argIdx++
 		}
 
-		// FirstUserMessage: if provided (not nil), set it directly (last write wins)
-		// Empty string clears it
+		// FirstUserMessage: if provided (not nil), only set if currently NULL (first write wins)
+		// Once set, the value is immutable via sync
 		if firstUserMessage != nil {
-			sessionQuery += fmt.Sprintf(", first_user_message = $%d", argIdx)
+			sessionQuery += fmt.Sprintf(", first_user_message = COALESCE(first_user_message, $%d)", argIdx)
 			args = append(args, *firstUserMessage)
 			argIdx++
 		}

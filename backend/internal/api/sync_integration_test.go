@@ -1639,6 +1639,163 @@ func TestSyncChunk_Summary_Integration(t *testing.T) {
 	})
 }
 
+func TestSyncChunk_FirstUserMessage_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("first_user_message first write wins - subsequent chunks do not overwrite", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "first-msg-test")
+
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload first chunk with first_user_message
+		reqBody := map[string]interface{}{
+			"session_id":         sessionID,
+			"file_name":          "transcript.jsonl",
+			"file_type":          "transcript",
+			"first_line":         1,
+			"lines":              []string{`{"type":"user","message":"Hello"}`},
+			"first_user_message": "First message A",
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Upload second chunk trying to overwrite first_user_message
+		reqBody2 := map[string]interface{}{
+			"session_id":         sessionID,
+			"file_name":          "transcript.jsonl",
+			"file_type":          "transcript",
+			"first_line":         2,
+			"lines":              []string{`{"type":"assistant","message":"Hi"}`},
+			"first_user_message": "First message B - should be ignored",
+		}
+
+		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody2, user.ID)
+		w = httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify first_user_message is still A (not B)
+		var firstUserMessage *string
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT first_user_message FROM sessions WHERE id = $1",
+			sessionID)
+		if err := row.Scan(&firstUserMessage); err != nil {
+			t.Fatalf("failed to query session first_user_message: %v", err)
+		}
+
+		if firstUserMessage == nil || *firstUserMessage != "First message A" {
+			t.Errorf("expected first_user_message 'First message A', got %v", firstUserMessage)
+		}
+	})
+
+	t.Run("first_user_message set in init cannot be overwritten by chunk", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Init with first_user_message
+		initBody := map[string]interface{}{
+			"external_id":        "first-msg-init-test",
+			"transcript_path":    "/home/user/project/transcript.jsonl",
+			"cwd":                "/home/user/project",
+			"first_user_message": "Message from init",
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", initBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncInit(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var initResp SyncInitResponse
+		testutil.ParseJSONResponse(t, w, &initResp)
+
+		// Upload chunk trying to overwrite first_user_message
+		chunkBody := map[string]interface{}{
+			"session_id":         initResp.SessionID,
+			"file_name":          "transcript.jsonl",
+			"file_type":          "transcript",
+			"first_line":         1,
+			"lines":              []string{`{"type":"user","message":"Hello"}`},
+			"first_user_message": "Message from chunk - should be ignored",
+		}
+
+		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", chunkBody, user.ID)
+		w = httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify first_user_message is still from init
+		var firstUserMessage *string
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT first_user_message FROM sessions WHERE id = $1",
+			initResp.SessionID)
+		if err := row.Scan(&firstUserMessage); err != nil {
+			t.Fatalf("failed to query session first_user_message: %v", err)
+		}
+
+		if firstUserMessage == nil || *firstUserMessage != "Message from init" {
+			t.Errorf("expected first_user_message 'Message from init', got %v", firstUserMessage)
+		}
+	})
+
+	t.Run("absent first_user_message field preserves existing value", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "first-msg-preserve-test")
+
+		// Set initial first_user_message directly in DB
+		_, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET first_user_message = $1 WHERE id = $2",
+			"Preserved Message", sessionID)
+		if err != nil {
+			t.Fatalf("failed to set initial first_user_message: %v", err)
+		}
+
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload chunk WITHOUT first_user_message field
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"user","message":"Hello"}`},
+			// No first_user_message field - should preserve existing
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify first_user_message was NOT changed
+		var firstUserMessage *string
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT first_user_message FROM sessions WHERE id = $1",
+			sessionID)
+		if err := row.Scan(&firstUserMessage); err != nil {
+			t.Fatalf("failed to query session first_user_message: %v", err)
+		}
+
+		if firstUserMessage == nil || *firstUserMessage != "Preserved Message" {
+			t.Errorf("expected first_user_message 'Preserved Message' to be preserved, got %v", firstUserMessage)
+		}
+	})
+}
+
 // =============================================================================
 // Chunk Count Tracking and Limits
 // =============================================================================
