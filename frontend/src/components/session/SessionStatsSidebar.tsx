@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback } from 'react';
 import type { TranscriptLine } from '@/types';
 import { useKeyboardShortcut, useSpinner } from '@/hooks';
 import { calculateTokenStats, calculateEstimatedCost, formatTokenCount, formatCost } from '@/utils/tokenStats';
-import { calculateCompactionStats } from '@/utils/compactionStats';
+import { calculateCompactionStats, formatResponseTime } from '@/utils/compactionStats';
 import PageSidebar from '../PageSidebar';
 import styles from './SessionStatsSidebar.module.css';
 
@@ -66,6 +66,7 @@ const TOOLTIPS = {
     total: 'Total number of context compaction events',
     auto: 'Compactions triggered automatically when context limit reached',
     manual: 'Compactions triggered manually by user',
+    avgResponseTime: 'Average time from compaction to first assistant response',
   },
 };
 
@@ -161,6 +162,10 @@ function SessionStatsSidebar({ messages, loading = false }: SessionStatsSidebarP
           <div className={styles.statRow} title={TOOLTIPS.compaction.manual}>
             <span className={styles.statLabel}>Manual</span>
             <span className={styles.statValue}>{renderValue(String(compactionStats.manual))}</span>
+          </div>
+          <div className={styles.statRow} title={TOOLTIPS.compaction.avgResponseTime}>
+            <span className={styles.statLabel}>Avg response</span>
+            <span className={styles.statValue}>{renderValue(formatResponseTime(compactionStats.avgResponseTimeMs))}</span>
           </div>
         </div>
 
