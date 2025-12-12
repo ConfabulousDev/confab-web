@@ -33,6 +33,9 @@ primary_region = 'sjc'
   EMAIL_FROM_ADDRESS = "noreply@share.confabulous.dev"  # Update this to match your verified Resend domain
   EMAIL_RATE_LIMIT_PER_HOUR = "100"
 
+  # Admin Configuration
+  SUPER_ADMIN_EMAILS = "jackie.tung@gmail.com"
+
 [http_service]
   internal_port = 8080
   force_https = true

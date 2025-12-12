@@ -21,6 +21,13 @@ type User struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
+// AdminUserStats extends User with admin-visible statistics
+type AdminUserStats struct {
+	User
+	SessionCount   int        `json:"session_count"`
+	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
+}
+
 // OAuthProvider represents supported OAuth providers
 type OAuthProvider string
 

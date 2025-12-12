@@ -73,6 +73,11 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			name = html.EscapeString(*user.Name)
 		}
 
+		lastActivity := "-"
+		if user.LastActivityAt != nil {
+			lastActivity = user.LastActivityAt.Format("Jan 2, 2006 15:04")
+		}
+
 		deleteAction := fmt.Sprintf("%s/users/%d/delete", AdminPathPrefix, user.ID)
 
 		userRows += fmt.Sprintf(`
@@ -81,6 +86,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 				<td>%s</td>
 				<td>%s</td>
 				<td><span class="%s">%s</span></td>
+				<td>%d</td>
+				<td>%s</td>
 				<td>%s</td>
 				<td class="actions">
 					%s
@@ -95,8 +102,10 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			name,
 			statusClass,
 			statusText,
+			user.SessionCount,
+			lastActivity,
 			user.CreatedAt.Format("Jan 2, 2006"),
-			h.buildStatusToggleForm(user, csrfToken),
+			h.buildStatusToggleForm(user.User, csrfToken),
 			deleteAction,
 			html.EscapeString(user.Email),
 			csrfToken,
@@ -264,6 +273,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
                     <th>Email</th>
                     <th>Name</th>
                     <th>Status</th>
+                    <th>Sessions</th>
+                    <th>Last Activity</th>
                     <th>Created</th>
                     <th>Actions</th>
                 </tr>

@@ -138,9 +138,17 @@ func (db *DB) UserExistsByEmail(ctx context.Context, email string) (bool, error)
 	return exists, nil
 }
 
-// ListAllUsers returns all users in the system, ordered by ID
-func (db *DB) ListAllUsers(ctx context.Context) ([]models.User, error) {
-	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users ORDER BY id`
+// ListAllUsers returns all users in the system with stats, ordered by ID
+func (db *DB) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error) {
+	query := `
+		SELECT
+			u.id, u.email, u.name, u.avatar_url, u.status, u.created_at, u.updated_at,
+			COUNT(s.id) AS session_count,
+			MAX(s.last_sync_at) AS last_activity_at
+		FROM users u
+		LEFT JOIN sessions s ON s.user_id = u.id
+		GROUP BY u.id
+		ORDER BY u.id`
 
 	rows, err := db.conn.QueryContext(ctx, query)
 	if err != nil {
@@ -148,9 +156,9 @@ func (db *DB) ListAllUsers(ctx context.Context) ([]models.User, error) {
 	}
 	defer rows.Close()
 
-	var users []models.User
+	var users []models.AdminUserStats
 	for rows.Next() {
-		var user models.User
+		var user models.AdminUserStats
 		err := rows.Scan(
 			&user.ID,
 			&user.Email,
@@ -159,6 +167,8 @@ func (db *DB) ListAllUsers(ctx context.Context) ([]models.User, error) {
 			&user.Status,
 			&user.CreatedAt,
 			&user.UpdatedAt,
+			&user.SessionCount,
+			&user.LastActivityAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
