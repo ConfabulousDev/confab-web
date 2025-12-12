@@ -63,7 +63,6 @@ const TOOLTIPS = {
     max: 'Longest compaction processing time',
   },
   compaction: {
-    total: 'Total number of context compaction events',
     auto: 'Compactions triggered automatically when context limit reached',
     manual: 'Compactions triggered manually by user',
     avgCompactionTime: 'Average time for server-side summarization',
@@ -151,10 +150,6 @@ function SessionStatsSidebar({ messages, loading = false }: SessionStatsSidebarP
         {/* Compaction Section */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>Compaction</div>
-          <div className={styles.statRow} title={TOOLTIPS.compaction.total}>
-            <span className={styles.statLabel}>Total</span>
-            <span className={styles.statValue}>{renderValue(String(compactionStats.total))}</span>
-          </div>
           <div className={styles.statRow} title={TOOLTIPS.compaction.auto}>
             <span className={styles.statLabel}>Auto</span>
             <span className={styles.statValue}>{renderValue(String(compactionStats.auto))}</span>
