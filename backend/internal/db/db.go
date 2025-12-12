@@ -143,10 +143,13 @@ func (db *DB) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error)
 	query := `
 		SELECT
 			u.id, u.email, u.name, u.avatar_url, u.status, u.created_at, u.updated_at,
-			COUNT(s.id) AS session_count,
-			MAX(s.last_sync_at) AS last_activity_at
+			COUNT(DISTINCT s.id) AS session_count,
+			MAX(ak.last_used_at) AS last_api_key_used,
+			MAX(ws.created_at) AS last_logged_in
 		FROM users u
 		LEFT JOIN sessions s ON s.user_id = u.id
+		LEFT JOIN api_keys ak ON ak.user_id = u.id
+		LEFT JOIN web_sessions ws ON ws.user_id = u.id
 		GROUP BY u.id
 		ORDER BY u.id`
 
@@ -168,7 +171,8 @@ func (db *DB) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error)
 			&user.CreatedAt,
 			&user.UpdatedAt,
 			&user.SessionCount,
-			&user.LastActivityAt,
+			&user.LastAPIKeyUsed,
+			&user.LastLoggedIn,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)

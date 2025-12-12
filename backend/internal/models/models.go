@@ -25,7 +25,8 @@ type User struct {
 type AdminUserStats struct {
 	User
 	SessionCount   int        `json:"session_count"`
-	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
+	LastAPIKeyUsed *time.Time `json:"last_api_key_used,omitempty"`
+	LastLoggedIn   *time.Time `json:"last_logged_in,omitempty"`
 }
 
 // OAuthProvider represents supported OAuth providers

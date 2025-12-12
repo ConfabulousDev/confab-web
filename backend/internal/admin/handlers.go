@@ -73,9 +73,14 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			name = html.EscapeString(*user.Name)
 		}
 
-		lastActivity := "-"
-		if user.LastActivityAt != nil {
-			lastActivity = user.LastActivityAt.Format("Jan 2, 2006 15:04")
+		lastAPIKeyUsed := "-"
+		if user.LastAPIKeyUsed != nil {
+			lastAPIKeyUsed = user.LastAPIKeyUsed.Format("Jan 2, 2006 15:04")
+		}
+
+		lastLoggedIn := "-"
+		if user.LastLoggedIn != nil {
+			lastLoggedIn = user.LastLoggedIn.Format("Jan 2, 2006 15:04")
 		}
 
 		deleteAction := fmt.Sprintf("%s/users/%d/delete", AdminPathPrefix, user.ID)
@@ -87,6 +92,7 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 				<td>%s</td>
 				<td><span class="%s">%s</span></td>
 				<td>%d</td>
+				<td>%s</td>
 				<td>%s</td>
 				<td>%s</td>
 				<td class="actions">
@@ -103,7 +109,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			statusClass,
 			statusText,
 			user.SessionCount,
-			lastActivity,
+			lastAPIKeyUsed,
+			lastLoggedIn,
 			user.CreatedAt.Format("Jan 2, 2006"),
 			h.buildStatusToggleForm(user.User, csrfToken),
 			deleteAction,
@@ -274,7 +281,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
                     <th>Name</th>
                     <th>Status</th>
                     <th>Sessions</th>
-                    <th>Last Activity</th>
+                    <th>Last API Key Used</th>
+                    <th>Last Logged In</th>
                     <th>Created</th>
                     <th>Actions</th>
                 </tr>
