@@ -4,6 +4,10 @@
 
 When given a Linear ticket to work on, always make a plan first before writing any code. Use the TodoWrite tool to break down the ticket into concrete implementation steps. Once the plan is finalized, update the Linear issue with the plan.
 
+## Test Coverage
+
+New features and bug fixes should come with appropriate test coverage. Write tests before or alongside implementation code.
+
 ## Running Tests
 
 ```bash
