@@ -41,9 +41,14 @@ export interface CompactionStats {
  * Calculate compaction stats by counting compact_boundary system messages.
  * Auto + Manual should equal Total.
  *
- * Also calculates average compaction time: the time from the last message
- * before compaction (logicalParentUuid) to the compact_boundary timestamp.
- * This measures actual server-side summarization time.
+ * Also calculates average compaction time for AUTO compactions only:
+ * the time from the last message before compaction (logicalParentUuid)
+ * to the compact_boundary timestamp. This measures actual server-side
+ * summarization time.
+ *
+ * Manual compactions are excluded from timing because the /compact command
+ * is not recorded in the transcript, so the gap includes arbitrary user
+ * think time rather than actual processing time.
  */
 export function calculateCompactionStats(messages: TranscriptLine[]): CompactionStats {
   const stats: CompactionStats = {
@@ -76,16 +81,19 @@ export function calculateCompactionStats(messages: TranscriptLine[]): Compaction
       stats.manual++;
     }
 
-    // Calculate compaction time: logicalParent timestamp → compact_boundary timestamp
-    const logicalParentUuid = message.logicalParentUuid;
-    if (logicalParentUuid) {
-      const parentTimestamp = timestampByUuid.get(logicalParentUuid);
-      if (parentTimestamp) {
-        const startTime = new Date(parentTimestamp).getTime();
-        const endTime = new Date(message.timestamp).getTime();
-        const delta = endTime - startTime;
-        if (delta >= 0) {
-          compactionTimes.push(delta);
+    // Calculate compaction time only for auto compactions
+    // Manual compactions include user think time, not just processing time
+    if (trigger === 'auto') {
+      const logicalParentUuid = message.logicalParentUuid;
+      if (logicalParentUuid) {
+        const parentTimestamp = timestampByUuid.get(logicalParentUuid);
+        if (parentTimestamp) {
+          const startTime = new Date(parentTimestamp).getTime();
+          const endTime = new Date(message.timestamp).getTime();
+          const delta = endTime - startTime;
+          if (delta >= 0) {
+            compactionTimes.push(delta);
+          }
         }
       }
     }

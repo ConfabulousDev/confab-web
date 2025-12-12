@@ -86,7 +86,8 @@ function createCompactBoundary(
   };
 }
 
-// Session with compaction events (avg ~45s compaction time)
+// Session with compaction events
+// Auto compactions: 42s + 55s = avg 48.5s (manual compactions excluded from timing)
 const sessionWithCompactions: TranscriptLine[] = [
   createAssistantMessage('1', 50000, 5000, 20000, 0, '2025-01-01T10:00:00.000Z'),
   createCompactBoundary('2', 'auto', '1', '2025-01-01T10:00:42.000Z', 150000), // 42s
@@ -94,11 +95,12 @@ const sessionWithCompactions: TranscriptLine[] = [
   createAssistantMessage('4', 48000, 5200, 15000, 20000, '2025-01-01T10:30:00.000Z'),
   createCompactBoundary('5', 'auto', '4', '2025-01-01T10:30:55.000Z', 160000), // 55s
   createAssistantMessage('6', 42000, 4000, 0, 35000, '2025-01-01T10:31:10.000Z'),
-  createCompactBoundary('7', 'manual', '6', '2025-01-01T10:31:48.000Z', 145000), // 38s
+  createCompactBoundary('7', 'manual', '6', '2025-01-01T10:31:48.000Z', 145000), // excluded from timing
   createAssistantMessage('8', 40000, 3800, 10000, 35000, '2025-01-01T10:32:00.000Z'),
 ];
 
-// Long session with many compactions (avg ~50s compaction time)
+// Long session with many compactions
+// Auto compactions: 45s + 52s + 55s + 50s = avg 50.5s (manual compactions excluded from timing)
 const longSessionWithManyCompactions: TranscriptLine[] = [
   createAssistantMessage('1', 50000, 5000, 20000, 0, '2025-01-01T09:00:00.000Z'),
   createCompactBoundary('2', 'auto', '1', '2025-01-01T09:00:45.000Z'), // 45s
@@ -107,11 +109,11 @@ const longSessionWithManyCompactions: TranscriptLine[] = [
   createAssistantMessage('5', 48000, 5200, 15000, 20000, '2025-01-01T09:02:10.000Z'),
   createCompactBoundary('6', 'auto', '5', '2025-01-01T09:03:05.000Z'), // 55s
   createAssistantMessage('7', 42000, 4000, 0, 35000, '2025-01-01T09:03:20.000Z'),
-  createCompactBoundary('8', 'manual', '7', '2025-01-01T09:04:08.000Z'), // 48s
+  createCompactBoundary('8', 'manual', '7', '2025-01-01T09:04:08.000Z'), // excluded from timing
   createAssistantMessage('9', 40000, 3800, 10000, 35000, '2025-01-01T09:04:30.000Z'),
   createCompactBoundary('10', 'auto', '9', '2025-01-01T09:05:20.000Z'), // 50s
   createAssistantMessage('11', 38000, 3500, 0, 45000, '2025-01-01T09:05:40.000Z'),
-  createCompactBoundary('12', 'manual', '11', '2025-01-01T09:06:35.000Z'), // 55s
+  createCompactBoundary('12', 'manual', '11', '2025-01-01T09:06:35.000Z'), // excluded from timing
   createAssistantMessage('13', 35000, 3200, 8000, 45000, '2025-01-01T09:07:00.000Z'),
 ];
 

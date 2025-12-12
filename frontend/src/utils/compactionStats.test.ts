@@ -218,7 +218,8 @@ describe('calculateCompactionStats', () => {
   });
 
   // Compaction time tests (logicalParent → compact_boundary)
-  it('calculates avgCompactionTimeMs for a single compaction', () => {
+  // Only auto compactions are included in timing; manual compactions include user think time
+  it('calculates avgCompactionTimeMs for a single auto compaction', () => {
     const messages: TranscriptLine[] = [
       createAssistantMessage('parent-1', '2025-12-11T16:53:39.000Z'),
       createCompactBoundary('boundary-1', 'auto', {
@@ -232,7 +233,7 @@ describe('calculateCompactionStats', () => {
     expect(result.avgCompactionTimeMs).toBe(54000);
   });
 
-  it('calculates average across multiple compactions', () => {
+  it('calculates average across multiple auto compactions', () => {
     const messages: TranscriptLine[] = [
       createAssistantMessage('parent-1', '2025-12-11T16:00:00.000Z'),
       createCompactBoundary('boundary-1', 'auto', {
@@ -248,6 +249,42 @@ describe('calculateCompactionStats', () => {
 
     const result = calculateCompactionStats(messages);
     expect(result.avgCompactionTimeMs).toBe(20000); // (10000 + 30000) / 2
+  });
+
+  it('excludes manual compactions from timing calculation', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage('parent-1', '2025-12-11T16:00:00.000Z'),
+      createCompactBoundary('boundary-1', 'manual', {
+        timestamp: '2025-12-11T16:10:00.000Z', // 10 minutes - user think time
+        logicalParentUuid: 'parent-1',
+      }),
+    ];
+
+    const result = calculateCompactionStats(messages);
+    expect(result.total).toBe(1);
+    expect(result.manual).toBe(1);
+    expect(result.avgCompactionTimeMs).toBeNull(); // Manual excluded from timing
+  });
+
+  it('only includes auto compactions in timing average, not manual', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage('parent-1', '2025-12-11T16:00:00.000Z'),
+      createCompactBoundary('boundary-1', 'auto', {
+        timestamp: '2025-12-11T16:00:20.000Z', // 20 seconds
+        logicalParentUuid: 'parent-1',
+      }),
+      createAssistantMessage('parent-2', '2025-12-11T17:00:00.000Z'),
+      createCompactBoundary('boundary-2', 'manual', {
+        timestamp: '2025-12-11T17:05:00.000Z', // 5 minutes - user think time, should be excluded
+        logicalParentUuid: 'parent-2',
+      }),
+    ];
+
+    const result = calculateCompactionStats(messages);
+    expect(result.total).toBe(2);
+    expect(result.auto).toBe(1);
+    expect(result.manual).toBe(1);
+    expect(result.avgCompactionTimeMs).toBe(20000); // Only the auto compaction's 20 seconds
   });
 
   it('returns null avgCompactionTimeMs when logicalParentUuid is missing', () => {
