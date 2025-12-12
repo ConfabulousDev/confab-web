@@ -38,7 +38,7 @@ func TestAdminMiddleware_SuperAdmin(t *testing.T) {
 	}))
 
 	// Create request with admin user context
-	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req := httptest.NewRequest(http.MethodGet, admin.AdminPathPrefix+"/users", nil)
 	ctx := context.WithValue(req.Context(), auth.GetUserIDContextKey(), adminUser.ID)
 	req = req.WithContext(ctx)
 
@@ -73,7 +73,7 @@ func TestAdminMiddleware_NonAdmin(t *testing.T) {
 	}))
 
 	// Create request with regular user context
-	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req := httptest.NewRequest(http.MethodGet, admin.AdminPathPrefix+"/users", nil)
 	ctx := context.WithValue(req.Context(), auth.GetUserIDContextKey(), regularUser.ID)
 	req = req.WithContext(ctx)
 
@@ -99,7 +99,7 @@ func TestAdminMiddleware_NoAuth(t *testing.T) {
 	}))
 
 	// Create request without user context
-	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req := httptest.NewRequest(http.MethodGet, admin.AdminPathPrefix+"/users", nil)
 
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -125,7 +125,7 @@ func TestHandleListUsers(t *testing.T) {
 
 	handlers := admin.NewHandlers(env.DB, env.Storage)
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req := httptest.NewRequest(http.MethodGet, admin.AdminPathPrefix+"/users", nil)
 	w := httptest.NewRecorder()
 
 	handlers.HandleListUsers(w, req)
@@ -168,7 +168,7 @@ func TestHandleDeactivateUser(t *testing.T) {
 	handlers := admin.NewHandlers(env.DB, env.Storage)
 
 	// Create request with chi URL param
-	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/deactivate", nil)
+	req := httptest.NewRequest(http.MethodPost, admin.AdminPathPrefix+"/users/1/deactivate", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", "1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -209,7 +209,7 @@ func TestHandleActivateUser(t *testing.T) {
 	handlers := admin.NewHandlers(env.DB, env.Storage)
 
 	// Create request with chi URL param
-	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/activate", nil)
+	req := httptest.NewRequest(http.MethodPost, admin.AdminPathPrefix+"/users/1/activate", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", "1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -254,7 +254,7 @@ func TestHandleDeleteUser(t *testing.T) {
 	handlers := admin.NewHandlers(env.DB, env.Storage)
 
 	// Create request with chi URL param
-	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/delete", nil)
+	req := httptest.NewRequest(http.MethodPost, admin.AdminPathPrefix+"/users/1/delete", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", "1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -294,7 +294,7 @@ func TestHandleDeleteUser_InvalidID(t *testing.T) {
 	handlers := admin.NewHandlers(env.DB, env.Storage)
 
 	// Create request with invalid user ID
-	req := httptest.NewRequest(http.MethodPost, "/admin/users/invalid/delete", nil)
+	req := httptest.NewRequest(http.MethodPost, admin.AdminPathPrefix+"/users/invalid/delete", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", "invalid")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -324,7 +324,7 @@ func TestHandleDeleteUser_NonExistentUser(t *testing.T) {
 	handlers := admin.NewHandlers(env.DB, env.Storage)
 
 	// Create request with non-existent user ID
-	req := httptest.NewRequest(http.MethodPost, "/admin/users/99999/delete", nil)
+	req := httptest.NewRequest(http.MethodPost, admin.AdminPathPrefix+"/users/99999/delete", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", "99999")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))

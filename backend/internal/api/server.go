@@ -215,8 +215,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db))))
 
 	// Admin routes (require web session + super admin)
+	// Obfuscated path to reduce exposure
 	adminHandlers := admin.NewHandlers(s.db, s.storage)
-	r.Route("/admin", func(r chi.Router) {
+	r.Route("/admin-8b5492d3-a268-4a1b-8b3b-f1dfd34f249b", func(r chi.Router) {
 		r.Use(csrfMiddleware)
 		r.Use(auth.SessionMiddleware(s.db))
 		r.Use(admin.Middleware(s.db))

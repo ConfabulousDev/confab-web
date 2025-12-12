@@ -19,6 +19,10 @@ import (
 const (
 	// DatabaseTimeout is the maximum duration for database operations
 	DatabaseTimeout = 5 * time.Second
+
+	// AdminPathPrefix is the obfuscated admin route prefix
+	// This must match the route in server.go
+	AdminPathPrefix = "/admin-8b5492d3-a268-4a1b-8b3b-f1dfd34f249b"
 )
 
 // Handlers holds dependencies for admin handlers
@@ -69,6 +73,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			name = html.EscapeString(*user.Name)
 		}
 
+		deleteAction := fmt.Sprintf("%s/users/%d/delete", AdminPathPrefix, user.ID)
+
 		userRows += fmt.Sprintf(`
 			<tr>
 				<td>%d</td>
@@ -78,7 +84,7 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 				<td>%s</td>
 				<td class="actions">
 					%s
-					<form method="POST" action="/admin/users/%d/delete" class="inline-form" onsubmit="return confirm('PERMANENTLY DELETE user %s and all their data? This cannot be undone!');">
+					<form method="POST" action="%s" class="inline-form" onsubmit="return confirm('PERMANENTLY DELETE user %s and all their data? This cannot be undone!');">
 						<input type="hidden" name="gorilla.csrf.Token" value="%s">
 						<button type="submit" class="btn btn-danger">Delete</button>
 					</form>
@@ -91,7 +97,7 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			statusText,
 			user.CreatedAt.Format("Jan 2, 2006"),
 			h.buildStatusToggleForm(user, csrfToken),
-			user.ID,
+			deleteAction,
 			html.EscapeString(user.Email),
 			csrfToken,
 		)
@@ -278,20 +284,22 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) buildStatusToggleForm(user models.User, csrfToken string) string {
 	if user.Status == models.UserStatusActive {
 		return fmt.Sprintf(`
-			<form method="POST" action="/admin/users/%d/deactivate" class="inline-form" onsubmit="return confirm('Deactivate user %s? They will lose all access.');">
+			<form method="POST" action="%s/users/%d/deactivate" class="inline-form" onsubmit="return confirm('Deactivate user %s? They will lose all access.');">
 				<input type="hidden" name="gorilla.csrf.Token" value="%s">
 				<button type="submit" class="btn btn-warning">Deactivate</button>
 			</form>`,
+			AdminPathPrefix,
 			user.ID,
 			html.EscapeString(user.Email),
 			csrfToken,
 		)
 	}
 	return fmt.Sprintf(`
-		<form method="POST" action="/admin/users/%d/activate" class="inline-form">
+		<form method="POST" action="%s/users/%d/activate" class="inline-form">
 			<input type="hidden" name="gorilla.csrf.Token" value="%s">
 			<button type="submit" class="btn btn-primary">Activate</button>
 		</form>`,
+		AdminPathPrefix,
 		user.ID,
 		csrfToken,
 	)
@@ -301,7 +309,7 @@ func (h *Handlers) buildStatusToggleForm(user models.User, csrfToken string) str
 func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUserID(r)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Invalid+user+ID", http.StatusSeeOther)
 		return
 	}
 
@@ -310,19 +318,19 @@ func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) 
 
 	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusInactive); err != nil {
 		logger.Error("Failed to deactivate user", "error", err, "user_id", userID)
-		http.Redirect(w, r, "/admin/users?error=Failed+to+deactivate+user", http.StatusSeeOther)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+deactivate+user", http.StatusSeeOther)
 		return
 	}
 
 	logger.Info("User deactivated", "user_id", userID)
-	http.Redirect(w, r, fmt.Sprintf("/admin/users?message=User+%d+deactivated", userID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+deactivated", userID), http.StatusSeeOther)
 }
 
 // HandleActivateUser sets a user's status to active
 func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUserID(r)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Invalid+user+ID", http.StatusSeeOther)
 		return
 	}
 
@@ -331,19 +339,19 @@ func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusActive); err != nil {
 		logger.Error("Failed to activate user", "error", err, "user_id", userID)
-		http.Redirect(w, r, "/admin/users?error=Failed+to+activate+user", http.StatusSeeOther)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+activate+user", http.StatusSeeOther)
 		return
 	}
 
 	logger.Info("User activated", "user_id", userID)
-	http.Redirect(w, r, fmt.Sprintf("/admin/users?message=User+%d+activated", userID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+activated", userID), http.StatusSeeOther)
 }
 
 // HandleDeleteUser permanently deletes a user and all their data
 func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUserID(r)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Invalid+user+ID", http.StatusSeeOther)
 		return
 	}
 
@@ -355,7 +363,7 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	sessionIDs, err := h.DB.GetUserSessionIDs(ctx, userID)
 	if err != nil {
 		logger.Error("Failed to get user sessions for deletion", "error", err, "user_id", userID)
-		http.Redirect(w, r, "/admin/users?error=Failed+to+get+user+sessions", http.StatusSeeOther)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+get+user+sessions", http.StatusSeeOther)
 		return
 	}
 
@@ -363,7 +371,7 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	for _, sessionID := range sessionIDs {
 		if err := h.Storage.DeleteAllSessionChunks(ctx, userID, sessionID); err != nil {
 			logger.Error("Failed to delete S3 objects for session", "error", err, "user_id", userID, "session_id", sessionID)
-			http.Redirect(w, r, "/admin/users?error=Failed+to+delete+storage", http.StatusSeeOther)
+			http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+delete+storage", http.StatusSeeOther)
 			return
 		}
 	}
@@ -371,12 +379,12 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Step 3: Delete user from database (CASCADE handles related records)
 	if err := h.DB.DeleteUser(ctx, userID); err != nil {
 		logger.Error("Failed to delete user from database", "error", err, "user_id", userID)
-		http.Redirect(w, r, "/admin/users?error=Failed+to+delete+user", http.StatusSeeOther)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+delete+user", http.StatusSeeOther)
 		return
 	}
 
 	logger.Info("User permanently deleted", "user_id", userID, "sessions_deleted", len(sessionIDs))
-	http.Redirect(w, r, fmt.Sprintf("/admin/users?message=User+%d+permanently+deleted", userID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+permanently+deleted", userID), http.StatusSeeOther)
 }
 
 // parseUserID extracts and validates the user ID from the URL path
