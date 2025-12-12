@@ -5,7 +5,7 @@ set -e
 # Usage: curl -fsSL https://confabulous.dev/cli/install.sh | bash
 
 BINARY_NAME="confab"
-GITHUB_REPO="ConfabulousDev/confab-cli"
+GITHUB_REPO="ConfabulousDev/confab"
 RELEASES_URL="https://github.com/${GITHUB_REPO}/releases"
 
 # Detect OS and architecture
@@ -40,11 +40,24 @@ detect_platform() {
 download() {
     local url="$1"
     local output="$2"
+    local auth_header=""
+
+    if [ -n "$CONFAB_GITHUB_TOKEN" ]; then
+        auth_header="Authorization: Bearer $CONFAB_GITHUB_TOKEN"
+    fi
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$output"
+        if [ -n "$auth_header" ]; then
+            curl -fsSL -H "$auth_header" "$url" -o "$output"
+        else
+            curl -fsSL "$url" -o "$output"
+        fi
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "$url" -O "$output"
+        if [ -n "$auth_header" ]; then
+            wget -q --header="$auth_header" "$url" -O "$output"
+        else
+            wget -q "$url" -O "$output"
+        fi
     else
         echo "Error: curl or wget is required"
         exit 1
@@ -54,11 +67,24 @@ download() {
 # Fetch content to stdout
 fetch() {
     local url="$1"
+    local auth_header=""
+
+    if [ -n "$CONFAB_GITHUB_TOKEN" ]; then
+        auth_header="Authorization: Bearer $CONFAB_GITHUB_TOKEN"
+    fi
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url"
+        if [ -n "$auth_header" ]; then
+            curl -fsSL -H "$auth_header" "$url"
+        else
+            curl -fsSL "$url"
+        fi
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO- "$url"
+        if [ -n "$auth_header" ]; then
+            wget -qO- --header="$auth_header" "$url"
+        else
+            wget -qO- "$url"
+        fi
     else
         echo "Error: curl or wget is required"
         exit 1
