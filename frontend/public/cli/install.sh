@@ -33,7 +33,7 @@ detect_platform() {
             ;;
     esac
 
-    echo "${os}-${arch}"
+    echo "${os}_${arch}"
 }
 
 # Download a file using curl or wget
@@ -115,34 +115,47 @@ verify_checksum() {
 }
 
 main() {
-    local platform binary_url checksum_url checksum tmp_dir tmp_file
+    local platform version archive_name archive_url checksum tmp_dir tmp_file
 
     platform="$(detect_platform)"
     echo "Installing confab for ${platform}..."
+
+    # Get the latest version from GitHub releases
+    echo "Fetching latest version..."
+    version="$(fetch "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/')"
+    if [ -z "$version" ]; then
+        echo "Error: Failed to determine latest version"
+        exit 1
+    fi
+    echo "Latest version: ${version}"
 
     # Create temp directory
     tmp_dir="$(mktemp -d)"
     tmp_file="${tmp_dir}/${BINARY_NAME}"
     trap 'rm -rf "$tmp_dir"' EXIT
 
-    # Download binary from GitHub releases
-    binary_url="${RELEASES_URL}/latest/download/${BINARY_NAME}-${platform}"
-    echo "Downloading ${binary_url}..."
-    download "$binary_url" "$tmp_file"
+    # Download archive from GitHub releases
+    archive_name="${BINARY_NAME}_${version}_${platform}.tar.gz"
+    archive_url="${RELEASES_URL}/download/v${version}/${archive_name}"
+    echo "Downloading ${archive_url}..."
+    download "$archive_url" "${tmp_dir}/${archive_name}"
 
-    # Download checksums file and extract checksum for our binary
-    checksums_url="${RELEASES_URL}/latest/download/checksums.txt"
-    binary_name="${BINARY_NAME}-${platform}"
-    checksum="$(fetch "$checksums_url" | grep "${binary_name}$" | cut -d' ' -f1)"
+    # Download checksums file and extract checksum for our archive
+    checksums_url="${RELEASES_URL}/download/v${version}/checksums.txt"
+    checksum="$(fetch "$checksums_url" | grep "${archive_name}" | cut -d' ' -f1)"
 
     if ! echo "$checksum" | grep -qE '^[a-fA-F0-9]{64}$'; then
-        echo "Error: Failed to get checksum for ${binary_name}"
+        echo "Error: Failed to get checksum for ${archive_name}"
         exit 1
     fi
 
     # Verify checksum
     echo "Verifying checksum..."
-    verify_checksum "$tmp_file" "$checksum"
+    verify_checksum "${tmp_dir}/${archive_name}" "$checksum"
+
+    # Extract the binary from the archive
+    echo "Extracting..."
+    tar -xzf "${tmp_dir}/${archive_name}" -C "$tmp_dir"
 
     # Run the binary's install command
     chmod +x "$tmp_file"
