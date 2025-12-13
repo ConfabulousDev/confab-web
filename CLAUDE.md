@@ -1,5 +1,9 @@
 # Confab Development Notes
 
+## API Documentation
+
+Backend API is documented in `backend/API.md`. **Keep this file up to date** when modifying API endpoints, request/response schemas, or authentication.
+
 ## Working on Linear Tickets
 
 When given a Linear ticket to work on, always make a plan first before writing any code. Use the TodoWrite tool to break down the ticket into concrete implementation steps. Once the plan is finalized, update the Linear issue with the plan.
