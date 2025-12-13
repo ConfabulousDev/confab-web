@@ -38,12 +38,21 @@ export function formatRelativeTime(dateStr: string): string {
   return 'just now';
 }
 
+interface FormatDurationOptions {
+  /** Show decimal seconds for sub-minute durations (e.g., "4.2s" vs "4s") */
+  decimalSeconds?: boolean;
+}
+
 /**
- * Format duration in a human-readable way
+ * Format duration in a human-readable way.
+ * Examples: "1d 2h", "5h 30m", "15m", "45s", "4.2s" (with decimalSeconds)
  */
-export function formatDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
+export function formatDuration(ms: number, options: FormatDurationOptions = {}): string {
+  const { decimalSeconds = false } = options;
+
+  // Round to nearest second first to avoid "1m 60s" edge cases
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
 
@@ -56,9 +65,16 @@ export function formatDuration(ms: number): string {
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   }
   if (minutes > 0) {
-    return `${minutes}m`;
+    const remainingSeconds = totalSeconds % 60;
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
   }
-  return `${seconds}s`;
+
+  // Sub-minute: optionally show decimal
+  if (decimalSeconds) {
+    const seconds = ms / 1000;
+    return `${seconds.toFixed(1)}s`;
+  }
+  return `${totalSeconds}s`;
 }
 
 /**
@@ -99,10 +115,13 @@ export function formatModelName(model: string): string {
   }
 
   // Try to extract version number - handles both "claude-3-5-sonnet" and "claude-opus-4"
+  // Version numbers are 1-2 digits, optionally followed by -X (e.g., 3, 4, 3-5, 4-5)
+  // We explicitly avoid matching date suffixes like -20250514
   // Pattern 1: claude-X-Y-variant (e.g., claude-3-5-sonnet)
-  const preVariantMatch = model.match(/claude-(\d+(?:-\d+)?)-\w+/i);
-  // Pattern 2: claude-variant-X (e.g., claude-opus-4)
-  const postVariantMatch = model.match(new RegExp(`${foundVariant}-(\\d+(?:-\\d+)?)`, 'i'));
+  const preVariantMatch = model.match(/claude-(\d{1,2}(?:-\d{1,2})?)-\w+/i);
+  // Pattern 2: claude-variant-X[-Y] (e.g., claude-opus-4, claude-opus-4-5)
+  // Use word boundary or dash+long-number to stop before date suffixes
+  const postVariantMatch = model.match(new RegExp(`${foundVariant}-(\\d{1,2}(?:-\\d{1,2})?)(?:-\\d{6,}|$)`, 'i'));
 
   let version = '';
   if (preVariantMatch?.[1]) {

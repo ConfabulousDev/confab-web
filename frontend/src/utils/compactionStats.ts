@@ -1,33 +1,15 @@
 import type { TranscriptLine } from '@/types';
+import { formatDuration } from './formatting';
 
 /**
- * Format milliseconds as a human-readable duration string.
- * Examples: "4.2s", "1m 23s", "2h 15m"
+ * Format milliseconds as a human-readable duration string, or '-' for null.
+ * Uses decimal seconds for precision (e.g., "4.2s", "1m 23s", "2h 15m")
  */
 export function formatResponseTime(ms: number | null): string {
   if (ms === null) {
     return '-';
   }
-
-  // Round to nearest second first to avoid "1m 60s" edge cases
-  const totalSeconds = Math.round(ms / 1000);
-
-  if (totalSeconds < 60) {
-    // For sub-minute, show one decimal place from original ms
-    const seconds = ms / 1000;
-    return `${seconds.toFixed(1)}s`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const remainingSeconds = totalSeconds % 60;
-
-  if (minutes < 60) {
-    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  return formatDuration(ms, { decimalSeconds: true });
 }
 
 export interface CompactionStats {

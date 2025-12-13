@@ -1,11 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { authAPI, AuthenticationError } from '@/services/api';
-
-interface User {
-  name: string;
-  email: string;
-  avatar_url: string;
-}
+import type { User } from '@/schemas/api';
 
 interface UseAuthReturn {
   user: User | null;

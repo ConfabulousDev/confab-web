@@ -11,4 +11,5 @@ export { useLoadSession } from './useLoadSession';
 export { useSessionFilters } from './useSessionFilters';
 export { useKeyboardShortcut } from './useKeyboardShortcut';
 export { useSpinner } from './useSpinner';
+export { useDropdown } from './useDropdown';
 export type { SessionErrorType } from './useLoadSession';

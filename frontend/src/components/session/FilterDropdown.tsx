@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useDropdown } from '@/hooks';
+import { FilterIcon, CheckIcon } from '../icons';
 import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
 import type { SidebarItemColor } from '../PageSidebar';
 import styles from './FilterDropdown.module.css';
@@ -24,21 +25,8 @@ const FILTER_ITEMS: FilterItemConfig[] = [
   { category: 'queue-operation', label: 'Queue', color: 'amber' },
 ];
 
-const FilterIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-  </svg>
-);
-
-const CheckIcon = (
-  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
-
 function FilterDropdown({ counts, visibleCategories, onToggleCategory }: FilterDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
   // Check if any filters are active (not showing all categories)
   const totalCategories = FILTER_ITEMS.filter((item) => counts[item.category] > 0).length;
@@ -47,43 +35,11 @@ function FilterDropdown({ counts, visibleCategories, onToggleCategory }: FilterD
   ).length;
   const hasActiveFilters = activeFilters !== totalCategories;
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        event.target instanceof Node &&
-        !containerRef.current.contains(event.target)
-      ) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
-  // Close on escape key
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen]);
-
   return (
     <div className={styles.container} ref={containerRef}>
       <button
         className={`${styles.filterBtn} ${hasActiveFilters ? styles.active : ''}`}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggle}
         title="Message Filters"
         aria-label="Message Filters"
         aria-expanded={isOpen}
