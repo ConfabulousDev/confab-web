@@ -165,7 +165,8 @@ func (s *Server) SetupRoutes() http.Handler {
 		csrf.Secure(os.Getenv("INSECURE_DEV_MODE") != "true"), // Secure by default (HTTPS-only, set INSECURE_DEV_MODE=true to disable)
 		csrf.SameSite(csrf.SameSiteLaxMode),                   // Lax mode for OAuth compatibility
 		csrf.Path("/"),
-		csrf.TrustedOrigins(trustedOrigins), // Trust the frontend origin(s)
+		csrf.MaxAge(int((auth.SessionDuration + 24*time.Hour).Seconds())), // Session duration + 1 day buffer
+		csrf.TrustedOrigins(trustedOrigins),                               // Trust the frontend origin(s)
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Debug: log all relevant info
 			log.Printf("CSRF validation failed for %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
