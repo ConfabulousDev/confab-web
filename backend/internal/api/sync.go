@@ -53,14 +53,12 @@ type SyncChunkMetadata struct {
 
 // SyncChunkRequest is the request body for POST /api/v1/sync/chunk
 type SyncChunkRequest struct {
-	SessionID        string             `json:"session_id"`
-	FileName         string             `json:"file_name"`
-	FileType         string             `json:"file_type"`
-	FirstLine        int                `json:"first_line"`
-	Lines            []string           `json:"lines"`
-	Summary          *string            `json:"summary,omitempty"`            // Optional: first summary (nil=don't update, ""=clear, "x"=set)
-	FirstUserMessage *string            `json:"first_user_message,omitempty"` // Optional: first user message (nil=don't update, ""=clear, "x"=set)
-	Metadata         *SyncChunkMetadata `json:"metadata,omitempty"`           // Optional: mutable session metadata (git_info, etc.)
+	SessionID string             `json:"session_id"`
+	FileName  string             `json:"file_name"`
+	FileType  string             `json:"file_type"`
+	FirstLine int                `json:"first_line"`
+	Lines     []string           `json:"lines"`
+	Metadata  *SyncChunkMetadata `json:"metadata,omitempty"` // Optional: mutable session metadata (git_info, summary, first_user_message)
 }
 
 // SyncChunkResponse is the response for POST /api/v1/sync/chunk
@@ -296,19 +294,11 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	// Extract metadata fields if present and this is a transcript file
 	// Only process metadata for transcript files, not agent/todo files
 	var gitInfo json.RawMessage
-	summary := req.Summary
-	firstUserMessage := req.FirstUserMessage
+	var summary, firstUserMessage *string
 	if req.Metadata != nil && req.FileType == "transcript" {
-		if len(req.Metadata.GitInfo) > 0 {
-			gitInfo = req.Metadata.GitInfo
-		}
-		// Metadata fields override top-level fields if present
-		if req.Metadata.Summary != nil {
-			summary = req.Metadata.Summary
-		}
-		if req.Metadata.FirstUserMessage != nil {
-			firstUserMessage = req.Metadata.FirstUserMessage
-		}
+		gitInfo = req.Metadata.GitInfo
+		summary = req.Metadata.Summary
+		firstUserMessage = req.Metadata.FirstUserMessage
 	}
 
 	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, summary, firstUserMessage, gitInfo); err != nil {
