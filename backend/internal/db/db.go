@@ -334,8 +334,6 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 	return nil
 }
 
-// NOTE: Legacy CreateSessionRun, AddFilesToRun, DeleteRun removed - using sync API instead
-
 // FindOrCreateUserByOAuth finds or creates a user by OAuth provider identity.
 // It handles account linking: if an identity doesn't exist but the email matches
 // an existing user, it links the new identity to that user.
@@ -1179,9 +1177,6 @@ func (db *DB) RecordShareAccess(ctx context.Context, shareToken string, userID i
 	return nil
 }
 
-
-// NOTE: Legacy file-by-ID and run-based functions removed - using sync API instead
-
 // DeleteSessionFromDB deletes an entire session and all its runs from the database
 // S3 objects must be deleted BEFORE calling this function
 func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string, userID int64) error {
@@ -1209,9 +1204,6 @@ func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string, userID 
 
 	return nil
 }
-
-// NOTE: CountUserRunsInLastWeek and GetUserWeeklyUsage removed - legacy rate limiting
-// Sync API uses different rate limiting strategy
 
 // ============================================================================
 // Device Code Flow (for CLI authentication)

@@ -704,7 +704,7 @@ func mergeChunks(chunks []chunkInfo) []byte {
 			if lineNum >= 1 && lineNum <= maxLine {
 				idx := lineNum - 1
 				// Check for conflicting content on overlap
-				if lines[idx] != nil && !bytesEqual(lines[idx], line) {
+				if lines[idx] != nil && !bytes.Equal(lines[idx], line) {
 					logger.Warn("Chunk overlap with differing content",
 						"line_num", lineNum,
 						"chunk", c.key,
@@ -726,19 +726,6 @@ func mergeChunks(chunks []chunkInfo) []byte {
 	}
 
 	return result
-}
-
-// bytesEqual compares two byte slices for equality
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // splitLines splits data into lines, preserving each line's content without the newline
@@ -788,17 +775,7 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 	defer dbCancel()
 
 	// Get viewer email if authenticated (for private shares)
-	var viewerEmail *string
-	cookie, err := r.Cookie("confab_session")
-	if err == nil {
-		webSession, err := s.db.GetWebSession(dbCtx, cookie.Value)
-		if err == nil {
-			user, err := s.db.GetUserByID(dbCtx, webSession.UserID)
-			if err == nil && user != nil {
-				viewerEmail = &user.Email
-			}
-		}
-	}
+	viewerEmail := getViewerEmailFromSession(dbCtx, r, s.db)
 
 	// Verify share and get session (this validates share token, expiration, and private access)
 	session, err := s.db.GetSharedSession(dbCtx, sessionID, shareToken, viewerEmail)

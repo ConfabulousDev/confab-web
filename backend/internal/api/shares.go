@@ -336,18 +336,7 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Try to get viewer email from session (for private shares)
-		var viewerEmail *string
-		cookie, err := r.Cookie("confab_session")
-		if err == nil {
-			// User is logged in, get their email
-			webSession, err := database.GetWebSession(ctx, cookie.Value)
-			if err == nil {
-				user, err := database.GetUserByID(ctx, webSession.UserID)
-				if err == nil {
-					viewerEmail = &user.Email
-				}
-			}
-		}
+		viewerEmail := getViewerEmailFromSession(ctx, r, database)
 
 		// Get shared session
 		session, err := database.GetSharedSession(ctx, sessionID, shareToken, viewerEmail)
@@ -440,4 +429,22 @@ func generateShareToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// getViewerEmailFromSession extracts the viewer's email from their session cookie if authenticated.
+// Returns nil if no valid session cookie or any lookup fails.
+func getViewerEmailFromSession(ctx context.Context, r *http.Request, database *db.DB) *string {
+	cookie, err := r.Cookie("confab_session")
+	if err != nil {
+		return nil
+	}
+	webSession, err := database.GetWebSession(ctx, cookie.Value)
+	if err != nil {
+		return nil
+	}
+	user, err := database.GetUserByID(ctx, webSession.UserID)
+	if err != nil || user == nil {
+		return nil
+	}
+	return &user.Email
 }
