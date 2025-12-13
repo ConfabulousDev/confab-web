@@ -41,33 +41,6 @@ Authorization: Bearer <api_key>
 
 ---
 
-### Check Sessions Exist
-Check which sessions already exist (for backfill deduplication).
-
-```
-POST /api/v1/sessions/check
-Authorization: Bearer <api_key>
-Content-Type: application/json
-```
-
-**Request:**
-```json
-{
-  "external_ids": ["session-uuid-1", "session-uuid-2", ...]
-}
-```
-- Max 1000 external IDs per request
-
-**Response:**
-```json
-{
-  "existing": ["session-uuid-1"],
-  "missing": ["session-uuid-2"]
-}
-```
-
----
-
 ### Sync Init
 Initialize or resume a sync session.
 
@@ -546,5 +519,5 @@ Upload rate limiting is per-user (not per-IP) to support backfill scenarios.
 | XS | 2 KB | GET/DELETE requests |
 | S | 16 KB | Auth tokens, simple metadata |
 | M | 128 KB | API keys, shares, session updates |
-| L | 2 MB | Batch operations (sessions/check) |
+| L | 2 MB | Batch operations |
 | XL | 16 MB | Sync chunk uploads |

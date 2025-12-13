@@ -40,7 +40,7 @@ const (
 	MaxBodyXS = 2 * 1024        // 2KB - GET/DELETE safety buffer
 	MaxBodyS  = 16 * 1024       // 16KB - auth tokens, simple metadata
 	MaxBodyM  = 128 * 1024      // 128KB - API keys, shares, session updates
-	MaxBodyL  = 2 * 1024 * 1024 // 2MB - batch operations (sessions/check)
+	MaxBodyL  = 2 * 1024 * 1024 // 2MB - batch operations
 	MaxBodyXL = 16 * 1024 * 1024 // 16MB - sync chunk uploads
 )
 
@@ -248,9 +248,6 @@ func (s *Server) SetupRoutes() http.Handler {
 				r.Use(ratelimit.MiddlewareWithKey(s.uploadLimiter, ratelimit.UserKeyFunc(auth.GetUserIDContextKey())))
 				// Decompress zstd-compressed request bodies
 				r.Use(decompressMiddleware())
-
-				// Check which sessions exist (for backfill deduplication)
-				r.Post("/sessions/check", withMaxBody(MaxBodyL, HandleCheckSessions(s)))
 
 				// Incremental sync endpoints (for daemon-based uploads)
 				r.Post("/sync/init", withMaxBody(MaxBodyM, s.handleSyncInit))

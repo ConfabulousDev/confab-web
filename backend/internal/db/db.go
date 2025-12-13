@@ -846,49 +846,6 @@ func (db *DB) loadSessionSyncFiles(ctx context.Context, session *SessionDetail) 
 	return nil
 }
 
-// CheckSessionsExist checks which external IDs exist for a user
-// Returns the list of external IDs that already exist in the database
-func (db *DB) CheckSessionsExist(ctx context.Context, userID int64, externalIDs []string) ([]string, error) {
-	if len(externalIDs) == 0 {
-		return []string{}, nil
-	}
-
-	// Build query with placeholders
-	placeholders := make([]string, len(externalIDs))
-	args := make([]interface{}, len(externalIDs)+1)
-	args[0] = userID
-	for i, id := range externalIDs {
-		placeholders[i] = fmt.Sprintf("$%d", i+2)
-		args[i+1] = id
-	}
-
-	query := fmt.Sprintf(`
-		SELECT external_id FROM sessions
-		WHERE user_id = $1 AND external_id IN (%s)
-	`, strings.Join(placeholders, ","))
-
-	rows, err := db.conn.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check sessions: %w", err)
-	}
-	defer rows.Close()
-
-	var existing []string
-	for rows.Next() {
-		var externalID string
-		if err := rows.Scan(&externalID); err != nil {
-			return nil, fmt.Errorf("failed to scan session: %w", err)
-		}
-		existing = append(existing, externalID)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating existing sessions: %w", err)
-	}
-
-	return existing, nil
-}
-
 // SessionShare represents a share link
 type SessionShare struct {
 	ID             int64      `json:"id"`
