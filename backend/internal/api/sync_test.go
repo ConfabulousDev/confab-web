@@ -54,7 +54,7 @@ func TestMergeChunks(t *testing.T) {
 
 		// All lines should come from the second chunk (processed last, overwrites)
 		for i, line := range lines {
-			expected := "new" + string('1'+byte(i))
+			var expected string
 			if i >= 9 {
 				expected = "new10"
 			} else {

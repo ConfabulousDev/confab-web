@@ -53,10 +53,8 @@ go test ./internal/api/... -v -run TestHandleCreateShare_Integration/creates_pub
    - `AssertStatus()` - Check HTTP status code
    - `AssertErrorResponse()` - Verify error response
 
-3. **Storage Helpers** - Upload and verify files in S3
-   - `UploadTestFile()` - Upload file to MinIO
+3. **Storage Helpers** - Verify files in S3
    - `VerifyFileInS3()` - Download and verify file exists
-   - `AssertFileContent()` - Verify file content matches expected
 
 ### Lifecycle
 

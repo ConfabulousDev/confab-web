@@ -17,9 +17,6 @@ var (
 	// File errors
 	ErrFileNotFound = errors.New("file not found")
 
-	// Run errors
-	ErrRunNotFound = errors.New("run not found")
-
 	// User errors
 	ErrUserNotFound   = errors.New("user not found")
 	ErrOwnerInactive  = errors.New("session owner is inactive")

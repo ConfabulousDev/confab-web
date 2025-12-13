@@ -1697,32 +1697,6 @@ func (db *DB) UpdateSyncFileChunkCount(ctx context.Context, sessionID, fileName 
 	return nil
 }
 
-// GetSyncChunkKeys returns all S3 keys for chunks of a session (for deletion)
-// This queries the sync_files table to know which files have chunks, then builds the S3 prefix
-func (db *DB) GetSyncFileNames(ctx context.Context, sessionID string) ([]string, error) {
-	query := `SELECT file_name FROM sync_files WHERE session_id = $1`
-	rows, err := db.conn.QueryContext(ctx, query, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query sync files: %w", err)
-	}
-	defer rows.Close()
-
-	var fileNames []string
-	for rows.Next() {
-		var fileName string
-		if err := rows.Scan(&fileName); err != nil {
-			return nil, fmt.Errorf("failed to scan file name: %w", err)
-		}
-		fileNames = append(fileNames, fileName)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating file names: %w", err)
-	}
-
-	return fileNames, nil
-}
-
 // GetSessionOwnerAndExternalID returns the user_id and external_id for a session
 // Used for S3 path construction when accessing shared sessions
 func (db *DB) GetSessionOwnerAndExternalID(ctx context.Context, sessionID string) (userID int64, externalID string, err error) {

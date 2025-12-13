@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -72,7 +73,7 @@ func TestAPIKeyMiddleware_HeaderParsing(t *testing.T) {
 // TestGetUserID_Extraction tests user ID extraction from context
 func TestGetUserID_Extraction(t *testing.T) {
 	t.Run("extracts user ID set by SetUserIDForTest", func(t *testing.T) {
-		ctx := SetUserIDForTest(nil, 99999)
+		ctx := SetUserIDForTest(context.Background(), 99999)
 		userID, ok := GetUserID(ctx)
 		if !ok {
 			t.Error("expected ok=true")
@@ -83,7 +84,7 @@ func TestGetUserID_Extraction(t *testing.T) {
 	})
 
 	t.Run("handles zero user ID", func(t *testing.T) {
-		ctx := SetUserIDForTest(nil, 0)
+		ctx := SetUserIDForTest(context.Background(), 0)
 		userID, ok := GetUserID(ctx)
 		if !ok {
 			t.Error("expected ok=true for zero userID")
@@ -94,7 +95,7 @@ func TestGetUserID_Extraction(t *testing.T) {
 	})
 
 	t.Run("handles negative user ID", func(t *testing.T) {
-		ctx := SetUserIDForTest(nil, -1)
+		ctx := SetUserIDForTest(context.Background(), -1)
 		userID, ok := GetUserID(ctx)
 		if !ok {
 			t.Error("expected ok=true for negative userID")

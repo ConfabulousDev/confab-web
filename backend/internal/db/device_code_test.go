@@ -416,7 +416,7 @@ func TestDeviceCodeFlow_CompleteScenario(t *testing.T) {
 	}
 
 	// Step 3: User enters code on web - web looks up by user code
-	dc, err = env.DB.GetDeviceCodeByUserCode(context.Background(), userCode)
+	_, err = env.DB.GetDeviceCodeByUserCode(context.Background(), userCode)
 	if err != nil {
 		t.Fatalf("Step 3 - GetDeviceCodeByUserCode failed: %v", err)
 	}

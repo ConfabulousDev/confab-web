@@ -36,24 +36,3 @@ func RunMigrations(db *sql.DB) error {
 
 	return nil
 }
-
-// MigrationVersion returns the current migration version and dirty state.
-// Useful for debugging migration issues in tests.
-func MigrationVersion(db *sql.DB) (version uint, dirty bool, err error) {
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
-	if err != nil {
-		return 0, false, fmt.Errorf("failed to create postgres driver: %w", err)
-	}
-
-	source, err := iofs.New(migrations.FS, ".")
-	if err != nil {
-		return 0, false, fmt.Errorf("failed to create migration source: %w", err)
-	}
-
-	m, err := migrate.NewWithInstance("iofs", source, "postgres", driver)
-	if err != nil {
-		return 0, false, fmt.Errorf("failed to create migrator: %w", err)
-	}
-
-	return m.Version()
-}
