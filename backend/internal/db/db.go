@@ -1377,12 +1377,10 @@ type SyncFileState struct {
 
 // SyncSessionParams contains parameters for creating/updating a sync session
 type SyncSessionParams struct {
-	ExternalID       string
-	TranscriptPath   string
-	CWD              string
-	GitInfo          json.RawMessage // Optional: JSONB for git metadata
-	Summary          *string         // Optional: nil=don't update, ""=clear, "x"=set to "x"
-	FirstUserMessage *string         // Optional: nil=don't update, ""=clear, "x"=set to "x"
+	ExternalID     string
+	TranscriptPath string
+	CWD            string
+	GitInfo        json.RawMessage // Optional: JSONB for git metadata
 }
 
 // FindOrCreateSyncSession finds an existing session by external_id or creates a new one
@@ -1408,18 +1406,10 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 	// Session not found - try to create it with metadata
 	sessionID = uuid.New().String()
 	insertQuery := `
-		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at, summary, first_user_message)
-		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW(), $7, $8)
+		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at)
+		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW())
 	`
-	// If Summary/FirstUserMessage is nil, pass nil to DB (NULL). If non-nil (even empty string), pass the value.
-	var summaryArg, firstUserMessageArg interface{}
-	if params.Summary != nil {
-		summaryArg = *params.Summary
-	}
-	if params.FirstUserMessage != nil {
-		firstUserMessageArg = *params.FirstUserMessage
-	}
-	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo, summaryArg, firstUserMessageArg)
+	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo)
 	if err == nil {
 		// Successfully created - new session has no synced files
 		return sessionID, make(map[string]SyncFileState), nil
@@ -1444,33 +1434,15 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 
 // updateSessionMetadata updates the metadata fields on an existing session
 func (db *DB) updateSessionMetadata(ctx context.Context, sessionID string, params SyncSessionParams) error {
-	// Build dynamic query - summary/first_user_message only set if explicitly provided (not nil)
 	query := `
 		UPDATE sessions
 		SET cwd = COALESCE($2, cwd),
 		    transcript_path = COALESCE($3, transcript_path),
 		    git_info = COALESCE($4, git_info),
 		    last_sync_at = NOW()
+		WHERE id = $1
 	`
-	args := []interface{}{sessionID, params.CWD, params.TranscriptPath, params.GitInfo}
-	argNum := 5
-
-	// Only update summary if explicitly provided (not nil). Empty string clears it.
-	if params.Summary != nil {
-		query += fmt.Sprintf(", summary = $%d", argNum)
-		args = append(args, *params.Summary)
-		argNum++
-	}
-
-	// Only update first_user_message if explicitly provided (not nil) and not already set (first write wins).
-	if params.FirstUserMessage != nil {
-		query += fmt.Sprintf(", first_user_message = COALESCE(first_user_message, $%d)", argNum)
-		args = append(args, *params.FirstUserMessage)
-		argNum++
-	}
-
-	query += " WHERE id = $1"
-	_, err := db.conn.ExecContext(ctx, query, args...)
+	_, err := db.conn.ExecContext(ctx, query, sessionID, params.CWD, params.TranscriptPath, params.GitInfo)
 	return err
 }
 

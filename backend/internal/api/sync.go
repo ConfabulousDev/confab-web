@@ -23,12 +23,10 @@ import (
 
 // SyncInitRequest is the request body for POST /api/v1/sync/init
 type SyncInitRequest struct {
-	ExternalID       string          `json:"external_id"`
-	TranscriptPath   string          `json:"transcript_path"`
-	CWD              string          `json:"cwd"`
-	GitInfo          json.RawMessage `json:"git_info,omitempty"`           // Optional git metadata
-	Summary          *string         `json:"summary,omitempty"`            // Optional: first summary from transcript (nil=don't set, ""=clear, "x"=set)
-	FirstUserMessage *string         `json:"first_user_message,omitempty"` // Optional: first user message (nil=don't set, ""=clear, "x"=set)
+	ExternalID     string          `json:"external_id"`
+	TranscriptPath string          `json:"transcript_path"`
+	CWD            string          `json:"cwd"`
+	GitInfo        json.RawMessage `json:"git_info,omitempty"` // Optional git metadata
 }
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
@@ -115,12 +113,10 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	params := db.SyncSessionParams{
-		ExternalID:       req.ExternalID,
-		TranscriptPath:   req.TranscriptPath,
-		CWD:              req.CWD,
-		GitInfo:          req.GitInfo,
-		Summary:          req.Summary,
-		FirstUserMessage: req.FirstUserMessage,
+		ExternalID:     req.ExternalID,
+		TranscriptPath: req.TranscriptPath,
+		CWD:            req.CWD,
+		GitInfo:        req.GitInfo,
 	}
 	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {
