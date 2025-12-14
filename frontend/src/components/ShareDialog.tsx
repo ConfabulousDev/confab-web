@@ -17,9 +17,9 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
   const { copy, copied } = useCopyToClipboard();
 
   const {
-    visibility,
-    setVisibility,
-    invitedEmails,
+    isPublic,
+    setIsPublic,
+    recipients,
     newEmail,
     setNewEmail,
     expiresInDays,
@@ -86,26 +86,26 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                 <label>
                   <input
                     type="radio"
-                    checked={visibility === 'public'}
-                    onChange={() => setVisibility('public')}
+                    checked={isPublic}
+                    onChange={() => setIsPublic(true)}
                   />
                   <strong>Public</strong> - Anyone with link
                 </label>
                 <label>
                   <input
                     type="radio"
-                    checked={visibility === 'private'}
-                    onChange={() => setVisibility('private')}
+                    checked={!isPublic}
+                    onChange={() => setIsPublic(false)}
                   />
                   <strong>Private</strong> - Invite specific people
                 </label>
               </div>
 
-              {visibility === 'private' && (
+              {!isPublic && (
                 <FormField
                   label="Invite by email"
                   required
-                  error={error || getFieldError(validationErrors, 'invited_emails')}
+                  error={error || getFieldError(validationErrors, 'recipients')}
                 >
                   <div className={styles.emailInputGroup}>
                     <input
@@ -124,9 +124,9 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                       Add
                     </Button>
                   </div>
-                  {invitedEmails.length > 0 && (
+                  {recipients.length > 0 && (
                     <div className={styles.emailList}>
-                      {invitedEmails.map((email) => (
+                      {recipients.map((email) => (
                         <span key={email} className={styles.emailTag}>
                           {email}
                           <button className={styles.removeBtn} onClick={() => removeEmail(email)}>
@@ -179,11 +179,11 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
               shares.map((share) => (
                 <div key={share.share_token} className={styles.shareItem}>
                   <div className={styles.shareInfo}>
-                    <span className={`${styles.visibilityBadge} ${styles[share.visibility]}`}>
-                      {share.visibility}
+                    <span className={`${styles.visibilityBadge} ${share.is_public ? styles.public : styles.private}`}>
+                      {share.is_public ? 'public' : 'private'}
                     </span>
-                    {share.visibility === 'private' && share.invited_emails && (
-                      <span className={styles.invited}>{share.invited_emails.join(', ')}</span>
+                    {!share.is_public && share.recipients && (
+                      <span className={styles.invited}>{share.recipients.join(', ')}</span>
                     )}
                     {share.expires_at ? (
                       <span className={styles.expires}>Expires: {formatDateString(share.expires_at)}</span>

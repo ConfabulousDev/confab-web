@@ -12,9 +12,9 @@ interface UseShareDialogOptions {
 
 interface UseShareDialogReturn {
   // Form state
-  visibility: 'public' | 'private';
-  setVisibility: (v: 'public' | 'private') => void;
-  invitedEmails: string[];
+  isPublic: boolean;
+  setIsPublic: (isPublic: boolean) => void;
+  recipients: string[];
   newEmail: string;
   setNewEmail: (email: string) => void;
   expiresInDays: number | null;
@@ -48,8 +48,8 @@ export function useShareDialog({
   onShareCreated,
 }: UseShareDialogOptions): UseShareDialogReturn {
   // Form state
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
+  const [isPublic, setIsPublic] = useState<boolean>(true);
+  const [recipients, setRecipients] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [expiresInDays, setExpiresInDays] = useState<number | null>(7);
 
@@ -64,8 +64,8 @@ export function useShareDialog({
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>();
 
   const resetForm = useCallback(() => {
-    setVisibility('public');
-    setInvitedEmails([]);
+    setIsPublic(true);
+    setRecipients([]);
     setNewEmail('');
     setExpiresInDays(7);
     setCreatedShareURL('');
@@ -105,19 +105,19 @@ export function useShareDialog({
       return;
     }
 
-    if (invitedEmails.some((e) => e.toLowerCase() === email)) {
+    if (recipients.some((e) => e.toLowerCase() === email)) {
       setError('Email already added');
       return;
     }
 
-    setInvitedEmails((prev) => [...prev, email]);
+    setRecipients((prev) => [...prev, email]);
     setNewEmail('');
     setError('');
     setValidationErrors(undefined);
-  }, [newEmail, userEmail, invitedEmails]);
+  }, [newEmail, userEmail, recipients]);
 
   const removeEmail = useCallback((email: string) => {
-    setInvitedEmails((prev) => prev.filter((e) => e !== email));
+    setRecipients((prev) => prev.filter((e) => e !== email));
   }, []);
 
   const createShare = useCallback(async () => {
@@ -127,8 +127,8 @@ export function useShareDialog({
 
     // Validate form data with Zod
     const formData: ShareFormData = {
-      visibility,
-      invited_emails: visibility === 'private' ? invitedEmails : [],
+      is_public: isPublic,
+      recipients: isPublic ? [] : recipients,
       expires_in_days: expiresInDays,
     };
 
@@ -150,7 +150,7 @@ export function useShareDialog({
     } finally {
       setLoading(false);
     }
-  }, [sessionId, visibility, invitedEmails, expiresInDays, fetchShares, onShareCreated]);
+  }, [sessionId, isPublic, recipients, expiresInDays, fetchShares, onShareCreated]);
 
   const revokeShare = useCallback(
     async (shareToken: string) => {
@@ -171,9 +171,9 @@ export function useShareDialog({
 
   return {
     // Form state
-    visibility,
-    setVisibility,
-    invitedEmails,
+    isPublic,
+    setIsPublic,
+    recipients,
     newEmail,
     setNewEmail,
     expiresInDays,

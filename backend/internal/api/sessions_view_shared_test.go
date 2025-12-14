@@ -27,13 +27,12 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 	// Create three users
 	userA := testutil.CreateTestUser(t, env, "usera@example.com", "User A")
 	userB := testutil.CreateTestUser(t, env, "userb@example.com", "User B")
-	userC := testutil.CreateTestUser(t, env, "userc@example.com", "User C")
 
 	// User A creates two sessions
 	sessionA1 := "session-a1"
 	sessionA2 := "session-a2"
 	sessionA1PK := testutil.CreateTestSession(t, env, userA.ID, sessionA1)
-	sessionA2PK := testutil.CreateTestSession(t, env, userA.ID, sessionA2)
+	testutil.CreateTestSession(t, env, userA.ID, sessionA2)
 
 	// User B creates one session
 	sessionB1 := "session-b1"
@@ -70,23 +69,23 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		}
 	})
 
-	// User A creates a private share for sessionA1, inviting userB
+	// User A creates a non-public share for sessionA1, inviting userB by user_id
 	var shareID int64
 	var shareToken string
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, share_token, visibility)
-		 VALUES ($1, $2, 'private') RETURNING id, share_token`,
+		`INSERT INTO session_shares (session_id, share_token)
+		 VALUES ($1, $2) RETURNING id, share_token`,
 		sessionA1PK, testutil.GenerateShareToken()).Scan(&shareID, &shareToken)
 	if err != nil {
 		t.Fatalf("Failed to create share: %v", err)
 	}
 
-	// Add userB to invite list
+	// Add userB as a recipient (with resolved user_id)
 	_, err = env.DB.Exec(ctx,
-		`INSERT INTO session_share_invites (share_id, email) VALUES ($1, $2)`,
-		shareID, userB.Email)
+		`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)`,
+		shareID, userB.Email, userB.ID)
 	if err != nil {
-		t.Fatalf("Failed to create invite: %v", err)
+		t.Fatalf("Failed to create recipient: %v", err)
 	}
 
 	t.Run("User B sees private share when include_shared=true", func(t *testing.T) {
@@ -142,74 +141,29 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		}
 	})
 
-	// User A creates a public share for sessionA2
-	var publicShareID int64
-	var publicShareToken string
-	err = env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, share_token, visibility)
-		 VALUES ($1, $2, 'public') RETURNING id, share_token`,
-		sessionA2PK, testutil.GenerateShareToken()).Scan(&publicShareID, &publicShareToken)
-	if err != nil {
-		t.Fatalf("Failed to create public share: %v", err)
-	}
-
-	// User C accesses the public share (simulating logged-in access)
-	_, err = env.DB.Exec(ctx,
-		`INSERT INTO session_share_accesses (share_id, user_id, first_accessed_at, last_accessed_at, access_count)
-		 VALUES ($1, $2, NOW(), NOW(), 1)`,
-		publicShareID, userC.ID)
-	if err != nil {
-		t.Fatalf("Failed to record share access: %v", err)
-	}
-
-	t.Run("User C sees public share they accessed when include_shared=true", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?include_shared=true", nil)
-		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), userC.ID)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler := api.HandleListSessions(env.DB)
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code != http.StatusOK {
-			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
-		}
-
-		var sessions []db.SessionListItem
-		json.Unmarshal(rr.Body.Bytes(), &sessions)
-
-		if len(sessions) != 1 {
-			t.Fatalf("Expected 1 session (accessed public share), got %d", len(sessions))
-		}
-
-		if sessions[0].ExternalID != sessionA2 {
-			t.Errorf("Expected session %s, got %s", sessionA2, sessions[0].ExternalID)
-		}
-		if sessions[0].IsOwner {
-			t.Error("Expected IsOwner=false for public share")
-		}
-		if sessions[0].AccessType != "public_share" {
-			t.Errorf("Expected AccessType=public_share, got %s", sessions[0].AccessType)
-		}
-		if sessions[0].SharedByEmail == nil || *sessions[0].SharedByEmail != userA.Email {
-			t.Errorf("Expected SharedByEmail=%s, got %v", userA.Email, sessions[0].SharedByEmail)
-		}
-	})
-
 	t.Run("Expired shares do not appear in list", func(t *testing.T) {
-		// Create an expired share
+		// Create an expired share with a recipient
 		yesterday := time.Now().UTC().Add(-24 * time.Hour)
-		_, err := env.DB.Exec(ctx,
-			`INSERT INTO session_shares (session_id, share_token, visibility, expires_at)
-			 VALUES ($1, $2, 'public', $3)`,
-			sessionB1PK, testutil.GenerateShareToken(), yesterday)
+		var expiredShareID int64
+		err := env.DB.QueryRow(ctx,
+			`INSERT INTO session_shares (session_id, share_token, expires_at)
+			 VALUES ($1, $2, $3) RETURNING id`,
+			sessionB1PK, testutil.GenerateShareToken(), yesterday).Scan(&expiredShareID)
 		if err != nil {
 			t.Fatalf("Failed to create expired share: %v", err)
 		}
 
-		// User C should NOT see the expired share
+		// Add userA as recipient
+		_, err = env.DB.Exec(ctx,
+			`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)`,
+			expiredShareID, userA.Email, userA.ID)
+		if err != nil {
+			t.Fatalf("Failed to create recipient for expired share: %v", err)
+		}
+
+		// User A should NOT see the expired share from userB
 		req, _ := http.NewRequest("GET", "/api/v1/sessions?include_shared=true", nil)
-		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), userC.ID)
+		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), userA.ID)
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()
@@ -219,12 +173,14 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		var sessions []db.SessionListItem
 		json.Unmarshal(rr.Body.Bytes(), &sessions)
 
-		// Should still only see the non-expired public share from sessionA2
-		if len(sessions) != 1 {
-			t.Fatalf("Expected 1 session (expired share should be filtered), got %d", len(sessions))
+		// User A should only see their own 2 sessions, not the expired share
+		if len(sessions) != 2 {
+			t.Fatalf("Expected 2 sessions (user A's own), got %d", len(sessions))
 		}
-		if sessions[0].ExternalID == sessionB1 {
-			t.Error("Expired share should not appear in list")
+		for _, s := range sessions {
+			if s.ExternalID == sessionB1 {
+				t.Error("Expired share should not appear in list")
+			}
 		}
 	})
 

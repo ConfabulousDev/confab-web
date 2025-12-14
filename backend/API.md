@@ -353,7 +353,8 @@ GET /api/v1/sessions/{id}
   "shares": [
     {
       "share_token": "hex32chars",
-      "visibility": "public",
+      "is_public": true,
+      "recipients": [],
       "expires_at": null
     }
   ]
@@ -384,16 +385,16 @@ Content-Type: application/json
 **Request:**
 ```json
 {
-  "visibility": "public",
-  "invited_emails": [],
+  "is_public": true,
+  "recipients": [],
   "expires_in_days": 30
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `visibility` | string | Yes | `"public"` or `"private"` |
-| `invited_emails` | string[] | For private | Email addresses to invite (max 50) |
+| `is_public` | bool | Yes | `true` for public links, `false` for private (email-only) |
+| `recipients` | string[] | For private | Email addresses to invite (max 50) |
 | `expires_in_days` | int | No | Days until expiration (null = never) |
 
 **Response:**
@@ -401,8 +402,8 @@ Content-Type: application/json
 {
   "share_token": "hex32chars",
   "share_url": "https://confab.dev/sessions/{id}/shared/{token}",
-  "visibility": "public",
-  "invited_emails": [],
+  "is_public": true,
+  "recipients": [],
   "expires_at": "2024-02-15T10:00:00Z",
   "emails_sent": true,
   "email_failures": []

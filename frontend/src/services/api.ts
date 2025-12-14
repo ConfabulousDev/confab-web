@@ -241,8 +241,8 @@ export const sessionsAPI = {
   createShare: (
     sessionId: string,
     data: {
-      visibility: 'public' | 'private';
-      invited_emails?: string[];
+      is_public: boolean;
+      recipients?: string[];
       expires_in_days?: number | null;
     }
   ): Promise<CreateShareResponse> =>

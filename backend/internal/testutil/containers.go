@@ -153,8 +153,8 @@ func (e *TestEnvironment) CleanDB(t *testing.T) {
 
 	// Truncate tables in reverse dependency order to avoid FK violations
 	tables := []string{
-		"session_share_invites",
-		"session_share_accesses",
+		"session_share_recipients",
+		"session_share_public",
 		"session_shares",
 		"sync_files",
 		"files",

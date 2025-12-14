@@ -774,11 +774,11 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer dbCancel()
 
-	// Get viewer email if authenticated (for private shares)
-	viewerEmail := getViewerEmailFromSession(dbCtx, r, s.db)
+	// Get viewer user ID if authenticated (for recipient-only shares)
+	viewerUserID := getViewerUserIDFromSession(dbCtx, r, s.db)
 
-	// Verify share and get session (this validates share token, expiration, and private access)
-	session, err := s.db.GetSharedSession(dbCtx, sessionID, shareToken, viewerEmail)
+	// Verify share and get session (this validates share token, expiration, and recipient access)
+	session, err := s.db.GetSharedSession(dbCtx, sessionID, shareToken, viewerUserID)
 	if err != nil {
 		if errors.Is(err, db.ErrShareNotFound) || errors.Is(err, db.ErrSessionNotFound) {
 			respondError(w, http.StatusNotFound, "Session not found")
@@ -858,7 +858,7 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 		"share_token", shareToken,
 		"file_name", fileName,
 		"chunk_count", len(chunks),
-		"viewer_email", viewerEmail)
+		"viewer_user_id", viewerUserID)
 
 	// Write response
 	// Use text/plain for JSONL files (multiple JSON objects, one per line)

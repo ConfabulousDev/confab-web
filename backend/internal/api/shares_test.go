@@ -122,26 +122,38 @@ func TestEmailValidation(t *testing.T) {
 	}
 }
 
-// Test share visibility validation
-func TestShareVisibilityValidation(t *testing.T) {
-	validVisibilities := []string{"public", "private"}
-	invalidVisibilities := []string{"", "Public", "PRIVATE", "protected", "shared"}
+// Test share public flag validation
+func TestSharePublicFlagValidation(t *testing.T) {
+	t.Run("public share without recipients is valid", func(t *testing.T) {
+		isPublic := true
+		recipients := []string{}
 
-	for _, v := range validVisibilities {
-		t.Run("accepts "+v, func(t *testing.T) {
-			if v != "public" && v != "private" {
-				t.Errorf("valid visibility %q rejected", v)
-			}
-		})
-	}
+		// Public shares don't require recipients
+		if !isPublic && len(recipients) == 0 {
+			t.Error("public share should be valid without recipients")
+		}
+	})
 
-	for _, v := range invalidVisibilities {
-		t.Run("rejects "+v, func(t *testing.T) {
-			if v == "public" || v == "private" {
-				t.Errorf("invalid visibility %q accepted", v)
-			}
-		})
-	}
+	t.Run("non-public share without recipients is invalid", func(t *testing.T) {
+		isPublic := false
+		recipients := []string{}
+
+		// Non-public shares require at least one recipient
+		if !isPublic && len(recipients) == 0 {
+			// This is the expected validation failure
+			return
+		}
+		t.Error("non-public share without recipients should be invalid")
+	})
+
+	t.Run("non-public share with recipients is valid", func(t *testing.T) {
+		isPublic := false
+		recipients := []string{"user@example.com"}
+
+		if !isPublic && len(recipients) == 0 {
+			t.Error("non-public share with recipients should be valid")
+		}
+	})
 }
 
 // Test email count limits for private shares

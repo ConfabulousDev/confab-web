@@ -1391,55 +1391,6 @@ func TestSyncInit_RaceCondition_Integration(t *testing.T) {
 // Summary/FirstUserMessage API Tests
 // =============================================================================
 
-func TestSyncInit_Summary_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	env := testutil.SetupTestEnvironment(t)
-
-	t.Run("summary and first_user_message are set when provided in init request", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-
-		reqBody := map[string]interface{}{
-			"external_id":        "summary-init-test",
-			"transcript_path":    "/home/user/project/transcript.jsonl",
-			"cwd":                "/home/user/project",
-			"summary":            "My Session Summary",
-			"first_user_message": "Hello, help me with this",
-		}
-
-		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
-		w := httptest.NewRecorder()
-
-		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncInit(w, req)
-
-		testutil.AssertStatus(t, w, http.StatusOK)
-
-		var resp SyncInitResponse
-		testutil.ParseJSONResponse(t, w, &resp)
-
-		// Verify summary and first_user_message were stored in database
-		var summary, firstUserMessage *string
-		row := env.DB.QueryRow(env.Ctx,
-			"SELECT summary, first_user_message FROM sessions WHERE id = $1",
-			resp.SessionID)
-		if err := row.Scan(&summary, &firstUserMessage); err != nil {
-			t.Fatalf("failed to query session: %v", err)
-		}
-
-		if summary == nil || *summary != "My Session Summary" {
-			t.Errorf("expected summary 'My Session Summary', got %v", summary)
-		}
-		if firstUserMessage == nil || *firstUserMessage != "Hello, help me with this" {
-			t.Errorf("expected first_user_message 'Hello, help me with this', got %v", firstUserMessage)
-		}
-	})
-}
-
 func TestSyncChunk_Summary_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -1463,14 +1414,16 @@ func TestSyncChunk_Summary_Integration(t *testing.T) {
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Upload chunk with new summary
+		// Upload chunk with new summary (via metadata)
 		reqBody := map[string]interface{}{
 			"session_id": sessionID,
 			"file_name":  "transcript.jsonl",
 			"file_type":  "transcript",
 			"first_line": 1,
 			"lines":      []string{`{"type":"user","message":"Hello"}`},
-			"summary":    "Updated Summary",
+			"metadata": map[string]interface{}{
+				"summary": "Updated Summary",
+			},
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
@@ -1493,41 +1446,36 @@ func TestSyncChunk_Summary_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("summary chunk overwrites init summary", func(t *testing.T) {
+	t.Run("summary chunk overwrites existing summary", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "summary-overwrite-test")
+
+		// Set initial summary A directly in DB
+		_, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET summary = $1 WHERE id = $2",
+			"Summary A", sessionID)
+		if err != nil {
+			t.Fatalf("failed to set initial summary: %v", err)
+		}
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Init with summary A
-		initBody := map[string]interface{}{
-			"external_id":     "summary-overwrite-test",
-			"transcript_path": "/home/user/project/transcript.jsonl",
-			"cwd":             "/home/user/project",
-			"summary":         "Summary A",
-		}
-
-		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", initBody, user.ID)
-		w := httptest.NewRecorder()
-		server.handleSyncInit(w, req)
-		testutil.AssertStatus(t, w, http.StatusOK)
-
-		var initResp SyncInitResponse
-		testutil.ParseJSONResponse(t, w, &initResp)
-
-		// Upload chunk with summary B
+		// Upload chunk with summary B (via metadata)
 		chunkBody := map[string]interface{}{
-			"session_id": initResp.SessionID,
+			"session_id": sessionID,
 			"file_name":  "transcript.jsonl",
 			"file_type":  "transcript",
 			"first_line": 1,
 			"lines":      []string{`{"type":"user","message":"Hello"}`},
-			"summary":    "Summary B",
+			"metadata": map[string]interface{}{
+				"summary": "Summary B",
+			},
 		}
 
-		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", chunkBody, user.ID)
-		w = httptest.NewRecorder()
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", chunkBody, user.ID)
+		w := httptest.NewRecorder()
 		server.handleSyncChunk(w, req)
 		testutil.AssertStatus(t, w, http.StatusOK)
 
@@ -1535,7 +1483,7 @@ func TestSyncChunk_Summary_Integration(t *testing.T) {
 		var summary *string
 		row := env.DB.QueryRow(env.Ctx,
 			"SELECT summary FROM sessions WHERE id = $1",
-			initResp.SessionID)
+			sessionID)
 		if err := row.Scan(&summary); err != nil {
 			t.Fatalf("failed to query session summary: %v", err)
 		}
@@ -1561,14 +1509,16 @@ func TestSyncChunk_Summary_Integration(t *testing.T) {
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Upload chunk with empty summary (present but empty string)
+		// Upload chunk with empty summary via metadata (should clear summary)
 		reqBody := map[string]interface{}{
 			"session_id": sessionID,
 			"file_name":  "transcript.jsonl",
 			"file_type":  "transcript",
 			"first_line": 1,
 			"lines":      []string{`{"type":"user","message":"Hello"}`},
-			"summary":    "", // Empty string - should clear summary
+			"metadata": map[string]interface{}{
+				"summary": "", // Empty string - should clear summary
+			},
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
@@ -1654,14 +1604,16 @@ func TestSyncChunk_FirstUserMessage_Integration(t *testing.T) {
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Upload first chunk with first_user_message
+		// Upload first chunk with first_user_message (via metadata)
 		reqBody := map[string]interface{}{
-			"session_id":         sessionID,
-			"file_name":          "transcript.jsonl",
-			"file_type":          "transcript",
-			"first_line":         1,
-			"lines":              []string{`{"type":"user","message":"Hello"}`},
-			"first_user_message": "First message A",
+			"session_id": sessionID,
+			"file_name":  "transcript.jsonl",
+			"file_type":  "transcript",
+			"first_line": 1,
+			"lines":      []string{`{"type":"user","message":"Hello"}`},
+			"metadata": map[string]interface{}{
+				"first_user_message": "First message A",
+			},
 		}
 
 		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
@@ -1669,14 +1621,16 @@ func TestSyncChunk_FirstUserMessage_Integration(t *testing.T) {
 		server.handleSyncChunk(w, req)
 		testutil.AssertStatus(t, w, http.StatusOK)
 
-		// Upload second chunk trying to overwrite first_user_message
+		// Upload second chunk trying to overwrite first_user_message (via metadata)
 		reqBody2 := map[string]interface{}{
-			"session_id":         sessionID,
-			"file_name":          "transcript.jsonl",
-			"file_type":          "transcript",
-			"first_line":         2,
-			"lines":              []string{`{"type":"assistant","message":"Hi"}`},
-			"first_user_message": "First message B - should be ignored",
+			"session_id": sessionID,
+			"file_name":  "transcript.jsonl",
+			"file_type":  "transcript",
+			"first_line": 2,
+			"lines":      []string{`{"type":"assistant","message":"Hi"}`},
+			"metadata": map[string]interface{}{
+				"first_user_message": "First message B - should be ignored",
+			},
 		}
 
 		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody2, user.ID)
@@ -1698,55 +1652,50 @@ func TestSyncChunk_FirstUserMessage_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("first_user_message set in init cannot be overwritten by chunk", func(t *testing.T) {
+	t.Run("first_user_message once set cannot be overwritten by chunk", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "first-msg-immutable-test")
+
+		// Set initial first_user_message directly in DB
+		_, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET first_user_message = $1 WHERE id = $2",
+			"Original message", sessionID)
+		if err != nil {
+			t.Fatalf("failed to set initial first_user_message: %v", err)
+		}
 
 		server := &Server{db: env.DB, storage: env.Storage}
 
-		// Init with first_user_message
-		initBody := map[string]interface{}{
-			"external_id":        "first-msg-init-test",
-			"transcript_path":    "/home/user/project/transcript.jsonl",
-			"cwd":                "/home/user/project",
-			"first_user_message": "Message from init",
-		}
-
-		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", initBody, user.ID)
-		w := httptest.NewRecorder()
-		server.handleSyncInit(w, req)
-		testutil.AssertStatus(t, w, http.StatusOK)
-
-		var initResp SyncInitResponse
-		testutil.ParseJSONResponse(t, w, &initResp)
-
-		// Upload chunk trying to overwrite first_user_message
+		// Upload chunk trying to overwrite first_user_message (via metadata)
 		chunkBody := map[string]interface{}{
-			"session_id":         initResp.SessionID,
-			"file_name":          "transcript.jsonl",
-			"file_type":          "transcript",
-			"first_line":         1,
-			"lines":              []string{`{"type":"user","message":"Hello"}`},
-			"first_user_message": "Message from chunk - should be ignored",
+			"session_id": sessionID,
+			"file_name":  "transcript.jsonl",
+			"file_type":  "transcript",
+			"first_line": 1,
+			"lines":      []string{`{"type":"user","message":"Hello"}`},
+			"metadata": map[string]interface{}{
+				"first_user_message": "Message from chunk - should be ignored",
+			},
 		}
 
-		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", chunkBody, user.ID)
-		w = httptest.NewRecorder()
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", chunkBody, user.ID)
+		w := httptest.NewRecorder()
 		server.handleSyncChunk(w, req)
 		testutil.AssertStatus(t, w, http.StatusOK)
 
-		// Verify first_user_message is still from init
+		// Verify first_user_message is still original (first write wins)
 		var firstUserMessage *string
 		row := env.DB.QueryRow(env.Ctx,
 			"SELECT first_user_message FROM sessions WHERE id = $1",
-			initResp.SessionID)
+			sessionID)
 		if err := row.Scan(&firstUserMessage); err != nil {
 			t.Fatalf("failed to query session first_user_message: %v", err)
 		}
 
-		if firstUserMessage == nil || *firstUserMessage != "Message from init" {
-			t.Errorf("expected first_user_message 'Message from init', got %v", firstUserMessage)
+		if firstUserMessage == nil || *firstUserMessage != "Original message" {
+			t.Errorf("expected first_user_message 'Original message', got %v", firstUserMessage)
 		}
 	})
 

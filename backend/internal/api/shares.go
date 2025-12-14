@@ -20,8 +20,8 @@ import (
 
 // CreateShareRequest is the request body for creating a share
 type CreateShareRequest struct {
-	Visibility    string   `json:"visibility"`      // "public" or "private"
-	InvitedEmails []string `json:"invited_emails"`  // required for private
+	IsPublic      bool     `json:"is_public"`       // true for public (anyone with link), false for recipients only
+	Recipients    []string `json:"recipients"`      // email addresses (required if not public)
 	ExpiresInDays *int     `json:"expires_in_days"` // null = never expires
 }
 
@@ -29,8 +29,8 @@ type CreateShareRequest struct {
 type CreateShareResponse struct {
 	ShareToken    string     `json:"share_token"`
 	ShareURL      string     `json:"share_url"`
-	Visibility    string     `json:"visibility"`
-	InvitedEmails []string   `json:"invited_emails,omitempty"`
+	IsPublic      bool       `json:"is_public"`
+	Recipients    []string   `json:"recipients,omitempty"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 	EmailsSent    bool       `json:"emails_sent"`              // True if all invitation emails were sent successfully
 	EmailFailures []string   `json:"email_failures,omitempty"` // List of emails that failed to send
@@ -60,12 +60,6 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			return
 		}
 
-		// Validate visibility
-		if req.Visibility != "public" && req.Visibility != "private" {
-			respondError(w, http.StatusBadRequest, "Visibility must be 'public' or 'private'")
-			return
-		}
-
 		// Get sharer info early so we can validate against self-invite
 		sharerCtx, sharerCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer sharerCancel()
@@ -76,33 +70,33 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			return
 		}
 
-		// Validate private shares have invited emails
-		if req.Visibility == "private" {
-			if len(req.InvitedEmails) == 0 {
-				respondError(w, http.StatusBadRequest, "Private shares require at least one invited email")
+		// Validate recipient shares have recipients
+		if !req.IsPublic {
+			if len(req.Recipients) == 0 {
+				respondError(w, http.StatusBadRequest, "Non-public shares require at least one recipient email")
 				return
 			}
-			if len(req.InvitedEmails) > 50 {
-				respondError(w, http.StatusBadRequest, "Maximum 50 invited emails allowed")
+			if len(req.Recipients) > 50 {
+				respondError(w, http.StatusBadRequest, "Maximum 50 recipients allowed")
 				return
 			}
 			// Validate email formats and check for self-invite
 			sharerEmailLower := strings.ToLower(sharer.Email)
-			for _, invitedEmail := range req.InvitedEmails {
-				if !validation.IsValidEmail(invitedEmail) {
+			for _, recipientEmail := range req.Recipients {
+				if !validation.IsValidEmail(recipientEmail) {
 					respondError(w, http.StatusBadRequest, "Invalid email format")
 					return
 				}
-				if strings.ToLower(invitedEmail) == sharerEmailLower {
-					respondError(w, http.StatusBadRequest, "You cannot invite yourself")
+				if strings.ToLower(recipientEmail) == sharerEmailLower {
+					respondError(w, http.StatusBadRequest, "You cannot share with yourself")
 					return
 				}
 			}
 		}
 
-		// Check email rate limit before creating share (for private shares with email service)
-		if req.Visibility == "private" && emailService != nil {
-			if err := emailService.CheckRateLimit(userID, len(req.InvitedEmails)); err != nil {
+		// Check email rate limit before creating share (for recipient shares with email service)
+		if !req.IsPublic && emailService != nil {
+			if err := emailService.CheckRateLimit(userID, len(req.Recipients)); err != nil {
 				if errors.Is(err, email.ErrRateLimitExceeded) {
 					respondError(w, http.StatusTooManyRequests, "Email rate limit exceeded. Try again later.")
 					return
@@ -141,7 +135,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		}
 
 		// Create share in database
-		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.Visibility, expiresAt, req.InvitedEmails)
+		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.IsPublic, expiresAt, req.Recipients)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -159,10 +153,10 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		// Build share URL (uses session ID in URL)
 		shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
 
-		// Send invitation emails for private shares
+		// Send invitation emails for recipient shares
 		var emailsSent bool
 		var emailFailures []string
-		if req.Visibility == "private" && emailService != nil && len(req.InvitedEmails) > 0 {
+		if !req.IsPublic && emailService != nil && len(req.Recipients) > 0 {
 			emailsSent = true
 			sharerName := sharer.Email // Default to email
 			if sharer.Name != nil && *sharer.Name != "" {
@@ -177,7 +171,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				sessionTitle = *session.FirstUserMessage
 			}
 
-			for _, toEmail := range req.InvitedEmails {
+			for _, toEmail := range req.Recipients {
 				emailParams := email.ShareInvitationParams{
 					ToEmail:      toEmail,
 					SharerName:   sharerName,
@@ -207,8 +201,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			"user_id", userID,
 			"session_id", sessionID,
 			"share_token", shareToken,
-			"visibility", share.Visibility,
-			"invited_emails_count", len(share.InvitedEmails),
+			"is_public", share.IsPublic,
+			"recipients_count", len(share.Recipients),
 			"expires_at", share.ExpiresAt,
 			"emails_sent", emailsSent,
 			"email_failures_count", len(emailFailures))
@@ -217,8 +211,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		response := CreateShareResponse{
 			ShareToken:    share.ShareToken,
 			ShareURL:      shareURL,
-			Visibility:    share.Visibility,
-			InvitedEmails: share.InvitedEmails,
+			IsPublic:      share.IsPublic,
+			Recipients:    share.Recipients,
 			ExpiresAt:     share.ExpiresAt,
 			EmailsSent:    emailsSent && len(emailFailures) == 0,
 			EmailFailures: emailFailures,
@@ -335,11 +329,11 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Try to get viewer email from session (for private shares)
-		viewerEmail := getViewerEmailFromSession(ctx, r, database)
+		// Try to get viewer user ID from session (for recipient-only shares)
+		viewerUserID := getViewerUserIDFromSession(ctx, r, database)
 
 		// Get shared session
-		session, err := database.GetSharedSession(ctx, sessionID, shareToken, viewerEmail)
+		session, err := database.GetSharedSession(ctx, sessionID, shareToken, viewerUserID)
 		if err != nil {
 			if errors.Is(err, db.ErrShareNotFound) || errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Share not found")
@@ -354,7 +348,7 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 				return
 			}
 			if errors.Is(err, db.ErrUnauthorized) {
-				respondError(w, http.StatusUnauthorized, "Please log in to view this private share")
+				respondError(w, http.StatusUnauthorized, "Please log in to view this share")
 				return
 			}
 			if errors.Is(err, db.ErrForbidden) {
@@ -370,24 +364,7 @@ func HandleGetSharedSession(database *db.DB) http.HandlerFunc {
 		logger.Info("Shared session accessed",
 			"session_id", sessionID,
 			"share_token", shareToken,
-			"viewer_email", viewerEmail)
-
-		// If user is logged in, record their access for later retrieval in session list
-		if viewerEmail != nil {
-			// Get user ID from session cookie (we already validated it above)
-			cookie, _ := r.Cookie("confab_session")
-			webSession, err := database.GetWebSession(ctx, cookie.Value)
-			if err == nil {
-				// Record that this user accessed this share
-				// This allows the share to appear in their session list later
-				recordCtx, recordCancel := context.WithTimeout(context.Background(), DatabaseTimeout)
-				defer recordCancel()
-				if err := database.RecordShareAccess(recordCtx, shareToken, webSession.UserID); err != nil {
-					// Log but don't fail the request
-					logger.Error("Failed to record share access", "error", err, "share_token", shareToken, "user_id", webSession.UserID)
-				}
-			}
-		}
+			"viewer_user_id", viewerUserID)
 
 		respondJSON(w, http.StatusOK, session)
 	}
@@ -431,9 +408,9 @@ func generateShareToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// getViewerEmailFromSession extracts the viewer's email from their session cookie if authenticated.
+// getViewerUserIDFromSession extracts the viewer's user ID from their session cookie if authenticated.
 // Returns nil if no valid session cookie or any lookup fails.
-func getViewerEmailFromSession(ctx context.Context, r *http.Request, database *db.DB) *string {
+func getViewerUserIDFromSession(ctx context.Context, r *http.Request, database *db.DB) *int64 {
 	cookie, err := r.Cookie("confab_session")
 	if err != nil {
 		return nil
@@ -442,9 +419,5 @@ func getViewerEmailFromSession(ctx context.Context, r *http.Request, database *d
 	if err != nil {
 		return nil
 	}
-	user, err := database.GetUserByID(ctx, webSession.UserID)
-	if err != nil || user == nil {
-		return nil
-	}
-	return &user.Email
+	return &webSession.UserID
 }

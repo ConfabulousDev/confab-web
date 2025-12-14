@@ -11,7 +11,7 @@ import Alert from '@/components/Alert';
 import Button from '@/components/Button';
 import styles from './ShareLinksPage.module.css';
 
-type SortColumn = 'session_summary' | 'visibility' | 'created_at' | 'expires_at';
+type SortColumn = 'session_summary' | 'is_public' | 'created_at' | 'expires_at';
 type FilterType = 'all' | 'public' | 'private' | 'expired' | 'active';
 
 // SVG Icons
@@ -88,8 +88,8 @@ function ShareLinksPage() {
 
   // Filter counts
   const counts = useMemo(() => {
-    const publicCount = shares.filter((s) => s.visibility === 'public').length;
-    const privateCount = shares.filter((s) => s.visibility === 'private').length;
+    const publicCount = shares.filter((s) => s.is_public).length;
+    const privateCount = shares.filter((s) => !s.is_public).length;
     const expiredCount = shares.filter((s) => s.expires_at && new Date(s.expires_at) < new Date()).length;
     const activeCount = shares.length - expiredCount;
     return { all: shares.length, public: publicCount, private: privateCount, expired: expiredCount, active: activeCount };
@@ -100,10 +100,10 @@ function ShareLinksPage() {
     let filtered = shares;
     switch (filter) {
       case 'public':
-        filtered = shares.filter((s) => s.visibility === 'public');
+        filtered = shares.filter((s) => s.is_public);
         break;
       case 'private':
-        filtered = shares.filter((s) => s.visibility === 'private');
+        filtered = shares.filter((s) => !s.is_public);
         break;
       case 'expired':
         filtered = shares.filter((s) => s.expires_at && new Date(s.expires_at) < new Date());
@@ -251,13 +251,13 @@ function ShareLinksPage() {
                         onSort={handleSort}
                       />
                       <SortableHeader
-                        column="visibility"
+                        column="is_public"
                         label="Visibility"
                         currentColumn={sortColumn}
                         direction={sortDirection}
                         onSort={handleSort}
                       />
-                      <th>Invited Emails</th>
+                      <th>Recipients</th>
                       <SortableHeader
                         column="created_at"
                         label="Created"
@@ -291,13 +291,13 @@ function ShareLinksPage() {
                             </div>
                           </td>
                           <td>
-                            <span className={`${styles.badge} ${styles[share.visibility]}`}>
-                              {share.visibility}
+                            <span className={`${styles.badge} ${share.is_public ? styles.public : styles.private}`}>
+                              {share.is_public ? 'public' : 'private'}
                             </span>
                           </td>
                           <td className={styles.emails}>
-                            {share.visibility === 'private' && share.invited_emails && share.invited_emails.length > 0
-                              ? share.invited_emails.join(', ')
+                            {!share.is_public && share.recipients && share.recipients.length > 0
+                              ? share.recipients.join(', ')
                               : '—'}
                           </td>
                           <td className={styles.timestamp}>{formatRelativeTime(share.created_at)}</td>

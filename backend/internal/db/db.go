@@ -439,6 +439,13 @@ func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUser
 		return nil, fmt.Errorf("failed to create identity: %w", err)
 	}
 
+	// Resolve pending share recipients for the new user
+	// This links any shares that were created with this user's email before they signed up
+	resolvePendingSQL := `UPDATE session_share_recipients SET user_id = $1 WHERE LOWER(email) = LOWER($2) AND user_id IS NULL`
+	if _, err = tx.ExecContext(ctx, resolvePendingSQL, user.ID, info.Email); err != nil {
+		return nil, fmt.Errorf("failed to resolve pending share recipients: %w", err)
+	}
+
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
@@ -542,16 +549,9 @@ type SessionListItem struct {
 }
 
 // ListUserSessions returns all sessions for a user
-// If includeShared is true, also includes sessions shared with the user (private shares and accessed public shares)
+// If includeShared is true, also includes sessions shared with the user (via session_share_recipients)
 // Uses sync_files table for file counts and sync state
 func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared bool) ([]SessionListItem, error) {
-	// Get user's email for private share matching
-	var userEmail string
-	emailQuery := `SELECT email FROM users WHERE id = $1`
-	if err := db.conn.QueryRowContext(ctx, emailQuery, userID).Scan(&userEmail); err != nil {
-		return nil, fmt.Errorf("failed to get user email: %w", err)
-	}
-
 	var query string
 	if !includeShared {
 		// Only owned sessions - using sync_files for file counts
@@ -611,9 +611,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				) sf_stats ON s.id = sf_stats.session_id
 				WHERE s.user_id = $1
 			),
-			-- Private shares (invited by email)
-			private_shares AS (
-				SELECT
+			-- Sessions shared with user (via session_share_recipients by user_id)
+			shared_sessions AS (
+				SELECT DISTINCT ON (s.id)
 					s.id,
 					s.external_id,
 					s.first_seen,
@@ -631,68 +631,28 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					u.email as shared_by_email
 				FROM sessions s
 				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_invites si ON sh.id = si.share_id
+				JOIN session_share_recipients sr ON sh.id = sr.share_id
 				JOIN users u ON s.user_id = u.id
 				LEFT JOIN (
 					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
 					FROM sync_files
 					GROUP BY session_id
 				) sf_stats ON s.id = sf_stats.session_id
-				WHERE sh.visibility = 'private'
-				  AND LOWER(si.email) = LOWER($2)
+				WHERE sr.user_id = $1
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
-			),
-			-- Public shares accessed by user
-			public_shares AS (
-				SELECT
-					s.id,
-					s.external_id,
-					s.first_seen,
-					COALESCE(sf_stats.file_count, 0) as file_count,
-					s.last_message_at,
-					s.summary,
-					s.first_user_message,
-					s.session_type,
-					COALESCE(sf_stats.total_lines, 0) as total_lines,
-					s.git_info->>'repo_url' as git_repo_url,
-					s.git_info->>'branch' as git_branch,
-					false as is_owner,
-					'public_share' as access_type,
-					sh.share_token,
-					u.email as shared_by_email
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_accesses sa ON sh.id = sa.share_id
-				JOIN users u ON s.user_id = u.id
-				LEFT JOIN (
-					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-					FROM sync_files
-					GROUP BY session_id
-				) sf_stats ON s.id = sf_stats.session_id
-				WHERE sh.visibility = 'public'
-				  AND sa.user_id = $1
-				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				  AND s.user_id != $1  -- Don't duplicate owned sessions
+				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
 			)
 			SELECT * FROM (
 				SELECT * FROM owned_sessions
 				UNION ALL
-				SELECT * FROM private_shares
-				UNION ALL
-				SELECT * FROM public_shares
+				SELECT * FROM shared_sessions
 			) combined
 			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
 	}
 
-	var rows *sql.Rows
-	var err error
-	if !includeShared {
-		rows, err = db.conn.QueryContext(ctx, query, userID)
-	} else {
-		rows, err = db.conn.QueryContext(ctx, query, userID, userEmail)
-	}
+	rows, err := db.conn.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query sessions: %w", err)
 	}
@@ -850,15 +810,17 @@ type SessionShare struct {
 	SessionID      string     `json:"session_id"`      // UUID references sessions.id
 	ExternalID     string     `json:"external_id"`     // External system's session ID (for display)
 	ShareToken     string     `json:"share_token"`
-	Visibility     string     `json:"visibility"`
+	IsPublic       bool       `json:"is_public"`       // true if in session_share_public table
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
-	InvitedEmails  []string   `json:"invited_emails,omitempty"`
+	Recipients     []string   `json:"recipients,omitempty"` // email addresses of recipients
 }
 
 // CreateShare creates a new share link for a session (by UUID primary key)
-func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) (*SessionShare, error) {
+// isPublic: true for public shares (anyone with link), false for recipient-only shares
+// recipientEmails: email addresses to grant access (ignored if isPublic)
+func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, shareToken string, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*SessionShare, error) {
 	// Verify session exists for this user and get external_id for display
 	var externalID string
 	err := db.conn.QueryRowContext(ctx,
@@ -875,36 +837,56 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 	}
 
 	// Insert share
-	query := `INSERT INTO session_shares (session_id, share_token, visibility, expires_at)
-	          VALUES ($1, $2, $3, $4)
+	query := `INSERT INTO session_shares (session_id, share_token, expires_at)
+	          VALUES ($1, $2, $3)
 	          RETURNING id, created_at`
 
 	var share SessionShare
 	share.SessionID = sessionID
 	share.ExternalID = externalID
 	share.ShareToken = shareToken
-	share.Visibility = visibility
+	share.IsPublic = isPublic
 	share.ExpiresAt = expiresAt
 
-	err = db.conn.QueryRowContext(ctx, query, sessionID, shareToken, visibility, expiresAt).Scan(&share.ID, &share.CreatedAt)
+	err = db.conn.QueryRowContext(ctx, query, sessionID, shareToken, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
 
-	// Insert invites for private shares
-	if visibility == "private" && len(invitedEmails) > 0 {
-		for _, email := range invitedEmails {
-			_, err := db.conn.ExecContext(ctx,
-				`INSERT INTO session_share_invites (share_id, email) VALUES ($1, $2)`,
-				share.ID, email)
-			if err != nil {
-				// Rollback share if invite fails
-				db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
-				return nil, fmt.Errorf("failed to create invite: %w", err)
+	// For public shares, insert into session_share_public
+	if isPublic {
+		_, err := db.conn.ExecContext(ctx,
+			`INSERT INTO session_share_public (share_id) VALUES ($1)`,
+			share.ID)
+		if err != nil {
+			db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
+			return nil, fmt.Errorf("failed to create public share: %w", err)
+		}
+	}
+
+	// For recipient shares, insert recipients with user_id lookup
+	if !isPublic && len(recipientEmails) > 0 {
+		for _, email := range recipientEmails {
+			// Try to resolve email to user_id
+			var recipientUserID *int64
+			var uid int64
+			err := db.conn.QueryRowContext(ctx,
+				`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
+				email).Scan(&uid)
+			if err == nil {
+				recipientUserID = &uid
 			}
 
+			_, err = db.conn.ExecContext(ctx,
+				`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)`,
+				share.ID, email, recipientUserID)
+			if err != nil {
+				// Rollback share if recipient insert fails
+				db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
+				return nil, fmt.Errorf("failed to create recipient: %w", err)
+			}
 		}
-		share.InvitedEmails = invitedEmails
+		share.Recipients = recipientEmails
 	}
 
 	return &share, nil
@@ -927,11 +909,13 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
 
-	// Get shares
-	query := `SELECT id, session_id, share_token, visibility, expires_at, created_at, last_accessed_at
-	          FROM session_shares
-	          WHERE session_id = $1
-	          ORDER BY created_at DESC`
+	// Get shares with public status
+	query := `SELECT ss.id, ss.session_id, ss.share_token, ss.expires_at, ss.created_at, ss.last_accessed_at,
+	                 (ssp.share_id IS NOT NULL) as is_public
+	          FROM session_shares ss
+	          LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
+	          WHERE ss.session_id = $1
+	          ORDER BY ss.created_at DESC`
 
 	rows, err := db.conn.QueryContext(ctx, query, sessionID)
 	if err != nil {
@@ -943,19 +927,19 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 	for rows.Next() {
 		var share SessionShare
 		err := rows.Scan(&share.ID, &share.SessionID, &share.ShareToken,
-			&share.Visibility, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt)
+			&share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt, &share.IsPublic)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan share: %w", err)
 		}
 		share.ExternalID = externalID // Set from parent query
 
-		// Get invited emails for private shares
-		if share.Visibility == "private" {
-			emails, err := db.loadShareInvitedEmails(ctx, share.ID)
+		// Get recipients for non-public shares
+		if !share.IsPublic {
+			emails, err := db.loadShareRecipients(ctx, share.ID)
 			if err != nil {
 				return nil, err
 			}
-			share.InvitedEmails = emails
+			share.Recipients = emails
 		}
 
 		shares = append(shares, share)
@@ -977,14 +961,16 @@ type ShareWithSessionInfo struct {
 
 // ListAllUserShares returns all shares for a user across all sessions
 func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithSessionInfo, error) {
-	// Get all shares for the user with session info
+	// Get all shares for the user with session info and public status
 	query := `
 		SELECT
-			ss.id, ss.session_id, s.external_id, ss.share_token, ss.visibility,
+			ss.id, ss.session_id, s.external_id, ss.share_token,
+			(ssp.share_id IS NOT NULL) as is_public,
 			ss.expires_at, ss.created_at, ss.last_accessed_at,
 			s.summary, s.first_user_message
 		FROM session_shares ss
 		JOIN sessions s ON ss.session_id = s.id
+		LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
 		WHERE s.user_id = $1
 		ORDER BY ss.created_at DESC
 	`
@@ -1000,20 +986,20 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 		var share ShareWithSessionInfo
 		err := rows.Scan(
 			&share.ID, &share.SessionID, &share.ExternalID, &share.ShareToken,
-			&share.Visibility, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
+			&share.IsPublic, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
 			&share.SessionSummary, &share.SessionFirstUserMessage,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan share: %w", err)
 		}
 
-		// Get invited emails for private shares
-		if share.Visibility == "private" {
-			emails, err := db.loadShareInvitedEmails(ctx, share.ID)
+		// Get recipients for non-public shares
+		if !share.IsPublic {
+			emails, err := db.loadShareRecipients(ctx, share.ID)
 			if err != nil {
 				return nil, err
 			}
-			share.InvitedEmails = emails
+			share.Recipients = emails
 		}
 
 		shares = append(shares, share)
@@ -1049,16 +1035,19 @@ func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) 
 
 // GetSharedSession returns session detail via share token (sessionID is the UUID primary key)
 // Uses sync_files table for file information
-func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken string, viewerEmail *string) (*SessionDetail, error) {
-	// Get share and verify it belongs to this session
-	var share SessionShare
-	query := `SELECT ss.id, ss.session_id, ss.visibility, ss.expires_at, ss.last_accessed_at
+// viewerUserID: required for recipient-only shares; nil allows only public share access
+func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken string, viewerUserID *int64) (*SessionDetail, error) {
+	// Get share and verify it belongs to this session, check if public
+	var shareID int64
+	var expiresAt *time.Time
+	var isPublic bool
+	query := `SELECT ss.id, ss.expires_at, (ssp.share_id IS NOT NULL) as is_public
 	          FROM session_shares ss
+	          LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
 	          WHERE ss.share_token = $1 AND ss.session_id = $2`
 
 	err := db.conn.QueryRowContext(ctx, query, shareToken, sessionID).Scan(
-		&share.ID, &share.SessionID, &share.Visibility,
-		&share.ExpiresAt, &share.LastAccessedAt)
+		&shareID, &expiresAt, &isPublic)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrShareNotFound
@@ -1067,21 +1056,21 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 	}
 
 	// Check expiration
-	if share.ExpiresAt != nil && share.ExpiresAt.Before(time.Now().UTC()) {
+	if expiresAt != nil && expiresAt.Before(time.Now().UTC()) {
 		return nil, ErrShareExpired
 	}
 
-	// Check authorization for private shares
-	if share.Visibility == "private" {
-		if viewerEmail == nil {
+	// Check authorization for recipient-only shares
+	if !isPublic {
+		if viewerUserID == nil {
 			return nil, ErrUnauthorized
 		}
 
-		// Check if email is invited
+		// Check if user is a recipient (by user_id)
 		var count int
 		err := db.conn.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM session_share_invites WHERE share_id = $1 AND LOWER(email) = LOWER($2)`,
-			share.ID, *viewerEmail).Scan(&count)
+			`SELECT COUNT(*) FROM session_share_recipients WHERE share_id = $1 AND user_id = $2`,
+			shareID, *viewerUserID).Scan(&count)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check authorization: %w", err)
 		}
@@ -1094,7 +1083,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 	// Update last accessed
 	db.conn.ExecContext(ctx,
 		`UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`,
-		share.ID)
+		shareID)
 
 	// Get session detail with all metadata (no ownership check since share verified)
 	// Also check owner's status to block access if deactivated
@@ -1143,38 +1132,6 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 	}
 
 	return &session, nil
-}
-
-// RecordShareAccess records that a user accessed a share
-// This is used to track public shares accessed by logged-in users
-// so they can see them in their session list
-func (db *DB) RecordShareAccess(ctx context.Context, shareToken string, userID int64) error {
-	// First get the share ID
-	var shareID int64
-	query := `SELECT id FROM session_shares WHERE share_token = $1`
-	err := db.conn.QueryRowContext(ctx, query, shareToken).Scan(&shareID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return ErrShareNotFound
-		}
-		return fmt.Errorf("failed to get share: %w", err)
-	}
-
-	// Record access (INSERT or UPDATE existing record)
-	upsertQuery := `
-		INSERT INTO session_share_accesses (share_id, user_id, first_accessed_at, last_accessed_at, access_count)
-		VALUES ($1, $2, NOW(), NOW(), 1)
-		ON CONFLICT (share_id, user_id)
-		DO UPDATE SET
-			last_accessed_at = NOW(),
-			access_count = session_share_accesses.access_count + 1
-	`
-	_, err = db.conn.ExecContext(ctx, upsertQuery, shareID, userID)
-	if err != nil {
-		return fmt.Errorf("failed to record share access: %w", err)
-	}
-
-	return nil
 }
 
 // DeleteSessionFromDB deletes an entire session and all its runs from the database
@@ -1431,13 +1388,13 @@ func isInvalidUUIDError(err error) bool {
 	return strings.Contains(err.Error(), "invalid input syntax for type uuid")
 }
 
-// loadShareInvitedEmails loads the invited emails for a private share
-func (db *DB) loadShareInvitedEmails(ctx context.Context, shareID int64) ([]string, error) {
+// loadShareRecipients loads the recipient emails for a share
+func (db *DB) loadShareRecipients(ctx context.Context, shareID int64) ([]string, error) {
 	rows, err := db.conn.QueryContext(ctx,
-		`SELECT email FROM session_share_invites WHERE share_id = $1 ORDER BY email`,
+		`SELECT email FROM session_share_recipients WHERE share_id = $1 ORDER BY email`,
 		shareID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get invites: %w", err)
+		return nil, fmt.Errorf("failed to get recipients: %w", err)
 	}
 	defer rows.Close()
 

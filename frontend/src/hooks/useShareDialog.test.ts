@@ -23,8 +23,8 @@ describe('useShareDialog', () => {
       useShareDialog({ sessionId: 'test-session' })
     );
 
-    expect(result.current.visibility).toBe('public');
-    expect(result.current.invitedEmails).toEqual([]);
+    expect(result.current.isPublic).toBe(true);
+    expect(result.current.recipients).toEqual([]);
     expect(result.current.newEmail).toBe('');
     expect(result.current.expiresInDays).toBe(7);
     expect(result.current.createdShareURL).toBe('');
@@ -35,16 +35,16 @@ describe('useShareDialog', () => {
     expect(result.current.validationErrors).toBeUndefined();
   });
 
-  it('allows changing visibility', () => {
+  it('allows changing isPublic', () => {
     const { result } = renderHook(() =>
       useShareDialog({ sessionId: 'test-session' })
     );
 
     act(() => {
-      result.current.setVisibility('private');
+      result.current.setIsPublic(false);
     });
 
-    expect(result.current.visibility).toBe('private');
+    expect(result.current.isPublic).toBe(false);
   });
 
   it('allows setting new email', () => {
@@ -77,7 +77,7 @@ describe('useShareDialog', () => {
     expect(result.current.expiresInDays).toBeNull();
   });
 
-  it('adds valid email to invited list', () => {
+  it('adds valid email to recipients list', () => {
     const { result } = renderHook(() =>
       useShareDialog({ sessionId: 'test-session' })
     );
@@ -90,7 +90,7 @@ describe('useShareDialog', () => {
       result.current.addEmail();
     });
 
-    expect(result.current.invitedEmails).toContain('valid@example.com');
+    expect(result.current.recipients).toContain('valid@example.com');
     expect(result.current.newEmail).toBe('');
     expect(result.current.error).toBe('');
   });
@@ -108,7 +108,7 @@ describe('useShareDialog', () => {
       result.current.addEmail();
     });
 
-    expect(result.current.invitedEmails).toEqual([]);
+    expect(result.current.recipients).toEqual([]);
     expect(result.current.error).toBeTruthy();
   });
 
@@ -131,7 +131,7 @@ describe('useShareDialog', () => {
       result.current.addEmail();
     });
 
-    expect(result.current.invitedEmails).toHaveLength(1);
+    expect(result.current.recipients).toHaveLength(1);
     expect(result.current.error).toBe('Email already added');
   });
 
@@ -150,11 +150,11 @@ describe('useShareDialog', () => {
       result.current.addEmail();
     });
 
-    expect(result.current.invitedEmails).toEqual([]);
+    expect(result.current.recipients).toEqual([]);
     expect(result.current.error).toBe('You cannot invite yourself');
   });
 
-  it('removes email from invited list', () => {
+  it('removes email from recipients list', () => {
     const { result } = renderHook(() =>
       useShareDialog({ sessionId: 'test-session' })
     );
@@ -166,13 +166,13 @@ describe('useShareDialog', () => {
       result.current.addEmail();
     });
 
-    expect(result.current.invitedEmails).toContain('test@example.com');
+    expect(result.current.recipients).toContain('test@example.com');
 
     act(() => {
       result.current.removeEmail('test@example.com');
     });
 
-    expect(result.current.invitedEmails).not.toContain('test@example.com');
+    expect(result.current.recipients).not.toContain('test@example.com');
   });
 
   it('resets form state', () => {
@@ -182,7 +182,7 @@ describe('useShareDialog', () => {
 
     // Modify state
     act(() => {
-      result.current.setVisibility('private');
+      result.current.setIsPublic(false);
       result.current.setNewEmail('test@example.com');
       result.current.setExpiresInDays(30);
     });
@@ -192,8 +192,8 @@ describe('useShareDialog', () => {
       result.current.resetForm();
     });
 
-    expect(result.current.visibility).toBe('public');
-    expect(result.current.invitedEmails).toEqual([]);
+    expect(result.current.isPublic).toBe(true);
+    expect(result.current.recipients).toEqual([]);
     expect(result.current.newEmail).toBe('');
     expect(result.current.expiresInDays).toBe(7);
   });
@@ -205,7 +205,7 @@ describe('useShareDialog', () => {
         session_id: 'session-1',
         external_id: 'ext-1',
         share_token: 'token1',
-        visibility: 'public' as const,
+        is_public: true,
         created_at: '2024-01-01T00:00:00Z',
       },
       {
@@ -213,7 +213,7 @@ describe('useShareDialog', () => {
         session_id: 'session-2',
         external_id: 'ext-2',
         share_token: 'token2',
-        visibility: 'private' as const,
+        is_public: false,
         created_at: '2024-01-02T00:00:00Z',
       },
     ];
@@ -262,21 +262,21 @@ describe('useShareDialog', () => {
     });
 
     expect(sessionsAPI.createShare).toHaveBeenCalledWith('test-session', {
-      visibility: 'public',
-      invited_emails: [],
+      is_public: true,
+      recipients: [],
       expires_in_days: 7,
     });
     expect(result.current.createdShareURL).toBe('https://example.com/share/abc123');
     expect(result.current.loading).toBe(false);
   });
 
-  it('validates private share requires emails', async () => {
+  it('validates non-public share requires recipients', async () => {
     const { result } = renderHook(() =>
       useShareDialog({ sessionId: 'test-session' })
     );
 
     act(() => {
-      result.current.setVisibility('private');
+      result.current.setIsPublic(false);
     });
 
     await act(async () => {

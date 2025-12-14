@@ -35,36 +35,36 @@ describe('validation schemas', () => {
   describe('shareFormSchema', () => {
     it('should accept valid public share', () => {
       const data = {
-        visibility: 'public' as const,
-        invited_emails: [],
+        is_public: true,
+        recipients: [],
         expires_in_days: 7,
       };
 
       expect(shareFormSchema.parse(data)).toEqual(data);
     });
 
-    it('should accept valid private share with emails', () => {
+    it('should accept valid non-public share with recipients', () => {
       const data = {
-        visibility: 'private' as const,
-        invited_emails: ['user1@example.com', 'user2@example.com'],
+        is_public: false,
+        recipients: ['user1@example.com', 'user2@example.com'],
         expires_in_days: 30,
       };
 
       expect(shareFormSchema.parse(data)).toEqual(data);
     });
 
-    it('should reject private share without emails', () => {
+    it('should reject non-public share without recipients', () => {
       const data = {
-        visibility: 'private' as const,
-        invited_emails: [],
+        is_public: false,
+        recipients: [],
       };
 
-      expect(() => shareFormSchema.parse(data)).toThrow('Private shares must have at least one invited email');
+      expect(() => shareFormSchema.parse(data)).toThrow('Non-public shares must have at least one recipient email');
     });
 
     it('should accept null expires_in_days', () => {
       const data = {
-        visibility: 'public' as const,
+        is_public: true,
         expires_in_days: null,
       };
 
@@ -72,18 +72,10 @@ describe('validation schemas', () => {
       expect(result.expires_in_days).toBeNull();
     });
 
-    it('should reject invalid visibility', () => {
+    it('should reject too many recipients', () => {
       const data = {
-        visibility: 'invalid',
-      };
-
-      expect(() => shareFormSchema.parse(data)).toThrow();
-    });
-
-    it('should reject too many emails', () => {
-      const data = {
-        visibility: 'private' as const,
-        invited_emails: Array(51).fill('test@example.com'),
+        is_public: false,
+        recipients: Array(51).fill('test@example.com'),
       };
 
       expect(() => shareFormSchema.parse(data)).toThrow('Too many email addresses');
@@ -91,7 +83,7 @@ describe('validation schemas', () => {
 
     it('should reject invalid expiration days', () => {
       const data = {
-        visibility: 'public' as const,
+        is_public: true,
         expires_in_days: -1,
       };
 
@@ -100,7 +92,7 @@ describe('validation schemas', () => {
 
     it('should reject expiration > 365 days', () => {
       const data = {
-        visibility: 'public' as const,
+        is_public: true,
         expires_in_days: 400,
       };
 
@@ -169,14 +161,14 @@ describe('validation schemas', () => {
 
     it('should flatten nested errors', () => {
       const data = {
-        visibility: 'private' as const,
-        invited_emails: [],
+        is_public: false,
+        recipients: [],
       };
       const result = validateForm(shareFormSchema, data);
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.errors).toHaveProperty('invited_emails');
+        expect(result.errors).toHaveProperty('recipients');
       }
     });
   });

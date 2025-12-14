@@ -145,31 +145,50 @@ func CreateTestSyncFile(t *testing.T, env *TestEnvironment, sessionID string, fi
 
 // CreateTestShare creates a share in the database for testing
 // sessionID is the UUID primary key of the session
-func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, shareToken, visibility string, expiresAt *time.Time, invitedEmails []string) int64 {
+// isPublic: true creates a public share (anyone with link), false creates a recipient-only share
+func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, shareToken string, isPublic bool, expiresAt *time.Time, recipients []string) int64 {
 	t.Helper()
 
 	// Insert share
 	query := `
-		INSERT INTO session_shares (session_id, share_token, visibility, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		INSERT INTO session_shares (session_id, share_token, expires_at, created_at)
+		VALUES ($1, $2, $3, NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, shareToken, visibility, expiresAt)
+	row := env.DB.QueryRow(env.Ctx, query, sessionID, shareToken, expiresAt)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test share: %v", err)
 	}
 
-	// Add invited emails if private
-	if visibility == "private" && len(invitedEmails) > 0 {
-		for _, email := range invitedEmails {
+	// Add public flag if public share
+	if isPublic {
+		_, err := env.DB.Exec(env.Ctx,
+			"INSERT INTO session_share_public (share_id) VALUES ($1)",
+			id)
+		if err != nil {
+			t.Fatalf("failed to add public flag: %v", err)
+		}
+	}
+
+	// Add recipients if non-public share
+	if !isPublic && len(recipients) > 0 {
+		for _, email := range recipients {
+			// Try to resolve user_id from email
+			var userID *int64
+			row := env.DB.QueryRow(env.Ctx, "SELECT id FROM users WHERE LOWER(email) = LOWER($1)", email)
+			var uid int64
+			if err := row.Scan(&uid); err == nil {
+				userID = &uid
+			}
+
 			_, err := env.DB.Exec(env.Ctx,
-				"INSERT INTO session_share_invites (share_id, email) VALUES ($1, $2)",
-				id, email)
+				"INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)",
+				id, email, userID)
 			if err != nil {
-				t.Fatalf("failed to add invited email: %v", err)
+				t.Fatalf("failed to add recipient: %v", err)
 			}
 		}
 	}

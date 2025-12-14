@@ -16,14 +16,10 @@ export const emailSchema = z
 // Share Form Schemas
 // ============================================================================
 
-export const shareVisibilitySchema = z.enum(['public', 'private'], {
-  message: 'Visibility must be either "public" or "private"',
-});
-
 export const shareFormSchema = z
   .object({
-    visibility: shareVisibilitySchema,
-    invited_emails: z
+    is_public: z.boolean(),
+    recipients: z
       .array(emailSchema)
       .max(50, 'Too many email addresses (max 50)')
       .optional()
@@ -38,15 +34,15 @@ export const shareFormSchema = z
   })
   .refine(
     (data) => {
-      // If visibility is private, must have at least one email
-      if (data.visibility === 'private') {
-        return data.invited_emails && data.invited_emails.length > 0;
+      // If not public, must have at least one recipient
+      if (!data.is_public) {
+        return data.recipients && data.recipients.length > 0;
       }
       return true;
     },
     {
-      message: 'Private shares must have at least one invited email',
-      path: ['invited_emails'],
+      message: 'Non-public shares must have at least one recipient email',
+      path: ['recipients'],
     }
   );
 

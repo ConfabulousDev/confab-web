@@ -25,7 +25,7 @@ func TestGetSharedSession_ActiveOwner(t *testing.T) {
 
 	// Create a public share
 	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, "public", nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
 
 	// Access the shared session (should succeed)
 	session, err := env.DB.GetSharedSession(context.Background(), sessionID, shareToken, nil)
@@ -52,7 +52,7 @@ func TestGetSharedSession_InactiveOwner(t *testing.T) {
 
 	// Create a public share
 	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, "public", nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
 
 	// Deactivate the owner
 	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, models.UserStatusInactive)
@@ -85,7 +85,7 @@ func TestGetSharedSession_ReactivatedOwner(t *testing.T) {
 
 	// Create a public share
 	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, "public", nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
 
 	// Deactivate the owner
 	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, models.UserStatusInactive)

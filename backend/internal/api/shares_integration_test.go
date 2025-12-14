@@ -31,7 +31,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 
 		// Create request
 		reqBody := CreateShareRequest{
-			Visibility: "public",
+			IsPublic: true,
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
 			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
@@ -52,8 +52,8 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		var resp CreateShareResponse
 		testutil.ParseJSONResponse(t, w, &resp)
 
-		if resp.Visibility != "public" {
-			t.Errorf("expected visibility 'public', got %s", resp.Visibility)
+		if !resp.IsPublic {
+			t.Errorf("expected is_public true, got false")
 		}
 		if resp.ShareToken == "" {
 			t.Error("expected share token, got empty")
@@ -65,7 +65,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 			t.Error("expected share URL, got empty")
 		}
 
-		// Verify database state
+		// Verify database state - check session_shares and session_share_public
 		var count int
 		row := env.DB.QueryRow(env.Ctx,
 			"SELECT COUNT(*) FROM session_shares WHERE session_id = $1",
@@ -76,9 +76,22 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		if count != 1 {
 			t.Errorf("expected 1 share in database, got %d", count)
 		}
+
+		// Verify public flag
+		row = env.DB.QueryRow(env.Ctx,
+			`SELECT COUNT(*) FROM session_share_public ssp
+			 JOIN session_shares ss ON ssp.share_id = ss.id
+			 WHERE ss.share_token = $1`,
+			resp.ShareToken)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query public shares: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("expected 1 public share entry, got %d", count)
+		}
 	})
 
-	t.Run("creates private share with invited emails", func(t *testing.T) {
+	t.Run("creates recipient share with emails", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
@@ -86,8 +99,8 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		reqBody := CreateShareRequest{
-			Visibility:    "private",
-			InvitedEmails: []string{"friend@example.com", "colleague@example.com"},
+			IsPublic:   false,
+			Recipients: []string{"friend@example.com", "colleague@example.com"},
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
 			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
@@ -106,25 +119,25 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		var resp CreateShareResponse
 		testutil.ParseJSONResponse(t, w, &resp)
 
-		if resp.Visibility != "private" {
-			t.Errorf("expected visibility 'private', got %s", resp.Visibility)
+		if resp.IsPublic {
+			t.Errorf("expected is_public false, got true")
 		}
-		if len(resp.InvitedEmails) != 2 {
-			t.Errorf("expected 2 invited emails, got %d", len(resp.InvitedEmails))
+		if len(resp.Recipients) != 2 {
+			t.Errorf("expected 2 recipients, got %d", len(resp.Recipients))
 		}
 
-		// Verify invited emails in database
+		// Verify recipients in database
 		var emailCount int
 		row := env.DB.QueryRow(env.Ctx,
-			`SELECT COUNT(*) FROM session_share_invites ssi
-			 JOIN session_shares ss ON ssi.share_id = ss.id
+			`SELECT COUNT(*) FROM session_share_recipients ssr
+			 JOIN session_shares ss ON ssr.share_id = ss.id
 			 WHERE ss.share_token = $1`,
 			resp.ShareToken)
 		if err := row.Scan(&emailCount); err != nil {
-			t.Fatalf("failed to query invited emails: %v", err)
+			t.Fatalf("failed to query recipients: %v", err)
 		}
 		if emailCount != 2 {
-			t.Errorf("expected 2 invited emails in database, got %d", emailCount)
+			t.Errorf("expected 2 recipients in database, got %d", emailCount)
 		}
 	})
 
@@ -135,7 +148,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		nonExistentID := "non-existent-uuid"
 
 		reqBody := CreateShareRequest{
-			Visibility: "public",
+			IsPublic: true,
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
 			"/api/v1/sessions/"+nonExistentID+"/share", reqBody, user.ID)
@@ -152,39 +165,7 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		testutil.AssertErrorResponse(t, w, http.StatusNotFound, "Session not found")
 	})
 
-	t.Run("validates visibility field", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "test@example.com", "Test")
-		externalID := "test-session-789"
-		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
-
-		reqBody := CreateShareRequest{
-			Visibility: "invalid",
-		}
-		req := testutil.AuthenticatedRequest(t, "POST",
-			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
-
-		// Add URL parameters
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", sessionID)
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-		w := httptest.NewRecorder()
-		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
-		handler(w, req)
-
-		testutil.AssertStatus(t, w, http.StatusBadRequest)
-
-		var resp map[string]string
-		testutil.ParseJSONResponse(t, w, &resp)
-
-		if resp["error"] == "" {
-			t.Error("expected error message for invalid visibility")
-		}
-	})
-
-	t.Run("requires invited emails for private shares", func(t *testing.T) {
+	t.Run("requires recipients for non-public shares", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test")
@@ -192,8 +173,8 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		reqBody := CreateShareRequest{
-			Visibility:    "private",
-			InvitedEmails: []string{}, // Empty - should fail
+			IsPublic:   false,
+			Recipients: []string{}, // Empty - should fail
 		}
 		req := testutil.AuthenticatedRequest(t, "POST",
 			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
