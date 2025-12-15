@@ -80,6 +80,18 @@
   font-family: 'SF Mono', Monaco, monospace;
 }
 
+.metaLink {
+  color: var(--color-text-secondary);
+  font-family: 'SF Mono', Monaco, monospace;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.metaLink:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
 .metaIcon {
   display: flex;
   align-items: center;
