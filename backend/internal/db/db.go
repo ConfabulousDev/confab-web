@@ -676,13 +676,22 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
 				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
 			)
+			-- Dedupe: prefer owner > private_share > system_share, then sort by time
 			SELECT * FROM (
-				SELECT * FROM owned_sessions
-				UNION ALL
-				SELECT * FROM shared_sessions
-				UNION ALL
-				SELECT * FROM system_shared_sessions
-			) combined
+				SELECT DISTINCT ON (id) * FROM (
+					SELECT * FROM owned_sessions
+					UNION ALL
+					SELECT * FROM shared_sessions
+					UNION ALL
+					SELECT * FROM system_shared_sessions
+				) combined
+				ORDER BY id, CASE access_type
+					WHEN 'owner' THEN 1
+					WHEN 'private_share' THEN 2
+					WHEN 'system_share' THEN 3
+					ELSE 4
+				END
+			) deduped
 			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
 	}

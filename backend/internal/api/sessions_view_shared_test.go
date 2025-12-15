@@ -340,4 +340,61 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 			t.Errorf("Expected AccessType=owner, got %s", sessions[0].AccessType)
 		}
 	})
+
+	t.Run("User with both private and system share sees session once", func(t *testing.T) {
+		// Also add a private share for regularUser to admin's session
+		var privateShareID int64
+		err := env.DB.QueryRow(ctx,
+			`INSERT INTO session_shares (session_id, share_token)
+			 VALUES ($1, $2) RETURNING id`,
+			adminSessionPK, testutil.GenerateShareToken()).Scan(&privateShareID)
+		if err != nil {
+			t.Fatalf("Failed to create private share: %v", err)
+		}
+
+		// Add regularUser as a recipient
+		_, err = env.DB.Exec(ctx,
+			`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)`,
+			privateShareID, regularUser.Email, regularUser.ID)
+		if err != nil {
+			t.Fatalf("Failed to create recipient: %v", err)
+		}
+
+		// regularUser now has access via both system share AND private share
+		req, _ := http.NewRequest("GET", "/api/v1/sessions?include_shared=true", nil)
+		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), regularUser.ID)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler := api.HandleListSessions(env.DB)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		var sessions []db.SessionListItem
+		json.Unmarshal(rr.Body.Bytes(), &sessions)
+
+		// Should see 2 sessions: their own + admin's (once, not twice)
+		if len(sessions) != 2 {
+			t.Fatalf("Expected 2 sessions (1 owned + 1 shared), got %d", len(sessions))
+		}
+
+		// Find the shared session
+		var sharedSession *db.SessionListItem
+		for i := range sessions {
+			if sessions[i].ExternalID == adminSession {
+				sharedSession = &sessions[i]
+			}
+		}
+
+		if sharedSession == nil {
+			t.Fatal("Shared session not found")
+		}
+		// Private share should take priority over system share
+		if sharedSession.AccessType != "private_share" {
+			t.Errorf("Expected AccessType=private_share (higher priority), got %s", sharedSession.AccessType)
+		}
+	})
 }
