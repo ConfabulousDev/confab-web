@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -458,6 +459,265 @@ func (h *Handlers) HandleCreateSystemShare(w http.ResponseWriter, r *http.Reques
 		"session_id":  share.SessionID,
 		"external_id": share.ExternalID,
 	})
+}
+
+// HandleSystemSharePage renders the system share creation page
+func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request) {
+	csrfToken := csrf.Token(r)
+
+	// Check for flash messages
+	message := r.URL.Query().Get("message")
+	errorMsg := r.URL.Query().Get("error")
+	shareURL := r.URL.Query().Get("share_url")
+
+	var flashHTML string
+	if message != "" {
+		flashHTML = fmt.Sprintf(`<div class="flash flash-success">%s</div>`, html.EscapeString(message))
+	}
+	if errorMsg != "" {
+		flashHTML = fmt.Sprintf(`<div class="flash flash-error">%s</div>`, html.EscapeString(errorMsg))
+	}
+
+	var shareResultHTML string
+	if shareURL != "" {
+		shareResultHTML = fmt.Sprintf(`
+			<div class="share-result">
+				<h3>System Share Created</h3>
+				<p>Share URL (accessible to all authenticated users):</p>
+				<div class="share-url-container">
+					<input type="text" readonly value="%s" id="shareUrl" class="share-url-input">
+					<button type="button" onclick="copyShareUrl()" class="btn btn-primary">Copy</button>
+				</div>
+			</div>`, html.EscapeString(shareURL))
+	}
+
+	htmlPage := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - System Shares</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 2rem;
+            background: #fafafa;
+            color: #1a1a1a;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        .subtitle {
+            color: #666;
+            margin: 0 0 1.5rem 0;
+            font-size: 0.875rem;
+        }
+        .flash {
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+        .flash-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .flash-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .card {
+            background: #fff;
+            border-radius: 6px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 1.5rem;
+        }
+        .card h2 {
+            margin: 0 0 1rem 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        input[type="text"] {
+            width: 100%%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.1);
+        }
+        .help-text {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            background: #fff;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: #fff;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+            border-color: #0056b3;
+        }
+        .share-result {
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .share-result h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+            color: #2e7d32;
+        }
+        .share-result p {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.875rem;
+        }
+        .share-url-container {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .share-url-input {
+            flex: 1;
+            font-family: monospace;
+            font-size: 0.8125rem !important;
+        }
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+    <script>
+        function copyShareUrl() {
+            const input = document.getElementById('shareUrl');
+            input.select();
+            document.execCommand('copy');
+            alert('Copied to clipboard!');
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <a href="%s/users" class="nav-link">← Back to User Management</a>
+        <h1>System Shares</h1>
+        <p class="subtitle">Create shares accessible to all authenticated users (current and future)</p>
+        %s
+        %s
+        <div class="card">
+            <h2>Create System Share</h2>
+            <form method="POST" action="%s/system-shares">
+                <input type="hidden" name="gorilla.csrf.Token" value="%s">
+                <div class="form-group">
+                    <label for="sessionId">Session ID (UUID)</label>
+                    <input type="text" id="sessionId" name="session_id" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
+                    <p class="help-text">The internal UUID of the session (not the external_id). Find this in the database or session detail URL.</p>
+                </div>
+                <button type="submit" class="btn btn-primary">Create System Share</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>`,
+		AdminPathPrefix,
+		flashHTML,
+		shareResultHTML,
+		AdminPathPrefix,
+		csrfToken,
+	)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(htmlPage))
+}
+
+// HandleCreateSystemShareForm handles form submission for creating system shares
+func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Request, frontendURL string, generateToken func() (string, error)) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Invalid+form+data", http.StatusSeeOther)
+		return
+	}
+
+	sessionID := r.FormValue("session_id")
+	if sessionID == "" {
+		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Session+ID+required", http.StatusSeeOther)
+		return
+	}
+
+	// Generate share token
+	shareToken, err := generateToken()
+	if err != nil {
+		logger.Error("Failed to generate share token", "error", err)
+		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Failed+to+generate+token", http.StatusSeeOther)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	// Create system share
+	share, err := h.DB.CreateSystemShare(ctx, sessionID, shareToken, nil)
+	if err != nil {
+		if err == db.ErrSessionNotFound {
+			http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Session+not+found", http.StatusSeeOther)
+			return
+		}
+		logger.Error("Failed to create system share", "error", err, "session_id", sessionID)
+		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Failed+to+create+system+share", http.StatusSeeOther)
+		return
+	}
+
+	shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
+
+	logger.Info("System share created via admin page",
+		"session_id", sessionID,
+		"share_token", shareToken,
+		"external_id", share.ExternalID)
+
+	// Redirect back with success message and share URL
+	redirectURL := fmt.Sprintf("%s/system-shares?message=System+share+created&share_url=%s",
+		AdminPathPrefix, url.QueryEscape(shareURL))
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
 // respondJSON writes a JSON response

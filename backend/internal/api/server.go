@@ -232,6 +232,12 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Post("/sessions/{sessionId}/system-share", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
 			adminHandlers.HandleCreateSystemShare(w, r, s.frontendURL, GenerateShareToken)
 		}))
+
+		// System share admin page
+		r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleSystemSharePage))
+		r.Post("/system-shares", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
+			adminHandlers.HandleCreateSystemShareForm(w, r, s.frontendURL, GenerateShareToken)
+		}))
 	})
 
 	// API v1 routes
