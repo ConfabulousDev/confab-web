@@ -543,7 +543,7 @@ type SessionListItem struct {
 	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
 	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
-	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share"
+	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
 	ShareToken       *string    `json:"share_token,omitempty"`        // share token if accessed via share
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
 }

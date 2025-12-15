@@ -39,7 +39,7 @@ export const SessionSchema = z.object({
   git_repo: z.string().nullable().optional(),
   git_branch: z.string().nullable().optional(),
   is_owner: z.boolean(),
-  access_type: z.enum(['owner', 'private_share', 'public_share']),
+  access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),
   share_token: z.string().nullable().optional(),
   shared_by_email: z.string().nullable().optional(),
 });
