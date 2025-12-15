@@ -82,6 +82,7 @@ type Session struct {
 	ExternalID       string    `json:"external_id"` // External system's session ID
 	UserID           int64     `json:"user_id"`
 	FirstSeen        time.Time `json:"first_seen"`
+	CustomTitle      *string   `json:"custom_title,omitempty"`      // User-set title override (max 255 chars)
 	Summary          *string   `json:"summary,omitempty"`
 	FirstUserMessage *string   `json:"first_user_message,omitempty"`
 	SessionType      string    `json:"session_type"`

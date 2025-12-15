@@ -55,6 +55,139 @@
   display: block;
 }
 
+/* Edit button */
+.editBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs);
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  opacity: 0.5;
+  transition: all var(--transition-fast);
+}
+
+.editBtn:hover {
+  opacity: 1;
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.editBtn svg {
+  display: block;
+}
+
+/* Edit mode container */
+.editContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 0;
+  max-width: 600px;
+}
+
+.titleInput {
+  width: 100%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  transition: border-color var(--transition-fast);
+}
+
+.titleInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.titleInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.titleInput::placeholder {
+  color: var(--color-text-muted);
+  font-weight: var(--font-normal);
+}
+
+.editActions {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+}
+
+.saveBtn,
+.clearBtn,
+.cancelBtn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: var(--color-bg-primary);
+}
+
+.saveBtn {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.saveBtn:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: white;
+}
+
+.saveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.clearBtn {
+  color: var(--color-text-muted);
+}
+
+.clearBtn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.clearBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancelBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs);
+  color: var(--color-text-muted);
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.cancelBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editError {
+  color: var(--color-error);
+  font-size: var(--font-xs);
+}
+
 /* Metadata chips row */
 .metadata {
   display: flex;

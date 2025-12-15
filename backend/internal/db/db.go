@@ -260,6 +260,9 @@ func (db *DB) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, er
 // MaxAPIKeysPerUser is the maximum number of API keys a user can have
 const MaxAPIKeysPerUser = 100
 
+// MaxCustomTitleLength is the maximum length of a custom session title
+const MaxCustomTitleLength = 255
+
 // CountAPIKeys returns the number of API keys for a user
 func (db *DB) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
 	query := `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`
@@ -536,6 +539,7 @@ type SessionListItem struct {
 	FirstSeen        time.Time  `json:"first_seen"`
 	FileCount        int        `json:"file_count"`                   // Number of sync files
 	LastSyncTime     *time.Time `json:"last_sync_time,omitempty"`     // Last sync timestamp
+	CustomTitle      *string    `json:"custom_title,omitempty"`       // User-set title override
 	Summary          *string    `json:"summary,omitempty"`            // First summary from transcript
 	FirstUserMessage *string    `json:"first_user_message,omitempty"` // First user message
 	SessionType      string     `json:"session_type"`
@@ -564,6 +568,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				s.first_seen,
 				COALESCE(sf_stats.file_count, 0) as file_count,
 				s.last_message_at,
+				s.custom_title,
 				s.summary,
 				s.first_user_message,
 				s.session_type,
@@ -595,6 +600,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.first_seen,
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
+					s.custom_title,
 					s.summary,
 					s.first_user_message,
 					s.session_type,
@@ -621,6 +627,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.first_seen,
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
+					s.custom_title,
 					s.summary,
 					s.first_user_message,
 					s.session_type,
@@ -653,6 +660,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					s.first_seen,
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
+					s.custom_title,
 					s.summary,
 					s.first_user_message,
 					s.session_type,
@@ -712,6 +720,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 			&session.FirstSeen,
 			&session.FileCount,
 			&session.LastSyncTime,
+			&session.CustomTitle,
 			&session.Summary,
 			&session.FirstUserMessage,
 			&session.SessionType,
@@ -745,6 +754,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 type SessionDetail struct {
 	ID               string           `json:"id"`                           // UUID primary key for URL routing
 	ExternalID       string           `json:"external_id"`                  // External system's session ID
+	CustomTitle      *string          `json:"custom_title,omitempty"`       // User-set title override
 	Summary          *string          `json:"summary,omitempty"`            // First summary from transcript
 	FirstUserMessage *string          `json:"first_user_message,omitempty"` // First user message
 	FirstSeen        time.Time        `json:"first_seen"`
@@ -770,13 +780,14 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 	var session SessionDetail
 	var gitInfoBytes []byte
 	sessionQuery := `
-		SELECT id, external_id, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at
+		SELECT id, external_id, custom_title, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at
 		FROM sessions
 		WHERE id = $1 AND user_id = $2
 	`
 	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(
 		&session.ID,
 		&session.ExternalID,
+		&session.CustomTitle,
 		&session.Summary,
 		&session.FirstUserMessage,
 		&session.FirstSeen,
@@ -1192,7 +1203,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 	var gitInfoBytes []byte
 	var ownerStatus models.UserStatus
 	sessionQuery := `
-		SELECT s.id, s.external_id, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, u.status
+		SELECT s.id, s.external_id, s.custom_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, u.status
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.id = $1
@@ -1200,6 +1211,7 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 	err = db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(
 		&session.ID,
 		&session.ExternalID,
+		&session.CustomTitle,
 		&session.Summary,
 		&session.FirstUserMessage,
 		&session.FirstSeen,
@@ -1564,6 +1576,47 @@ func (db *DB) UpdateSessionSummary(ctx context.Context, externalID string, userI
 		var exists bool
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM sessions WHERE external_id = $1)`
 		if checkErr := db.conn.QueryRowContext(ctx, checkQuery, externalID).Scan(&exists); checkErr != nil {
+			return fmt.Errorf("failed to check session existence: %w", checkErr)
+		}
+		if exists {
+			return ErrForbidden
+		}
+		return ErrSessionNotFound
+	}
+
+	return nil
+}
+
+// UpdateSessionCustomTitle updates the custom_title field for a session identified by UUID
+// Pass nil to clear the custom title (revert to auto-derived title)
+// Returns ErrSessionNotFound if session doesn't exist, ErrForbidden if user doesn't own it
+func (db *DB) UpdateSessionCustomTitle(ctx context.Context, sessionID string, userID int64, customTitle *string) error {
+	query := `
+		UPDATE sessions
+		SET custom_title = $1
+		WHERE id = $2 AND user_id = $3
+	`
+	result, err := db.conn.ExecContext(ctx, query, customTitle, sessionID, userID)
+	if err != nil {
+		if isInvalidUUIDError(err) {
+			return ErrSessionNotFound
+		}
+		return fmt.Errorf("failed to update session custom title: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		// Check if session exists but belongs to another user
+		var exists bool
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)`
+		if checkErr := db.conn.QueryRowContext(ctx, checkQuery, sessionID).Scan(&exists); checkErr != nil {
+			if isInvalidUUIDError(checkErr) {
+				return ErrSessionNotFound
+			}
 			return fmt.Errorf("failed to check session existence: %w", checkErr)
 		}
 		if exists {

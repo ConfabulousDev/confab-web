@@ -297,6 +297,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Session viewing
 			r.Get("/sessions", withMaxBody(MaxBodyXS, HandleListSessions(s.db)))
 			r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
+			r.Patch("/sessions/{id}/title", withMaxBody(MaxBodyS, HandleUpdateSessionTitle(s.db)))
 
 			// Sync file read (same handler, different auth)
 			r.Get("/sync/file", withMaxBody(MaxBodyXS, s.handleSyncFileRead))

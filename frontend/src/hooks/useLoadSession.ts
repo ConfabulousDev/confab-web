@@ -10,6 +10,7 @@ function hasStatusProperty(err: unknown): err is { status: number } {
 
 interface UseLoadSessionResult {
   session: SessionDetail | null;
+  setSession: React.Dispatch<React.SetStateAction<SessionDetail | null>>;
   loading: boolean;
   error: string;
   errorType: SessionErrorType;
@@ -97,6 +98,7 @@ export function useLoadSession({
 
   return {
     session,
+    setSession,
     loading,
     error,
     errorType,

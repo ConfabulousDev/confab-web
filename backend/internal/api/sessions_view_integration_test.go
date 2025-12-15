@@ -296,3 +296,170 @@ func TestHandleGetSession_Integration(t *testing.T) {
 		testutil.AssertStatus(t, w, http.StatusUnauthorized)
 	})
 }
+
+// TestHandleUpdateSessionTitle_Integration tests updating session custom title
+func TestHandleUpdateSessionTitle_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("successfully sets custom title", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "session-1")
+
+		customTitle := "My Custom Title"
+		body := map[string]interface{}{"custom_title": customTitle}
+		req := testutil.AuthenticatedRequest(t, "PATCH", "/api/v1/sessions/"+sessionID+"/title", body, user.ID)
+
+		// Add URL parameter
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		handler := HandleUpdateSessionTitle(env.DB)
+		handler(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var result db.SessionDetail
+		testutil.ParseJSONResponse(t, w, &result)
+
+		if result.CustomTitle == nil || *result.CustomTitle != customTitle {
+			t.Errorf("expected custom_title %q, got %v", customTitle, result.CustomTitle)
+		}
+	})
+
+	t.Run("clears custom title when null", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "session-1")
+
+		// First set a custom title
+		customTitle := "My Custom Title"
+		ctx := context.Background()
+		err := env.DB.UpdateSessionCustomTitle(ctx, sessionID, user.ID, &customTitle)
+		if err != nil {
+			t.Fatalf("failed to set initial custom title: %v", err)
+		}
+
+		// Now clear it
+		body := map[string]interface{}{"custom_title": nil}
+		req := testutil.AuthenticatedRequest(t, "PATCH", "/api/v1/sessions/"+sessionID+"/title", body, user.ID)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		handler := HandleUpdateSessionTitle(env.DB)
+		handler(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var result db.SessionDetail
+		testutil.ParseJSONResponse(t, w, &result)
+
+		if result.CustomTitle != nil {
+			t.Errorf("expected custom_title to be nil, got %v", *result.CustomTitle)
+		}
+	})
+
+	t.Run("rejects title over 255 characters", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "session-1")
+
+		// Create a title that's too long (256 characters)
+		longTitle := ""
+		for i := 0; i < 256; i++ {
+			longTitle += "a"
+		}
+
+		body := map[string]interface{}{"custom_title": longTitle}
+		req := testutil.AuthenticatedRequest(t, "PATCH", "/api/v1/sessions/"+sessionID+"/title", body, user.ID)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		handler := HandleUpdateSessionTitle(env.DB)
+		handler(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("returns 404 for non-existent session", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		// Use a valid UUID format that doesn't exist in the database
+		nonExistentUUID := "00000000-0000-0000-0000-000000000000"
+
+		body := map[string]interface{}{"custom_title": "Test"}
+		req := testutil.AuthenticatedRequest(t, "PATCH", "/api/v1/sessions/"+nonExistentUUID+"/title", body, user.ID)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", nonExistentUUID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		handler := HandleUpdateSessionTitle(env.DB)
+		handler(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusNotFound)
+	})
+
+	t.Run("returns 403 for session owned by another user", func(t *testing.T) {
+		env.CleanDB(t)
+
+		owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		other := testutil.CreateTestUser(t, env, "other@example.com", "Other")
+		sessionID := testutil.CreateTestSession(t, env, owner.ID, "session-1")
+
+		body := map[string]interface{}{"custom_title": "Hacked Title"}
+		req := testutil.AuthenticatedRequest(t, "PATCH", "/api/v1/sessions/"+sessionID+"/title", body, other.ID)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		handler := HandleUpdateSessionTitle(env.DB)
+		handler(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusForbidden)
+	})
+
+	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "session-1")
+
+		body := map[string]interface{}{"custom_title": "Test"}
+		req := testutil.AuthenticatedRequest(t, "PATCH", "/api/v1/sessions/"+sessionID+"/title", body, 0)
+
+		// Remove auth context to simulate unauthenticated request
+		req = req.WithContext(context.Background())
+
+		// Add URL parameter
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		handler := HandleUpdateSessionTitle(env.DB)
+		handler(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusUnauthorized)
+	})
+}

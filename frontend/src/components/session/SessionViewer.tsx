@@ -12,11 +12,12 @@ interface SessionViewerProps {
   shareToken?: string;
   onShare?: () => void;
   onDelete?: () => void;
+  onSessionUpdate?: (session: SessionDetail) => void;
   isOwner?: boolean;
   isShared?: boolean;
 }
 
-function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true, isShared = false }: SessionViewerProps) {
+function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false }: SessionViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
@@ -105,7 +106,10 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
 
       <div className={styles.mainContent}>
         <SessionHeader
-          title={session.summary ?? session.first_user_message ?? undefined}
+          sessionId={session.id}
+          title={session.custom_title ?? session.summary ?? session.first_user_message ?? undefined}
+          hasCustomTitle={!!session.custom_title}
+          autoTitle={session.summary ?? session.first_user_message ?? undefined}
           externalId={session.external_id}
           model={sessionMeta.model}
           durationMs={sessionMeta.durationMs}
@@ -113,6 +117,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, isOwner = true,
           gitInfo={session.git_info}
           onShare={onShare}
           onDelete={onDelete}
+          onSessionUpdate={onSessionUpdate}
           isOwner={isOwner}
           isShared={isShared}
           categoryCounts={categoryCounts}

@@ -32,14 +32,14 @@ function SessionDetailPage() {
     return sessionsAPI.get(sessionId);
   }, [sessionId]);
 
-  const { session, loading, error } = useLoadSession({
+  const { session, setSession, loading, error } = useLoadSession({
     fetchSession,
     deps: [sessionId],
   });
 
-  // Dynamic page title based on session
+  // Dynamic page title based on session (custom_title takes precedence)
   const pageTitle = session
-    ? session.summary || session.first_user_message || `Session ${session.external_id.substring(0, 8)}`
+    ? session.custom_title || session.summary || session.first_user_message || `Session ${session.external_id.substring(0, 8)}`
     : 'Session';
   useDocumentTitle(pageTitle);
 
@@ -114,6 +114,11 @@ function SessionDetailPage() {
         session={session}
         onShare={() => setShowShareDialog(true)}
         onDelete={openDeleteDialog}
+        onSessionUpdate={(updatedSession) => {
+          setSession(updatedSession);
+          // Invalidate sessions list so updated title shows when navigating back
+          queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        }}
         isOwner={true}
       />
 

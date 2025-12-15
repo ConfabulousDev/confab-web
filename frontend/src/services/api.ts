@@ -221,6 +221,26 @@ class APIClient {
     });
     return validateResponse(schema, response, endpoint);
   }
+
+  /**
+   * Make a validated PATCH request
+   * @param endpoint - API endpoint
+   * @param schema - Zod schema to validate response
+   * @param data - Request body
+   */
+  async patchValidated<T>(
+    endpoint: string,
+    schema: z.ZodType<T>,
+    data?: unknown,
+    options?: RequestOptions
+  ): Promise<T> {
+    const response = await this.requestRaw(endpoint, {
+      ...options,
+      method: 'PATCH',
+      body: data,
+    });
+    return validateResponse(schema, response, endpoint);
+  }
 }
 
 // Export singleton instance
@@ -234,6 +254,15 @@ export const sessionsAPI = {
 
   get: (sessionId: string): Promise<SessionDetail> =>
     api.getValidated(`/sessions/${sessionId}`, SessionDetailSchema),
+
+  /**
+   * Update the custom title for a session.
+   * Pass null to clear the custom title and revert to auto-derived title.
+   * @param sessionId - The session UUID
+   * @param customTitle - The new title (max 255 chars) or null to clear
+   */
+  updateTitle: (sessionId: string, customTitle: string | null): Promise<SessionDetail> =>
+    api.patchValidated(`/sessions/${sessionId}/title`, SessionDetailSchema, { custom_title: customTitle }),
 
   getShares: (sessionId: string): Promise<SessionShare[]> =>
     api.getValidated(`/sessions/${sessionId}/shares`, SessionShareListSchema),

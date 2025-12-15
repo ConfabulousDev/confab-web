@@ -32,6 +32,7 @@ export const SessionSchema = z.object({
   first_seen: z.string(),
   file_count: z.number(),
   last_sync_time: z.string().nullable().optional(),
+  custom_title: z.string().max(255).nullable().optional(),
   summary: z.string().nullable().optional(),
   first_user_message: z.string().nullable().optional(),
   session_type: z.string(),
@@ -47,6 +48,7 @@ export const SessionSchema = z.object({
 export const SessionDetailSchema = z.object({
   id: z.string(),
   external_id: z.string(),
+  custom_title: z.string().max(255).nullable().optional(),
   summary: z.string().nullable().optional(),
   first_user_message: z.string().nullable().optional(),
   first_seen: z.string(),

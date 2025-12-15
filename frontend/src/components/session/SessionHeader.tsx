@@ -1,11 +1,15 @@
-import type { GitInfo } from '@/types';
+import { useState } from 'react';
+import type { GitInfo, SessionDetail } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import { formatDuration, formatDateTime, formatModelName } from '@/utils/formatting';
+import { sessionsAPI } from '@/services/api';
 import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
 import FilterDropdown from './FilterDropdown';
 import styles from './SessionHeader.module.css';
+
+const MAX_CUSTOM_TITLE_LENGTH = 255;
 
 // SVG Icons
 const CopyIcon = (
@@ -54,8 +58,25 @@ const ShareIcon = (
   </svg>
 );
 
+const EditIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+
+const CloseIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
+
 interface SessionHeaderProps {
+  sessionId: string;
   title?: string;
+  hasCustomTitle?: boolean;
+  autoTitle?: string; // The auto-derived title (summary || first_user_message)
   externalId: string;
   model?: string;
   durationMs?: number;
@@ -63,6 +84,7 @@ interface SessionHeaderProps {
   gitInfo?: GitInfo | null;
   onShare?: () => void;
   onDelete?: () => void;
+  onSessionUpdate?: (session: SessionDetail) => void;
   isOwner?: boolean;
   isShared?: boolean;
   // Filter props
@@ -72,7 +94,10 @@ interface SessionHeaderProps {
 }
 
 function SessionHeader({
+  sessionId,
   title,
+  hasCustomTitle = false,
+  autoTitle,
   externalId,
   model,
   durationMs,
@@ -80,6 +105,7 @@ function SessionHeader({
   gitInfo,
   onShare,
   onDelete,
+  onSessionUpdate,
   isOwner = true,
   isShared = false,
   categoryCounts,
@@ -89,11 +115,140 @@ function SessionHeader({
   const { copy, copied } = useCopyToClipboard();
   const displayTitle = title || `Session ${externalId.substring(0, 8)}`;
 
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(title || '');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const canEdit = isOwner && !isShared && onSessionUpdate;
+
+  async function handleSave() {
+    if (!onSessionUpdate) return;
+
+    const trimmedValue = editValue.trim();
+    if (trimmedValue.length > MAX_CUSTOM_TITLE_LENGTH) {
+      setEditError(`Title must be ${MAX_CUSTOM_TITLE_LENGTH} characters or less`);
+      return;
+    }
+
+    setSaving(true);
+    setEditError(null);
+
+    try {
+      // If empty, clear the custom title (revert to auto)
+      const newTitle = trimmedValue || null;
+      const updatedSession = await sessionsAPI.updateTitle(sessionId, newTitle);
+      onSessionUpdate(updatedSession);
+      setIsEditing(false);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update title');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleClearCustomTitle() {
+    if (!onSessionUpdate) return;
+
+    setSaving(true);
+    setEditError(null);
+
+    try {
+      const updatedSession = await sessionsAPI.updateTitle(sessionId, null);
+      onSessionUpdate(updatedSession);
+      setIsEditing(false);
+      setEditValue(autoTitle || '');
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to clear title');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleStartEdit() {
+    setEditValue(title || '');
+    setEditError(null);
+    setIsEditing(true);
+  }
+
+  function handleCancelEdit() {
+    setEditValue(title || '');
+    setEditError(null);
+    setIsEditing(false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  }
+
   return (
     <header className={styles.header}>
       <div className={styles.titleSection}>
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>{displayTitle}</h1>
+          {isEditing ? (
+            <div className={styles.editContainer}>
+              <input
+                type="text"
+                className={styles.titleInput}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={autoTitle || 'Enter session title...'}
+                maxLength={MAX_CUSTOM_TITLE_LENGTH}
+                autoFocus
+                disabled={saving}
+              />
+              <div className={styles.editActions}>
+                <button
+                  className={styles.saveBtn}
+                  onClick={handleSave}
+                  disabled={saving}
+                  title="Save title"
+                >
+                  {saving ? '...' : 'Save'}
+                </button>
+                {hasCustomTitle && (
+                  <button
+                    className={styles.clearBtn}
+                    onClick={handleClearCustomTitle}
+                    disabled={saving}
+                    title="Clear custom title and use auto-generated"
+                  >
+                    Reset
+                  </button>
+                )}
+                <button
+                  className={styles.cancelBtn}
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                  title="Cancel editing"
+                >
+                  {CloseIcon}
+                </button>
+              </div>
+              {editError && <div className={styles.editError}>{editError}</div>}
+            </div>
+          ) : (
+            <>
+              <h1 className={styles.title}>{displayTitle}</h1>
+              {canEdit && (
+                <button
+                  className={styles.editBtn}
+                  onClick={handleStartEdit}
+                  title="Edit session title"
+                  aria-label="Edit session title"
+                >
+                  {EditIcon}
+                </button>
+              )}
+            </>
+          )}
           <button
             className={styles.copyIdBtn}
             onClick={() => copy(externalId)}

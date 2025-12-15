@@ -316,6 +316,7 @@ GET /api/v1/sessions?include_shared=true
   {
     "id": "uuid",
     "external_id": "session-uuid",
+    "custom_title": "My Custom Title",
     "summary": "Session summary",
     "first_user_message": "First message",
     "first_seen": "2024-01-15T10:00:00Z",
@@ -327,6 +328,8 @@ GET /api/v1/sessions?include_shared=true
 ]
 ```
 
+Note: `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
+
 #### Get Session Detail
 ```
 GET /api/v1/sessions/{id}
@@ -337,6 +340,7 @@ GET /api/v1/sessions/{id}
 {
   "id": "uuid",
   "external_id": "session-uuid",
+  "custom_title": "My Custom Title",
   "summary": "Session summary",
   "first_user_message": "First message",
   "first_seen": "2024-01-15T10:00:00Z",
@@ -360,6 +364,31 @@ GET /api/v1/sessions/{id}
   ]
 }
 ```
+
+#### Update Session Title
+```
+PATCH /api/v1/sessions/{id}/title
+X-CSRF-Token: <token>
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "custom_title": "My Custom Title"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `custom_title` | string\|null | Yes | Custom title (max 255 chars). Pass `null` to clear and revert to auto-derived title. |
+
+**Response:** Returns the updated session detail (same as Get Session Detail).
+
+**Errors:**
+- `400` - Title exceeds 255 characters
+- `403` - Not the session owner
+- `404` - Session not found
 
 #### Delete Session
 ```

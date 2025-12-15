@@ -225,8 +225,8 @@ function SessionsPage() {
                         onClick={() => handleRowClick(session)}
                       >
                         <td className={styles.titleCell}>
-                          <span className={session.summary || session.first_user_message ? '' : styles.untitled}>
-                            {session.summary || session.first_user_message || 'Untitled'}
+                          <span className={session.custom_title || session.summary || session.first_user_message ? '' : styles.untitled}>
+                            {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
                           </span>
                         </td>
                         <td className={styles.gitInfo}>{session.git_repo || ''}</td>
