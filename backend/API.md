@@ -387,7 +387,8 @@ Content-Type: application/json
 {
   "is_public": true,
   "recipients": [],
-  "expires_in_days": 30
+  "expires_in_days": 30,
+  "skip_notifications": false
 }
 ```
 
@@ -396,6 +397,7 @@ Content-Type: application/json
 | `is_public` | bool | Yes | `true` for public links, `false` for private (email-only) |
 | `recipients` | string[] | For private | Email addresses to invite (max 50) |
 | `expires_in_days` | int | No | Days until expiration (null = never) |
+| `skip_notifications` | bool | No | Skip sending invitation emails (default: false) |
 
 **Response:**
 ```json
@@ -467,6 +469,37 @@ These endpoints handle OAuth authentication flow:
 | `POST /auth/device/token` | Poll for access token |
 | `GET /auth/device` | User verification page |
 | `POST /auth/device/verify` | Submit user code |
+
+---
+
+## Admin Endpoints (Super Admin Only)
+
+These endpoints require web session authentication and super admin privileges. The path is obfuscated.
+
+### Create System Share
+
+Creates a share accessible to all authenticated users (current and future).
+
+```
+POST /admin-.../sessions/{sessionId}/system-share
+X-CSRF-Token: <token>
+```
+
+**Response:**
+```json
+{
+  "share_token": "hex32chars",
+  "share_url": "https://confab.dev/sessions/{id}/shared/{token}",
+  "session_id": "uuid",
+  "external_id": "session-external-id"
+}
+```
+
+System shares:
+- Require authentication to view (unlike public shares)
+- Are accessible to any logged-in user
+- Include future users who sign up after the share is created
+- Do not expire by default
 
 ---
 

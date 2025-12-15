@@ -190,4 +190,165 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 
 		testutil.AssertStatus(t, w, http.StatusBadRequest)
 	})
+
+	t.Run("creates recipient share with skip_notifications", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		externalID := "test-session-skip-notify"
+		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
+
+		reqBody := CreateShareRequest{
+			IsPublic:          false,
+			Recipients:        []string{"friend@example.com", "colleague@example.com"},
+			SkipNotifications: true, // Skip sending emails
+		}
+		req := testutil.AuthenticatedRequest(t, "POST",
+			"/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
+
+		// Add URL parameters
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		w := httptest.NewRecorder()
+		// Pass nil email service to simulate no email service configured
+		handler := HandleCreateShare(env.DB, "https://confab.dev", nil)
+		handler(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var resp CreateShareResponse
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		// Share should be created successfully
+		if resp.IsPublic {
+			t.Errorf("expected is_public false, got true")
+		}
+		if len(resp.Recipients) != 2 {
+			t.Errorf("expected 2 recipients, got %d", len(resp.Recipients))
+		}
+		if resp.ShareToken == "" {
+			t.Error("expected share token, got empty")
+		}
+
+		// EmailsSent should be false when skip_notifications is true
+		if resp.EmailsSent {
+			t.Error("expected emails_sent false when skip_notifications is true")
+		}
+
+		// Verify recipients are still stored in database
+		var emailCount int
+		row := env.DB.QueryRow(env.Ctx,
+			`SELECT COUNT(*) FROM session_share_recipients ssr
+			 JOIN session_shares ss ON ssr.share_id = ss.id
+			 WHERE ss.share_token = $1`,
+			resp.ShareToken)
+		if err := row.Scan(&emailCount); err != nil {
+			t.Fatalf("failed to query recipients: %v", err)
+		}
+		if emailCount != 2 {
+			t.Errorf("expected 2 recipients in database, got %d", emailCount)
+		}
+	})
+}
+
+// TestSystemShare_Integration tests system share creation and access
+func TestSystemShare_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("creates system share successfully", func(t *testing.T) {
+		env.CleanDB(t)
+
+		// Create a user and session
+		owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		externalID := "test-session-system"
+		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
+
+		// Create system share using database function directly
+		shareToken, err := GenerateShareToken()
+		if err != nil {
+			t.Fatalf("failed to generate token: %v", err)
+		}
+
+		share, err := env.DB.CreateSystemShare(env.Ctx, sessionID, shareToken, nil)
+		if err != nil {
+			t.Fatalf("failed to create system share: %v", err)
+		}
+
+		if share.ShareToken != shareToken {
+			t.Errorf("expected share token %s, got %s", shareToken, share.ShareToken)
+		}
+		if share.IsPublic {
+			t.Error("system share should not be marked as public")
+		}
+
+		// Verify system share entry in database
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			`SELECT COUNT(*) FROM session_share_system sss
+			 JOIN session_shares ss ON sss.share_id = ss.id
+			 WHERE ss.share_token = $1`,
+			shareToken)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query system shares: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("expected 1 system share entry, got %d", count)
+		}
+	})
+
+	t.Run("system share allows any authenticated user", func(t *testing.T) {
+		env.CleanDB(t)
+
+		// Create owner and session
+		owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		externalID := "test-session-system-access"
+		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
+
+		// Create system share
+		shareToken, _ := GenerateShareToken()
+		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, shareToken, nil)
+		if err != nil {
+			t.Fatalf("failed to create system share: %v", err)
+		}
+
+		// Create a different user (not the owner, not a recipient)
+		otherUser := testutil.CreateTestUser(t, env, "other@example.com", "Other User")
+
+		// Other user should be able to access the system share
+		session, err := env.DB.GetSharedSession(env.Ctx, sessionID, shareToken, &otherUser.ID)
+		if err != nil {
+			t.Fatalf("authenticated user should be able to access system share: %v", err)
+		}
+		if session.ID != sessionID {
+			t.Errorf("expected session ID %s, got %s", sessionID, session.ID)
+		}
+	})
+
+	t.Run("system share requires authentication", func(t *testing.T) {
+		env.CleanDB(t)
+
+		// Create owner and session
+		owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		externalID := "test-session-system-noauth"
+		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
+
+		// Create system share
+		shareToken, _ := GenerateShareToken()
+		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, shareToken, nil)
+		if err != nil {
+			t.Fatalf("failed to create system share: %v", err)
+		}
+
+		// Unauthenticated access (nil viewerUserID) should fail
+		_, err = env.DB.GetSharedSession(env.Ctx, sessionID, shareToken, nil)
+		if err == nil {
+			t.Error("expected error for unauthenticated access to system share")
+		}
+	})
 }

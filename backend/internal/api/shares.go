@@ -20,9 +20,10 @@ import (
 
 // CreateShareRequest is the request body for creating a share
 type CreateShareRequest struct {
-	IsPublic      bool     `json:"is_public"`       // true for public (anyone with link), false for recipients only
-	Recipients    []string `json:"recipients"`      // email addresses (required if not public)
-	ExpiresInDays *int     `json:"expires_in_days"` // null = never expires
+	IsPublic          bool     `json:"is_public"`          // true for public (anyone with link), false for recipients only
+	Recipients        []string `json:"recipients"`         // email addresses (required if not public)
+	ExpiresInDays     *int     `json:"expires_in_days"`    // null = never expires
+	SkipNotifications bool     `json:"skip_notifications"` // skip sending invitation emails (default: false)
 }
 
 // CreateShareResponse is the response for creating a share
@@ -94,18 +95,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			}
 		}
 
-		// Check email rate limit before creating share (for recipient shares with email service)
-		if !req.IsPublic && emailService != nil {
-			if err := emailService.CheckRateLimit(userID, len(req.Recipients)); err != nil {
-				if errors.Is(err, email.ErrRateLimitExceeded) {
-					respondError(w, http.StatusTooManyRequests, "Email rate limit exceeded. Try again later.")
-					return
-				}
-			}
-		}
-
 		// Generate share token (UUID-like)
-		shareToken, err := generateShareToken()
+		shareToken, err := GenerateShareToken()
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "Failed to generate token")
 			return
@@ -153,10 +144,10 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		// Build share URL (uses session ID in URL)
 		shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
 
-		// Send invitation emails for recipient shares
+		// Send invitation emails for recipient shares (unless skipped)
 		var emailsSent bool
 		var emailFailures []string
-		if !req.IsPublic && emailService != nil && len(req.Recipients) > 0 {
+		if !req.IsPublic && !req.SkipNotifications && emailService != nil && len(req.Recipients) > 0 {
 			emailsSent = true
 			sharerName := sharer.Email // Default to email
 			if sharer.Name != nil && *sharer.Name != "" {
@@ -204,6 +195,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			"is_public", share.IsPublic,
 			"recipients_count", len(share.Recipients),
 			"expires_at", share.ExpiresAt,
+			"skip_notifications", req.SkipNotifications,
 			"emails_sent", emailsSent,
 			"email_failures_count", len(emailFailures))
 
@@ -399,8 +391,8 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 	}
 }
 
-// generateShareToken generates a random share token
-func generateShareToken() (string, error) {
+// GenerateShareToken generates a random share token (32 hex chars)
+func GenerateShareToken() (string, error) {
 	bytes := make([]byte, 16) // 16 bytes = 32 hex chars
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err

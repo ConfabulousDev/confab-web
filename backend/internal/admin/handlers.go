@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
@@ -410,4 +411,67 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 func parseUserID(r *http.Request) (int64, error) {
 	idStr := chi.URLParam(r, "id")
 	return strconv.ParseInt(idStr, 10, 64)
+}
+
+// HandleCreateSystemShare creates a system-wide share for any session (admin only)
+// System shares are accessible to all authenticated users
+func (h *Handlers) HandleCreateSystemShare(w http.ResponseWriter, r *http.Request, frontendURL string, generateToken func() (string, error)) {
+	sessionID := chi.URLParam(r, "sessionId")
+	if sessionID == "" {
+		respondError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	// Generate share token
+	shareToken, err := generateToken()
+	if err != nil {
+		logger.Error("Failed to generate share token", "error", err)
+		respondError(w, http.StatusInternalServerError, "Failed to generate token")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	// Create system share (no expiration for system shares)
+	share, err := h.DB.CreateSystemShare(ctx, sessionID, shareToken, nil)
+	if err != nil {
+		if err == db.ErrSessionNotFound {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+		logger.Error("Failed to create system share", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to create system share")
+		return
+	}
+
+	shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
+
+	logger.Info("System share created",
+		"session_id", sessionID,
+		"share_token", shareToken,
+		"external_id", share.ExternalID)
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"share_token": share.ShareToken,
+		"share_url":   shareURL,
+		"session_id":  share.SessionID,
+		"external_id": share.ExternalID,
+	})
+}
+
+// respondJSON writes a JSON response
+func respondJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if data != nil {
+		if err := json.NewEncoder(w).Encode(data); err != nil {
+			logger.Error("Failed to encode JSON response", "error", err)
+		}
+	}
+}
+
+// respondError writes a JSON error response
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
 }

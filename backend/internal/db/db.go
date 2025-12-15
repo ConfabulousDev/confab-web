@@ -549,7 +549,9 @@ type SessionListItem struct {
 }
 
 // ListUserSessions returns all sessions for a user
-// If includeShared is true, also includes sessions shared with the user (via session_share_recipients)
+// If includeShared is true, also includes:
+//   - Sessions shared with the user (via session_share_recipients)
+//   - System-wide shares (via session_share_system) visible to all authenticated users
 // Uses sync_files table for file counts and sync state
 func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared bool) ([]SessionListItem, error) {
 	var query string
@@ -642,11 +644,44 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
 				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
+			),
+			-- System-wide shares (visible to all authenticated users)
+			system_shared_sessions AS (
+				SELECT DISTINCT ON (s.id)
+					s.id,
+					s.external_id,
+					s.first_seen,
+					COALESCE(sf_stats.file_count, 0) as file_count,
+					s.last_message_at,
+					s.summary,
+					s.first_user_message,
+					s.session_type,
+					COALESCE(sf_stats.total_lines, 0) as total_lines,
+					s.git_info->>'repo_url' as git_repo_url,
+					s.git_info->>'branch' as git_branch,
+					false as is_owner,
+					'system_share' as access_type,
+					sh.share_token,
+					u.email as shared_by_email
+				FROM sessions s
+				JOIN session_shares sh ON s.id = sh.session_id
+				JOIN session_share_system sss ON sh.id = sss.share_id
+				JOIN users u ON s.user_id = u.id
+				LEFT JOIN (
+					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+					FROM sync_files
+					GROUP BY session_id
+				) sf_stats ON s.id = sf_stats.session_id
+				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
+				  AND s.user_id != $1  -- Don't duplicate owned sessions
+				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
 			)
 			SELECT * FROM (
 				SELECT * FROM owned_sessions
 				UNION ALL
 				SELECT * FROM shared_sessions
+				UNION ALL
+				SELECT * FROM system_shared_sessions
 			) combined
 			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
@@ -892,6 +927,53 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 	return &share, nil
 }
 
+// CreateSystemShare creates a system-wide share for a session (admin only, no ownership check)
+// System shares are accessible to any authenticated user
+func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, shareToken string, expiresAt *time.Time) (*SessionShare, error) {
+	// Get session external_id (no ownership check - admin operation)
+	var externalID string
+	err := db.conn.QueryRowContext(ctx,
+		`SELECT external_id FROM sessions WHERE id = $1`,
+		sessionID).Scan(&externalID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSessionNotFound
+		}
+		if isInvalidUUIDError(err) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Insert share
+	var share SessionShare
+	share.SessionID = sessionID
+	share.ExternalID = externalID
+	share.ShareToken = shareToken
+	share.IsPublic = false // System shares are not public (require auth)
+	share.ExpiresAt = expiresAt
+
+	err = db.conn.QueryRowContext(ctx,
+		`INSERT INTO session_shares (session_id, share_token, expires_at)
+		 VALUES ($1, $2, $3)
+		 RETURNING id, created_at`,
+		sessionID, shareToken, expiresAt).Scan(&share.ID, &share.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create share: %w", err)
+	}
+
+	// Insert into session_share_system
+	_, err = db.conn.ExecContext(ctx,
+		`INSERT INTO session_share_system (share_id) VALUES ($1)`,
+		share.ID)
+	if err != nil {
+		db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
+		return nil, fmt.Errorf("failed to create system share: %w", err)
+	}
+
+	return &share, nil
+}
+
 // ListShares returns all shares for a session (by UUID primary key)
 func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([]SessionShare, error) {
 	// Verify session exists for this user and get external_id for display
@@ -1037,17 +1119,21 @@ func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) 
 // Uses sync_files table for file information
 // viewerUserID: required for recipient-only shares; nil allows only public share access
 func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken string, viewerUserID *int64) (*SessionDetail, error) {
-	// Get share and verify it belongs to this session, check if public
+	// Get share and verify it belongs to this session, check if public or system
 	var shareID int64
 	var expiresAt *time.Time
 	var isPublic bool
-	query := `SELECT ss.id, ss.expires_at, (ssp.share_id IS NOT NULL) as is_public
+	var isSystem bool
+	query := `SELECT ss.id, ss.expires_at,
+	                 (ssp.share_id IS NOT NULL) as is_public,
+	                 (sss.share_id IS NOT NULL) as is_system
 	          FROM session_shares ss
 	          LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
+	          LEFT JOIN session_share_system sss ON ss.id = sss.share_id
 	          WHERE ss.share_token = $1 AND ss.session_id = $2`
 
 	err := db.conn.QueryRowContext(ctx, query, shareToken, sessionID).Scan(
-		&shareID, &expiresAt, &isPublic)
+		&shareID, &expiresAt, &isPublic, &isSystem)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrShareNotFound
@@ -1060,23 +1146,29 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 		return nil, ErrShareExpired
 	}
 
-	// Check authorization for recipient-only shares
+	// Check authorization based on share type
+	// - Public: anyone can view
+	// - System: any authenticated user can view
+	// - Private: only specific recipients can view
 	if !isPublic {
 		if viewerUserID == nil {
 			return nil, ErrUnauthorized
 		}
 
-		// Check if user is a recipient (by user_id)
-		var count int
-		err := db.conn.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM session_share_recipients WHERE share_id = $1 AND user_id = $2`,
-			shareID, *viewerUserID).Scan(&count)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check authorization: %w", err)
-		}
+		// System shares allow any authenticated user
+		if !isSystem {
+			// Check if user is a recipient (by user_id)
+			var count int
+			err := db.conn.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM session_share_recipients WHERE share_id = $1 AND user_id = $2`,
+				shareID, *viewerUserID).Scan(&count)
+			if err != nil {
+				return nil, fmt.Errorf("failed to check authorization: %w", err)
+			}
 
-		if count == 0 {
-			return nil, ErrForbidden
+			if count == 0 {
+				return nil, ErrForbidden
+			}
 		}
 	}
 

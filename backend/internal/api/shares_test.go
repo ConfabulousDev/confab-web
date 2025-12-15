@@ -9,9 +9,9 @@ import (
 // Test share token generation - security critical
 func TestGenerateShareToken(t *testing.T) {
 	t.Run("generates valid token", func(t *testing.T) {
-		token, err := generateShareToken()
+		token, err := GenerateShareToken()
 		if err != nil {
-			t.Fatalf("generateShareToken failed: %v", err)
+			t.Fatalf("GenerateShareToken failed: %v", err)
 		}
 
 		// Should be 32 hex characters (16 bytes)
@@ -29,14 +29,14 @@ func TestGenerateShareToken(t *testing.T) {
 	})
 
 	t.Run("generates different tokens each time", func(t *testing.T) {
-		token1, err := generateShareToken()
+		token1, err := GenerateShareToken()
 		if err != nil {
-			t.Fatalf("generateShareToken failed: %v", err)
+			t.Fatalf("GenerateShareToken failed: %v", err)
 		}
 
-		token2, err := generateShareToken()
+		token2, err := GenerateShareToken()
 		if err != nil {
-			t.Fatalf("generateShareToken failed: %v", err)
+			t.Fatalf("GenerateShareToken failed: %v", err)
 		}
 
 		if token1 == token2 {
@@ -49,9 +49,9 @@ func TestGenerateShareToken(t *testing.T) {
 		count := 100
 
 		for i := 0; i < count; i++ {
-			token, err := generateShareToken()
+			token, err := GenerateShareToken()
 			if err != nil {
-				t.Fatalf("generateShareToken failed: %v", err)
+				t.Fatalf("GenerateShareToken failed: %v", err)
 			}
 
 			if tokens[token] {
@@ -215,3 +215,4 @@ func TestPrivateShareEmailLimits(t *testing.T) {
 		t.Error("public share should not require emails")
 	})
 }
+

@@ -209,3 +209,135 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		}
 	})
 }
+
+func TestListSessionsWithSystemShares(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	// Create two users
+	admin := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+	regularUser := testutil.CreateTestUser(t, env, "user@example.com", "Regular User")
+
+	// Admin creates a session
+	adminSession := "admin-session"
+	adminSessionPK := testutil.CreateTestSession(t, env, admin.ID, adminSession)
+
+	// Regular user creates their own session
+	userSession := "user-session"
+	testutil.CreateTestSession(t, env, regularUser.ID, userSession)
+
+	// Create a system share for admin's session
+	systemShareToken := testutil.GenerateShareToken()
+	_, err := env.DB.CreateSystemShare(ctx, adminSessionPK, systemShareToken, nil)
+	if err != nil {
+		t.Fatalf("Failed to create system share: %v", err)
+	}
+
+	t.Run("System share appears in shared sessions list", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/api/v1/sessions?include_shared=true", nil)
+		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), regularUser.ID)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler := api.HandleListSessions(env.DB)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		var sessions []db.SessionListItem
+		json.Unmarshal(rr.Body.Bytes(), &sessions)
+
+		// Regular user should see 2 sessions: their own + system share
+		if len(sessions) != 2 {
+			t.Fatalf("Expected 2 sessions (1 owned + 1 system share), got %d", len(sessions))
+		}
+
+		// Find the system shared session
+		var systemSession *db.SessionListItem
+		var ownedSession *db.SessionListItem
+		for i := range sessions {
+			if sessions[i].ExternalID == adminSession {
+				systemSession = &sessions[i]
+			} else if sessions[i].ExternalID == userSession {
+				ownedSession = &sessions[i]
+			}
+		}
+
+		if systemSession == nil {
+			t.Fatal("System shared session not found in list")
+		}
+		if systemSession.IsOwner {
+			t.Error("Expected IsOwner=false for system share")
+		}
+		if systemSession.AccessType != "system_share" {
+			t.Errorf("Expected AccessType=system_share, got %s", systemSession.AccessType)
+		}
+		if systemSession.SharedByEmail == nil || *systemSession.SharedByEmail != admin.Email {
+			t.Errorf("Expected SharedByEmail=%s, got %v", admin.Email, systemSession.SharedByEmail)
+		}
+		if systemSession.ShareToken == nil || *systemSession.ShareToken != systemShareToken {
+			t.Errorf("Expected ShareToken=%s, got %v", systemShareToken, systemSession.ShareToken)
+		}
+
+		// Verify owned session still correct
+		if ownedSession == nil {
+			t.Fatal("Owned session not found")
+		}
+		if !ownedSession.IsOwner {
+			t.Error("Expected IsOwner=true for owned session")
+		}
+	})
+
+	t.Run("System share does not appear without include_shared", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
+		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), regularUser.ID)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler := api.HandleListSessions(env.DB)
+		handler.ServeHTTP(rr, req)
+
+		var sessions []db.SessionListItem
+		json.Unmarshal(rr.Body.Bytes(), &sessions)
+
+		// Should only see owned session
+		if len(sessions) != 1 {
+			t.Fatalf("Expected 1 session (owned only), got %d", len(sessions))
+		}
+		if sessions[0].ExternalID != userSession {
+			t.Errorf("Expected owned session %s, got %s", userSession, sessions[0].ExternalID)
+		}
+	})
+
+	t.Run("Owner does not see duplicate from system share", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/api/v1/sessions?include_shared=true", nil)
+		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), admin.ID)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler := api.HandleListSessions(env.DB)
+		handler.ServeHTTP(rr, req)
+
+		var sessions []db.SessionListItem
+		json.Unmarshal(rr.Body.Bytes(), &sessions)
+
+		// Admin should only see their own session once (not duplicated via system share)
+		if len(sessions) != 1 {
+			t.Fatalf("Expected 1 session for owner, got %d", len(sessions))
+		}
+		if !sessions[0].IsOwner {
+			t.Error("Expected IsOwner=true for owner")
+		}
+		if sessions[0].AccessType != "owner" {
+			t.Errorf("Expected AccessType=owner, got %s", sessions[0].AccessType)
+		}
+	})
+}
