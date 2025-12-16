@@ -2,7 +2,7 @@
 set -e
 
 # Confab CLI Installer
-# Usage: curl -fsSL https://confabulous.dev/cli/install.sh | bash
+# Usage: curl -fsSL https://confabulous.dev/install | bash
 
 BINARY_NAME="confab"
 GITHUB_REPO="ConfabulousDev/confab"

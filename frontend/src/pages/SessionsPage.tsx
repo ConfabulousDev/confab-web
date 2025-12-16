@@ -9,6 +9,7 @@ import SessionsFilterDropdown from '@/components/SessionsFilterDropdown';
 import SortableHeader from '@/components/SortableHeader';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import Alert from '@/components/Alert';
+import SessionEmptyState from '@/components/SessionEmptyState';
 import styles from './SessionsPage.module.css';
 
 function SessionsPage() {
@@ -180,13 +181,15 @@ function SessionsPage() {
             {loading ? (
               <p className={styles.loading}>Loading sessions...</p>
             ) : sortedSessions.length === 0 ? (
-              <p className={styles.empty}>
-                {showSharedWithMe
-                  ? 'No sessions have been shared with you yet.'
-                  : selectedRepo || selectedBranch
-                    ? 'No sessions match the selected filters.'
-                    : 'No sessions yet. Sessions will appear here after you use confab.'}
-              </p>
+              <SessionEmptyState
+                variant={
+                  showSharedWithMe
+                    ? 'no-shared'
+                    : selectedRepo || selectedBranch
+                      ? 'no-matches'
+                      : 'no-sessions'
+                }
+              />
             ) : (
               <div className={styles.sessionsTable}>
                 <table>
