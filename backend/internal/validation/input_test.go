@@ -23,12 +23,12 @@ func TestValidateExternalID(t *testing.T) {
 		},
 		{
 			name:       "external ID too long",
-			externalID: strings.Repeat("a", 257),
+			externalID: strings.Repeat("a", MaxExternalIDLength+1),
 			wantErr:    true,
 		},
 		{
 			name:       "external ID at max length",
-			externalID: strings.Repeat("a", 256),
+			externalID: strings.Repeat("a", MaxExternalIDLength),
 			wantErr:    false,
 		},
 		{

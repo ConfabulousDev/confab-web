@@ -38,12 +38,36 @@ export class APIError extends Error {
   data?: unknown;
 
   constructor(message: string, status: number, statusText: string, data?: unknown) {
-    super(message);
+    // Extract backend error message if available (format: {"error": "message"})
+    const backendMessage = extractErrorMessage(data);
+    super(backendMessage || message);
     this.name = 'APIError';
     this.status = status;
     this.statusText = statusText;
     this.data = data;
   }
+}
+
+/**
+ * Type guard for backend error response format.
+ */
+function isErrorResponse(data: unknown): data is { error: string } {
+  if (data === null || typeof data !== 'object') {
+    return false;
+  }
+  const obj: Record<string, unknown> = data;
+  return 'error' in obj && typeof obj.error === 'string';
+}
+
+/**
+ * Extract error message from backend response data.
+ * Backend returns errors as {"error": "message"}.
+ */
+function extractErrorMessage(data: unknown): string | null {
+  if (isErrorResponse(data)) {
+    return data.error;
+  }
+  return null;
 }
 
 export class NetworkError extends Error {

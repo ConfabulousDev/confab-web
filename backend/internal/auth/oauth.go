@@ -1114,6 +1114,12 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 			req.KeyName = "CLI Key"
 		}
 
+		// Validate key name length
+		if err := validation.ValidateAPIKeyName(req.KeyName); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		// Generate codes
 		deviceCode, err := generateDeviceCode()
 		if err != nil {

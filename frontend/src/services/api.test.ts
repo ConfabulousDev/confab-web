@@ -11,6 +11,30 @@ describe('APIError', () => {
     expect(error.data).toEqual({ detail: 'test' });
     expect(error.name).toBe('APIError');
   });
+
+  it('should extract backend error message from data.error', () => {
+    const error = new APIError('Request failed: Bad Request', 400, 'Bad Request', {
+      error: 'Custom title exceeds maximum length of 255 characters',
+    });
+
+    expect(error.message).toBe('Custom title exceeds maximum length of 255 characters');
+    expect(error.status).toBe(400);
+    expect(error.data).toEqual({ error: 'Custom title exceeds maximum length of 255 characters' });
+  });
+
+  it('should fallback to generic message when data.error is not present', () => {
+    const error = new APIError('Request failed: Internal Server Error', 500, 'Internal Server Error', {
+      details: 'something went wrong',
+    });
+
+    expect(error.message).toBe('Request failed: Internal Server Error');
+  });
+
+  it('should fallback to generic message when data is not an object', () => {
+    const error = new APIError('Request failed: Bad Request', 400, 'Bad Request', 'plain text error');
+
+    expect(error.message).toBe('Request failed: Bad Request');
+  });
 });
 
 describe('NetworkError', () => {

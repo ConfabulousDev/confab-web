@@ -12,6 +12,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // CreateAPIKeyRequest is the request body for creating an API key
@@ -46,6 +47,12 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 
 		if req.Name == "" {
 			req.Name = "API Key"
+		}
+
+		// Validate key name length
+		if err := validation.ValidateAPIKeyName(req.Name); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
 		}
 
 		// Generate API key

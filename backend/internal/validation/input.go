@@ -8,9 +8,22 @@ import (
 
 // Validation limits for URL parameters
 const (
-	MaxExternalIDLength = 256 // Max external ID length
-	MinExternalIDLength = 1   // Min external ID length
-	ShareTokenLength    = 32  // Share tokens are exactly 32 hex chars
+	MinExternalIDLength = 1  // Min external ID length
+	ShareTokenLength    = 32 // Share tokens are exactly 32 hex chars
+)
+
+// Field size limits (must match DB VARCHAR constraints in migration 000010)
+const (
+	MaxAvatarURLLength        = 4096 // users.avatar_url
+	MaxExternalIDLength       = 512  // sessions.external_id
+	MaxSummaryLength          = 2048 // sessions.summary
+	MaxFirstUserMessageLength = 8192 // sessions.first_user_message
+	MaxCWDLength              = 8192 // sessions.cwd, runs.cwd
+	MaxTranscriptPathLength   = 8192 // sessions.transcript_path, runs.transcript_path
+	MaxRunReasonLength        = 2048 // runs.reason
+	MaxFilePathLength         = 8192 // files.file_path
+	MaxS3KeyLength            = 2048 // files.s3_key
+	MaxSyncFileNameLength     = 512  // sync_files.file_name
 )
 
 // hexRegex matches hexadecimal strings
@@ -42,6 +55,57 @@ func ValidateShareToken(shareToken string) error {
 	}
 	if !hexRegex.MatchString(shareToken) {
 		return fmt.Errorf("share_token must be hexadecimal")
+	}
+	return nil
+}
+
+// ValidateCWD validates a working directory path
+func ValidateCWD(cwd string) error {
+	if len(cwd) > MaxCWDLength {
+		return fmt.Errorf("cwd exceeds maximum length of %d characters", MaxCWDLength)
+	}
+	return nil
+}
+
+// ValidateTranscriptPath validates a transcript file path
+func ValidateTranscriptPath(path string) error {
+	if len(path) > MaxTranscriptPathLength {
+		return fmt.Errorf("transcript_path exceeds maximum length of %d characters", MaxTranscriptPathLength)
+	}
+	return nil
+}
+
+// ValidateSyncFileName validates a sync file name
+func ValidateSyncFileName(fileName string) error {
+	if len(fileName) > MaxSyncFileNameLength {
+		return fmt.Errorf("file_name exceeds maximum length of %d characters", MaxSyncFileNameLength)
+	}
+	return nil
+}
+
+// ValidateSummary validates a session summary
+func ValidateSummary(summary string) error {
+	if len(summary) > MaxSummaryLength {
+		return fmt.Errorf("summary exceeds maximum length of %d characters", MaxSummaryLength)
+	}
+	return nil
+}
+
+// ValidateFirstUserMessage validates a first user message
+func ValidateFirstUserMessage(msg string) error {
+	if len(msg) > MaxFirstUserMessageLength {
+		return fmt.Errorf("first_user_message exceeds maximum length of %d characters", MaxFirstUserMessageLength)
+	}
+	return nil
+}
+
+// MaxAPIKeyNameLength is the maximum length for API key names
+const MaxAPIKeyNameLength = 255
+
+// ValidateAPIKeyName validates an API key name
+func ValidateAPIKeyName(name string) error {
+	if len(name) > MaxAPIKeyNameLength {
+		return fmt.Errorf("key name exceeds maximum length of %d characters", MaxAPIKeyNameLength)
 	}
 	return nil
 }

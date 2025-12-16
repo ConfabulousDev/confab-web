@@ -15,6 +15,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // ============================================================================
@@ -108,6 +109,20 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate field lengths
+	if err := validation.ValidateExternalID(req.ExternalID); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validation.ValidateTranscriptPath(req.TranscriptPath); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validation.ValidateCWD(req.CWD); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Find or create session
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
@@ -186,6 +201,26 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	if len(req.Lines) == 0 {
 		respondError(w, http.StatusBadRequest, "lines array cannot be empty")
 		return
+	}
+
+	// Validate field lengths
+	if err := validation.ValidateSyncFileName(req.FileName); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Metadata != nil {
+		if req.Metadata.Summary != nil {
+			if err := validation.ValidateSummary(*req.Metadata.Summary); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
+		if req.Metadata.FirstUserMessage != nil {
+			if err := validation.ValidateFirstUserMessage(*req.Metadata.FirstUserMessage); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
 	}
 
 	// Verify session ownership and get external_id (needed for S3 key)
@@ -960,6 +995,12 @@ func (s *Server) handleUpdateSessionSummary(w http.ResponseWriter, r *http.Reque
 	var req UpdateSummaryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate summary length
+	if err := validation.ValidateSummary(req.Summary); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
