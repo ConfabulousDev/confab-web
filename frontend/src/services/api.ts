@@ -52,11 +52,12 @@ export class APIError extends Error {
  * Type guard for backend error response format.
  */
 function isErrorResponse(data: unknown): data is { error: string } {
-  if (data === null || typeof data !== 'object') {
-    return false;
-  }
-  const obj: Record<string, unknown> = data;
-  return 'error' in obj && typeof obj.error === 'string';
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    'error' in data &&
+    typeof data.error === 'string'
+  );
 }
 
 /**

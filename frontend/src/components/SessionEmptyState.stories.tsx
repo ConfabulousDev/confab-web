@@ -17,19 +17,13 @@ const meta: Meta<typeof SessionEmptyState> = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['no-sessions', 'no-shared', 'no-matches'],
+      options: ['no-shared', 'no-matches'],
     },
   },
 };
 
 export default meta;
 type Story = StoryObj<typeof SessionEmptyState>;
-
-export const NoSessions: Story = {
-  args: {
-    variant: 'no-sessions',
-  },
-};
 
 export const NoShared: Story = {
   args: {

@@ -9,6 +9,7 @@ import SessionsFilterDropdown from '@/components/SessionsFilterDropdown';
 import SortableHeader from '@/components/SortableHeader';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import Alert from '@/components/Alert';
+import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import styles from './SessionsPage.module.css';
 
@@ -181,15 +182,13 @@ function SessionsPage() {
             {loading ? (
               <p className={styles.loading}>Loading sessions...</p>
             ) : sortedSessions.length === 0 ? (
-              <SessionEmptyState
-                variant={
-                  showSharedWithMe
-                    ? 'no-shared'
-                    : selectedRepo || selectedBranch
-                      ? 'no-matches'
-                      : 'no-sessions'
-                }
-              />
+              showSharedWithMe ? (
+                <SessionEmptyState variant="no-shared" />
+              ) : selectedRepo || selectedBranch ? (
+                <SessionEmptyState variant="no-matches" />
+              ) : (
+                <Quickstart />
+              )
             ) : (
               <div className={styles.sessionsTable}>
                 <table>
