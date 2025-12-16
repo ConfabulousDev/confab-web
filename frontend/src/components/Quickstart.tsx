@@ -26,7 +26,7 @@ function Quickstart() {
   return (
     <div className={styles.container}>
       <div className={styles.icon}>🚀</div>
-      <h2 className={styles.headline}>Get started with Confabulous</h2>
+      <h2 className={styles.headline}>Quickstart</h2>
       <p className={styles.description}>
         Install the CLI to automatically sync your <em>Claude Code</em> sessions.
       </p>
