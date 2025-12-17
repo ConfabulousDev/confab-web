@@ -7,10 +7,13 @@ This document describes the backend API surface for the Confab web application. 
 The API uses two authentication methods:
 
 ### 1. API Key Authentication (CLI)
-Used by CLI tools. Pass the API key in the Authorization header:
+Used by CLI tools. All CLI requests include these headers:
 ```
 Authorization: Bearer cfb_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+User-Agent: confab/1.2.3 (darwin; arm64)
 ```
+
+The `User-Agent` header includes CLI version, OS, and architecture.
 
 ### 2. Session Cookie Authentication (Web)
 Used by the web frontend. Session cookie (`confab_session`) is set after OAuth login. CSRF token required for mutating requests.
@@ -57,7 +60,9 @@ Content-Type: application/json
   "transcript_path": "/path/to/transcript.jsonl",
   "metadata": {
     "cwd": "/working/directory",
-    "git_info": { ... }
+    "git_info": { ... },
+    "hostname": "macbook.local",
+    "username": "jackie"
   }
 }
 ```
@@ -69,6 +74,8 @@ Content-Type: application/json
 | `metadata` | object | No | Session metadata (see below) |
 | `metadata.cwd` | string | No | Current working directory |
 | `metadata.git_info` | object | No | Git repository metadata (branch, remote, etc.) |
+| `metadata.hostname` | string | No | Client machine hostname |
+| `metadata.username` | string | No | OS username of the client |
 
 **Deprecated fields (backward compatibility):**
 

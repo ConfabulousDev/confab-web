@@ -25,8 +25,10 @@ import (
 // SyncInitMetadata contains optional metadata for session initialization.
 // This groups session metadata consistently with the chunk API's metadata field.
 type SyncInitMetadata struct {
-	CWD     string          `json:"cwd,omitempty"`
-	GitInfo json.RawMessage `json:"git_info,omitempty"`
+	CWD      string          `json:"cwd,omitempty"`
+	GitInfo  json.RawMessage `json:"git_info,omitempty"`
+	Hostname string          `json:"hostname,omitempty"`
+	Username string          `json:"username,omitempty"`
 }
 
 // SyncInitRequest is the request body for POST /api/v1/sync/init
@@ -140,6 +142,7 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	// Extract metadata, preferring new nested format over deprecated top-level fields
 	cwd := req.CWD
 	gitInfo := req.GitInfo
+	var hostname, username string
 	if req.Metadata != nil {
 		if req.Metadata.CWD != "" {
 			cwd = req.Metadata.CWD
@@ -147,10 +150,22 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		if req.Metadata.GitInfo != nil {
 			gitInfo = req.Metadata.GitInfo
 		}
+		hostname = req.Metadata.Hostname
+		username = req.Metadata.Username
 	}
 
 	// Validate cwd regardless of which field it came from
 	if err := validation.ValidateCWD(cwd); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Validate hostname and username
+	if err := validation.ValidateHostname(hostname); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validation.ValidateUsername(username); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -164,6 +179,8 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		TranscriptPath: req.TranscriptPath,
 		CWD:            cwd,
 		GitInfo:        gitInfo,
+		Hostname:       hostname,
+		Username:       username,
 	}
 	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {

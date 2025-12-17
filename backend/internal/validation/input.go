@@ -12,7 +12,7 @@ const (
 	ShareTokenLength    = 32 // Share tokens are exactly 32 hex chars
 )
 
-// Field size limits (must match DB VARCHAR constraints in migration 000010)
+// Field size limits (must match DB VARCHAR constraints in migration 000010, 000011)
 const (
 	MaxAvatarURLLength        = 4096 // users.avatar_url
 	MaxExternalIDLength       = 512  // sessions.external_id
@@ -24,6 +24,8 @@ const (
 	MaxFilePathLength         = 8192 // files.file_path
 	MaxS3KeyLength            = 2048 // files.s3_key
 	MaxSyncFileNameLength     = 512  // sync_files.file_name
+	MaxHostnameLength         = 255  // sessions.hostname
+	MaxUsernameLength         = 255  // sessions.username
 )
 
 // hexRegex matches hexadecimal strings
@@ -106,6 +108,22 @@ const MaxAPIKeyNameLength = 255
 func ValidateAPIKeyName(name string) error {
 	if len(name) > MaxAPIKeyNameLength {
 		return fmt.Errorf("key name exceeds maximum length of %d characters", MaxAPIKeyNameLength)
+	}
+	return nil
+}
+
+// ValidateHostname validates a client hostname
+func ValidateHostname(hostname string) error {
+	if len(hostname) > MaxHostnameLength {
+		return fmt.Errorf("hostname exceeds maximum length of %d characters", MaxHostnameLength)
+	}
+	return nil
+}
+
+// ValidateUsername validates a client username
+func ValidateUsername(username string) error {
+	if len(username) > MaxUsernameLength {
+		return fmt.Errorf("username exceeds maximum length of %d characters", MaxUsernameLength)
 	}
 	return nil
 }

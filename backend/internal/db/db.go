@@ -1400,6 +1400,8 @@ type SyncSessionParams struct {
 	TranscriptPath string
 	CWD            string
 	GitInfo        json.RawMessage // Optional: JSONB for git metadata
+	Hostname       string          // Optional: client machine hostname
+	Username       string          // Optional: OS username of the client
 }
 
 // FindOrCreateSyncSession finds an existing session by external_id or creates a new one
@@ -1425,10 +1427,10 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 	// Session not found - try to create it with metadata
 	sessionID = uuid.New().String()
 	insertQuery := `
-		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, last_sync_at)
-		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NOW())
+		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, hostname, username, last_sync_at)
+		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), NOW())
 	`
-	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo)
+	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo, params.Hostname, params.Username)
 	if err == nil {
 		// Successfully created - new session has no synced files
 		return sessionID, make(map[string]SyncFileState), nil
@@ -1458,10 +1460,12 @@ func (db *DB) updateSessionMetadata(ctx context.Context, sessionID string, param
 		SET cwd = COALESCE($2, cwd),
 		    transcript_path = COALESCE($3, transcript_path),
 		    git_info = COALESCE($4, git_info),
+		    hostname = COALESCE(NULLIF($5, ''), hostname),
+		    username = COALESCE(NULLIF($6, ''), username),
 		    last_sync_at = NOW()
 		WHERE id = $1
 	`
-	_, err := db.conn.ExecContext(ctx, query, sessionID, params.CWD, params.TranscriptPath, params.GitInfo)
+	_, err := db.conn.ExecContext(ctx, query, sessionID, params.CWD, params.TranscriptPath, params.GitInfo, params.Hostname, params.Username)
 	return err
 }
 
