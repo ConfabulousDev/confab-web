@@ -270,6 +270,290 @@ func TestHandleSyncInit_Integration(t *testing.T) {
 }
 
 // =============================================================================
+// POST /api/v1/sync/init - Metadata Nesting (New vs Deprecated Format)
+// =============================================================================
+
+func TestHandleSyncInit_MetadataNesting_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("new format: reads cwd and git_info from metadata", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		// Use map to send new nested format
+		reqBody := map[string]interface{}{
+			"external_id":     "new-format-session",
+			"transcript_path": "/home/user/project/transcript.jsonl",
+			"metadata": map[string]interface{}{
+				"cwd":      "/home/user/new-format-project",
+				"git_info": map[string]string{"branch": "main", "repo_url": "https://github.com/test/repo.git"},
+			},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncInit(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var resp SyncInitResponse
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		// Verify session was created
+		if resp.SessionID == "" {
+			t.Error("expected non-empty session_id")
+		}
+
+		// Verify cwd and git_info were stored correctly
+		var storedCWD string
+		var storedGitInfo json.RawMessage
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT cwd, git_info FROM sessions WHERE id = $1",
+			resp.SessionID)
+		if err := row.Scan(&storedCWD, &storedGitInfo); err != nil {
+			t.Fatalf("failed to query session: %v", err)
+		}
+
+		if storedCWD != "/home/user/new-format-project" {
+			t.Errorf("expected cwd '/home/user/new-format-project', got %q", storedCWD)
+		}
+
+		var gitData map[string]string
+		if err := json.Unmarshal(storedGitInfo, &gitData); err != nil {
+			t.Fatalf("failed to parse stored git_info: %v", err)
+		}
+		if gitData["branch"] != "main" {
+			t.Errorf("expected branch 'main', got %q", gitData["branch"])
+		}
+	})
+
+	t.Run("old format: reads cwd and git_info from top-level (backward compat)", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		// Use the old struct format (top-level cwd and git_info)
+		reqBody := SyncInitRequest{
+			ExternalID:     "old-format-session",
+			TranscriptPath: "/home/user/project/transcript.jsonl",
+			CWD:            "/home/user/old-format-project",
+			GitInfo:        json.RawMessage(`{"branch":"feature","repo_url":"https://github.com/test/old.git"}`),
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncInit(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var resp SyncInitResponse
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		// Verify cwd and git_info were stored correctly from top-level fields
+		var storedCWD string
+		var storedGitInfo json.RawMessage
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT cwd, git_info FROM sessions WHERE id = $1",
+			resp.SessionID)
+		if err := row.Scan(&storedCWD, &storedGitInfo); err != nil {
+			t.Fatalf("failed to query session: %v", err)
+		}
+
+		if storedCWD != "/home/user/old-format-project" {
+			t.Errorf("expected cwd '/home/user/old-format-project', got %q", storedCWD)
+		}
+
+		var gitData map[string]string
+		if err := json.Unmarshal(storedGitInfo, &gitData); err != nil {
+			t.Fatalf("failed to parse stored git_info: %v", err)
+		}
+		if gitData["branch"] != "feature" {
+			t.Errorf("expected branch 'feature', got %q", gitData["branch"])
+		}
+	})
+
+	t.Run("mixed format: metadata takes precedence over top-level", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		// Send both top-level AND metadata - metadata should win
+		reqBody := map[string]interface{}{
+			"external_id":     "mixed-format-session",
+			"transcript_path": "/home/user/project/transcript.jsonl",
+			"cwd":             "/home/user/top-level-cwd",       // Should be ignored
+			"git_info":        map[string]string{"branch": "old"}, // Should be ignored
+			"metadata": map[string]interface{}{
+				"cwd":      "/home/user/metadata-cwd",
+				"git_info": map[string]string{"branch": "new"},
+			},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncInit(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var resp SyncInitResponse
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		// Verify metadata values took precedence
+		var storedCWD string
+		var storedGitInfo json.RawMessage
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT cwd, git_info FROM sessions WHERE id = $1",
+			resp.SessionID)
+		if err := row.Scan(&storedCWD, &storedGitInfo); err != nil {
+			t.Fatalf("failed to query session: %v", err)
+		}
+
+		if storedCWD != "/home/user/metadata-cwd" {
+			t.Errorf("expected metadata cwd '/home/user/metadata-cwd', got %q", storedCWD)
+		}
+
+		var gitData map[string]string
+		if err := json.Unmarshal(storedGitInfo, &gitData); err != nil {
+			t.Fatalf("failed to parse stored git_info: %v", err)
+		}
+		if gitData["branch"] != "new" {
+			t.Errorf("expected metadata branch 'new', got %q", gitData["branch"])
+		}
+	})
+
+	t.Run("empty metadata object falls back to top-level", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		// Send top-level with empty metadata - should use top-level
+		reqBody := map[string]interface{}{
+			"external_id":     "empty-metadata-session",
+			"transcript_path": "/home/user/project/transcript.jsonl",
+			"cwd":             "/home/user/fallback-cwd",
+			"git_info":        map[string]string{"branch": "fallback"},
+			"metadata":        map[string]interface{}{}, // Empty metadata
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncInit(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var resp SyncInitResponse
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		// Verify top-level values were used as fallback
+		var storedCWD string
+		var storedGitInfo json.RawMessage
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT cwd, git_info FROM sessions WHERE id = $1",
+			resp.SessionID)
+		if err := row.Scan(&storedCWD, &storedGitInfo); err != nil {
+			t.Fatalf("failed to query session: %v", err)
+		}
+
+		if storedCWD != "/home/user/fallback-cwd" {
+			t.Errorf("expected fallback cwd '/home/user/fallback-cwd', got %q", storedCWD)
+		}
+
+		var gitData map[string]string
+		if err := json.Unmarshal(storedGitInfo, &gitData); err != nil {
+			t.Fatalf("failed to parse stored git_info: %v", err)
+		}
+		if gitData["branch"] != "fallback" {
+			t.Errorf("expected fallback branch 'fallback', got %q", gitData["branch"])
+		}
+	})
+
+	t.Run("null metadata falls back to top-level", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		// Send top-level with null metadata
+		reqBody := map[string]interface{}{
+			"external_id":     "null-metadata-session",
+			"transcript_path": "/home/user/project/transcript.jsonl",
+			"cwd":             "/home/user/null-fallback-cwd",
+			"git_info":        map[string]string{"branch": "null-fallback"},
+			"metadata":        nil,
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncInit(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		var resp SyncInitResponse
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		// Verify top-level values were used as fallback
+		var storedCWD string
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT cwd FROM sessions WHERE id = $1",
+			resp.SessionID)
+		if err := row.Scan(&storedCWD); err != nil {
+			t.Fatalf("failed to query session: %v", err)
+		}
+
+		if storedCWD != "/home/user/null-fallback-cwd" {
+			t.Errorf("expected fallback cwd '/home/user/null-fallback-cwd', got %q", storedCWD)
+		}
+	})
+
+	t.Run("cwd validation applies regardless of field location", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+
+		// Create an extremely long cwd to trigger validation error
+		longCWD := "/" + strings.Repeat("a", 9000) // Exceeds 8192 limit
+
+		// Test with metadata.cwd
+		reqBody := map[string]interface{}{
+			"external_id":     "cwd-validation-test",
+			"transcript_path": "/home/user/project/transcript.jsonl",
+			"metadata": map[string]interface{}{
+				"cwd": longCWD,
+			},
+		}
+
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/init", reqBody, user.ID)
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncInit(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusBadRequest)
+
+		var resp map[string]string
+		testutil.ParseJSONResponse(t, w, &resp)
+
+		if !strings.Contains(resp["error"], "cwd") {
+			t.Errorf("expected error about cwd, got: %s", resp["error"])
+		}
+	})
+}
+
+// =============================================================================
 // POST /api/v1/sync/chunk - Upload a chunk of lines
 // =============================================================================
 

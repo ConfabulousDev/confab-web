@@ -50,13 +50,15 @@ Authorization: Bearer <api_key>
 Content-Type: application/json
 ```
 
-**Request:**
+**Request (recommended):**
 ```json
 {
   "external_id": "session-uuid",
   "transcript_path": "/path/to/transcript.jsonl",
-  "cwd": "/working/directory",
-  "git_info": { ... }
+  "metadata": {
+    "cwd": "/working/directory",
+    "git_info": { ... }
+  }
 }
 ```
 
@@ -64,8 +66,18 @@ Content-Type: application/json
 |-------|------|----------|-------------|
 | `external_id` | string | Yes | Unique session identifier (UUID from Claude Code) |
 | `transcript_path` | string | Yes | Path to transcript file on user's machine |
-| `cwd` | string | No | Current working directory |
-| `git_info` | object | No | Git repository metadata (branch, remote, etc.) |
+| `metadata` | object | No | Session metadata (see below) |
+| `metadata.cwd` | string | No | Current working directory |
+| `metadata.git_info` | object | No | Git repository metadata (branch, remote, etc.) |
+
+**Deprecated fields (backward compatibility):**
+
+The following top-level fields are deprecated but still supported for backward compatibility with older CLI versions. When both top-level and `metadata` fields are provided, `metadata` takes precedence.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cwd` | string | *Deprecated:* Use `metadata.cwd` instead |
+| `git_info` | object | *Deprecated:* Use `metadata.git_info` instead |
 
 **Response:**
 ```json

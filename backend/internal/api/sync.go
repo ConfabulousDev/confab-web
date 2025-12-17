@@ -22,12 +22,30 @@ import (
 // Request/Response Types
 // ============================================================================
 
+// SyncInitMetadata contains optional metadata for session initialization.
+// This groups session metadata consistently with the chunk API's metadata field.
+type SyncInitMetadata struct {
+	CWD     string          `json:"cwd,omitempty"`
+	GitInfo json.RawMessage `json:"git_info,omitempty"`
+}
+
 // SyncInitRequest is the request body for POST /api/v1/sync/init
 type SyncInitRequest struct {
-	ExternalID     string          `json:"external_id"`
-	TranscriptPath string          `json:"transcript_path"`
-	CWD            string          `json:"cwd"`
-	GitInfo        json.RawMessage `json:"git_info,omitempty"` // Optional git metadata
+	ExternalID     string            `json:"external_id"`
+	TranscriptPath string            `json:"transcript_path"`
+	Metadata       *SyncInitMetadata `json:"metadata,omitempty"`
+
+	// ===========================================================================
+	// DEPRECATED: The following top-level fields are deprecated.
+	// Use the nested Metadata struct instead for consistency with the chunk API.
+	// These fields are kept for backward compatibility with older CLI versions.
+	// When both are provided, Metadata takes precedence.
+	// ===========================================================================
+
+	// Deprecated: Use Metadata.CWD instead.
+	CWD string `json:"cwd,omitempty"`
+	// Deprecated: Use Metadata.GitInfo instead.
+	GitInfo json.RawMessage `json:"git_info,omitempty"`
 }
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
@@ -118,7 +136,21 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := validation.ValidateCWD(req.CWD); err != nil {
+
+	// Extract metadata, preferring new nested format over deprecated top-level fields
+	cwd := req.CWD
+	gitInfo := req.GitInfo
+	if req.Metadata != nil {
+		if req.Metadata.CWD != "" {
+			cwd = req.Metadata.CWD
+		}
+		if req.Metadata.GitInfo != nil {
+			gitInfo = req.Metadata.GitInfo
+		}
+	}
+
+	// Validate cwd regardless of which field it came from
+	if err := validation.ValidateCWD(cwd); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -130,8 +162,8 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	params := db.SyncSessionParams{
 		ExternalID:     req.ExternalID,
 		TranscriptPath: req.TranscriptPath,
-		CWD:            req.CWD,
-		GitInfo:        req.GitInfo,
+		CWD:            cwd,
+		GitInfo:        gitInfo,
 	}
 	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {
