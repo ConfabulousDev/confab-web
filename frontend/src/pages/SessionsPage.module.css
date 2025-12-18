@@ -133,6 +133,11 @@
   font-weight: var(--font-medium);
 }
 
+.shrinkCol {
+  width: 1%;
+  white-space: nowrap;
+}
+
 .untitled {
   color: var(--color-text-muted);
 }
@@ -141,6 +146,8 @@
   color: var(--color-text-muted);
   cursor: text;
   user-select: text;
+  width: 1%;
+  white-space: nowrap;
 }
 
 .chipCell {
@@ -148,6 +155,7 @@
   flex-wrap: nowrap;
   gap: 4px;
   align-items: center;
+  white-space: nowrap;
 }
 
 .timestamp {
@@ -155,6 +163,7 @@
   font-size: var(--font-sm);
   font-family: inherit; /* Use regular font, not monospace */
   white-space: nowrap;
+  width: 1%;
 }
 
 /* Alert styling */

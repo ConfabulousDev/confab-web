@@ -237,8 +237,8 @@ function SessionsPage() {
                         direction={sortDirection}
                         onSort={handleSort}
                       />
-                      <th>Git</th>
-                      {!showSharedWithMe && <th>Hostname</th>}
+                      <th className={styles.shrinkCol}>Git</th>
+                      {!showSharedWithMe && <th className={styles.shrinkCol}>Hostname</th>}
                       <SortableHeader
                         column="external_id"
                         label="CC id"
@@ -267,7 +267,7 @@ function SessionsPage() {
                             {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
                           </span>
                         </td>
-                        <td>
+                        <td className={styles.shrinkCol}>
                           <div className={styles.chipCell}>
                             {session.git_repo && (
                               <Chip
@@ -287,7 +287,7 @@ function SessionsPage() {
                           </div>
                         </td>
                         {!showSharedWithMe && (
-                          <td>
+                          <td className={styles.shrinkCol}>
                             {session.hostname && (
                               <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
                                 {session.hostname}

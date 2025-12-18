@@ -1,76 +1,105 @@
-# Plan: Remove Todo File Support
+# CF-29: Session List Filtering Expansion
 
-## Goal
-
-Remove all code related to loading/displaying todo FILES from confab-web. This mirrors the change made in confab CLI (commit d4cfbc0) which removed todo file sync support.
-
-**Keep**: Message types like `TodoItem` that are used for displaying TodoWrite tool results in transcripts.
-
-**Remove**: All code that reads/displays todo files (the separate `.json` files from `~/.claude/todos/`).
-
-## Rationale (from confab CLI commit)
-
-> TODO files (~/.claude/todos/) are transient state that gets cleared when tasks complete, leaving empty [] files. Not useful for transcript history.
+## Overview
+Expand the session list filtering by adding hostname and title text filters, integrated into the existing `SessionsFilterDropdown` component.
 
 ## Current State
+- `SessionsFilterDropdown` supports filtering by **repository** and **branch**
+- Filter state is managed in `useSessionFilters` hook with URL persistence
+- Sessions have `hostname` and title fields (`summary`, `first_user_message`, `custom_title`)
 
-### Files to Remove/Modify
+## Implementation Plan
 
-| File | Action | Description |
-|------|--------|-------------|
-| `frontend/src/hooks/useTodos.ts` | DELETE | Hook that loads todo files from session |
-| `frontend/src/hooks/index.ts` | MODIFY | Remove `useTodos` export |
-| `frontend/src/components/TodoListDisplay.tsx` | DELETE | Component for rendering todo lists (unused) |
-| `frontend/src/components/TodoListDisplay.module.css` | DELETE | Styles for TodoListDisplay (unused) |
-| `frontend/src/components/SessionCard.tsx` | MODIFY | Remove todo file loading and display |
-| `frontend/src/components/SessionCard.module.css` | MODIFY | Remove `.fileType.todo` and `.todosSection` styles |
-| `frontend/src/types/index.ts` | KEEP | `TodoItem` type stays (used for transcript messages) |
-| `backend/internal/models/models.go` | KEEP | Comment mentions "todo" but no code change needed |
-| `backend/internal/api/sync.go` | KEEP | Comment mentions "agent/todo files" but logic is generic |
+### 1. Update `useSessionFilters` hook
+**File:** `frontend/src/hooks/useSessionFilters.ts`
 
-## Implementation Steps
+Add new filter state:
+- `selectedHostname: string | null` - hostname filter (URL param: `hostname`)
+- `searchQuery: string` - title text search (URL param: `q`)
 
-### 1. Delete Frontend Files
+Add new actions:
+- `setSelectedHostname(value: string | null)`
+- `setSearchQuery(value: string)`
 
-Delete these files entirely:
-- `frontend/src/hooks/useTodos.ts`
-- `frontend/src/components/TodoListDisplay.tsx`
-- `frontend/src/components/TodoListDisplay.module.css`
+### 2. Update `SessionsFilterDropdown` component
+**File:** `frontend/src/components/SessionsFilterDropdown.tsx`
 
-### 2. Update `frontend/src/hooks/index.ts`
+Add new props:
+- `hostnames: string[]` - list of unique hostnames
+- `selectedHostname: string | null`
+- `hostnameCounts: Record<string, number>`
+- `onHostnameClick: (hostname: string | null) => void`
+- `searchQuery: string`
+- `onSearchChange: (query: string) => void`
 
-Remove the `useTodos` export:
-```diff
-- export { useTodos } from './useTodos';
+UI changes:
+1. Add a **search input** at the top of the dropdown (before "All Sessions")
+   - Text input with search icon
+   - Placeholder: "Search by title..."
+   - Debounced to avoid excessive re-renders
+2. Add a **Hostnames section** after the Branches section
+   - Similar UI pattern to repos/branches (checkboxes with counts)
+   - Uses ComputerIcon
+   - Only shown when there are hostnames to display
+
+### 3. Update `SessionsFilterDropdown.module.css`
+**File:** `frontend/src/components/SessionsFilterDropdown.module.css`
+
+Add styles for:
+- `.searchInput` - text input styling
+- `.searchWrapper` - container with search icon
+
+### 4. Update `SessionsPage` component
+**File:** `frontend/src/pages/SessionsPage.tsx`
+
+Changes:
+- Extract unique hostnames from sessions (similar to repos/branches)
+- Calculate hostname counts
+- Pass new props to `SessionsFilterDropdown`
+- Update filter logic in `sortedSessions` to include:
+  - Hostname filter: `if (selectedHostname && s.hostname !== selectedHostname) return false`
+  - Title search: case-insensitive match on `summary`, `first_user_message`, or `custom_title`
+
+### 5. Update tests and stories
+- **Stories:** Update `SessionsFilterDropdown.stories.tsx` with new props and add stories for hostname filter and search
+- **Tests:** Add unit tests for the new filtering logic in `useSessionFilters`
+
+## File Changes Summary
+
+| File | Change |
+|------|--------|
+| `frontend/src/hooks/useSessionFilters.ts` | Add hostname and search state |
+| `frontend/src/components/SessionsFilterDropdown.tsx` | Add hostname section and search input |
+| `frontend/src/components/SessionsFilterDropdown.module.css` | Add search input styles |
+| `frontend/src/pages/SessionsPage.tsx` | Wire up new filters |
+| `frontend/src/components/SessionsFilterDropdown.stories.tsx` | Add new stories |
+| `frontend/src/hooks/useSessionFilters.test.ts` | Add tests for new filters |
+
+## UI Mockup
+
 ```
-
-### 3. Update `frontend/src/components/SessionCard.tsx`
-
-Remove:
-- `useTodos` import
-- `useTodos({ session, shareToken })` call
-- The entire `{todos.length > 0 && ...}` JSX block (lines 140-158)
-
-### 4. Update `frontend/src/components/SessionCard.module.css`
-
-Remove unused todo-related styles:
-- `.fileType.todo` (lines 195-198)
-- `.todosSection` and all related styles (lines 216-305)
-
-## What to Keep
-
-1. **`TodoItem` type** in `frontend/src/types/index.ts` - Used for displaying TodoWrite tool results inline in transcripts
-2. **Backend file type handling** - The sync API accepts any file_type string; no backend changes needed
-3. **`docs/claude-code-data-directory.md`** - Documentation reference (can be updated separately if needed)
-
-## Testing
-
-```bash
-cd frontend && npm run build && npm run lint && npm test
+┌─────────────────────────────────┐
+│ Session Filters                 │
+├─────────────────────────────────┤
+│ ┌─────────────────────────────┐ │
+│ │ 🔍 Search by title...       │ │
+│ └─────────────────────────────┘ │
+│                                 │
+│ ☑ All Sessions              80 │
+│ ─────────────────────────────── │
+│ REPOSITORIES                    │
+│ ☐ confab-web                45 │
+│ ☐ confab-cli                23 │
+│ ─────────────────────────────── │
+│ HOSTNAMES                       │
+│ ☐ macbook-pro               38 │
+│ ☐ desktop-linux             25 │
+│ ☐ work-laptop               17 │
+└─────────────────────────────────┘
 ```
 
 ## Notes
-
-- This is frontend-only cleanup
-- The backend sync API is generic and will continue to work if todo files are ever synced (they just won't be displayed specially)
-- The `TodoItem` type remains because it's used for rendering todo items from `todowrite` tool messages in transcripts
+- Hostname filter only makes sense for owned sessions (not shared), since `hostname` is owner-only
+- Search is case-insensitive and matches against any title field
+- All filters are cumulative (AND logic)
+- Clear search resets text filter but preserves other filters
