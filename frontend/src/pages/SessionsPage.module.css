@@ -131,6 +131,7 @@
 
 .titleCell {
   font-weight: var(--font-medium);
+  width: 100%;
 }
 
 .shrinkCol {
