@@ -25,10 +25,14 @@ function SessionsPage() {
     selectedRepo,
     selectedBranch,
     setSelectedBranch,
+    selectedHostname,
+    searchQuery,
+    setSearchQuery,
     sortColumn,
     sortDirection,
     handleSort,
     handleRepoClick,
+    handleHostnameClick,
     showEmptySessions,
     toggleShowEmptySessions,
   } = useSessionFilters();
@@ -41,24 +45,28 @@ function SessionsPage() {
   const { sessions, loading, error } = useSessions(showSharedWithMe);
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
-  // Get unique repos and branches for filtering
-  const { repos, branches } = useMemo(() => {
+  // Get unique repos, branches, and hostnames for filtering
+  const { repos, branches, hostnames } = useMemo(() => {
     const repoSet = new Set<string>();
     const branchSet = new Set<string>();
+    const hostnameSet = new Set<string>();
 
     sessions.forEach((s) => {
       if (s.git_repo) repoSet.add(s.git_repo);
       if (s.git_branch) branchSet.add(s.git_branch);
+      if (s.hostname) hostnameSet.add(s.hostname);
     });
 
     return {
       repos: Array.from(repoSet).sort(),
       branches: Array.from(branchSet).sort(),
+      hostnames: Array.from(hostnameSet).sort(),
     };
   }, [sessions]);
 
   // Sorted and filtered sessions
   const sortedSessions = useMemo(() => {
+    const lowerQuery = searchQuery.toLowerCase();
     return sortData({
       data: sessions,
       sortBy: sortColumn,
@@ -74,10 +82,17 @@ function SessionsPage() {
         if (selectedRepo && s.git_repo !== selectedRepo) return false;
         // Filter by selected branch
         if (selectedBranch && s.git_branch !== selectedBranch) return false;
+        // Filter by selected hostname
+        if (selectedHostname && s.hostname !== selectedHostname) return false;
+        // Filter by search query (match against title fields)
+        if (lowerQuery) {
+          const title = (s.custom_title || s.summary || s.first_user_message || '').toLowerCase();
+          if (!title.includes(lowerQuery)) return false;
+        }
         return true;
       },
     });
-  }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch, showEmptySessions]);
+  }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch, selectedHostname, searchQuery, showEmptySessions]);
 
   // Helper to check if a session passes the base filters (excluding repo/branch)
   const passesBaseFilters = useCallback((s: typeof sessions[0]) => {
@@ -111,6 +126,19 @@ function SessionsPage() {
     });
     return counts;
   }, [sessions, passesBaseFilters, selectedRepo]);
+
+  const hostnameCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sessions.forEach((s) => {
+      if (passesBaseFilters(s)) {
+        const hostname = s.hostname || '';
+        if (hostname) {
+          counts[hostname] = (counts[hostname] || 0) + 1;
+        }
+      }
+    });
+    return counts;
+  }, [sessions, passesBaseFilters]);
 
   const totalCount = useMemo(() => {
     return sessions.filter(passesBaseFilters).length;
@@ -156,13 +184,19 @@ function SessionsPage() {
             <SessionsFilterDropdown
               repos={repos}
               branches={branches}
+              hostnames={showSharedWithMe ? [] : hostnames}
               selectedRepo={selectedRepo}
               selectedBranch={selectedBranch}
+              selectedHostname={selectedHostname}
               repoCounts={repoCounts}
               branchCounts={branchCounts}
+              hostnameCounts={hostnameCounts}
               totalCount={totalCount}
+              searchQuery={searchQuery}
               onRepoClick={handleRepoClick}
               onBranchClick={(branch) => setSelectedBranch(branch)}
+              onHostnameClick={handleHostnameClick}
+              onSearchChange={setSearchQuery}
             />
           }
         />
@@ -186,7 +220,7 @@ function SessionsPage() {
             ) : sortedSessions.length === 0 ? (
               showSharedWithMe ? (
                 <SessionEmptyState variant="no-shared" />
-              ) : selectedRepo || selectedBranch ? (
+              ) : selectedRepo || selectedBranch || selectedHostname || searchQuery ? (
                 <SessionEmptyState variant="no-matches" />
               ) : (
                 <Quickstart />

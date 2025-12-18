@@ -5,6 +5,7 @@ import SessionsFilterDropdown from './SessionsFilterDropdown';
 // Sample data for stories
 const sampleRepos = ['confab-web', 'confab-cli', 'my-app'];
 const sampleBranches = ['main', 'feature/auth', 'fix/bug-123', 'develop'];
+const sampleHostnames = ['macbook-pro', 'desktop-linux', 'work-laptop'];
 
 const sampleRepoCounts: Record<string, number> = {
   'confab-web': 45,
@@ -19,26 +20,42 @@ const sampleBranchCounts: Record<string, number> = {
   develop: 2,
 };
 
+const sampleHostnameCounts: Record<string, number> = {
+  'macbook-pro': 38,
+  'desktop-linux': 25,
+  'work-laptop': 17,
+};
+
 // Interactive wrapper component
 function SessionsFilterDropdownInteractive({
   repos = sampleRepos,
   branches = sampleBranches,
+  hostnames = sampleHostnames,
   repoCounts = sampleRepoCounts,
   branchCounts = sampleBranchCounts,
+  hostnameCounts = sampleHostnameCounts,
   totalCount = 80,
   initialRepo = null,
   initialBranch = null,
+  initialHostname = null,
+  initialSearchQuery = '',
 }: {
   repos?: string[];
   branches?: string[];
+  hostnames?: string[];
   repoCounts?: Record<string, number>;
   branchCounts?: Record<string, number>;
+  hostnameCounts?: Record<string, number>;
   totalCount?: number;
   initialRepo?: string | null;
   initialBranch?: string | null;
+  initialHostname?: string | null;
+  initialSearchQuery?: string;
 }) {
   const [selectedRepo, setSelectedRepo] = useState<string | null>(initialRepo);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(initialBranch);
+  const [selectedHostname, setSelectedHostname] = useState<string | null>(initialHostname);
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
 
   const handleRepoClick = (repo: string | null) => {
     setSelectedRepo(repo);
@@ -49,17 +66,27 @@ function SessionsFilterDropdownInteractive({
     setSelectedBranch(branch);
   };
 
+  const handleHostnameClick = (hostname: string | null) => {
+    setSelectedHostname(hostname);
+  };
+
   return (
     <SessionsFilterDropdown
       repos={repos}
       branches={branches}
+      hostnames={hostnames}
       selectedRepo={selectedRepo}
       selectedBranch={selectedBranch}
+      selectedHostname={selectedHostname}
       repoCounts={repoCounts}
       branchCounts={branchCounts}
+      hostnameCounts={hostnameCounts}
       totalCount={totalCount}
+      searchQuery={searchQuery}
       onRepoClick={handleRepoClick}
       onBranchClick={handleBranchClick}
+      onHostnameClick={handleHostnameClick}
+      onSearchChange={setSearchQuery}
     />
   );
 }
@@ -150,5 +177,33 @@ export const LongRepoNames: Story = {
       'another-extremely-long-repo-name-here': 18,
     },
     totalCount: 60,
+  },
+};
+
+export const WithHostnameSelected: Story = {
+  args: {
+    initialHostname: 'macbook-pro',
+  },
+};
+
+export const WithSearchQuery: Story = {
+  args: {
+    initialSearchQuery: 'auth',
+  },
+};
+
+export const NoHostnames: Story = {
+  args: {
+    hostnames: [],
+    hostnameCounts: {},
+  },
+};
+
+export const AllFiltersActive: Story = {
+  args: {
+    initialRepo: 'confab-web',
+    initialBranch: 'main',
+    initialHostname: 'macbook-pro',
+    initialSearchQuery: 'test',
   },
 };

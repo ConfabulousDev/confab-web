@@ -8,6 +8,8 @@ interface SessionFilters {
   showSharedWithMe: boolean;
   selectedRepo: string | null;
   selectedBranch: string | null;
+  selectedHostname: string | null;
+  searchQuery: string;
   sortColumn: SortColumn;
   sortDirection: SortDirection;
   showEmptySessions: boolean;
@@ -17,10 +19,13 @@ interface SessionFiltersActions {
   setShowSharedWithMe: (value: boolean) => void;
   setSelectedRepo: (value: string | null) => void;
   setSelectedBranch: (value: string | null) => void;
+  setSelectedHostname: (value: string | null) => void;
+  setSearchQuery: (value: string) => void;
   setSortColumn: (value: SortColumn) => void;
   setSortDirection: (value: SortDirection) => void;
   handleSort: (column: SortColumn) => void;
   handleRepoClick: (repo: string | null) => void;
+  handleHostnameClick: (hostname: string | null) => void;
   toggleShowEmptySessions: () => void;
 }
 
@@ -28,6 +33,8 @@ const PARAM_KEYS = {
   shared: 'shared',
   repo: 'repo',
   branch: 'branch',
+  hostname: 'hostname',
+  q: 'q',
   sort: 'sort',
   dir: 'dir',
 } as const;
@@ -53,6 +60,8 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     const sharedParam = searchParams.get(PARAM_KEYS.shared);
     const repoParam = searchParams.get(PARAM_KEYS.repo);
     const branchParam = searchParams.get(PARAM_KEYS.branch);
+    const hostnameParam = searchParams.get(PARAM_KEYS.hostname);
+    const queryParam = searchParams.get(PARAM_KEYS.q);
     const sortParam = searchParams.get(PARAM_KEYS.sort);
     const dirParam = searchParams.get(PARAM_KEYS.dir);
 
@@ -60,6 +69,8 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
       showSharedWithMe: sharedParam === '1',
       selectedRepo: repoParam,
       selectedBranch: branchParam,
+      selectedHostname: hostnameParam,
+      searchQuery: queryParam || '',
       sortColumn: isValidSortColumn(sortParam) ? sortParam : DEFAULT_SORT_COLUMN,
       sortDirection: isValidSortDirection(dirParam) ? dirParam : DEFAULT_SORT_DIRECTION,
       showEmptySessions,
@@ -90,9 +101,11 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     (value: boolean) => {
       updateParams({
         [PARAM_KEYS.shared]: value ? '1' : null,
-        // Reset repo/branch filters when switching tabs
+        // Reset all filters when switching tabs
         [PARAM_KEYS.repo]: null,
         [PARAM_KEYS.branch]: null,
+        [PARAM_KEYS.hostname]: null,
+        [PARAM_KEYS.q]: null,
       });
     },
     [updateParams]
@@ -111,6 +124,20 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
   const setSelectedBranch = useCallback(
     (value: string | null) => {
       updateParams({ [PARAM_KEYS.branch]: value });
+    },
+    [updateParams]
+  );
+
+  const setSelectedHostname = useCallback(
+    (value: string | null) => {
+      updateParams({ [PARAM_KEYS.hostname]: value });
+    },
+    [updateParams]
+  );
+
+  const setSearchQuery = useCallback(
+    (value: string) => {
+      updateParams({ [PARAM_KEYS.q]: value || null });
     },
     [updateParams]
   );
@@ -161,6 +188,13 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [updateParams]
   );
 
+  const handleHostnameClick = useCallback(
+    (hostname: string | null) => {
+      updateParams({ [PARAM_KEYS.hostname]: hostname });
+    },
+    [updateParams]
+  );
+
   const toggleShowEmptySessions = useCallback(() => {
     setShowEmptySessions((prev) => !prev);
   }, []);
@@ -170,10 +204,13 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     setShowSharedWithMe,
     setSelectedRepo,
     setSelectedBranch,
+    setSelectedHostname,
+    setSearchQuery,
     setSortColumn,
     setSortDirection,
     handleSort,
     handleRepoClick,
+    handleHostnameClick,
     toggleShowEmptySessions,
   };
 }

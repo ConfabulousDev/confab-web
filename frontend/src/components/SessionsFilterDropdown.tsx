@@ -1,34 +1,46 @@
 import { useDropdown } from '@/hooks';
-import { FilterIcon, CheckIcon, GitHubIcon, BranchIcon } from './icons';
+import { FilterIcon, CheckIcon, GitHubIcon, BranchIcon, ComputerIcon, SearchIcon } from './icons';
 import styles from './SessionsFilterDropdown.module.css';
 
 interface SessionsFilterDropdownProps {
   repos: string[];
   branches: string[];
+  hostnames: string[];
   selectedRepo: string | null;
   selectedBranch: string | null;
+  selectedHostname: string | null;
   repoCounts: Record<string, number>;
   branchCounts: Record<string, number>;
+  hostnameCounts: Record<string, number>;
   totalCount: number;
+  searchQuery: string;
   onRepoClick: (repo: string | null) => void;
   onBranchClick: (branch: string | null) => void;
+  onHostnameClick: (hostname: string | null) => void;
+  onSearchChange: (query: string) => void;
 }
 
 function SessionsFilterDropdown({
   repos,
   branches,
+  hostnames,
   selectedRepo,
   selectedBranch,
+  selectedHostname,
   repoCounts,
   branchCounts,
+  hostnameCounts,
   totalCount,
+  searchQuery,
   onRepoClick,
   onBranchClick,
+  onHostnameClick,
+  onSearchChange,
 }: SessionsFilterDropdownProps) {
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
   // Check if any filters are active
-  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null;
+  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null || selectedHostname !== null || searchQuery !== '';
 
   // Get visible branches (only show branches with sessions when a repo is selected)
   const visibleBranches = selectedRepo
@@ -51,12 +63,25 @@ function SessionsFilterDropdown({
         <div className={styles.dropdown}>
           <div className={styles.dropdownHeader}>Session Filters</div>
           <div className={styles.dropdownContent}>
+            {/* Search input */}
+            <div className={styles.searchWrapper}>
+              <span className={styles.searchIcon}>{SearchIcon}</span>
+              <input
+                type="text"
+                className={styles.searchInput}
+                placeholder="Search by title..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+
             {/* All Sessions option */}
             <button
-              className={`${styles.filterItem} ${!selectedRepo ? styles.selected : ''}`}
-              onClick={() => onRepoClick(null)}
+              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname ? styles.selected : ''}`}
+              onClick={() => { onRepoClick(null); onHostnameClick(null); }}
             >
-              <span className={`${styles.checkbox} ${!selectedRepo ? styles.checked : ''}`}>
+              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname ? styles.checked : ''}`}>
                 {CheckIcon}
               </span>
               <span className={styles.filterLabel}>All Sessions</span>
@@ -102,6 +127,28 @@ function SessionsFilterDropdown({
                     <span className={styles.iconWrapper}>{BranchIcon}</span>
                     <span className={styles.filterLabel}>{branch}</span>
                     <span className={styles.filterCount}>{branchCounts[branch] || 0}</span>
+                  </button>
+                ))}
+              </>
+            )}
+
+            {/* Hostnames section */}
+            {hostnames.length > 0 && (
+              <>
+                <div className={styles.sectionDivider} />
+                <div className={styles.sectionLabel}>Hostnames</div>
+                {hostnames.map((hostname) => (
+                  <button
+                    key={hostname}
+                    className={`${styles.filterItem} ${selectedHostname === hostname ? styles.selected : ''}`}
+                    onClick={() => onHostnameClick(selectedHostname === hostname ? null : hostname)}
+                  >
+                    <span className={`${styles.checkbox} ${selectedHostname === hostname ? styles.checked : ''}`}>
+                      {CheckIcon}
+                    </span>
+                    <span className={styles.iconWrapper}>{ComputerIcon}</span>
+                    <span className={styles.filterLabel}>{hostname}</span>
+                    <span className={styles.filterCount}>{hostnameCounts[hostname] || 0}</span>
                   </button>
                 ))}
               </>
