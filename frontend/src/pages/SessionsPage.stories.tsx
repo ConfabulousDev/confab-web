@@ -121,9 +121,10 @@ interface SessionListTableProps {
   sessions: MockSession[];
   sortColumn?: string;
   sortDirection?: 'asc' | 'desc';
+  showSharedWithMe?: boolean;
 }
 
-function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirection = 'desc' }: SessionListTableProps) {
+function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirection = 'desc', showSharedWithMe = false }: SessionListTableProps) {
   return (
     <div className={styles.card}>
       <div className={styles.sessionsTable}>
@@ -138,7 +139,7 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                 onSort={() => {}}
               />
               <th className={styles.shrinkCol}>Git</th>
-              <th className={styles.shrinkCol}>Hostname</th>
+              {!showSharedWithMe && <th className={styles.shrinkCol}>Hostname</th>}
               <SortableHeader
                 column="external_id"
                 label="CC id"
@@ -180,13 +181,15 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                     )}
                   </div>
                 </td>
-                <td className={styles.shrinkCol}>
-                  {session.hostname && (
-                    <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
-                      {session.hostname}
-                    </Chip>
-                  )}
-                </td>
+                {!showSharedWithMe && (
+                  <td className={styles.shrinkCol}>
+                    {session.hostname && (
+                      <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
+                        {session.hostname}
+                      </Chip>
+                    )}
+                  </td>
+                )}
                 <td className={styles.sessionId}>
                   {session.external_id.substring(0, 8)}
                 </td>
@@ -262,4 +265,11 @@ export const Empty: Story = {
       <p className={styles.empty}>No sessions found</p>
     </div>
   ),
+};
+
+export const SharedWithMe: Story = {
+  args: {
+    sessions: mockSessions,
+    showSharedWithMe: true,
+  },
 };
