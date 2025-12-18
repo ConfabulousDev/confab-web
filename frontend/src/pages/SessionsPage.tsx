@@ -12,7 +12,7 @@ import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, UserIcon, GitHubIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
 function SessionsPage() {
@@ -204,7 +204,7 @@ function SessionsPage() {
                         onSort={handleSort}
                       />
                       <th>Git</th>
-                      <th>System</th>
+                      {!showSharedWithMe && <th>Hostname</th>}
                       <SortableHeader
                         column="external_id"
                         label="CC id"
@@ -252,20 +252,15 @@ function SessionsPage() {
                             )}
                           </div>
                         </td>
-                        <td>
-                          <div className={styles.chipCell}>
+                        {!showSharedWithMe && (
+                          <td>
                             {session.hostname && (
                               <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
                                 {session.hostname}
                               </Chip>
                             )}
-                            {session.username && (
-                              <Chip icon={UserIcon} variant="purple" title={session.username}>
-                                {session.username}
-                              </Chip>
-                            )}
-                          </div>
-                        </td>
+                          </td>
+                        )}
                         <td
                           className={styles.sessionId}
                           onClick={(e) => e.stopPropagation()}

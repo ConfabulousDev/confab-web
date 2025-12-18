@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, UserIcon, GitHubIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon } from '@/components/icons';
 import SortableHeader from '@/components/SortableHeader';
 import styles from './SessionsPage.module.css';
 
@@ -138,7 +138,7 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                 onSort={() => {}}
               />
               <th>Git</th>
-              <th>System</th>
+              <th>Hostname</th>
               <SortableHeader
                 column="external_id"
                 label="CC id"
@@ -181,18 +181,11 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                   </div>
                 </td>
                 <td>
-                  <div className={styles.chipCell}>
-                    {session.hostname && (
-                      <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
-                        {session.hostname}
-                      </Chip>
-                    )}
-                    {session.username && (
-                      <Chip icon={UserIcon} variant="purple" title={session.username}>
-                        {session.username}
-                      </Chip>
-                    )}
-                  </div>
+                  {session.hostname && (
+                    <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
+                      {session.hostname}
+                    </Chip>
+                  )}
                 </td>
                 <td className={styles.sessionId}>
                   {session.external_id.substring(0, 8)}
