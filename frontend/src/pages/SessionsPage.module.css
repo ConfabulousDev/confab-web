@@ -132,6 +132,9 @@
 .titleCell {
   font-weight: var(--font-medium);
   width: 100%;
+  max-width: 0; /* Forces column to respect table width constraints */
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .shrinkCol {
