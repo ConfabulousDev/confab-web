@@ -25,7 +25,7 @@ const mockSessions: MockSession[] = [
     id: '1',
     external_id: '3b9cbb80-1234-5678-9abc-def012345678',
     custom_title: null,
-    summary: 'Recently we started ingesting hostname and username in sync/init API. I want to start displayin...',
+    summary: 'Recently we started ingesting hostname and username in sync/init API. I want to start displaying this in the session list.',
     first_user_message: null,
     last_sync_time: new Date(Date.now() - 18 * 1000).toISOString(), // 18s ago
     git_repo: 'ConfabulousDev/confab-web',
@@ -137,8 +137,8 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                 direction={sortDirection}
                 onSort={() => {}}
               />
-              <th>Git</th>
-              <th>Hostname</th>
+              <th className={styles.shrinkCol}>Git</th>
+              <th className={styles.shrinkCol}>Hostname</th>
               <SortableHeader
                 column="external_id"
                 label="CC id"
@@ -161,7 +161,7 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                 <td className={styles.titleCell}>
                   <span>{session.custom_title || session.summary || session.first_user_message || 'Untitled'}</span>
                 </td>
-                <td>
+                <td className={styles.shrinkCol}>
                   <div className={styles.chipCell}>
                     {session.git_repo && (
                       <Chip
@@ -180,7 +180,7 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                     )}
                   </div>
                 </td>
-                <td>
+                <td className={styles.shrinkCol}>
                   {session.hostname && (
                     <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
                       {session.hostname}
