@@ -550,6 +550,8 @@ type SessionListItem struct {
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
 	ShareToken       *string    `json:"share_token,omitempty"`        // share token if accessed via share
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
+	Hostname         *string    `json:"hostname,omitempty"`           // Client machine hostname (owner-only, null for shared sessions)
+	Username         *string    `json:"username,omitempty"`           // OS username (owner-only, null for shared sessions)
 }
 
 // ListUserSessions returns all sessions for a user
@@ -578,7 +580,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				true as is_owner,
 				'owner' as access_type,
 				NULL::text as share_token,
-				NULL::text as shared_by_email
+				NULL::text as shared_by_email,
+				s.hostname,
+				s.username
 			FROM sessions s
 			LEFT JOIN (
 				SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
@@ -610,7 +614,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					true as is_owner,
 					'owner' as access_type,
 					NULL::text as share_token,
-					NULL::text as shared_by_email
+					NULL::text as shared_by_email,
+					s.hostname,
+					s.username
 				FROM sessions s
 				LEFT JOIN (
 					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
@@ -620,6 +626,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				WHERE s.user_id = $1
 			),
 			-- Sessions shared with user (via session_share_recipients by user_id)
+			-- NOTE: hostname/username are NULL for privacy - only visible to session owner
 			shared_sessions AS (
 				SELECT DISTINCT ON (s.id)
 					s.id,
@@ -637,7 +644,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					false as is_owner,
 					'private_share' as access_type,
 					sh.share_token,
-					u.email as shared_by_email
+					u.email as shared_by_email,
+					NULL::text as hostname,
+					NULL::text as username
 				FROM sessions s
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_recipients sr ON sh.id = sr.share_id
@@ -653,6 +662,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
 			),
 			-- System-wide shares (visible to all authenticated users)
+			-- NOTE: hostname/username are NULL for privacy - only visible to session owner
 			system_shared_sessions AS (
 				SELECT DISTINCT ON (s.id)
 					s.id,
@@ -670,7 +680,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 					false as is_owner,
 					'system_share' as access_type,
 					sh.share_token,
-					u.email as shared_by_email
+					u.email as shared_by_email,
+					NULL::text as hostname,
+					NULL::text as username
 				FROM sessions s
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_system sss ON sh.id = sss.share_id
@@ -731,6 +743,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 			&session.AccessType,
 			&session.ShareToken,
 			&session.SharedByEmail,
+			&session.Hostname,
+			&session.Username,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
@@ -763,6 +777,8 @@ type SessionDetail struct {
 	GitInfo          interface{}      `json:"git_info,omitempty"`           // Git metadata
 	LastSyncAt       *time.Time       `json:"last_sync_at,omitempty"`       // Last sync timestamp
 	Files            []SyncFileDetail `json:"files"`                        // Sync files
+	Hostname         *string          `json:"hostname,omitempty"`           // Client machine hostname (owner-only)
+	Username         *string          `json:"username,omitempty"`           // OS username (owner-only)
 }
 
 // SyncFileDetail represents a synced file
@@ -780,7 +796,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 	var session SessionDetail
 	var gitInfoBytes []byte
 	sessionQuery := `
-		SELECT id, external_id, custom_title, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at
+		SELECT id, external_id, custom_title, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at, hostname, username
 		FROM sessions
 		WHERE id = $1 AND user_id = $2
 	`
@@ -795,6 +811,8 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		&session.TranscriptPath,
 		&gitInfoBytes,
 		&session.LastSyncAt,
+		&session.Hostname,
+		&session.Username,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {

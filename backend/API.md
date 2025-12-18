@@ -339,20 +339,32 @@ GET /api/v1/sessions?include_shared=true
     "summary": "Session summary",
     "first_user_message": "First message",
     "first_seen": "2024-01-15T10:00:00Z",
-    "last_message_at": "2024-01-15T11:30:00Z",
-    "cwd": "/project/path",
-    "git_info": { ... },
-    "is_shared": false
+    "last_sync_time": "2024-01-15T11:30:00Z",
+    "session_type": "Claude Code",
+    "file_count": 2,
+    "total_lines": 1500,
+    "git_repo": "org/repo",
+    "git_branch": "main",
+    "is_owner": true,
+    "access_type": "owner",
+    "share_token": null,
+    "shared_by_email": null,
+    "hostname": "macbook.local",
+    "username": "developer"
   }
 ]
 ```
 
-Note: `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
+**Notes:**
+- `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
+- `hostname` and `username` are **owner-only fields** for privacy. They are returned as `null` for shared sessions (`is_owner: false`).
 
 #### Get Session Detail
 ```
 GET /api/v1/sessions/{id}
 ```
+
+This endpoint is owner-only. Use the shared session endpoint for accessing sessions via share links.
 
 **Response:**
 ```json
@@ -363,26 +375,31 @@ GET /api/v1/sessions/{id}
   "summary": "Session summary",
   "first_user_message": "First message",
   "first_seen": "2024-01-15T10:00:00Z",
-  "last_message_at": "2024-01-15T11:30:00Z",
+  "last_sync_at": "2024-01-15T11:30:00Z",
   "cwd": "/project/path",
-  "git_info": { ... },
+  "transcript_path": "/home/user/.claude/projects/.../session.jsonl",
+  "git_info": {
+    "repo_url": "https://github.com/org/repo",
+    "branch": "main",
+    "commit_sha": "abc123",
+    "commit_message": "Initial commit",
+    "author": "developer",
+    "is_dirty": false
+  },
+  "hostname": "macbook.local",
+  "username": "developer",
   "files": [
     {
       "file_name": "transcript.jsonl",
       "file_type": "transcript",
-      "created_at": "2024-01-15T10:00:00Z"
-    }
-  ],
-  "shares": [
-    {
-      "share_token": "hex32chars",
-      "is_public": true,
-      "recipients": [],
-      "expires_at": null
+      "last_synced_line": 100,
+      "updated_at": "2024-01-15T10:00:00Z"
     }
   ]
 }
 ```
+
+**Note:** `hostname` and `username` are only returned in this owner endpoint. They are NOT included in the shared session endpoint for privacy.
 
 #### Update Session Title
 ```

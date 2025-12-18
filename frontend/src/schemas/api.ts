@@ -43,6 +43,8 @@ export const SessionSchema = z.object({
   access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),
   share_token: z.string().nullable().optional(),
   shared_by_email: z.string().nullable().optional(),
+  hostname: z.string().nullable().optional(), // Client machine hostname (owner-only, null for shared)
+  username: z.string().nullable().optional(), // OS username (owner-only, null for shared)
 });
 
 export const SessionDetailSchema = z.object({
@@ -57,6 +59,8 @@ export const SessionDetailSchema = z.object({
   git_info: GitInfoSchema.nullable().optional(),
   last_sync_at: z.string().nullable().optional(),
   files: z.array(SyncFileDetailSchema),
+  hostname: z.string().nullable().optional(), // Client machine hostname (owner-only, null for shared)
+  username: z.string().nullable().optional(), // OS username (owner-only, null for shared)
 });
 
 export const SessionShareSchema = z.object({
