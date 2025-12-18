@@ -1,6 +1,6 @@
 import type { GitInfo } from '@/types';
 import { formatRepoName } from '@/utils/formatting';
-import { getRepoWebURL } from '@/utils/git';
+import { getRepoWebURL, getBranchURL } from '@/utils/git';
 import MetaItem from './MetaItem';
 
 // SVG Icons
@@ -44,7 +44,11 @@ function GitInfoMeta({ gitInfo }: GitInfoMetaProps) {
         />
       )}
       {gitInfo.branch && (
-        <MetaItem icon={BranchIcon} value={gitInfo.branch} />
+        <MetaItem
+          icon={BranchIcon}
+          value={gitInfo.branch}
+          href={getBranchURL(gitInfo) ?? undefined}
+        />
       )}
       {gitInfo.commit_sha && (
         <MetaItem icon={CommitIcon} value={gitInfo.commit_sha.substring(0, 7)} />

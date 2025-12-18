@@ -25,6 +25,24 @@ export function getRepoWebURL(repoUrl?: string): string | null {
 }
 
 /**
+ * Get a web URL for a specific branch
+ * Supports GitHub and GitLab
+ */
+export function getBranchURL(gitInfo?: GitInfo): string | null {
+  const repoUrl = getRepoWebURL(gitInfo?.repo_url);
+  if (!repoUrl || !gitInfo?.branch) return null;
+
+  if (repoUrl.includes('github.com')) {
+    return `${repoUrl}/tree/${encodeURIComponent(gitInfo.branch)}`;
+  }
+  if (repoUrl.includes('gitlab.com')) {
+    return `${repoUrl}/-/tree/${encodeURIComponent(gitInfo.branch)}`;
+  }
+
+  return null;
+}
+
+/**
  * Get a web URL for a specific commit
  * Supports GitHub and GitLab
  */
