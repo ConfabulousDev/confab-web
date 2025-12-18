@@ -145,7 +145,7 @@
 
 .chipCell {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
   align-items: center;
 }
