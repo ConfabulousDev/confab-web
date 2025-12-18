@@ -1,0 +1,60 @@
+/* Chip component - small, subtle tags for metadata display */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  font-size: 0.6875rem; /* 11px */
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  line-height: 1.4;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Leading ellipsis - shows "...repo-name" instead of "org/repo..." */
+.textEllipsisStart {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+/* Variants */
+.neutral {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.blue {
+  background: #e8f1fb;
+  color: #1a5fb4;
+}
+
+.green {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.purple {
+  background: #f3e8fb;
+  color: #7b1fa2;
+}

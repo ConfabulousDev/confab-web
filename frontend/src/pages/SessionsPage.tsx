@@ -11,6 +11,8 @@ import ScrollNavButtons from '@/components/ScrollNavButtons';
 import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
+import Chip from '@/components/Chip';
+import { RepoIcon, BranchIcon, ComputerIcon, UserIcon, GitHubIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
 function SessionsPage() {
@@ -201,8 +203,8 @@ function SessionsPage() {
                         direction={sortDirection}
                         onSort={handleSort}
                       />
-                      <th>Repo</th>
-                      <th>Branch</th>
+                      <th>Git</th>
+                      <th>System</th>
                       <SortableHeader
                         column="external_id"
                         label="CC id"
@@ -231,8 +233,39 @@ function SessionsPage() {
                             {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
                           </span>
                         </td>
-                        <td className={styles.gitInfo}>{session.git_repo || ''}</td>
-                        <td className={styles.gitInfo}>{session.git_branch || ''}</td>
+                        <td>
+                          <div className={styles.chipCell}>
+                            {session.git_repo && (
+                              <Chip
+                                icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
+                                variant="neutral"
+                                title={session.git_repo}
+                                ellipsis="start"
+                              >
+                                {session.git_repo}
+                              </Chip>
+                            )}
+                            {session.git_branch && (
+                              <Chip icon={BranchIcon} variant="blue" title={session.git_branch}>
+                                {session.git_branch}
+                              </Chip>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <div className={styles.chipCell}>
+                            {session.hostname && (
+                              <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
+                                {session.hostname}
+                              </Chip>
+                            )}
+                            {session.username && (
+                              <Chip icon={UserIcon} variant="purple" title={session.username}>
+                                {session.username}
+                              </Chip>
+                            )}
+                          </div>
+                        </td>
                         <td
                           className={styles.sessionId}
                           onClick={(e) => e.stopPropagation()}

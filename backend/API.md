@@ -344,6 +344,7 @@ GET /api/v1/sessions?include_shared=true
     "file_count": 2,
     "total_lines": 1500,
     "git_repo": "org/repo",
+    "git_repo_url": "https://github.com/org/repo",
     "git_branch": "main",
     "is_owner": true,
     "access_type": "owner",

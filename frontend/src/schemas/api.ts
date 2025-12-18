@@ -38,6 +38,7 @@ export const SessionSchema = z.object({
   session_type: z.string(),
   total_lines: z.number(),
   git_repo: z.string().nullable().optional(),
+  git_repo_url: z.string().nullable().optional(), // Full git repository URL
   git_branch: z.string().nullable().optional(),
   is_owner: z.boolean(),
   access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),

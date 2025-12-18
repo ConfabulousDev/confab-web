@@ -544,7 +544,9 @@ type SessionListItem struct {
 	FirstUserMessage *string    `json:"first_user_message,omitempty"` // First user message
 	SessionType      string     `json:"session_type"`
 	TotalLines       int64      `json:"total_lines"`                  // Sum of last_synced_line across all files
+	// TODO: Remove git_repo field and only return git_repo_url, let frontend parse the org/repo
 	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
+	GitRepoURL       *string    `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
 	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
@@ -752,6 +754,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 		// Extract org/repo from full git URL (e.g., "https://github.com/org/repo.git" -> "org/repo")
 		if gitRepoURL != nil && *gitRepoURL != "" {
 			session.GitRepo = extractRepoName(*gitRepoURL)
+			session.GitRepoURL = gitRepoURL
 		}
 
 		sessions = append(sessions, session)
