@@ -335,9 +335,7 @@ func SessionMiddleware(database *db.DB) func(http.Handler) http.Handler {
 			}
 
 			// Set user ID on logger's response writer (if wrapped by FlyLogger)
-			if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
-				setter.SetLogUserID(session.UserID)
-			}
+			setLogUserID(w, session.UserID)
 
 			// Add user ID to context
 			ctx := context.WithValue(r.Context(), userIDContextKey, session.UserID)

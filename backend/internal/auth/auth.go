@@ -90,9 +90,7 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 			}()
 
 			// Set user ID on logger's response writer (if wrapped by FlyLogger)
-			if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
-				setter.SetLogUserID(userID)
-			}
+			setLogUserID(w, userID)
 
 			// Add user ID to request context
 			ctx := context.WithValue(r.Context(), userIDContextKey, userID)
@@ -105,4 +103,21 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 func GetUserID(ctx context.Context) (int64, bool) {
 	userID, ok := ctx.Value(userIDContextKey).(int64)
 	return userID, ok
+}
+
+// setLogUserID sets the user ID on the logger's response writer.
+// It unwraps the ResponseWriter chain to find the LogUserIDSetter.
+func setLogUserID(w http.ResponseWriter, userID int64) {
+	for {
+		if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
+			setter.SetLogUserID(userID)
+			return
+		}
+		// Try to unwrap
+		if unwrapper, ok := w.(interface{ Unwrap() http.ResponseWriter }); ok {
+			w = unwrapper.Unwrap()
+		} else {
+			return // No more wrappers, give up
+		}
+	}
 }
