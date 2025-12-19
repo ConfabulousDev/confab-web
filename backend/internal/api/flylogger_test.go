@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,8 +10,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 )
 
 func TestGetRealClientIP(t *testing.T) {
@@ -397,14 +394,6 @@ func TestExtractIPFromAddr(t *testing.T) {
 	}
 }
 
-// Helper to create request with user ID in context
-func requestWithUserID(method, path string, userID int64) *http.Request {
-	req := httptest.NewRequest(method, path, nil)
-	req.RemoteAddr = "192.168.1.1:8080"
-	ctx := context.WithValue(req.Context(), auth.GetUserIDContextKey(), userID)
-	return req.WithContext(ctx)
-}
-
 // =============================================================================
 // User ID Logging Tests (always log when authenticated)
 // =============================================================================
@@ -414,14 +403,19 @@ func TestFlyLoggerMiddleware_LogsUserID_OnSuccess(t *testing.T) {
 	log.SetOutput(&buf)
 	defer log.SetOutput(os.Stderr)
 
+	// Simulate auth middleware setting user ID on the response writer
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
+			setter.SetLogUserID(42)
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 
 	wrapped := FlyLogger(handler)
 
-	req := requestWithUserID("GET", "/api/v1/sessions", 42)
+	req := httptest.NewRequest("GET", "/api/v1/sessions", nil)
+	req.RemoteAddr = "192.168.1.1:8080"
 
 	rr := httptest.NewRecorder()
 	wrapped.ServeHTTP(rr, req)
@@ -437,14 +431,19 @@ func TestFlyLoggerMiddleware_LogsUserID_On4xx(t *testing.T) {
 	log.SetOutput(&buf)
 	defer log.SetOutput(os.Stderr)
 
+	// Simulate auth middleware setting user ID, then handler returning error
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
+			setter.SetLogUserID(123)
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
 	})
 
 	wrapped := FlyLogger(handler)
 
-	req := requestWithUserID("POST", "/api/v1/sync/init", 123)
+	req := httptest.NewRequest("POST", "/api/v1/sync/init", nil)
+	req.RemoteAddr = "192.168.1.1:8080"
 
 	rr := httptest.NewRecorder()
 	wrapped.ServeHTTP(rr, req)

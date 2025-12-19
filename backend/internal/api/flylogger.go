@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 )
 
 // Maximum length for error messages in logs
@@ -45,9 +43,9 @@ func FlyLogger(next http.Handler) http.Handler {
 		// Build extra info parts
 		var extraParts []string
 
-		// Add user ID if authenticated
-		if userID, ok := auth.GetUserID(r.Context()); ok {
-			extraParts = append(extraParts, "user="+strconv.FormatInt(userID, 10))
+		// Add user ID if authenticated (set by auth middleware via LogUserIDSetter)
+		if lrw.userIDSet {
+			extraParts = append(extraParts, "user="+strconv.FormatInt(lrw.userID, 10))
 		}
 
 		// Add Fly.io info (sanitize to prevent log injection)
@@ -164,6 +162,12 @@ func extractIPFromAddr(addr string) string {
 	return addr
 }
 
+// LogUserIDSetter is implemented by response writers that can capture the user ID for logging.
+// Auth middleware should check for this interface and call SetLogUserID when a user is authenticated.
+type LogUserIDSetter interface {
+	SetLogUserID(id int64)
+}
+
 // loggingResponseWriter wraps http.ResponseWriter to capture status code, bytes written,
 // and response body for 4xx errors
 type loggingResponseWriter struct {
@@ -171,6 +175,14 @@ type loggingResponseWriter struct {
 	statusCode   int
 	bytesWritten int
 	body         []byte // Captured body for 4xx responses
+	userID       int64  // User ID set by auth middleware
+	userIDSet    bool   // Whether userID was set
+}
+
+// SetLogUserID implements LogUserIDSetter
+func (lrw *loggingResponseWriter) SetLogUserID(id int64) {
+	lrw.userID = id
+	lrw.userIDSet = true
 }
 
 func (lrw *loggingResponseWriter) WriteHeader(code int) {

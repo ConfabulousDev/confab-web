@@ -89,6 +89,11 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 				}
 			}()
 
+			// Set user ID on logger's response writer (if wrapped by FlyLogger)
+			if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
+				setter.SetLogUserID(userID)
+			}
+
 			// Add user ID to request context
 			ctx := context.WithValue(r.Context(), userIDContextKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
