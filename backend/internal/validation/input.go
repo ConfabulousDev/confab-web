@@ -127,3 +127,33 @@ func ValidateUsername(username string) error {
 	}
 	return nil
 }
+
+// TODO(2026-Q2): Remove truncation helpers when grace period ends
+
+// TruncateSyncFileName truncates a sync file name to the maximum allowed length
+func TruncateSyncFileName(s string) string {
+	return truncateString(s, MaxSyncFileNameLength)
+}
+
+// TruncateSummary truncates a summary to the maximum allowed length
+func TruncateSummary(s string) string {
+	return truncateString(s, MaxSummaryLength)
+}
+
+// TruncateFirstUserMessage truncates a first user message to the maximum allowed length
+func TruncateFirstUserMessage(s string) string {
+	return truncateString(s, MaxFirstUserMessageLength)
+}
+
+// truncateString truncates a string to maxLen bytes, ensuring valid UTF-8
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	// Truncate to maxLen bytes, but ensure we don't cut a UTF-8 character in half
+	truncated := s[:maxLen]
+	for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return truncated
+}
