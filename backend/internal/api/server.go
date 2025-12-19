@@ -130,7 +130,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(middleware.Logger)
+	r.Use(FlyLogger) // Custom logger that uses Fly-Client-IP for real client IPs
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
