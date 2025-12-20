@@ -215,7 +215,7 @@ function SessionsPage() {
           {error && <Alert variant="error">{error.message}</Alert>}
 
           <div className={styles.card}>
-            {loading ? (
+            {loading && sessions.length === 0 ? (
               <p className={styles.loading}>Loading sessions...</p>
             ) : sortedSessions.length === 0 ? (
               showSharedWithMe ? (
