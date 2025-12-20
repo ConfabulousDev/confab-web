@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSessions, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
+import { useSessionsPolling, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { formatRelativeTime, formatDuration, sortData } from '@/utils';
 import PageHeader from '@/components/PageHeader';
@@ -42,7 +42,7 @@ function SessionsPage() {
     toggleShowEmptySessions();
   }, [toggleShowEmptySessions]);
   useKeyboardShortcut('mod+shift+e', handleToggleEmptySessions);
-  const { sessions, loading, error } = useSessions(showSharedWithMe);
+  const { sessions, loading, error } = useSessionsPolling(showSharedWithMe ? 'shared' : 'owned');
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
   // Get unique repos, branches, and hostnames for filtering
@@ -212,7 +212,7 @@ function SessionsPage() {
               {successMessage}
             </Alert>
           )}
-          {error && <Alert variant="error">{error}</Alert>}
+          {error && <Alert variant="error">{error.message}</Alert>}
 
           <div className={styles.card}>
             {loading ? (

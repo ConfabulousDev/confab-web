@@ -2,6 +2,7 @@
 export { useAuth } from './useAuth';
 export { useSession } from './useSession';
 export { useSessions } from './useSessions';
+export { useSessionsPolling } from './useSessionsPolling';
 export { useDocumentTitle } from './useDocumentTitle';
 export { useCopyToClipboard } from './useCopyToClipboard';
 export { useSuccessMessage } from './useSuccessMessage';
@@ -12,4 +13,7 @@ export { useSessionFilters } from './useSessionFilters';
 export { useKeyboardShortcut } from './useKeyboardShortcut';
 export { useSpinner } from './useSpinner';
 export { useDropdown } from './useDropdown';
+export { useVisibility } from './useVisibility';
+export { useUserActivity } from './useUserActivity';
+export { useSmartPolling } from './useSmartPolling';
 export type { SessionErrorType } from './useLoadSession';

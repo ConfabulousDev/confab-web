@@ -120,19 +120,19 @@ describe('useSessions', () => {
     expect(result.current.error).toBeNull();
   });
 
-  it('passes includeShared parameter to API', async () => {
+  it('passes view parameter to API', async () => {
     vi.mocked(sessionsAPI.list).mockResolvedValue(mockSessions);
 
-    renderHook(() => useSessions(true), {
+    renderHook(() => useSessions('shared'), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => {
-      expect(sessionsAPI.list).toHaveBeenCalledWith(true);
+      expect(sessionsAPI.list).toHaveBeenCalledWith('shared');
     });
   });
 
-  it('defaults includeShared to false', async () => {
+  it('defaults view to owned', async () => {
     vi.mocked(sessionsAPI.list).mockResolvedValue(mockSessions);
 
     renderHook(() => useSessions(), {
@@ -140,7 +140,7 @@ describe('useSessions', () => {
     });
 
     await waitFor(() => {
-      expect(sessionsAPI.list).toHaveBeenCalledWith(false);
+      expect(sessionsAPI.list).toHaveBeenCalledWith('owned');
     });
   });
 

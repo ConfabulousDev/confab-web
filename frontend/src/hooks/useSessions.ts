@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { sessionsAPI, AuthenticationError } from '@/services/api';
+import type { SessionListView } from '@/services/api';
 import type { Session } from '@/types';
 
 interface UseSessionsReturn {
@@ -11,12 +12,12 @@ interface UseSessionsReturn {
 
 /**
  * Hook for fetching sessions list with React Query
- * @param includeShared - Whether to include sessions shared with the user (default: false)
+ * @param view - Which sessions to show: 'owned' (default) or 'shared'
  */
-export function useSessions(includeShared = false): UseSessionsReturn {
+export function useSessions(view: SessionListView = 'owned'): UseSessionsReturn {
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['sessions', includeShared],
-    queryFn: () => sessionsAPI.list(includeShared),
+    queryKey: ['sessions', view],
+    queryFn: () => sessionsAPI.list(view),
   });
 
   // Auth errors are handled globally by the API client

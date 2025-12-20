@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -14,7 +15,9 @@ import (
 
 // HandleListSessions lists all sessions for the authenticated user
 // Query parameters:
-//   - include_shared: "true" to include sessions shared with the user (default: false)
+//   - view: "owned" (default) or "shared" to select which sessions to list
+//
+// Supports conditional requests via ETag/If-None-Match for efficient polling.
 func HandleListSessions(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get user ID from context (set by SessionMiddleware)
@@ -24,17 +27,43 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Parse include_shared query parameter (default: false)
-		includeShared := r.URL.Query().Get("include_shared") == "true"
+		// Parse view parameter
+		var view db.SessionListView
+		switch r.URL.Query().Get("view") {
+		case "shared":
+			view = db.SessionListViewSharedWithMe
+		case "owned", "":
+			view = db.SessionListViewOwned
+		default:
+			respondError(w, http.StatusBadRequest, "Invalid view parameter, must be 'owned' or 'shared'")
+			return
+		}
 
 		// Create context with timeout for database operation
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Get sessions from database
-		sessions, err := database.ListUserSessions(ctx, userID, includeShared)
+		// Get last modified timestamp for ETag
+		lastModified, err := database.GetSessionsLastModified(ctx, userID, view)
 		if err != nil {
-			logger.Error("Failed to list sessions", "error", err, "user_id", userID, "include_shared", includeShared)
+			logger.Error("Failed to get sessions last modified", "error", err, "user_id", userID)
+			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
+			return
+		}
+
+		// Generate ETag from last modified timestamp
+		etag := fmt.Sprintf(`"%d"`, lastModified.UnixNano())
+
+		// Check If-None-Match header for conditional request
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		// Get sessions from database
+		sessions, err := database.ListUserSessions(ctx, userID, view)
+		if err != nil {
+			logger.Error("Failed to list sessions", "error", err, "user_id", userID, "view", view)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}
@@ -44,6 +73,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			sessions = make([]db.SessionListItem, 0)
 		}
 
+		w.Header().Set("ETag", etag)
 		respondJSON(w, http.StatusOK, sessions)
 	}
 }

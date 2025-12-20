@@ -556,14 +556,12 @@ type SessionListItem struct {
 	Username         *string    `json:"username,omitempty"`           // OS username (owner-only, null for shared sessions)
 }
 
-// ListUserSessions returns all sessions for a user
-// If includeShared is true, also includes:
-//   - Sessions shared with the user (via session_share_recipients)
-//   - System-wide shares (via session_share_system) visible to all authenticated users
-// Uses sync_files table for file counts and sync state
-func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared bool) ([]SessionListItem, error) {
+// ListUserSessions returns sessions for a user based on the specified view.
+// Uses sync_files table for file counts and sync state.
+func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionListView) ([]SessionListItem, error) {
 	var query string
-	if !includeShared {
+	switch view {
+	case SessionListViewOwned:
 		// Only owned sessions - using sync_files for file counts
 		query = `
 			SELECT
@@ -594,8 +592,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 			WHERE s.user_id = $1
 			ORDER BY COALESCE(s.last_message_at, s.first_seen) DESC
 		`
-	} else {
-		// Include owned + shared sessions via UNION
+	case SessionListViewSharedWithMe:
+		// Shared sessions (private shares + system shares), includes owned for deduplication
 		query = `
 			WITH
 			-- User's own sessions
@@ -716,6 +714,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 			) deduped
 			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
+	default:
+		return nil, fmt.Errorf("invalid session list view: %s", view)
 	}
 
 	rows, err := db.conn.QueryContext(ctx, query, userID)
@@ -765,6 +765,50 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, includeShared 
 	}
 
 	return sessions, nil
+}
+
+// SessionListView specifies which sessions to query
+type SessionListView string
+
+const (
+	SessionListViewOwned        SessionListView = "owned"
+	SessionListViewSharedWithMe SessionListView = "shared-with-me"
+)
+
+// GetSessionsLastModified returns the most recent last_sync_at timestamp for polling ETag.
+//
+// TODO: If this becomes a bottleneck at scale, consider maintaining a separate
+// user_sessions_metadata table with a denormalized last_sync_at column, updated on each sync.
+func (db *DB) GetSessionsLastModified(ctx context.Context, userID int64, view SessionListView) (time.Time, error) {
+	var query string
+	switch view {
+	case SessionListViewOwned:
+		query = `
+			SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
+			FROM sessions
+			WHERE user_id = $1
+		`
+	case SessionListViewSharedWithMe:
+		query = `
+			SELECT COALESCE(MAX(s.last_sync_at), '1970-01-01'::timestamp)
+			FROM sessions s
+			JOIN session_shares sh ON s.id = sh.session_id
+			JOIN session_share_recipients sr ON sh.id = sr.share_id
+			WHERE sr.user_id = $1
+			  AND s.user_id != $1
+			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+		`
+	default:
+		return time.Time{}, fmt.Errorf("invalid session list view: %s", view)
+	}
+
+	var lastModified time.Time
+	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&lastModified)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get sessions last modified: %w", err)
+	}
+
+	return lastModified, nil
 }
 
 // SessionDetail represents detailed session information (sync-based model)

@@ -322,12 +322,18 @@ X-CSRF-Token: <token>
 
 #### List Sessions
 ```
-GET /api/v1/sessions?include_shared=true
+GET /api/v1/sessions?view=owned
+GET /api/v1/sessions?view=shared
 ```
 
 | Query Param | Type | Default | Description |
 |-------------|------|---------|-------------|
-| `include_shared` | bool | false | Include sessions shared with user |
+| `view` | string | `owned` | Which sessions to list: `owned` or `shared` |
+
+Supports conditional requests for efficient polling:
+- **Request header:** `If-None-Match: "<etag>"`
+- **Response header:** `ETag: "<timestamp>"`
+- Returns `304 Not Modified` if content unchanged
 
 **Response:**
 ```json

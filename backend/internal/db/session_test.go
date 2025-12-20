@@ -541,7 +541,7 @@ func TestListUserSessions_OwnedOnly(t *testing.T) {
 
 	ctx := context.Background()
 
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID, false)
+	sessions, err := env.DB.ListUserSessions(ctx, user.ID, db.SessionListViewOwned)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -573,7 +573,7 @@ func TestListUserSessions_Empty(t *testing.T) {
 
 	ctx := context.Background()
 
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID, false)
+	sessions, err := env.DB.ListUserSessions(ctx, user.ID, db.SessionListViewOwned)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -607,8 +607,8 @@ func TestListUserSessions_WithShared(t *testing.T) {
 
 	ctx := context.Background()
 
-	// List with shared sessions
-	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, true)
+	// List shared sessions view (includes owned for deduplication)
+	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, db.SessionListViewSharedWithMe)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -658,14 +658,14 @@ func TestListUserSessions_ExcludesSharedByDefault(t *testing.T) {
 
 	ctx := context.Background()
 
-	// List WITHOUT shared sessions
-	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, false)
+	// List owned sessions only (recipient has none)
+	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, db.SessionListViewOwned)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
 
 	if len(sessions) != 0 {
-		t.Errorf("expected 0 sessions (shared excluded), got %d", len(sessions))
+		t.Errorf("expected 0 sessions (recipient owns none), got %d", len(sessions))
 	}
 }
 
@@ -691,8 +691,8 @@ func TestListUserSessions_ExpiredShareExcluded(t *testing.T) {
 
 	ctx := context.Background()
 
-	// List with shared sessions - expired should be excluded
-	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, true)
+	// List shared sessions - expired should be excluded
+	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, db.SessionListViewSharedWithMe)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
