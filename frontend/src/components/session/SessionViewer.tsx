@@ -80,17 +80,13 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
     const firstAssistant = messages.find((m) => m.type === 'assistant');
     const model = firstAssistant?.type === 'assistant' ? firstAssistant.message.model : undefined;
 
-    // Compute duration
+    // Compute duration from session timestamps (consistent with listing view)
     let durationMs: number | undefined;
-    if (messages.length > 0) {
-      const firstMessage = messages[0];
-      const lastMessage = messages[messages.length - 1];
-      if (firstMessage && lastMessage) {
-        const firstTimestamp = 'timestamp' in firstMessage ? new Date(firstMessage.timestamp) : null;
-        const lastTimestamp = 'timestamp' in lastMessage ? new Date(lastMessage.timestamp) : null;
-        if (firstTimestamp && lastTimestamp) {
-          durationMs = lastTimestamp.getTime() - firstTimestamp.getTime();
-        }
+    if (session.first_seen && session.last_sync_at) {
+      const start = new Date(session.first_seen).getTime();
+      const end = new Date(session.last_sync_at).getTime();
+      if (end > start) {
+        durationMs = end - start;
       }
     }
 
@@ -98,7 +94,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
     const sessionDate = session.first_seen ? new Date(session.first_seen) : undefined;
 
     return { model, durationMs, sessionDate };
-  }, [messages, session.first_seen]);
+  }, [messages, session.first_seen, session.last_sync_at]);
 
   return (
     <div className={styles.sessionViewer}>

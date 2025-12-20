@@ -81,7 +81,10 @@ type Story = StoryObj<typeof SessionHeaderInteractive>;
 
 export const Default: Story = {
   args: {
+    sessionId: 'session-123',
     title: 'CLI Refactoring: Summary Linking & macOS Binary Fix',
+    hasCustomTitle: false,
+    autoTitle: 'CLI Refactoring: Summary Linking & macOS Binary Fix',
     externalId: 'abc123def456',
     model: 'claude-opus-4-5-20251101',
     durationMs: 4980000, // ~1h 23m
@@ -91,12 +94,16 @@ export const Default: Story = {
     isShared: false,
     onShare: () => alert('Share clicked'),
     onDelete: () => alert('Delete clicked'),
+    onSessionUpdate: (session) => console.log('Session updated:', session),
   },
 };
 
 export const SharedSession: Story = {
   args: {
+    sessionId: 'session-456',
     title: 'Implementing Dark Mode Toggle',
+    hasCustomTitle: false,
+    autoTitle: 'Implementing Dark Mode Toggle',
     externalId: 'xyz789abc123',
     model: 'claude-sonnet-4-20250514',
     durationMs: 1800000, // 30 min
@@ -109,7 +116,10 @@ export const SharedSession: Story = {
 
 export const NoGitInfo: Story = {
   args: {
+    sessionId: 'session-789',
     title: 'Quick debugging session',
+    hasCustomTitle: false,
+    autoTitle: 'Quick debugging session',
     externalId: 'def456ghi789',
     model: 'claude-haiku-3-5-20241022',
     durationMs: 300000, // 5 min
@@ -118,12 +128,17 @@ export const NoGitInfo: Story = {
     isShared: false,
     onShare: () => alert('Share clicked'),
     onDelete: () => alert('Delete clicked'),
+    onSessionUpdate: (session) => console.log('Session updated:', session),
   },
 };
 
 export const LongTitle: Story = {
   args: {
+    sessionId: 'session-long',
     title:
+      'This is a very long session title that might need to wrap or be truncated depending on the available space in the header component',
+    hasCustomTitle: false,
+    autoTitle:
       'This is a very long session title that might need to wrap or be truncated depending on the available space in the header component',
     externalId: 'long123title456',
     model: 'claude-opus-4-5-20251101',
@@ -134,11 +149,14 @@ export const LongTitle: Story = {
     isShared: false,
     onShare: () => alert('Share clicked'),
     onDelete: () => alert('Delete clicked'),
+    onSessionUpdate: (session) => console.log('Session updated:', session),
   },
 };
 
 export const FallbackTitle: Story = {
   args: {
+    sessionId: 'session-fallback',
+    hasCustomTitle: false,
     externalId: 'fallback123456789',
     model: 'claude-sonnet-4-20250514',
     sessionDate: new Date(),
@@ -146,5 +164,6 @@ export const FallbackTitle: Story = {
     isShared: false,
     onShare: () => alert('Share clicked'),
     onDelete: () => alert('Delete clicked'),
+    onSessionUpdate: (session) => console.log('Session updated:', session),
   },
 };
