@@ -478,6 +478,8 @@ Content-Type: application/json
 }
 ```
 
+**Note:** For private shares, invitation emails contain a personalized URL with the recipient's email: `https://confab.dev/sessions/{id}/shared/{token}?email={recipient_email}`. This allows the login flow to guide the recipient to sign in with the correct email address.
+
 #### List Shares for Session
 ```
 GET /api/v1/sessions/{id}/shares
@@ -500,12 +502,26 @@ X-CSRF-Token: <token>
 
 ### Access Shared Session (Public)
 
-These endpoints don't require authentication (for public shares) or require the viewer to be logged in and on the invite list (for private shares).
+These endpoints don't require authentication (for public shares) or require the viewer to be logged in and on the invite list (for private shares). **Session owners can always access their own share links**, even if not in the recipient list.
 
 #### Get Shared Session
 ```
 GET /api/v1/sessions/{id}/shared/{shareToken}
 ```
+
+**Response:** Same as Get Session Detail, plus:
+```json
+{
+  "is_owner": true,
+  ...session fields...
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_owner` | bool | `true` if the viewer is the session owner (allows switching to owner view) |
+
+**Note:** `hostname` and `username` are NOT included in shared session responses for privacy.
 
 #### Read Shared Sync File
 ```
@@ -526,6 +542,21 @@ These endpoints handle OAuth authentication flow:
 | `GET /auth/google/login` | Initiate Google OAuth |
 | `GET /auth/google/callback` | Google OAuth callback |
 | `GET /auth/logout` | Logout (clears session) |
+
+### OAuth Login Parameters
+
+The login endpoints accept optional query parameters to support share link flows:
+
+| Parameter | Description |
+|-----------|-------------|
+| `redirect` | URL path to redirect to after successful login |
+| `email` | Expected email address (for share link login hints) |
+
+When `email` is provided:
+- The login selector page shows "Sign in with **{email}** to view this shared session"
+- GitHub OAuth URL includes `&login={email}` (pre-fills username field)
+- Google OAuth URL includes `&login_hint={email}` (pre-fills email field)
+- After OAuth callback, if the logged-in email doesn't match, redirect includes `?email_mismatch=1&expected={email}&actual={actual_email}`
 
 ### Device Code Flow (CLI on headless machines)
 

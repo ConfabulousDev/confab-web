@@ -65,7 +65,8 @@ describe('formatRelativeTime', () => {
   });
 
   it('should format future minutes', () => {
-    const future = new Date(Date.now() + 120000).toISOString();
+    // Add buffer to avoid flaky test at boundary (2m + 1s)
+    const future = new Date(Date.now() + 121000).toISOString();
     expect(formatRelativeTime(future)).toBe('in 2m');
   });
 

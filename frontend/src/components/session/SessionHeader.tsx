@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { GitInfo, SessionDetail } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import { formatDuration, formatDateTime, formatModelName } from '@/utils/formatting';
@@ -283,10 +284,18 @@ function SessionHeader({
           onToggleCategory={onToggleCategory}
         />
         {isShared ? (
-          <div className={styles.sharedIndicator}>
-            {ShareIcon}
-            <span>Shared Session</span>
-          </div>
+          isOwner ? (
+            // Owner viewing their own share link - clickable to switch to owner view
+            <Link to={`/sessions/${sessionId}`} className={styles.sharedIndicatorLink} title="Switch to owner view">
+              {ShareIcon}
+              <span>Shared Session</span>
+            </Link>
+          ) : (
+            <div className={styles.sharedIndicator}>
+              {ShareIcon}
+              <span>Shared Session</span>
+            </div>
+          )
         ) : isOwner && (
           <>
             {onShare && (

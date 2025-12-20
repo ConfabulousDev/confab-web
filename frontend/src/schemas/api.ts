@@ -62,6 +62,7 @@ export const SessionDetailSchema = z.object({
   files: z.array(SyncFileDetailSchema),
   hostname: z.string().nullable().optional(), // Client machine hostname (owner-only, null for shared)
   username: z.string().nullable().optional(), // OS username (owner-only, null for shared)
+  is_owner: z.boolean().optional(), // True if viewer is session owner (shared sessions only)
 });
 
 export const SessionShareSchema = z.object({

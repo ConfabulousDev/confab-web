@@ -286,7 +286,30 @@
   font-weight: var(--font-medium);
 }
 
-.sharedIndicator svg {
+/* Clickable shared indicator for owner viewing their own share */
+.sharedIndicatorLink {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-md);
+  color: var(--color-info);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sharedIndicatorLink:hover {
+  background: color-mix(in srgb, var(--color-info-bg) 70%, var(--color-info) 30%);
+  border-color: var(--color-info);
+}
+
+.sharedIndicator svg,
+.sharedIndicatorLink svg {
   flex-shrink: 0;
 }
 

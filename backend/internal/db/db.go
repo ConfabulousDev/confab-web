@@ -782,6 +782,7 @@ type SessionDetail struct {
 	Files            []SyncFileDetail `json:"files"`                        // Sync files
 	Hostname         *string          `json:"hostname,omitempty"`           // Client machine hostname (owner-only)
 	Username         *string          `json:"username,omitempty"`           // OS username (owner-only)
+	IsOwner          *bool            `json:"is_owner,omitempty"`           // True if viewer is session owner (shared sessions only)
 }
 
 // SyncFileDetail represents a synced file
@@ -1187,11 +1188,26 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 		return nil, ErrShareExpired
 	}
 
+	// Get session owner's user_id to check ownership
+	var ownerUserID int64
+	err = db.conn.QueryRowContext(ctx,
+		`SELECT user_id FROM sessions WHERE id = $1`, sessionID).Scan(&ownerUserID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to get session owner: %w", err)
+	}
+
+	// Check if viewer is the session owner
+	isOwner := viewerUserID != nil && *viewerUserID == ownerUserID
+
 	// Check authorization based on share type
 	// - Public: anyone can view
 	// - System: any authenticated user can view
+	// - Owner: session owner can always view their own shares
 	// - Private: only specific recipients can view
-	if !isPublic {
+	if !isPublic && !isOwner {
 		if viewerUserID == nil {
 			return nil, ErrUnauthorized
 		}
@@ -1264,6 +1280,9 @@ func (db *DB) GetSharedSession(ctx context.Context, sessionID string, shareToken
 	if err := db.loadSessionSyncFiles(ctx, &session); err != nil {
 		return nil, err
 	}
+
+	// Set IsOwner flag for shared session responses
+	session.IsOwner = &isOwner
 
 	return &session, nil
 }

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import SessionHeader from './SessionHeader';
 import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
 import type { GitInfo } from '@/types';
@@ -69,9 +70,11 @@ const meta: Meta<typeof SessionHeaderInteractive> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ background: '#fafafa', minHeight: '200px' }}>
-        <Story />
-      </div>
+      <MemoryRouter>
+        <div style={{ background: '#fafafa', minHeight: '200px' }}>
+          <Story />
+        </div>
+      </MemoryRouter>
     ),
   ],
 };
@@ -111,6 +114,23 @@ export const SharedSession: Story = {
     gitInfo: { repo_url: 'https://github.com/user/project', branch: 'feature/dark-mode' },
     isOwner: false,
     isShared: true,
+  },
+};
+
+// Owner viewing their own share link - indicator is clickable
+export const OwnerViewingShareLink: Story = {
+  args: {
+    sessionId: 'session-owner-share',
+    title: 'API Authentication Implementation',
+    hasCustomTitle: false,
+    autoTitle: 'API Authentication Implementation',
+    externalId: 'owner123share456',
+    model: 'claude-opus-4-5-20251101',
+    durationMs: 3600000, // 1 hour
+    sessionDate: new Date('2025-12-06T10:00:00'),
+    gitInfo: { repo_url: 'https://github.com/user/project', branch: 'feature/auth' },
+    isOwner: true,
+    isShared: true, // Owner viewing via share link
   },
 };
 

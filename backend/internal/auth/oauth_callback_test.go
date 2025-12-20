@@ -443,6 +443,250 @@ func TestGenerateDeviceCode(t *testing.T) {
 	})
 }
 
+// TestHandleGitHubLogin_EmailHint tests email login hint functionality
+func TestHandleGitHubLogin_EmailHint(t *testing.T) {
+	config := OAuthConfig{
+		GitHubClientID:     "test_client_id",
+		GitHubClientSecret: "test_client_secret",
+		GitHubRedirectURL:  "http://localhost:8080/auth/github/callback",
+	}
+
+	t.Run("valid email sets cookie and login hint", func(t *testing.T) {
+		handler := HandleGitHubLogin(config)
+
+		req := httptest.NewRequest("GET", "/auth/github/login?email=alice@example.com", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		// Should set expected_email cookie
+		cookies := rec.Result().Cookies()
+		var emailCookie *http.Cookie
+		for _, c := range cookies {
+			if c.Name == "expected_email" {
+				emailCookie = c
+				break
+			}
+		}
+
+		if emailCookie == nil {
+			t.Fatal("expected_email cookie not set")
+		}
+
+		if emailCookie.Value != "alice@example.com" {
+			t.Errorf("expected_email = %q, want 'alice@example.com'", emailCookie.Value)
+		}
+
+		// Should add login hint to redirect URL
+		location := rec.Header().Get("Location")
+		if !containsSubstring(location, "login=alice%40example.com") {
+			t.Errorf("redirect URL missing login hint: %s", location)
+		}
+	})
+
+	t.Run("invalid email does not set cookie or hint", func(t *testing.T) {
+		handler := HandleGitHubLogin(config)
+
+		req := httptest.NewRequest("GET", "/auth/github/login?email=not-an-email", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		// Should NOT set expected_email cookie
+		cookies := rec.Result().Cookies()
+		for _, c := range cookies {
+			if c.Name == "expected_email" {
+				t.Error("expected_email cookie should not be set for invalid email")
+			}
+		}
+
+		// Should NOT add login hint to redirect URL
+		location := rec.Header().Get("Location")
+		if containsSubstring(location, "login=") {
+			t.Errorf("redirect URL should not have login hint for invalid email: %s", location)
+		}
+	})
+
+	t.Run("empty email does not set cookie", func(t *testing.T) {
+		handler := HandleGitHubLogin(config)
+
+		req := httptest.NewRequest("GET", "/auth/github/login?email=", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		cookies := rec.Result().Cookies()
+		for _, c := range cookies {
+			if c.Name == "expected_email" {
+				t.Error("expected_email cookie should not be set for empty email")
+			}
+		}
+	})
+}
+
+// TestHandleGoogleLogin_EmailHint tests Google email login hint
+func TestHandleGoogleLogin_EmailHint(t *testing.T) {
+	config := OAuthConfig{
+		GoogleClientID:     "test_client_id",
+		GoogleClientSecret: "test_client_secret",
+		GoogleRedirectURL:  "http://localhost:8080/auth/google/callback",
+	}
+
+	t.Run("valid email adds login_hint", func(t *testing.T) {
+		handler := HandleGoogleLogin(config)
+
+		req := httptest.NewRequest("GET", "/auth/google/login?email=bob@example.com", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		// Should add login_hint to redirect URL
+		location := rec.Header().Get("Location")
+		if !containsSubstring(location, "login_hint=bob%40example.com") {
+			t.Errorf("redirect URL missing login_hint: %s", location)
+		}
+	})
+
+	t.Run("invalid email does not add login_hint", func(t *testing.T) {
+		handler := HandleGoogleLogin(config)
+
+		req := httptest.NewRequest("GET", "/auth/google/login?email=garbage", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		location := rec.Header().Get("Location")
+		if containsSubstring(location, "login_hint=") {
+			t.Errorf("redirect URL should not have login_hint for invalid email: %s", location)
+		}
+	})
+}
+
+// TestHandleLogout_RedirectSupport tests logout redirect functionality
+func TestHandleLogout_RedirectSupport(t *testing.T) {
+	// Note: HandleLogout requires a db, but we can still test the redirect logic
+	// by passing nil db (logout will still work, just won't delete session from db)
+
+	t.Run("redirects to relative path", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "http://localhost:3000")
+
+		handler := HandleLogout(nil)
+
+		req := httptest.NewRequest("GET", "/auth/logout?redirect=/auth/login", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		location := rec.Header().Get("Location")
+		// /auth paths should redirect directly
+		if location != "/auth/login" {
+			t.Errorf("location = %q, want '/auth/login'", location)
+		}
+	})
+
+	t.Run("prepends frontend URL for non-auth paths", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "http://localhost:3000")
+
+		handler := HandleLogout(nil)
+
+		req := httptest.NewRequest("GET", "/auth/logout?redirect=/sessions/123", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		location := rec.Header().Get("Location")
+		if location != "http://localhost:3000/sessions/123" {
+			t.Errorf("location = %q, want 'http://localhost:3000/sessions/123'", location)
+		}
+	})
+
+	t.Run("blocks absolute URL redirects (open redirect attack)", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "http://localhost:3000")
+
+		handler := HandleLogout(nil)
+
+		req := httptest.NewRequest("GET", "/auth/logout?redirect=http://evil.com", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		location := rec.Header().Get("Location")
+		// Should redirect to frontend, not evil.com
+		if location != "http://localhost:3000" {
+			t.Errorf("location = %q, should redirect to frontend, not attacker URL", location)
+		}
+	})
+
+	t.Run("blocks protocol-relative redirects", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "http://localhost:3000")
+
+		handler := HandleLogout(nil)
+
+		req := httptest.NewRequest("GET", "/auth/logout?redirect=//evil.com/path", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		location := rec.Header().Get("Location")
+		if containsSubstring(location, "evil.com") {
+			t.Errorf("location contains evil.com - open redirect vulnerability: %s", location)
+		}
+	})
+}
+
+// TestHandleLoginSelector_EmailDisplay tests email display in login selector
+func TestHandleLoginSelector_EmailDisplay(t *testing.T) {
+	t.Run("valid email appears in page", func(t *testing.T) {
+		handler := HandleLoginSelector()
+
+		req := httptest.NewRequest("GET", "/auth/login?email=test@example.com", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		body := rec.Body.String()
+		if !containsSubstring(body, "test@example.com") {
+			t.Error("page should display the expected email")
+		}
+		if !containsSubstring(body, "to view this shared session") {
+			t.Error("page should show shared session context")
+		}
+	})
+
+	t.Run("invalid email is not displayed", func(t *testing.T) {
+		handler := HandleLoginSelector()
+
+		req := httptest.NewRequest("GET", "/auth/login?email=<script>alert(1)</script>", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		body := rec.Body.String()
+		// Should fall back to default message, not display invalid email
+		if containsSubstring(body, "<script>") {
+			t.Error("XSS attempt should be blocked")
+		}
+		if !containsSubstring(body, "Choose your authentication method") {
+			t.Error("should show default message for invalid email")
+		}
+	})
+
+	t.Run("email is passed to OAuth links", func(t *testing.T) {
+		handler := HandleLoginSelector()
+
+		req := httptest.NewRequest("GET", "/auth/login?email=user@example.com&redirect=/sessions/123", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		body := rec.Body.String()
+		// OAuth links should include email param
+		if !containsSubstring(body, "email=user%40example.com") {
+			t.Error("OAuth links should include email parameter")
+		}
+	})
+}
+
 // Helper functions
 
 func containsSubstring(s, substr string) bool {

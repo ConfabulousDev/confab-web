@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -163,12 +164,14 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			}
 
 			for _, toEmail := range req.Recipients {
+				// Include recipient email in URL so login flow can guide them to the right account
+				recipientShareURL := shareURL + "?email=" + url.QueryEscape(toEmail)
 				emailParams := email.ShareInvitationParams{
 					ToEmail:      toEmail,
 					SharerName:   sharerName,
 					SharerEmail:  sharer.Email,
 					SessionTitle: sessionTitle,
-					ShareURL:     shareURL,
+					ShareURL:     recipientShareURL,
 					ExpiresAt:    expiresAt,
 				}
 

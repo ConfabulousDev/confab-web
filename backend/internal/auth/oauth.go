@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -102,6 +103,22 @@ func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
 			})
 		}
 
+		// Store expected email if provided (for share link login flow)
+		// Only store and use valid email addresses
+		expectedEmail := r.URL.Query().Get("email")
+		validEmail := expectedEmail != "" && validation.IsValidEmail(expectedEmail)
+		if validEmail {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "expected_email",
+				Value:    expectedEmail,
+				Path:     "/",
+				MaxAge:   300, // 5 minutes
+				HttpOnly: true,
+				Secure:   cookieSecure(),
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
+
 		// Redirect to GitHub
 		// Scope: read:user gets profile info, user:email gets email
 		authURL := fmt.Sprintf(
@@ -110,6 +127,12 @@ func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
 			config.GitHubRedirectURL,
 			state,
 		)
+
+		// Add login hint if valid email is provided (pre-fills GitHub username/email field)
+		if validEmail {
+			authURL += "&login=" + url.QueryEscape(expectedEmail)
+		}
+
 		http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 	}
 }
@@ -239,6 +262,29 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			SameSite: http.SameSiteLaxMode,
 		})
 
+		// Check for expected email (from share link flow)
+		// If user logged in with different email than expected, redirect with mismatch error
+		var emailMismatch bool
+		var expectedEmail string
+		if expectedEmailCookie, err := r.Cookie("expected_email"); err == nil && expectedEmailCookie.Value != "" {
+			expectedEmail = expectedEmailCookie.Value
+			// Clear the cookie
+			http.SetCookie(w, &http.Cookie{
+				Name:   "expected_email",
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			// Compare emails (case-insensitive)
+			if strings.ToLower(expectedEmail) != strings.ToLower(user.Email) {
+				emailMismatch = true
+				logger.Warn("OAuth email mismatch",
+					"expected_email", expectedEmail,
+					"actual_email", user.Email,
+					"provider", "github")
+			}
+		}
+
 		// Check if this was a CLI login flow
 		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
 			// Clear the cli_redirect cookie
@@ -272,6 +318,14 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
 				redirectURL = os.Getenv("FRONTEND_URL") + redirectURL
 			}
+			// Add email mismatch params if applicable
+			if emailMismatch {
+				separator := "?"
+				if strings.Contains(redirectURL, "?") {
+					separator = "&"
+				}
+				redirectURL += separator + "email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
+			}
 			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 			return
 		}
@@ -279,6 +333,9 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Redirect back to frontend (normal web login)
 		// Note: FRONTEND_URL is validated at startup in main.go
 		frontendURL := os.Getenv("FRONTEND_URL")
+		if emailMismatch {
+			frontendURL += "?email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
+		}
 		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
 	}
 }
@@ -303,9 +360,24 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 			MaxAge: -1,
 		})
 
+		// Check for redirect URL (e.g., for re-login with different account)
+		frontendURL := os.Getenv("FRONTEND_URL")
+		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
+			// SECURITY: Only allow relative paths to prevent open redirect attacks
+			if strings.HasPrefix(redirectAfter, "/") && !strings.HasPrefix(redirectAfter, "//") {
+				// Prepend frontend URL for frontend paths, or use as-is for backend paths
+				if strings.HasPrefix(redirectAfter, "/auth") {
+					http.Redirect(w, r, redirectAfter, http.StatusTemporaryRedirect)
+					return
+				}
+				http.Redirect(w, r, frontendURL+redirectAfter, http.StatusTemporaryRedirect)
+				return
+			}
+			logger.Warn("Blocked potential open redirect in logout", "redirect_url", redirectAfter)
+		}
+
 		// Redirect back to frontend
 		// Note: FRONTEND_URL is validated at startup in main.go
-		frontendURL := os.Getenv("FRONTEND_URL")
 		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
 	}
 }
@@ -507,6 +579,22 @@ func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
 			})
 		}
 
+		// Store expected email if provided (for share link login flow)
+		// Only store and use valid email addresses
+		expectedEmail := r.URL.Query().Get("email")
+		validEmail := expectedEmail != "" && validation.IsValidEmail(expectedEmail)
+		if validEmail {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "expected_email",
+				Value:    expectedEmail,
+				Path:     "/",
+				MaxAge:   300, // 5 minutes
+				HttpOnly: true,
+				Secure:   cookieSecure(),
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
+
 		// Redirect to Google
 		authURL := fmt.Sprintf(
 			"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&state=%s&scope=%s",
@@ -515,6 +603,12 @@ func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
 			url.QueryEscape(state),
 			url.QueryEscape("openid email profile"),
 		)
+
+		// Add login hint if valid email is provided (pre-fills Google email field)
+		if validEmail {
+			authURL += "&login_hint=" + url.QueryEscape(expectedEmail)
+		}
+
 		http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 	}
 }
@@ -642,6 +736,29 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			SameSite: http.SameSiteLaxMode,
 		})
 
+		// Check for expected email (from share link flow)
+		// If user logged in with different email than expected, redirect with mismatch error
+		var emailMismatch bool
+		var expectedEmail string
+		if expectedEmailCookie, err := r.Cookie("expected_email"); err == nil && expectedEmailCookie.Value != "" {
+			expectedEmail = expectedEmailCookie.Value
+			// Clear the cookie
+			http.SetCookie(w, &http.Cookie{
+				Name:   "expected_email",
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			// Compare emails (case-insensitive)
+			if strings.ToLower(expectedEmail) != strings.ToLower(user.Email) {
+				emailMismatch = true
+				logger.Warn("OAuth email mismatch",
+					"expected_email", expectedEmail,
+					"actual_email", user.Email,
+					"provider", "google")
+			}
+		}
+
 		// Check if this was a CLI login flow
 		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
 			http.SetCookie(w, &http.Cookie{
@@ -673,12 +790,24 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
 				redirectURL = frontendURL + redirectURL
 			}
+			// Add email mismatch params if applicable
+			if emailMismatch {
+				separator := "?"
+				if strings.Contains(redirectURL, "?") {
+					separator = "&"
+				}
+				redirectURL += separator + "email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
+			}
 			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 			return
 		}
 
 		// Redirect to frontend
-		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
+		finalURL := frontendURL
+		if emailMismatch {
+			finalURL += "?email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
+		}
+		http.Redirect(w, r, finalURL, http.StatusTemporaryRedirect)
 	}
 }
 
@@ -763,8 +892,38 @@ func generateRandomString(length int) (string, error) {
 // HandleLoginSelector serves a page where users can choose their OAuth provider
 func HandleLoginSelector() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Preserve any redirect URL in query params
+		// Preserve any redirect URL and email in query params
 		redirectAfter := r.URL.Query().Get("redirect")
+		expectedEmail := r.URL.Query().Get("email")
+
+		// Only use email if it's a valid format (prevents display of garbage/attacks)
+		validEmail := expectedEmail != "" && validation.IsValidEmail(expectedEmail)
+		if !validEmail {
+			expectedEmail = ""
+		}
+
+		// Build query string for OAuth links
+		buildQueryString := func() string {
+			params := make([]string, 0, 2)
+			if redirectAfter != "" {
+				params = append(params, "redirect="+url.QueryEscape(redirectAfter))
+			}
+			if expectedEmail != "" {
+				params = append(params, "email="+url.QueryEscape(expectedEmail))
+			}
+			if len(params) > 0 {
+				return "?" + strings.Join(params, "&")
+			}
+			return ""
+		}
+
+		// Build subtitle based on whether expected email is set
+		subtitle := "Choose your authentication method"
+		if expectedEmail != "" {
+			subtitle = fmt.Sprintf("Sign in with <strong>%s</strong> to view this shared session", template.HTMLEscapeString(expectedEmail))
+		}
+
+		queryString := buildQueryString()
 
 		html := `<!DOCTYPE html>
 <html>
@@ -804,6 +963,9 @@ func HandleLoginSelector() http.HandlerFunc {
             color: #666;
             margin: 0 0 1.5rem 0;
             font-size: 0.875rem;
+        }
+        p strong {
+            color: #1a1a1a;
         }
         .buttons {
             display: flex;
@@ -852,25 +1014,15 @@ func HandleLoginSelector() http.HandlerFunc {
 <body>
     <div class="container">
         <h1>Sign in to Confab</h1>
-        <p>Choose your authentication method</p>
+        <p>` + subtitle + `</p>
         <div class="buttons">
-            <a href="/auth/github/login` + func() string {
-			if redirectAfter != "" {
-				return "?redirect=" + url.QueryEscape(redirectAfter)
-			}
-			return ""
-		}() + `" class="btn btn-github">
+            <a href="/auth/github/login` + queryString + `" class="btn btn-github">
                 <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
                 </svg>
                 Continue with GitHub
             </a>
-            <a href="/auth/google/login` + func() string {
-			if redirectAfter != "" {
-				return "?redirect=" + url.QueryEscape(redirectAfter)
-			}
-			return ""
-		}() + `" class="btn btn-google">
+            <a href="/auth/google/login` + queryString + `" class="btn btn-google">
                 <svg class="icon" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>

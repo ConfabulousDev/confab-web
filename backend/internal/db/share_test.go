@@ -499,6 +499,49 @@ func TestGetSharedSession_PrivateForbidden(t *testing.T) {
 	}
 }
 
+// TestGetSharedSession_OwnerCanAccessOwnPrivateShare tests that owner can access their own private share
+// even when not in the recipient list
+func TestGetSharedSession_OwnerCanAccessOwnPrivateShare(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "private-share-session")
+
+	shareToken := testutil.GenerateShareToken()
+	// Create private share with only recipient - owner is NOT in the list
+	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+
+	ctx := context.Background()
+
+	// Owner should have access even though they're not in recipient list
+	session, err := env.DB.GetSharedSession(ctx, sessionID, shareToken, &owner.ID)
+	if err != nil {
+		t.Fatalf("owner should have access to their own share: %v", err)
+	}
+	if session == nil {
+		t.Error("expected session to be returned for owner")
+	}
+	// Verify is_owner flag is set correctly
+	if session.IsOwner == nil || !*session.IsOwner {
+		t.Error("expected IsOwner to be true for owner")
+	}
+
+	// Verify recipient also still has access and is_owner is false
+	session, err = env.DB.GetSharedSession(ctx, sessionID, shareToken, &recipient.ID)
+	if err != nil {
+		t.Fatalf("recipient should have access: %v", err)
+	}
+	if session.IsOwner == nil || *session.IsOwner {
+		t.Error("expected IsOwner to be false for recipient")
+	}
+}
+
 // TestGetSharedSession_TokenSessionMismatch tests wrong session ID for share token
 func TestGetSharedSession_TokenSessionMismatch(t *testing.T) {
 	if testing.Short() {
