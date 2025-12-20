@@ -170,6 +170,26 @@
   width: 1%;
 }
 
+.activityContent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.activityDuration {
+  display: none;
+}
+
+.activityContent:hover .activityTime {
+  display: none;
+}
+
+.activityContent:hover .activityDuration {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Alert styling */
 .alertFading {
   opacity: 0;

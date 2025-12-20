@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessions, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { formatRelativeTime, sortData } from '@/utils';
+import { formatRelativeTime, formatDuration, sortData } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import SessionListStatsSidebar from '@/components/SessionListStatsSidebar';
 import SessionsFilterDropdown from '@/components/SessionsFilterDropdown';
@@ -12,7 +12,7 @@ import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
 function SessionsPage() {
@@ -301,7 +301,19 @@ function SessionsPage() {
                         >
                           {session.external_id.substring(0, 8)}
                         </td>
-                        <td className={styles.timestamp}>{session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}</td>
+                        <td className={styles.timestamp}>
+                          <span className={styles.activityContent}>
+                            <span className={styles.activityTime}>
+                              {session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}
+                            </span>
+                            {session.first_seen && session.last_sync_time && (
+                              <span className={styles.activityDuration}>
+                                {DurationIcon}
+                                {formatDuration(new Date(session.last_sync_time).getTime() - new Date(session.first_seen).getTime())}
+                              </span>
+                            )}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

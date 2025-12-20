@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon } from '@/components/icons';
 import SortableHeader from '@/components/SortableHeader';
+import { formatRelativeTime, formatDuration } from '@/utils';
 import styles from './SessionsPage.module.css';
 
 // Type for mock session data
@@ -11,6 +12,7 @@ interface MockSession {
   custom_title: string | null;
   summary: string | null;
   first_user_message: string | null;
+  first_seen: string;
   last_sync_time: string | null;
   git_repo: string | null;
   git_repo_url: string | null;
@@ -27,7 +29,8 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Recently we started ingesting hostname and username in sync/init API. I want to start displaying this in the session list.',
     first_user_message: null,
-    last_sync_time: new Date(Date.now() - 18 * 1000).toISOString(), // 18s ago
+    first_seen: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // Started 5m ago
+    last_sync_time: new Date(Date.now() - 18 * 1000).toISOString(), // 18s ago (duration: ~5m)
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
@@ -40,7 +43,8 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'check the latest pending changes in the api md files. See if you understand what changed.',
     first_user_message: null,
-    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago
+    first_seen: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // Started 25h ago
+    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago (duration: 2h)
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
@@ -53,7 +57,8 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Backend API metadata nesting & client telemetry',
     first_user_message: null,
-    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago
+    first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Started 24h ago
+    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago (duration: 1h)
     git_repo: 'internal/confab',
     git_repo_url: 'https://gitlab.company.com/internal/confab', // Non-GitHub example
     git_branch: 'main',
@@ -66,7 +71,8 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Sync API Metadata Nesting Implementation',
     first_user_message: null,
-    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago
+    first_seen: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(), // Started 26h ago
+    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago (duration: 3h)
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
@@ -79,7 +85,8 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Refactor onboarding UI into reusable Quickstart',
     first_user_message: null,
-    last_sync_time: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1d ago
+    first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // Started 2d ago
+    last_sync_time: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1d ago (duration: 1d)
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/quickstart',
@@ -92,7 +99,8 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Add authentication middleware',
     first_user_message: null,
-    last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2d ago
+    first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 45 * 60 * 1000).toISOString(), // Started 2d 45m ago
+    last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2d ago (duration: 45m)
     git_repo: 'ConfabulousDev/confab-cli',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-cli',
     git_branch: 'develop',
@@ -100,21 +108,6 @@ const mockSessions: MockSession[] = [
     username: null,
   },
 ];
-
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSecs < 60) return `${diffSecs}s`;
-  if (diffMins < 60) return `${diffMins}m`;
-  if (diffHours < 24) return `${diffHours}h`;
-  return `${diffDays}d`;
-}
 
 // Presentational component for the session list table
 interface SessionListTableProps {
@@ -194,7 +187,17 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                   {session.external_id.substring(0, 8)}
                 </td>
                 <td className={styles.timestamp}>
-                  {session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}
+                  <span className={styles.activityContent}>
+                    <span className={styles.activityTime}>
+                      {session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}
+                    </span>
+                    {session.first_seen && session.last_sync_time && (
+                      <span className={styles.activityDuration}>
+                        {DurationIcon}
+                        {formatDuration(new Date(session.last_sync_time).getTime() - new Date(session.first_seen).getTime())}
+                      </span>
+                    )}
+                  </span>
                 </td>
               </tr>
             ))}
@@ -233,7 +236,8 @@ export const WithMixedData: Story = {
         custom_title: 'Custom titled session',
         summary: 'This has a custom title set by the user',
         first_user_message: null,
-        last_sync_time: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        first_seen: new Date(Date.now() - 35 * 60 * 1000).toISOString(), // Started 35m ago
+        last_sync_time: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5m ago (duration: 30m)
         git_repo: 'company/another-repo',
         git_repo_url: 'https://github.com/company/another-repo',
         git_branch: 'main',

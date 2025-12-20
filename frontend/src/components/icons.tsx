@@ -54,3 +54,10 @@ export const SearchIcon = (
     <line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 );
+
+export const DurationIcon = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
