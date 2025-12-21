@@ -26,9 +26,9 @@
 }
 
 .navButton:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
-  border-color: var(--color-border-dark);
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
 }
 
 .navButton svg {
