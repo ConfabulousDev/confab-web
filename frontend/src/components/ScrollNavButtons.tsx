@@ -9,6 +9,8 @@ interface ScrollNavButtonsProps {
   onScrollToTop?: () => void;
   /** Custom handler for scrolling to bottom (useful for virtualized lists) */
   onScrollToBottom?: () => void;
+  /** Called when at-bottom state changes (useful for auto-scroll on new content) */
+  onAtBottomChange?: (atBottom: boolean) => void;
 }
 
 /**
@@ -20,6 +22,7 @@ function ScrollNavButtons({
   threshold = 100,
   onScrollToTop,
   onScrollToBottom,
+  onAtBottomChange,
 }: ScrollNavButtonsProps) {
   const [showTopButton, setShowTopButton] = useState(false);
   const [showBottomButton, setShowBottomButton] = useState(false);
@@ -28,6 +31,8 @@ function ScrollNavButtons({
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
+    let lastAtBottom: boolean | null = null;
+
     const updateButtonVisibility = () => {
       const { scrollTop, scrollHeight, clientHeight } = scrollElement;
       const atTop = scrollTop < threshold;
@@ -35,6 +40,12 @@ function ScrollNavButtons({
 
       setShowTopButton(!atTop);
       setShowBottomButton(!atBottom);
+
+      // Notify parent of atBottom state changes
+      if (onAtBottomChange && atBottom !== lastAtBottom) {
+        lastAtBottom = atBottom;
+        onAtBottomChange(atBottom);
+      }
     };
 
     scrollElement.addEventListener('scroll', updateButtonVisibility);
@@ -49,7 +60,7 @@ function ScrollNavButtons({
       scrollElement.removeEventListener('scroll', updateButtonVisibility);
       resizeObserver.disconnect();
     };
-  }, [scrollRef, threshold]);
+  }, [scrollRef, threshold, onAtBottomChange]);
 
   const scrollToTop = useCallback(() => {
     if (onScrollToTop) {

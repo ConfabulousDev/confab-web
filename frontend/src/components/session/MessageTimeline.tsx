@@ -1,4 +1,4 @@
-import { useMemo, useRef, useCallback } from 'react';
+import { useMemo, useRef, useCallback, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
 import TimelineMessage from './TimelineMessage';
@@ -76,6 +76,8 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
 
 function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true); // Start at bottom for initial load
+  const prevMessageCountRef = useRef(messages.length);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
@@ -170,6 +172,24 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
     scrollWithRetry();
   }, [virtualizer, virtualItems.length]);
 
+  // Callback to track atBottom state from ScrollNavButtons
+  const handleAtBottomChange = useCallback((atBottom: boolean) => {
+    isAtBottomRef.current = atBottom;
+  }, []);
+
+  // Auto-scroll to bottom when new messages arrive and user was at bottom
+  useEffect(() => {
+    const messageCount = messages.length;
+    const prevCount = prevMessageCountRef.current;
+
+    if (messageCount > prevCount && isAtBottomRef.current) {
+      // New messages arrived and user was at bottom - scroll to bottom
+      scrollToBottom();
+    }
+
+    prevMessageCountRef.current = messageCount;
+  }, [messages.length, scrollToBottom]);
+
   if (messages.length === 0) {
     return (
       <div className={styles.emptyState}>
@@ -185,6 +205,7 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
         scrollRef={parentRef}
         onScrollToTop={scrollToTop}
         onScrollToBottom={scrollToBottom}
+        onAtBottomChange={handleAtBottomChange}
       />
 
       <div
