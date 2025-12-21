@@ -8,8 +8,8 @@ import SessionStatsSidebar from './SessionStatsSidebar';
 import MessageTimeline from './MessageTimeline';
 import styles from './SessionViewer.module.css';
 
-// Polling interval for new transcript messages (30 seconds)
-const TRANSCRIPT_POLL_INTERVAL_MS = 30000;
+// Polling interval for new transcript messages (15 seconds)
+const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
 
 interface SessionViewerProps {
   session: SessionDetail;
