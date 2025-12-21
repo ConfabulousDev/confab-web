@@ -392,15 +392,32 @@ export const authAPI = {
 export const syncFilesAPI = {
   /**
    * Get file content for an owned session
+   * @param sessionId - The session UUID
+   * @param fileName - Name of the file (e.g., "transcript.jsonl")
+   * @param lineOffset - Optional: Return only lines after this line number (for incremental fetching)
    */
-  getContent: (sessionId: string, fileName: string): Promise<string> =>
-    api.getString(`/sync/file?session_id=${encodeURIComponent(sessionId)}&file_name=${encodeURIComponent(fileName)}`),
+  getContent: (sessionId: string, fileName: string, lineOffset?: number): Promise<string> => {
+    let url = `/sync/file?session_id=${encodeURIComponent(sessionId)}&file_name=${encodeURIComponent(fileName)}`;
+    if (lineOffset !== undefined && lineOffset > 0) {
+      url += `&line_offset=${lineOffset}`;
+    }
+    return api.getString(url);
+  },
 
   /**
    * Get file content for a shared session
+   * @param sessionId - The session UUID
+   * @param shareToken - The share token
+   * @param fileName - Name of the file
+   * @param lineOffset - Optional: Return only lines after this line number (for incremental fetching)
    */
-  getSharedContent: (sessionId: string, shareToken: string, fileName: string): Promise<string> =>
-    api.getString(`/sessions/${sessionId}/shared/${shareToken}/sync/file?file_name=${encodeURIComponent(fileName)}`),
+  getSharedContent: (sessionId: string, shareToken: string, fileName: string, lineOffset?: number): Promise<string> => {
+    let url = `/sessions/${sessionId}/shared/${shareToken}/sync/file?file_name=${encodeURIComponent(fileName)}`;
+    if (lineOffset !== undefined && lineOffset > 0) {
+      url += `&line_offset=${lineOffset}`;
+    }
+    return api.getString(url);
+  },
 };
 
 export const keysAPI = {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -420,7 +421,12 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSyncFileRead reads and concatenates all chunks for a file
-// GET /api/v1/sync/file?session_id=...&file_name=...
+// GET /api/v1/sync/file?session_id=...&file_name=...&line_offset=...
+//
+// The optional line_offset parameter enables incremental fetching:
+// - If line_offset is 0 or omitted, returns all lines (backward compatible)
+// - If line_offset > 0, returns only lines after line_offset (lines N+1 onwards)
+// - If line_offset >= last_synced_line, returns empty response (no S3 operations)
 func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
 	userID, ok := auth.GetUserID(r.Context())
@@ -432,6 +438,7 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	// Parse query params
 	sessionID := r.URL.Query().Get("session_id")
 	fileName := r.URL.Query().Get("file_name")
+	lineOffsetStr := r.URL.Query().Get("line_offset")
 
 	if sessionID == "" {
 		respondError(w, http.StatusBadRequest, "session_id is required")
@@ -440,6 +447,21 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	if fileName == "" {
 		respondError(w, http.StatusBadRequest, "file_name is required")
 		return
+	}
+
+	// Parse line_offset (default 0 for backward compatibility)
+	var lineOffset int
+	if lineOffsetStr != "" {
+		var err error
+		lineOffset, err = strconv.Atoi(lineOffsetStr)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "line_offset must be a valid integer")
+			return
+		}
+		if lineOffset < 0 {
+			respondError(w, http.StatusBadRequest, "line_offset must be non-negative")
+			return
+		}
 	}
 
 	// Verify session ownership and get external_id
@@ -461,6 +483,23 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get sync file state from DB to check last_synced_line
+	// This enables short-circuit when line_offset >= last_synced_line
+	syncState, err := s.db.GetSyncFileState(dbCtx, sessionID, fileName)
+	if err != nil {
+		// File doesn't exist in DB - return 404
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Short-circuit: if line_offset >= last_synced_line, no new lines exist
+	// Return empty response without touching S3
+	if lineOffset >= syncState.LastSyncedLine {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// List all chunks for this file
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 	defer storageCancel()
@@ -477,11 +516,30 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Filter chunks to only those containing lines > lineOffset
+	// A chunk with range [firstLine, lastLine] is relevant if lastLine > lineOffset
+	var relevantKeys []string
+	if lineOffset > 0 {
+		for _, key := range chunkKeys {
+			_, lastLine, ok := parseChunkKey(key)
+			if !ok {
+				// Include unparseable keys - they'll be skipped during download
+				relevantKeys = append(relevantKeys, key)
+				continue
+			}
+			// Only include chunks that have lines after lineOffset
+			if lastLine > lineOffset {
+				relevantKeys = append(relevantKeys, key)
+			}
+		}
+		chunkKeys = relevantKeys
+	}
+
 	// Self-healing: update DB chunk_count if it differs from actual S3 count
 	// This corrects any drift from races or failed uploads
+	// Note: We use the original chunk count before filtering for self-healing
 	actualChunkCount := len(chunkKeys)
-	syncState, err := s.db.GetSyncFileState(dbCtx, sessionID, fileName)
-	if err == nil {
+	if lineOffset == 0 {
 		// Only update if chunk_count is nil (legacy) or doesn't match
 		if syncState.ChunkCount == nil || *syncState.ChunkCount != actualChunkCount {
 			if err := s.db.UpdateSyncFileChunkCount(dbCtx, sessionID, fileName, actualChunkCount); err != nil {
@@ -501,7 +559,14 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Download all chunks and parse their line ranges
+	// If no relevant chunks after filtering, return empty response
+	if len(chunkKeys) == 0 {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Download chunks and parse their line ranges
 	chunks, err := downloadChunks(storageCtx, s.storage, chunkKeys)
 	if err != nil {
 		respondStorageError(w, err, "Failed to download file chunk")
@@ -509,18 +574,74 @@ func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(chunks) == 0 {
-		respondError(w, http.StatusNotFound, "File not found")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
 		return
+	}
+
+	// Find the first line number among downloaded chunks (for filtering)
+	minFirstLine := chunks[0].firstLine
+	for _, c := range chunks[1:] {
+		if c.firstLine < minFirstLine {
+			minFirstLine = c.firstLine
+		}
 	}
 
 	// Merge chunks, handling any overlaps from partial upload failures
 	merged := mergeChunks(chunks)
+
+	// If line_offset is specified, filter output to only lines after offset
+	if lineOffset > 0 {
+		merged = filterLinesAfterOffset(merged, lineOffset, minFirstLine)
+	}
 
 	// Write response
 	// Use text/plain for JSONL files (multiple JSON objects, one per line)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(merged)
+}
+
+// filterLinesAfterOffset removes lines at or before the given offset.
+// The firstLineNum parameter indicates what transcript line the content starts at.
+// For example, if content is lines 4,5,6 of the transcript (firstLineNum=4) and
+// offset=3, all lines are kept (4,5,6 are all > 3). If offset=5, only line 6 is kept.
+func filterLinesAfterOffset(content []byte, offset int, firstLineNum int) []byte {
+	if offset <= 0 {
+		return content
+	}
+
+	// If all content is after offset, return everything
+	if offset < firstLineNum {
+		return content
+	}
+
+	lines := bytes.Split(content, []byte("\n"))
+
+	// Calculate how many lines to skip from the beginning
+	// Line at index i corresponds to transcript line (firstLineNum + i)
+	// We want lines where (firstLineNum + i) > offset
+	// So: i > offset - firstLineNum
+	// So: i >= offset - firstLineNum + 1
+	startIndex := offset - firstLineNum + 1
+
+	if startIndex >= len(lines) {
+		return nil
+	}
+
+	// Skip lines before startIndex
+	remaining := lines[startIndex:]
+
+	// Filter out empty trailing lines that result from split
+	for len(remaining) > 0 && len(remaining[len(remaining)-1]) == 0 {
+		remaining = remaining[:len(remaining)-1]
+	}
+
+	if len(remaining) == 0 {
+		return nil
+	}
+
+	return bytes.Join(remaining, []byte("\n"))
 }
 
 // handleSyncEvent records a session lifecycle event

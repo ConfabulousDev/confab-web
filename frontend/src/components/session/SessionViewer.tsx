@@ -1,11 +1,15 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { SessionDetail, TranscriptLine } from '@/types';
-import { fetchParsedTranscript } from '@/services/transcriptService';
+import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
+import { useVisibility } from '@/hooks/useVisibility';
 import { countCategories, type MessageCategory } from './messageCategories';
 import SessionHeader from './SessionHeader';
 import SessionStatsSidebar from './SessionStatsSidebar';
 import MessageTimeline from './MessageTimeline';
 import styles from './SessionViewer.module.css';
+
+// Polling interval for new transcript messages (30 seconds)
+const TRANSCRIPT_POLL_INTERVAL_MS = 30000;
 
 interface SessionViewerProps {
   session: SessionDetail;
@@ -22,6 +26,12 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
 
+  // Track the current line count for incremental fetching
+  const lineCountRef = useRef(0);
+
+  // Track visibility for smart polling
+  const isVisible = useVisibility();
+
   // Filter state - user, assistant, system visible by default
   const [visibleCategories, setVisibleCategories] = useState<Set<MessageCategory>>(
     new Set(['user', 'assistant', 'system'])
@@ -35,7 +45,13 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
     return messages.filter((message) => visibleCategories.has(message.type));
   }, [messages, visibleCategories]);
 
-  // Load transcript
+  // Get transcript file name
+  const transcriptFileName = useMemo(() => {
+    const transcriptFile = session.files.find((f) => f.file_type === 'transcript');
+    return transcriptFile?.file_name;
+  }, [session.files]);
+
+  // Load transcript initially
   useEffect(() => {
     loadTranscript();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -44,15 +60,16 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
   async function loadTranscript() {
     setLoading(true);
     setError(null);
+    lineCountRef.current = 0;
 
     try {
-      const transcriptFile = session.files.find((f) => f.file_type === 'transcript');
-      if (!transcriptFile) {
+      if (!transcriptFileName) {
         throw new Error('No transcript file found');
       }
 
-      const parsed = await fetchParsedTranscript(session.id, transcriptFile.file_name, shareToken);
+      const parsed = await fetchParsedTranscript(session.id, transcriptFileName, shareToken);
       setMessages(parsed.messages);
+      lineCountRef.current = parsed.messages.length;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load transcript');
       console.error('Failed to load transcript:', e);
@@ -60,6 +77,40 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
       setLoading(false);
     }
   }
+
+  // Poll for new messages when visible
+  useEffect(() => {
+    if (!isVisible || loading || !transcriptFileName) {
+      return;
+    }
+
+    const pollForNewMessages = async () => {
+      try {
+        const { newMessages, newTotalLineCount } = await fetchNewTranscriptMessages(
+          session.id,
+          transcriptFileName,
+          lineCountRef.current,
+          shareToken
+        );
+
+        if (newMessages.length > 0) {
+          setMessages((prev) => [...prev, ...newMessages]);
+          lineCountRef.current = newTotalLineCount;
+        }
+      } catch (e) {
+        // Don't show error for polling failures - just log
+        console.warn('Failed to poll for new messages:', e);
+      }
+    };
+
+    // Set up polling interval
+    const intervalId = setInterval(pollForNewMessages, TRANSCRIPT_POLL_INTERVAL_MS);
+
+    // Cleanup
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isVisible, loading, session.id, transcriptFileName, shareToken]);
 
   // Toggle a category's visibility
   const toggleCategory = useCallback((category: MessageCategory) => {

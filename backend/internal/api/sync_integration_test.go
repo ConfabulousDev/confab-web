@@ -2348,3 +2348,432 @@ func TestHandleSyncFileRead_SelfHealing_Integration(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// GET /api/v1/sync/file - line_offset for incremental fetching
+// =============================================================================
+
+func TestHandleSyncFileRead_LineOffset_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	// Helper to upload chunks via API
+	uploadChunks := func(t *testing.T, server *Server, userID int64, sessionID string, chunks []struct {
+		firstLine int
+		lines     []string
+	}) {
+		for _, chunk := range chunks {
+			reqBody := SyncChunkRequest{
+				SessionID: sessionID,
+				FileName:  "transcript.jsonl",
+				FileType:  "transcript",
+				FirstLine: chunk.firstLine,
+				Lines:     chunk.lines,
+			}
+			req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, userID)
+			w := httptest.NewRecorder()
+			server.handleSyncChunk(w, req)
+			testutil.AssertStatus(t, w, http.StatusOK)
+		}
+	}
+
+	// Helper to read file with optional line_offset
+	readFile := func(t *testing.T, server *Server, userID int64, sessionID, fileName string, lineOffset *int) *httptest.ResponseRecorder {
+		url := "/api/v1/sync/file?session_id=" + sessionID + "&file_name=" + fileName
+		if lineOffset != nil {
+			url += fmt.Sprintf("&line_offset=%d", *lineOffset)
+		}
+		req := testutil.AuthenticatedRequest(t, "GET", url, nil, userID)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+		server.handleSyncFileRead(w, req)
+		return w
+	}
+
+	t.Run("returns all lines when line_offset is not specified (backward compatible)", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-1")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload chunks with 6 lines total
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
+			{4, []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
+		})
+
+		// Read without line_offset
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", nil)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		lines := strings.Split(strings.TrimSpace(w.Body.String()), "\n")
+		if len(lines) != 6 {
+			t.Errorf("expected 6 lines, got %d: %v", len(lines), lines)
+		}
+	})
+
+	t.Run("returns all lines when line_offset=0", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-2")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
+			{4, []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
+		})
+
+		offset := 0
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", &offset)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		lines := strings.Split(strings.TrimSpace(w.Body.String()), "\n")
+		if len(lines) != 6 {
+			t.Errorf("expected 6 lines, got %d: %v", len(lines), lines)
+		}
+	})
+
+	t.Run("returns only lines after line_offset", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-3")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
+			{4, []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
+		})
+
+		// Request lines after line 3 (should return lines 4, 5, 6)
+		offset := 3
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", &offset)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		body := w.Body.String()
+		lines := strings.Split(strings.TrimSpace(body), "\n")
+
+		if len(lines) != 3 {
+			t.Errorf("expected 3 lines, got %d: %v", len(lines), lines)
+		}
+
+		// Verify we got lines 4, 5, 6
+		for i, line := range lines {
+			expected := fmt.Sprintf(`{"line":%d}`, i+4)
+			if line != expected {
+				t.Errorf("line %d: expected %s, got %s", i, expected, line)
+			}
+		}
+
+		// Verify line 3 is NOT in output
+		if strings.Contains(body, `"line":3`) {
+			t.Error("response should not contain line 3")
+		}
+	})
+
+	t.Run("returns empty response when line_offset equals total lines", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-4")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
+		})
+
+		// Request lines after line 3 (none exist)
+		offset := 3
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", &offset)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		body := strings.TrimSpace(w.Body.String())
+		if body != "" {
+			t.Errorf("expected empty response, got: %s", body)
+		}
+	})
+
+	t.Run("returns empty response when line_offset exceeds total lines", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-5")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
+		})
+
+		// Request lines after line 100 (none exist)
+		offset := 100
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", &offset)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		body := strings.TrimSpace(w.Body.String())
+		if body != "" {
+			t.Errorf("expected empty response, got: %s", body)
+		}
+	})
+
+	t.Run("returns 400 for negative line_offset", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-6")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`}},
+		})
+
+		offset := -1
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", &offset)
+		testutil.AssertStatus(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("returns 400 for invalid line_offset", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-7")
+
+		// Use string instead of int for line_offset
+		url := "/api/v1/sync/file?session_id=" + sessionID + "&file_name=transcript.jsonl&line_offset=invalid"
+		req := testutil.AuthenticatedRequest(t, "GET", url, nil, user.ID)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+
+		server := &Server{db: env.DB, storage: env.Storage}
+		server.handleSyncFileRead(w, req)
+
+		testutil.AssertStatus(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("filters output to lines within a single chunk", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-8")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload one chunk with 5 lines
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`, `{"line":2}`, `{"line":3}`, `{"line":4}`, `{"line":5}`}},
+		})
+
+		// Request lines after line 2 (should return lines 3, 4, 5)
+		offset := 2
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", &offset)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		lines := strings.Split(strings.TrimSpace(w.Body.String()), "\n")
+		expected := []string{`{"line":3}`, `{"line":4}`, `{"line":5}`}
+		if len(lines) != len(expected) {
+			t.Fatalf("expected %d lines, got %d: %v", len(expected), len(lines), lines)
+		}
+
+		// Verify content
+		for i, line := range lines {
+			if line != expected[i] {
+				t.Errorf("line %d: expected %s, got %s", i, expected[i], line)
+			}
+		}
+	})
+
+	t.Run("works correctly across chunk boundaries", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-9")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload 3 chunks with 3 lines each (total 9 lines)
+		uploadChunks(t, server, user.ID, sessionID, []struct {
+			firstLine int
+			lines     []string
+		}{
+			{1, []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
+			{4, []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
+			{7, []string{`{"line":7}`, `{"line":8}`, `{"line":9}`}},
+		})
+
+		// Request lines after line 5 (should return lines 6, 7, 8, 9)
+		offset := 5
+		w := readFile(t, server, user.ID, sessionID, "transcript.jsonl", &offset)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		lines := strings.Split(strings.TrimSpace(w.Body.String()), "\n")
+		if len(lines) != 4 {
+			t.Errorf("expected 4 lines, got %d: %v", len(lines), lines)
+		}
+
+		// Verify content
+		expected := []string{`{"line":6}`, `{"line":7}`, `{"line":8}`, `{"line":9}`}
+		for i, line := range lines {
+			if line != expected[i] {
+				t.Errorf("line %d: expected %s, got %s", i, expected[i], line)
+			}
+		}
+	})
+}
+
+// TestHandleSyncFileRead_LineOffset_DBShortCircuit tests the behavior where
+// line_offset >= last_synced_line returns empty response efficiently.
+// The DB short-circuit optimization (skipping S3) is verified through functional tests.
+func TestHandleSyncFileRead_LineOffset_DBShortCircuit_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	// Helper to read file with line_offset
+	readFileWithOffset := func(t *testing.T, server *Server, userID int64, sessionID, fileName string, lineOffset int) *httptest.ResponseRecorder {
+		url := fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=%s&line_offset=%d", sessionID, fileName, lineOffset)
+		req := testutil.AuthenticatedRequest(t, "GET", url, nil, userID)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+		server.handleSyncFileRead(w, req)
+		return w
+	}
+
+	t.Run("verifies last_synced_line is correctly tracked", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "shortcircuit-test-1")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload a chunk with 3 lines
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"line":1}`, `{"line":2}`, `{"line":3}`},
+		}
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Verify last_synced_line is 3
+		var lastSyncedLine int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT last_synced_line FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "transcript.jsonl")
+		if err := row.Scan(&lastSyncedLine); err != nil {
+			t.Fatalf("failed to get last_synced_line: %v", err)
+		}
+		if lastSyncedLine != 3 {
+			t.Errorf("expected last_synced_line=3, got %d", lastSyncedLine)
+		}
+
+		// Request with line_offset=3 should return empty (no lines after 3)
+		w = readFileWithOffset(t, server, user.ID, sessionID, "transcript.jsonl", 3)
+		testutil.AssertStatus(t, w, http.StatusOK)
+		body := strings.TrimSpace(w.Body.String())
+		if body != "" {
+			t.Errorf("expected empty response for line_offset=last_synced_line, got: %s", body)
+		}
+	})
+
+	t.Run("returns new lines after incremental sync", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "shortcircuit-test-2")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// Upload first chunk (lines 1-3)
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"line":1}`, `{"line":2}`, `{"line":3}`},
+		}
+		req := testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w := httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Client knows it has 3 lines, polls with line_offset=3
+		w = readFileWithOffset(t, server, user.ID, sessionID, "transcript.jsonl", 3)
+		testutil.AssertStatus(t, w, http.StatusOK)
+		if strings.TrimSpace(w.Body.String()) != "" {
+			t.Errorf("expected empty before new sync, got: %s", w.Body.String())
+		}
+
+		// New data arrives - upload second chunk (lines 4-6)
+		reqBody = SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 4,
+			Lines:     []string{`{"line":4}`, `{"line":5}`, `{"line":6}`},
+		}
+		req = testutil.AuthenticatedRequest(t, "POST", "/api/v1/sync/chunk", reqBody, user.ID)
+		w = httptest.NewRecorder()
+		server.handleSyncChunk(w, req)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		// Client polls again with same line_offset=3, now gets new lines
+		w = readFileWithOffset(t, server, user.ID, sessionID, "transcript.jsonl", 3)
+		testutil.AssertStatus(t, w, http.StatusOK)
+
+		lines := strings.Split(strings.TrimSpace(w.Body.String()), "\n")
+		if len(lines) != 3 {
+			t.Errorf("expected 3 new lines, got %d: %v", len(lines), lines)
+		}
+
+		// Verify content is lines 4-6
+		expected := []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}
+		for i, line := range lines {
+			if line != expected[i] {
+				t.Errorf("line %d: expected %s, got %s", i, expected[i], line)
+			}
+		}
+	})
+
+	t.Run("returns 404 when file has no DB record", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "shortcircuit-test-3")
+		server := &Server{db: env.DB, storage: env.Storage}
+
+		// No chunks uploaded, so no sync_files record
+		w := readFileWithOffset(t, server, user.ID, sessionID, "transcript.jsonl", 0)
+		testutil.AssertStatus(t, w, http.StatusNotFound)
+	})
+}

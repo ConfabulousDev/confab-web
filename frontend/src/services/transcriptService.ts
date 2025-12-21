@@ -60,16 +60,21 @@ export interface FetchOptions {
 /**
  * Fetch transcript content from backend API via sync file endpoint
  * Supports both authenticated and shared (public) access
+ * @param sessionId - The session UUID
+ * @param fileName - Name of the transcript file
+ * @param shareToken - Optional share token for shared access
+ * @param lineOffset - Optional: Return only lines after this line number
  */
 export async function fetchTranscriptContent(
   sessionId: string,
   fileName: string,
-  shareToken?: string
+  shareToken?: string,
+  lineOffset?: number
 ): Promise<string> {
   if (shareToken) {
-    return syncFilesAPI.getSharedContent(sessionId, shareToken, fileName);
+    return syncFilesAPI.getSharedContent(sessionId, shareToken, fileName, lineOffset);
   } else {
-    return syncFilesAPI.getContent(sessionId, fileName);
+    return syncFilesAPI.getContent(sessionId, fileName, lineOffset);
   }
 }
 
@@ -203,6 +208,42 @@ export async function fetchParsedTranscript(
       lastTimestamp: timestamps[timestamps.length - 1],
       parseErrorCount: errors.length,
     },
+  };
+}
+
+/**
+ * Fetch new transcript messages incrementally.
+ * Returns only messages that are new since the given line count.
+ *
+ * @param sessionId - The session UUID
+ * @param fileName - Name of the transcript file
+ * @param currentLineCount - Number of lines already loaded (fetch lines after this)
+ * @param shareToken - Optional share token for shared access
+ * @returns Object with newMessages array and the new total line count
+ */
+export async function fetchNewTranscriptMessages(
+  sessionId: string,
+  fileName: string,
+  currentLineCount: number,
+  shareToken?: string
+): Promise<{ newMessages: TranscriptLine[]; newTotalLineCount: number }> {
+  // Fetch only lines after currentLineCount
+  const content = await fetchTranscriptContent(sessionId, fileName, shareToken, currentLineCount);
+
+  // If content is empty, no new messages
+  if (!content.trim()) {
+    return { newMessages: [], newTotalLineCount: currentLineCount };
+  }
+
+  // Parse the new content
+  const parseResult = parseJSONL(content);
+
+  // New total is previous count plus successfully parsed new lines
+  const newTotalLineCount = currentLineCount + parseResult.successCount;
+
+  return {
+    newMessages: parseResult.messages,
+    newTotalLineCount,
   };
 }
 

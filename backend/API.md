@@ -187,14 +187,26 @@ Content-Type: application/json
 ---
 
 ### Read Sync File
-Read the full contents of a synced file.
+Read the full contents of a synced file, or incrementally fetch new lines.
 
 ```
-GET /api/v1/sync/file?session_id=<uuid>&file_name=<name>
+GET /api/v1/sync/file?session_id=<uuid>&file_name=<name>&line_offset=<n>
 Authorization: Bearer <api_key>
 ```
 
-**Response:** `text/plain` - concatenated file contents
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| session_id | UUID | Yes | The session UUID |
+| file_name | string | Yes | Name of the file (e.g., "transcript.jsonl") |
+| line_offset | integer | No | Return only lines after this line number (default: 0 = all lines) |
+
+**Response:** `text/plain` - concatenated file contents (lines after line_offset if specified)
+
+**Notes:**
+- When `line_offset=0` or omitted, returns all lines (backward compatible)
+- When `line_offset >= last_synced_line`, returns empty response (efficient polling)
+- Useful for incremental fetching: poll with line_offset = number of lines already loaded
 
 ---
 
