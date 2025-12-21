@@ -185,6 +185,7 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
         scrollRef={parentRef}
         onScrollToTop={scrollToTop}
         onScrollToBottom={scrollToBottom}
+        contentDependency={messages.length}
       />
 
       <div

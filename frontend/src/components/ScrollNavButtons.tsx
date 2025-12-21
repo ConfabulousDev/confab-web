@@ -11,6 +11,8 @@ interface ScrollNavButtonsProps {
   onScrollToBottom?: () => void;
   /** Called when at-bottom state changes (useful for auto-scroll on new content) */
   onAtBottomChange?: (atBottom: boolean) => void;
+  /** Dependency value that triggers button visibility re-evaluation when changed */
+  contentDependency?: number;
 }
 
 /**
@@ -23,6 +25,7 @@ function ScrollNavButtons({
   onScrollToTop,
   onScrollToBottom,
   onAtBottomChange,
+  contentDependency,
 }: ScrollNavButtonsProps) {
   const [showTopButton, setShowTopButton] = useState(false);
   const [showBottomButton, setShowBottomButton] = useState(false);
@@ -60,7 +63,7 @@ function ScrollNavButtons({
       scrollElement.removeEventListener('scroll', updateButtonVisibility);
       resizeObserver.disconnect();
     };
-  }, [scrollRef, threshold, onAtBottomChange]);
+  }, [scrollRef, threshold, onAtBottomChange, contentDependency]);
 
   const scrollToTop = useCallback(() => {
     if (onScrollToTop) {
