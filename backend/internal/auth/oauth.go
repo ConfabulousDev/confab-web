@@ -276,7 +276,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 				MaxAge: -1,
 			})
 			// Compare emails (case-insensitive)
-			if strings.ToLower(expectedEmail) != strings.ToLower(user.Email) {
+			if !strings.EqualFold(expectedEmail, user.Email) {
 				emailMismatch = true
 				logger.Warn("OAuth email mismatch",
 					"expected_email", expectedEmail,
@@ -750,7 +750,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 				MaxAge: -1,
 			})
 			// Compare emails (case-insensitive)
-			if strings.ToLower(expectedEmail) != strings.ToLower(user.Email) {
+			if !strings.EqualFold(expectedEmail, user.Email) {
 				emailMismatch = true
 				logger.Warn("OAuth email mismatch",
 					"expected_email", expectedEmail,
