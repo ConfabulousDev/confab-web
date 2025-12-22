@@ -2,8 +2,9 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessionsPolling, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { formatRelativeTime, formatDuration, sortData } from '@/utils';
+import { formatDuration, sortData } from '@/utils';
 import PageHeader from '@/components/PageHeader';
+import { RelativeTime } from '@/components/RelativeTime';
 import SessionListStatsSidebar from '@/components/SessionListStatsSidebar';
 import SessionsFilterDropdown from '@/components/SessionsFilterDropdown';
 import SortableHeader from '@/components/SortableHeader';
@@ -304,7 +305,7 @@ function SessionsPage() {
                         <td className={styles.timestamp}>
                           <span className={styles.activityContent}>
                             <span className={styles.activityTime}>
-                              {session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}
+                              {session.last_sync_time ? <RelativeTime date={session.last_sync_time} /> : '-'}
                             </span>
                             {session.first_seen && session.last_sync_time && (
                               <span className={styles.activityDuration}>
