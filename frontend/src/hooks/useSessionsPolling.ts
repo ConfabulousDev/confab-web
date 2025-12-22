@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef } from 'react';
 import { useSmartPolling } from './useSmartPolling';
 import { sessionsAPI } from '@/services/api';
 import type { SessionListView } from '@/services/api';
@@ -35,16 +35,18 @@ export function useSessionsPolling(
   view: SessionListView = 'owned',
   enabled = true
 ): UseSessionsPollingReturn {
-  // Track ETag for conditional requests
+  // Track ETag for conditional requests (view-specific)
   const etagRef = useRef<string | null>(null);
-
-  // Reset ETag when view changes (ETags are view-specific)
-  useEffect(() => {
-    etagRef.current = null;
-  }, [view]);
+  const lastFetchedViewRef = useRef<SessionListView | null>(null);
 
   // Fetch function that handles ETag
   const fetchSessions = useCallback(async (): Promise<Session[] | null> => {
+    // Reset ETag when view changes (ETags are view-specific)
+    if (lastFetchedViewRef.current !== view) {
+      etagRef.current = null;
+      lastFetchedViewRef.current = view;
+    }
+
     const { data, etag } = await sessionsAPI.listWithETag(view, etagRef.current);
 
     // Update stored ETag
@@ -58,6 +60,7 @@ export function useSessionsPolling(
 
   const { data, state, refetch, loading, error } = useSmartPolling(fetchSessions, {
     enabled,
+    resetKey: view, // Triggers refetch when switching between owned/shared views
   });
 
   return {

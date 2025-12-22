@@ -8,6 +8,8 @@ interface UseSmartPollingOptions<T> {
   merge?: (prev: T | null, next: T) => T;
   /** Whether polling is enabled. Default: true */
   enabled?: boolean;
+  /** Key that triggers a reset and refetch when it changes */
+  resetKey?: string;
 }
 
 interface UseSmartPollingReturn<T> {
@@ -38,7 +40,7 @@ export function useSmartPolling<T>(
   fetchFn: () => Promise<T | null>,
   options: UseSmartPollingOptions<T> = {}
 ): UseSmartPollingReturn<T> {
-  const { merge, enabled = true } = options;
+  const { merge, enabled = true, resetKey } = options;
 
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
@@ -181,6 +183,24 @@ export function useSmartPolling<T>(
       scheduleNext();
     }
   }, [isIdle, scheduleNext]);
+
+  // Track resetKey to detect changes
+  const prevResetKeyRef = useRef(resetKey);
+
+  // Reset data and refetch when resetKey changes
+  useEffect(() => {
+    if (prevResetKeyRef.current !== resetKey) {
+      prevResetKeyRef.current = resetKey;
+      // Clear stale data immediately
+      setData(null);
+      // Fetch fresh data
+      doFetch().finally(() => {
+        if (isMountedRef.current) {
+          scheduleNext();
+        }
+      });
+    }
+  }, [resetKey, doFetch, scheduleNext]);
 
   const refetch = useCallback(async () => {
     await doFetch();

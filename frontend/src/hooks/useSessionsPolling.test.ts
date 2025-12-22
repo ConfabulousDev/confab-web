@@ -97,7 +97,7 @@ describe('useSessionsPolling', () => {
 
     expect(useSmartPolling).toHaveBeenCalledWith(
       expect.any(Function),
-      { enabled: false }
+      { enabled: false, resetKey: 'owned' }
     );
   });
 
