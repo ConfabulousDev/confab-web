@@ -291,17 +291,17 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 		t.Fatalf("Failed to make share public: %v", err)
 	}
 
-	t.Run("Shared session endpoint does NOT expose hostname/username", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID+"/shared/"+shareToken, nil)
+	t.Run("Canonical session endpoint does NOT expose hostname/username for shared access", func(t *testing.T) {
+		// Use canonical endpoint (CF-132) instead of old /shared/{token} endpoint
+		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 
 		// Add URL parameters
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", sessionID)
-		rctx.URLParams.Add("shareToken", shareToken)
 		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 		rr := httptest.NewRecorder()
-		handler := api.HandleGetSharedSession(env.DB)
+		handler := api.HandleGetSession(env.DB)
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
@@ -315,10 +315,10 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 
 		// The critical privacy check: hostname and username must NOT be exposed
 		if session.Hostname != nil {
-			t.Errorf("PRIVACY VIOLATION: hostname exposed via shared session endpoint: '%s'", *session.Hostname)
+			t.Errorf("PRIVACY VIOLATION: hostname exposed via canonical session endpoint: '%s'", *session.Hostname)
 		}
 		if session.Username != nil {
-			t.Errorf("PRIVACY VIOLATION: username exposed via shared session endpoint: '%s'", *session.Username)
+			t.Errorf("PRIVACY VIOLATION: username exposed via canonical session endpoint: '%s'", *session.Username)
 		}
 	})
 }
@@ -359,16 +359,15 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 		t.Fatalf("Failed to create recipient: %v", err)
 	}
 
-	t.Run("Private shared session endpoint does NOT expose hostname/username", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID+"/shared/"+shareToken, nil)
+	t.Run("Private shared session via canonical endpoint does NOT expose hostname/username", func(t *testing.T) {
+		// Use canonical endpoint (CF-132) instead of old /shared/{token} endpoint
+		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 
-		// Add URL parameters and viewer's session
+		// Add URL parameters
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", sessionID)
-		rctx.URLParams.Add("shareToken", shareToken)
 
 		// Simulate viewer being logged in (for private share access check)
-		// Note: HandleGetSharedSession extracts user from cookie, we'll add directly to context for test
 		reqCtx := context.WithValue(ctx, chi.RouteCtxKey, rctx)
 		req = req.WithContext(reqCtx)
 
@@ -388,7 +387,7 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 		})
 
 		rr := httptest.NewRecorder()
-		handler := api.HandleGetSharedSession(env.DB)
+		handler := api.HandleGetSession(env.DB)
 		handler.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
@@ -402,10 +401,10 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 
 		// The critical privacy check: hostname and username must NOT be exposed
 		if session.Hostname != nil {
-			t.Errorf("PRIVACY VIOLATION: hostname exposed via private shared session endpoint: '%s'", *session.Hostname)
+			t.Errorf("PRIVACY VIOLATION: hostname exposed via canonical session endpoint: '%s'", *session.Hostname)
 		}
 		if session.Username != nil {
-			t.Errorf("PRIVACY VIOLATION: username exposed via private shared session endpoint: '%s'", *session.Username)
+			t.Errorf("PRIVACY VIOLATION: username exposed via canonical session endpoint: '%s'", *session.Username)
 		}
 	})
 }

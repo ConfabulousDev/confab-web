@@ -378,12 +378,18 @@ Supports conditional requests for efficient polling:
 - `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
 - `hostname` and `username` are **owner-only fields** for privacy. They are returned as `null` for shared sessions (`is_owner: false`).
 
-#### Get Session Detail
+#### Get Session Detail (Canonical Access)
 ```
 GET /api/v1/sessions/{id}
 ```
 
-This endpoint is owner-only. Use the shared session endpoint for accessing sessions via share links.
+This endpoint provides unified access to session details. It supports:
+- **Owner access**: Authenticated session owner (full details including hostname/username)
+- **Public share**: Anyone (no auth required) if session has a public share
+- **System share**: Any authenticated user if session has a system share
+- **Recipient share**: Authenticated user who is a private share recipient
+
+Authentication is optional - the endpoint extracts user from session cookie if present.
 
 **Response:**
 ```json
@@ -407,6 +413,7 @@ This endpoint is owner-only. Use the shared session endpoint for accessing sessi
   },
   "hostname": "macbook.local",
   "username": "developer",
+  "is_owner": true,
   "files": [
     {
       "file_name": "transcript.jsonl",
@@ -418,7 +425,29 @@ This endpoint is owner-only. Use the shared session endpoint for accessing sessi
 }
 ```
 
-**Note:** `hostname` and `username` are only returned in this owner endpoint. They are NOT included in the shared session endpoint for privacy.
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_owner` | bool | `true` if the viewer is the session owner |
+| `hostname` | string\|null | Machine hostname (owner-only, null for shared access) |
+| `username` | string\|null | OS username (owner-only, null for shared access) |
+
+**Errors:**
+- `403` - Session owner is deactivated
+- `404` - Session not found or no access
+
+#### Read Session Sync File
+```
+GET /api/v1/sessions/{id}/sync/file?file_name=<name>
+```
+
+Read the contents of a synced file. Uses the same access logic as Get Session Detail.
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| file_name | string | Yes | Name of the file (e.g., "transcript.jsonl") |
+
+**Response:** `text/plain` - concatenated file contents
 
 #### Update Session Title
 ```
@@ -487,7 +516,7 @@ Content-Type: application/json
 ```json
 {
   "share_token": "hex32chars",
-  "share_url": "https://confab.dev/sessions/{id}/shared/{token}",
+  "share_url": "https://confab.dev/sessions/{id}",
   "is_public": true,
   "recipients": [],
   "expires_at": "2024-02-15T10:00:00Z",
@@ -496,7 +525,7 @@ Content-Type: application/json
 }
 ```
 
-**Note:** For private shares, invitation emails contain a personalized URL with the recipient's email: `https://confab.dev/sessions/{id}/shared/{token}?email={recipient_email}`. This allows the login flow to guide the recipient to sign in with the correct email address.
+**Note:** Share URLs use the canonical session URL format (`/sessions/{id}`). For private shares, invitation emails include the recipient's email as a query parameter: `https://confab.dev/sessions/{id}?email={recipient_email}`. This allows the login flow to guide the recipient to sign in with the correct email address. The share token is stored in the database for recipient lookup but is not exposed in URLs.
 
 #### List Shares for Session
 ```
@@ -515,36 +544,6 @@ X-CSRF-Token: <token>
 ```
 
 **Response:** `204 No Content`
-
----
-
-### Access Shared Session (Public)
-
-These endpoints don't require authentication (for public shares) or require the viewer to be logged in and on the invite list (for private shares). **Session owners can always access their own share links**, even if not in the recipient list.
-
-#### Get Shared Session
-```
-GET /api/v1/sessions/{id}/shared/{shareToken}
-```
-
-**Response:** Same as Get Session Detail, plus:
-```json
-{
-  "is_owner": true,
-  ...session fields...
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `is_owner` | bool | `true` if the viewer is the session owner (allows switching to owner view) |
-
-**Note:** `hostname` and `username` are NOT included in shared session responses for privacy.
-
-#### Read Shared Sync File
-```
-GET /api/v1/sessions/{id}/shared/{shareToken}/sync/file?file_name=<name>
-```
 
 ---
 
@@ -604,7 +603,7 @@ X-CSRF-Token: <token>
 ```json
 {
   "share_token": "hex32chars",
-  "share_url": "https://confab.dev/sessions/{id}/shared/{token}",
+  "share_url": "https://confab.dev/sessions/{id}",
   "session_id": "uuid",
   "external_id": "session-external-id"
 }

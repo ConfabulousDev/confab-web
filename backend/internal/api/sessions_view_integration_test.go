@@ -276,13 +276,15 @@ func TestHandleGetSession_Integration(t *testing.T) {
 		testutil.AssertStatus(t, w, http.StatusBadRequest)
 	})
 
-	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
+	t.Run("returns 404 for unauthenticated request without public share", func(t *testing.T) {
 		env.CleanDB(t)
 
-		sessionID := "test-session"
+		// Create a session but no public share
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, 0)
-		req = req.WithContext(context.Background())
+		// Unauthenticated request (no session cookie)
+		req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 
 		// Add URL parameter
 		rctx := chi.NewRouteContext()
@@ -293,7 +295,8 @@ func TestHandleGetSession_Integration(t *testing.T) {
 		handler := HandleGetSession(env.DB)
 		handler(w, req)
 
-		testutil.AssertStatus(t, w, http.StatusUnauthorized)
+		// Should return 404 (not 401) to not reveal session existence
+		testutil.AssertStatus(t, w, http.StatusNotFound)
 	})
 }
 

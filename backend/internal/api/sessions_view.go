@@ -78,16 +78,17 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 	}
 }
 
-// HandleGetSession returns detailed information about a specific session
+// HandleGetSession returns detailed information about a specific session.
+// Supports unified canonical access (CF-132):
+// - Owner access: authenticated user who owns the session
+// - Public share: anyone (no auth required)
+// - System share: any authenticated user
+// - Recipient share: authenticated user who is a share recipient
+//
+// This handler supports optional authentication - it extracts user ID from
+// the session cookie if present, but doesn't require it.
 func HandleGetSession(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
-		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
-			return
-		}
-
 		// Get session ID from URL (UUID)
 		sessionID := chi.URLParam(r, "id")
 		if sessionID == "" {
@@ -99,13 +100,58 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Get session detail (includes ownership check)
-		session, err := database.GetSessionDetail(ctx, sessionID, userID)
+		// =============================================================================
+		// Canonical Access Control (CF-132)
+		// =============================================================================
+		// This endpoint uses a unified access model where /sessions/{id} is the single
+		// entry point for all access types. Access is determined by checking in order:
+		//   1. Owner - user owns the session (full access, sees hostname/username)
+		//   2. Recipient - user is named in a private share (no hostname/username)
+		//   3. System - any authenticated user via system share (no hostname/username)
+		//   4. Public - anyone via public share (no hostname/username)
+		//   5. None - no access, return 404
+		//
+		// This pattern is also used in handleCanonicalSyncFileRead (sync.go).
+		// =============================================================================
+
+		// Step 1: Extract viewer identity from session cookie (optional auth)
+		var viewerUserID *int64
+		if userID, ok := auth.GetUserID(r.Context()); ok {
+			viewerUserID = &userID
+		} else {
+			viewerUserID = getViewerUserIDFromSession(ctx, r, database)
+		}
+
+		// Step 2: Determine access type based on ownership and shares
+		accessInfo, err := database.GetSessionAccessType(ctx, sessionID, viewerUserID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
+			logger.Error("Failed to get session access type", "error", err, "session_id", sessionID)
+			respondError(w, http.StatusInternalServerError, "Failed to get session")
+			return
+		}
+
+		// Step 3: Deny access if none of the access types apply
+		if accessInfo.AccessType == db.SessionAccessNone {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+
+		// Step 4: Get session with privacy filtering based on access type
+		session, err := database.GetSessionDetailWithAccess(ctx, sessionID, viewerUserID, accessInfo)
+		if err != nil {
+			if errors.Is(err, db.ErrSessionNotFound) {
+				respondError(w, http.StatusNotFound, "Session not found")
+				return
+			}
+			if errors.Is(err, db.ErrOwnerInactive) {
+				respondError(w, http.StatusForbidden, "This session is no longer available")
+				return
+			}
+			logger.Error("Failed to get session detail", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to get session")
 			return
 		}

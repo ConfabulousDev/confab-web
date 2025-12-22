@@ -311,9 +311,9 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/keys", withMaxBody(MaxBodyXS, HandleListAPIKeys(s.db)))
 			r.Delete("/keys/{id}", withMaxBody(MaxBodyXS, HandleDeleteAPIKey(s.db)))
 
-			// Session viewing
+			// Session listing (requires auth)
 			r.Get("/sessions", withMaxBody(MaxBodyXS, HandleListSessions(s.db)))
-			r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
+			// Session title update (requires auth + ownership)
 			r.Patch("/sessions/{id}/title", withMaxBody(MaxBodyS, HandleUpdateSessionTitle(s.db)))
 
 			// Sync file read (same handler, different auth)
@@ -331,10 +331,13 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Delete("/shares/{shareToken}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))
 		})
 
-		// Public shared session access (no auth for public, optional auth for private)
-		r.Get("/sessions/{id}/shared/{shareToken}", withMaxBody(MaxBodyXS, HandleGetSharedSession(s.db)))
-		// Shared sync file access endpoint
-		r.Get("/sessions/{id}/shared/{shareToken}/sync/file", withMaxBody(MaxBodyXS, s.handleSharedSyncFileRead))
+		// Canonical session access (CF-132) - supports optional authentication
+		// Works for: owner access, public shares, system shares, recipient shares
+		r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
+
+		// Canonical shared sync file access endpoint (CF-132)
+		// Uses same session access logic as /sessions/{id}
+		r.Get("/sessions/{id}/sync/file", withMaxBody(MaxBodyXS, s.handleCanonicalSyncFileRead))
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)

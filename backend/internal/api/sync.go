@@ -1085,6 +1085,143 @@ func (s *Server) handleSharedSyncFileRead(w http.ResponseWriter, r *http.Request
 	w.Write(merged)
 }
 
+// handleCanonicalSyncFileRead reads and concatenates all chunks for a file via canonical access (CF-132)
+// GET /api/v1/sessions/{id}/sync/file?file_name=...
+// Supports: owner access, public shares, system shares, recipient shares
+func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Request) {
+	// Get params from URL
+	sessionID := chi.URLParam(r, "id")
+	fileName := r.URL.Query().Get("file_name")
+
+	if sessionID == "" {
+		respondError(w, http.StatusBadRequest, "session_id is required")
+		return
+	}
+	if fileName == "" {
+		respondError(w, http.StatusBadRequest, "file_name is required")
+		return
+	}
+
+	// =============================================================================
+	// Canonical Access Control (CF-132)
+	// =============================================================================
+	// This endpoint uses the same unified access model as HandleGetSession.
+	// Access is determined by checking in order:
+	//   1. Owner - user owns the session
+	//   2. Recipient - user is named in a private share
+	//   3. System - any authenticated user via system share
+	//   4. Public - anyone via public share
+	//   5. None - no access, return 404
+	//
+	// See HandleGetSession (sessions_view.go) for the primary implementation.
+	// =============================================================================
+
+	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer dbCancel()
+
+	// Step 1: Extract viewer identity from session cookie (optional auth)
+	viewerUserID := getViewerUserIDFromSession(dbCtx, r, s.db)
+
+	// Step 2: Determine access type based on ownership and shares
+	accessInfo, err := s.db.GetSessionAccessType(dbCtx, sessionID, viewerUserID)
+	if err != nil {
+		if errors.Is(err, db.ErrSessionNotFound) {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+		logger.Error("Failed to get session access type", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to get session")
+		return
+	}
+
+	// Step 3: Deny access if none of the access types apply
+	if accessInfo.AccessType == db.SessionAccessNone {
+		respondError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Step 4: Validate access (checks inactive owner, etc.)
+	session, err := s.db.GetSessionDetailWithAccess(dbCtx, sessionID, viewerUserID, accessInfo)
+	if err != nil {
+		if errors.Is(err, db.ErrSessionNotFound) {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+		if errors.Is(err, db.ErrOwnerInactive) {
+			respondError(w, http.StatusForbidden, "This session is no longer available")
+			return
+		}
+		logger.Error("Failed to get session detail", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to get session")
+		return
+	}
+
+	// Get the session's user_id and external_id for S3 path
+	sessionUserID, externalID, err := s.db.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+	if err != nil {
+		logger.Error("Failed to get session info", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to get session info")
+		return
+	}
+
+	// Verify file exists in this session
+	fileExists := false
+	for _, file := range session.Files {
+		if file.FileName == fileName {
+			fileExists = true
+			break
+		}
+	}
+	if !fileExists {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// List and download all chunks for this file
+	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
+	defer storageCancel()
+
+	chunkKeys, err := s.storage.ListChunks(storageCtx, sessionUserID, externalID, fileName)
+	if err != nil {
+		logger.Error("Failed to list chunks", "error", err, "session_id", sessionID, "file_name", fileName)
+		respondStorageError(w, err, "Failed to list chunks")
+		return
+	}
+
+	if len(chunkKeys) == 0 {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Download all chunks and parse their line ranges
+	chunks, err := downloadChunks(storageCtx, s.storage, chunkKeys)
+	if err != nil {
+		respondStorageError(w, err, "Failed to download file chunk")
+		return
+	}
+
+	if len(chunks) == 0 {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Merge chunks, handling any overlaps from partial upload failures
+	merged := mergeChunks(chunks)
+
+	logger.Info("Canonical sync file read",
+		"session_id", sessionID,
+		"file_name", fileName,
+		"chunk_count", len(chunks),
+		"access_type", accessInfo.AccessType,
+		"viewer_user_id", viewerUserID)
+
+	// Write response
+	// Use text/plain for JSONL files (multiple JSON objects, one per line)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(merged)
+}
+
 // extractTextFromMessage extracts the first text content from a message entry
 // Handles both string content and array content (multimodal messages)
 func extractTextFromMessage(entry map[string]interface{}) string {

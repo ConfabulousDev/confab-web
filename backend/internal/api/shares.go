@@ -142,8 +142,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			return
 		}
 
-		// Build share URL (uses session ID in URL)
-		shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
+		// Build canonical share URL (CF-132: no token in URL)
+		shareURL := frontendURL + "/sessions/" + sessionID
 
 		// Send invitation emails for recipient shares (unless skipped)
 		var emailsSent bool

@@ -274,3 +274,33 @@ func CreateTestWebSession(t *testing.T, env *TestEnvironment, sessionID string, 
 		t.Fatalf("failed to create test web session: %v", err)
 	}
 }
+
+// CreateTestSystemShare creates a system share in the database for testing
+// System shares are accessible to all authenticated users
+func CreateTestSystemShare(t *testing.T, env *TestEnvironment, sessionID string, shareToken string, expiresAt *time.Time) int64 {
+	t.Helper()
+
+	// Insert share
+	query := `
+		INSERT INTO session_shares (session_id, share_token, expires_at, created_at)
+		VALUES ($1, $2, $3, NOW())
+		RETURNING id
+	`
+
+	var id int64
+	row := env.DB.QueryRow(env.Ctx, query, sessionID, shareToken, expiresAt)
+	err := row.Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to create test share: %v", err)
+	}
+
+	// Add system share flag
+	_, err = env.DB.Exec(env.Ctx,
+		"INSERT INTO session_share_system (share_id) VALUES ($1)",
+		id)
+	if err != nil {
+		t.Fatalf("failed to add system share flag: %v", err)
+	}
+
+	return id
+}

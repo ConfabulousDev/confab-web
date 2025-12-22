@@ -155,6 +155,7 @@ func (e *TestEnvironment) CleanDB(t *testing.T) {
 	tables := []string{
 		"session_share_recipients",
 		"session_share_public",
+		"session_share_system",
 		"session_shares",
 		"sync_files",
 		"files",

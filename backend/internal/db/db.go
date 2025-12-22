@@ -1863,3 +1863,178 @@ func (db *DB) InsertSessionEvent(ctx context.Context, params SessionEventParams)
 	}
 	return nil
 }
+
+// ============================================================================
+// Canonical Session Access (CF-132)
+// ============================================================================
+
+// SessionAccessType represents how a user can access a session
+type SessionAccessType string
+
+const (
+	SessionAccessNone      SessionAccessType = "none"
+	SessionAccessOwner     SessionAccessType = "owner"
+	SessionAccessPublic    SessionAccessType = "public"
+	SessionAccessSystem    SessionAccessType = "system"
+	SessionAccessRecipient SessionAccessType = "recipient"
+)
+
+// SessionAccessInfo contains information about how a user can access a session
+type SessionAccessInfo struct {
+	AccessType SessionAccessType
+	ShareID    *int64 // The share ID that granted access (for updating last_accessed_at)
+}
+
+// GetSessionAccessType determines how a user can access a session.
+// Checks in order of specificity: owner, recipient, system, public.
+// Returns the access type and the share ID (if applicable).
+// viewerUserID can be nil for unauthenticated users.
+func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewerUserID *int64) (*SessionAccessInfo, error) {
+	// First, check if session exists and get owner
+	var ownerUserID int64
+	err := db.conn.QueryRowContext(ctx,
+		`SELECT user_id FROM sessions WHERE id = $1`, sessionID).Scan(&ownerUserID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSessionNotFound
+		}
+		if isInvalidUUIDError(err) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Check if viewer is the owner (most specific)
+	if viewerUserID != nil && *viewerUserID == ownerUserID {
+		return &SessionAccessInfo{AccessType: SessionAccessOwner}, nil
+	}
+
+	// For recipient and system checks, user must be authenticated
+	if viewerUserID != nil {
+		// Check for recipient share (non-expired) - user explicitly invited
+		var recipientShareID int64
+		err = db.conn.QueryRowContext(ctx, `
+			SELECT ss.id FROM session_shares ss
+			JOIN session_share_recipients ssr ON ss.id = ssr.share_id
+			WHERE ss.session_id = $1
+			  AND ssr.user_id = $2
+			  AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
+			LIMIT 1
+		`, sessionID, *viewerUserID).Scan(&recipientShareID)
+		if err == nil {
+			return &SessionAccessInfo{AccessType: SessionAccessRecipient, ShareID: &recipientShareID}, nil
+		}
+		if err != sql.ErrNoRows {
+			return nil, fmt.Errorf("failed to check recipient share: %w", err)
+		}
+
+		// Check for system share (non-expired) - any authenticated user can access
+		var systemShareID int64
+		err = db.conn.QueryRowContext(ctx, `
+			SELECT ss.id FROM session_shares ss
+			JOIN session_share_system sss ON ss.id = sss.share_id
+			WHERE ss.session_id = $1
+			  AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
+			LIMIT 1
+		`, sessionID).Scan(&systemShareID)
+		if err == nil {
+			return &SessionAccessInfo{AccessType: SessionAccessSystem, ShareID: &systemShareID}, nil
+		}
+		if err != sql.ErrNoRows {
+			return nil, fmt.Errorf("failed to check system share: %w", err)
+		}
+	}
+
+	// Check for public share (non-expired) - anyone can access (least specific)
+	var publicShareID int64
+	err = db.conn.QueryRowContext(ctx, `
+		SELECT ss.id FROM session_shares ss
+		JOIN session_share_public ssp ON ss.id = ssp.share_id
+		WHERE ss.session_id = $1
+		  AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
+		LIMIT 1
+	`, sessionID).Scan(&publicShareID)
+	if err == nil {
+		return &SessionAccessInfo{AccessType: SessionAccessPublic, ShareID: &publicShareID}, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to check public share: %w", err)
+	}
+
+	return &SessionAccessInfo{AccessType: SessionAccessNone}, nil
+}
+
+// GetSessionDetailWithAccess returns session details for any user with access.
+// Unlike GetSessionDetail, this works for shared access (not just owners).
+// Hostname and username are only returned for owners.
+// Updates last_accessed_at on the share if accessed via share.
+func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, viewerUserID *int64, accessInfo *SessionAccessInfo) (*SessionDetail, error) {
+	// Check owner's status to block access if deactivated
+	var session SessionDetail
+	var gitInfoBytes []byte
+	var ownerStatus models.UserStatus
+	var hostname, username *string
+
+	sessionQuery := `
+		SELECT s.id, s.external_id, s.custom_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.status
+		FROM sessions s
+		JOIN users u ON s.user_id = u.id
+		WHERE s.id = $1
+	`
+	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(
+		&session.ID,
+		&session.ExternalID,
+		&session.CustomTitle,
+		&session.Summary,
+		&session.FirstUserMessage,
+		&session.FirstSeen,
+		&session.CWD,
+		&session.TranscriptPath,
+		&gitInfoBytes,
+		&session.LastSyncAt,
+		&hostname,
+		&username,
+		&ownerStatus,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSessionNotFound
+		}
+		if isInvalidUUIDError(err) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Check if session owner is deactivated
+	if ownerStatus == models.UserStatusInactive {
+		return nil, ErrOwnerInactive
+	}
+
+	// Only include hostname/username for owners
+	if accessInfo.AccessType == SessionAccessOwner {
+		session.Hostname = hostname
+		session.Username = username
+	}
+
+	// Set IsOwner flag
+	isOwner := accessInfo.AccessType == SessionAccessOwner
+	session.IsOwner = &isOwner
+
+	// Unmarshal git_info and load sync files
+	if err := db.unmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
+		return nil, err
+	}
+	if err := db.loadSessionSyncFiles(ctx, &session); err != nil {
+		return nil, err
+	}
+
+	// Update last_accessed_at on the share if accessed via share
+	if accessInfo.ShareID != nil {
+		db.conn.ExecContext(ctx,
+			`UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`,
+			*accessInfo.ShareID)
+	}
+
+	return &session, nil
+}
