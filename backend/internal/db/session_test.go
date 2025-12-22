@@ -751,3 +751,152 @@ func TestGetUserByID_NotFound(t *testing.T) {
 		t.Errorf("expected ErrUserNotFound, got %v", err)
 	}
 }
+
+// =============================================================================
+// GetSessionsLastModified Tests
+// =============================================================================
+
+// TestGetSessionsLastModified_IncludesSystemShares tests that system shares
+// are included in the ETag calculation for the shared-with-me view.
+// This is a regression test for CF-133.
+func TestGetSessionsLastModified_IncludesSystemShares(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Create session owner
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	// Create another user who will view the shared session
+	viewer := testutil.CreateTestUser(t, env, "viewer@test.com", "Viewer")
+
+	ctx := context.Background()
+
+	// Initially, viewer has no shared sessions
+	lastModified1, err := env.DB.GetSessionsLastModified(ctx, viewer.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("GetSessionsLastModified failed: %v", err)
+	}
+
+	// Create owner's session
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "system-shared-session")
+
+	// Update the session's last_sync_at to a known time
+	knownTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	_, err = env.DB.Exec(ctx, "UPDATE sessions SET last_sync_at = $1 WHERE id = $2", knownTime, sessionID)
+	if err != nil {
+		t.Fatalf("failed to update session last_sync_at: %v", err)
+	}
+
+	// Create a system share (accessible to all authenticated users)
+	shareToken := testutil.GenerateShareToken()
+	_, err = env.DB.CreateSystemShare(ctx, sessionID, shareToken, nil)
+	if err != nil {
+		t.Fatalf("failed to create system share: %v", err)
+	}
+
+	// Now viewer should see the system share reflected in lastModified
+	lastModified2, err := env.DB.GetSessionsLastModified(ctx, viewer.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("GetSessionsLastModified after system share failed: %v", err)
+	}
+
+	// The lastModified should have changed to reflect the system share
+	if !lastModified2.After(lastModified1) {
+		t.Errorf("lastModified did not increase after system share: before=%v, after=%v",
+			lastModified1, lastModified2)
+	}
+
+	// The lastModified should match the session's last_sync_at
+	if !lastModified2.Equal(knownTime) {
+		t.Errorf("lastModified = %v, want %v", lastModified2, knownTime)
+	}
+}
+
+// TestGetSessionsLastModified_PrivateShares tests that private shares are
+// still included in the ETag calculation (baseline test).
+func TestGetSessionsLastModified_PrivateShares(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@test.com", "Recipient")
+
+	ctx := context.Background()
+
+	// Initially, recipient has no shared sessions
+	lastModified1, err := env.DB.GetSessionsLastModified(ctx, recipient.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("GetSessionsLastModified failed: %v", err)
+	}
+
+	// Create owner's session
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "private-shared-session")
+
+	// Update the session's last_sync_at to a known time
+	knownTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	_, err = env.DB.Exec(ctx, "UPDATE sessions SET last_sync_at = $1 WHERE id = $2", knownTime, sessionID)
+	if err != nil {
+		t.Fatalf("failed to update session last_sync_at: %v", err)
+	}
+
+	// Share with recipient (private share)
+	shareToken := testutil.GenerateShareToken()
+	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@test.com"})
+
+	// Now recipient should see the private share reflected in lastModified
+	lastModified2, err := env.DB.GetSessionsLastModified(ctx, recipient.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("GetSessionsLastModified after private share failed: %v", err)
+	}
+
+	// The lastModified should have changed to reflect the share
+	if !lastModified2.After(lastModified1) {
+		t.Errorf("lastModified did not increase after private share: before=%v, after=%v",
+			lastModified1, lastModified2)
+	}
+
+	// The lastModified should match the session's last_sync_at
+	if !lastModified2.Equal(knownTime) {
+		t.Errorf("lastModified = %v, want %v", lastModified2, knownTime)
+	}
+}
+
+// TestGetSessionsLastModified_OwnedView tests the owned view returns correct lastModified.
+func TestGetSessionsLastModified_OwnedView(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+
+	ctx := context.Background()
+
+	// Create a session
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "owned-session")
+
+	// Update the session's last_sync_at to a known time
+	knownTime := time.Date(2024, 7, 20, 14, 45, 0, 0, time.UTC)
+	_, err := env.DB.Exec(ctx, "UPDATE sessions SET last_sync_at = $1 WHERE id = $2", knownTime, sessionID)
+	if err != nil {
+		t.Fatalf("failed to update session last_sync_at: %v", err)
+	}
+
+	lastModified, err := env.DB.GetSessionsLastModified(ctx, user.ID, db.SessionListViewOwned)
+	if err != nil {
+		t.Fatalf("GetSessionsLastModified failed: %v", err)
+	}
+
+	if !lastModified.Equal(knownTime) {
+		t.Errorf("lastModified = %v, want %v", lastModified, knownTime)
+	}
+}

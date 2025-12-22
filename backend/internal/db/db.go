@@ -790,13 +790,25 @@ func (db *DB) GetSessionsLastModified(ctx context.Context, userID int64, view Se
 		`
 	case SessionListViewSharedWithMe:
 		query = `
-			SELECT COALESCE(MAX(s.last_sync_at), '1970-01-01'::timestamp)
-			FROM sessions s
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_recipients sr ON sh.id = sr.share_id
-			WHERE sr.user_id = $1
-			  AND s.user_id != $1
-			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+			SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
+			FROM (
+				-- Private shares
+				SELECT s.last_sync_at
+				FROM sessions s
+				JOIN session_shares sh ON s.id = sh.session_id
+				JOIN session_share_recipients sr ON sh.id = sr.share_id
+				WHERE sr.user_id = $1
+				  AND s.user_id != $1
+				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+				UNION ALL
+				-- System shares
+				SELECT s.last_sync_at
+				FROM sessions s
+				JOIN session_shares sh ON s.id = sh.session_id
+				JOIN session_share_system sss ON sh.id = sss.share_id
+				WHERE s.user_id != $1
+				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+			) combined
 		`
 	default:
 		return time.Time{}, fmt.Errorf("invalid session list view: %s", view)
