@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -320,13 +321,13 @@ func TestSystemShare_Integration(t *testing.T) {
 		// Create a different user (not the owner, not a recipient)
 		otherUser := testutil.CreateTestUser(t, env, "other@example.com", "Other User")
 
-		// Other user should be able to access the system share
-		session, err := env.DB.GetSharedSession(env.Ctx, sessionID, shareToken, &otherUser.ID)
+		// Other user should be able to access via canonical access
+		accessInfo, err := env.DB.GetSessionAccessType(env.Ctx, sessionID, &otherUser.ID)
 		if err != nil {
 			t.Fatalf("authenticated user should be able to access system share: %v", err)
 		}
-		if session.ID != sessionID {
-			t.Errorf("expected session ID %s, got %s", sessionID, session.ID)
+		if accessInfo.AccessType != db.SessionAccessSystem {
+			t.Errorf("expected SessionAccessSystem, got %v", accessInfo.AccessType)
 		}
 	})
 
@@ -345,10 +346,13 @@ func TestSystemShare_Integration(t *testing.T) {
 			t.Fatalf("failed to create system share: %v", err)
 		}
 
-		// Unauthenticated access (nil viewerUserID) should fail
-		_, err = env.DB.GetSharedSession(env.Ctx, sessionID, shareToken, nil)
-		if err == nil {
-			t.Error("expected error for unauthenticated access to system share")
+		// Unauthenticated access (nil viewerUserID) should fail - system shares require auth
+		accessInfo, err := env.DB.GetSessionAccessType(env.Ctx, sessionID, nil)
+		if err != nil {
+			t.Fatalf("GetSessionAccessType failed: %v", err)
+		}
+		if accessInfo.AccessType != db.SessionAccessNone {
+			t.Errorf("expected SessionAccessNone for unauthenticated access to system share, got %v", accessInfo.AccessType)
 		}
 	})
 }
