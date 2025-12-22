@@ -183,10 +183,11 @@ export async function fetchTranscriptWithErrors(
 export async function fetchParsedTranscript(
   sessionId: string,
   fileName: string,
-  shareToken?: string
+  shareToken?: string,
+  skipCache?: boolean
 ): Promise<ParsedTranscript> {
   const t0 = performance.now();
-  const { messages, errors } = await fetchTranscriptWithErrors(sessionId, fileName, { shareToken });
+  const { messages, errors } = await fetchTranscriptWithErrors(sessionId, fileName, { shareToken, skipCache });
   const t1 = performance.now();
   console.log(`  ⏱️ fetchTranscript (network + parse) took ${Math.round(t1 - t0)}ms for ${messages.length} messages`);
 

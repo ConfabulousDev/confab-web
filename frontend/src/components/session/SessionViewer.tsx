@@ -67,7 +67,8 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
         throw new Error('No transcript file found');
       }
 
-      const parsed = await fetchParsedTranscript(session.id, transcriptFileName, shareToken);
+      // Skip cache on initial load to ensure fresh data when navigating to a session
+      const parsed = await fetchParsedTranscript(session.id, transcriptFileName, shareToken, true);
       setMessages(parsed.messages);
       lineCountRef.current = parsed.messages.length;
     } catch (e) {
