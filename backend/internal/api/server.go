@@ -283,9 +283,6 @@ func (s *Server) SetupRoutes() http.Handler {
 				r.Post("/sync/event", withMaxBody(MaxBodyM, s.handleSyncEvent))
 			})
 
-			// Read endpoint doesn't need rate limiting or decompression
-			r.Get("/sync/file", withMaxBody(MaxBodyXS, s.handleSyncFileRead))
-
 			// Session metadata update (by external_id for CLI convenience)
 			r.Patch("/sessions/{external_id}/summary", withMaxBody(MaxBodyM, s.handleUpdateSessionSummary))
 		})
@@ -315,9 +312,6 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions", withMaxBody(MaxBodyXS, HandleListSessions(s.db)))
 			// Session title update (requires auth + ownership)
 			r.Patch("/sessions/{id}/title", withMaxBody(MaxBodyS, HandleUpdateSessionTitle(s.db)))
-
-			// Sync file read (same handler, different auth)
-			r.Get("/sync/file", withMaxBody(MaxBodyXS, s.handleSyncFileRead))
 
 			// Session deletion
 			r.Delete("/sessions/{id}", withMaxBody(MaxBodyXS, HandleDeleteSession(s.db, s.storage)))

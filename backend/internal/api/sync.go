@@ -420,188 +420,6 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleSyncFileRead reads and concatenates all chunks for a file
-// GET /api/v1/sync/file?session_id=...&file_name=...&line_offset=...
-//
-// The optional line_offset parameter enables incremental fetching:
-// - If line_offset is 0 or omitted, returns all lines (backward compatible)
-// - If line_offset > 0, returns only lines after line_offset (lines N+1 onwards)
-// - If line_offset >= last_synced_line, returns empty response (no S3 operations)
-func (s *Server) handleSyncFileRead(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user
-	userID, ok := auth.GetUserID(r.Context())
-	if !ok {
-		respondError(w, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
-
-	// Parse query params
-	sessionID := r.URL.Query().Get("session_id")
-	fileName := r.URL.Query().Get("file_name")
-	lineOffsetStr := r.URL.Query().Get("line_offset")
-
-	if sessionID == "" {
-		respondError(w, http.StatusBadRequest, "session_id is required")
-		return
-	}
-	if fileName == "" {
-		respondError(w, http.StatusBadRequest, "file_name is required")
-		return
-	}
-
-	// Parse line_offset (default 0 for backward compatibility)
-	var lineOffset int
-	if lineOffsetStr != "" {
-		var err error
-		lineOffset, err = strconv.Atoi(lineOffsetStr)
-		if err != nil {
-			respondError(w, http.StatusBadRequest, "line_offset must be a valid integer")
-			return
-		}
-		if lineOffset < 0 {
-			respondError(w, http.StatusBadRequest, "line_offset must be non-negative")
-			return
-		}
-	}
-
-	// Verify session ownership and get external_id
-	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer dbCancel()
-
-	externalID, err := s.db.VerifySessionOwnership(dbCtx, sessionID, userID)
-	if err != nil {
-		if errors.Is(err, db.ErrSessionNotFound) {
-			respondError(w, http.StatusNotFound, "Session not found")
-			return
-		}
-		if errors.Is(err, db.ErrForbidden) {
-			respondError(w, http.StatusForbidden, "Access denied")
-			return
-		}
-		logger.Error("Failed to verify session ownership", "error", err, "session_id", sessionID)
-		respondError(w, http.StatusInternalServerError, "Failed to verify session")
-		return
-	}
-
-	// Get sync file state from DB to check last_synced_line
-	// This enables short-circuit when line_offset >= last_synced_line
-	syncState, err := s.db.GetSyncFileState(dbCtx, sessionID, fileName)
-	if err != nil {
-		// File doesn't exist in DB - return 404
-		respondError(w, http.StatusNotFound, "File not found")
-		return
-	}
-
-	// Short-circuit: if line_offset >= last_synced_line, no new lines exist
-	// Return empty response without touching S3
-	if lineOffset >= syncState.LastSyncedLine {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// List all chunks for this file
-	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
-	defer storageCancel()
-
-	chunkKeys, err := s.storage.ListChunks(storageCtx, userID, externalID, fileName)
-	if err != nil {
-		logger.Error("Failed to list chunks", "error", err, "session_id", sessionID, "file_name", fileName)
-		respondStorageError(w, err, "Failed to list chunks")
-		return
-	}
-
-	if len(chunkKeys) == 0 {
-		respondError(w, http.StatusNotFound, "File not found")
-		return
-	}
-
-	// Filter chunks to only those containing lines > lineOffset
-	// A chunk with range [firstLine, lastLine] is relevant if lastLine > lineOffset
-	var relevantKeys []string
-	if lineOffset > 0 {
-		for _, key := range chunkKeys {
-			_, lastLine, ok := parseChunkKey(key)
-			if !ok {
-				// Include unparseable keys - they'll be skipped during download
-				relevantKeys = append(relevantKeys, key)
-				continue
-			}
-			// Only include chunks that have lines after lineOffset
-			if lastLine > lineOffset {
-				relevantKeys = append(relevantKeys, key)
-			}
-		}
-		chunkKeys = relevantKeys
-	}
-
-	// Self-healing: update DB chunk_count if it differs from actual S3 count
-	// This corrects any drift from races or failed uploads
-	// Note: We use the original chunk count before filtering for self-healing
-	actualChunkCount := len(chunkKeys)
-	if lineOffset == 0 {
-		// Only update if chunk_count is nil (legacy) or doesn't match
-		if syncState.ChunkCount == nil || *syncState.ChunkCount != actualChunkCount {
-			if err := s.db.UpdateSyncFileChunkCount(dbCtx, sessionID, fileName, actualChunkCount); err != nil {
-				// Log but don't fail the read - this is best-effort healing
-				logger.Warn("Failed to self-heal chunk count",
-					"error", err,
-					"session_id", sessionID,
-					"file_name", fileName,
-					"actual_count", actualChunkCount)
-			} else {
-				logger.Debug("Self-healed chunk count",
-					"session_id", sessionID,
-					"file_name", fileName,
-					"old_count", syncState.ChunkCount,
-					"new_count", actualChunkCount)
-			}
-		}
-	}
-
-	// If no relevant chunks after filtering, return empty response
-	if len(chunkKeys) == 0 {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// Download chunks and parse their line ranges
-	chunks, err := downloadChunks(storageCtx, s.storage, chunkKeys)
-	if err != nil {
-		respondStorageError(w, err, "Failed to download file chunk")
-		return
-	}
-
-	if len(chunks) == 0 {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// Find the first line number among downloaded chunks (for filtering)
-	minFirstLine := chunks[0].firstLine
-	for _, c := range chunks[1:] {
-		if c.firstLine < minFirstLine {
-			minFirstLine = c.firstLine
-		}
-	}
-
-	// Merge chunks, handling any overlaps from partial upload failures
-	merged := mergeChunks(chunks)
-
-	// If line_offset is specified, filter output to only lines after offset
-	if lineOffset > 0 {
-		merged = filterLinesAfterOffset(merged, lineOffset, minFirstLine)
-	}
-
-	// Write response
-	// Use text/plain for JSONL files (multiple JSON objects, one per line)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write(merged)
-}
-
 // filterLinesAfterOffset removes lines at or before the given offset.
 // The firstLineNum parameter indicates what transcript line the content starts at.
 // For example, if content is lines 4,5,6 of the transcript (firstLineNum=4) and
@@ -968,12 +786,22 @@ func splitLines(data []byte) [][]byte {
 }
 
 // handleCanonicalSyncFileRead reads and concatenates all chunks for a file via canonical access (CF-132)
-// GET /api/v1/sessions/{id}/sync/file?file_name=...
+// GET /api/v1/sessions/{id}/sync/file?file_name=...&line_offset=...
 // Supports: owner access, public shares, system shares, recipient shares
+//
+// The optional line_offset parameter enables incremental fetching:
+// - If line_offset is 0 or omitted, returns all lines
+// - If line_offset > 0, returns only lines after line_offset (lines N+1 onwards)
+//
+// Optimizations:
+// - DB short-circuit: if line_offset >= last_synced_line, returns empty without S3 access
+// - Chunk filtering: only downloads chunks containing lines > line_offset
+// - Self-healing: corrects DB chunk_count if it differs from actual S3 count (owner only)
 func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Request) {
 	// Get params from URL
 	sessionID := chi.URLParam(r, "id")
 	fileName := r.URL.Query().Get("file_name")
+	lineOffsetStr := r.URL.Query().Get("line_offset")
 
 	if sessionID == "" {
 		respondError(w, http.StatusBadRequest, "session_id is required")
@@ -982,6 +810,21 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	if fileName == "" {
 		respondError(w, http.StatusBadRequest, "file_name is required")
 		return
+	}
+
+	// Parse line_offset (default 0 for backward compatibility)
+	var lineOffset int
+	if lineOffsetStr != "" {
+		var err error
+		lineOffset, err = strconv.Atoi(lineOffsetStr)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "line_offset must be a valid integer")
+			return
+		}
+		if lineOffset < 0 {
+			respondError(w, http.StatusBadRequest, "line_offset must be non-negative")
+			return
+		}
 	}
 
 	// Check canonical access (CF-132 unified access model)
@@ -1000,6 +843,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	}
 
 	session := result.Session
+	isOwner := result.AccessInfo.AccessType == db.SessionAccessOwner
 
 	// Get the session's user_id and external_id for S3 path
 	sessionUserID, externalID, err := s.db.GetSessionOwnerAndExternalID(dbCtx, sessionID)
@@ -1009,20 +853,28 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Verify file exists in this session
-	fileExists := false
-	for _, file := range session.Files {
-		if file.FileName == fileName {
-			fileExists = true
+	// Find file in session and get last_synced_line for short-circuit optimization
+	var fileInfo *db.SyncFileDetail
+	for i := range session.Files {
+		if session.Files[i].FileName == fileName {
+			fileInfo = &session.Files[i]
 			break
 		}
 	}
-	if !fileExists {
+	if fileInfo == nil {
 		respondError(w, http.StatusNotFound, "File not found")
 		return
 	}
 
-	// List and download all chunks for this file
+	// Short-circuit: if line_offset >= last_synced_line, no new lines exist
+	// Return empty response without touching S3
+	if lineOffset >= fileInfo.LastSyncedLine {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// List all chunks for this file
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 	defer storageCancel()
 
@@ -1038,7 +890,60 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Download all chunks and parse their line ranges
+	// Self-healing: update DB chunk_count if it differs from actual S3 count (owner only)
+	// This corrects any drift from races or failed uploads
+	// Only do this when lineOffset == 0 (full read) to avoid extra DB calls on incremental fetches
+	if isOwner && lineOffset == 0 {
+		// Get current chunk_count from DB for comparison
+		syncState, err := s.db.GetSyncFileState(dbCtx, sessionID, fileName)
+		if err == nil {
+			actualChunkCount := len(chunkKeys)
+			if syncState.ChunkCount == nil || *syncState.ChunkCount != actualChunkCount {
+				if err := s.db.UpdateSyncFileChunkCount(dbCtx, sessionID, fileName, actualChunkCount); err != nil {
+					// Log but don't fail the read - this is best-effort healing
+					logger.Warn("Failed to self-heal chunk count",
+						"error", err,
+						"session_id", sessionID,
+						"file_name", fileName,
+						"actual_count", actualChunkCount)
+				} else {
+					logger.Debug("Self-healed chunk count",
+						"session_id", sessionID,
+						"file_name", fileName,
+						"old_count", syncState.ChunkCount,
+						"new_count", actualChunkCount)
+				}
+			}
+		}
+	}
+
+	// Filter chunks to only those containing lines > lineOffset
+	// A chunk with range [firstLine, lastLine] is relevant if lastLine > lineOffset
+	if lineOffset > 0 {
+		var relevantKeys []string
+		for _, key := range chunkKeys {
+			_, lastLine, ok := parseChunkKey(key)
+			if !ok {
+				// Include unparseable keys - they'll be skipped during download
+				relevantKeys = append(relevantKeys, key)
+				continue
+			}
+			// Only include chunks that have lines after lineOffset
+			if lastLine > lineOffset {
+				relevantKeys = append(relevantKeys, key)
+			}
+		}
+		chunkKeys = relevantKeys
+	}
+
+	// If no relevant chunks after filtering, return empty response
+	if len(chunkKeys) == 0 {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Download chunks and parse their line ranges
 	chunks, err := downloadChunks(storageCtx, s.storage, chunkKeys)
 	if err != nil {
 		respondStorageError(w, err, "Failed to download file chunk")
@@ -1046,17 +951,32 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	}
 
 	if len(chunks) == 0 {
-		respondError(w, http.StatusNotFound, "File not found")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
 		return
+	}
+
+	// Find the first line number among downloaded chunks (for correct filtering)
+	minFirstLine := chunks[0].firstLine
+	for _, c := range chunks[1:] {
+		if c.firstLine < minFirstLine {
+			minFirstLine = c.firstLine
+		}
 	}
 
 	// Merge chunks, handling any overlaps from partial upload failures
 	merged := mergeChunks(chunks)
 
+	// If line_offset is specified, filter output to only lines after offset
+	if lineOffset > 0 {
+		merged = filterLinesAfterOffset(merged, lineOffset, minFirstLine)
+	}
+
 	logger.Info("Canonical sync file read",
 		"session_id", sessionID,
 		"file_name", fileName,
 		"chunk_count", len(chunks),
+		"line_offset", lineOffset,
 		"access_type", result.AccessInfo.AccessType,
 		"viewer_user_id", result.ViewerUserID)
 
@@ -1064,7 +984,9 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	// Use text/plain for JSONL files (multiple JSON objects, one per line)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write(merged)
+	if merged != nil {
+		w.Write(merged)
+	}
 }
 
 // extractTextFromMessage extracts the first text content from a message entry

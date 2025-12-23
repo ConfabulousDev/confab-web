@@ -186,30 +186,6 @@ Content-Type: application/json
 
 ---
 
-### Read Sync File
-Read the full contents of a synced file, or incrementally fetch new lines.
-
-```
-GET /api/v1/sync/file?session_id=<uuid>&file_name=<name>&line_offset=<n>
-Authorization: Bearer <api_key>
-```
-
-**Query Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| session_id | UUID | Yes | The session UUID |
-| file_name | string | Yes | Name of the file (e.g., "transcript.jsonl") |
-| line_offset | integer | No | Return only lines after this line number (default: 0 = all lines) |
-
-**Response:** `text/plain` - concatenated file contents (lines after line_offset if specified)
-
-**Notes:**
-- When `line_offset=0` or omitted, returns all lines (backward compatible)
-- When `line_offset >= last_synced_line`, returns empty response (efficient polling)
-- Useful for incremental fetching: poll with line_offset = number of lines already loaded
-
----
-
 ### Update Session Summary
 
 ```
@@ -436,17 +412,24 @@ Authentication is optional - the endpoint extracts user from session cookie if p
 
 #### Read Session Sync File
 ```
-GET /api/v1/sessions/{id}/sync/file?file_name=<name>
+GET /api/v1/sessions/{id}/sync/file?file_name=<name>&line_offset=<n>
 ```
 
-Read the contents of a synced file. Uses the same access logic as Get Session Detail.
+Read the contents of a synced file, or incrementally fetch new lines. Uses the same access logic as Get Session Detail.
 
 **Query Parameters:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | file_name | string | Yes | Name of the file (e.g., "transcript.jsonl") |
+| line_offset | integer | No | Return only lines after this line number (default: 0 = all lines) |
 
-**Response:** `text/plain` - concatenated file contents
+**Response:** `text/plain` - concatenated file contents (lines after line_offset if specified)
+
+**Notes:**
+- When `line_offset=0` or omitted, returns all lines (backward compatible)
+- When `line_offset >= last_synced_line`, returns empty response without S3 access (efficient polling)
+- Useful for incremental fetching: poll with line_offset = number of lines already loaded
+- Optimizations: DB short-circuit for no new lines, chunk filtering before download
 
 #### Update Session Title
 ```

@@ -1139,10 +1139,10 @@ func TestHandleSyncChunk_Integration(t *testing.T) {
 }
 
 // =============================================================================
-// GET /api/v1/sync/file - Read merged file content
+// GET /api/v1/sessions/{id}/sync/file - Read merged file content (canonical)
 // =============================================================================
 
-func TestHandleSyncFileRead_Integration(t *testing.T) {
+func TestHandleCanonicalSyncFileRead_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -1182,16 +1182,17 @@ func TestHandleSyncFileRead_Integration(t *testing.T) {
 			testutil.AssertStatus(t, w, http.StatusOK)
 		}
 
-		// Read merged file
+		// Read merged file via canonical endpoint
 		req := testutil.AuthenticatedRequest(t, "GET",
-			"/api/v1/sync/file?session_id="+sessionID+"&file_name=transcript.jsonl", nil, user.ID)
+			"/api/v1/sessions/"+sessionID+"/sync/file?file_name=transcript.jsonl", nil, user.ID)
 
 		// Add chi URL params
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
@@ -1227,20 +1228,21 @@ func TestHandleSyncFileRead_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "no-file-session")
 
 		req := testutil.AuthenticatedRequest(t, "GET",
-			"/api/v1/sync/file?session_id="+sessionID+"&file_name=nonexistent.jsonl", nil, user.ID)
+			"/api/v1/sessions/"+sessionID+"/sync/file?file_name=nonexistent.jsonl", nil, user.ID)
 
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
 
 		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusNotFound)
 	})
 
-	t.Run("returns 403 for session owned by another user", func(t *testing.T) {
+	t.Run("returns 404 for session owned by another user (no access)", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user1 := testutil.CreateTestUser(t, env, "user1@example.com", "User 1")
@@ -1248,38 +1250,20 @@ func TestHandleSyncFileRead_Integration(t *testing.T) {
 
 		sessionID := testutil.CreateTestSession(t, env, user1.ID, "user1-session")
 
-		// User2 tries to read user1's file
+		// User2 tries to read user1's file - canonical endpoint returns 404 for no access
 		req := testutil.AuthenticatedRequest(t, "GET",
-			"/api/v1/sync/file?session_id="+sessionID+"&file_name=transcript.jsonl", nil, user2.ID)
+			"/api/v1/sessions/"+sessionID+"/sync/file?file_name=transcript.jsonl", nil, user2.ID)
 
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
 
 		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
-		testutil.AssertStatus(t, w, http.StatusForbidden)
-	})
-
-	t.Run("returns 400 for missing session_id", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-
-		req := testutil.AuthenticatedRequest(t, "GET",
-			"/api/v1/sync/file?file_name=transcript.jsonl", nil, user.ID)
-
-		rctx := chi.NewRouteContext()
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-		w := httptest.NewRecorder()
-
-		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncFileRead(w, req)
-
-		testutil.AssertStatus(t, w, http.StatusBadRequest)
+		testutil.AssertStatus(t, w, http.StatusNotFound)
 	})
 
 	t.Run("returns 400 for missing file_name", func(t *testing.T) {
@@ -1289,15 +1273,16 @@ func TestHandleSyncFileRead_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
 		req := testutil.AuthenticatedRequest(t, "GET",
-			"/api/v1/sync/file?session_id="+sessionID, nil, user.ID)
+			"/api/v1/sessions/"+sessionID+"/sync/file", nil, user.ID)
 
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
 
 		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusBadRequest)
 	})
@@ -1357,17 +1342,18 @@ func TestHandleSyncFileRead_Integration(t *testing.T) {
 			t.Fatalf("failed to insert sync file: %v", err)
 		}
 
-		// Read merged file
+		// Read merged file via canonical endpoint
 		req := testutil.AuthenticatedRequest(t, "GET",
-			"/api/v1/sync/file?session_id="+sessionID+"&file_name=transcript.jsonl", nil, user.ID)
+			"/api/v1/sessions/"+sessionID+"/sync/file?file_name=transcript.jsonl", nil, user.ID)
 
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
 
 		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
@@ -1438,17 +1424,18 @@ func TestHandleSyncFileRead_Integration(t *testing.T) {
 			t.Fatalf("failed to insert sync file: %v", err)
 		}
 
-		// Read merged file
+		// Read merged file via canonical endpoint
 		req := testutil.AuthenticatedRequest(t, "GET",
-			"/api/v1/sync/file?session_id="+sessionID+"&file_name=transcript.jsonl", nil, user.ID)
+			"/api/v1/sessions/"+sessionID+"/sync/file?file_name=transcript.jsonl", nil, user.ID)
 
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
 
 		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
@@ -2179,7 +2166,7 @@ func TestHandleSyncChunk_ChunkCountTracking_Integration(t *testing.T) {
 	})
 }
 
-func TestHandleSyncFileRead_SelfHealing_Integration(t *testing.T) {
+func TestHandleCanonicalSyncFileRead_SelfHealing_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -2214,14 +2201,17 @@ func TestHandleSyncFileRead_SelfHealing_Integration(t *testing.T) {
 			t.Fatalf("failed to insert sync file: %v", err)
 		}
 
-		// Read the file
+		// Read the file via canonical endpoint
 		server := &Server{db: env.DB, storage: env.Storage}
 
 		req := testutil.AuthenticatedRequest(t, "GET",
-			fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=transcript.jsonl", sessionID),
+			fmt.Sprintf("/api/v1/sessions/%s/sync/file?file_name=transcript.jsonl", sessionID),
 			nil, user.ID)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
@@ -2266,14 +2256,17 @@ func TestHandleSyncFileRead_SelfHealing_Integration(t *testing.T) {
 			t.Fatalf("failed to insert sync file: %v", err)
 		}
 
-		// Read the file
+		// Read the file via canonical endpoint
 		server := &Server{db: env.DB, storage: env.Storage}
 
 		req := testutil.AuthenticatedRequest(t, "GET",
-			fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=transcript.jsonl", sessionID),
+			fmt.Sprintf("/api/v1/sessions/%s/sync/file?file_name=transcript.jsonl", sessionID),
 			nil, user.ID)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
@@ -2318,14 +2311,17 @@ func TestHandleSyncFileRead_SelfHealing_Integration(t *testing.T) {
 			t.Fatalf("failed to insert sync file: %v", err)
 		}
 
-		// Read the file
+		// Read the file via canonical endpoint
 		server := &Server{db: env.DB, storage: env.Storage}
 
 		req := testutil.AuthenticatedRequest(t, "GET",
-			fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=transcript.jsonl", sessionID),
+			fmt.Sprintf("/api/v1/sessions/%s/sync/file?file_name=transcript.jsonl", sessionID),
 			nil, user.ID)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusOK)
 
@@ -2350,10 +2346,10 @@ func TestHandleSyncFileRead_SelfHealing_Integration(t *testing.T) {
 }
 
 // =============================================================================
-// GET /api/v1/sync/file - line_offset for incremental fetching
+// GET /api/v1/sessions/{id}/sync/file - line_offset for incremental fetching
 // =============================================================================
 
-func TestHandleSyncFileRead_LineOffset_Integration(t *testing.T) {
+func TestHandleCanonicalSyncFileRead_LineOffset_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -2380,17 +2376,18 @@ func TestHandleSyncFileRead_LineOffset_Integration(t *testing.T) {
 		}
 	}
 
-	// Helper to read file with optional line_offset
+	// Helper to read file with optional line_offset via canonical endpoint
 	readFile := func(t *testing.T, server *Server, userID int64, sessionID, fileName string, lineOffset *int) *httptest.ResponseRecorder {
-		url := "/api/v1/sync/file?session_id=" + sessionID + "&file_name=" + fileName
+		url := "/api/v1/sessions/" + sessionID + "/sync/file?file_name=" + fileName
 		if lineOffset != nil {
 			url += fmt.Sprintf("&line_offset=%d", *lineOffset)
 		}
 		req := testutil.AuthenticatedRequest(t, "GET", url, nil, userID)
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 		return w
 	}
 
@@ -2562,14 +2559,15 @@ func TestHandleSyncFileRead_LineOffset_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "offset-test-7")
 
 		// Use string instead of int for line_offset
-		url := "/api/v1/sync/file?session_id=" + sessionID + "&file_name=transcript.jsonl&line_offset=invalid"
+		url := "/api/v1/sessions/" + sessionID + "/sync/file?file_name=transcript.jsonl&line_offset=invalid"
 		req := testutil.AuthenticatedRequest(t, "GET", url, nil, user.ID)
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
 
 		server := &Server{db: env.DB, storage: env.Storage}
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 
 		testutil.AssertStatus(t, w, http.StatusBadRequest)
 	})
@@ -2645,24 +2643,25 @@ func TestHandleSyncFileRead_LineOffset_Integration(t *testing.T) {
 	})
 }
 
-// TestHandleSyncFileRead_LineOffset_DBShortCircuit tests the behavior where
+// TestHandleCanonicalSyncFileRead_LineOffset_DBShortCircuit tests the behavior where
 // line_offset >= last_synced_line returns empty response efficiently.
 // The DB short-circuit optimization (skipping S3) is verified through functional tests.
-func TestHandleSyncFileRead_LineOffset_DBShortCircuit_Integration(t *testing.T) {
+func TestHandleCanonicalSyncFileRead_LineOffset_DBShortCircuit_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
 
 	env := testutil.SetupTestEnvironment(t)
 
-	// Helper to read file with line_offset
+	// Helper to read file with line_offset via canonical endpoint
 	readFileWithOffset := func(t *testing.T, server *Server, userID int64, sessionID, fileName string, lineOffset int) *httptest.ResponseRecorder {
-		url := fmt.Sprintf("/api/v1/sync/file?session_id=%s&file_name=%s&line_offset=%d", sessionID, fileName, lineOffset)
+		url := fmt.Sprintf("/api/v1/sessions/%s/sync/file?file_name=%s&line_offset=%d", sessionID, fileName, lineOffset)
 		req := testutil.AuthenticatedRequest(t, "GET", url, nil, userID)
 		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
-		server.handleSyncFileRead(w, req)
+		server.handleCanonicalSyncFileRead(w, req)
 		return w
 	}
 
