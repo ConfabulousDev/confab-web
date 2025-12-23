@@ -56,12 +56,6 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		if !resp.IsPublic {
 			t.Errorf("expected is_public true, got false")
 		}
-		if resp.ShareToken == "" {
-			t.Error("expected share token, got empty")
-		}
-		if len(resp.ShareToken) != 32 {
-			t.Errorf("expected share token length 32, got %d", len(resp.ShareToken))
-		}
 		if resp.ShareURL == "" {
 			t.Error("expected share URL, got empty")
 		}
@@ -78,12 +72,12 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 			t.Errorf("expected 1 share in database, got %d", count)
 		}
 
-		// Verify public flag
+		// Verify public flag using share ID
 		row = env.DB.QueryRow(env.Ctx,
 			`SELECT COUNT(*) FROM session_share_public ssp
 			 JOIN session_shares ss ON ssp.share_id = ss.id
-			 WHERE ss.share_token = $1`,
-			resp.ShareToken)
+			 WHERE ss.session_id = $1`,
+			sessionID)
 		if err := row.Scan(&count); err != nil {
 			t.Fatalf("failed to query public shares: %v", err)
 		}
@@ -132,8 +126,8 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		row := env.DB.QueryRow(env.Ctx,
 			`SELECT COUNT(*) FROM session_share_recipients ssr
 			 JOIN session_shares ss ON ssr.share_id = ss.id
-			 WHERE ss.share_token = $1`,
-			resp.ShareToken)
+			 WHERE ss.session_id = $1`,
+			sessionID)
 		if err := row.Scan(&emailCount); err != nil {
 			t.Fatalf("failed to query recipients: %v", err)
 		}
@@ -229,9 +223,6 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		if len(resp.Recipients) != 2 {
 			t.Errorf("expected 2 recipients, got %d", len(resp.Recipients))
 		}
-		if resp.ShareToken == "" {
-			t.Error("expected share token, got empty")
-		}
 
 		// EmailsSent should be false when skip_notifications is true
 		if resp.EmailsSent {
@@ -243,8 +234,8 @@ func TestHandleCreateShare_Integration(t *testing.T) {
 		row := env.DB.QueryRow(env.Ctx,
 			`SELECT COUNT(*) FROM session_share_recipients ssr
 			 JOIN session_shares ss ON ssr.share_id = ss.id
-			 WHERE ss.share_token = $1`,
-			resp.ShareToken)
+			 WHERE ss.session_id = $1`,
+			sessionID)
 		if err := row.Scan(&emailCount); err != nil {
 			t.Fatalf("failed to query recipients: %v", err)
 		}
@@ -271,19 +262,11 @@ func TestSystemShare_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create system share using database function directly
-		shareToken, err := GenerateShareToken()
-		if err != nil {
-			t.Fatalf("failed to generate token: %v", err)
-		}
-
-		share, err := env.DB.CreateSystemShare(env.Ctx, sessionID, shareToken, nil)
+		share, err := env.DB.CreateSystemShare(env.Ctx, sessionID, nil)
 		if err != nil {
 			t.Fatalf("failed to create system share: %v", err)
 		}
 
-		if share.ShareToken != shareToken {
-			t.Errorf("expected share token %s, got %s", shareToken, share.ShareToken)
-		}
 		if share.IsPublic {
 			t.Error("system share should not be marked as public")
 		}
@@ -293,8 +276,8 @@ func TestSystemShare_Integration(t *testing.T) {
 		row := env.DB.QueryRow(env.Ctx,
 			`SELECT COUNT(*) FROM session_share_system sss
 			 JOIN session_shares ss ON sss.share_id = ss.id
-			 WHERE ss.share_token = $1`,
-			shareToken)
+			 WHERE ss.id = $1`,
+			share.ID)
 		if err := row.Scan(&count); err != nil {
 			t.Fatalf("failed to query system shares: %v", err)
 		}
@@ -312,8 +295,7 @@ func TestSystemShare_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create system share
-		shareToken, _ := GenerateShareToken()
-		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, shareToken, nil)
+		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, nil)
 		if err != nil {
 			t.Fatalf("failed to create system share: %v", err)
 		}
@@ -340,8 +322,7 @@ func TestSystemShare_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create system share
-		shareToken, _ := GenerateShareToken()
-		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, shareToken, nil)
+		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, nil)
 		if err != nil {
 			t.Fatalf("failed to create system share: %v", err)
 		}

@@ -177,7 +177,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
               <p className={styles.empty}>No active shares</p>
             ) : (
               shares.map((share) => (
-                <div key={share.share_token} className={styles.shareItem}>
+                <div key={share.id} className={styles.shareItem}>
                   <div className={styles.shareInfo}>
                     <span className={`${styles.visibilityBadge} ${share.is_public ? styles.public : styles.private}`}>
                       {share.is_public ? 'public' : 'private'}
@@ -194,7 +194,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => revokeShare(share.share_token)}
+                    onClick={() => revokeShare(share.id)}
                   >
                     Revoke
                   </Button>

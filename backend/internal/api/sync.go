@@ -984,59 +984,22 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// =============================================================================
-	// Canonical Access Control (CF-132)
-	// =============================================================================
-	// This endpoint uses the same unified access model as HandleGetSession.
-	// Access is determined by checking in order:
-	//   1. Owner - user owns the session
-	//   2. Recipient - user is named in a private share
-	//   3. System - any authenticated user via system share
-	//   4. Public - anyone via public share
-	//   5. None - no access, return 404
-	//
-	// See HandleGetSession (sessions_view.go) for the primary implementation.
-	// =============================================================================
-
+	// Check canonical access (CF-132 unified access model)
 	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer dbCancel()
 
-	// Step 1: Extract viewer identity from session cookie (optional auth)
-	viewerUserID := getViewerUserIDFromSession(dbCtx, r, s.db)
-
-	// Step 2: Determine access type based on ownership and shares
-	accessInfo, err := s.db.GetSessionAccessType(dbCtx, sessionID, viewerUserID)
-	if err != nil {
-		if errors.Is(err, db.ErrSessionNotFound) {
-			respondError(w, http.StatusNotFound, "Session not found")
-			return
-		}
-		logger.Error("Failed to get session access type", "error", err, "session_id", sessionID)
-		respondError(w, http.StatusInternalServerError, "Failed to get session")
+	result, err := CheckCanonicalAccess(dbCtx, r, s.db, sessionID)
+	if RespondCanonicalAccessError(w, err, sessionID) {
 		return
 	}
 
-	// Step 3: Deny access if none of the access types apply
-	if accessInfo.AccessType == db.SessionAccessNone {
+	// Handle no access - sync endpoint always returns 404 (no AuthMayHelp prompt)
+	if result.AccessInfo.AccessType == db.SessionAccessNone {
 		respondError(w, http.StatusNotFound, "Session not found")
 		return
 	}
 
-	// Step 4: Validate access (checks inactive owner, etc.)
-	session, err := s.db.GetSessionDetailWithAccess(dbCtx, sessionID, viewerUserID, accessInfo)
-	if err != nil {
-		if errors.Is(err, db.ErrSessionNotFound) {
-			respondError(w, http.StatusNotFound, "Session not found")
-			return
-		}
-		if errors.Is(err, db.ErrOwnerInactive) {
-			respondError(w, http.StatusForbidden, "This session is no longer available")
-			return
-		}
-		logger.Error("Failed to get session detail", "error", err, "session_id", sessionID)
-		respondError(w, http.StatusInternalServerError, "Failed to get session")
-		return
-	}
+	session := result.Session
 
 	// Get the session's user_id and external_id for S3 path
 	sessionUserID, externalID, err := s.db.GetSessionOwnerAndExternalID(dbCtx, sessionID)
@@ -1094,8 +1057,8 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		"session_id", sessionID,
 		"file_name", fileName,
 		"chunk_count", len(chunks),
-		"access_type", accessInfo.AccessType,
-		"viewer_user_id", viewerUserID)
+		"access_type", result.AccessInfo.AccessType,
+		"viewer_user_id", result.ViewerUserID)
 
 	// Write response
 	// Use text/plain for JSONL files (multiple JSON objects, one per line)

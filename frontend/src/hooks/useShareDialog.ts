@@ -34,7 +34,7 @@ interface UseShareDialogReturn {
   addEmail: () => void;
   removeEmail: (email: string) => void;
   createShare: () => Promise<void>;
-  revokeShare: (shareToken: string) => Promise<void>;
+  revokeShare: (shareId: number) => Promise<void>;
   resetForm: () => void;
   fetchShares: () => Promise<void>;
 }
@@ -153,14 +153,14 @@ export function useShareDialog({
   }, [sessionId, isPublic, recipients, expiresInDays, fetchShares, onShareCreated]);
 
   const revokeShare = useCallback(
-    async (shareToken: string) => {
+    async (shareId: number) => {
       if (!confirm('Are you sure you want to revoke this share?')) {
         return;
       }
 
       setError('');
       try {
-        await sessionsAPI.revokeShare(shareToken);
+        await sessionsAPI.revokeShare(shareId);
         await fetchShares();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to revoke share');

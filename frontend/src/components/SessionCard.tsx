@@ -7,10 +7,9 @@ import styles from './SessionCard.module.css';
 interface SessionCardProps {
   session: SessionDetail;
   showGitInfo?: boolean;
-  shareToken?: string;
 }
 
-function SessionCard({ session, showGitInfo = true, shareToken }: SessionCardProps) {
+function SessionCard({ session, showGitInfo = true }: SessionCardProps) {
   const expandedFiles = useToggleSet<string>();
 
   return (
@@ -126,7 +125,7 @@ function SessionCard({ session, showGitInfo = true, shareToken }: SessionCardPro
                   </div>
                   {isExpanded && (
                     <div className={styles.fileContent}>
-                      <TranscriptViewer session={session} shareToken={shareToken} />
+                      <TranscriptViewer session={session} />
                     </div>
                   )}
                 </div>

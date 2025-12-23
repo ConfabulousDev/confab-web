@@ -42,7 +42,6 @@ export const SessionSchema = z.object({
   git_branch: z.string().nullable().optional(),
   is_owner: z.boolean(),
   access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),
-  share_token: z.string().nullable().optional(),
   shared_by_email: z.string().nullable().optional(),
   hostname: z.string().nullable().optional(), // Client machine hostname (owner-only, null for shared)
   username: z.string().nullable().optional(), // OS username (owner-only, null for shared)
@@ -71,7 +70,6 @@ export const SessionShareSchema = z.object({
   external_id: z.string(),
   session_summary: z.string().nullable().optional(),
   session_first_user_message: z.string().nullable().optional(),
-  share_token: z.string(),
   is_public: z.boolean(),
   recipients: z.array(z.string()).nullable().optional(),
   expires_at: z.string().nullable().optional(),

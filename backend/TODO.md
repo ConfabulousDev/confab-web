@@ -77,8 +77,9 @@ Currently, shared sessions are only accessible via the web frontend. Add support
 ### Implementation Plan
 
 **Current State:**
-- Shared session endpoint exists: `GET /api/v1/sessions/:sessionId/shared/:shareToken`
+- Canonical session endpoint: `GET /api/v1/sessions/{id}`
 - Endpoint returns JSON session data
+- Access determined by share type (public, system, recipient) and user auth
 - Public shares: no auth required
 - Private shares: requires web session cookie to verify email
 

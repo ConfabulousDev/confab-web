@@ -26,16 +26,12 @@ func TestCreateShare_PublicSuccess(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "share-external-id")
 
 	ctx := context.Background()
-	shareToken := testutil.GenerateShareToken()
 
-	share, err := env.DB.CreateShare(ctx, sessionID, owner.ID, shareToken, true, nil, nil)
+	share, err := env.DB.CreateShare(ctx, sessionID, owner.ID, true, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateShare failed: %v", err)
 	}
 
-	if share.ShareToken != shareToken {
-		t.Errorf("ShareToken = %s, want %s", share.ShareToken, shareToken)
-	}
 	if !share.IsPublic {
 		t.Error("share should be public")
 	}
@@ -58,10 +54,9 @@ func TestCreateShare_PrivateWithRecipients(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "share-external-id")
 
 	ctx := context.Background()
-	shareToken := testutil.GenerateShareToken()
 	recipients := []string{"recipient@example.com"}
 
-	share, err := env.DB.CreateShare(ctx, sessionID, owner.ID, shareToken, false, nil, recipients)
+	share, err := env.DB.CreateShare(ctx, sessionID, owner.ID, false, nil, recipients)
 	if err != nil {
 		t.Fatalf("CreateShare failed: %v", err)
 	}
@@ -89,9 +84,8 @@ func TestCreateShare_SessionNotFound(t *testing.T) {
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 
 	ctx := context.Background()
-	shareToken := testutil.GenerateShareToken()
 
-	_, err := env.DB.CreateShare(ctx, "00000000-0000-0000-0000-000000000000", owner.ID, shareToken, true, nil, nil)
+	_, err := env.DB.CreateShare(ctx, "00000000-0000-0000-0000-000000000000", owner.ID, true, nil, nil)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -111,10 +105,9 @@ func TestCreateShare_WrongOwner(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "owner-session")
 
 	ctx := context.Background()
-	shareToken := testutil.GenerateShareToken()
 
 	// Attacker tries to create share for owner's session
-	_, err := env.DB.CreateShare(ctx, sessionID, attacker.ID, shareToken, true, nil, nil)
+	_, err := env.DB.CreateShare(ctx, sessionID, attacker.ID, true, nil, nil)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound (security), got %v", err)
 	}
@@ -137,10 +130,8 @@ func TestListShares_Success(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "list-shares-session")
 
 	// Create multiple shares
-	token1 := testutil.GenerateShareToken()
-	token2 := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, token1, true, nil, nil)
-	testutil.CreateTestShare(t, env, sessionID, token2, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	ctx := context.Background()
 
@@ -211,12 +202,11 @@ func TestRevokeShare_Success(t *testing.T) {
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "revoke-session")
 
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	shareID := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	ctx := context.Background()
 
-	err := env.DB.RevokeShare(ctx, shareToken, owner.ID)
+	err := env.DB.RevokeShare(ctx, shareID, owner.ID)
 	if err != nil {
 		t.Fatalf("RevokeShare failed: %v", err)
 	}
@@ -244,13 +234,12 @@ func TestRevokeShare_Unauthorized(t *testing.T) {
 	attacker := testutil.CreateTestUser(t, env, "attacker@example.com", "Attacker")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "owner-session")
 
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	shareID := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	ctx := context.Background()
 
 	// Attacker tries to revoke owner's share
-	err := env.DB.RevokeShare(ctx, shareToken, attacker.ID)
+	err := env.DB.RevokeShare(ctx, shareID, attacker.ID)
 	if !errors.Is(err, db.ErrUnauthorized) {
 		t.Errorf("expected ErrUnauthorized, got %v", err)
 	}
@@ -278,9 +267,9 @@ func TestRevokeShare_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := env.DB.RevokeShare(ctx, "nonexistent-token", owner.ID)
+	err := env.DB.RevokeShare(ctx, 99999, owner.ID)
 	if !errors.Is(err, db.ErrUnauthorized) {
-		// Returns unauthorized for security (doesn't reveal if token exists)
+		// Returns unauthorized for security (doesn't reveal if share exists)
 		t.Errorf("expected ErrUnauthorized, got %v", err)
 	}
 }
@@ -303,10 +292,8 @@ func TestListAllUserShares_Success(t *testing.T) {
 	session2 := testutil.CreateTestSession(t, env, owner.ID, "session-2")
 
 	// Create shares for different sessions
-	token1 := testutil.GenerateShareToken()
-	token2 := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, session1, token1, true, nil, nil)
-	testutil.CreateTestShare(t, env, session2, token2, true, nil, nil)
+	testutil.CreateTestShare(t, env, session1, true, nil, nil)
+	testutil.CreateTestShare(t, env, session2, true, nil, nil)
 
 	ctx := context.Background()
 

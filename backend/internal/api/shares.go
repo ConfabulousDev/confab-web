@@ -2,12 +2,11 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,7 +28,6 @@ type CreateShareRequest struct {
 
 // CreateShareResponse is the response for creating a share
 type CreateShareResponse struct {
-	ShareToken    string     `json:"share_token"`
 	ShareURL      string     `json:"share_url"`
 	IsPublic      bool       `json:"is_public"`
 	Recipients    []string   `json:"recipients,omitempty"`
@@ -96,13 +94,6 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			}
 		}
 
-		// Generate share token (UUID-like)
-		shareToken, err := GenerateShareToken()
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "Failed to generate token")
-			return
-		}
-
 		// Calculate expiration
 		var expiresAt *time.Time
 		if req.ExpiresInDays != nil && *req.ExpiresInDays > 0 {
@@ -127,7 +118,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		}
 
 		// Create share in database
-		share, err := database.CreateShare(ctx, sessionID, userID, shareToken, req.IsPublic, expiresAt, req.Recipients)
+		share, err := database.CreateShare(ctx, sessionID, userID, req.IsPublic, expiresAt, req.Recipients)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -179,13 +170,13 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 					logger.Error("Failed to send share invitation email",
 						"error", err,
 						"to_email", toEmail,
-						"share_token", shareToken)
+						"share_id", share.ID)
 					emailFailures = append(emailFailures, toEmail)
 					emailsSent = false
 				} else {
 					logger.Info("Share invitation email sent",
 						"to_email", toEmail,
-						"share_token", shareToken)
+						"share_id", share.ID)
 				}
 			}
 		}
@@ -194,7 +185,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		logger.Info("Share created",
 			"user_id", userID,
 			"session_id", sessionID,
-			"share_token", shareToken,
+			"share_id", share.ID,
 			"is_public", share.IsPublic,
 			"recipients_count", len(share.Recipients),
 			"expires_at", share.ExpiresAt,
@@ -204,7 +195,6 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 
 		// Return response
 		response := CreateShareResponse{
-			ShareToken:    share.ShareToken,
 			ShareURL:      shareURL,
 			IsPublic:      share.IsPublic,
 			Recipients:    share.Recipients,
@@ -261,7 +251,7 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 	}
 }
 
-// HandleRevokeShare revokes a share
+// HandleRevokeShare revokes a share by ID
 func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get user ID from context
@@ -271,10 +261,11 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Get share token from URL
-		shareToken := chi.URLParam(r, "shareToken")
-		if err := validation.ValidateShareToken(shareToken); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+		// Get share ID from URL
+		shareIDStr := chi.URLParam(r, "shareID")
+		shareID, err := strconv.ParseInt(shareIDStr, 10, 64)
+		if err != nil || shareID <= 0 {
+			respondError(w, http.StatusBadRequest, "Invalid share ID")
 			return
 		}
 
@@ -283,19 +274,19 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Revoke share
-		err := database.RevokeShare(ctx, shareToken, userID)
+		err = database.RevokeShare(ctx, shareID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
 				respondError(w, http.StatusNotFound, "Share not found or unauthorized")
 				return
 			}
-			logger.Error("Failed to revoke share", "error", err, "user_id", userID, "share_token", shareToken)
+			logger.Error("Failed to revoke share", "error", err, "user_id", userID, "share_id", shareID)
 			respondError(w, http.StatusInternalServerError, "Failed to revoke share")
 			return
 		}
 
 		// Audit log: Share revoked
-		logger.Info("Share revoked", "user_id", userID, "share_token", shareToken)
+		logger.Info("Share revoked", "user_id", userID, "share_id", shareID)
 
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -330,19 +321,10 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 	}
 }
 
-// GenerateShareToken generates a random share token (32 hex chars)
-func GenerateShareToken() (string, error) {
-	bytes := make([]byte, 16) // 16 bytes = 32 hex chars
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
 // getViewerUserIDFromSession extracts the viewer's user ID from their session cookie if authenticated.
 // Returns nil if no valid session cookie or any lookup fails.
 func getViewerUserIDFromSession(ctx context.Context, r *http.Request, database *db.DB) *int64 {
-	cookie, err := r.Cookie("confab_session")
+	cookie, err := r.Cookie(auth.SessionCookieName)
 	if err != nil {
 		return nil
 	}

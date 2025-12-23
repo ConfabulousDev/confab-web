@@ -550,7 +550,6 @@ type SessionListItem struct {
 	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
-	ShareToken       *string    `json:"share_token,omitempty"`        // share token if accessed via share
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
 	Hostname         *string    `json:"hostname,omitempty"`           // Client machine hostname (owner-only, null for shared sessions)
 	Username         *string    `json:"username,omitempty"`           // OS username (owner-only, null for shared sessions)
@@ -579,7 +578,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 				s.git_info->>'branch' as git_branch,
 				true as is_owner,
 				'owner' as access_type,
-				NULL::text as share_token,
 				NULL::text as shared_by_email,
 				s.hostname,
 				s.username
@@ -613,7 +611,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					s.git_info->>'branch' as git_branch,
 					true as is_owner,
 					'owner' as access_type,
-					NULL::text as share_token,
 					NULL::text as shared_by_email,
 					s.hostname,
 					s.username
@@ -643,7 +640,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					s.git_info->>'branch' as git_branch,
 					false as is_owner,
 					'private_share' as access_type,
-					sh.share_token,
 					u.email as shared_by_email,
 					NULL::text as hostname,
 					NULL::text as username
@@ -679,7 +675,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					s.git_info->>'branch' as git_branch,
 					false as is_owner,
 					'system_share' as access_type,
-					sh.share_token,
 					u.email as shared_by_email,
 					NULL::text as hostname,
 					NULL::text as username
@@ -743,7 +738,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 			&session.GitBranch,
 			&session.IsOwner,
 			&session.AccessType,
-			&session.ShareToken,
 			&session.SharedByEmail,
 			&session.Hostname,
 			&session.Username,
@@ -942,7 +936,6 @@ type SessionShare struct {
 	ID             int64      `json:"id"`
 	SessionID      string     `json:"session_id"`      // UUID references sessions.id
 	ExternalID     string     `json:"external_id"`     // External system's session ID (for display)
-	ShareToken     string     `json:"share_token"`
 	IsPublic       bool       `json:"is_public"`       // true if in session_share_public table
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
@@ -953,7 +946,7 @@ type SessionShare struct {
 // CreateShare creates a new share link for a session (by UUID primary key)
 // isPublic: true for public shares (anyone with link), false for recipient-only shares
 // recipientEmails: email addresses to grant access (ignored if isPublic)
-func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, shareToken string, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*SessionShare, error) {
+func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*SessionShare, error) {
 	// Verify session exists for this user and get external_id for display
 	var externalID string
 	err := db.conn.QueryRowContext(ctx,
@@ -970,18 +963,17 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 	}
 
 	// Insert share
-	query := `INSERT INTO session_shares (session_id, share_token, expires_at)
-	          VALUES ($1, $2, $3)
+	query := `INSERT INTO session_shares (session_id, expires_at)
+	          VALUES ($1, $2)
 	          RETURNING id, created_at`
 
 	var share SessionShare
 	share.SessionID = sessionID
 	share.ExternalID = externalID
-	share.ShareToken = shareToken
 	share.IsPublic = isPublic
 	share.ExpiresAt = expiresAt
 
-	err = db.conn.QueryRowContext(ctx, query, sessionID, shareToken, expiresAt).Scan(&share.ID, &share.CreatedAt)
+	err = db.conn.QueryRowContext(ctx, query, sessionID, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
@@ -1027,7 +1019,7 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, s
 
 // CreateSystemShare creates a system-wide share for a session (admin only, no ownership check)
 // System shares are accessible to any authenticated user
-func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, shareToken string, expiresAt *time.Time) (*SessionShare, error) {
+func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt *time.Time) (*SessionShare, error) {
 	// Get session external_id (no ownership check - admin operation)
 	var externalID string
 	err := db.conn.QueryRowContext(ctx,
@@ -1047,15 +1039,14 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, shareToke
 	var share SessionShare
 	share.SessionID = sessionID
 	share.ExternalID = externalID
-	share.ShareToken = shareToken
 	share.IsPublic = false // System shares are not public (require auth)
 	share.ExpiresAt = expiresAt
 
 	err = db.conn.QueryRowContext(ctx,
-		`INSERT INTO session_shares (session_id, share_token, expires_at)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO session_shares (session_id, expires_at)
+		 VALUES ($1, $2)
 		 RETURNING id, created_at`,
-		sessionID, shareToken, expiresAt).Scan(&share.ID, &share.CreatedAt)
+		sessionID, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
@@ -1090,7 +1081,7 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 	}
 
 	// Get shares with public status
-	query := `SELECT ss.id, ss.session_id, ss.share_token, ss.expires_at, ss.created_at, ss.last_accessed_at,
+	query := `SELECT ss.id, ss.session_id, ss.expires_at, ss.created_at, ss.last_accessed_at,
 	                 (ssp.share_id IS NOT NULL) as is_public
 	          FROM session_shares ss
 	          LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
@@ -1106,7 +1097,7 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 	shares := make([]SessionShare, 0)
 	for rows.Next() {
 		var share SessionShare
-		err := rows.Scan(&share.ID, &share.SessionID, &share.ShareToken,
+		err := rows.Scan(&share.ID, &share.SessionID,
 			&share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt, &share.IsPublic)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan share: %w", err)
@@ -1144,7 +1135,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 	// Get all shares for the user with session info and public status
 	query := `
 		SELECT
-			ss.id, ss.session_id, s.external_id, ss.share_token,
+			ss.id, ss.session_id, s.external_id,
 			(ssp.share_id IS NOT NULL) as is_public,
 			ss.expires_at, ss.created_at, ss.last_accessed_at,
 			s.summary, s.first_user_message
@@ -1165,7 +1156,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 	for rows.Next() {
 		var share ShareWithSessionInfo
 		err := rows.Scan(
-			&share.ID, &share.SessionID, &share.ExternalID, &share.ShareToken,
+			&share.ID, &share.SessionID, &share.ExternalID,
 			&share.IsPublic, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
 			&share.SessionSummary, &share.SessionFirstUserMessage,
 		)
@@ -1192,14 +1183,14 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 	return shares, nil
 }
 
-// RevokeShare deletes a share
-func (db *DB) RevokeShare(ctx context.Context, shareToken string, userID int64) error {
+// RevokeShare deletes a share by ID
+func (db *DB) RevokeShare(ctx context.Context, shareID int64, userID int64) error {
 	// Verify ownership via session and delete
 	result, err := db.conn.ExecContext(ctx,
 		`DELETE FROM session_shares ss
 		 USING sessions s
-		 WHERE ss.session_id = s.id AND ss.share_token = $1 AND s.user_id = $2`,
-		shareToken, userID)
+		 WHERE ss.session_id = s.id AND ss.id = $1 AND s.user_id = $2`,
+		shareID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke share: %w", err)
 	}
@@ -1751,8 +1742,9 @@ const (
 
 // SessionAccessInfo contains information about how a user can access a session
 type SessionAccessInfo struct {
-	AccessType SessionAccessType
-	ShareID    *int64 // The share ID that granted access (for updating last_accessed_at)
+	AccessType       SessionAccessType
+	ShareID          *int64 // The share ID that granted access (for updating last_accessed_at)
+	AuthMayHelp      bool   // True if session has non-public shares that require authentication
 }
 
 // GetSessionAccessType determines how a user can access a session.
@@ -1779,59 +1771,58 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 		return &SessionAccessInfo{AccessType: SessionAccessOwner}, nil
 	}
 
-	// For recipient and system checks, user must be authenticated
-	if viewerUserID != nil {
-		// Check for recipient share (non-expired) - user explicitly invited
-		var recipientShareID int64
-		err = db.conn.QueryRowContext(ctx, `
-			SELECT ss.id FROM session_shares ss
-			JOIN session_share_recipients ssr ON ss.id = ssr.share_id
-			WHERE ss.session_id = $1
-			  AND ssr.user_id = $2
-			  AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
-			LIMIT 1
-		`, sessionID, *viewerUserID).Scan(&recipientShareID)
-		if err == nil {
-			return &SessionAccessInfo{AccessType: SessionAccessRecipient, ShareID: &recipientShareID}, nil
-		}
-		if err != sql.ErrNoRows {
-			return nil, fmt.Errorf("failed to check recipient share: %w", err)
-		}
+	// Combined query checks all share types in one round-trip.
+	// Priority: recipient (1) > system (2) > public (3)
+	// Also computes auth_may_help: true if unauthenticated and non-public shares exist
+	var accessType string
+	var shareID int64
+	var authMayHelp bool
 
-		// Check for system share (non-expired) - any authenticated user can access
-		var systemShareID int64
-		err = db.conn.QueryRowContext(ctx, `
-			SELECT ss.id FROM session_shares ss
-			JOIN session_share_system sss ON ss.id = sss.share_id
-			WHERE ss.session_id = $1
-			  AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
-			LIMIT 1
-		`, sessionID).Scan(&systemShareID)
-		if err == nil {
-			return &SessionAccessInfo{AccessType: SessionAccessSystem, ShareID: &systemShareID}, nil
-		}
-		if err != sql.ErrNoRows {
-			return nil, fmt.Errorf("failed to check system share: %w", err)
-		}
-	}
-
-	// Check for public share (non-expired) - anyone can access (least specific)
-	var publicShareID int64
 	err = db.conn.QueryRowContext(ctx, `
-		SELECT ss.id FROM session_shares ss
-		JOIN session_share_public ssp ON ss.id = ssp.share_id
+		SELECT
+			CASE
+				WHEN ssr.user_id IS NOT NULL THEN 'recipient'
+				WHEN sss.share_id IS NOT NULL AND $2::bigint IS NOT NULL THEN 'system'
+				WHEN ssp.share_id IS NOT NULL THEN 'public'
+				ELSE 'none'
+			END as access_type,
+			ss.id as share_id,
+			($2::bigint IS NULL AND ssp.share_id IS NULL) as auth_may_help
+		FROM session_shares ss
+		LEFT JOIN session_share_recipients ssr ON ss.id = ssr.share_id AND ssr.user_id = $2
+		LEFT JOIN session_share_system sss ON ss.id = sss.share_id
+		LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
 		WHERE ss.session_id = $1
 		  AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
+		ORDER BY
+			CASE
+				WHEN ssr.user_id IS NOT NULL THEN 1
+				WHEN sss.share_id IS NOT NULL AND $2::bigint IS NOT NULL THEN 2
+				WHEN ssp.share_id IS NOT NULL THEN 3
+				ELSE 4
+			END
 		LIMIT 1
-	`, sessionID).Scan(&publicShareID)
-	if err == nil {
-		return &SessionAccessInfo{AccessType: SessionAccessPublic, ShareID: &publicShareID}, nil
+	`, sessionID, viewerUserID).Scan(&accessType, &shareID, &authMayHelp)
+
+	if err == sql.ErrNoRows {
+		// No shares exist for this session
+		return &SessionAccessInfo{AccessType: SessionAccessNone, AuthMayHelp: false}, nil
 	}
-	if err != sql.ErrNoRows {
-		return nil, fmt.Errorf("failed to check public share: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check share access: %w", err)
 	}
 
-	return &SessionAccessInfo{AccessType: SessionAccessNone}, nil
+	switch accessType {
+	case "recipient":
+		return &SessionAccessInfo{AccessType: SessionAccessRecipient, ShareID: &shareID}, nil
+	case "system":
+		return &SessionAccessInfo{AccessType: SessionAccessSystem, ShareID: &shareID}, nil
+	case "public":
+		return &SessionAccessInfo{AccessType: SessionAccessPublic, ShareID: &shareID}, nil
+	default:
+		// "none" - has shares but viewer has no access
+		return &SessionAccessInfo{AccessType: SessionAccessNone, AuthMayHelp: authMayHelp}, nil
+	}
 }
 
 // GetSessionDetailWithAccess returns session details for any user with access.

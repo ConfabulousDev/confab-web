@@ -2,6 +2,7 @@
 // All API responses are validated at runtime to ensure type safety
 import { z } from 'zod';
 import { getCSRFToken, initCSRF, clearCSRFToken, updateCSRFTokenFromResponse } from './csrf';
+import { shouldSkip401Redirect } from '@/utils/sessionErrors';
 import {
   SessionDetailSchema,
   SessionListSchema,
@@ -104,9 +105,8 @@ class APIClient {
 
     // Handle authentication errors
     if (response.status === 401) {
-      // Don't redirect for /me - it's expected to return 401 when not logged in
-      // The useAuth hook handles this gracefully
-      if (!endpoint.endsWith('/me')) {
+      // Some endpoints handle 401 gracefully (e.g., showing login prompt)
+      if (!shouldSkip401Redirect(endpoint)) {
         handleAuthFailure();
       }
       throw new AuthenticationError();
@@ -379,7 +379,7 @@ export const sessionsAPI = {
   ): Promise<CreateShareResponse> =>
     api.postValidated(`/sessions/${sessionId}/share`, CreateShareResponseSchema, data),
 
-  revokeShare: (shareToken: string): Promise<void> => api.deleteVoid(`/shares/${shareToken}`),
+  revokeShare: (shareId: number): Promise<void> => api.deleteVoid(`/shares/${shareId}`),
 };
 
 export const authAPI = {
@@ -387,32 +387,21 @@ export const authAPI = {
 };
 
 /**
- * Sync file API - access file content via sync API
+ * Sync file API - access file content via sync API.
+ * Uses canonical session endpoint which handles all access types
+ * (owner, recipient share, system share, public share).
  */
 export const syncFilesAPI = {
   /**
-   * Get file content for an owned session
+   * Get file content for a session.
+   * Works for all access types - the backend determines access based on
+   * session ownership, share status, and user authentication.
    * @param sessionId - The session UUID
    * @param fileName - Name of the file (e.g., "transcript.jsonl")
    * @param lineOffset - Optional: Return only lines after this line number (for incremental fetching)
    */
   getContent: (sessionId: string, fileName: string, lineOffset?: number): Promise<string> => {
     let url = `/sync/file?session_id=${encodeURIComponent(sessionId)}&file_name=${encodeURIComponent(fileName)}`;
-    if (lineOffset !== undefined && lineOffset > 0) {
-      url += `&line_offset=${lineOffset}`;
-    }
-    return api.getString(url);
-  },
-
-  /**
-   * Get file content for a shared session
-   * @param sessionId - The session UUID
-   * @param shareToken - The share token
-   * @param fileName - Name of the file
-   * @param lineOffset - Optional: Return only lines after this line number (for incremental fetching)
-   */
-  getSharedContent: (sessionId: string, shareToken: string, fileName: string, lineOffset?: number): Promise<string> => {
-    let url = `/sessions/${sessionId}/shared/${shareToken}/sync/file?file_name=${encodeURIComponent(fileName)}`;
     if (lineOffset !== undefined && lineOffset > 0) {
       url += `&line_offset=${lineOffset}`;
     }

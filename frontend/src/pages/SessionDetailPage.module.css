@@ -405,3 +405,50 @@
   color: var(--color-warning-text);
   font-size: var(--font-sm);
 }
+
+/* Error container for access denied, not found, expired states */
+.errorContainer {
+  text-align: center;
+  padding: 3rem;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.errorIcon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.errorContainer h2 {
+  color: var(--color-error);
+  margin-bottom: 1rem;
+}
+
+.errorContainer p {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+
+.email {
+  color: var(--color-text-primary);
+  font-size: 1.1rem;
+  margin: 0.25rem 0 1rem 0;
+}
+
+.retryButton {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  margin-top: 1rem;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: #fff;
+  background-color: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.retryButton:hover {
+  background-color: var(--color-primary-hover);
+}

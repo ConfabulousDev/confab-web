@@ -51,7 +51,6 @@ const mockSessions: Session[] = [
     git_branch: 'main',
     is_owner: true,
     access_type: 'owner',
-    share_token: null,
     shared_by_email: null,
   },
   {
@@ -68,7 +67,6 @@ const mockSessions: Session[] = [
     git_branch: null,
     is_owner: true,
     access_type: 'owner',
-    share_token: null,
     shared_by_email: null,
   },
 ];

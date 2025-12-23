@@ -50,32 +50,19 @@ export interface AgentNode {
 }
 
 /**
- * Options for fetching transcript content
- */
-export interface FetchOptions {
-  sessionId: string;
-  shareToken?: string;
-}
-
-/**
- * Fetch transcript content from backend API via sync file endpoint
- * Supports both authenticated and shared (public) access
+ * Fetch transcript content from backend API via sync file endpoint.
+ * Uses canonical session endpoint which supports all access types
+ * (owner, recipient share, system share, public share).
  * @param sessionId - The session UUID
  * @param fileName - Name of the transcript file
- * @param shareToken - Optional share token for shared access
  * @param lineOffset - Optional: Return only lines after this line number
  */
 export async function fetchTranscriptContent(
   sessionId: string,
   fileName: string,
-  shareToken?: string,
   lineOffset?: number
 ): Promise<string> {
-  if (shareToken) {
-    return syncFilesAPI.getSharedContent(sessionId, shareToken, fileName, lineOffset);
-  } else {
-    return syncFilesAPI.getContent(sessionId, fileName, lineOffset);
-  }
+  return syncFilesAPI.getContent(sessionId, fileName, lineOffset);
 }
 
 /**
@@ -129,7 +116,7 @@ const transcriptCacheV2 = new Map<string, CacheEntry>();
 export async function fetchTranscript(
   sessionId: string,
   fileName: string,
-  options: { skipCache?: boolean; shareToken?: string } = {}
+  options: { skipCache?: boolean } = {}
 ): Promise<TranscriptLine[]> {
   const result = await fetchTranscriptWithErrors(sessionId, fileName, options);
   return result.messages;
@@ -142,7 +129,7 @@ export async function fetchTranscript(
 export async function fetchTranscriptWithErrors(
   sessionId: string,
   fileName: string,
-  options: { skipCache?: boolean; shareToken?: string } = {}
+  options: { skipCache?: boolean } = {}
 ): Promise<CacheEntry> {
   const cacheKey = `${sessionId}-${fileName}`;
 
@@ -155,7 +142,7 @@ export async function fetchTranscriptWithErrors(
 
   // Fetch and parse
   const t0 = performance.now();
-  const content = await fetchTranscriptContent(sessionId, fileName, options.shareToken);
+  const content = await fetchTranscriptContent(sessionId, fileName);
   const t1 = performance.now();
   console.log(
     `    ⏱️ Network fetch took ${Math.round(t1 - t0)}ms (${Math.round((content.length / 1024 / 1024) * 10) / 10}MB)`
@@ -183,11 +170,10 @@ export async function fetchTranscriptWithErrors(
 export async function fetchParsedTranscript(
   sessionId: string,
   fileName: string,
-  shareToken?: string,
   skipCache?: boolean
 ): Promise<ParsedTranscript> {
   const t0 = performance.now();
-  const { messages, errors } = await fetchTranscriptWithErrors(sessionId, fileName, { shareToken, skipCache });
+  const { messages, errors } = await fetchTranscriptWithErrors(sessionId, fileName, { skipCache });
   const t1 = performance.now();
   console.log(`  ⏱️ fetchTranscript (network + parse) took ${Math.round(t1 - t0)}ms for ${messages.length} messages`);
 
@@ -219,17 +205,15 @@ export async function fetchParsedTranscript(
  * @param sessionId - The session UUID
  * @param fileName - Name of the transcript file
  * @param currentLineCount - Number of lines already loaded (fetch lines after this)
- * @param shareToken - Optional share token for shared access
  * @returns Object with newMessages array and the new total line count
  */
 export async function fetchNewTranscriptMessages(
   sessionId: string,
   fileName: string,
-  currentLineCount: number,
-  shareToken?: string
+  currentLineCount: number
 ): Promise<{ newMessages: TranscriptLine[]; newTotalLineCount: number }> {
   // Fetch only lines after currentLineCount
-  const content = await fetchTranscriptContent(sessionId, fileName, shareToken, currentLineCount);
+  const content = await fetchTranscriptContent(sessionId, fileName, currentLineCount);
 
   // If content is empty, no new messages
   if (!content.trim()) {

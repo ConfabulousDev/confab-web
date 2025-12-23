@@ -602,8 +602,7 @@ func TestListUserSessions_WithShared(t *testing.T) {
 	testutil.CreateTestSession(t, env, recipient.ID, "recipient-session")
 
 	// Share owner's session with recipient
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, ownerSession, shareToken, false, nil, []string{"recipient@test.com"})
+	testutil.CreateTestShare(t, env, ownerSession, false, nil, []string{"recipient@test.com"})
 
 	ctx := context.Background()
 
@@ -653,8 +652,7 @@ func TestListUserSessions_ExcludesSharedByDefault(t *testing.T) {
 	ownerSession := testutil.CreateTestSession(t, env, owner.ID, "owner-session")
 
 	// Share with recipient
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, ownerSession, shareToken, false, nil, []string{"recipient@test.com"})
+	testutil.CreateTestShare(t, env, ownerSession, false, nil, []string{"recipient@test.com"})
 
 	ctx := context.Background()
 
@@ -685,9 +683,8 @@ func TestListUserSessions_ExpiredShareExcluded(t *testing.T) {
 	ownerSession := testutil.CreateTestSession(t, env, owner.ID, "owner-session")
 
 	// Create expired share
-	shareToken := testutil.GenerateShareToken()
 	expiredTime := time.Now().Add(-time.Hour)
-	testutil.CreateTestShare(t, env, ownerSession, shareToken, false, &expiredTime, []string{"recipient@test.com"})
+	testutil.CreateTestShare(t, env, ownerSession, false, &expiredTime, []string{"recipient@test.com"})
 
 	ctx := context.Background()
 
@@ -791,11 +788,7 @@ func TestGetSessionsLastModified_IncludesSystemShares(t *testing.T) {
 	}
 
 	// Create a system share (accessible to all authenticated users)
-	shareToken := testutil.GenerateShareToken()
-	_, err = env.DB.CreateSystemShare(ctx, sessionID, shareToken, nil)
-	if err != nil {
-		t.Fatalf("failed to create system share: %v", err)
-	}
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	// Now viewer should see the system share reflected in lastModified
 	lastModified2, err := env.DB.GetSessionsLastModified(ctx, viewer.ID, db.SessionListViewSharedWithMe)
@@ -847,8 +840,7 @@ func TestGetSessionsLastModified_PrivateShares(t *testing.T) {
 	}
 
 	// Share with recipient (private share)
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@test.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@test.com"})
 
 	// Now recipient should see the private share reflected in lastModified
 	lastModified2, err := env.DB.GetSessionsLastModified(ctx, recipient.ID, db.SessionListViewSharedWithMe)

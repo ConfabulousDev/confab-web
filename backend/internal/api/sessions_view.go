@@ -100,63 +100,23 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// =============================================================================
-		// Canonical Access Control (CF-132)
-		// =============================================================================
-		// This endpoint uses a unified access model where /sessions/{id} is the single
-		// entry point for all access types. Access is determined by checking in order:
-		//   1. Owner - user owns the session (full access, sees hostname/username)
-		//   2. Recipient - user is named in a private share (no hostname/username)
-		//   3. System - any authenticated user via system share (no hostname/username)
-		//   4. Public - anyone via public share (no hostname/username)
-		//   5. None - no access, return 404
-		//
-		// This pattern is also used in handleCanonicalSyncFileRead (sync.go).
-		// =============================================================================
-
-		// Step 1: Extract viewer identity from session cookie (optional auth)
-		var viewerUserID *int64
-		if userID, ok := auth.GetUserID(r.Context()); ok {
-			viewerUserID = &userID
-		} else {
-			viewerUserID = getViewerUserIDFromSession(ctx, r, database)
-		}
-
-		// Step 2: Determine access type based on ownership and shares
-		accessInfo, err := database.GetSessionAccessType(ctx, sessionID, viewerUserID)
-		if err != nil {
-			if errors.Is(err, db.ErrSessionNotFound) {
-				respondError(w, http.StatusNotFound, "Session not found")
-				return
-			}
-			logger.Error("Failed to get session access type", "error", err, "session_id", sessionID)
-			respondError(w, http.StatusInternalServerError, "Failed to get session")
+		// Check canonical access (CF-132 unified access model)
+		result, err := CheckCanonicalAccess(ctx, r, database, sessionID)
+		if RespondCanonicalAccessError(w, err, sessionID) {
 			return
 		}
 
-		// Step 3: Deny access if none of the access types apply
-		if accessInfo.AccessType == db.SessionAccessNone {
+		// Handle no access - check AuthMayHelp to decide 401 vs 404
+		if result.AccessInfo.AccessType == db.SessionAccessNone {
+			if result.AccessInfo.AuthMayHelp {
+				respondError(w, http.StatusUnauthorized, "Sign in to view this session")
+				return
+			}
 			respondError(w, http.StatusNotFound, "Session not found")
 			return
 		}
 
-		// Step 4: Get session with privacy filtering based on access type
-		session, err := database.GetSessionDetailWithAccess(ctx, sessionID, viewerUserID, accessInfo)
-		if err != nil {
-			if errors.Is(err, db.ErrSessionNotFound) {
-				respondError(w, http.StatusNotFound, "Session not found")
-				return
-			}
-			if errors.Is(err, db.ErrOwnerInactive) {
-				respondError(w, http.StatusForbidden, "This session is no longer available")
-				return
-			}
-			logger.Error("Failed to get session detail", "error", err, "session_id", sessionID)
-			respondError(w, http.StatusInternalServerError, "Failed to get session")
-			return
-		}
-
-		respondJSON(w, http.StatusOK, session)
+		respondJSON(w, http.StatusOK, result.Session)
 	}
 }
 

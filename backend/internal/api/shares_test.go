@@ -6,67 +6,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
-// Test share token generation - security critical
-func TestGenerateShareToken(t *testing.T) {
-	t.Run("generates valid token", func(t *testing.T) {
-		token, err := GenerateShareToken()
-		if err != nil {
-			t.Fatalf("GenerateShareToken failed: %v", err)
-		}
-
-		// Should be 32 hex characters (16 bytes)
-		if len(token) != 32 {
-			t.Errorf("expected token length 32, got %d", len(token))
-		}
-
-		// Check all characters are valid hex
-		for _, c := range token {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-				t.Errorf("token contains non-hex character: %c", c)
-				break
-			}
-		}
-	})
-
-	t.Run("generates different tokens each time", func(t *testing.T) {
-		token1, err := GenerateShareToken()
-		if err != nil {
-			t.Fatalf("GenerateShareToken failed: %v", err)
-		}
-
-		token2, err := GenerateShareToken()
-		if err != nil {
-			t.Fatalf("GenerateShareToken failed: %v", err)
-		}
-
-		if token1 == token2 {
-			t.Error("generated identical tokens - randomness failure")
-		}
-	})
-
-	t.Run("generates multiple unique tokens", func(t *testing.T) {
-		tokens := make(map[string]bool)
-		count := 100
-
-		for i := 0; i < count; i++ {
-			token, err := GenerateShareToken()
-			if err != nil {
-				t.Fatalf("GenerateShareToken failed: %v", err)
-			}
-
-			if tokens[token] {
-				t.Errorf("duplicate token generated: %s", token)
-				break
-			}
-			tokens[token] = true
-		}
-
-		if len(tokens) != count {
-			t.Errorf("expected %d unique tokens, got %d", count, len(tokens))
-		}
-	})
-}
-
 // Test email validation logic - business logic
 func TestEmailValidation(t *testing.T) {
 	tests := []struct {

@@ -63,8 +63,7 @@ func TestHandleGetSession_PublicShareAccess_Unauthenticated(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	// Unauthenticated request (no user ID in context)
 	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
@@ -108,8 +107,7 @@ func TestHandleGetSession_PublicShareAccess_Authenticated(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, viewer.ID)
 
@@ -148,8 +146,7 @@ func TestHandleGetSession_SystemShareAccess(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create system share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, shareToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, viewer.ID)
 
@@ -188,8 +185,7 @@ func TestHandleGetSession_RecipientShareAccess(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create private share with recipient
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, recipient.ID)
 
@@ -283,8 +279,7 @@ func TestHandleGetSession_SystemShareRequiresAuth(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create system share (no public share)
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, shareToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	// Unauthenticated request
 	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
@@ -297,8 +292,8 @@ func TestHandleGetSession_SystemShareRequiresAuth(t *testing.T) {
 	handler := HandleGetSession(env.DB)
 	handler(w, req)
 
-	// Should return 404 (system shares require auth, so unauthenticated user gets no access)
-	testutil.AssertStatus(t, w, http.StatusNotFound)
+	// Should return 401 (system shares require auth - prompt user to sign in)
+	testutil.AssertStatus(t, w, http.StatusUnauthorized)
 }
 
 // TestHandleGetSession_PrivateShareRequiresAuth tests that private shares require authentication
@@ -315,8 +310,7 @@ func TestHandleGetSession_PrivateShareRequiresAuth(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create private share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	// Unauthenticated request
 	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
@@ -329,8 +323,8 @@ func TestHandleGetSession_PrivateShareRequiresAuth(t *testing.T) {
 	handler := HandleGetSession(env.DB)
 	handler(w, req)
 
-	// Should return 404 (private shares require auth)
-	testutil.AssertStatus(t, w, http.StatusNotFound)
+	// Should return 401 (private shares require auth - prompt user to sign in)
+	testutil.AssertStatus(t, w, http.StatusUnauthorized)
 }
 
 // TestHandleGetSession_InactiveOwnerBlocksAccess tests that deactivated owner blocks all access
@@ -346,8 +340,7 @@ func TestHandleGetSession_InactiveOwnerBlocksAccess(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	// Deactivate owner
 	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")
@@ -459,8 +452,7 @@ func TestHandleGetSession_SharedAccessHostnameUsernameHidden(t *testing.T) {
 	}
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, viewer.ID)
 
@@ -540,13 +532,12 @@ func TestHandleGetSession_ExpiredPublicShare(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share that's already expired
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	shareID := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	// Expire the share
 	_, err := env.DB.Exec(env.Ctx,
-		"UPDATE session_shares SET expires_at = NOW() - INTERVAL '1 hour' WHERE share_token = $1",
-		shareToken)
+		"UPDATE session_shares SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = $1",
+		shareID)
 	if err != nil {
 		t.Fatalf("failed to expire share: %v", err)
 	}
@@ -580,13 +571,12 @@ func TestHandleGetSession_ExpiredSystemShare(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create system share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, shareToken, nil)
+	shareID := testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	// Expire the share
 	_, err := env.DB.Exec(env.Ctx,
-		"UPDATE session_shares SET expires_at = NOW() - INTERVAL '1 hour' WHERE share_token = $1",
-		shareToken)
+		"UPDATE session_shares SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = $1",
+		shareID)
 	if err != nil {
 		t.Fatalf("failed to expire share: %v", err)
 	}
@@ -619,13 +609,12 @@ func TestHandleGetSession_ExpiredRecipientShare(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create private share with recipient
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+	shareID := testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	// Expire the share
 	_, err := env.DB.Exec(env.Ctx,
-		"UPDATE session_shares SET expires_at = NOW() - INTERVAL '1 hour' WHERE share_token = $1",
-		shareToken)
+		"UPDATE session_shares SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = $1",
+		shareID)
 	if err != nil {
 		t.Fatalf("failed to expire share: %v", err)
 	}
@@ -659,8 +648,7 @@ func TestHandleGetSession_WrongRecipient(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create private share for intended recipient only
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"intended@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"intended@example.com"})
 
 	// Wrong user tries to access
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, wrongUser.ID)
@@ -708,8 +696,7 @@ func TestHandleGetSession_Precedence_OwnerOverRecipient(t *testing.T) {
 	}
 
 	// Owner is also a recipient (weird but possible)
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"owner@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"owner@example.com"})
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, owner.ID)
 
@@ -749,11 +736,9 @@ func TestHandleGetSession_Precedence_RecipientOverSystem(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create both system share and recipient share
-	systemToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, systemToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
-	recipientToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, recipientToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, recipient.ID)
 
@@ -790,11 +775,9 @@ func TestHandleGetSession_Precedence_SystemOverPublic(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create both public share and system share
-	publicToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, publicToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
-	systemToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, systemToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, viewer.ID)
 
@@ -830,14 +813,11 @@ func TestHandleGetSession_AllSharesExpired(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create multiple shares
-	publicToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, publicToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
-	systemToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, systemToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
-	recipientToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, recipientToken, false, nil, []string{"viewer@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"viewer@example.com"})
 
 	// Expire ALL shares
 	_, err := env.DB.Exec(env.Ctx,
@@ -883,8 +863,7 @@ func TestHandleGetSession_RecipientHostnameUsernameHidden(t *testing.T) {
 	}
 
 	// Create private share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, recipient.ID)
 
@@ -932,8 +911,7 @@ func TestHandleGetSession_SystemShareHostnameUsernameHidden(t *testing.T) {
 	}
 
 	// Create system share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, shareToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, viewer.ID)
 
@@ -1007,14 +985,11 @@ func TestHandleGetSession_InactiveOwnerBlocksAllAccess(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create all share types
-	publicToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, publicToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
-	systemToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, systemToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
-	recipientToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, recipientToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	// Deactivate owner
 	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")

@@ -22,7 +22,6 @@ function createMockSession(overrides: Partial<Session> = {}): Session {
     git_branch: 'main',
     is_owner: true,
     access_type: 'owner',
-    share_token: null,
     shared_by_email: null,
     ...overrides,
   };

@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
 import { sessionsAPI } from '@/services/api';
 import { useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
 import type { SessionDetail } from '@/types';
+import { getErrorIcon, getErrorDescription } from '@/utils/sessionErrors';
 import { SessionViewer } from '@/components/session';
 import ShareDialog from '@/components/ShareDialog';
 import styles from './SessionDetailPage.module.css';
@@ -13,10 +14,16 @@ function SessionDetailPage() {
   const { id: sessionId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const {
     message: successMessage,
     fading: successFading,
   } = useSuccessMessage();
+
+  // Email mismatch query params (for recipient shares with wrong account)
+  const emailMismatch = searchParams.get('email_mismatch') === '1';
+  const mismatchExpected = searchParams.get('expected');
+  const mismatchActual = searchParams.get('actual');
 
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -26,16 +33,19 @@ function SessionDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
-  // Fetch session using the shared hook
+  // Fetch session using the shared hook (canonical endpoint supports all access types)
   const fetchSession = useCallback(async (): Promise<SessionDetail> => {
     if (!sessionId) throw new Error('No session ID');
     return sessionsAPI.get(sessionId);
   }, [sessionId]);
 
-  const { session, setSession, loading, error } = useLoadSession({
+  const { session, setSession, loading, error, errorType } = useLoadSession({
     fetchSession,
     deps: [sessionId],
   });
+
+  // Determine if viewer is owner (from backend response, defaults to false for non-owners)
+  const isOwner = session?.is_owner ?? false;
 
   // Dynamic page title based on session (custom_title takes precedence)
   const pageTitle = session
@@ -88,11 +98,53 @@ function SessionDetailPage() {
     );
   }
 
-  // Render error state
-  if (error) {
+  // Handle email mismatch - user logged in with wrong email for recipient share
+  if (emailMismatch && mismatchExpected && mismatchActual) {
+    const handleLogoutAndRetry = () => {
+      const currentPath = window.location.pathname + window.location.search.replace(/[&?]email_mismatch=1.*/, '');
+      const loginUrl = `/auth/login?redirect=${encodeURIComponent(currentPath)}&email=${encodeURIComponent(mismatchExpected)}`;
+      window.location.href = `/auth/logout?redirect=${encodeURIComponent(loginUrl)}`;
+    };
+
     return (
       <div className={styles.container}>
-        <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>
+        <div className={styles.errorContainer}>
+          <div className={styles.errorIcon}>🔐</div>
+          <h2>Wrong Account</h2>
+          <p>This share was sent to:</p>
+          <p className={styles.email}><strong>{mismatchExpected}</strong></p>
+          <p>You&apos;re signed in as:</p>
+          <p className={styles.email}><strong>{mismatchActual}</strong></p>
+          <button className={styles.retryButton} onClick={handleLogoutAndRetry}>
+            Sign in with correct account
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Render error state with appropriate icon and message
+  if (error) {
+    // For auth_required, show login prompt with redirect back to this page
+    const handleSignIn = () => {
+      const currentPath = window.location.pathname + window.location.search;
+      window.location.href = `/auth/login?redirect=${encodeURIComponent(currentPath)}`;
+    };
+
+    const description = getErrorDescription(errorType);
+
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <div className={styles.errorIcon}>{getErrorIcon(errorType)}</div>
+          <h2>{error}</h2>
+          {description && <p>{description}</p>}
+          {errorType === 'auth_required' && (
+            <button className={styles.retryButton} onClick={handleSignIn}>
+              Sign in
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -112,14 +164,15 @@ function SessionDetailPage() {
 
       <SessionViewer
         session={session}
-        onShare={() => setShowShareDialog(true)}
-        onDelete={openDeleteDialog}
-        onSessionUpdate={(updatedSession) => {
+        onShare={isOwner ? () => setShowShareDialog(true) : undefined}
+        onDelete={isOwner ? openDeleteDialog : undefined}
+        onSessionUpdate={isOwner ? (updatedSession) => {
           setSession(updatedSession);
           // Invalidate sessions list so updated title shows when navigating back
           queryClient.invalidateQueries({ queryKey: ['sessions'] });
-        }}
-        isOwner={true}
+        } : undefined}
+        isOwner={isOwner}
+        isShared={!isOwner}
       />
 
       {/* Share Dialog Modal */}

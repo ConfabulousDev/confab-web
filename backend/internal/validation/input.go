@@ -2,14 +2,12 @@ package validation
 
 import (
 	"fmt"
-	"regexp"
 	"unicode/utf8"
 )
 
 // Validation limits for URL parameters
 const (
-	MinExternalIDLength = 1  // Min external ID length
-	ShareTokenLength    = 32 // Share tokens are exactly 32 hex chars
+	MinExternalIDLength = 1 // Min external ID length
 )
 
 // Field size limits (must match DB VARCHAR constraints in migration 000010, 000011)
@@ -28,9 +26,6 @@ const (
 	MaxUsernameLength         = 255  // sessions.username
 )
 
-// hexRegex matches hexadecimal strings
-var hexRegex = regexp.MustCompile(`^[0-9a-fA-F]+$`)
-
 // ValidateExternalID validates an external ID from URL parameters
 // Returns error if external ID is invalid
 func ValidateExternalID(externalID string) error {
@@ -42,21 +37,6 @@ func ValidateExternalID(externalID string) error {
 	}
 	if !utf8.ValidString(externalID) {
 		return fmt.Errorf("external_id must be valid UTF-8")
-	}
-	return nil
-}
-
-// ValidateShareToken validates a share token from URL parameters
-// Share tokens must be exactly 32 hexadecimal characters
-func ValidateShareToken(shareToken string) error {
-	if shareToken == "" {
-		return fmt.Errorf("share_token is required")
-	}
-	if len(shareToken) != ShareTokenLength {
-		return fmt.Errorf("share_token must be exactly %d characters", ShareTokenLength)
-	}
-	if !hexRegex.MatchString(shareToken) {
-		return fmt.Errorf("share_token must be hexadecimal")
 	}
 	return nil
 }

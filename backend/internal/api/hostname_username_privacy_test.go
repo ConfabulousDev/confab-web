@@ -87,9 +87,9 @@ func TestHostnameUsernamePrivacy_SessionList(t *testing.T) {
 	// Create a private share for viewer
 	var shareID int64
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, share_token)
-		 VALUES ($1, $2) RETURNING id`,
-		sessionID, testutil.GenerateShareToken()).Scan(&shareID)
+		`INSERT INTO session_shares (session_id)
+		 VALUES ($1) RETURNING id`,
+		sessionID).Scan(&shareID)
 	if err != nil {
 		t.Fatalf("Failed to create share: %v", err)
 	}
@@ -161,8 +161,7 @@ func TestHostnameUsernamePrivacy_SessionListSystemShare(t *testing.T) {
 	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "system-shared-session", "server.internal", "admin")
 
 	// Create a system share
-	systemShareToken := testutil.GenerateShareToken()
-	_, err := env.DB.CreateSystemShare(ctx, sessionID, systemShareToken, nil)
+	_, err := env.DB.CreateSystemShare(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("Failed to create system share: %v", err)
 	}
@@ -273,12 +272,11 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "shared-detail-session", "secret-server.internal", "secretuser")
 
 	// Create a public share
-	shareToken := testutil.GenerateShareToken()
 	var shareID int64
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, share_token)
-		 VALUES ($1, $2) RETURNING id`,
-		sessionID, shareToken).Scan(&shareID)
+		`INSERT INTO session_shares (session_id)
+		 VALUES ($1) RETURNING id`,
+		sessionID).Scan(&shareID)
 	if err != nil {
 		t.Fatalf("Failed to create share: %v", err)
 	}
@@ -341,12 +339,11 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "private-shared-session", "private-machine.home", "privateuser")
 
 	// Create a private share for viewer
-	shareToken := testutil.GenerateShareToken()
 	var shareID int64
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, share_token)
-		 VALUES ($1, $2) RETURNING id`,
-		sessionID, shareToken).Scan(&shareID)
+		`INSERT INTO session_shares (session_id)
+		 VALUES ($1) RETURNING id`,
+		sessionID).Scan(&shareID)
 	if err != nil {
 		t.Fatalf("Failed to create share: %v", err)
 	}
@@ -372,7 +369,7 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		// Create a web session for the viewer to simulate being logged in
-		webSessionToken := testutil.GenerateShareToken() // reuse for simplicity
+		webSessionToken := "test-web-session-token-for-privacy-test"
 		_, err := env.DB.Exec(ctx,
 			`INSERT INTO web_sessions (id, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
 			webSessionToken, viewer.ID)

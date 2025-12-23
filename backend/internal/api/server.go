@@ -246,13 +246,13 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// System share - creates a share accessible to all authenticated users
 		r.Post("/sessions/{sessionId}/system-share", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
-			adminHandlers.HandleCreateSystemShare(w, r, s.frontendURL, GenerateShareToken)
+			adminHandlers.HandleCreateSystemShare(w, r, s.frontendURL)
 		}))
 
 		// System share admin page
 		r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleSystemSharePage))
 		r.Post("/system-shares", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
-			adminHandlers.HandleCreateSystemShareForm(w, r, s.frontendURL, GenerateShareToken)
+			adminHandlers.HandleCreateSystemShareForm(w, r, s.frontendURL)
 		}))
 	})
 
@@ -328,7 +328,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService)))
 			r.Get("/sessions/{id}/shares", withMaxBody(MaxBodyXS, HandleListShares(s.db)))
 			r.Get("/shares", withMaxBody(MaxBodyXS, HandleListAllUserShares(s.db)))
-			r.Delete("/shares/{shareToken}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))
+			r.Delete("/shares/{shareID}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))
 		})
 
 		// Canonical session access (CF-132) - supports optional authentication

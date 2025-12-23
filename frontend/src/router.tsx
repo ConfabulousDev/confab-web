@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import App from './App';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
@@ -7,10 +7,18 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 const HomePage = lazy(() => import('@/pages/HomePage'));
 const SessionsPage = lazy(() => import('@/pages/SessionsPage'));
 const SessionDetailPage = lazy(() => import('@/pages/SessionDetailPage'));
-const SharedSessionPage = lazy(() => import('@/pages/SharedSessionPage'));
 const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+
+/** Redirect old /sessions/:id/shared/:token URLs to canonical /sessions/:id (CF-132) */
+// eslint-disable-next-line react-refresh/only-export-components
+function RedirectToCanonicalSession() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  // Preserve query params (e.g., ?email=...) for login flow
+  const search = window.location.search;
+  return <Navigate to={`/sessions/${sessionId}${search}`} replace />;
+}
 
 /** Wrap a page component with Suspense and optional ProtectedRoute */
 function page(component: ReactNode, isProtected = false) {
@@ -25,8 +33,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: page(<HomePage />) },
       { path: 'sessions', element: page(<SessionsPage />, true) },
-      { path: 'sessions/:id', element: page(<SessionDetailPage />, true) },
-      { path: 'sessions/:sessionId/shared/:token', element: page(<SharedSessionPage />) },
+      { path: 'sessions/:id', element: page(<SessionDetailPage />) },
+      { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },
       { path: 'keys', element: page(<APIKeysPage />, true) },
       { path: 'shares', element: page(<ShareLinksPage />, true) },
       { path: '*', element: page(<NotFoundPage />) },

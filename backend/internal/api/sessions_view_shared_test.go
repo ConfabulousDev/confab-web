@@ -71,11 +71,10 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 
 	// User A creates a non-public share for sessionA1, inviting userB by user_id
 	var shareID int64
-	var shareToken string
 	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id, share_token)
-		 VALUES ($1, $2) RETURNING id, share_token`,
-		sessionA1PK, testutil.GenerateShareToken()).Scan(&shareID, &shareToken)
+		`INSERT INTO session_shares (session_id)
+		 VALUES ($1) RETURNING id`,
+		sessionA1PK).Scan(&shareID)
 	if err != nil {
 		t.Fatalf("Failed to create share: %v", err)
 	}
@@ -146,9 +145,9 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		yesterday := time.Now().UTC().Add(-24 * time.Hour)
 		var expiredShareID int64
 		err := env.DB.QueryRow(ctx,
-			`INSERT INTO session_shares (session_id, share_token, expires_at)
-			 VALUES ($1, $2, $3) RETURNING id`,
-			sessionB1PK, testutil.GenerateShareToken(), yesterday).Scan(&expiredShareID)
+			`INSERT INTO session_shares (session_id, expires_at)
+			 VALUES ($1, $2) RETURNING id`,
+			sessionB1PK, yesterday).Scan(&expiredShareID)
 		if err != nil {
 			t.Fatalf("Failed to create expired share: %v", err)
 		}
@@ -233,8 +232,7 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 	testutil.CreateTestSession(t, env, regularUser.ID, userSession)
 
 	// Create a system share for admin's session
-	systemShareToken := testutil.GenerateShareToken()
-	_, err := env.DB.CreateSystemShare(ctx, adminSessionPK, systemShareToken, nil)
+	_, err := env.DB.CreateSystemShare(ctx, adminSessionPK, nil)
 	if err != nil {
 		t.Fatalf("Failed to create system share: %v", err)
 	}
@@ -282,9 +280,6 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 		}
 		if systemSession.SharedByEmail == nil || *systemSession.SharedByEmail != admin.Email {
 			t.Errorf("Expected SharedByEmail=%s, got %v", admin.Email, systemSession.SharedByEmail)
-		}
-		if systemSession.ShareToken == nil || *systemSession.ShareToken != systemShareToken {
-			t.Errorf("Expected ShareToken=%s, got %v", systemShareToken, systemSession.ShareToken)
 		}
 
 		// Verify owned session still correct
@@ -345,9 +340,9 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 		// Also add a private share for regularUser to admin's session
 		var privateShareID int64
 		err := env.DB.QueryRow(ctx,
-			`INSERT INTO session_shares (session_id, share_token)
-			 VALUES ($1, $2) RETURNING id`,
-			adminSessionPK, testutil.GenerateShareToken()).Scan(&privateShareID)
+			`INSERT INTO session_shares (session_id)
+			 VALUES ($1) RETURNING id`,
+			adminSessionPK).Scan(&privateShareID)
 		if err != nil {
 			t.Fatalf("Failed to create private share: %v", err)
 		}

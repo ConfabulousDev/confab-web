@@ -146,11 +146,8 @@ function SessionsPage() {
   }, [sessions, passesBaseFilters]);
 
   const handleRowClick = (session: typeof sessions[0]) => {
-    if (session.is_owner) {
-      navigate(`/sessions/${session.id}`);
-    } else {
-      navigate(`/sessions/${session.id}/shared/${session.share_token}`);
-    }
+    // CF-132: Use canonical URL for all session types
+    navigate(`/sessions/${session.id}`);
   };
 
   return (

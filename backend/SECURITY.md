@@ -292,14 +292,6 @@ curl -X POST https://confab.dev/api/v1/sessions/save \
 - Used in: /api/v1/sessions/{sessionId}
 ```
 
-**Share Token:**
-```go
-// internal/validation/input.go:ValidateShareToken()
-- Length: Exactly 32 characters
-- Must be hexadecimal [0-9a-fA-F]
-- Used in: /api/v1/shares/{shareToken}
-```
-
 **Email:**
 ```go
 // internal/validation/email.go:ValidateEmail()

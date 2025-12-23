@@ -13,7 +13,6 @@ const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
 
 interface SessionViewerProps {
   session: SessionDetail;
-  shareToken?: string;
   onShare?: () => void;
   onDelete?: () => void;
   onSessionUpdate?: (session: SessionDetail) => void;
@@ -21,7 +20,7 @@ interface SessionViewerProps {
   isShared?: boolean;
 }
 
-function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false }: SessionViewerProps) {
+function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false }: SessionViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
@@ -68,7 +67,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
       }
 
       // Skip cache on initial load to ensure fresh data when navigating to a session
-      const parsed = await fetchParsedTranscript(session.id, transcriptFileName, shareToken, true);
+      const parsed = await fetchParsedTranscript(session.id, transcriptFileName, true);
       setMessages(parsed.messages);
       lineCountRef.current = parsed.messages.length;
     } catch (e) {
@@ -90,8 +89,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
         const { newMessages, newTotalLineCount } = await fetchNewTranscriptMessages(
           session.id,
           transcriptFileName,
-          lineCountRef.current,
-          shareToken
+          lineCountRef.current
         );
 
         if (newMessages.length > 0) {
@@ -111,7 +109,7 @@ function SessionViewer({ session, shareToken, onShare, onDelete, onSessionUpdate
     return () => {
       clearInterval(intervalId);
     };
-  }, [isVisible, loading, session.id, transcriptFileName, shareToken]);
+  }, [isVisible, loading, session.id, transcriptFileName]);
 
   // Toggle a category's visibility
   const toggleCategory = useCallback((category: MessageCategory) => {

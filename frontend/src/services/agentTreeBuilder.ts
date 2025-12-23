@@ -138,8 +138,7 @@ async function buildAgentNodeRecursive(
 	metadata: AgentMetadata,
 	agentFileMap: Map<string, SyncFileDetail>,
 	depth: number = 0,
-	maxDepth: number = 10,
-	shareToken?: string
+	maxDepth: number = 10
 ): Promise<AgentNode> {
 	// Prevent infinite recursion
 	if (depth >= maxDepth) {
@@ -155,7 +154,7 @@ async function buildAgentNodeRecursive(
 	}
 
 	// Load agent transcript
-	const transcript = await fetchTranscript(sessionId, agentFile.file_name, { shareToken });
+	const transcript = await fetchTranscript(sessionId, agentFile.file_name);
 
 	// Find sub-agents spawned by this agent
 	const subAgentRefs = findAgentReferences(transcript);
@@ -180,8 +179,7 @@ async function buildAgentNodeRecursive(
 			refData.metadata,
 			agentFileMap,
 			depth + 1,
-			maxDepth,
-			shareToken
+			maxDepth
 		).catch((e) => {
 			console.error(`Failed to load sub-agent ${subAgentId}:`, e);
 			return null;
@@ -215,8 +213,7 @@ async function buildAgentNodeRecursive(
 export async function buildAgentTree(
 	sessionId: string,
 	mainTranscript: TranscriptLine[],
-	allFiles: SyncFileDetail[],
-	shareToken?: string
+	allFiles: SyncFileDetail[]
 ): Promise<AgentNode[]> {
 	// Find all agent files
 	const agentFiles = allFiles.filter((f) => f.file_type === 'agent');
@@ -253,8 +250,7 @@ export async function buildAgentTree(
 			refData.metadata,
 			agentFileMap, // Pass the map for recursive lookups
 			0, // Start at depth 0
-			10, // Max depth
-			shareToken
+			10 // Max depth
 		).catch((e) => {
 			console.error(`Failed to load agent ${agentId}:`, e);
 			return null;

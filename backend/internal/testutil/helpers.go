@@ -3,8 +3,6 @@ package testutil
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -146,18 +144,18 @@ func CreateTestSyncFile(t *testing.T, env *TestEnvironment, sessionID string, fi
 // CreateTestShare creates a share in the database for testing
 // sessionID is the UUID primary key of the session
 // isPublic: true creates a public share (anyone with link), false creates a recipient-only share
-func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, shareToken string, isPublic bool, expiresAt *time.Time, recipients []string) int64 {
+func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, isPublic bool, expiresAt *time.Time, recipients []string) int64 {
 	t.Helper()
 
 	// Insert share
 	query := `
-		INSERT INTO session_shares (session_id, share_token, expires_at, created_at)
-		VALUES ($1, $2, $3, NOW())
+		INSERT INTO session_shares (session_id, expires_at, created_at)
+		VALUES ($1, $2, NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, shareToken, expiresAt)
+	row := env.DB.QueryRow(env.Ctx, query, sessionID, expiresAt)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test share: %v", err)
@@ -216,14 +214,6 @@ func CreateTestAPIKey(t *testing.T, env *TestEnvironment, userID int64, keyHash,
 	return id
 }
 
-// GenerateShareToken generates a random share token for testing (32 hex chars)
-func GenerateShareToken() string {
-	bytes := make([]byte, 16) // 16 bytes = 32 hex chars
-	if _, err := rand.Read(bytes); err != nil {
-		panic(err) // In tests, panic is acceptable for crypto failures
-	}
-	return hex.EncodeToString(bytes)
-}
 
 // CreateTestDeviceCode creates a device code in the database for testing
 // Note: expiresAt should be in UTC for consistent behavior with PostgreSQL NOW()
@@ -277,18 +267,18 @@ func CreateTestWebSession(t *testing.T, env *TestEnvironment, sessionID string, 
 
 // CreateTestSystemShare creates a system share in the database for testing
 // System shares are accessible to all authenticated users
-func CreateTestSystemShare(t *testing.T, env *TestEnvironment, sessionID string, shareToken string, expiresAt *time.Time) int64 {
+func CreateTestSystemShare(t *testing.T, env *TestEnvironment, sessionID string, expiresAt *time.Time) int64 {
 	t.Helper()
 
 	// Insert share
 	query := `
-		INSERT INTO session_shares (session_id, share_token, expires_at, created_at)
-		VALUES ($1, $2, $3, NOW())
+		INSERT INTO session_shares (session_id, expires_at, created_at)
+		VALUES ($1, $2, NOW())
 		RETURNING id
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, shareToken, expiresAt)
+	row := env.DB.QueryRow(env.Ctx, query, sessionID, expiresAt)
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test share: %v", err)

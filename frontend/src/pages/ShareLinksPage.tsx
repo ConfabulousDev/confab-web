@@ -141,14 +141,14 @@ function ShareLinksPage() {
     }
   }
 
-  async function handleRevoke(shareToken: string) {
+  async function handleRevoke(shareId: number) {
     if (!confirm('Are you sure you want to revoke this share?')) {
       return;
     }
 
     setError('');
     try {
-      await sessionsAPI.revokeShare(shareToken);
+      await sessionsAPI.revokeShare(shareId);
       setSuccessMessage('Share link revoked successfully');
       await fetchShares();
     } catch (err) {
@@ -156,8 +156,9 @@ function ShareLinksPage() {
     }
   }
 
-  function getShareURL(sessionId: string, shareToken: string): string {
-    return `${window.location.origin}/sessions/${sessionId}/shared/${shareToken}`;
+  function getShareURL(sessionId: string): string {
+    // CF-132: Use canonical URL format (no token in URL)
+    return `${window.location.origin}/sessions/${sessionId}`;
   }
 
   const displayMessage = copyMessage || successMessage;
@@ -277,11 +278,11 @@ function ShareLinksPage() {
                   </thead>
                   <tbody>
                     {sortedShares.map((share) => {
-                      const shareURL = getShareURL(share.session_id, share.share_token);
+                      const shareURL = getShareURL(share.session_id);
                       const isExpired = share.expires_at && new Date(share.expires_at) < new Date();
 
                       return (
-                        <tr key={share.share_token} className={isExpired ? styles.expiredRow : ''}>
+                        <tr key={share.id} className={isExpired ? styles.expiredRow : ''}>
                           <td>
                             <Link to={`/sessions/${share.session_id}`} className={styles.sessionLink}>
                               {share.session_summary || share.session_first_user_message || 'Untitled Session'}
@@ -324,7 +325,7 @@ function ShareLinksPage() {
                               <Button
                                 variant="danger"
                                 size="sm"
-                                onClick={() => handleRevoke(share.share_token)}
+                                onClick={() => handleRevoke(share.id)}
                               >
                                 Revoke
                               </Button>

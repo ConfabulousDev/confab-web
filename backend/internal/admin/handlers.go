@@ -416,18 +416,10 @@ func parseUserID(r *http.Request) (int64, error) {
 
 // HandleCreateSystemShare creates a system-wide share for any session (admin only)
 // System shares are accessible to all authenticated users
-func (h *Handlers) HandleCreateSystemShare(w http.ResponseWriter, r *http.Request, frontendURL string, generateToken func() (string, error)) {
+func (h *Handlers) HandleCreateSystemShare(w http.ResponseWriter, r *http.Request, frontendURL string) {
 	sessionID := chi.URLParam(r, "sessionId")
 	if sessionID == "" {
 		respondError(w, http.StatusBadRequest, "Session ID required")
-		return
-	}
-
-	// Generate share token
-	shareToken, err := generateToken()
-	if err != nil {
-		logger.Error("Failed to generate share token", "error", err)
-		respondError(w, http.StatusInternalServerError, "Failed to generate token")
 		return
 	}
 
@@ -435,7 +427,7 @@ func (h *Handlers) HandleCreateSystemShare(w http.ResponseWriter, r *http.Reques
 	defer cancel()
 
 	// Create system share (no expiration for system shares)
-	share, err := h.DB.CreateSystemShare(ctx, sessionID, shareToken, nil)
+	share, err := h.DB.CreateSystemShare(ctx, sessionID, nil)
 	if err != nil {
 		if err == db.ErrSessionNotFound {
 			respondError(w, http.StatusNotFound, "Session not found")
@@ -446,15 +438,16 @@ func (h *Handlers) HandleCreateSystemShare(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
+	// Canonical URL (CF-132: no token in URL)
+	shareURL := frontendURL + "/sessions/" + sessionID
 
 	logger.Info("System share created",
 		"session_id", sessionID,
-		"share_token", shareToken,
+		"share_id", share.ID,
 		"external_id", share.ExternalID)
 
-	respondJSON(w, http.StatusOK, map[string]string{
-		"share_token": share.ShareToken,
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"share_id":    share.ID,
 		"share_url":   shareURL,
 		"session_id":  share.SessionID,
 		"external_id": share.ExternalID,
@@ -672,7 +665,7 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 }
 
 // HandleCreateSystemShareForm handles form submission for creating system shares
-func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Request, frontendURL string, generateToken func() (string, error)) {
+func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Request, frontendURL string) {
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Invalid+form+data", http.StatusSeeOther)
 		return
@@ -684,19 +677,11 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Generate share token
-	shareToken, err := generateToken()
-	if err != nil {
-		logger.Error("Failed to generate share token", "error", err)
-		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Failed+to+generate+token", http.StatusSeeOther)
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
 	// Create system share
-	share, err := h.DB.CreateSystemShare(ctx, sessionID, shareToken, nil)
+	share, err := h.DB.CreateSystemShare(ctx, sessionID, nil)
 	if err != nil {
 		if err == db.ErrSessionNotFound {
 			http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Session+not+found", http.StatusSeeOther)
@@ -707,11 +692,12 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	shareURL := frontendURL + "/sessions/" + sessionID + "/shared/" + shareToken
+	// Canonical URL (CF-132: no token in URL)
+	shareURL := frontendURL + "/sessions/" + sessionID
 
 	logger.Info("System share created via admin page",
 		"session_id", sessionID,
-		"share_token", shareToken,
+		"share_id", share.ID,
 		"external_id", share.ExternalID)
 
 	// Redirect back with success message and share URL

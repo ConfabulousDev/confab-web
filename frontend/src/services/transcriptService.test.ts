@@ -6,7 +6,6 @@ import * as api from './api';
 vi.mock('./api', () => ({
   syncFilesAPI: {
     getContent: vi.fn(),
-    getSharedContent: vi.fn(),
   },
 }));
 
@@ -127,28 +126,6 @@ ${createSystemMessage(2)}`;
 
     expect(result.newMessages).toHaveLength(0);
     expect(result.newTotalLineCount).toBe(10);
-  });
-
-  it('uses shared API for shared sessions', async () => {
-    const newContent = createSystemMessage(1);
-
-    vi.mocked(api.syncFilesAPI.getSharedContent).mockResolvedValue(newContent);
-
-    const result = await fetchNewTranscriptMessages(
-      'session-123',
-      'transcript.jsonl',
-      5,
-      'share-token-abc'
-    );
-
-    expect(api.syncFilesAPI.getSharedContent).toHaveBeenCalledWith(
-      'session-123',
-      'share-token-abc',
-      'transcript.jsonl',
-      5
-    );
-    expect(result.newMessages).toHaveLength(1);
-    expect(result.newTotalLineCount).toBe(6);
   });
 
   it('handles parse errors gracefully - only counts successful parses', async () => {

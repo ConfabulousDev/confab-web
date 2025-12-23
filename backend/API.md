@@ -366,7 +366,6 @@ Supports conditional requests for efficient polling:
     "git_branch": "main",
     "is_owner": true,
     "access_type": "owner",
-    "share_token": null,
     "shared_by_email": null,
     "hostname": "macbook.local",
     "username": "developer"
@@ -515,7 +514,7 @@ Content-Type: application/json
 **Response:**
 ```json
 {
-  "share_token": "hex32chars",
+  "share_id": 123,
   "share_url": "https://confab.dev/sessions/{id}",
   "is_public": true,
   "recipients": [],
@@ -525,7 +524,7 @@ Content-Type: application/json
 }
 ```
 
-**Note:** Share URLs use the canonical session URL format (`/sessions/{id}`). For private shares, invitation emails include the recipient's email as a query parameter: `https://confab.dev/sessions/{id}?email={recipient_email}`. This allows the login flow to guide the recipient to sign in with the correct email address. The share token is stored in the database for recipient lookup but is not exposed in URLs.
+**Note:** Share URLs use the canonical session URL format (`/sessions/{id}`). For private shares, invitation emails include the recipient's email as a query parameter: `https://confab.dev/sessions/{id}?email={recipient_email}`. This allows the login flow to guide the recipient to sign in with the correct email address.
 
 #### List Shares for Session
 ```
@@ -539,11 +538,13 @@ GET /api/v1/shares
 
 #### Revoke Share
 ```
-DELETE /api/v1/shares/{shareToken}
+DELETE /api/v1/shares/{shareId}
 X-CSRF-Token: <token>
 ```
 
 **Response:** `204 No Content`
+
+**Note:** The `shareId` is the numeric ID returned from Create Share.
 
 ---
 
@@ -602,7 +603,7 @@ X-CSRF-Token: <token>
 **Response:**
 ```json
 {
-  "share_token": "hex32chars",
+  "share_id": 123,
   "share_url": "https://confab.dev/sessions/{id}",
   "session_id": "uuid",
   "external_id": "session-external-id"

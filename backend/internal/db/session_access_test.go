@@ -53,8 +53,7 @@ func TestGetSessionAccessType_PublicShare_Unauthenticated(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	shareID := testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	shareID := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	ctx := context.Background()
 
@@ -86,8 +85,7 @@ func TestGetSessionAccessType_PublicShare_Authenticated(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	shareID := testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	shareID := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	ctx := context.Background()
 
@@ -119,8 +117,7 @@ func TestGetSessionAccessType_SystemShare_Authenticated(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create system share
-	shareToken := testutil.GenerateShareToken()
-	shareID := testutil.CreateTestSystemShare(t, env, sessionID, shareToken, nil)
+	shareID := testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	ctx := context.Background()
 
@@ -151,8 +148,7 @@ func TestGetSessionAccessType_SystemShare_Unauthenticated(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create system share (no public share)
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, shareToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	ctx := context.Background()
 
@@ -181,8 +177,7 @@ func TestGetSessionAccessType_RecipientShare_Authorized(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create private share with recipient
-	shareToken := testutil.GenerateShareToken()
-	shareID := testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+	shareID := testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	ctx := context.Background()
 
@@ -215,8 +210,7 @@ func TestGetSessionAccessType_RecipientShare_NotAuthorized(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create private share with specific recipient
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	ctx := context.Background()
 
@@ -254,8 +248,7 @@ func TestGetSessionAccessType_RecipientShare_Unauthenticated(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create private share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	ctx := context.Background()
 
@@ -350,9 +343,8 @@ func TestGetSessionAccessType_ExpiredPublicShare(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create expired public share
-	shareToken := testutil.GenerateShareToken()
 	expiredTime := time.Now().Add(-time.Hour)
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, &expiredTime, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, &expiredTime, nil)
 
 	ctx := context.Background()
 
@@ -381,9 +373,8 @@ func TestGetSessionAccessType_ExpiredSystemShare(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create expired system share
-	shareToken := testutil.GenerateShareToken()
 	expiredTime := time.Now().Add(-time.Hour)
-	testutil.CreateTestSystemShare(t, env, sessionID, shareToken, &expiredTime)
+	testutil.CreateTestSystemShare(t, env, sessionID, &expiredTime)
 
 	ctx := context.Background()
 
@@ -412,9 +403,8 @@ func TestGetSessionAccessType_ExpiredRecipientShare(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create expired private share
-	shareToken := testutil.GenerateShareToken()
 	expiredTime := time.Now().Add(-time.Hour)
-	testutil.CreateTestShare(t, env, sessionID, shareToken, false, &expiredTime, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, &expiredTime, []string{"recipient@example.com"})
 
 	ctx := context.Background()
 
@@ -442,8 +432,7 @@ func TestGetSessionAccessType_AccessPrecedence(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	ctx := context.Background()
 
@@ -472,13 +461,11 @@ func TestGetSessionAccessType_MultipleShares(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create expired public share
-	expiredToken := testutil.GenerateShareToken()
 	expiredTime := time.Now().Add(-time.Hour)
-	testutil.CreateTestShare(t, env, sessionID, expiredToken, true, &expiredTime, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, &expiredTime, nil)
 
 	// Create valid private share for recipient
-	validToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, validToken, false, nil, []string{"recipient@example.com"})
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	ctx := context.Background()
 
@@ -508,11 +495,9 @@ func TestGetSessionAccessType_SystemTakesPrecedenceOverPublic(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create both public and system shares
-	publicToken := testutil.GenerateShareToken()
-	testutil.CreateTestShare(t, env, sessionID, publicToken, true, nil, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
-	systemToken := testutil.GenerateShareToken()
-	systemShareID := testutil.CreateTestSystemShare(t, env, sessionID, systemToken, nil)
+	systemShareID := testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
 	ctx := context.Background()
 
@@ -544,11 +529,9 @@ func TestGetSessionAccessType_RecipientTakesPrecedenceOverSystem(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create both system and recipient shares
-	systemToken := testutil.GenerateShareToken()
-	testutil.CreateTestSystemShare(t, env, sessionID, systemToken, nil)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
 
-	recipientToken := testutil.GenerateShareToken()
-	recipientShareID := testutil.CreateTestShare(t, env, sessionID, recipientToken, false, nil, []string{"recipient@example.com"})
+	recipientShareID := testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	ctx := context.Background()
 
@@ -687,8 +670,7 @@ func TestGetSessionDetailWithAccess_UpdatesLastAccessedAt(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Create public share
-	shareToken := testutil.GenerateShareToken()
-	shareID := testutil.CreateTestShare(t, env, sessionID, shareToken, true, nil, nil)
+	shareID := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	ctx := context.Background()
 
@@ -737,5 +719,201 @@ func TestGetSessionDetailWithAccess_SessionNotFound(t *testing.T) {
 	_, err := env.DB.GetSessionDetailWithAccess(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID, accessInfo)
 	if err != db.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
+	}
+}
+
+// =============================================================================
+// AuthMayHelp Tests (CF-132: Login Prompt for Non-Public Shares)
+// =============================================================================
+
+// TestGetSessionAccessType_AuthMayHelp_RecipientShare tests that AuthMayHelp is true
+// when session has recipient shares and user is unauthenticated
+func TestGetSessionAccessType_AuthMayHelp_RecipientShare(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create recipient share (non-public)
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{recipient.Email})
+
+	ctx := context.Background()
+
+	// Unauthenticated user should get AuthMayHelp=true
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessNone {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessNone, accessInfo.AccessType)
+	}
+	if !accessInfo.AuthMayHelp {
+		t.Error("expected AuthMayHelp = true for session with recipient share")
+	}
+}
+
+// TestGetSessionAccessType_AuthMayHelp_SystemShare tests that AuthMayHelp is true
+// when session has system shares and user is unauthenticated
+func TestGetSessionAccessType_AuthMayHelp_SystemShare(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create system share (non-public)
+	testutil.CreateTestSystemShare(t, env, sessionID, nil)
+
+	ctx := context.Background()
+
+	// Unauthenticated user should get AuthMayHelp=true
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessNone {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessNone, accessInfo.AccessType)
+	}
+	if !accessInfo.AuthMayHelp {
+		t.Error("expected AuthMayHelp = true for session with system share")
+	}
+}
+
+// TestGetSessionAccessType_AuthMayHelp_NoShares tests that AuthMayHelp is false
+// when session has no shares
+func TestGetSessionAccessType_AuthMayHelp_NoShares(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	ctx := context.Background()
+
+	// Unauthenticated user should get AuthMayHelp=false (no shares exist)
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessNone {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessNone, accessInfo.AccessType)
+	}
+	if accessInfo.AuthMayHelp {
+		t.Error("expected AuthMayHelp = false for session with no shares")
+	}
+}
+
+// TestGetSessionAccessType_AuthMayHelp_OnlyPublicShare tests that AuthMayHelp is false
+// when session has only public shares (user already has access, no need to login)
+func TestGetSessionAccessType_AuthMayHelp_OnlyPublicShare(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create public share
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+
+	ctx := context.Background()
+
+	// Unauthenticated user should get public access (not "no access")
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	// With a public share, user gets access - AuthMayHelp is irrelevant
+	if accessInfo.AccessType != db.SessionAccessPublic {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessPublic, accessInfo.AccessType)
+	}
+}
+
+// TestGetSessionAccessType_AuthMayHelp_AuthenticatedNoAccess tests that AuthMayHelp is false
+// when user is authenticated but has no access (they're already logged in)
+func TestGetSessionAccessType_AuthMayHelp_AuthenticatedNoAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	otherUser := testutil.CreateTestUser(t, env, "other@example.com", "Other")
+	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create recipient share for a different user
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{recipient.Email})
+
+	ctx := context.Background()
+
+	// Authenticated user (not the recipient) should get AuthMayHelp=false
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &otherUser.ID)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessNone {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessNone, accessInfo.AccessType)
+	}
+	if accessInfo.AuthMayHelp {
+		t.Error("expected AuthMayHelp = false for authenticated user without access")
+	}
+}
+
+// TestGetSessionAccessType_AuthMayHelp_ExpiredShare tests that AuthMayHelp is false
+// when non-public shares exist but are expired
+func TestGetSessionAccessType_AuthMayHelp_ExpiredShare(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create expired recipient share
+	expiredAt := time.Now().Add(-24 * time.Hour) // Expired yesterday
+	testutil.CreateTestShare(t, env, sessionID, false, &expiredAt, []string{recipient.Email})
+
+	ctx := context.Background()
+
+	// Unauthenticated user should get AuthMayHelp=false (share is expired)
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessNone {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessNone, accessInfo.AccessType)
+	}
+	if accessInfo.AuthMayHelp {
+		t.Error("expected AuthMayHelp = false for session with only expired shares")
 	}
 }

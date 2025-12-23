@@ -8,10 +8,9 @@ import styles from './TranscriptViewer.module.css';
 
 interface TranscriptViewerProps {
   session: SessionDetail;
-  shareToken?: string;
 }
 
-function TranscriptViewer({ session, shareToken }: TranscriptViewerProps) {
+function TranscriptViewer({ session }: TranscriptViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>([]);
@@ -52,13 +51,13 @@ function TranscriptViewer({ session, shareToken }: TranscriptViewerProps) {
 
       // Fetch and parse transcript using session ID and file name
       const t1 = performance.now();
-      const parsed = await fetchParsedTranscript(session.id, transcriptFile.file_name, shareToken);
+      const parsed = await fetchParsedTranscript(session.id, transcriptFile.file_name);
       const t2 = performance.now();
       console.log(`⏱️ fetchParsedTranscript took ${Math.round(t2 - t1)}ms`);
 
       // Build agent tree
       const t3 = performance.now();
-      const agentTree = await buildAgentTree(session.id, parsed.messages, session.files, shareToken);
+      const agentTree = await buildAgentTree(session.id, parsed.messages, session.files);
       const t4 = performance.now();
       console.log(`⏱️ buildAgentTree took ${Math.round(t4 - t3)}ms`);
 

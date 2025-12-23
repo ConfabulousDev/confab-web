@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SessionDetail } from '@/types';
+import { type SessionErrorType, statusToErrorType, getErrorMessage } from '@/utils/sessionErrors';
 
-export type SessionErrorType = 'not_found' | 'expired' | 'forbidden' | 'general' | null;
+export type { SessionErrorType } from '@/utils/sessionErrors';
 
 /** Type guard for objects with a status property */
 function hasStatusProperty(err: unknown): err is { status: number } {
@@ -20,7 +21,6 @@ interface UseLoadSessionResult {
 
 interface UseLoadSessionOptions {
   fetchSession: () => Promise<SessionDetail>;
-  onAuthRequired?: (redirectPath: string) => void;
   deps?: unknown[];
 }
 
@@ -30,7 +30,6 @@ interface UseLoadSessionOptions {
  */
 export function useLoadSession({
   fetchSession,
-  onAuthRequired,
   deps = [],
 }: UseLoadSessionOptions): UseLoadSessionResult {
   const [session, setSession] = useState<SessionDetail | null>(null);
@@ -65,19 +64,8 @@ export function useLoadSession({
 
         // Handle specific error types - check for status property
         if (err instanceof Response || hasStatusProperty(err)) {
-          const status = err.status;
-          if (status === 404) {
-            setError('Session not found', 'not_found');
-          } else if (status === 410) {
-            setError('This share link has expired', 'expired');
-          } else if (status === 401 && onAuthRequired) {
-            onAuthRequired(window.location.pathname + window.location.search);
-            return;
-          } else if (status === 403) {
-            setError('You are not authorized to view this session', 'forbidden');
-          } else {
-            setError('Failed to load session', 'general');
-          }
+          const errorType = statusToErrorType(err.status);
+          setError(getErrorMessage(errorType), errorType);
         } else {
           setError(err instanceof Error ? err.message : 'Failed to load session', 'general');
         }

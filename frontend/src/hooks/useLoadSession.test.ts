@@ -113,18 +113,21 @@ describe('useLoadSession', () => {
     expect(result.current.errorType).toBe('forbidden');
   });
 
-  it('handles 401 error by calling onAuthRequired', async () => {
+  it('handles 401 error with auth_required errorType', async () => {
     const error = { status: 401 };
     const fetchSession = vi.fn().mockRejectedValue(error);
-    const onAuthRequired = vi.fn();
 
-    renderHook(() =>
-      useLoadSession({ fetchSession, onAuthRequired })
+    const { result } = renderHook(() =>
+      useLoadSession({ fetchSession })
     );
 
     await waitFor(() => {
-      expect(onAuthRequired).toHaveBeenCalled();
+      expect(result.current.loading).toBe(false);
     });
+
+    expect(result.current.session).toBeNull();
+    expect(result.current.error).toBe('Sign in to view this session');
+    expect(result.current.errorType).toBe('auth_required');
   });
 
   it('handles generic errors', async () => {

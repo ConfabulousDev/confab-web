@@ -684,7 +684,7 @@ conn.SetConnMaxLifetime(5 * time.Minute)  // Recycle after 5 minutes
 
 **Current:**
 - ✅ SQL parameterization (prevents SQL injection, enables query caching)
-- ✅ Indexed columns: `user_id`, `session_id`, `share_token`, `email`
+- ✅ Indexed columns: `user_id`, `session_id`, `email`
 - ⏳ TODO: Add EXPLAIN ANALYZE for slow queries
 - ⏳ TODO: Add query timeout enforcement
 - ⏳ TODO: Add connection pool monitoring
