@@ -772,7 +772,7 @@ type chunkDownloader interface {
 }
 
 // maxParallelDownloads limits concurrent chunk downloads to avoid overwhelming S3
-const maxParallelDownloads = 5
+const maxParallelDownloads = 10
 
 // chunkResult holds the result of a parallel chunk download
 type chunkResult struct {
