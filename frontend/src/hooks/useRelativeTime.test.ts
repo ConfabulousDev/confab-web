@@ -60,11 +60,21 @@ describe('useRelativeTime', () => {
     expect(result.current).toBe('35s ago');
   });
 
-  it('uses 5 second interval for timestamps less than 1 hour old', () => {
+  it('uses 2 second interval for timestamps less than 5 minutes old', () => {
     const setIntervalSpy = vi.spyOn(global, 'setInterval');
 
     // 30 seconds ago
     const date = '2025-01-15T11:59:30Z';
+    renderHook(() => useRelativeTime(date));
+
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
+  });
+
+  it('uses 5 second interval for timestamps between 5 minutes and 1 hour old', () => {
+    const setIntervalSpy = vi.spyOn(global, 'setInterval');
+
+    // 10 minutes ago
+    const date = '2025-01-15T11:50:00Z';
     renderHook(() => useRelativeTime(date));
 
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5000);

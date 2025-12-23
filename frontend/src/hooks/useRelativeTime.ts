@@ -3,11 +3,13 @@ import { formatRelativeTime } from '@/utils/formatting';
 import { useVisibility } from './useVisibility';
 
 // Interval durations based on timestamp age
+const VERY_RECENT_INTERVAL = 2000; // 2 seconds for timestamps < 5 minutes
 const RECENT_INTERVAL = 5000; // 5 seconds for timestamps < 1 hour
 const HOUR_INTERVAL = 60000; // 60 seconds for hour+ timestamps
 
 /**
  * Calculate the appropriate update interval based on timestamp age.
+ * - Less than 5 minutes: update every 2 seconds
  * - Less than 1 hour: update every 5 seconds
  * - 1 hour or more: update every 60 seconds
  */
@@ -16,9 +18,12 @@ function getUpdateInterval(dateStr: string): number {
   const now = new Date();
   const diffMs = Math.abs(now.getTime() - date.getTime());
 
+  const FIVE_MINUTES = 5 * 60 * 1000;
   const ONE_HOUR = 60 * 60 * 1000;
 
-  if (diffMs < ONE_HOUR) {
+  if (diffMs < FIVE_MINUTES) {
+    return VERY_RECENT_INTERVAL;
+  } else if (diffMs < ONE_HOUR) {
     return RECENT_INTERVAL;
   } else {
     return HOUR_INTERVAL;
