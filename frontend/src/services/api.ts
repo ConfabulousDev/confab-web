@@ -401,7 +401,7 @@ export const syncFilesAPI = {
    * @param lineOffset - Optional: Return only lines after this line number (for incremental fetching)
    */
   getContent: (sessionId: string, fileName: string, lineOffset?: number): Promise<string> => {
-    let url = `/sync/file?session_id=${encodeURIComponent(sessionId)}&file_name=${encodeURIComponent(fileName)}`;
+    let url = `/sessions/${encodeURIComponent(sessionId)}/sync/file?file_name=${encodeURIComponent(fileName)}`;
     if (lineOffset !== undefined && lineOffset > 0) {
       url += `&line_offset=${lineOffset}`;
     }
