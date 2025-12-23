@@ -53,6 +53,8 @@ function Message({ message, previousMessage }: MessageProps) {
       </div>
 
       <div className={styles.messageContent}>
+        {/* Index as key is acceptable here: transcript content blocks are immutable
+            and append-only - they are never reordered, inserted, or removed. */}
         {messageData.content.map((block: ContentBlock, i: number) => (
           <ContentBlockComponent
             key={i}

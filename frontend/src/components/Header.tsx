@@ -10,6 +10,10 @@ function Header() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
+  // NOTE: This is a manual implementation of click-outside detection. If this pattern
+  // is needed in other components, consider extracting to a reusable useClickOutside hook:
+  //   function useClickOutside(ref: RefObject<HTMLElement>, handler: () => void) { ... }
+  // For now, this is the only usage, so inline implementation is acceptable.
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target;

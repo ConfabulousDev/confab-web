@@ -77,6 +77,12 @@ const CloseIcon = (
   </svg>
 );
 
+// NOTE: This component has a large prop list (18 props). This is acceptable for now
+// as it serves as the main session header orchestrating multiple concerns. If this
+// grows further or filter-related props are needed elsewhere, consider:
+// - Extracting filter state to a React context (SessionFilterContext)
+// - Using a compound component pattern for the header sections
+// - Grouping related props into objects (e.g., filterProps: { counts, visible, onToggle })
 interface SessionHeaderProps {
   sessionId: string;
   title?: string;
@@ -92,7 +98,8 @@ interface SessionHeaderProps {
   onSessionUpdate?: (session: SessionDetail) => void;
   isOwner?: boolean;
   isShared?: boolean;
-  // Filter props
+  // Filter props - currently drilled from SessionViewer -> SessionHeader -> FilterDropdown
+  // Monitor if this drilling pattern extends further; context may be warranted then.
   categoryCounts: MessageCategoryCounts;
   visibleCategories: Set<MessageCategory>;
   onToggleCategory: (category: MessageCategory) => void;
