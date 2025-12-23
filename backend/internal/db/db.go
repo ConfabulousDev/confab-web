@@ -947,9 +947,15 @@ type SessionShare struct {
 // isPublic: true for public shares (anyone with link), false for recipient-only shares
 // recipientEmails: email addresses to grant access (ignored if isPublic)
 func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*SessionShare, error) {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Verify session exists for this user and get external_id for display
 	var externalID string
-	err := db.conn.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`,
 		sessionID, userID).Scan(&externalID)
 	if err != nil {
@@ -973,45 +979,79 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, i
 	share.IsPublic = isPublic
 	share.ExpiresAt = expiresAt
 
-	err = db.conn.QueryRowContext(ctx, query, sessionID, expiresAt).Scan(&share.ID, &share.CreatedAt)
+	err = tx.QueryRowContext(ctx, query, sessionID, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
 
 	// For public shares, insert into session_share_public
 	if isPublic {
-		_, err := db.conn.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`INSERT INTO session_share_public (share_id) VALUES ($1)`,
 			share.ID)
 		if err != nil {
-			db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
 			return nil, fmt.Errorf("failed to create public share: %w", err)
 		}
 	}
 
-	// For recipient shares, insert recipients with user_id lookup
+	// For recipient shares, batch insert recipients with user_id lookup
 	if !isPublic && len(recipientEmails) > 0 {
-		for _, email := range recipientEmails {
-			// Try to resolve email to user_id
-			var recipientUserID *int64
-			var uid int64
-			err := db.conn.QueryRowContext(ctx,
-				`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
-				email).Scan(&uid)
-			if err == nil {
-				recipientUserID = &uid
-			}
-
-			_, err = db.conn.ExecContext(ctx,
-				`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)`,
-				share.ID, email, recipientUserID)
-			if err != nil {
-				// Rollback share if recipient insert fails
-				db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
-				return nil, fmt.Errorf("failed to create recipient: %w", err)
-			}
+		// Batch lookup: get all existing user_ids for the recipient emails
+		emailToUserID := make(map[string]int64)
+		placeholders := make([]string, len(recipientEmails))
+		args := make([]interface{}, len(recipientEmails))
+		for i, email := range recipientEmails {
+			placeholders[i] = fmt.Sprintf("LOWER($%d)", i+1)
+			args[i] = email
 		}
+
+		lookupQuery := fmt.Sprintf(
+			`SELECT id, LOWER(email) FROM users WHERE LOWER(email) IN (%s)`,
+			strings.Join(placeholders, ", "))
+		rows, err := tx.QueryContext(ctx, lookupQuery, args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to lookup recipient users: %w", err)
+		}
+		for rows.Next() {
+			var uid int64
+			var email string
+			if err := rows.Scan(&uid, &email); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("failed to scan recipient user: %w", err)
+			}
+			emailToUserID[email] = uid
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("error iterating recipient users: %w", err)
+		}
+
+		// Batch insert: build multi-row INSERT for all recipients
+		insertPlaceholders := make([]string, len(recipientEmails))
+		insertArgs := make([]interface{}, 0, len(recipientEmails)*3)
+		for i, email := range recipientEmails {
+			var userID *int64
+			if uid, ok := emailToUserID[strings.ToLower(email)]; ok {
+				userID = &uid
+			}
+			base := i*3 + 1
+			insertPlaceholders[i] = fmt.Sprintf("($%d, $%d, $%d)", base, base+1, base+2)
+			insertArgs = append(insertArgs, share.ID, email, userID)
+		}
+
+		insertQuery := fmt.Sprintf(
+			`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES %s`,
+			strings.Join(insertPlaceholders, ", "))
+		_, err = tx.ExecContext(ctx, insertQuery, insertArgs...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create recipients: %w", err)
+		}
+
 		share.Recipients = recipientEmails
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
 	return &share, nil
@@ -1020,9 +1060,15 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, i
 // CreateSystemShare creates a system-wide share for a session (admin only, no ownership check)
 // System shares are accessible to any authenticated user
 func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt *time.Time) (*SessionShare, error) {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Get session external_id (no ownership check - admin operation)
 	var externalID string
-	err := db.conn.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT external_id FROM sessions WHERE id = $1`,
 		sessionID).Scan(&externalID)
 	if err != nil {
@@ -1042,7 +1088,7 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 	share.IsPublic = false // System shares are not public (require auth)
 	share.ExpiresAt = expiresAt
 
-	err = db.conn.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`INSERT INTO session_shares (session_id, expires_at)
 		 VALUES ($1, $2)
 		 RETURNING id, created_at`,
@@ -1052,12 +1098,15 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 	}
 
 	// Insert into session_share_system
-	_, err = db.conn.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO session_share_system (share_id) VALUES ($1)`,
 		share.ID)
 	if err != nil {
-		db.conn.ExecContext(ctx, `DELETE FROM session_shares WHERE id = $1`, share.ID)
 		return nil, fmt.Errorf("failed to create system share: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
 	return &share, nil
@@ -1596,6 +1645,12 @@ func (db *DB) UpdateSessionCustomTitle(ctx context.Context, sessionID string, us
 // If summary/firstUserMessage is provided (not nil), sets them (last write wins; empty string clears)
 // If gitInfo is provided (not nil and not empty), updates session.git_info
 func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, summary, firstUserMessage *string, gitInfo json.RawMessage) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Update sync_files table - increment chunk_count on each chunk upload
 	syncQuery := `
 		INSERT INTO sync_files (session_id, file_name, file_type, last_synced_line, chunk_count, updated_at)
@@ -1605,7 +1660,7 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 			chunk_count = COALESCE(sync_files.chunk_count, 0) + 1,
 			updated_at = NOW()
 	`
-	_, err := db.conn.ExecContext(ctx, syncQuery, sessionID, fileName, fileType, lastSyncedLine)
+	_, err = tx.ExecContext(ctx, syncQuery, sessionID, fileName, fileType, lastSyncedLine)
 	if err != nil {
 		return fmt.Errorf("failed to update sync file state: %w", err)
 	}
@@ -1650,17 +1705,21 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 		}
 
 		sessionQuery += " WHERE id = $1"
-		_, err = db.conn.ExecContext(ctx, sessionQuery, args...)
+		_, err = tx.ExecContext(ctx, sessionQuery, args...)
 		if err != nil {
 			return fmt.Errorf("failed to update session metadata: %w", err)
 		}
 	} else {
 		// Still update last_sync_at even without message timestamp or summary
 		sessionQuery := `UPDATE sessions SET last_sync_at = NOW() WHERE id = $1`
-		_, err = db.conn.ExecContext(ctx, sessionQuery, sessionID)
+		_, err = tx.ExecContext(ctx, sessionQuery, sessionID)
 		if err != nil {
 			return fmt.Errorf("failed to update session last_sync_at: %w", err)
 		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit: %w", err)
 	}
 
 	return nil
@@ -1891,8 +1950,9 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	}
 
 	// Update last_accessed_at on the share if accessed via share
+	// Non-critical analytics update; ignore errors to not fail the main operation
 	if accessInfo.ShareID != nil {
-		db.conn.ExecContext(ctx,
+		_, _ = db.conn.ExecContext(ctx,
 			`UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`,
 			*accessInfo.ShareID)
 	}

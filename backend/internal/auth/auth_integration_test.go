@@ -3,6 +3,8 @@ package auth_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -660,4 +662,121 @@ func TestCanUserLogin_EmailNormalization(t *testing.T) {
 	if allowed {
 		t.Error("new user should be rejected when cap is reached")
 	}
+}
+
+// TestAPIKeyMiddleware_Integration tests the full API key middleware flow with a real database
+func TestAPIKeyMiddleware_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	t.Run("valid API key grants access", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		// Create a user
+		user := testutil.CreateTestUser(t, env, "apiuser@example.com", "API User")
+
+		// Create an API key for the user
+		rawKey, keyHash, err := auth.GenerateAPIKey()
+		if err != nil {
+			t.Fatalf("GenerateAPIKey failed: %v", err)
+		}
+
+		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		if err != nil {
+			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
+		}
+
+		// Create handler wrapped with middleware
+		var capturedUserID int64
+		handler := auth.Middleware(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := auth.GetUserID(r.Context())
+			if !ok {
+				t.Error("expected user ID in context")
+			}
+			capturedUserID = userID
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		req.Header.Set("Authorization", "Bearer "+rawKey)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+		if capturedUserID != user.ID {
+			t.Errorf("captured userID = %d, want %d", capturedUserID, user.ID)
+		}
+	})
+
+	t.Run("invalid API key returns 401", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		handler := auth.Middleware(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("handler should not be called for invalid key")
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		req.Header.Set("Authorization", "Bearer cfb_invalid_key_that_does_not_exist")
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("inactive user returns 403", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		// Create a user and then deactivate them
+		user := testutil.CreateTestUser(t, env, "inactive@example.com", "Inactive User")
+
+		// Create an API key
+		rawKey, keyHash, err := auth.GenerateAPIKey()
+		if err != nil {
+			t.Fatalf("GenerateAPIKey failed: %v", err)
+		}
+
+		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		if err != nil {
+			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
+		}
+
+		// Deactivate the user
+		err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+		if err != nil {
+			t.Fatalf("SetUserStatus failed: %v", err)
+		}
+
+		handler := auth.Middleware(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("handler should not be called for inactive user")
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		req.Header.Set("Authorization", "Bearer "+rawKey)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+		}
+		if body := rec.Body.String(); body != "Account deactivated\n" {
+			t.Errorf("body = %q, want %q", body, "Account deactivated\n")
+		}
+	})
 }

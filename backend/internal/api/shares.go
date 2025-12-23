@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -17,6 +18,9 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
+
+// MaxShareRecipients is the maximum number of recipients allowed per share
+const MaxShareRecipients = 50
 
 // CreateShareRequest is the request body for creating a share
 type CreateShareRequest struct {
@@ -76,8 +80,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				respondError(w, http.StatusBadRequest, "Non-public shares require at least one recipient email")
 				return
 			}
-			if len(req.Recipients) > 50 {
-				respondError(w, http.StatusBadRequest, "Maximum 50 recipients allowed")
+			if len(req.Recipients) > MaxShareRecipients {
+				respondError(w, http.StatusBadRequest, fmt.Sprintf("Maximum %d recipients allowed", MaxShareRecipients))
 				return
 			}
 			// Validate email formats and check for self-invite
