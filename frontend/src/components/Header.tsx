@@ -113,7 +113,7 @@ function Header() {
               API Keys
             </Link>
             <Link to="/shares" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
-              Share Links
+              Shares
             </Link>
             <div className={styles.dropdownDivider} />
             <button className={styles.dropdownItem} onClick={handleLogout}>

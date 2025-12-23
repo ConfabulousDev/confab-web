@@ -143,6 +143,13 @@
   color: #2e7d32;
 }
 
+.shareUrlLabel {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: #333;
+  font-weight: 500;
+}
+
 .shareUrlBox {
   display: flex;
   gap: 0.5rem;

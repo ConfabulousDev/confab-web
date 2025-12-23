@@ -64,7 +64,8 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
         <div className={styles.modalBody}>
           {createdShareURL ? (
             <div className={styles.successMessage}>
-              <h3>✓ Share Link Created</h3>
+              <h3>✓ Share Created</h3>
+              <p className={styles.shareUrlLabel}>Session link:</p>
               <div className={styles.shareUrlBox}>
                 <input
                   type="text"
@@ -160,7 +161,7 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
                   onClick={createShare}
                   disabled={loading}
                 >
-                  {loading ? 'Creating...' : 'Create Share Link'}
+                  {loading ? 'Creating...' : 'Create Share'}
                 </Button>
                 <Button variant="secondary" onClick={onClose}>
                   Cancel

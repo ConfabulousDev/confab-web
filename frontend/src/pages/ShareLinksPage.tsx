@@ -61,7 +61,7 @@ const CopyIcon = (
 );
 
 function ShareLinksPage() {
-  useDocumentTitle('Share Links');
+  useDocumentTitle('Shares');
   const navigate = useNavigate();
   const [shares, setShares] = useState<SessionShare[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +149,7 @@ function ShareLinksPage() {
     setError('');
     try {
       await sessionsAPI.revokeShare(shareId);
-      setSuccessMessage('Share link revoked successfully');
+      setSuccessMessage('Share revoked successfully');
       await fetchShares();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to revoke share');
@@ -166,7 +166,7 @@ function ShareLinksPage() {
   return (
     <div className={styles.pageWrapper}>
       <PageSidebar
-        title="Share Links"
+        title="Shares"
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       >
@@ -220,7 +220,7 @@ function ShareLinksPage() {
 
       <div className={`${styles.mainContent} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
         <PageHeader
-          title="Share Links"
+          title="Shares"
           subtitle={`${sortedShares.length} share${sortedShares.length !== 1 ? 's' : ''}`}
         />
 
@@ -233,7 +233,7 @@ function ShareLinksPage() {
               <p className={styles.loading}>Loading shares...</p>
             ) : shares.length === 0 ? (
               <p className={styles.empty}>
-                No share links yet. Share a session to see links here.
+                No shares yet. Share a session to see shares here.
               </p>
             ) : sortedShares.length === 0 ? (
               <p className={styles.empty}>

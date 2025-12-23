@@ -22,9 +22,9 @@ const SESSION_ERROR_CONFIG: Record<NonNullable<SessionErrorType>, SessionErrorCo
     icon: '🔍',
   },
   expired: {
-    message: 'This share link has expired',
+    message: 'This share has expired',
     icon: '⏰',
-    description: 'Please request a new share link from the session owner.',
+    description: 'Please request a new share from the session owner.',
   },
   forbidden: {
     message: 'You are not authorized to view this session',

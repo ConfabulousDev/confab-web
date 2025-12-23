@@ -92,7 +92,7 @@ describe('useLoadSession', () => {
     });
 
     expect(result.current.session).toBeNull();
-    expect(result.current.error).toBe('This share link has expired');
+    expect(result.current.error).toBe('This share has expired');
     expect(result.current.errorType).toBe('expired');
   });
 
