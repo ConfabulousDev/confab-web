@@ -324,6 +324,8 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireSessionOrAPIKey(s.db))
 			r.Get("/sessions/by-external-id/{external_id}", withMaxBody(MaxBodyXS, HandleLookupSessionByExternalID(s.db)))
+			// GitHub links - create (CLI or web)
+			r.Post("/sessions/{id}/github-links", withMaxBody(MaxBodyM, HandleCreateGitHubLink(s.db)))
 		})
 
 		// Canonical session access (CF-132) - supports optional authentication
@@ -334,6 +336,14 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Canonical shared sync file access endpoint (CF-132)
 			// Uses same session access logic as /sessions/{id}
 			r.Get("/sessions/{id}/sync/file", withMaxBody(MaxBodyXS, s.handleCanonicalSyncFileRead))
+			// GitHub links - list (viewable by anyone with session access)
+			r.Get("/sessions/{id}/github-links", withMaxBody(MaxBodyXS, HandleListGitHubLinks(s.db)))
+		})
+
+		// GitHub links - delete (owner-only, web session required)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireSession(s.db))
+			r.Delete("/sessions/{id}/github-links/{linkID}", withMaxBody(MaxBodyXS, HandleDeleteGitHubLink(s.db)))
 		})
 	})
 

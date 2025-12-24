@@ -114,6 +114,30 @@ export const CreateShareResponseSchema = z.object({
 });
 
 // ============================================================================
+// GitHub Link Schemas
+// ============================================================================
+
+export const GitHubLinkTypeSchema = z.enum(['commit', 'pull_request']);
+export const GitHubLinkSourceSchema = z.enum(['cli_hook', 'manual']);
+
+export const GitHubLinkSchema = z.object({
+  id: z.number(),
+  session_id: z.string(),
+  link_type: GitHubLinkTypeSchema,
+  url: z.string(),
+  owner: z.string(),
+  repo: z.string(),
+  ref: z.string(),
+  title: z.string().nullable().optional(),
+  source: GitHubLinkSourceSchema,
+  created_at: z.string(),
+});
+
+export const GitHubLinksResponseSchema = z.object({
+  links: z.array(GitHubLinkSchema),
+});
+
+// ============================================================================
 // Array Response Schemas
 // ============================================================================
 
@@ -134,6 +158,10 @@ export type User = z.infer<typeof UserSchema>;
 export type APIKey = z.infer<typeof APIKeySchema>;
 export type CreateAPIKeyResponse = z.infer<typeof CreateAPIKeyResponseSchema>;
 export type CreateShareResponse = z.infer<typeof CreateShareResponseSchema>;
+export type GitHubLinkType = z.infer<typeof GitHubLinkTypeSchema>;
+export type GitHubLinkSource = z.infer<typeof GitHubLinkSourceSchema>;
+export type GitHubLink = z.infer<typeof GitHubLinkSchema>;
+export type GitHubLinksResponse = z.infer<typeof GitHubLinksResponseSchema>;
 
 // ============================================================================
 // Validation Functions

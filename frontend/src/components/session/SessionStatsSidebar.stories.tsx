@@ -1,7 +1,36 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { TranscriptLine, AssistantMessage, SystemMessage } from '@/types';
+import type { GitHubLink } from '@/services/api';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
 import SessionStatsSidebar from './SessionStatsSidebar';
+
+// Sample GitHub links for stories
+const mockGitHubLinks: GitHubLink[] = [
+  {
+    id: 1,
+    session_id: 'test-session',
+    link_type: 'pull_request',
+    url: 'https://github.com/owner/repo/pull/123',
+    owner: 'owner',
+    repo: 'repo',
+    ref: '123',
+    title: 'Add new feature',
+    source: 'cli_hook',
+    created_at: '2025-01-15T10:30:00Z',
+  },
+  {
+    id: 2,
+    session_id: 'test-session',
+    link_type: 'pull_request',
+    url: 'https://github.com/another-org/another-repo/pull/456',
+    owner: 'another-org',
+    repo: 'another-repo',
+    ref: '456',
+    title: 'Fix critical bug',
+    source: 'manual',
+    created_at: '2025-01-15T09:00:00Z',
+  },
+];
 
 // Helper to create a minimal assistant message with token usage
 function createAssistantMessage(
@@ -174,5 +203,31 @@ export const WithCompactions: Story = {
 export const ManyCompactions: Story = {
   args: {
     messages: longSessionWithManyCompactions,
+  },
+};
+
+// Stories with GitHub section
+
+export const WithGitHubLinks: Story = {
+  args: {
+    messages: sampleMessages,
+    isOwner: true,
+    initialGithubLinks: mockGitHubLinks,
+  },
+};
+
+export const WithGitHubLinksViewOnly: Story = {
+  args: {
+    messages: sampleMessages,
+    isOwner: false,
+    initialGithubLinks: mockGitHubLinks,
+  },
+};
+
+export const WithSinglePR: Story = {
+  args: {
+    messages: sampleMessages,
+    isOwner: true,
+    initialGithubLinks: mockGitHubLinks.slice(0, 1),
   },
 };

@@ -30,4 +30,8 @@ var (
 
 	// Device code errors
 	ErrDeviceCodeNotFound = errors.New("device code not found or expired")
+
+	// GitHub link errors
+	ErrGitHubLinkNotFound  = errors.New("github link not found")
+	ErrGitHubLinkDuplicate = errors.New("github link already exists")
 )

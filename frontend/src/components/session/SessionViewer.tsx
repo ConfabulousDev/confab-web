@@ -148,7 +148,12 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
   return (
     <div className={styles.sessionViewer}>
-      <SessionStatsSidebar messages={messages} loading={loading} />
+      <SessionStatsSidebar
+        messages={messages}
+        loading={loading}
+        sessionId={session.id}
+        isOwner={isOwner}
+      />
 
       <div className={styles.mainContent}>
         <SessionHeader

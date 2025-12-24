@@ -11,6 +11,8 @@ import {
   CreateAPIKeyResponseSchema,
   CreateShareResponseSchema,
   UserSchema,
+  GitHubLinkSchema,
+  GitHubLinksResponseSchema,
   validateResponse,
   type Session,
   type SessionDetail,
@@ -19,10 +21,12 @@ import {
   type CreateAPIKeyResponse,
   type CreateShareResponse,
   type User,
+  type GitHubLink,
+  type GitHubLinksResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
-export type { Session, SessionDetail, SessionShare, APIKey, User } from '@/schemas/api';
+export type { Session, SessionDetail, SessionShare, APIKey, User, GitHubLink } from '@/schemas/api';
 
 /**
  * Handles authentication failures by clearing cached state and redirecting to home.
@@ -420,4 +424,34 @@ export const keysAPI = {
 
 export const sharesAPI = {
   list: (): Promise<SessionShare[]> => api.getValidated('/shares', SessionShareListSchema),
+};
+
+export const githubLinksAPI = {
+  /**
+   * List GitHub links for a session.
+   * Works for any user with session access (owner, shared, public).
+   */
+  list: (sessionId: string): Promise<GitHubLinksResponse> =>
+    api.getValidated(`/sessions/${sessionId}/github-links`, GitHubLinksResponseSchema),
+
+  /**
+   * Create a new GitHub link for a session.
+   * Requires session ownership.
+   */
+  create: (
+    sessionId: string,
+    data: {
+      url: string;
+      title?: string;
+      source: 'cli_hook' | 'manual';
+    }
+  ): Promise<GitHubLink> =>
+    api.postValidated(`/sessions/${sessionId}/github-links`, GitHubLinkSchema, data),
+
+  /**
+   * Delete a GitHub link.
+   * Requires session ownership.
+   */
+  delete: (sessionId: string, linkId: number): Promise<void> =>
+    api.deleteVoid(`/sessions/${sessionId}/github-links/${linkId}`),
 };

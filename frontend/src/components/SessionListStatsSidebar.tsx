@@ -109,7 +109,7 @@ function SessionListStatsSidebar({ sessions, loading = false }: SessionListStats
   const renderValue = (value: string) => (loading ? spinner : value);
 
   return (
-    <PageSidebar title="Stats" collapsible={false}>
+    <PageSidebar collapsible={false}>
       <div>
         {/* Overview Section */}
         <div className={styles.section}>

@@ -142,3 +142,41 @@ type SaveSessionResponse struct {
 	SessionURL string `json:"session_url"`
 	Message    string `json:"message,omitempty"`
 }
+
+// GitHubLinkType represents the type of GitHub artifact
+type GitHubLinkType string
+
+const (
+	GitHubLinkTypeCommit      GitHubLinkType = "commit"
+	GitHubLinkTypePullRequest GitHubLinkType = "pull_request"
+)
+
+// GitHubLinkSource represents how the link was created
+type GitHubLinkSource string
+
+const (
+	GitHubLinkSourceCLIHook GitHubLinkSource = "cli_hook"
+	GitHubLinkSourceManual  GitHubLinkSource = "manual"
+)
+
+// GitHubLink represents a link between a session and a GitHub artifact
+type GitHubLink struct {
+	ID        int64            `json:"id"`
+	SessionID string           `json:"session_id"`
+	LinkType  GitHubLinkType   `json:"link_type"`
+	URL       string           `json:"url"`
+	Owner     string           `json:"owner"`
+	Repo      string           `json:"repo"`
+	Ref       string           `json:"ref"`
+	Title     *string          `json:"title,omitempty"`
+	Source    GitHubLinkSource `json:"source"`
+	CreatedAt time.Time        `json:"created_at"`
+}
+
+// CreateGitHubLinkRequest is the API request for creating a GitHub link
+type CreateGitHubLinkRequest struct {
+	LinkType GitHubLinkType   `json:"link_type"`
+	URL      string           `json:"url"`
+	Title    *string          `json:"title,omitempty"`
+	Source   GitHubLinkSource `json:"source"`
+}

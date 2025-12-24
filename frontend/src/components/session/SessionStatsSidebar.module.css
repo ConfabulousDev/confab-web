@@ -75,3 +75,176 @@
 .collapsed .section {
   display: none;
 }
+
+/* GitHub section specific styles */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.addButton {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.addButton:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.errorText {
+  font-size: var(--font-xs);
+  color: var(--color-error);
+  padding: 0 var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  padding: 3px var(--spacing-sm);
+  gap: var(--spacing-xs);
+}
+
+.linkRow:hover {
+  background: var(--color-bg-hover);
+}
+
+.linkContent {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  transition: color 0.15s;
+}
+
+.linkContent:hover {
+  color: var(--color-text-primary);
+}
+
+.linkRef {
+  font-weight: var(--font-medium);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.linkRepo {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deleteButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.linkRow:hover .deleteButton {
+  opacity: 1;
+}
+
+.deleteButton:hover {
+  color: var(--color-error);
+}
+
+.deleteButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Add form styles */
+.addForm {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.urlInput {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: var(--font-xs);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.urlInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.urlInput::placeholder {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.addFormButtons {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.submitButton,
+.cancelButton {
+  padding: 3px 6px;
+  font-size: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+.submitButton {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+}
+
+.submitButton:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.submitButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancelButton {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.cancelButton:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.cancelButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

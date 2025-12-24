@@ -1973,3 +1973,130 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 
 	return &session, nil
 }
+
+// CreateGitHubLink creates a new GitHub link for a session.
+// Returns ErrGitHubLinkDuplicate if link already exists.
+func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink) (*models.GitHubLink, error) {
+	query := `
+		INSERT INTO session_github_links (session_id, link_type, url, owner, repo, ref, title, source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, created_at
+	`
+	err := db.conn.QueryRowContext(ctx, query,
+		link.SessionID,
+		link.LinkType,
+		link.URL,
+		link.Owner,
+		link.Repo,
+		link.Ref,
+		link.Title,
+		link.Source,
+	).Scan(&link.ID, &link.CreatedAt)
+
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			return nil, ErrGitHubLinkDuplicate
+		}
+		return nil, fmt.Errorf("failed to create github link: %w", err)
+	}
+
+	return link, nil
+}
+
+// GetGitHubLinksForSession returns all GitHub links for a session.
+func (db *DB) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([]models.GitHubLink, error) {
+	query := `
+		SELECT id, session_id, link_type, url, owner, repo, ref, title, source, created_at
+		FROM session_github_links
+		WHERE session_id = $1
+		ORDER BY created_at DESC
+	`
+	rows, err := db.conn.QueryContext(ctx, query, sessionID)
+	if err != nil {
+		if isInvalidUUIDError(err) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to get github links: %w", err)
+	}
+	defer rows.Close()
+
+	var links []models.GitHubLink
+	for rows.Next() {
+		var link models.GitHubLink
+		err := rows.Scan(
+			&link.ID,
+			&link.SessionID,
+			&link.LinkType,
+			&link.URL,
+			&link.Owner,
+			&link.Repo,
+			&link.Ref,
+			&link.Title,
+			&link.Source,
+			&link.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan github link: %w", err)
+		}
+		links = append(links, link)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating github links: %w", err)
+	}
+
+	return links, nil
+}
+
+// DeleteGitHubLink deletes a GitHub link by ID.
+// Returns ErrGitHubLinkNotFound if link doesn't exist.
+func (db *DB) DeleteGitHubLink(ctx context.Context, linkID int64) error {
+	result, err := db.conn.ExecContext(ctx,
+		`DELETE FROM session_github_links WHERE id = $1`,
+		linkID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete github link: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrGitHubLinkNotFound
+	}
+
+	return nil
+}
+
+// GetGitHubLinkByID returns a GitHub link by ID.
+// Returns ErrGitHubLinkNotFound if link doesn't exist.
+func (db *DB) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitHubLink, error) {
+	query := `
+		SELECT id, session_id, link_type, url, owner, repo, ref, title, source, created_at
+		FROM session_github_links
+		WHERE id = $1
+	`
+	var link models.GitHubLink
+	err := db.conn.QueryRowContext(ctx, query, linkID).Scan(
+		&link.ID,
+		&link.SessionID,
+		&link.LinkType,
+		&link.URL,
+		&link.Owner,
+		&link.Repo,
+		&link.Ref,
+		&link.Title,
+		&link.Source,
+		&link.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrGitHubLinkNotFound
+		}
+		return nil, fmt.Errorf("failed to get github link: %w", err)
+	}
+
+	return &link, nil
+}

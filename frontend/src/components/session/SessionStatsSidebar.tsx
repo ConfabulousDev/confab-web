@@ -1,14 +1,19 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import type { TranscriptLine } from '@/types';
 import { useSpinner } from '@/hooks';
 import { calculateTokenStats, calculateEstimatedCost, formatTokenCount, formatCost } from '@/utils/tokenStats';
 import { calculateCompactionStats, formatResponseTime } from '@/utils/compactionStats';
+import { githubLinksAPI, type GitHubLink } from '@/services/api';
 import PageSidebar from '../PageSidebar';
 import styles from './SessionStatsSidebar.module.css';
 
 interface SessionStatsSidebarProps {
   messages: TranscriptLine[];
   loading?: boolean;
+  sessionId?: string;
+  isOwner?: boolean;
+  /** For Storybook: pass links directly instead of fetching from API */
+  initialGithubLinks?: GitHubLink[];
 }
 
 const TOOLTIPS = {
@@ -37,21 +42,199 @@ const InfoIcon = (
   </svg>
 );
 
-function SessionStatsSidebar({ messages, loading = false }: SessionStatsSidebarProps) {
+const PRIcon = (
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/>
+  </svg>
+);
+
+const DeleteIcon = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M18 6L6 18M6 6l12 12"/>
+  </svg>
+);
+
+const PlusIcon = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 5v14M5 12h14"/>
+  </svg>
+);
+
+function SessionStatsSidebar({ messages, loading = false, sessionId, isOwner = false, initialGithubLinks }: SessionStatsSidebarProps) {
   const tokenStats = useMemo(() => calculateTokenStats(messages), [messages]);
   const estimatedCost = useMemo(() => calculateEstimatedCost(messages), [messages]);
   const compactionStats = useMemo(() => calculateCompactionStats(messages), [messages]);
   const spinner = useSpinner(loading);
 
+  // GitHub links state - use initialGithubLinks if provided (for Storybook)
+  const [links, setLinks] = useState<GitHubLink[]>(initialGithubLinks ?? []);
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [linksError, setLinksError] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newUrl, setNewUrl] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
+
+  const fetchLinks = useCallback(async () => {
+    // Skip API fetch if initialGithubLinks was provided
+    if (!sessionId || initialGithubLinks !== undefined) return;
+    try {
+      setLinksLoading(true);
+      const response = await githubLinksAPI.list(sessionId);
+      setLinks(response.links);
+      setLinksError(null);
+    } catch (err) {
+      console.error('Failed to fetch GitHub links:', err);
+      setLinksError('Failed to load');
+    } finally {
+      setLinksLoading(false);
+    }
+  }, [sessionId, initialGithubLinks]);
+
+  useEffect(() => {
+    fetchLinks();
+  }, [fetchLinks]);
+
+  const handleAddLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUrl.trim() || !sessionId) return;
+
+    try {
+      setAdding(true);
+      await githubLinksAPI.create(sessionId, {
+        url: newUrl.trim(),
+        source: 'manual',
+      });
+      setNewUrl('');
+      setShowAddForm(false);
+      await fetchLinks();
+    } catch (err) {
+      console.error('Failed to add GitHub link:', err);
+      setLinksError(err instanceof Error ? err.message : 'Failed to add');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleDeleteLink = async (linkId: number) => {
+    if (!sessionId) return;
+    try {
+      setDeleting(linkId);
+      await githubLinksAPI.delete(sessionId, linkId);
+      await fetchLinks();
+    } catch (err) {
+      console.error('Failed to delete GitHub link:', err);
+      setLinksError('Failed to delete');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const formatRef = (link: GitHubLink) => {
+    if (link.link_type === 'pull_request') {
+      return `#${link.ref}`;
+    }
+    return link.ref.slice(0, 7);
+  };
+
   // Helper to render a value or spinner when loading
   const renderValue = (value: string) => (loading ? spinner : value);
 
+  // Show GitHub section if: has links, or is owner (can add), or loading
+  // Also show if initialGithubLinks was provided (for Storybook)
+  const showGitHubSection = (sessionId || initialGithubLinks !== undefined) && (links.length > 0 || isOwner || linksLoading);
+
   return (
-    <PageSidebar
-      title="Session Stats"
-      collapsible={false}
-    >
+    <PageSidebar collapsible={false}>
       <div>
+        {/* GitHub Section */}
+        {showGitHubSection && (
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              GitHub
+              {isOwner && !showAddForm && (
+                <button
+                  className={styles.addButton}
+                  onClick={() => setShowAddForm(true)}
+                  title="Link to GitHub PR"
+                >
+                  {PlusIcon}
+                </button>
+              )}
+            </div>
+
+            {linksError && <div className={styles.errorText}>{linksError}</div>}
+
+            {showAddForm && (
+              <form onSubmit={handleAddLink} className={styles.addForm}>
+                <input
+                  type="url"
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="github.com/owner/repo/pull/123"
+                  className={styles.urlInput}
+                  disabled={adding}
+                  autoFocus
+                />
+                <div className={styles.addFormButtons}>
+                  <button
+                    type="submit"
+                    className={styles.submitButton}
+                    disabled={adding || !newUrl.trim()}
+                  >
+                    {adding ? '...' : 'Add'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.cancelButton}
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewUrl('');
+                    }}
+                    disabled={adding}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {linksLoading && links.length === 0 ? (
+              <div className={styles.statRow}>
+                <span className={styles.statLabel}>{spinner}</span>
+              </div>
+            ) : (
+              links.filter((link) => link.link_type === 'pull_request').map((link) => (
+                <div key={link.id} className={styles.linkRow}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.linkContent}
+                    title={link.title || `${link.owner}/${link.repo}`}
+                  >
+                    <span className={styles.statIcon}>
+                      {PRIcon}
+                    </span>
+                    <span className={styles.linkRef}>{formatRef(link)}</span>
+                    <span className={styles.linkRepo}>{link.owner}/{link.repo}</span>
+                  </a>
+                  {isOwner && (
+                    <button
+                      className={styles.deleteButton}
+                      onClick={() => handleDeleteLink(link.id)}
+                      disabled={deleting === link.id}
+                      title="Remove link"
+                    >
+                      {DeleteIcon}
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
         {/* Tokens Section */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>Tokens</div>

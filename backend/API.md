@@ -531,6 +531,104 @@ X-CSRF-Token: <token>
 
 ---
 
+### GitHub Links
+
+Link sessions to GitHub artifacts (commits and PRs) for bidirectional navigation.
+
+#### Create GitHub Link
+```
+POST /api/v1/sessions/{id}/github-links
+Authorization: Bearer <api_key>  (CLI)
+   or
+X-CSRF-Token: <token>  (Web)
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "url": "https://github.com/owner/repo/pull/123",
+  "title": "Optional PR/commit title",
+  "source": "cli_hook"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | string | Yes | GitHub PR or commit URL |
+| `title` | string | No | Title/description of the PR or commit |
+| `source` | string | Yes | `"cli_hook"` (from CLI hook) or `"manual"` (user-added) |
+
+**Response:** `201 Created`
+```json
+{
+  "id": 1,
+  "session_id": "uuid",
+  "link_type": "pull_request",
+  "url": "https://github.com/owner/repo/pull/123",
+  "owner": "owner",
+  "repo": "repo",
+  "ref": "123",
+  "title": "Add new feature",
+  "source": "cli_hook",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `link_type` | string | `"commit"` or `"pull_request"` (auto-detected from URL) |
+| `owner` | string | GitHub repository owner (parsed from URL) |
+| `repo` | string | GitHub repository name (parsed from URL) |
+| `ref` | string | PR number or commit SHA (parsed from URL) |
+
+**Errors:**
+- `400` - Invalid GitHub URL (must be PR or commit URL)
+- `404` - Session not found or not owner
+- `409` - Link already exists for this session
+
+#### List GitHub Links
+```
+GET /api/v1/sessions/{id}/github-links
+```
+
+Works for any user with session access (owner, shared, public).
+
+**Response:**
+```json
+{
+  "links": [
+    {
+      "id": 1,
+      "session_id": "uuid",
+      "link_type": "pull_request",
+      "url": "https://github.com/owner/repo/pull/123",
+      "owner": "owner",
+      "repo": "repo",
+      "ref": "123",
+      "title": "Add new feature",
+      "source": "cli_hook",
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### Delete GitHub Link
+```
+DELETE /api/v1/sessions/{id}/github-links/{linkId}
+X-CSRF-Token: <token>
+```
+
+Requires session ownership (web session auth only, no API key).
+
+**Response:** `204 No Content`
+
+**Errors:**
+- `404` - Link not found or not session owner
+
+---
+
 ## OAuth Endpoints (No prefix)
 
 These endpoints handle OAuth authentication flow:
