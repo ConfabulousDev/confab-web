@@ -110,7 +110,9 @@ def test_transcript_path_discoverable(backend: BackendClient, project_dir: Path)
     transcript_path = find_local_transcript(result.session_id)
     assert transcript_path is not None, "Should find local transcript"
     assert transcript_path.exists(), "Transcript path should exist"
-    assert transcript_path.name == "transcript.jsonl", "Should be transcript.jsonl"
+    assert transcript_path.name == f"{result.session_id}.jsonl", (
+        f"Should be {result.session_id}.jsonl"
+    )
 
     print(f"Found transcript at: {transcript_path}")
 

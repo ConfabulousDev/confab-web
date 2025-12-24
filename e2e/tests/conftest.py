@@ -138,21 +138,20 @@ def project_dir() -> Generator[Path, None, None]:
 def find_local_transcript(session_id: str) -> Path | None:
     """Find the local transcript file for a session.
 
-    Claude Code stores transcripts in ~/.claude/projects/<hash>/<session-id>/
+    Claude Code stores transcripts in ~/.claude/projects/<hash>/<session-id>.jsonl
     """
     claude_dir = Path.home() / ".claude" / "projects"
     if not claude_dir.exists():
         return None
 
-    # Search for transcript.jsonl in any project directory matching the session
+    # Search for <session-id>.jsonl in any project directory
+    transcript_name = f"{session_id}.jsonl"
     for project_dir in claude_dir.iterdir():
         if not project_dir.is_dir():
             continue
-        session_dir = project_dir / session_id
-        if session_dir.exists():
-            transcript = session_dir / "transcript.jsonl"
-            if transcript.exists():
-                return transcript
+        transcript = project_dir / transcript_name
+        if transcript.exists():
+            return transcript
 
     return None
 
