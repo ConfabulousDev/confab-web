@@ -382,35 +382,72 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 	}
 }
 
-// SessionMiddleware validates web sessions
-func SessionMiddleware(database *db.DB) func(http.Handler) http.Handler {
+// TrySessionAuth attempts to authenticate using a session cookie.
+// Returns the user ID if successful, nil otherwise.
+// Does not reject - callers decide whether to require auth.
+func TrySessionAuth(r *http.Request, database *db.DB) *int64 {
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return nil
+	}
+
+	session, err := database.GetWebSession(r.Context(), cookie.Value)
+	if err != nil {
+		return nil
+	}
+
+	// Check if user is inactive
+	if session.UserStatus == models.UserStatusInactive {
+		return nil
+	}
+
+	return &session.UserID
+}
+
+// RequireSession returns an HTTP middleware that requires session cookie authentication.
+// Use TrySessionAuth for optional authentication.
+func RequireSession(database *db.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get session cookie
-			cookie, err := r.Cookie(SessionCookieName)
-			if err != nil {
+			userID := TrySessionAuth(r, database)
+			if userID == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
-			// Validate session in database
-			session, err := database.GetWebSession(r.Context(), cookie.Value)
-			if err != nil {
-				http.Error(w, "Invalid or expired session", http.StatusUnauthorized)
-				return
-			}
-
-			// Check if user is inactive
-			if session.UserStatus == models.UserStatusInactive {
-				http.Error(w, "Account deactivated", http.StatusForbidden)
-				return
-			}
-
-			// Set user ID on logger's response writer (if wrapped by FlyLogger)
-			setLogUserID(w, session.UserID)
+			// Set user ID on logger's response writer
+			setLogUserID(w, *userID)
 
 			// Add user ID to context
-			ctx := context.WithValue(r.Context(), userIDContextKey, session.UserID)
+			ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// RequireSessionOrAPIKey returns an HTTP middleware that requires either
+// session cookie or API key authentication. Tries session first, then API key.
+func RequireSessionOrAPIKey(database *db.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Try session cookie first
+			userID := TrySessionAuth(r, database)
+
+			// Fall back to API key
+			if userID == nil {
+				userID = TryAPIKeyAuth(r, database)
+			}
+
+			if userID == nil {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			// Set user ID on logger's response writer
+			setLogUserID(w, *userID)
+
+			// Add user ID to context
+			ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

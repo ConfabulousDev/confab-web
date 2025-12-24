@@ -22,15 +22,25 @@ type CanonicalAccessResult struct {
 }
 
 // getViewerUserID extracts the viewer's user ID from the request.
-// First checks if user ID was set by auth middleware, then falls back to session cookie.
+// Checks in order:
+//  1. User ID set by auth middleware (API key or session routes)
+//  2. API key from Authorization header (for endpoints supporting optional API key auth)
+//  3. Session cookie (web dashboard)
+//
 // Returns nil if the user is not authenticated.
 func getViewerUserID(ctx context.Context, r *http.Request, database *db.DB) *int64 {
 	// First, check if auth middleware already set the user ID
 	if userID, ok := auth.GetUserID(r.Context()); ok {
 		return &userID
 	}
+
+	// Second, try API key auth (for endpoints that support optional API key authentication)
+	if userID := auth.TryAPIKeyAuth(r, database); userID != nil {
+		return userID
+	}
+
 	// Fall back to extracting from session cookie
-	return getViewerUserIDFromSession(ctx, r, database)
+	return auth.TrySessionAuth(r, database)
 }
 
 // CheckCanonicalAccess checks session access using the unified canonical access model.

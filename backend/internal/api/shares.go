@@ -325,16 +325,3 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 	}
 }
 
-// getViewerUserIDFromSession extracts the viewer's user ID from their session cookie if authenticated.
-// Returns nil if no valid session cookie or any lookup fails.
-func getViewerUserIDFromSession(ctx context.Context, r *http.Request, database *db.DB) *int64 {
-	cookie, err := r.Cookie(auth.SessionCookieName)
-	if err != nil {
-		return nil
-	}
-	webSession, err := database.GetWebSession(ctx, cookie.Value)
-	if err != nil {
-		return nil
-	}
-	return &webSession.UserID
-}

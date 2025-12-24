@@ -1763,6 +1763,20 @@ func (db *DB) GetSessionOwnerAndExternalID(ctx context.Context, sessionID string
 	return userID, externalID, nil
 }
 
+// GetSessionIDByExternalID looks up the internal session ID by external_id for a specific user.
+// Returns the internal UUID, or ErrSessionNotFound if not found or not owned by user.
+func (db *DB) GetSessionIDByExternalID(ctx context.Context, externalID string, userID int64) (sessionID string, err error) {
+	query := `SELECT id FROM sessions WHERE external_id = $1 AND user_id = $2`
+	err = db.conn.QueryRowContext(ctx, query, externalID, userID).Scan(&sessionID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrSessionNotFound
+		}
+		return "", fmt.Errorf("failed to get session: %w", err)
+	}
+	return sessionID, nil
+}
+
 // SessionEventParams contains parameters for inserting a session event
 type SessionEventParams struct {
 	SessionID      string
