@@ -453,6 +453,34 @@ func RequireSessionOrAPIKey(database *db.DB) func(http.Handler) http.Handler {
 	}
 }
 
+// OptionalAuth returns an HTTP middleware that attempts authentication but doesn't require it.
+// If authentication succeeds (via session cookie or API key), the user ID is set in context.
+// If authentication fails, the request continues without a user ID.
+// Use auth.GetUserID(ctx) to check if a user is authenticated.
+func OptionalAuth(database *db.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Try API key first, then session cookie
+			if userID := TryAPIKeyAuth(r, database); userID != nil {
+				setLogUserID(w, *userID)
+				ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			if userID := TrySessionAuth(r, database); userID != nil {
+				setLogUserID(w, *userID)
+				ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			// No auth - continue without user ID in context
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // exchangeGitHubCode exchanges authorization code for access token
 func exchangeGitHubCode(code string, config OAuthConfig) (string, error) {
 	data := map[string]string{

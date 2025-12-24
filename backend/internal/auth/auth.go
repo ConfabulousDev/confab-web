@@ -160,3 +160,12 @@ func setLogUserID(w http.ResponseWriter, userID int64) {
 		}
 	}
 }
+
+// SetUserIDForTest is a test helper to set user ID in context.
+// This allows tests to bypass middleware and directly set the authenticated user.
+func SetUserIDForTest(ctx context.Context, userID int64) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, userIDContextKey, userID)
+}

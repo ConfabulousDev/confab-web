@@ -831,7 +831,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer dbCancel()
 
-	result, err := CheckCanonicalAccess(dbCtx, r, s.db, sessionID)
+	result, err := CheckCanonicalAccess(dbCtx, s.db, sessionID)
 	if RespondCanonicalAccessError(w, err, sessionID) {
 		return
 	}

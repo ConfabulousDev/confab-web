@@ -101,7 +101,7 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Check canonical access (CF-132 unified access model)
-		result, err := CheckCanonicalAccess(ctx, r, database, sessionID)
+		result, err := CheckCanonicalAccess(ctx, database, sessionID)
 		if RespondCanonicalAccessError(w, err, sessionID) {
 			return
 		}

@@ -333,11 +333,13 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// Canonical session access (CF-132) - supports optional authentication
 		// Works for: owner access, public shares, system shares, recipient shares
-		r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
-
-		// Canonical shared sync file access endpoint (CF-132)
-		// Uses same session access logic as /sessions/{id}
-		r.Get("/sessions/{id}/sync/file", withMaxBody(MaxBodyXS, s.handleCanonicalSyncFileRead))
+		r.Group(func(r chi.Router) {
+			r.Use(auth.OptionalAuth(s.db))
+			r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
+			// Canonical shared sync file access endpoint (CF-132)
+			// Uses same session access logic as /sessions/{id}
+			r.Get("/sessions/{id}/sync/file", withMaxBody(MaxBodyXS, s.handleCanonicalSyncFileRead))
+		})
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)

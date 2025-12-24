@@ -364,24 +364,11 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", sessionID)
 
-		// Simulate viewer being logged in (for private share access check)
+		// Set up context with route params and authenticated user
+		// (simulates OptionalAuth middleware setting user ID)
 		reqCtx := context.WithValue(ctx, chi.RouteCtxKey, rctx)
+		reqCtx = auth.SetUserIDForTest(reqCtx, viewer.ID)
 		req = req.WithContext(reqCtx)
-
-		// Create a web session for the viewer to simulate being logged in
-		webSessionToken := "test-web-session-token-for-privacy-test"
-		_, err := env.DB.Exec(ctx,
-			`INSERT INTO web_sessions (id, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
-			webSessionToken, viewer.ID)
-		if err != nil {
-			t.Fatalf("Failed to create web session: %v", err)
-		}
-
-		// Add cookie
-		req.AddCookie(&http.Cookie{
-			Name:  "confab_session",
-			Value: webSessionToken,
-		})
 
 		rr := httptest.NewRecorder()
 		handler := api.HandleGetSession(env.DB)

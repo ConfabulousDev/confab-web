@@ -987,18 +987,15 @@ func TestHandleGetSession_APIKeyOwnerAccess(t *testing.T) {
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
-	// Create API key for owner
-	rawKey := "cfb_test_owner_key_12345"
-	keyHash := auth.HashAPIKey(rawKey)
-	testutil.CreateTestAPIKey(t, env, owner.ID, keyHash, "test-key")
-
-	// Request with API key (no session cookie)
+	// Request with API key owner access (simulated via OptionalAuth middleware)
 	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
-	req.Header.Set("Authorization", "Bearer "+rawKey)
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", sessionID)
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	// Set up context with route params and authenticated user (simulates OptionalAuth middleware)
+	reqCtx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	reqCtx = auth.SetUserIDForTest(reqCtx, owner.ID)
+	req = req.WithContext(reqCtx)
 
 	w := httptest.NewRecorder()
 	handler := HandleGetSession(env.DB)
