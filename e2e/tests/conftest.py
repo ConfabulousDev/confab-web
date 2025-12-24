@@ -71,6 +71,40 @@ class BackendClient:
             time.sleep(poll_interval)
         raise TimeoutError(f"Session {external_id} not found after {timeout}s")
 
+    def get_transcript_content(self, session_id: str, line_offset: int = 0) -> str | None:
+        """Get transcript file content for a session."""
+        endpoint = f"/api/v1/sessions/{session_id}/sync/file?file_name=transcript.jsonl"
+        if line_offset > 0:
+            endpoint += f"&line_offset={line_offset}"
+        resp = self.get(endpoint)
+        if resp.status_code == 200:
+            return resp.text
+        return None
+
+    def wait_for_sync_lines(
+        self,
+        external_id: str,
+        min_lines: int,
+        timeout: float = 30.0,
+        poll_interval: float = 1.0,
+    ) -> dict[str, Any]:
+        """Wait for transcript to have at least min_lines synced."""
+        start = time.time()
+        while time.time() - start < timeout:
+            session = self.get_session_by_external_id(external_id)
+            if session is not None:
+                transcript_files = [
+                    f for f in session.get("files", []) if f["file_type"] == "transcript"
+                ]
+                if transcript_files:
+                    lines = transcript_files[0].get("last_synced_line", 0)
+                    if lines >= min_lines:
+                        return session
+            time.sleep(poll_interval)
+        raise TimeoutError(
+            f"Session {external_id} did not reach {min_lines} lines after {timeout}s"
+        )
+
 
 @pytest.fixture
 def backend() -> BackendClient:
