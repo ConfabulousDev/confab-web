@@ -692,7 +692,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 
 		// Create handler wrapped with middleware
 		var capturedUserID int64
-		handler := auth.Middleware(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireAPIKey(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID, ok := auth.GetUserID(r.Context())
 			if !ok {
 				t.Error("expected user ID in context")
@@ -719,7 +719,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
 
-		handler := auth.Middleware(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireAPIKey(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Error("handler should not be called for invalid key")
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -761,7 +761,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 			t.Fatalf("SetUserStatus failed: %v", err)
 		}
 
-		handler := auth.Middleware(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireAPIKey(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Error("handler should not be called for inactive user")
 			w.WriteHeader(http.StatusOK)
 		}))

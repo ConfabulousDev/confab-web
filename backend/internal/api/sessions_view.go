@@ -101,7 +101,7 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Check canonical access (CF-132 unified access model)
-		result, err := CheckCanonicalAccess(ctx, r, database, sessionID)
+		result, err := CheckCanonicalAccess(ctx, database, sessionID)
 		if RespondCanonicalAccessError(w, err, sessionID) {
 			return
 		}
@@ -117,6 +117,50 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 		}
 
 		respondJSON(w, http.StatusOK, result.Session)
+	}
+}
+
+// SessionLookupResponse is the response for looking up a session by external_id
+type SessionLookupResponse struct {
+	SessionID string `json:"session_id"`
+}
+
+// HandleLookupSessionByExternalID looks up a session's internal ID by external_id.
+// This is an authenticated endpoint - users can only look up their own sessions.
+// Supports both session cookie auth and API key auth (via SessionOrAPIKeyMiddleware).
+func HandleLookupSessionByExternalID(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get user ID from context (set by SessionOrAPIKeyMiddleware)
+		userID, ok := auth.GetUserID(r.Context())
+		if !ok {
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+
+		// Get external_id from URL
+		externalID := chi.URLParam(r, "external_id")
+		if externalID == "" {
+			respondError(w, http.StatusBadRequest, "Missing external_id")
+			return
+		}
+
+		// Create context with timeout
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
+
+		// Look up session
+		sessionID, err := database.GetSessionIDByExternalID(ctx, externalID, userID)
+		if err != nil {
+			if errors.Is(err, db.ErrSessionNotFound) {
+				respondError(w, http.StatusNotFound, "Session not found")
+				return
+			}
+			logger.Error("Failed to lookup session by external_id", "error", err, "external_id", externalID)
+			respondError(w, http.StatusInternalServerError, "Failed to lookup session")
+			return
+		}
+
+		respondJSON(w, http.StatusOK, SessionLookupResponse{SessionID: sessionID})
 	}
 }
 

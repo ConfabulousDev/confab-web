@@ -1,0 +1,141 @@
+# E2E Test Infrastructure
+#
+# Usage:
+#   docker-compose up -d postgres minio backend  # Start infrastructure
+#   docker-compose run --rm workstation <scenario>  # Run test scenario
+#   docker-compose down -v  # Cleanup
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: confab
+      POSTGRES_PASSWORD: confab
+      POSTGRES_DB: confab_e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U confab -d confab_e2e"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set minio http://minio:9000 minioadmin minioadmin;
+      mc mb minio/confab-e2e --ignore-existing;
+      mc anonymous set download minio/confab-e2e;
+      exit 0;
+      "
+
+  # Run database migrations
+  db-migrate:
+    image: migrate/migrate:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../backend/internal/db/migrations:/migrations:ro
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://confab:confab@postgres:5432/confab_e2e?sslmode=disable",
+      "up"
+    ]
+
+  backend:
+    build:
+      context: ..
+      dockerfile: e2e/containers/backend/Dockerfile
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      minio-setup:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://confab:confab@postgres:5432/confab_e2e?sslmode=disable
+      S3_ENDPOINT: minio:9000
+      S3_USE_SSL: "false"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      BUCKET_NAME: confab-e2e
+      CSRF_SECRET_KEY: e2e-test-csrf-secret-key-32bytes!
+      FRONTEND_URL: http://localhost:3000
+      ALLOWED_ORIGINS: http://localhost:3000
+      # Placeholder values for unused features (OAuth, email)
+      GITHUB_CLIENT_ID: unused
+      GITHUB_CLIENT_SECRET: unused
+      GITHUB_REDIRECT_URL: http://localhost/unused
+      GOOGLE_CLIENT_ID: unused
+      GOOGLE_CLIENT_SECRET: unused
+      GOOGLE_REDIRECT_URL: http://localhost/unused
+      RESEND_API_KEY: unused
+      EMAIL_FROM_ADDRESS: unused@localhost
+      EMAIL_FROM_NAME: unused
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  # Seed test user and API key into database
+  db-seed:
+    image: postgres:16-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: confab
+    # Create test user and API key
+    # Raw key: cfb_e2e-test-api-key-1234567890abcdef
+    # Hash: SHA256 of the raw key (precomputed)
+    entrypoint: >
+      /bin/sh -c "
+      psql -h postgres -U confab -d confab_e2e -c \"
+        INSERT INTO users (email, name, status)
+        VALUES ('e2e-test@example.com', 'E2E Test User', 'active')
+        ON CONFLICT (email) DO NOTHING;
+      \" &&
+      psql -h postgres -U confab -d confab_e2e -c \"
+        INSERT INTO api_keys (user_id, key_hash, name)
+        SELECT id, 'd49313b06d363479d5b1f68e869684c55f0f4ee93329ca9ff943bdd14c7ba37a', 'E2E Test Key'
+        FROM users WHERE email = 'e2e-test@example.com'
+        ON CONFLICT DO NOTHING;
+      \" &&
+      echo 'Test user and API key seeded'
+      "
+
+  workstation:
+    build:
+      context: ..
+      dockerfile: e2e/containers/workstation/Dockerfile
+    depends_on:
+      db-seed:
+        condition: service_completed_successfully
+    environment:
+      ANTHROPIC_API_KEY: ${E2E_ANTHROPIC_API_KEY}
+      # Confab configuration
+      CONFAB_BACKEND_URL: http://backend:8080
+      CONFAB_API_KEY: cfb_e2e-test-api-key-1234567890abcdef
+      # Fast sync for tests (2 seconds, no jitter)
+      CONFAB_SYNC_INTERVAL_MS: "2000"
+      CONFAB_SYNC_JITTER_MS: "0"
+      # Force cheapest model for all requests
+      ANTHROPIC_MODEL: claude-3-5-haiku-latest
+    volumes:
+      - ./tests:/e2e/tests:ro

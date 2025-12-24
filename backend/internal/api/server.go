@@ -236,7 +236,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	adminHandlers := admin.NewHandlers(s.db, s.storage)
 	r.Route("/admin-8b5492d3-a268-4a1b-8b3b-f1dfd34f249b", func(r chi.Router) {
 		r.Use(csrfMiddleware)
-		r.Use(auth.SessionMiddleware(s.db))
+		r.Use(auth.RequireSession(s.db))
 		r.Use(admin.Middleware(s.db))
 
 		r.Get("/users", withMaxBody(MaxBodyXS, adminHandlers.HandleListUsers))
@@ -264,7 +264,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// Protected routes require API key authentication (for CLI)
 		// No CSRF protection for API key routes (CLI doesn't use cookies)
 		r.Group(func(r chi.Router) {
-			r.Use(auth.Middleware(s.db))
+			r.Use(auth.RequireAPIKey(s.db))
 
 			// API key validation endpoint with rate limiting to prevent abuse
 			r.Get("/auth/validate", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.validationLimiter, s.handleValidateAPIKey)))
@@ -291,7 +291,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// CSRF protection applied here to prevent forged requests
 		r.Group(func(r chi.Router) {
 			r.Use(csrfMiddleware)
-			r.Use(auth.SessionMiddleware(s.db))
+			r.Use(auth.RequireSession(s.db))
 
 			// CSRF token endpoint - must be inside CSRF middleware to set cookie
 			r.Get("/csrf-token", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
@@ -325,13 +325,21 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Delete("/shares/{shareID}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))
 		})
 
+		// Session lookup by external_id - requires auth (session cookie OR API key)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireSessionOrAPIKey(s.db))
+			r.Get("/sessions/by-external-id/{external_id}", withMaxBody(MaxBodyXS, HandleLookupSessionByExternalID(s.db)))
+		})
+
 		// Canonical session access (CF-132) - supports optional authentication
 		// Works for: owner access, public shares, system shares, recipient shares
-		r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
-
-		// Canonical shared sync file access endpoint (CF-132)
-		// Uses same session access logic as /sessions/{id}
-		r.Get("/sessions/{id}/sync/file", withMaxBody(MaxBodyXS, s.handleCanonicalSyncFileRead))
+		r.Group(func(r chi.Router) {
+			r.Use(auth.OptionalAuth(s.db))
+			r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
+			// Canonical shared sync file access endpoint (CF-132)
+			// Uses same session access logic as /sessions/{id}
+			r.Get("/sessions/{id}/sync/file", withMaxBody(MaxBodyXS, s.handleCanonicalSyncFileRead))
+		})
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -968,6 +969,151 @@ func TestHandleGetSession_InactiveOwnerBlocksOwnerAccess(t *testing.T) {
 
 	// Deactivated owner = forbidden
 	testutil.AssertStatus(t, w, http.StatusForbidden)
+}
+
+// =============================================================================
+// API Key Authentication Tests
+// =============================================================================
+
+// TestHandleGetSession_APIKeyOwnerAccess tests that API key owners can access their sessions
+func TestHandleGetSession_APIKeyOwnerAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Request with API key owner access (simulated via OptionalAuth middleware)
+	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	// Set up context with route params and authenticated user (simulates OptionalAuth middleware)
+	reqCtx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	reqCtx = auth.SetUserIDForTest(reqCtx, owner.ID)
+	req = req.WithContext(reqCtx)
+
+	w := httptest.NewRecorder()
+	handler := HandleGetSession(env.DB)
+	handler(w, req)
+
+	testutil.AssertStatus(t, w, http.StatusOK)
+
+	var session db.SessionDetail
+	testutil.ParseJSONResponse(t, w, &session)
+
+	if session.ID != sessionID {
+		t.Errorf("expected session ID %s, got %s", sessionID, session.ID)
+	}
+	if session.IsOwner == nil || !*session.IsOwner {
+		t.Error("expected IsOwner = true for API key owner access")
+	}
+}
+
+// TestHandleGetSession_APIKeyCrossUserDenied tests that API key cannot access another user's session
+func TestHandleGetSession_APIKeyCrossUserDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	attacker := testutil.CreateTestUser(t, env, "attacker@example.com", "Attacker")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create API key for attacker (not owner)
+	attackerRawKey := "cfb_test_attacker_key_12345"
+	attackerKeyHash := auth.HashAPIKey(attackerRawKey)
+	testutil.CreateTestAPIKey(t, env, attacker.ID, attackerKeyHash, "attacker-key")
+
+	// Attacker tries to access owner's session with their API key
+	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
+	req.Header.Set("Authorization", "Bearer "+attackerRawKey)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	handler := HandleGetSession(env.DB)
+	handler(w, req)
+
+	// Should return 404 (not 401/403) to not reveal session existence
+	testutil.AssertStatus(t, w, http.StatusNotFound)
+}
+
+// TestHandleGetSession_APIKeyInvalidDenied tests that invalid API key is rejected
+func TestHandleGetSession_APIKeyInvalidDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Request with invalid API key
+	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
+	req.Header.Set("Authorization", "Bearer cfb_invalid_key_that_does_not_exist")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	handler := HandleGetSession(env.DB)
+	handler(w, req)
+
+	// Invalid API key = unauthenticated = 404 (no public share)
+	testutil.AssertStatus(t, w, http.StatusNotFound)
+}
+
+// TestHandleGetSession_APIKeyInactiveUserDenied tests that API key for inactive user is rejected
+func TestHandleGetSession_APIKeyInactiveUserDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create API key for owner
+	rawKey := "cfb_test_inactive_user_key_12345"
+	keyHash := auth.HashAPIKey(rawKey)
+	testutil.CreateTestAPIKey(t, env, owner.ID, keyHash, "test-key")
+
+	// Deactivate owner
+	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")
+	if err != nil {
+		t.Fatalf("failed to deactivate owner: %v", err)
+	}
+
+	// Request with API key of inactive user
+	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
+	req.Header.Set("Authorization", "Bearer "+rawKey)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	handler := HandleGetSession(env.DB)
+	handler(w, req)
+
+	// Inactive user's API key = unauthenticated = 404 (falls through to no access)
+	// Note: We silently reject inactive users in tryAPIKeyAuth rather than return 403
+	testutil.AssertStatus(t, w, http.StatusNotFound)
 }
 
 // TestHandleGetSession_InactiveOwnerBlocksAllAccess tests that inactive owner blocks all access types

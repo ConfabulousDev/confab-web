@@ -46,7 +46,7 @@ func TestAPIKeyMiddleware_HeaderParsing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Use nil db - we're testing header parsing before DB is called
-			handler := Middleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := RequireAPIKey(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
 

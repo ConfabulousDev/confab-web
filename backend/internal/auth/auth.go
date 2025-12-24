@@ -48,11 +48,50 @@ func HashAPIKey(rawKey string) string {
 	return fmt.Sprintf("%x", hash)
 }
 
-// Middleware returns an HTTP middleware that validates API keys
-func Middleware(database *db.DB) func(http.Handler) http.Handler {
+// TryAPIKeyAuth attempts to authenticate using an API key from the Authorization header.
+// Returns the user ID if successful, nil otherwise.
+// Does not reject - callers decide whether to require auth.
+func TryAPIKeyAuth(r *http.Request, database *db.DB) *int64 {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return nil
+	}
+
+	// Expected format: "Bearer <api-key>"
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return nil
+	}
+
+	rawKey := parts[1]
+	keyHash := HashAPIKey(rawKey)
+
+	// Validate key in database
+	userID, keyID, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
+	if err != nil {
+		return nil
+	}
+
+	// Check if user is inactive
+	if userStatus == models.UserStatusInactive {
+		return nil
+	}
+
+	// Update last used timestamp (fire and forget)
+	go func() {
+		if err := database.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
+			logger.Warn("Failed to update API key last used", "error", err, "key_id", keyID)
+		}
+	}()
+
+	return &userID
+}
+
+// RequireAPIKey returns an HTTP middleware that requires API key authentication.
+// Use TryAPIKeyAuth for optional authentication.
+func RequireAPIKey(database *db.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Extract API key from Authorization header
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
@@ -82,14 +121,14 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Update last used timestamp (fire and forget - don't block the request)
+			// Update last used timestamp (fire and forget)
 			go func() {
 				if err := database.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
 					logger.Warn("Failed to update API key last used", "error", err, "key_id", keyID)
 				}
 			}()
 
-			// Set user ID on logger's response writer (if wrapped by FlyLogger)
+			// Set user ID on logger's response writer
 			setLogUserID(w, userID)
 
 			// Add user ID to request context
@@ -120,4 +159,13 @@ func setLogUserID(w http.ResponseWriter, userID int64) {
 			return // No more wrappers, give up
 		}
 	}
+}
+
+// SetUserIDForTest is a test helper to set user ID in context.
+// This allows tests to bypass middleware and directly set the authenticated user.
+func SetUserIDForTest(ctx context.Context, userID int64) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, userIDContextKey, userID)
 }

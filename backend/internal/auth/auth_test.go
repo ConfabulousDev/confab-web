@@ -165,14 +165,6 @@ func TestHashAPIKey(t *testing.T) {
 	})
 }
 
-// SetUserIDForTest is a test helper to set user ID in context
-func SetUserIDForTest(ctx context.Context, userID int64) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, userIDContextKey, userID)
-}
-
 // Test GetUserID context extraction
 func TestGetUserID(t *testing.T) {
 	t.Run("extracts user ID from context", func(t *testing.T) {

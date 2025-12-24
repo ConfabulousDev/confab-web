@@ -21,20 +21,11 @@ type CanonicalAccessResult struct {
 	Session *db.SessionDetail
 }
 
-// getViewerUserID extracts the viewer's user ID from the request.
-// First checks if user ID was set by auth middleware, then falls back to session cookie.
-// Returns nil if the user is not authenticated.
-func getViewerUserID(ctx context.Context, r *http.Request, database *db.DB) *int64 {
-	// First, check if auth middleware already set the user ID
-	if userID, ok := auth.GetUserID(r.Context()); ok {
-		return &userID
-	}
-	// Fall back to extracting from session cookie
-	return getViewerUserIDFromSession(ctx, r, database)
-}
-
 // CheckCanonicalAccess checks session access using the unified canonical access model.
 // This implements the common access control pattern used by session and sync endpoints.
+//
+// IMPORTANT: Routes using this function should apply auth.OptionalAuth middleware
+// to set the user ID in context if authenticated.
 //
 // Access is determined by checking in order:
 //  1. Owner - user owns the session (full access)
@@ -49,14 +40,15 @@ func getViewerUserID(ctx context.Context, r *http.Request, database *db.DB) *int
 //   - result.Session != nil: Access granted, session details available
 func CheckCanonicalAccess(
 	ctx context.Context,
-	r *http.Request,
 	database *db.DB,
 	sessionID string,
 ) (*CanonicalAccessResult, error) {
 	result := &CanonicalAccessResult{}
 
-	// Step 1: Extract viewer identity
-	result.ViewerUserID = getViewerUserID(ctx, r, database)
+	// Step 1: Extract viewer identity from context (set by OptionalAuth middleware)
+	if userID, ok := auth.GetUserID(ctx); ok {
+		result.ViewerUserID = &userID
+	}
 
 	// Step 2: Determine access type based on ownership and shares
 	accessInfo, err := database.GetSessionAccessType(ctx, sessionID, result.ViewerUserID)
