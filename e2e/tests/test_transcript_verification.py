@@ -52,8 +52,8 @@ def test_transcript_content_matches_backend(backend: BackendClient, project_dir:
     local_lines = [line for line in local_content.strip().split("\n") if line]
     print(f"Local transcript has {len(local_lines)} lines")
 
-    # Fetch backend transcript
-    backend_content = backend.get_transcript_content(internal_id)
+    # Fetch backend transcript (file_name is {external_id}.jsonl)
+    backend_content = backend.get_transcript_content(internal_id, result.session_id)
     assert backend_content is not None, "Backend should return transcript content"
 
     backend_lines = [line for line in backend_content.strip().split("\n") if line]
@@ -180,8 +180,8 @@ def test_full_transcript_sync_after_completion(backend: BackendClient, project_d
         f"({synced_lines}/{len(local_lines)})"
     )
 
-    # Fetch and compare content
-    backend_content = backend.get_transcript_content(internal_id)
+    # Fetch and compare content (file_name is {external_id}.jsonl)
+    backend_content = backend.get_transcript_content(internal_id, result.session_id)
     assert backend_content is not None, "Backend should return content"
 
     backend_lines = [line for line in backend_content.strip().split("\n") if line]

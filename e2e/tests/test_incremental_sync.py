@@ -76,8 +76,8 @@ def test_transcript_content_accessible(backend: BackendClient, project_dir: Path
     # Wait for session to have some content synced
     backend.wait_for_sync_lines(result.session_id, min_lines=1, timeout=15)
 
-    # Fetch transcript content
-    content = backend.get_transcript_content(internal_id)
+    # Fetch transcript content (file_name is {external_id}.jsonl)
+    content = backend.get_transcript_content(internal_id, result.session_id)
     assert content is not None, "Should be able to fetch transcript content"
     assert len(content) > 0, "Transcript should have content"
 
@@ -120,8 +120,8 @@ def test_line_offset_incremental_fetch(backend: BackendClient, project_dir: Path
     # Wait for session to sync
     backend.wait_for_sync_lines(result.session_id, min_lines=2, timeout=15)
 
-    # Fetch full content
-    full_content = backend.get_transcript_content(internal_id)
+    # Fetch full content (file_name is {external_id}.jsonl)
+    full_content = backend.get_transcript_content(internal_id, result.session_id)
     assert full_content, "Should have content"
 
     full_lines = full_content.strip().split("\n")
@@ -129,7 +129,9 @@ def test_line_offset_incremental_fetch(backend: BackendClient, project_dir: Path
 
     if len(full_lines) >= 2:
         # Fetch with offset - should get remaining lines
-        offset_content = backend.get_transcript_content(internal_id, line_offset=1)
+        offset_content = backend.get_transcript_content(
+            internal_id, result.session_id, line_offset=1
+        )
         assert offset_content, "Should have offset content"
 
         offset_lines = offset_content.strip().split("\n")

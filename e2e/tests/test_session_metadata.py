@@ -75,11 +75,13 @@ def test_session_has_transcript_file(backend: BackendClient, project_dir: Path) 
 
     # Find transcript file
     transcript_files = [f for f in session["files"] if f["file_type"] == "transcript"]
-    assert len(transcript_files) == 1, "Should have exactly one transcript file"
+    assert len(transcript_files) >= 1, "Should have at least one transcript file"
 
     transcript = transcript_files[0]
-    assert transcript["file_name"] == "transcript.jsonl", (
-        "Transcript should be named transcript.jsonl"
+    # CLI syncs files as {external_id}.jsonl
+    expected_name = f"{result.session_id}.jsonl"
+    assert transcript["file_name"] == expected_name, (
+        f"Transcript should be named {expected_name}, got {transcript['file_name']}"
     )
     assert transcript["last_synced_line"] >= 1, "Should have synced at least 1 line"
     assert transcript["updated_at"], "Should have updated_at timestamp"

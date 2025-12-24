@@ -71,9 +71,19 @@ class BackendClient:
             time.sleep(poll_interval)
         raise TimeoutError(f"Session {external_id} not found after {timeout}s")
 
-    def get_transcript_content(self, session_id: str, line_offset: int = 0) -> str | None:
-        """Get transcript file content for a session."""
-        endpoint = f"/api/v1/sessions/{session_id}/sync/file?file_name=transcript.jsonl"
+    def get_transcript_content(
+        self, session_id: str, external_id: str, line_offset: int = 0
+    ) -> str | None:
+        """Get transcript file content for a session.
+
+        Args:
+            session_id: Internal UUID of the session
+            external_id: External ID (Claude Code session ID) - used as filename
+            line_offset: Return lines after this offset (0 = all lines)
+        """
+        # CLI syncs files as {external_id}.jsonl, not transcript.jsonl
+        file_name = f"{external_id}.jsonl"
+        endpoint = f"/api/v1/sessions/{session_id}/sync/file?file_name={file_name}"
         if line_offset > 0:
             endpoint += f"&line_offset={line_offset}"
         resp = self.get(endpoint)
