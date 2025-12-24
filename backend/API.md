@@ -572,32 +572,13 @@ When `email` is provided:
 
 ## Admin Endpoints (Super Admin Only)
 
-These endpoints require web session authentication and super admin privileges. The path is obfuscated.
+Admin functionality is accessed via HTML pages at an obfuscated path. Requires web session authentication and super admin privileges (configured via `SUPER_ADMIN_EMAILS` environment variable).
 
-### Create System Share
+Features:
+- **User Management**: View, activate, deactivate, and delete users
+- **System Shares**: Create shares accessible to all authenticated users
 
-Creates a share accessible to all authenticated users (current and future).
-
-```
-POST /admin-.../sessions/{sessionId}/system-share
-X-CSRF-Token: <token>
-```
-
-**Response:**
-```json
-{
-  "share_id": 123,
-  "share_url": "https://confab.dev/sessions/{id}",
-  "session_id": "uuid",
-  "external_id": "session-external-id"
-}
-```
-
-System shares:
-- Require authentication to view (unlike public shares)
-- Are accessible to any logged-in user
-- Include future users who sign up after the share is created
-- Do not expire by default
+All admin actions are audit logged with admin identity and action details.
 
 ---
 

@@ -244,11 +244,6 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Post("/users/{id}/activate", withMaxBody(MaxBodyXS, adminHandlers.HandleActivateUser))
 		r.Post("/users/{id}/delete", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteUser))
 
-		// System share - creates a share accessible to all authenticated users
-		r.Post("/sessions/{sessionId}/system-share", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
-			adminHandlers.HandleCreateSystemShare(w, r, s.frontendURL)
-		}))
-
 		// System share admin page
 		r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleSystemSharePage))
 		r.Post("/system-shares", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {

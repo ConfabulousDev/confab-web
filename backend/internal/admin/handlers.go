@@ -337,13 +337,24 @@ func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
+	// Get target user email for audit log before modifying
+	var targetEmail string
+	if targetUser, err := h.DB.GetUserByID(ctx, userID); err == nil {
+		targetEmail = targetUser.Email
+	}
+
 	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusInactive); err != nil {
 		logger.Error("Failed to deactivate user", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+deactivate+user", http.StatusSeeOther)
 		return
 	}
 
-	logger.Info("User deactivated", "user_id", userID)
+	// Audit log with full context
+	AuditLogFromRequest(r, h.DB, ActionUserDeactivate, map[string]interface{}{
+		"target_user_id":    userID,
+		"target_user_email": targetEmail,
+	})
+
 	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+deactivated", userID), http.StatusSeeOther)
 }
 
@@ -358,13 +369,24 @@ func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
+	// Get target user email for audit log before modifying
+	var targetEmail string
+	if targetUser, err := h.DB.GetUserByID(ctx, userID); err == nil {
+		targetEmail = targetUser.Email
+	}
+
 	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusActive); err != nil {
 		logger.Error("Failed to activate user", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+activate+user", http.StatusSeeOther)
 		return
 	}
 
-	logger.Info("User activated", "user_id", userID)
+	// Audit log with full context
+	AuditLogFromRequest(r, h.DB, ActionUserActivate, map[string]interface{}{
+		"target_user_id":    userID,
+		"target_user_email": targetEmail,
+	})
+
 	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+activated", userID), http.StatusSeeOther)
 }
 
@@ -379,6 +401,12 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Use a longer timeout for deletion since it involves S3 operations
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
+
+	// Get target user email for audit log BEFORE deletion
+	var targetEmail string
+	if targetUser, err := h.DB.GetUserByID(ctx, userID); err == nil {
+		targetEmail = targetUser.Email
+	}
 
 	// Step 1: Get all session IDs for S3 cleanup
 	sessionIDs, err := h.DB.GetUserSessionIDs(ctx, userID)
@@ -404,7 +432,13 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Info("User permanently deleted", "user_id", userID, "sessions_deleted", len(sessionIDs))
+	// Audit log with full context - this is a destructive action
+	AuditLogFromRequest(r, h.DB, ActionUserDelete, map[string]interface{}{
+		"target_user_id":    userID,
+		"target_user_email": targetEmail,
+		"sessions_deleted":  len(sessionIDs),
+	})
+
 	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+permanently+deleted", userID), http.StatusSeeOther)
 }
 
@@ -412,46 +446,6 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 func parseUserID(r *http.Request) (int64, error) {
 	idStr := chi.URLParam(r, "id")
 	return strconv.ParseInt(idStr, 10, 64)
-}
-
-// HandleCreateSystemShare creates a system-wide share for any session (admin only)
-// System shares are accessible to all authenticated users
-func (h *Handlers) HandleCreateSystemShare(w http.ResponseWriter, r *http.Request, frontendURL string) {
-	sessionID := chi.URLParam(r, "sessionId")
-	if sessionID == "" {
-		respondError(w, http.StatusBadRequest, "Session ID required")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer cancel()
-
-	// Create system share (no expiration for system shares)
-	share, err := h.DB.CreateSystemShare(ctx, sessionID, nil)
-	if err != nil {
-		if err == db.ErrSessionNotFound {
-			respondError(w, http.StatusNotFound, "Session not found")
-			return
-		}
-		logger.Error("Failed to create system share", "error", err, "session_id", sessionID)
-		respondError(w, http.StatusInternalServerError, "Failed to create system share")
-		return
-	}
-
-	// Canonical URL (CF-132: no token in URL)
-	shareURL := frontendURL + "/sessions/" + sessionID
-
-	logger.Info("System share created",
-		"session_id", sessionID,
-		"share_id", share.ID,
-		"external_id", share.ExternalID)
-
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"share_id":    share.ID,
-		"share_url":   shareURL,
-		"session_id":  share.SessionID,
-		"external_id": share.ExternalID,
-	})
 }
 
 // HandleSystemSharePage renders the system share creation page
@@ -695,10 +689,12 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 	// Canonical URL (CF-132: no token in URL)
 	shareURL := frontendURL + "/sessions/" + sessionID
 
-	logger.Info("System share created via admin page",
-		"session_id", sessionID,
-		"share_id", share.ID,
-		"external_id", share.ExternalID)
+	// Audit log for system share creation
+	AuditLogFromRequest(r, h.DB, ActionSystemShareCreate, map[string]interface{}{
+		"session_id":  sessionID,
+		"share_id":    share.ID,
+		"external_id": share.ExternalID,
+	})
 
 	// Redirect back with success message and share URL
 	redirectURL := fmt.Sprintf("%s/system-shares?message=System+share+created&share_url=%s",
