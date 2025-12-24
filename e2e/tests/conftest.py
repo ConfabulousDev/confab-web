@@ -71,6 +71,40 @@ class BackendClient:
             time.sleep(poll_interval)
         raise TimeoutError(f"Session {external_id} not found after {timeout}s")
 
+    def get_transcript_content(self, session_id: str, line_offset: int = 0) -> str | None:
+        """Get transcript file content for a session."""
+        endpoint = f"/api/v1/sessions/{session_id}/sync/file?file_name=transcript.jsonl"
+        if line_offset > 0:
+            endpoint += f"&line_offset={line_offset}"
+        resp = self.get(endpoint)
+        if resp.status_code == 200:
+            return resp.text
+        return None
+
+    def wait_for_sync_lines(
+        self,
+        external_id: str,
+        min_lines: int,
+        timeout: float = 30.0,
+        poll_interval: float = 1.0,
+    ) -> dict[str, Any]:
+        """Wait for transcript to have at least min_lines synced."""
+        start = time.time()
+        while time.time() - start < timeout:
+            session = self.get_session_by_external_id(external_id)
+            if session is not None:
+                transcript_files = [
+                    f for f in session.get("files", []) if f["file_type"] == "transcript"
+                ]
+                if transcript_files:
+                    lines = transcript_files[0].get("last_synced_line", 0)
+                    if lines >= min_lines:
+                        return session
+            time.sleep(poll_interval)
+        raise TimeoutError(
+            f"Session {external_id} did not reach {min_lines} lines after {timeout}s"
+        )
+
 
 @pytest.fixture
 def backend() -> BackendClient:
@@ -99,6 +133,35 @@ def project_dir() -> Generator[Path, None, None]:
         subprocess.run(["git", "commit", "-q", "-m", "Initial commit"], cwd=project, check=True)
 
         yield project
+
+
+def find_local_transcript(session_id: str) -> Path | None:
+    """Find the local transcript file for a session.
+
+    Claude Code stores transcripts in ~/.claude/projects/<hash>/<session-id>.jsonl
+    """
+    claude_dir = Path.home() / ".claude" / "projects"
+    if not claude_dir.exists():
+        return None
+
+    # Search for <session-id>.jsonl in any project directory
+    transcript_name = f"{session_id}.jsonl"
+    for project_dir in claude_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        transcript = project_dir / transcript_name
+        if transcript.exists():
+            return transcript
+
+    return None
+
+
+def read_local_transcript(session_id: str) -> str | None:
+    """Read the local transcript file content for a session."""
+    transcript_path = find_local_transcript(session_id)
+    if transcript_path is None:
+        return None
+    return transcript_path.read_text()
 
 
 def run_claude(
