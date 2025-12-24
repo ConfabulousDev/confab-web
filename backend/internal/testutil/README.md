@@ -1,6 +1,6 @@
 # Integration Test Infrastructure
 
-This package provides infrastructure for running integration tests with **real PostgreSQL and MinIO (S3-compatible) containers** using Docker.
+This package provides infrastructure for running integration tests with **real PostgreSQL and MinIO (S3-compatible) containers** using Docker, and **real HTTP servers** using the production router.
 
 ## Prerequisites
 
@@ -22,14 +22,14 @@ go test ./internal/api/... -v
 go test ./internal/api/... -short
 ```
 
-### Run only integration tests
+### Run only HTTP integration tests
 ```bash
-go test ./internal/api/... -v -run Integration
+go test ./internal/api/... -v -run "_HTTP_Integration"
 ```
 
 ### Run specific integration test
 ```bash
-go test ./internal/api/... -v -run TestHandleCreateShare_Integration/creates_public
+go test ./internal/api/... -v -run "TestSyncInit_HTTP_Integration/creates_new"
 ```
 
 ## Architecture
@@ -42,19 +42,125 @@ go test ./internal/api/... -v -run TestHandleCreateShare_Integration/creates_pub
    - Database connection with migrations applied
    - S3 storage client configured
 
-2. **Helper Functions** - Create test data and make HTTP requests
+2. **TestServer** - Real HTTP server with production router
+   - Starts server on random available port
+   - Full middleware chain (auth, CSRF, rate limiting, compression)
+   - Automatic cleanup on test completion
+
+3. **TestClient** - HTTP client with authentication support
+   - API key authentication (Bearer token)
+   - Session cookie authentication
+   - Automatic CSRF token handling
+   - JSON request/response helpers
+
+4. **Helper Functions** - Create test data and make HTTP requests
    - `CreateTestUser()` - Insert user into database
    - `CreateTestSession()` - Insert session into database
-   - `CreateTestRun()` - Insert run into database
-   - `CreateTestFile()` - Insert file metadata into database
-   - `CreateTestShare()` - Insert share into database
-   - `AuthenticatedRequest()` - Create HTTP request with user context
-   - `ParseJSONResponse()` - Decode JSON response
-   - `AssertStatus()` - Check HTTP status code
-   - `AssertErrorResponse()` - Verify error response
+   - `CreateTestAPIKeyWithToken()` - Create API key and return raw token
+   - `CreateTestWebSessionWithToken()` - Create web session and return token
+   - `CreateTestSyncFile()` - Insert sync file into database
+   - `ParseJSON()` - Decode JSON response
+   - `RequireStatus()` - Check HTTP status code
 
-3. **Storage Helpers** - Verify files in S3
-   - `VerifyFileInS3()` - Download and verify file exists
+## Test Patterns
+
+### HTTP Integration Tests (Recommended)
+
+HTTP integration tests exercise the full stack including:
+- Real HTTP routing
+- Middleware (auth, CSRF, rate limiting, compression)
+- Request validation
+- Response serialization
+
+```go
+func TestMyEndpoint_HTTP_Integration(t *testing.T) {
+    if testing.Short() {
+        t.Skip("Skipping HTTP integration test in short mode")
+    }
+
+    env := testutil.SetupTestEnvironment(t)
+
+    t.Run("test case name", func(t *testing.T) {
+        env.CleanDB(t)
+
+        // Create test data
+        user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+        apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+        // Start server with production router
+        ts := setupTestServerWithEnv(t, env)
+
+        // Create authenticated client
+        client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+        // Make request
+        resp, err := client.Post("/api/v1/endpoint", requestBody)
+        if err != nil {
+            t.Fatalf("request failed: %v", err)
+        }
+        defer resp.Body.Close()
+
+        // Assert response
+        testutil.RequireStatus(t, resp, http.StatusOK)
+
+        var result ResponseType
+        testutil.ParseJSON(t, resp, &result)
+
+        // Verify response data
+        if result.Field != expected {
+            t.Errorf("expected %v, got %v", expected, result.Field)
+        }
+
+        // Verify database state
+        var count int
+        row := env.DB.QueryRow(env.Ctx, "SELECT COUNT(*) FROM table WHERE ...")
+        // ...
+    })
+}
+
+// Helper to set up test server with required environment
+func setupTestServerWithEnv(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
+    t.Helper()
+
+    testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
+    testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
+    testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
+    testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
+
+    oauthConfig := auth.OAuthConfig{
+        GitHubClientID:     "test-github-client-id",
+        GitHubClientSecret: "test-github-client-secret",
+        GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
+        GoogleClientID:     "test-google-client-id",
+        GoogleClientSecret: "test-google-client-secret",
+        GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
+    }
+
+    apiServer := api.NewServer(env.DB, env.Storage, oauthConfig, nil)
+    handler := apiServer.SetupRoutes()
+
+    return testutil.StartTestServer(t, env, handler)
+}
+```
+
+### Authentication Methods
+
+#### API Key Authentication (CLI endpoints)
+```go
+apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+resp, err := client.Post("/api/v1/sync/init", body)
+```
+
+#### Session Cookie Authentication (Web dashboard endpoints)
+```go
+sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+// CSRF tokens are automatically handled for state-changing requests
+resp, err := client.Patch("/api/v1/sessions/"+sessionID+"/title", body)
+```
 
 ### Lifecycle
 
@@ -62,7 +168,7 @@ go test ./internal/api/... -v -run TestHandleCreateShare_Integration/creates_pub
 1. Test starts
    ↓
 2. SetupTestEnvironment()
-   - Starts PostgreSQL container (~3 seconds)
+   - Starts PostgreSQL container (~2 seconds)
    - Runs database migrations
    - Starts MinIO container (~1 second)
    - Creates S3 bucket
@@ -70,91 +176,33 @@ go test ./internal/api/... -v -run TestHandleCreateShare_Integration/creates_pub
 3. For each test case:
    - CleanDB() truncates all tables
    - Create test data
-   - Execute HTTP handler
+   - Start test server (random port)
+   - Make HTTP requests
    - Verify response and database state
+   - Server auto-cleanup on test completion
    ↓
 4. Test ends
    - Cleanup() stops containers
    - Removes volumes
 ```
 
-## Writing Integration Tests
-
-### Example Test
-
-```go
-func TestHandleCreateShare_Integration(t *testing.T) {
-    // Skip in short mode (unit tests only)
-    if testing.Short() {
-        t.Skip("Skipping integration test in short mode")
-    }
-
-    // Setup test environment (PostgreSQL + MinIO)
-    env := testutil.SetupTestEnvironment(t)
-
-    t.Run("creates public share successfully", func(t *testing.T) {
-        // Clean database for test isolation
-        env.CleanDB(t)
-
-        // Create test data
-        user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
-        sessionID := "test-session-123"
-        testutil.CreateTestSession(t, env, user.ID, sessionID)
-
-        // Create HTTP request
-        reqBody := CreateShareRequest{
-            Visibility: "public",
-        }
-        req := testutil.AuthenticatedRequest(t, "POST",
-            "/api/v1/sessions/"+sessionID+"/share", reqBody, user.ID)
-
-        // Add chi URL parameters
-        rctx := chi.NewRouteContext()
-        rctx.URLParams.Add("sessionId", sessionID)
-        req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-        // Execute handler
-        w := httptest.NewRecorder()
-        handler := HandleCreateShare(env.DB, "https://confab.dev")
-        handler(w, req)
-
-        // Assert response
-        testutil.AssertStatus(t, w, http.StatusOK)
-
-        var resp CreateShareResponse
-        testutil.ParseJSONResponse(t, w, &resp)
-
-        if resp.Visibility != "public" {
-            t.Errorf("expected visibility 'public', got %s", resp.Visibility)
-        }
-
-        // Verify database state
-        var count int
-        row := env.DB.QueryRow(env.Ctx,
-            "SELECT COUNT(*) FROM session_shares WHERE session_id = $1",
-            sessionID)
-        if err := row.Scan(&count); err != nil {
-            t.Fatalf("failed to query shares: %v", err)
-        }
-        if count != 1 {
-            t.Errorf("expected 1 share in database, got %d", count)
-        }
-    })
-}
-```
-
-### Best Practices
+## Best Practices
 
 1. **Always call `env.CleanDB(t)` at the start of each test case** for isolation
-2. **Use chi.RouteContext** for handlers that read URL parameters
+2. **Use HTTP tests for endpoint testing** - they exercise the full middleware chain
 3. **Verify both HTTP response AND database state** to ensure correctness
-4. **Test error cases** (404s, validation failures, etc.)
+4. **Test error cases** (404s, validation failures, auth failures, etc.)
 5. **Keep tests focused** - one test case per scenario
+6. **Use appropriate auth for each endpoint**:
+   - API key for `/api/v1/sync/*` (CLI endpoints)
+   - Session cookie for web dashboard endpoints
+   - Session + CSRF for state-changing web endpoints
 
 ## Performance
 
-- **Container startup**: ~4 seconds (one-time per test suite)
-- **Test execution**: ~50-100ms per test case
+- **Container startup**: ~3 seconds (one-time per test suite)
+- **Server startup**: ~10ms per test (random port selection + ready check)
+- **Test execution**: ~30-50ms per test case
 - **Cleanup**: ~2 seconds (automatic on test completion)
 
 Container startup is cached - subsequent test runs reuse pulled images.
@@ -176,13 +224,13 @@ docker ps -a
 docker logs <container_id>
 ```
 
+### "CSRF validation failed" error
+
+Ensure your test uses `WithSession()` which automatically fetches CSRF tokens:
+```go
+client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+```
+
 ### Slow test startup
 
 First run downloads Docker images (~100MB). Subsequent runs are fast.
-
-## Future Enhancements
-
-- Add CI/CD configuration (GitHub Actions with service containers)
-- Add test coverage reporting
-- Add more integration tests for remaining handlers
-- Add performance benchmarks
