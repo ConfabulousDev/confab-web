@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -10,6 +11,31 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/go-chi/chi/v5/middleware"
 )
+
+// CLIUserAgent represents parsed CLI user agent information.
+// User agent format: confab/1.2.3 (darwin; arm64)
+type CLIUserAgent struct {
+	Version string // e.g., "1.2.3"
+	OS      string // e.g., "darwin", "linux", "windows"
+	Arch    string // e.g., "arm64", "amd64"
+}
+
+// cliUserAgentRegex matches the CLI user agent format: confab/1.2.3 (darwin; arm64)
+var cliUserAgentRegex = regexp.MustCompile(`^confab/([^\s]+)\s*\(([^;]+);\s*([^)]+)\)`)
+
+// ParseCLIUserAgent extracts CLI version, OS, and architecture from the user agent string.
+// Returns nil if the user agent doesn't match the expected CLI format.
+func ParseCLIUserAgent(ua string) *CLIUserAgent {
+	matches := cliUserAgentRegex.FindStringSubmatch(ua)
+	if matches == nil {
+		return nil
+	}
+	return &CLIUserAgent{
+		Version: matches[1],
+		OS:      matches[2],
+		Arch:    matches[3],
+	}
+}
 
 // Maximum length for error messages in logs
 const maxErrorMessageLength = 200
@@ -85,13 +111,20 @@ func FlyLogger(next http.Handler) http.Handler {
 			}
 		}
 
-		// Add User-Agent
+		// Add User-Agent - always log raw, plus parsed CLI fields when present
 		if ua := r.Header.Get("User-Agent"); ua != "" {
-			ua = sanitizeLogValue(ua)
-			if runes := []rune(ua); len(runes) > 100 {
-				ua = string(runes[:100]) + "..."
+			sanitized := sanitizeLogValue(ua)
+			if runes := []rune(sanitized); len(runes) > 100 {
+				sanitized = string(runes[:100]) + "..."
 			}
-			attrs = append(attrs, "user_agent", ua)
+			attrs = append(attrs, "user_agent", sanitized)
+
+			// Also log structured CLI fields when user agent matches CLI format
+			if cli := ParseCLIUserAgent(ua); cli != nil {
+				attrs = append(attrs, "cli_version", cli.Version)
+				attrs = append(attrs, "cli_os", cli.OS)
+				attrs = append(attrs, "cli_arch", cli.Arch)
+			}
 		}
 
 		logger.Info("http_request", attrs...)

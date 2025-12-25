@@ -743,3 +743,159 @@ func TestFlyLoggerMiddleware_SupportsFlush(t *testing.T) {
 		t.Errorf("Expected body 'chunk1chunk2', got %s", rr.Body.String())
 	}
 }
+
+// =============================================================================
+// CLI User Agent Parsing Tests
+// =============================================================================
+
+func TestParseCLIUserAgent(t *testing.T) {
+	tests := []struct {
+		name     string
+		ua       string
+		expected *CLIUserAgent
+	}{
+		{
+			name: "standard CLI user agent",
+			ua:   "confab/1.2.3 (darwin; arm64)",
+			expected: &CLIUserAgent{
+				Version: "1.2.3",
+				OS:      "darwin",
+				Arch:    "arm64",
+			},
+		},
+		{
+			name: "linux amd64",
+			ua:   "confab/0.1.0 (linux; amd64)",
+			expected: &CLIUserAgent{
+				Version: "0.1.0",
+				OS:      "linux",
+				Arch:    "amd64",
+			},
+		},
+		{
+			name: "windows x86",
+			ua:   "confab/2.0.0-beta (windows; x86)",
+			expected: &CLIUserAgent{
+				Version: "2.0.0-beta",
+				OS:      "windows",
+				Arch:    "x86",
+			},
+		},
+		{
+			name: "version with build metadata",
+			ua:   "confab/1.0.0+build.123 (darwin; arm64)",
+			expected: &CLIUserAgent{
+				Version: "1.0.0+build.123",
+				OS:      "darwin",
+				Arch:    "arm64",
+			},
+		},
+		{
+			name:     "browser user agent",
+			ua:       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+			expected: nil,
+		},
+		{
+			name:     "curl user agent",
+			ua:       "curl/8.1.2",
+			expected: nil,
+		},
+		{
+			name:     "empty user agent",
+			ua:       "",
+			expected: nil,
+		},
+		{
+			name:     "malformed - missing parens",
+			ua:       "confab/1.0.0 darwin; arm64",
+			expected: nil,
+		},
+		{
+			name:     "malformed - missing semicolon",
+			ua:       "confab/1.0.0 (darwin arm64)",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ParseCLIUserAgent(tt.ua)
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("ParseCLIUserAgent(%q) = %+v, want nil", tt.ua, result)
+				}
+			} else {
+				if result == nil {
+					t.Fatalf("ParseCLIUserAgent(%q) = nil, want %+v", tt.ua, tt.expected)
+				}
+				if result.Version != tt.expected.Version {
+					t.Errorf("Version = %q, want %q", result.Version, tt.expected.Version)
+				}
+				if result.OS != tt.expected.OS {
+					t.Errorf("OS = %q, want %q", result.OS, tt.expected.OS)
+				}
+				if result.Arch != tt.expected.Arch {
+					t.Errorf("Arch = %q, want %q", result.Arch, tt.expected.Arch)
+				}
+			}
+		})
+	}
+}
+
+func TestFlyLoggerMiddleware_LogsCLIUserAgentFields(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	wrapped := FlyLogger(handler)
+
+	req := httptest.NewRequest("POST", "/api/v1/sync/init", nil)
+	req.RemoteAddr = "192.168.1.1:8080"
+	req.Header.Set("User-Agent", "confab/1.2.3 (darwin; arm64)")
+
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
+
+	// Should log raw user_agent
+	if !strings.Contains(logOutput, `"user_agent":"confab/1.2.3 (darwin; arm64)"`) {
+		t.Errorf("Log should contain user_agent, got: %s", logOutput)
+	}
+	// Should ALSO log structured CLI fields
+	if !strings.Contains(logOutput, `"cli_version":"1.2.3"`) {
+		t.Errorf("Log should contain cli_version:1.2.3, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, `"cli_os":"darwin"`) {
+		t.Errorf("Log should contain cli_os:darwin, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, `"cli_arch":"arm64"`) {
+		t.Errorf("Log should contain cli_arch:arm64, got: %s", logOutput)
+	}
+}
+
+func TestFlyLoggerMiddleware_LogsRawUserAgent_ForNonCLI(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	wrapped := FlyLogger(handler)
+
+	req := httptest.NewRequest("GET", "/api/v1/sessions", nil)
+	req.RemoteAddr = "192.168.1.1:8080"
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
+
+	// Should log raw user_agent for non-CLI requests
+	if !strings.Contains(logOutput, `"user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"`) {
+		t.Errorf("Log should contain user_agent for non-CLI request, got: %s", logOutput)
+	}
+	// Should NOT log CLI fields
+	if strings.Contains(logOutput, `"cli_version":`) {
+		t.Errorf("Log should NOT contain cli_version for non-CLI request, got: %s", logOutput)
+	}
+}
