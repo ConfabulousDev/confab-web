@@ -91,6 +91,12 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		log.Info("GitHub link create request",
+			"session_id", sessionID,
+			"url", req.URL,
+			"link_type", req.LinkType,
+			"source", req.Source)
+
 		// Validate URL
 		if req.URL == "" {
 			respondError(w, http.StatusBadRequest, "URL is required")
