@@ -118,6 +118,7 @@ function SessionStatsSidebar({ messages, loading = false, sessionId, isOwner = f
 
   const handleDeleteLink = async (linkId: number) => {
     if (!sessionId) return;
+    if (!window.confirm('Remove this GitHub link?')) return;
     try {
       setDeleting(linkId);
       await githubLinksAPI.delete(sessionId, linkId);
