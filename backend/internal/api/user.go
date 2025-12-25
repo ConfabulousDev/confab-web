@@ -10,6 +10,8 @@ import (
 
 // handleGetMe returns the current authenticated user's info
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	// Get user ID from session middleware
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -24,7 +26,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	// Get user from database
 	user, err := s.db.GetUserByID(ctx, userID)
 	if err != nil {
-		logger.Error("Failed to get user", "error", err, "user_id", userID)
+		log.Error("Failed to get user", "error", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get user")
 		return
 	}

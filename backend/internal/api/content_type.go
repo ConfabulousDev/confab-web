@@ -13,11 +13,12 @@ func validateContentType(next http.Handler) http.Handler {
 		// Only validate for requests with a body
 		method := r.Method
 		if method == "POST" || method == "PUT" || method == "PATCH" {
+			log := logger.Ctx(r.Context())
 			contentType := r.Header.Get("Content-Type")
 
 			// Content-Type must be present
 			if contentType == "" {
-				logger.Info("Request missing Content-Type header", "method", method, "path", r.URL.Path)
+				log.Info("Request missing Content-Type header", "method", method, "path", r.URL.Path)
 				http.Error(w, "Content-Type header required", http.StatusUnsupportedMediaType)
 				return
 			}
@@ -31,7 +32,7 @@ func validateContentType(next http.Handler) http.Handler {
 
 			// Must be application/json
 			if mediaType != "application/json" {
-				logger.Info("Request with invalid Content-Type", "method", method, "path", r.URL.Path, "content_type", mediaType)
+				log.Info("Request with invalid Content-Type", "method", method, "path", r.URL.Path, "content_type", mediaType)
 				http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
 				return
 			}

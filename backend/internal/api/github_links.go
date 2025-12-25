@@ -68,6 +68,8 @@ type CreateGitHubLinkRequest struct {
 // HandleCreateGitHubLink creates a new GitHub link for a session
 func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -125,7 +127,7 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			logger.Error("Failed to verify session ownership", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to verify session ownership", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to verify session")
 			return
 		}
@@ -148,13 +150,12 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusConflict, "GitHub link already exists")
 				return
 			}
-			logger.Error("Failed to create GitHub link", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to create GitHub link", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to create GitHub link")
 			return
 		}
 
-		logger.Info("GitHub link created",
-			"user_id", userID,
+		log.Info("GitHub link created",
 			"session_id", sessionID,
 			"link_id", createdLink.ID,
 			"link_type", createdLink.LinkType,
@@ -167,6 +168,8 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 // HandleListGitHubLinks lists all GitHub links for a session
 func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get session ID from URL
 		sessionID := chi.URLParam(r, "id")
 		if sessionID == "" {
@@ -192,7 +195,7 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			logger.Error("Failed to check session access", "error", err, "session_id", sessionID)
+			log.Error("Failed to check session access", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to check access")
 			return
 		}
@@ -205,7 +208,7 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 		// Get GitHub links
 		links, err := database.GetGitHubLinksForSession(ctx, sessionID)
 		if err != nil {
-			logger.Error("Failed to get GitHub links", "error", err, "session_id", sessionID)
+			log.Error("Failed to get GitHub links", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to get GitHub links")
 			return
 		}
@@ -224,6 +227,8 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 // HandleDeleteGitHubLink deletes a GitHub link
 func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context (web auth only, no API key)
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -256,7 +261,7 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			logger.Error("Failed to verify session ownership", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to verify session ownership", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to verify session")
 			return
 		}
@@ -268,7 +273,7 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusNotFound, "GitHub link not found")
 				return
 			}
-			logger.Error("Failed to get GitHub link", "error", err, "link_id", linkID)
+			log.Error("Failed to get GitHub link", "error", err, "link_id", linkID)
 			respondError(w, http.StatusInternalServerError, "Failed to get GitHub link")
 			return
 		}
@@ -281,13 +286,12 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 		// Delete the link
 		err = database.DeleteGitHubLink(ctx, linkID)
 		if err != nil {
-			logger.Error("Failed to delete GitHub link", "error", err, "link_id", linkID)
+			log.Error("Failed to delete GitHub link", "error", err, "link_id", linkID)
 			respondError(w, http.StatusInternalServerError, "Failed to delete GitHub link")
 			return
 		}
 
-		logger.Info("GitHub link deleted",
-			"user_id", userID,
+		log.Info("GitHub link deleted",
 			"session_id", sessionID,
 			"link_id", linkID)
 
@@ -298,6 +302,8 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 // HandleDeleteGitHubLinksByType deletes all GitHub links of a given type for a session
 func HandleDeleteGitHubLinksByType(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context (web auth only, no API key)
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -341,7 +347,7 @@ func HandleDeleteGitHubLinksByType(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			logger.Error("Failed to verify session ownership", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to verify session ownership", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to verify session")
 			return
 		}
@@ -349,13 +355,12 @@ func HandleDeleteGitHubLinksByType(database *db.DB) http.HandlerFunc {
 		// Delete all links of the given type
 		deleted, err := database.DeleteGitHubLinksByType(ctx, sessionID, linkType)
 		if err != nil {
-			logger.Error("Failed to delete GitHub links by type", "error", err, "session_id", sessionID, "link_type", linkType)
+			log.Error("Failed to delete GitHub links by type", "error", err, "session_id", sessionID, "link_type", linkType)
 			respondError(w, http.StatusInternalServerError, "Failed to delete GitHub links")
 			return
 		}
 
-		logger.Info("GitHub links deleted by type",
-			"user_id", userID,
+		log.Info("GitHub links deleted by type",
 			"session_id", sessionID,
 			"link_type", linkType,
 			"count", deleted)

@@ -15,6 +15,8 @@ import (
 // HandleDeleteSession deletes an entire session and all associated S3 chunks
 func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get authenticated user ID
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -43,9 +45,8 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 				respondError(w, http.StatusForbidden, "Access denied")
 				return
 			}
-			logger.Error("Failed to verify session ownership",
+			log.Error("Failed to verify session ownership",
 				"error", err,
-				"user_id", userID,
 				"session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to retrieve session information")
 			return
@@ -56,9 +57,8 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		defer storageCancel()
 
 		if err := store.DeleteAllSessionChunks(storageCtx, userID, externalID); err != nil {
-			logger.Error("Failed to delete session chunks",
+			log.Error("Failed to delete session chunks",
 				"error", err,
-				"user_id", userID,
 				"session_id", sessionID,
 				"external_id", externalID)
 			// Continue anyway - chunks will be orphaned but session deletion should proceed
@@ -73,17 +73,15 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			logger.Error("Failed to delete session from database",
+			log.Error("Failed to delete session from database",
 				"error", err,
-				"user_id", userID,
 				"session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to delete session")
 			return
 		}
 
 		// Audit log: Session deleted successfully
-		logger.Info("Session deleted successfully",
-			"user_id", userID,
+		log.Info("Session deleted successfully",
 			"session_id", sessionID,
 			"external_id", externalID)
 

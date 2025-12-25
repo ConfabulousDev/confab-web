@@ -43,12 +43,14 @@ func NewHandlers(database *db.DB, store *storage.S3Storage) *Handlers {
 
 // HandleListUsers renders the admin user list page
 func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
 	users, err := h.DB.ListAllUsers(ctx)
 	if err != nil {
-		logger.Error("Failed to list users", "error", err)
+		log.Error("Failed to list users", "error", err)
 		http.Error(w, "Failed to list users", http.StatusInternalServerError)
 		return
 	}
@@ -328,6 +330,8 @@ func (h *Handlers) buildStatusToggleForm(user models.User, csrfToken string) str
 
 // HandleDeactivateUser sets a user's status to inactive
 func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	userID, err := parseUserID(r)
 	if err != nil {
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Invalid+user+ID", http.StatusSeeOther)
@@ -344,7 +348,7 @@ func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusInactive); err != nil {
-		logger.Error("Failed to deactivate user", "error", err, "user_id", userID)
+		log.Error("Failed to deactivate user", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+deactivate+user", http.StatusSeeOther)
 		return
 	}
@@ -360,6 +364,8 @@ func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) 
 
 // HandleActivateUser sets a user's status to active
 func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	userID, err := parseUserID(r)
 	if err != nil {
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Invalid+user+ID", http.StatusSeeOther)
@@ -376,7 +382,7 @@ func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusActive); err != nil {
-		logger.Error("Failed to activate user", "error", err, "user_id", userID)
+		log.Error("Failed to activate user", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+activate+user", http.StatusSeeOther)
 		return
 	}
@@ -392,6 +398,8 @@ func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
 
 // HandleDeleteUser permanently deletes a user and all their data
 func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	userID, err := parseUserID(r)
 	if err != nil {
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Invalid+user+ID", http.StatusSeeOther)
@@ -411,7 +419,7 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Get all session IDs for S3 cleanup
 	sessionIDs, err := h.DB.GetUserSessionIDs(ctx, userID)
 	if err != nil {
-		logger.Error("Failed to get user sessions for deletion", "error", err, "user_id", userID)
+		log.Error("Failed to get user sessions for deletion", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+get+user+sessions", http.StatusSeeOther)
 		return
 	}
@@ -419,7 +427,7 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Step 2: Delete S3 objects for each session (fail-fast: S3 before DB)
 	for _, sessionID := range sessionIDs {
 		if err := h.Storage.DeleteAllSessionChunks(ctx, userID, sessionID); err != nil {
-			logger.Error("Failed to delete S3 objects for session", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to delete S3 objects for session", "error", err, "user_id", userID, "session_id", sessionID)
 			http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+delete+storage", http.StatusSeeOther)
 			return
 		}
@@ -427,7 +435,7 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	// Step 3: Delete user from database (CASCADE handles related records)
 	if err := h.DB.DeleteUser(ctx, userID); err != nil {
-		logger.Error("Failed to delete user from database", "error", err, "user_id", userID)
+		log.Error("Failed to delete user from database", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+delete+user", http.StatusSeeOther)
 		return
 	}
@@ -660,6 +668,8 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 
 // HandleCreateSystemShareForm handles form submission for creating system shares
 func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Request, frontendURL string) {
+	log := logger.Ctx(r.Context())
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Invalid+form+data", http.StatusSeeOther)
 		return
@@ -681,7 +691,7 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 			http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Session+not+found", http.StatusSeeOther)
 			return
 		}
-		logger.Error("Failed to create system share", "error", err, "session_id", sessionID)
+		log.Error("Failed to create system share", "error", err, "session_id", sessionID)
 		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Failed+to+create+system+share", http.StatusSeeOther)
 		return
 	}
@@ -708,6 +718,7 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.WriteHeader(status)
 	if data != nil {
 		if err := json.NewEncoder(w).Encode(data); err != nil {
+			// Note: No request context available here, use default logger
 			logger.Error("Failed to encode JSON response", "error", err)
 		}
 	}

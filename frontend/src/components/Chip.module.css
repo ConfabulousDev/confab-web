@@ -23,8 +23,22 @@
   height: 12px;
 }
 
+.textWrapper {
+  position: relative;
+}
+
 .text {
   /* No truncation by default */
+}
+
+.copiedText {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.hidden {
+  visibility: hidden;
 }
 
 /* Variants */
@@ -46,4 +60,15 @@
 .purple {
   background: #f3e8fb;
   color: #7b1fa2;
+}
+
+/* Clickable chips (with copy functionality) */
+.clickable {
+  cursor: default;
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.clickable:hover {
+  border-color: var(--color-text-secondary);
 }

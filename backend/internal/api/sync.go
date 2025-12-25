@@ -106,6 +106,8 @@ type SyncEventResponse struct {
 // handleSyncInit initializes or resumes a sync session
 // POST /api/v1/sync/init
 func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	// Get authenticated user
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -185,7 +187,7 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {
-		logger.Error("Failed to find/create sync session", "error", err, "user_id", userID, "external_id", req.ExternalID)
+		log.Error("Failed to find/create sync session", "error", err, "user_id", userID, "external_id", req.ExternalID)
 		respondError(w, http.StatusInternalServerError, "Failed to initialize sync session")
 		return
 	}
@@ -198,8 +200,7 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logger.Info("Sync session initialized",
-		"user_id", userID,
+	log.Info("Sync session initialized",
 		"session_id", sessionID,
 		"external_id", req.ExternalID,
 		"file_count", len(files))
@@ -213,6 +214,8 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 // handleSyncChunk uploads a chunk of lines for a file
 // POST /api/v1/sync/chunk
 func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	// Get authenticated user
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -300,7 +303,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusForbidden, "Access denied")
 			return
 		}
-		logger.Error("Failed to verify session ownership", "error", err, "session_id", req.SessionID)
+		log.Error("Failed to verify session ownership", "error", err, "session_id", req.SessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to verify session")
 		return
 	}
@@ -312,7 +315,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		// File exists - next chunk must continue from where we left off
 		expectedFirstLine = syncState.LastSyncedLine + 1
 	} else if !errors.Is(err, db.ErrFileNotFound) {
-		logger.Error("Failed to get sync state", "error", err, "session_id", req.SessionID, "file_name", req.FileName)
+		log.Error("Failed to get sync state", "error", err, "session_id", req.SessionID, "file_name", req.FileName)
 		respondError(w, http.StatusInternalServerError, "Failed to get sync state")
 		return
 	}
@@ -320,7 +323,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 
 	// Validate chunk continuity (no gaps, no overlaps)
 	if req.FirstLine != expectedFirstLine {
-		logger.Warn("Chunk continuity error",
+		log.Warn("Chunk continuity error",
 			"session_id", req.SessionID,
 			"file_name", req.FileName,
 			"expected_first_line", expectedFirstLine,
@@ -333,7 +336,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	// Soft limit check on chunk count (if known)
 	// This is a soft limit - races may allow slightly exceeding it, but reads will self-heal
 	if syncState != nil && syncState.ChunkCount != nil && *syncState.ChunkCount >= storage.MaxChunksPerFile {
-		logger.Warn("Chunk limit exceeded",
+		log.Warn("Chunk limit exceeded",
 			"session_id", req.SessionID,
 			"file_name", req.FileName,
 			"chunk_count", *syncState.ChunkCount,
@@ -370,9 +373,8 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 
 	s3Key, err := s.storage.UploadChunk(storageCtx, userID, externalID, req.FileName, req.FirstLine, lastLine, content.Bytes())
 	if err != nil {
-		logger.Error("Failed to upload chunk",
+		log.Error("Failed to upload chunk",
 			"error", err,
-			"user_id", userID,
 			"session_id", req.SessionID,
 			"file_name", req.FileName,
 			"first_line", req.FirstLine,
@@ -396,7 +398,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, summary, firstUserMessage, gitInfo); err != nil {
-		logger.Error("Failed to update sync state",
+		log.Error("Failed to update sync state",
 			"error", err,
 			"session_id", req.SessionID,
 			"file_name", req.FileName,
@@ -407,8 +409,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug("Chunk uploaded",
-		"user_id", userID,
+	log.Debug("Chunk uploaded",
 		"session_id", req.SessionID,
 		"file_name", req.FileName,
 		"first_line", req.FirstLine,
@@ -465,6 +466,8 @@ func filterLinesAfterOffset(content []byte, offset int, firstLineNum int) []byte
 // handleSyncEvent records a session lifecycle event
 // POST /api/v1/sync/event
 func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	// Get authenticated user
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -511,7 +514,7 @@ func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusForbidden, "Access denied")
 			return
 		}
-		logger.Error("Failed to verify session ownership", "error", err, "session_id", req.SessionID)
+		log.Error("Failed to verify session ownership", "error", err, "session_id", req.SessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to verify session")
 		return
 	}
@@ -524,13 +527,12 @@ func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
 		Payload:        req.Payload,
 	})
 	if err != nil {
-		logger.Error("Failed to insert session event", "error", err, "session_id", req.SessionID, "event_type", req.EventType)
+		log.Error("Failed to insert session event", "error", err, "session_id", req.SessionID, "event_type", req.EventType)
 		respondError(w, http.StatusInternalServerError, "Failed to record event")
 		return
 	}
 
-	logger.Info("Session event recorded",
-		"user_id", userID,
+	log.Info("Session event recorded",
 		"session_id", req.SessionID,
 		"event_type", req.EventType,
 		"timestamp", req.Timestamp)
@@ -608,6 +610,8 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 		return nil, nil
 	}
 
+	log := logger.Ctx(ctx)
+
 	// Parse all keys first to filter out invalid ones
 	type keyInfo struct {
 		key       string
@@ -619,7 +623,7 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 	for i, key := range chunkKeys {
 		firstLine, lastLine, ok := parseChunkKey(key)
 		if !ok {
-			logger.Warn("Skipping chunk with unparseable key", "key", key)
+			log.Warn("Skipping chunk with unparseable key", "key", key)
 			continue
 		}
 		validKeys = append(validKeys, keyInfo{key: key, firstLine: firstLine, lastLine: lastLine, index: i})
@@ -644,7 +648,7 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 			elapsed := time.Since(start)
 
 			if err != nil {
-				logger.Error("Failed to download chunk", "error", err, "key", ki.key)
+				log.Error("Failed to download chunk", "error", err, "key", ki.key)
 				results <- chunkResult{index: idx, err: err, duration: elapsed}
 				return
 			}
@@ -692,7 +696,7 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 		if maxDuration > 0 {
 			ratio = float64(sumDuration) / float64(maxDuration)
 		}
-		logger.Info("Parallel chunk download metrics",
+		log.Info("Parallel chunk download metrics",
 			"chunk_count", len(validKeys),
 			"max_duration_ms", maxDuration.Milliseconds(),
 			"sum_duration_ms", sumDuration.Milliseconds(),
@@ -798,6 +802,8 @@ func splitLines(data []byte) [][]byte {
 // - Chunk filtering: only downloads chunks containing lines > line_offset
 // - Self-healing: corrects DB chunk_count if it differs from actual S3 count (owner only)
 func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	// Get params from URL
 	sessionID := chi.URLParam(r, "id")
 	fileName := r.URL.Query().Get("file_name")
@@ -832,7 +838,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	defer dbCancel()
 
 	result, err := CheckCanonicalAccess(dbCtx, s.db, sessionID)
-	if RespondCanonicalAccessError(w, err, sessionID) {
+	if RespondCanonicalAccessError(dbCtx, w, err, sessionID) {
 		return
 	}
 
@@ -848,7 +854,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	// Get the session's user_id and external_id for S3 path
 	sessionUserID, externalID, err := s.db.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 	if err != nil {
-		logger.Error("Failed to get session info", "error", err, "session_id", sessionID)
+		log.Error("Failed to get session info", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to get session info")
 		return
 	}
@@ -880,7 +886,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 
 	chunkKeys, err := s.storage.ListChunks(storageCtx, sessionUserID, externalID, fileName)
 	if err != nil {
-		logger.Error("Failed to list chunks", "error", err, "session_id", sessionID, "file_name", fileName)
+		log.Error("Failed to list chunks", "error", err, "session_id", sessionID, "file_name", fileName)
 		respondStorageError(w, err, "Failed to list chunks")
 		return
 	}
@@ -901,13 +907,13 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 			if syncState.ChunkCount == nil || *syncState.ChunkCount != actualChunkCount {
 				if err := s.db.UpdateSyncFileChunkCount(dbCtx, sessionID, fileName, actualChunkCount); err != nil {
 					// Log but don't fail the read - this is best-effort healing
-					logger.Warn("Failed to self-heal chunk count",
+					log.Warn("Failed to self-heal chunk count",
 						"error", err,
 						"session_id", sessionID,
 						"file_name", fileName,
 						"actual_count", actualChunkCount)
 				} else {
-					logger.Debug("Self-healed chunk count",
+					log.Debug("Self-healed chunk count",
 						"session_id", sessionID,
 						"file_name", fileName,
 						"old_count", syncState.ChunkCount,
@@ -972,7 +978,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		merged = filterLinesAfterOffset(merged, lineOffset, minFirstLine)
 	}
 
-	logger.Info("Canonical sync file read",
+	log.Info("Canonical sync file read",
 		"session_id", sessionID,
 		"file_name", fileName,
 		"chunk_count", len(chunks),
@@ -1064,6 +1070,8 @@ type UpdateSummaryRequest struct {
 // handleUpdateSessionSummary updates the summary for a session by external_id
 // PATCH /api/v1/sessions/{external_id}/summary
 func (s *Server) handleUpdateSessionSummary(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
 	// Get authenticated user
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
@@ -1105,11 +1113,11 @@ func (s *Server) handleUpdateSessionSummary(w http.ResponseWriter, r *http.Reque
 			respondError(w, http.StatusForbidden, "Access denied")
 			return
 		}
-		logger.Error("Failed to update session summary", "error", err, "user_id", userID, "external_id", externalID)
+		log.Error("Failed to update session summary", "error", err, "external_id", externalID)
 		respondError(w, http.StatusInternalServerError, "Failed to update summary")
 		return
 	}
 
-	logger.Info("Session summary updated", "user_id", userID, "external_id", externalID)
+	log.Info("Session summary updated", "external_id", externalID)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -22,12 +22,14 @@ const (
 // AuditLog logs an admin action with full context for security audit trail.
 // All admin actions should be logged through this function.
 func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details map[string]interface{}) {
+	log := logger.Ctx(ctx)
+
 	// Extract admin user ID from context (set by RequireSession middleware)
 	adminUserID, ok := auth.GetUserID(ctx)
 	if !ok {
 		// This shouldn't happen since admin routes require session auth,
 		// but log anyway with unknown admin
-		logger.Warn("Admin action without authenticated user",
+		log.Warn("Admin action without authenticated user",
 			"action", string(action),
 			"details", details)
 		return
@@ -38,7 +40,7 @@ func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details 
 	adminUser, err := database.GetUserByID(ctx, adminUserID)
 	if err != nil {
 		adminEmail = "unknown"
-		logger.Warn("Failed to get admin user for audit log", "error", err, "admin_user_id", adminUserID)
+		log.Warn("Failed to get admin user for audit log", "error", err, "admin_user_id", adminUserID)
 	} else {
 		adminEmail = adminUser.Email
 	}
@@ -56,7 +58,7 @@ func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details 
 		logArgs = append(logArgs, k, v)
 	}
 
-	logger.Info("ADMIN_AUDIT", logArgs...)
+	log.Info("ADMIN_AUDIT", logArgs...)
 }
 
 // AuditLogFromRequest is a convenience wrapper that extracts context from request

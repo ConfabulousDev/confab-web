@@ -75,7 +75,7 @@ func CheckCanonicalAccess(
 // RespondCanonicalAccessError writes the appropriate HTTP error response for access control failures.
 // This handles the common error cases: not found, owner inactive, and internal errors.
 // Returns true if an error response was written, false if no error occurred.
-func RespondCanonicalAccessError(w http.ResponseWriter, err error, sessionID string) bool {
+func RespondCanonicalAccessError(ctx context.Context, w http.ResponseWriter, err error, sessionID string) bool {
 	if err == nil {
 		return false
 	}
@@ -86,7 +86,8 @@ func RespondCanonicalAccessError(w http.ResponseWriter, err error, sessionID str
 	case errors.Is(err, db.ErrOwnerInactive):
 		respondError(w, http.StatusForbidden, "This session is no longer available")
 	default:
-		logger.Error("Failed to check session access", "error", err, "session_id", sessionID)
+		log := logger.Ctx(ctx)
+		log.Error("Failed to check session access", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to get session")
 	}
 	return true

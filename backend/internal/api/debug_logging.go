@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
@@ -24,7 +23,7 @@ func debugLoggingMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			requestID := middleware.GetReqID(r.Context())
+			log := logger.Ctx(r.Context())
 
 			// Read and log request body
 			if r.Body != nil && r.ContentLength != 0 {
@@ -40,8 +39,7 @@ func debugLoggingMiddleware() func(http.Handler) http.Handler {
 					logBody = fullBody[:maxDebugBodySize]
 				}
 
-				logger.Debug("request body",
-					"request_id", requestID,
+				log.Debug("request body",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"body", string(logBody),
@@ -62,8 +60,7 @@ func debugLoggingMiddleware() func(http.Handler) http.Handler {
 			responseBody := ww.body.String()
 			truncated := ww.truncated
 
-			logger.Debug("response body",
-				"request_id", requestID,
+			log.Debug("response body",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", ww.status,

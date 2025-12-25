@@ -140,6 +140,7 @@ func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
 // HandleGitHubCallback handles the OAuth callback from GitHub
 func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
 		ctx := r.Context()
 
 		// Validate state to prevent CSRF
@@ -167,7 +168,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Exchange code for access token
 		accessToken, err := exchangeGitHubCode(code, config)
 		if err != nil {
-			logger.Error("Failed to exchange GitHub code", "error", err)
+			log.Error("Failed to exchange GitHub code", "error", err)
 			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s?error=github_error&error_description=%s",
 				frontendURL,
@@ -179,7 +180,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Get user info from GitHub
 		user, err := getGitHubUser(accessToken)
 		if err != nil {
-			logger.Error("Failed to get GitHub user", "error", err)
+			log.Error("Failed to get GitHub user", "error", err)
 			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s?error=github_error&error_description=%s",
 				frontendURL,
@@ -189,7 +190,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		}
 
 		// Log user info from GitHub
-		logger.Info("GitHub OAuth user retrieved",
+		log.Info("GitHub OAuth user retrieved",
 			"github_id", user.ID,
 			"login", user.Login,
 			"email", user.Email,
@@ -198,7 +199,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Check user cap
 		allowed, err := CanUserLogin(ctx, database, user.Email)
 		if err != nil {
-			logger.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
+			log.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
 			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s?error=server_error&error_description=%s",
 				frontendURL,
@@ -207,7 +208,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			return
 		}
 		if !allowed {
-			logger.Warn("User cap reached, login denied", "email", user.Email)
+			log.Warn("User cap reached, login denied", "email", user.Email)
 			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
 				frontendURL,
@@ -233,7 +234,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		}
 		dbUser, err := database.FindOrCreateUserByOAuth(ctx, oauthInfo)
 		if err != nil {
-			logger.Error("Failed to create/find user in database", "error", err, "github_id", oauthInfo.ProviderID)
+			log.Error("Failed to create/find user in database", "error", err, "github_id", oauthInfo.ProviderID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
@@ -278,7 +279,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			// Compare emails (case-insensitive)
 			if !strings.EqualFold(expectedEmail, user.Email) {
 				emailMismatch = true
-				logger.Warn("OAuth email mismatch",
+				log.Warn("OAuth email mismatch",
 					"expected_email", expectedEmail,
 					"actual_email", user.Email,
 					"provider", "github")
@@ -311,7 +312,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			redirectURL := postLoginRedirect.Value
 			// SECURITY: Only allow relative paths to prevent open redirect attacks
 			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
-				logger.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
+				log.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
 				redirectURL = "/"
 			}
 			// If it's a frontend path (not a backend path like /device), prepend frontend URL
@@ -343,6 +344,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 // HandleLogout logs out the user
 func HandleLogout(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
 		ctx := r.Context()
 
 		// Get session cookie
@@ -373,7 +375,7 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 				http.Redirect(w, r, frontendURL+redirectAfter, http.StatusTemporaryRedirect)
 				return
 			}
-			logger.Warn("Blocked potential open redirect in logout", "redirect_url", redirectAfter)
+			log.Warn("Blocked potential open redirect in logout", "redirect_url", redirectAfter)
 		}
 
 		// Redirect back to frontend
@@ -418,8 +420,12 @@ func RequireSession(database *db.DB) func(http.Handler) http.Handler {
 			// Set user ID on logger's response writer
 			setLogUserID(w, *userID)
 
+			// Enrich request-scoped logger with user_id
+			log := logger.Ctx(r.Context()).With("user_id", *userID)
+			ctx := logger.WithLogger(r.Context(), log)
+
 			// Add user ID to context
-			ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
+			ctx = context.WithValue(ctx, userIDContextKey, *userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -446,8 +452,12 @@ func RequireSessionOrAPIKey(database *db.DB) func(http.Handler) http.Handler {
 			// Set user ID on logger's response writer
 			setLogUserID(w, *userID)
 
+			// Enrich request-scoped logger with user_id
+			log := logger.Ctx(r.Context()).With("user_id", *userID)
+			ctx := logger.WithLogger(r.Context(), log)
+
 			// Add user ID to context
-			ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
+			ctx = context.WithValue(ctx, userIDContextKey, *userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -463,14 +473,18 @@ func OptionalAuth(database *db.DB) func(http.Handler) http.Handler {
 			// Try API key first, then session cookie
 			if userID := TryAPIKeyAuth(r, database); userID != nil {
 				setLogUserID(w, *userID)
-				ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
+				log := logger.Ctx(r.Context()).With("user_id", *userID)
+				ctx := logger.WithLogger(r.Context(), log)
+				ctx = context.WithValue(ctx, userIDContextKey, *userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
 			if userID := TrySessionAuth(r, database); userID != nil {
 				setLogUserID(w, *userID)
-				ctx := context.WithValue(r.Context(), userIDContextKey, *userID)
+				log := logger.Ctx(r.Context()).With("user_id", *userID)
+				ctx := logger.WithLogger(r.Context(), log)
+				ctx = context.WithValue(ctx, userIDContextKey, *userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -681,6 +695,7 @@ func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
 // HandleGoogleCallback handles the OAuth callback from Google
 func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
 		ctx := r.Context()
 		frontendURL := os.Getenv("FRONTEND_URL")
 
@@ -709,7 +724,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Exchange code for access token
 		accessToken, err := exchangeGoogleCode(code, config)
 		if err != nil {
-			logger.Error("Failed to exchange Google code", "error", err)
+			log.Error("Failed to exchange Google code", "error", err)
 			errorURL := fmt.Sprintf("%s?error=google_error&error_description=%s",
 				frontendURL,
 				url.QueryEscape("Failed to complete Google authentication. Please try again."))
@@ -720,7 +735,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Get user info from Google
 		user, err := getGoogleUser(accessToken)
 		if err != nil {
-			logger.Error("Failed to get Google user", "error", err)
+			log.Error("Failed to get Google user", "error", err)
 			errorURL := fmt.Sprintf("%s?error=google_error&error_description=%s",
 				frontendURL,
 				url.QueryEscape("Failed to retrieve user information from Google. Please try again."))
@@ -730,7 +745,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 
 		// SECURITY: Reject unverified emails
 		if !user.VerifiedEmail {
-			logger.Warn("Google email not verified", "email", user.Email)
+			log.Warn("Google email not verified", "email", user.Email)
 			errorURL := fmt.Sprintf("%s?error=email_unverified&error_description=%s",
 				frontendURL,
 				url.QueryEscape("Your Google email is not verified. Please verify your email and try again."))
@@ -738,7 +753,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			return
 		}
 
-		logger.Info("Google OAuth user retrieved",
+		log.Info("Google OAuth user retrieved",
 			"google_id", user.ID,
 			"email", user.Email,
 			"name", user.Name)
@@ -746,7 +761,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Check user cap
 		allowed, err := CanUserLogin(ctx, database, user.Email)
 		if err != nil {
-			logger.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
+			log.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
 			errorURL := fmt.Sprintf("%s?error=server_error&error_description=%s",
 				frontendURL,
 				url.QueryEscape("An error occurred. Please try again later."))
@@ -754,7 +769,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			return
 		}
 		if !allowed {
-			logger.Warn("User cap reached, login denied", "email", user.Email)
+			log.Warn("User cap reached, login denied", "email", user.Email)
 			errorURL := fmt.Sprintf("%s?error=access_denied&error_description=%s",
 				frontendURL,
 				url.QueryEscape("This application has reached its user limit. Please contact the administrator."))
@@ -772,7 +787,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		}
 		dbUser, err := database.FindOrCreateUserByOAuth(ctx, oauthInfo)
 		if err != nil {
-			logger.Error("Failed to create/find user in database", "error", err, "google_id", user.ID)
+			log.Error("Failed to create/find user in database", "error", err, "google_id", user.ID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
@@ -817,7 +832,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			// Compare emails (case-insensitive)
 			if !strings.EqualFold(expectedEmail, user.Email) {
 				emailMismatch = true
-				logger.Warn("OAuth email mismatch",
+				log.Warn("OAuth email mismatch",
 					"expected_email", expectedEmail,
 					"actual_email", user.Email,
 					"provider", "google")
@@ -848,7 +863,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			redirectURL := postLoginRedirect.Value
 			// SECURITY: Only allow relative paths to prevent open redirect attacks
 			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
-				logger.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
+				log.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
 				redirectURL = "/"
 			}
 			// If it's a frontend path (not a backend path like /device), prepend frontend URL
@@ -1110,6 +1125,7 @@ func HandleLoginSelector() http.HandlerFunc {
 // HandleCLIAuthorize handles CLI API key generation flow
 func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
 		ctx := r.Context()
 
 		// Check if user confirmed provider choice (came back from login selector)
@@ -1209,7 +1225,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 				// Redirect to callback with error that CLI can handle
 				frontendURL := os.Getenv("FRONTEND_URL")
 				redirectURL := fmt.Sprintf("%s?error=api_key_limit_exceeded", callback)
-				logger.Warn("API key limit exceeded", "user_id", session.UserID)
+				log.Warn("API key limit exceeded", "user_id", session.UserID)
 				// Also show a helpful page before redirecting
 				html := fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -1239,12 +1255,12 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 				w.Write([]byte(html))
 				return
 			}
-			logger.Error("Failed to create API key in database", "error", err, "user_id", session.UserID)
+			log.Error("Failed to create API key in database", "error", err, "user_id", session.UserID)
 			http.Error(w, "Failed to create API key", http.StatusInternalServerError)
 			return
 		}
 
-		logger.Info("API key created successfully",
+		log.Info("API key created successfully",
 			"key_id", keyID,
 			"name", keyName,
 			"user_id", session.UserID,
@@ -1322,6 +1338,7 @@ func generateDeviceCode() (string, error) {
 // POST /auth/device/code
 func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
 		ctx := r.Context()
 
 		// Parse request
@@ -1343,14 +1360,14 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 		// Generate codes
 		deviceCode, err := generateDeviceCode()
 		if err != nil {
-			logger.Error("Failed to generate device code", "error", err)
+			log.Error("Failed to generate device code", "error", err)
 			http.Error(w, "Failed to generate device code", http.StatusInternalServerError)
 			return
 		}
 
 		userCode, err := generateUserCode()
 		if err != nil {
-			logger.Error("Failed to generate user code", "error", err)
+			log.Error("Failed to generate user code", "error", err)
 			http.Error(w, "Failed to generate user code", http.StatusInternalServerError)
 			return
 		}
@@ -1359,12 +1376,12 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 
 		// Store in database
 		if err := database.CreateDeviceCode(ctx, deviceCode, userCode, req.KeyName, expiresAt); err != nil {
-			logger.Error("Failed to store device code", "error", err)
+			log.Error("Failed to store device code", "error", err)
 			http.Error(w, "Failed to create device code", http.StatusInternalServerError)
 			return
 		}
 
-		logger.Info("Device code created", "user_code", userCode)
+		log.Info("Device code created", "user_code", userCode)
 
 		// Return response
 		resp := DeviceCodeResponse{
@@ -1384,6 +1401,7 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 // POST /auth/device/token
 func HandleDeviceToken(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
 		ctx := r.Context()
 
 		// Parse request
@@ -1437,7 +1455,7 @@ func HandleDeviceToken(database *db.DB) http.HandlerFunc {
 		// Authorized! Generate API key
 		apiKey, keyHash, err := GenerateAPIKey()
 		if err != nil {
-			logger.Error("Failed to generate API key", "error", err)
+			log.Error("Failed to generate API key", "error", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
@@ -1448,20 +1466,20 @@ func HandleDeviceToken(database *db.DB) http.HandlerFunc {
 		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, *dc.UserID, keyHash, dc.KeyName)
 		if err != nil {
 			if err == db.ErrAPIKeyLimitExceeded {
-				logger.Warn("API key limit exceeded during device flow", "user_id", *dc.UserID)
+				log.Warn("API key limit exceeded during device flow", "user_id", *dc.UserID)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "api_key_limit_exceeded"})
 				return
 			}
-			logger.Error("Failed to create API key", "error", err, "user_id", *dc.UserID)
+			log.Error("Failed to create API key", "error", err, "user_id", *dc.UserID)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
 			return
 		}
 
-		logger.Info("API key created via device flow",
+		log.Info("API key created via device flow",
 			"key_id", keyID,
 			"name", dc.KeyName,
 			"user_id", *dc.UserID,
@@ -1520,6 +1538,7 @@ func HandleDevicePage(database *db.DB) http.HandlerFunc {
 // POST /device/verify
 func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
 		ctx := r.Context()
 
 		// Parse form first to get the code for redirect
@@ -1558,7 +1577,7 @@ func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 		// Validate and authorize
 		err = database.AuthorizeDeviceCode(ctx, userCode, session.UserID)
 		if err != nil {
-			logger.Warn("Device code authorization failed", "error", err, "user_code", userCode)
+			log.Warn("Device code authorization failed", "error", err, "user_code", userCode)
 			// Show error page
 			html := generateDeviceResultHTML(false, "Invalid or expired code. Please try again.")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1567,7 +1586,7 @@ func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		logger.Info("Device code authorized", "user_code", userCode, "user_id", session.UserID)
+		log.Info("Device code authorized", "user_code", userCode, "user_id", session.UserID)
 
 		// Show success page
 		html := generateDeviceResultHTML(true, "Device authorized! You can close this window and return to your terminal.")
@@ -1822,6 +1841,8 @@ const DefaultMaxUsers = 50
 // 1. User already exists (returning users always allowed), OR
 // 2. User count is below MAX_USERS cap (new users allowed if under cap)
 func CanUserLogin(ctx context.Context, database *db.DB, email string) (bool, error) {
+	log := logger.Ctx(ctx)
+
 	if database == nil {
 		return false, fmt.Errorf("database is required")
 	}
@@ -1834,7 +1855,7 @@ func CanUserLogin(ctx context.Context, database *db.DB, email string) (bool, err
 	// Check if user already exists - returning users always allowed
 	exists, err := database.UserExistsByEmail(ctx, email)
 	if err != nil {
-		logger.Warn("Failed to check if user exists", "email", email, "error", err)
+		log.Warn("Failed to check if user exists", "email", email, "error", err)
 		return false, err
 	}
 	if exists {
@@ -1846,7 +1867,7 @@ func CanUserLogin(ctx context.Context, database *db.DB, email string) (bool, err
 	if maxUsersEnv := os.Getenv("MAX_USERS"); maxUsersEnv != "" {
 		parsed, err := strconv.Atoi(maxUsersEnv)
 		if err != nil {
-			logger.Warn("Invalid MAX_USERS value, using default", "value", maxUsersEnv, "default", DefaultMaxUsers, "error", err)
+			log.Warn("Invalid MAX_USERS value, using default", "value", maxUsersEnv, "default", DefaultMaxUsers, "error", err)
 		} else {
 			maxUsers = parsed
 		}
@@ -1854,12 +1875,12 @@ func CanUserLogin(ctx context.Context, database *db.DB, email string) (bool, err
 
 	currentUsers, err := database.CountUsers(ctx)
 	if err != nil {
-		logger.Warn("Failed to count users", "error", err)
+		log.Warn("Failed to count users", "error", err)
 		return false, err
 	}
 
 	if currentUsers >= maxUsers {
-		logger.Warn("User cap reached", "current", currentUsers, "max", maxUsers, "email", email)
+		log.Warn("User cap reached", "current", currentUsers, "max", maxUsers, "email", email)
 		return false, nil
 	}
 

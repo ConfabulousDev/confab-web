@@ -43,6 +43,8 @@ type CreateShareResponse struct {
 // HandleCreateShare creates a new share for a session
 func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -69,7 +71,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		defer sharerCancel()
 		sharer, err := database.GetUserByID(sharerCtx, userID)
 		if err != nil {
-			logger.Error("Failed to get sharer info", "error", err, "user_id", userID)
+			log.Error("Failed to get sharer info", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to get user info")
 			return
 		}
@@ -116,7 +118,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			logger.Error("Failed to get session info", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to get session info", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to get session info")
 			return
 		}
@@ -132,7 +134,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
-			logger.Error("Failed to create share", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to create share", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to create share")
 			return
 		}
@@ -171,14 +173,14 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				}
 
 				if err := emailService.SendShareInvitation(r.Context(), userID, emailParams); err != nil {
-					logger.Error("Failed to send share invitation email",
+					log.Error("Failed to send share invitation email",
 						"error", err,
 						"to_email", toEmail,
 						"share_id", share.ID)
 					emailFailures = append(emailFailures, toEmail)
 					emailsSent = false
 				} else {
-					logger.Info("Share invitation email sent",
+					log.Info("Share invitation email sent",
 						"to_email", toEmail,
 						"share_id", share.ID)
 				}
@@ -186,8 +188,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		}
 
 		// Audit log: Share created
-		logger.Info("Share created",
-			"user_id", userID,
+		log.Info("Share created",
 			"session_id", sessionID,
 			"share_id", share.ID,
 			"is_public", share.IsPublic,
@@ -214,6 +215,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 // HandleListShares lists all shares for a session
 func HandleListShares(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -243,13 +246,13 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "Unauthorized")
 				return
 			}
-			logger.Error("Failed to list shares", "error", err, "user_id", userID, "session_id", sessionID)
+			log.Error("Failed to list shares", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to list shares")
 			return
 		}
 
 		// Success log
-		logger.Info("Shares listed", "user_id", userID, "session_id", sessionID, "count", len(shares))
+		log.Info("Shares listed", "session_id", sessionID, "count", len(shares))
 
 		respondJSON(w, http.StatusOK, shares)
 	}
@@ -258,6 +261,8 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 // HandleRevokeShare revokes a share by ID
 func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -284,13 +289,13 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusNotFound, "Share not found or unauthorized")
 				return
 			}
-			logger.Error("Failed to revoke share", "error", err, "user_id", userID, "share_id", shareID)
+			log.Error("Failed to revoke share", "error", err, "share_id", shareID)
 			respondError(w, http.StatusInternalServerError, "Failed to revoke share")
 			return
 		}
 
 		// Audit log: Share revoked
-		logger.Info("Share revoked", "user_id", userID, "share_id", shareID)
+		log.Info("Share revoked", "share_id", shareID)
 
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -299,6 +304,8 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 // HandleListAllUserShares lists all shares for the authenticated user across all sessions
 func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -313,13 +320,13 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 		// Get all shares from database
 		shares, err := database.ListAllUserShares(ctx, userID)
 		if err != nil {
-			logger.Error("Failed to list all user shares", "error", err, "user_id", userID)
+			log.Error("Failed to list all user shares", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list shares")
 			return
 		}
 
 		// Success log
-		logger.Info("All user shares listed", "user_id", userID, "count", len(shares))
+		log.Info("All user shares listed", "count", len(shares))
 
 		respondJSON(w, http.StatusOK, shares)
 	}

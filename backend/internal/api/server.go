@@ -141,11 +141,13 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(ratelimit.Middleware(s.globalLimiter))
 	// 4. RequestID: assign unique ID for request tracing (used by FlyLogger)
 	r.Use(middleware.RequestID)
-	// 5. Redirects and security headers
+	// 5. Request-scoped logger: adds req_id to all logs within the request
+	r.Use(logger.Middleware)
+	// 6. Redirects and security headers
 	r.Use(wwwRedirectMiddleware())
 	r.Use(securityHeadersMiddleware())
 
-	// 6. Compression: Brotli (preferred) + gzip (fallback)
+	// 7. Compression: Brotli (preferred) + gzip (fallback)
 	// Brotli provides 15-25% better compression than gzip for JSON
 	// Serves Brotli to modern clients (95%+), gzip to legacy clients
 	compressor := middleware.NewCompressor(5) // gzip level 5 (baseline)
@@ -155,7 +157,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	})
 	r.Use(compressor.Handler)
 
-	// 7. FlyLogger: AFTER compressor so it captures uncompressed response bodies
+	// 8. FlyLogger: AFTER compressor so it captures uncompressed response bodies
 	r.Use(FlyLogger)
 
 	// CORS configuration - CRITICAL SECURITY FIX
@@ -193,7 +195,8 @@ func (s *Server) SetupRoutes() http.Handler {
 		csrf.MaxAge(int((auth.SessionDuration + 24*time.Hour).Seconds())), // Session duration + 1 day buffer
 		csrf.TrustedOrigins(trustedOrigins),                               // Trust the frontend origin(s)
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger.Warn("CSRF validation failed",
+			log := logger.Ctx(r.Context())
+			log.Warn("CSRF validation failed",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"remote_addr", r.RemoteAddr,

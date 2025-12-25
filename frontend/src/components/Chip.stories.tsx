@@ -98,3 +98,36 @@ export const SessionListExample: Story = {
     </div>
   ),
 };
+
+export const Clickable: Story = {
+  args: {
+    children: 'Click to copy',
+    variant: 'neutral',
+    copyValue: 'https://github.com/example/repo',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Chips with `copyValue` show a border on hover and copy the value to clipboard when clicked.',
+      },
+    },
+  },
+};
+
+export const ClickableVariants: Story = {
+  render: () => (
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <Chip icon={RepoIcon} variant="neutral" copyValue="https://github.com/example/repo">example/repo</Chip>
+      <Chip icon={BranchIcon} variant="blue" copyValue="https://github.com/example/repo/tree/main">main</Chip>
+      <Chip icon={ComputerIcon} variant="green" copyValue="macbook-pro.local">macbook-pro</Chip>
+      <Chip icon={UserIcon} variant="purple" copyValue="https://github.com/example/repo/pull/123">#123</Chip>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story: 'All chip variants support the clickable copy behavior. Hover to see the border, click to copy.',
+      },
+    },
+  },
+};

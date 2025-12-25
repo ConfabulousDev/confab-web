@@ -20,6 +20,8 @@ import (
 // Supports conditional requests via ETag/If-None-Match for efficient polling.
 func HandleListSessions(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context (set by SessionMiddleware)
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -46,7 +48,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		// Get last modified timestamp for ETag
 		lastModified, err := database.GetSessionsLastModified(ctx, userID, view)
 		if err != nil {
-			logger.Error("Failed to get sessions last modified", "error", err, "user_id", userID)
+			log.Error("Failed to get sessions last modified", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}
@@ -63,7 +65,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		// Get sessions from database
 		sessions, err := database.ListUserSessions(ctx, userID, view)
 		if err != nil {
-			logger.Error("Failed to list sessions", "error", err, "user_id", userID, "view", view)
+			log.Error("Failed to list sessions", "error", err, "view", view)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}
@@ -89,6 +91,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 // the session cookie if present, but doesn't require it.
 func HandleGetSession(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Note: No log := here since this handler doesn't have logging calls
 		// Get session ID from URL (UUID)
 		sessionID := chi.URLParam(r, "id")
 		if sessionID == "" {
@@ -102,7 +105,7 @@ func HandleGetSession(database *db.DB) http.HandlerFunc {
 
 		// Check canonical access (CF-132 unified access model)
 		result, err := CheckCanonicalAccess(ctx, database, sessionID)
-		if RespondCanonicalAccessError(w, err, sessionID) {
+		if RespondCanonicalAccessError(ctx, w, err, sessionID) {
 			return
 		}
 
@@ -130,6 +133,8 @@ type SessionLookupResponse struct {
 // Supports both session cookie auth and API key auth (via SessionOrAPIKeyMiddleware).
 func HandleLookupSessionByExternalID(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context (set by SessionOrAPIKeyMiddleware)
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -155,7 +160,7 @@ func HandleLookupSessionByExternalID(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return
 			}
-			logger.Error("Failed to lookup session by external_id", "error", err, "external_id", externalID)
+			log.Error("Failed to lookup session by external_id", "error", err, "external_id", externalID)
 			respondError(w, http.StatusInternalServerError, "Failed to lookup session")
 			return
 		}
@@ -173,6 +178,8 @@ type UpdateSessionTitleRequest struct {
 // HandleUpdateSessionTitle updates the custom title for a session
 func HandleUpdateSessionTitle(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -215,7 +222,7 @@ func HandleUpdateSessionTitle(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusForbidden, "You don't have permission to modify this session")
 				return
 			}
-			logger.Error("Failed to update session title", "error", err, "session_id", sessionID, "user_id", userID)
+			log.Error("Failed to update session title", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to update session title")
 			return
 		}

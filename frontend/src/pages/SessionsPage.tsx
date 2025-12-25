@@ -317,34 +317,48 @@ function SessionsPage() {
                             {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
                           </div>
                           <div className={styles.chipRow}>
-                            <Chip icon={ClaudeCodeIcon} variant="neutral">
+                            <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>
                               {session.external_id.substring(0, 8)}
                             </Chip>
                             {session.git_repo && (
                               <Chip
                                 icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
                                 variant="neutral"
+                                copyValue={session.git_repo_url || session.git_repo}
                               >
                                 {session.git_repo}
                               </Chip>
                             )}
                             {session.git_branch && (
-                              <Chip icon={BranchIcon} variant="blue">
+                              <Chip
+                                icon={BranchIcon}
+                                variant="blue"
+                                copyValue={session.git_repo_url ? `${session.git_repo_url}/tree/${session.git_branch}` : session.git_branch}
+                              >
                                 {session.git_branch}
                               </Chip>
                             )}
                             {session.github_prs?.map((pr) => (
-                              <Chip key={pr} icon={PRIcon} variant="purple">
+                              <Chip
+                                key={pr}
+                                icon={PRIcon}
+                                variant="purple"
+                                copyValue={session.git_repo_url ? `${session.git_repo_url}/pull/${pr}` : pr}
+                              >
                                 #{pr}
                               </Chip>
                             ))}
                             {session.github_commits?.[0] && (
-                              <Chip icon={CommitIcon} variant="purple">
+                              <Chip
+                                icon={CommitIcon}
+                                variant="purple"
+                                copyValue={session.git_repo_url ? `${session.git_repo_url}/commit/${session.github_commits[0]}` : session.github_commits[0]}
+                              >
                                 {session.github_commits[0].slice(0, 7)}
                               </Chip>
                             )}
                             {!showSharedWithMe && session.hostname && (
-                              <Chip icon={ComputerIcon} variant="green">
+                              <Chip icon={ComputerIcon} variant="green" copyValue={session.hostname}>
                                 {session.hostname}
                               </Chip>
                             )}

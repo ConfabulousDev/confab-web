@@ -31,6 +31,8 @@ type CreateAPIKeyResponse struct {
 // HandleCreateAPIKey creates a new API key for the authenticated user
 func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context (set by SessionMiddleware)
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -73,13 +75,13 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusConflict, "API key limit reached. Please delete some existing keys before creating new ones.")
 				return
 			}
-			logger.Error("Failed to create API key in database", "error", err, "user_id", userID, "name", req.Name)
+			log.Error("Failed to create API key in database", "error", err, "name", req.Name)
 			respondError(w, http.StatusInternalServerError, "Failed to create API key")
 			return
 		}
 
 		// Audit log: API key created
-		logger.Info("API key created", "user_id", userID, "key_id", keyID, "name", req.Name)
+		log.Info("API key created", "key_id", keyID, "name", req.Name)
 
 		// Return response (key is only shown once)
 		respondJSON(w, http.StatusOK, CreateAPIKeyResponse{
@@ -94,6 +96,8 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 // HandleListAPIKeys lists all API keys for the authenticated user
 func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -108,13 +112,13 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 		// Get keys from database
 		keys, err := database.ListAPIKeys(ctx, userID)
 		if err != nil {
-			logger.Error("Failed to list API keys", "error", err, "user_id", userID)
+			log.Error("Failed to list API keys", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list API keys")
 			return
 		}
 
 		// Success log
-		logger.Info("API keys listed", "user_id", userID, "count", len(keys))
+		log.Info("API keys listed", "count", len(keys))
 
 		// Ensure non-nil slice for JSON encoding
 		if keys == nil {
@@ -128,6 +132,8 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 // HandleDeleteAPIKey deletes an API key
 func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
 		// Get user ID from context
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
@@ -149,13 +155,13 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 
 		// Delete key
 		if err := database.DeleteAPIKey(ctx, userID, keyID); err != nil {
-			logger.Error("Failed to delete API key", "error", err, "user_id", userID, "key_id", keyID)
+			log.Error("Failed to delete API key", "error", err, "key_id", keyID)
 			respondError(w, http.StatusNotFound, "API key not found")
 			return
 		}
 
 		// Audit log: API key deleted
-		logger.Info("API key deleted", "user_id", userID, "key_id", keyID)
+		log.Info("API key deleted", "key_id", keyID)
 
 		w.WriteHeader(http.StatusNoContent)
 	}

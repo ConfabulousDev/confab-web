@@ -131,8 +131,12 @@ func RequireAPIKey(database *db.DB) func(http.Handler) http.Handler {
 			// Set user ID on logger's response writer
 			setLogUserID(w, userID)
 
+			// Enrich request-scoped logger with user_id
+			log := logger.Ctx(r.Context()).With("user_id", userID)
+			ctx := logger.WithLogger(r.Context(), log)
+
 			// Add user ID to request context
-			ctx := context.WithValue(r.Context(), userIDContextKey, userID)
+			ctx = context.WithValue(ctx, userIDContextKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
