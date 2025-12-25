@@ -143,8 +143,8 @@
 }
 
 .linkRepo {
-  color: var(--color-text-muted);
-  font-size: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
