@@ -3,7 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,7 +12,45 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/clientip"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
+
+// captureLogOutput captures logger output during a test function.
+// Returns the captured log output as a string.
+func captureLogOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	// Create a pipe to capture output
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+
+	// Redirect logger output to the pipe
+	cleanup := logger.SetOutputForTest(w)
+	defer cleanup()
+
+	// Run the test function
+	fn()
+
+	// Close write end and read all output
+	w.Close()
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	r.Close()
+
+	return buf.String()
+}
+
+// parseLogLine parses a single JSON log line into a map.
+func parseLogLine(t *testing.T, line string) map[string]interface{} {
+	t.Helper()
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(line), &result); err != nil {
+		t.Fatalf("Failed to parse log line as JSON: %v\nLine: %s", err, line)
+	}
+	return result
+}
 
 // wrapWithClientIP wraps a handler with clientip.Middleware for tests
 // This simulates the production middleware chain where clientip runs before FlyLogger
@@ -21,11 +59,6 @@ func wrapWithClientIP(h http.Handler) http.Handler {
 }
 
 func TestFlyLoggerMiddleware_LogsCorrectClientIP(t *testing.T) {
-	// Capture log output
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	// Create a simple handler that returns 200
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -42,15 +75,14 @@ func TestFlyLoggerMiddleware_LogsCorrectClientIP(t *testing.T) {
 	req.Header.Set("Fly-Client-IP", "203.0.113.45")
 	req.Header.Set("Fly-Region", "sjc")
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
-
-	// Check log output
-	logOutput := buf.String()
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
 	// Should log the real client IP (203.0.113.45), not the internal IP (172.16.29.234)
-	if !strings.Contains(logOutput, "203.0.113.45") {
-		t.Errorf("Log should contain real client IP 203.0.113.45, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"client_ip":"203.0.113.45"`) {
+		t.Errorf("Log should contain client_ip:203.0.113.45, got: %s", logOutput)
 	}
 	if strings.Contains(logOutput, "172.16.29.234") {
 		t.Errorf("Log should NOT contain internal Fly IP 172.16.29.234, got: %s", logOutput)
@@ -58,10 +90,6 @@ func TestFlyLoggerMiddleware_LogsCorrectClientIP(t *testing.T) {
 }
 
 func TestFlyLoggerMiddleware_LogsRegion(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -73,20 +101,17 @@ func TestFlyLoggerMiddleware_LogsRegion(t *testing.T) {
 	req.Header.Set("Fly-Client-IP", "203.0.113.45")
 	req.Header.Set("Fly-Region", "sjc")
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if !strings.Contains(logOutput, "region=sjc") {
-		t.Errorf("Log should contain region=sjc, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"region":"sjc"`) {
+		t.Errorf("Log should contain region:sjc, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsProto(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -98,20 +123,17 @@ func TestFlyLoggerMiddleware_LogsProto(t *testing.T) {
 	req.Header.Set("Fly-Client-IP", "203.0.113.45")
 	req.Header.Set("X-Forwarded-Proto", "https")
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if !strings.Contains(logOutput, "proto=https") {
-		t.Errorf("Log should contain proto=https, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"x_proto":"https"`) {
+		t.Errorf("Log should contain x_proto:https, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsStatusCode(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	})
@@ -121,20 +143,17 @@ func TestFlyLoggerMiddleware_LogsStatusCode(t *testing.T) {
 	req := httptest.NewRequest("GET", "/notfound", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if !strings.Contains(logOutput, "404") {
-		t.Errorf("Log should contain status code 404, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"status":404`) {
+		t.Errorf("Log should contain status:404, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsMethod(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -144,20 +163,17 @@ func TestFlyLoggerMiddleware_LogsMethod(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sync/init", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if !strings.Contains(logOutput, "POST") {
-		t.Errorf("Log should contain method POST, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"method":"POST"`) {
+		t.Errorf("Log should contain method:POST, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsPath(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -167,20 +183,17 @@ func TestFlyLoggerMiddleware_LogsPath(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/sessions?limit=10", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	if !strings.Contains(logOutput, "/api/v1/sessions") {
 		t.Errorf("Log should contain path /api/v1/sessions, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsDuration(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(10 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
@@ -191,21 +204,18 @@ func TestFlyLoggerMiddleware_LogsDuration(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	// Should contain some duration indication (ms or µs)
-	if !strings.Contains(logOutput, "ms") && !strings.Contains(logOutput, "µs") && !strings.Contains(logOutput, "s") {
-		t.Errorf("Log should contain duration, got: %s", logOutput)
+	// Should contain duration_ms field
+	if !strings.Contains(logOutput, `"duration_ms":`) {
+		t.Errorf("Log should contain duration_ms field, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_NoFlyHeaders(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -216,25 +226,22 @@ func TestFlyLoggerMiddleware_NoFlyHeaders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "127.0.0.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	// Should log RemoteAddr IP when no Fly headers
 	if !strings.Contains(logOutput, "127.0.0.1") {
 		t.Errorf("Log should contain RemoteAddr IP 127.0.0.1 when no Fly headers, got: %s", logOutput)
 	}
-	// Should not have "region=" since no region header
-	if strings.Contains(logOutput, "region=") {
-		t.Errorf("Log should not contain region= when no Fly headers, got: %s", logOutput)
+	// Should not have "region" field since no region header
+	if strings.Contains(logOutput, `"region":`) {
+		t.Errorf("Log should not contain region field when no Fly headers, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_CapturesResponseBytes(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Hello, World!")) // 13 bytes
@@ -245,13 +252,14 @@ func TestFlyLoggerMiddleware_CapturesResponseBytes(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	// Should contain byte count
-	if !strings.Contains(logOutput, "13") {
-		t.Errorf("Log should contain response size 13, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"bytes":13`) {
+		t.Errorf("Log should contain bytes:13, got: %s", logOutput)
 	}
 }
 
@@ -283,10 +291,6 @@ func TestFlyLoggerMiddleware_ResponseWriterPassthrough(t *testing.T) {
 }
 
 func TestResponseWriter_WriteWithoutExplicitStatus(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	// Handler that writes without calling WriteHeader (implicit 200)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
@@ -297,13 +301,14 @@ func TestResponseWriter_WriteWithoutExplicitStatus(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	// Should show 200 status (implicit)
-	if !strings.Contains(logOutput, "200") {
-		t.Errorf("Log should contain implicit 200 status, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"status":200`) {
+		t.Errorf("Log should contain implicit status:200, got: %s", logOutput)
 	}
 }
 
@@ -312,10 +317,6 @@ func TestResponseWriter_WriteWithoutExplicitStatus(t *testing.T) {
 // =============================================================================
 
 func TestFlyLoggerMiddleware_LogsUserID_OnSuccess(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	// Simulate auth middleware setting user ID on the response writer
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
@@ -330,20 +331,17 @@ func TestFlyLoggerMiddleware_LogsUserID_OnSuccess(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/sessions", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if !strings.Contains(logOutput, "user=42") {
-		t.Errorf("Log should contain user=42 for authenticated request, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"user_id":42`) {
+		t.Errorf("Log should contain user_id:42 for authenticated request, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsUserID_On4xx(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	// Simulate auth middleware setting user ID, then handler returning error
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if setter, ok := w.(interface{ SetLogUserID(int64) }); ok {
@@ -358,20 +356,17 @@ func TestFlyLoggerMiddleware_LogsUserID_On4xx(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sync/init", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if !strings.Contains(logOutput, "user=123") {
-		t.Errorf("Log should contain user=123 for authenticated 4xx request, got: %s", logOutput)
+	if !strings.Contains(logOutput, `"user_id":123`) {
+		t.Errorf("Log should contain user_id:123 for authenticated 4xx request, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_NoUserID_WhenUnauthenticated(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -382,12 +377,13 @@ func TestFlyLoggerMiddleware_NoUserID_WhenUnauthenticated(t *testing.T) {
 	req := httptest.NewRequest("GET", "/health", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if strings.Contains(logOutput, "user=") {
-		t.Errorf("Log should NOT contain user= for unauthenticated request, got: %s", logOutput)
+	if strings.Contains(logOutput, `"user_id":`) {
+		t.Errorf("Log should NOT contain user_id for unauthenticated request, got: %s", logOutput)
 	}
 }
 
@@ -396,10 +392,6 @@ func TestFlyLoggerMiddleware_NoUserID_WhenUnauthenticated(t *testing.T) {
 // =============================================================================
 
 func TestFlyLoggerMiddleware_LogsErrorMessage_JSON(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -411,20 +403,17 @@ func TestFlyLoggerMiddleware_LogsErrorMessage_JSON(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/sessions/bad", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	if !strings.Contains(logOutput, "Invalid session ID") {
 		t.Errorf("Log should contain error message 'Invalid session ID', got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsErrorMessage_PlainText(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 	})
@@ -434,20 +423,17 @@ func TestFlyLoggerMiddleware_LogsErrorMessage_PlainText(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sync/chunk", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	if !strings.Contains(logOutput, "Rate limit exceeded") {
 		t.Errorf("Log should contain error message 'Rate limit exceeded', got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_NoErrorMessage_On2xx(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -459,21 +445,18 @@ func TestFlyLoggerMiddleware_NoErrorMessage_On2xx(t *testing.T) {
 	req := httptest.NewRequest("GET", "/health", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	// Should not contain "err=" for successful responses
-	if strings.Contains(logOutput, "err=") {
-		t.Errorf("Log should NOT contain err= for 2xx response, got: %s", logOutput)
+	// Should not contain "error" field for successful responses
+	if strings.Contains(logOutput, `"error":`) {
+		t.Errorf("Log should NOT contain error field for 2xx response, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_NoErrorMessage_On3xx(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/new-location", http.StatusFound)
 	})
@@ -483,20 +466,17 @@ func TestFlyLoggerMiddleware_NoErrorMessage_On3xx(t *testing.T) {
 	req := httptest.NewRequest("GET", "/old-location", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-	if strings.Contains(logOutput, "err=") {
-		t.Errorf("Log should NOT contain err= for 3xx response, got: %s", logOutput)
+	if strings.Contains(logOutput, `"error":`) {
+		t.Errorf("Log should NOT contain error field for 3xx response, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsErrorMessage_401(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
 	})
@@ -506,20 +486,17 @@ func TestFlyLoggerMiddleware_LogsErrorMessage_401(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/sessions", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	if !strings.Contains(logOutput, "Missing Authorization header") {
 		t.Errorf("Log should contain error message for 401, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsErrorMessage_403(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
@@ -531,20 +508,17 @@ func TestFlyLoggerMiddleware_LogsErrorMessage_403(t *testing.T) {
 	req := httptest.NewRequest("DELETE", "/api/v1/sessions/123", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	if !strings.Contains(logOutput, "Access denied") {
 		t.Errorf("Log should contain error message for 403, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_LogsErrorMessage_404(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -556,20 +530,17 @@ func TestFlyLoggerMiddleware_LogsErrorMessage_404(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/sessions/999", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	if !strings.Contains(logOutput, "Session not found") {
 		t.Errorf("Log should contain error message for 404, got: %s", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_TruncatesLongErrorMessage(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	// Create a very long error message (500+ chars)
 	longMessage := strings.Repeat("x", 500)
 
@@ -582,10 +553,11 @@ func TestFlyLoggerMiddleware_TruncatesLongErrorMessage(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sync/init", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	// Should truncate and not contain the full 500-char message
 	if strings.Contains(logOutput, longMessage) {
 		t.Errorf("Log should truncate long error messages, got full message in: %s", logOutput)
@@ -597,10 +569,6 @@ func TestFlyLoggerMiddleware_TruncatesLongErrorMessage(t *testing.T) {
 }
 
 func TestFlyLoggerMiddleware_NoErrorMessage_On5xx(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -612,10 +580,11 @@ func TestFlyLoggerMiddleware_NoErrorMessage_On5xx(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/sessions", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
 	// 5xx errors should NOT log the error body (may contain sensitive info)
 	if strings.Contains(logOutput, "Database connection failed") {
 		t.Errorf("Log should NOT contain error body for 5xx responses, got: %s", logOutput)
@@ -655,10 +624,6 @@ func TestFlyLoggerMiddleware_ResponsePassthrough_With4xxLogging(t *testing.T) {
 // =============================================================================
 
 func TestFlyLoggerMiddleware_SanitizesLogInjection(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	// Attacker tries to inject a fake log line via error message
 	maliciousError := "bad request\n2025/01/01 00:00:00 \"GET /admin\" from 1.2.3.4 - 200 0B in 1ms [user=1]"
 
@@ -671,34 +636,30 @@ func TestFlyLoggerMiddleware_SanitizesLogInjection(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sync/init", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-
-	// Key assertion: should produce exactly ONE log line (newline at end only)
-	// If log injection worked, there would be multiple lines
-	if strings.Count(logOutput, "\n") > 1 {
+	// With JSON logging, the malicious content is safely escaped in the error field
+	// The log should be valid JSON (single line)
+	lines := strings.Split(strings.TrimSpace(logOutput), "\n")
+	if len(lines) > 1 {
 		t.Errorf("Log injection detected - multiple log lines created: %q", logOutput)
 	}
 
-	// The malicious content is still in the log (sanitized), but as part of err= field
-	// not as a separate log entry. Verify it's in the k=v section after |.
-	if !strings.Contains(logOutput, " | ") || !strings.Contains(logOutput, "err=") {
-		t.Errorf("Should contain error in k=v section after |: %q", logOutput)
+	// Should contain error field with sanitized content
+	if !strings.Contains(logOutput, `"error":`) {
+		t.Errorf("Should contain error field: %q", logOutput)
 	}
 
-	// Verify the real request path is logged, not the injected one at the start
+	// Verify the real request path is logged
 	if !strings.Contains(logOutput, "/api/v1/sync/init") {
 		t.Errorf("Should contain the real request path: %q", logOutput)
 	}
 }
 
 func TestFlyLoggerMiddleware_SanitizesControlCharacters(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-
 	// Error with various control characters
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error\twith\x00null\rand\ncontrol", http.StatusBadRequest)
@@ -709,12 +670,12 @@ func TestFlyLoggerMiddleware_SanitizesControlCharacters(t *testing.T) {
 	req := httptest.NewRequest("POST", "/test", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
-	rr := httptest.NewRecorder()
-	wrapped.ServeHTTP(rr, req)
+	logOutput := captureLogOutput(t, func() {
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+	})
 
-	logOutput := buf.String()
-
-	// Should not contain raw control characters
+	// Should not contain raw control characters (they get sanitized before JSON encoding)
 	if strings.ContainsAny(logOutput, "\x00\r") {
 		t.Errorf("Control characters should be sanitized: %q", logOutput)
 	}

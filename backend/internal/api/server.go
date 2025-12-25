@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/email"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/ratelimit"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
@@ -161,7 +161,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	// CORS configuration - CRITICAL SECURITY FIX
 	// Note: ALLOWED_ORIGINS is validated at startup in main.go
 	allowedOrigins, trustedOrigins := parseAllowedOrigins()
-	log.Printf("CORS allowed origins: %v, CSRF trusted origins: %v", allowedOrigins, trustedOrigins)
+	logger.Info("CORS configured", "allowed_origins", allowedOrigins, "csrf_trusted_origins", trustedOrigins)
 
 	r.Use(cors.Handler(cors.Options{
 		// AllowedOrigins: Only requests from these domains are allowed
@@ -193,12 +193,14 @@ func (s *Server) SetupRoutes() http.Handler {
 		csrf.MaxAge(int((auth.SessionDuration + 24*time.Hour).Seconds())), // Session duration + 1 day buffer
 		csrf.TrustedOrigins(trustedOrigins),                               // Trust the frontend origin(s)
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Debug: log all relevant info
-			log.Printf("CSRF validation failed for %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
-			log.Printf("  X-CSRF-Token header: %s", r.Header.Get("X-CSRF-Token"))
-			log.Printf("  Cookie header: %s", r.Header.Get("Cookie"))
-			log.Printf("  Origin: %s", r.Header.Get("Origin"))
-			log.Printf("  Referer: %s", r.Header.Get("Referer"))
+			logger.Warn("CSRF validation failed",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote_addr", r.RemoteAddr,
+				"csrf_token", r.Header.Get("X-CSRF-Token"),
+				"origin", r.Header.Get("Origin"),
+				"referer", r.Header.Get("Referer"),
+			)
 			respondError(w, http.StatusForbidden, "CSRF token validation failed")
 		})),
 	)
@@ -359,7 +361,7 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// Static file serving (production mode when frontend is bundled with backend)
 	if staticDir != "" {
-		log.Printf("Serving static files from: %s", staticDir)
+		logger.Info("serving static files", "dir", staticDir)
 		// Serve static assets (JS, CSS, images, etc.)
 		r.Get("/*", s.serveSPA(staticDir))
 	}

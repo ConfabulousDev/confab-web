@@ -31,6 +31,9 @@ func init() {
 		Level: logLevel,
 	})
 	log = slog.New(handler)
+
+	// Set as default so any code using slog directly gets JSON output
+	slog.SetDefault(log)
 }
 
 // IsDebug returns true if debug logging is enabled
@@ -71,4 +74,26 @@ func Debug(msg string, args ...any) {
 // Warn logs a warning message with structured fields
 func Warn(msg string, args ...any) {
 	log.Warn(msg, args...)
+}
+
+// Fatal logs an error message and exits with status 1
+func Fatal(msg string, args ...any) {
+	log.Error(msg, args...)
+	os.Exit(1)
+}
+
+// SetOutputForTest redirects log output to a custom writer for testing.
+// Returns a cleanup function that restores the original output.
+// This should only be used in tests.
+func SetOutputForTest(w *os.File) func() {
+	originalHandler := log.Handler()
+	handler := slog.NewJSONHandler(w, &slog.HandlerOptions{
+		Level: logLevel,
+	})
+	log = slog.New(handler)
+	slog.SetDefault(log)
+	return func() {
+		log = slog.New(originalHandler)
+		slog.SetDefault(log)
+	}
 }

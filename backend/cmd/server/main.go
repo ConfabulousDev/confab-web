@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/email"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
@@ -26,14 +26,14 @@ func main() {
 	// See: migrate -database "$DATABASE_URL" -path internal/db/migrations up
 	database, err := db.Connect(config.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatal("failed to connect to database", "error", err)
 	}
 	defer database.Close()
 
 	// Initialize S3/MinIO storage
 	store, err := storage.NewS3Storage(config.S3Config)
 	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+		logger.Fatal("failed to initialize storage", "error", err)
 	}
 
 	// Initialize email service
@@ -43,7 +43,7 @@ func main() {
 		config.EmailConfig.FromName,
 	)
 	emailService := email.NewRateLimitedService(resendService, config.EmailConfig.RateLimitPerHour)
-	log.Printf("Email service configured with Resend (rate limit: %d/hour)", config.EmailConfig.RateLimitPerHour)
+	logger.Info("email service configured", "provider", "resend", "rate_limit_per_hour", config.EmailConfig.RateLimitPerHour)
 
 	// Create API server
 	server := api.NewServer(database, store, config.OAuthConfig, emailService)
@@ -60,9 +60,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("Starting Confab backend server on port %d", config.Port)
+		logger.Info("starting server", "port", config.Port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
+			logger.Fatal("server failed", "error", err)
 		}
 	}()
 
@@ -71,15 +71,15 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("shutting down server")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := httpServer.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		logger.Fatal("server forced to shutdown", "error", err)
 	}
 
-	log.Println("Server stopped")
+	logger.Info("server stopped")
 }
 
 type Config struct {
@@ -123,91 +123,91 @@ func loadConfig() Config {
 	// Validate required OAuth configuration
 	githubClientID := os.Getenv("GITHUB_CLIENT_ID")
 	if githubClientID == "" {
-		log.Fatal("GITHUB_CLIENT_ID is required")
+		logger.Fatal("missing required env var", "var", "GITHUB_CLIENT_ID")
 	}
 
 	githubClientSecret := os.Getenv("GITHUB_CLIENT_SECRET")
 	if githubClientSecret == "" {
-		log.Fatal("GITHUB_CLIENT_SECRET is required")
+		logger.Fatal("missing required env var", "var", "GITHUB_CLIENT_SECRET")
 	}
 
 	githubRedirectURL := os.Getenv("GITHUB_REDIRECT_URL")
 	if githubRedirectURL == "" {
-		log.Fatal("GITHUB_REDIRECT_URL is required")
+		logger.Fatal("missing required env var", "var", "GITHUB_REDIRECT_URL")
 	}
 
 	// Google OAuth configuration
 	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
 	if googleClientID == "" {
-		log.Fatal("GOOGLE_CLIENT_ID is required")
+		logger.Fatal("missing required env var", "var", "GOOGLE_CLIENT_ID")
 	}
 
 	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
 	if googleClientSecret == "" {
-		log.Fatal("GOOGLE_CLIENT_SECRET is required")
+		logger.Fatal("missing required env var", "var", "GOOGLE_CLIENT_SECRET")
 	}
 
 	googleRedirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
 	if googleRedirectURL == "" {
-		log.Fatal("GOOGLE_REDIRECT_URL is required")
+		logger.Fatal("missing required env var", "var", "GOOGLE_REDIRECT_URL")
 	}
 
 	// Validate required security configuration
 	csrfSecretKey := os.Getenv("CSRF_SECRET_KEY")
 	if csrfSecretKey == "" {
-		log.Fatal("CSRF_SECRET_KEY is required (must be at least 32 characters)")
+		logger.Fatal("missing required env var", "var", "CSRF_SECRET_KEY", "hint", "must be at least 32 characters")
 	}
 	if len(csrfSecretKey) < 32 {
-		log.Fatal("CSRF_SECRET_KEY must be at least 32 characters")
+		logger.Fatal("invalid env var", "var", "CSRF_SECRET_KEY", "error", "must be at least 32 characters")
 	}
 
 	// Validate required S3/storage configuration
 	s3Endpoint := os.Getenv("S3_ENDPOINT")
 	if s3Endpoint == "" {
-		log.Fatal("S3_ENDPOINT is required")
+		logger.Fatal("missing required env var", "var", "S3_ENDPOINT")
 	}
 
 	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 	if awsAccessKeyID == "" {
-		log.Fatal("AWS_ACCESS_KEY_ID is required")
+		logger.Fatal("missing required env var", "var", "AWS_ACCESS_KEY_ID")
 	}
 
 	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	if awsSecretAccessKey == "" {
-		log.Fatal("AWS_SECRET_ACCESS_KEY is required")
+		logger.Fatal("missing required env var", "var", "AWS_SECRET_ACCESS_KEY")
 	}
 
 	bucketName := os.Getenv("BUCKET_NAME")
 	if bucketName == "" {
-		log.Fatal("BUCKET_NAME is required")
+		logger.Fatal("missing required env var", "var", "BUCKET_NAME")
 	}
 
 	// Validate required database configuration
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		log.Fatal("DATABASE_URL is required")
+		logger.Fatal("missing required env var", "var", "DATABASE_URL")
 	}
 
 	// Validate required frontend configuration
 	frontendURL := os.Getenv("FRONTEND_URL")
 	if frontendURL == "" {
-		log.Fatal("FRONTEND_URL is required")
+		logger.Fatal("missing required env var", "var", "FRONTEND_URL")
 	}
 
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
-		log.Fatal("ALLOWED_ORIGINS is required (comma-separated list of allowed origins)")
+		logger.Fatal("missing required env var", "var", "ALLOWED_ORIGINS", "hint", "comma-separated list of allowed origins")
 	}
 
 	// Validate required email configuration
 	resendAPIKey := os.Getenv("RESEND_API_KEY")
 	if resendAPIKey == "" {
-		log.Fatal("RESEND_API_KEY is required")
+		logger.Fatal("missing required env var", "var", "RESEND_API_KEY")
 	}
 
 	emailFromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
 	if emailFromAddress == "" {
-		log.Fatal("EMAIL_FROM_ADDRESS is required")
+		logger.Fatal("missing required env var", "var", "EMAIL_FROM_ADDRESS")
 	}
 
 	emailFromName := os.Getenv("EMAIL_FROM_NAME")

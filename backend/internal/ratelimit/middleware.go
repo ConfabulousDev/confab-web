@@ -2,10 +2,10 @@ package ratelimit
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/ConfabulousDev/confab-web/internal/clientip"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
 // Middleware creates an HTTP middleware that applies rate limiting
@@ -18,7 +18,7 @@ func Middleware(limiter RateLimiter) func(http.Handler) http.Handler {
 
 			// Check rate limit
 			if !limiter.Allow(r.Context(), key) {
-				log.Printf("Rate limit exceeded for IP: %s, path: %s", key, r.URL.Path)
+				logger.Warn("rate limit exceeded", "key", key, "path", r.URL.Path)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -42,7 +42,7 @@ func MiddlewareWithKey(limiter RateLimiter, keyFunc func(*http.Request) string) 
 
 			// Check rate limit
 			if !limiter.Allow(r.Context(), key) {
-				log.Printf("Rate limit exceeded for key: %s, path: %s", key, r.URL.Path)
+				logger.Warn("rate limit exceeded", "key", key, "path", r.URL.Path)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -59,7 +59,7 @@ func HandlerFunc(limiter RateLimiter, handler http.HandlerFunc) http.HandlerFunc
 		key := clientip.FromRequest(r).RateLimitKey
 
 		if !limiter.Allow(r.Context(), key) {
-			log.Printf("Rate limit exceeded for IP: %s, path: %s", key, r.URL.Path)
+			logger.Warn("rate limit exceeded", "key", key, "path", r.URL.Path)
 			http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 			return
 		}
