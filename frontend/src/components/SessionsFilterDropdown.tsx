@@ -1,22 +1,30 @@
 import { useDropdown } from '@/hooks';
-import { FilterIcon, CheckIcon, GitHubIcon, BranchIcon, ComputerIcon, SearchIcon } from './icons';
+import { FilterIcon, CheckIcon, GitHubIcon, BranchIcon, ComputerIcon, SearchIcon, PRIcon, CommitIcon } from './icons';
 import styles from './SessionsFilterDropdown.module.css';
 
 interface SessionsFilterDropdownProps {
   repos: string[];
   branches: string[];
   hostnames: string[];
+  prs: string[];
+  commits: string[];
   selectedRepo: string | null;
   selectedBranch: string | null;
   selectedHostname: string | null;
+  selectedPR: string | null;
+  selectedCommit: string | null;
   repoCounts: Record<string, number>;
   branchCounts: Record<string, number>;
   hostnameCounts: Record<string, number>;
+  prCounts: Record<string, number>;
+  commitCounts: Record<string, number>;
   totalCount: number;
   searchQuery: string;
   onRepoClick: (repo: string | null) => void;
   onBranchClick: (branch: string | null) => void;
   onHostnameClick: (hostname: string | null) => void;
+  onPRClick: (pr: string | null) => void;
+  onCommitClick: (commit: string | null) => void;
   onSearchChange: (query: string) => void;
 }
 
@@ -24,27 +32,45 @@ function SessionsFilterDropdown({
   repos,
   branches,
   hostnames,
+  prs,
+  commits,
   selectedRepo,
   selectedBranch,
   selectedHostname,
+  selectedPR,
+  selectedCommit,
   repoCounts,
   branchCounts,
   hostnameCounts,
+  prCounts,
+  commitCounts,
   totalCount,
   searchQuery,
   onRepoClick,
   onBranchClick,
   onHostnameClick,
+  onPRClick,
+  onCommitClick,
   onSearchChange,
 }: SessionsFilterDropdownProps) {
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
   // Check if any filters are active
-  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null || selectedHostname !== null || searchQuery !== '';
+  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null || selectedHostname !== null || selectedPR !== null || selectedCommit !== null || searchQuery !== '';
 
   // Get visible branches (only show branches with sessions when a repo is selected)
   const visibleBranches = selectedRepo
     ? branches.filter((branch) => (branchCounts[branch] ?? 0) > 0)
+    : [];
+
+  // Get visible PRs (only show when a repo is selected and PRs have matching sessions)
+  const visiblePRs = selectedRepo
+    ? prs.filter((pr) => (prCounts[pr] ?? 0) > 0)
+    : [];
+
+  // Get visible commits (only show when a repo is selected and commits have matching sessions)
+  const visibleCommits = selectedRepo
+    ? commits.filter((commit) => (commitCounts[commit] ?? 0) > 0)
     : [];
 
   return (
@@ -78,10 +104,15 @@ function SessionsFilterDropdown({
 
             {/* All Sessions option */}
             <button
-              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname ? styles.selected : ''}`}
-              onClick={() => { onRepoClick(null); onHostnameClick(null); }}
+              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname && !selectedPR && !selectedCommit ? styles.selected : ''}`}
+              onClick={() => {
+                onRepoClick(null);
+                onHostnameClick(null);
+                onPRClick(null);
+                onCommitClick(null);
+              }}
             >
-              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname ? styles.checked : ''}`}>
+              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname && !selectedPR && !selectedCommit ? styles.checked : ''}`}>
                 {CheckIcon}
               </span>
               <span className={styles.filterLabel}>All Sessions</span>
@@ -127,6 +158,50 @@ function SessionsFilterDropdown({
                     <span className={styles.iconWrapper}>{BranchIcon}</span>
                     <span className={styles.filterLabel}>{branch}</span>
                     <span className={styles.filterCount}>{branchCounts[branch] || 0}</span>
+                  </button>
+                ))}
+              </>
+            )}
+
+            {/* PRs section - only show when a repo is selected */}
+            {visiblePRs.length > 0 && (
+              <>
+                <div className={styles.sectionDivider} />
+                <div className={styles.sectionLabel}>Pull Requests</div>
+                {visiblePRs.map((pr) => (
+                  <button
+                    key={pr}
+                    className={`${styles.filterItem} ${selectedPR === pr ? styles.selected : ''}`}
+                    onClick={() => onPRClick(selectedPR === pr ? null : pr)}
+                  >
+                    <span className={`${styles.checkbox} ${selectedPR === pr ? styles.checked : ''}`}>
+                      {CheckIcon}
+                    </span>
+                    <span className={styles.iconWrapper}>{PRIcon}</span>
+                    <span className={styles.filterLabel}>#{pr}</span>
+                    <span className={styles.filterCount}>{prCounts[pr] || 0}</span>
+                  </button>
+                ))}
+              </>
+            )}
+
+            {/* Commits section - only show when a repo is selected */}
+            {visibleCommits.length > 0 && (
+              <>
+                <div className={styles.sectionDivider} />
+                <div className={styles.sectionLabel}>Commits</div>
+                {visibleCommits.map((commit) => (
+                  <button
+                    key={commit}
+                    className={`${styles.filterItem} ${selectedCommit === commit ? styles.selected : ''}`}
+                    onClick={() => onCommitClick(selectedCommit === commit ? null : commit)}
+                  >
+                    <span className={`${styles.checkbox} ${selectedCommit === commit ? styles.checked : ''}`}>
+                      {CheckIcon}
+                    </span>
+                    <span className={styles.iconWrapper}>{CommitIcon}</span>
+                    <span className={styles.filterLabel}>{commit.slice(0, 7)}</span>
+                    <span className={styles.filterCount}>{commitCounts[commit] || 0}</span>
                   </button>
                 ))}
               </>

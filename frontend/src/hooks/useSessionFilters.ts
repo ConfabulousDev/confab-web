@@ -9,6 +9,8 @@ interface SessionFilters {
   selectedRepo: string | null;
   selectedBranch: string | null;
   selectedHostname: string | null;
+  selectedPR: string | null;
+  selectedCommit: string | null;
   searchQuery: string;
   sortColumn: SortColumn;
   sortDirection: SortDirection;
@@ -20,6 +22,8 @@ interface SessionFiltersActions {
   setSelectedRepo: (value: string | null) => void;
   setSelectedBranch: (value: string | null) => void;
   setSelectedHostname: (value: string | null) => void;
+  setSelectedPR: (value: string | null) => void;
+  setSelectedCommit: (value: string | null) => void;
   setSearchQuery: (value: string) => void;
   setSortColumn: (value: SortColumn) => void;
   setSortDirection: (value: SortDirection) => void;
@@ -34,6 +38,8 @@ const PARAM_KEYS = {
   repo: 'repo',
   branch: 'branch',
   hostname: 'hostname',
+  pr: 'pr',
+  commit: 'commit',
   q: 'q',
   sort: 'sort',
   dir: 'dir',
@@ -61,6 +67,8 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     const repoParam = searchParams.get(PARAM_KEYS.repo);
     const branchParam = searchParams.get(PARAM_KEYS.branch);
     const hostnameParam = searchParams.get(PARAM_KEYS.hostname);
+    const prParam = searchParams.get(PARAM_KEYS.pr);
+    const commitParam = searchParams.get(PARAM_KEYS.commit);
     const queryParam = searchParams.get(PARAM_KEYS.q);
     const sortParam = searchParams.get(PARAM_KEYS.sort);
     const dirParam = searchParams.get(PARAM_KEYS.dir);
@@ -70,6 +78,8 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
       selectedRepo: repoParam,
       selectedBranch: branchParam,
       selectedHostname: hostnameParam,
+      selectedPR: prParam,
+      selectedCommit: commitParam,
       searchQuery: queryParam || '',
       sortColumn: isValidSortColumn(sortParam) ? sortParam : DEFAULT_SORT_COLUMN,
       sortDirection: isValidSortDirection(dirParam) ? dirParam : DEFAULT_SORT_DIRECTION,
@@ -105,6 +115,8 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
         [PARAM_KEYS.repo]: null,
         [PARAM_KEYS.branch]: null,
         [PARAM_KEYS.hostname]: null,
+        [PARAM_KEYS.pr]: null,
+        [PARAM_KEYS.commit]: null,
         [PARAM_KEYS.q]: null,
       });
     },
@@ -115,7 +127,10 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     (value: string | null) => {
       updateParams({
         [PARAM_KEYS.repo]: value,
-        [PARAM_KEYS.branch]: null, // Reset branch when repo changes
+        // Reset repo-scoped filters when repo changes
+        [PARAM_KEYS.branch]: null,
+        [PARAM_KEYS.pr]: null,
+        [PARAM_KEYS.commit]: null,
       });
     },
     [updateParams]
@@ -131,6 +146,20 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
   const setSelectedHostname = useCallback(
     (value: string | null) => {
       updateParams({ [PARAM_KEYS.hostname]: value });
+    },
+    [updateParams]
+  );
+
+  const setSelectedPR = useCallback(
+    (value: string | null) => {
+      updateParams({ [PARAM_KEYS.pr]: value });
+    },
+    [updateParams]
+  );
+
+  const setSelectedCommit = useCallback(
+    (value: string | null) => {
+      updateParams({ [PARAM_KEYS.commit]: value });
     },
     [updateParams]
   );
@@ -182,7 +211,10 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     (repo: string | null) => {
       updateParams({
         [PARAM_KEYS.repo]: repo,
-        [PARAM_KEYS.branch]: null, // Reset branch when repo changes
+        // Reset repo-scoped filters when repo changes
+        [PARAM_KEYS.branch]: null,
+        [PARAM_KEYS.pr]: null,
+        [PARAM_KEYS.commit]: null,
       });
     },
     [updateParams]
@@ -205,6 +237,8 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     setSelectedRepo,
     setSelectedBranch,
     setSelectedHostname,
+    setSelectedPR,
+    setSelectedCommit,
     setSearchQuery,
     setSortColumn,
     setSortDirection,
