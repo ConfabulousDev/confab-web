@@ -13,7 +13,7 @@ import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, ClaudeCodeIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
 function SessionsPage() {
@@ -277,6 +277,11 @@ function SessionsPage() {
                                 #{pr}
                               </Chip>
                             ))}
+                            {session.github_commits?.[0] && (
+                              <Chip icon={CommitIcon} variant="purple">
+                                {session.github_commits[0].slice(0, 7)}
+                              </Chip>
+                            )}
                             {!showSharedWithMe && session.hostname && (
                               <Chip icon={ComputerIcon} variant="green">
                                 {session.hostname}

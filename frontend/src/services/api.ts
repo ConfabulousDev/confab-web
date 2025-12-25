@@ -454,4 +454,11 @@ export const githubLinksAPI = {
    */
   delete: (sessionId: string, linkId: number): Promise<void> =>
     api.deleteVoid(`/sessions/${sessionId}/github-links/${linkId}`),
+
+  /**
+   * Delete all GitHub links of a given type for a session.
+   * Requires session ownership.
+   */
+  deleteByType: (sessionId: string, linkType: 'commit' | 'pull_request'): Promise<void> =>
+    api.deleteVoid(`/sessions/${sessionId}/github-links?type=${linkType}`),
 };

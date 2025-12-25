@@ -294,3 +294,72 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+
+// HandleDeleteGitHubLinksByType deletes all GitHub links of a given type for a session
+func HandleDeleteGitHubLinksByType(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get user ID from context (web auth only, no API key)
+		userID, ok := auth.GetUserID(r.Context())
+		if !ok {
+			respondError(w, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+
+		// Get session ID from URL
+		sessionID := chi.URLParam(r, "id")
+		if sessionID == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
+			return
+		}
+
+		// Get link type from query parameter
+		linkTypeStr := r.URL.Query().Get("type")
+		if linkTypeStr == "" {
+			respondError(w, http.StatusBadRequest, "type query parameter is required")
+			return
+		}
+
+		var linkType models.GitHubLinkType
+		switch linkTypeStr {
+		case "commit":
+			linkType = models.GitHubLinkTypeCommit
+		case "pull_request":
+			linkType = models.GitHubLinkTypePullRequest
+		default:
+			respondError(w, http.StatusBadRequest, "type must be 'commit' or 'pull_request'")
+			return
+		}
+
+		// Create context with timeout
+		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
+
+		// Verify user owns the session
+		_, err := database.GetSessionDetail(ctx, sessionID, userID)
+		if err != nil {
+			if errors.Is(err, db.ErrSessionNotFound) {
+				respondError(w, http.StatusNotFound, "Session not found")
+				return
+			}
+			logger.Error("Failed to verify session ownership", "error", err, "user_id", userID, "session_id", sessionID)
+			respondError(w, http.StatusInternalServerError, "Failed to verify session")
+			return
+		}
+
+		// Delete all links of the given type
+		deleted, err := database.DeleteGitHubLinksByType(ctx, sessionID, linkType)
+		if err != nil {
+			logger.Error("Failed to delete GitHub links by type", "error", err, "session_id", sessionID, "link_type", linkType)
+			respondError(w, http.StatusInternalServerError, "Failed to delete GitHub links")
+			return
+		}
+
+		logger.Info("GitHub links deleted by type",
+			"user_id", userID,
+			"session_id", sessionID,
+			"link_type", linkType,
+			"count", deleted)
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

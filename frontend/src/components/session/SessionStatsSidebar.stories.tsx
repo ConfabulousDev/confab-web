@@ -32,6 +32,46 @@ const mockGitHubLinks: GitHubLink[] = [
   },
 ];
 
+// Sample commit links for stories
+const mockCommitLinks: GitHubLink[] = [
+  {
+    id: 3,
+    session_id: 'test-session',
+    link_type: 'commit',
+    url: 'https://github.com/owner/repo/commit/abc1234567890def',
+    owner: 'owner',
+    repo: 'repo',
+    ref: 'abc1234567890def',
+    title: null,
+    source: 'cli_hook',
+    created_at: '2025-01-15T11:00:00Z', // Latest
+  },
+  {
+    id: 4,
+    session_id: 'test-session',
+    link_type: 'commit',
+    url: 'https://github.com/owner/repo/commit/def5678901234abc',
+    owner: 'owner',
+    repo: 'repo',
+    ref: 'def5678901234abc',
+    title: null,
+    source: 'cli_hook',
+    created_at: '2025-01-15T10:00:00Z',
+  },
+  {
+    id: 5,
+    session_id: 'test-session',
+    link_type: 'commit',
+    url: 'https://github.com/owner/repo/commit/789abcdef0123456',
+    owner: 'owner',
+    repo: 'repo',
+    ref: '789abcdef0123456',
+    title: null,
+    source: 'cli_hook',
+    created_at: '2025-01-15T09:00:00Z',
+  },
+];
+
 // Helper to create a minimal assistant message with token usage
 function createAssistantMessage(
   uuid: string,
@@ -229,5 +269,37 @@ export const WithSinglePR: Story = {
     messages: sampleMessages,
     isOwner: true,
     initialGithubLinks: mockGitHubLinks.slice(0, 1),
+  },
+};
+
+export const WithCommits: Story = {
+  args: {
+    messages: sampleMessages,
+    isOwner: true,
+    initialGithubLinks: mockCommitLinks,
+  },
+};
+
+export const WithCommitsViewOnly: Story = {
+  args: {
+    messages: sampleMessages,
+    isOwner: false,
+    initialGithubLinks: mockCommitLinks,
+  },
+};
+
+export const WithPRsAndCommits: Story = {
+  args: {
+    messages: sampleMessages,
+    isOwner: true,
+    initialGithubLinks: [...mockGitHubLinks, ...mockCommitLinks],
+  },
+};
+
+export const WithSingleCommit: Story = {
+  args: {
+    messages: sampleMessages,
+    isOwner: true,
+    initialGithubLinks: mockCommitLinks.slice(0, 1),
   },
 };

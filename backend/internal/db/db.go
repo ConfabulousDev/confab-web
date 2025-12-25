@@ -550,6 +550,7 @@ type SessionListItem struct {
 	GitRepoURL       *string    `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
 	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
 	GitHubPRs        []string   `json:"github_prs,omitempty"`         // Linked GitHub PR refs (e.g., ["123", "456"])
+	GitHubCommits    []string   `json:"github_commits,omitempty"`     // Linked GitHub commit SHAs (latest first)
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
@@ -583,6 +584,11 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					FROM session_github_links
 					WHERE session_id = s.id AND link_type = 'pull_request'
 				), ARRAY[]::text[]) as github_prs,
+				COALESCE((
+					SELECT array_agg(ref ORDER BY created_at DESC)
+					FROM session_github_links
+					WHERE session_id = s.id AND link_type = 'commit'
+				), ARRAY[]::text[]) as github_commits,
 				true as is_owner,
 				'owner' as access_type,
 				NULL::text as shared_by_email,
@@ -608,6 +614,13 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 				WHERE link_type = 'pull_request'
 				GROUP BY session_id
 			),
+			-- GitHub commits for each session (latest first)
+			github_commit_refs AS (
+				SELECT session_id, array_agg(ref ORDER BY created_at DESC) as commits
+				FROM session_github_links
+				WHERE link_type = 'commit'
+				GROUP BY session_id
+			),
 			-- User's own sessions
 			owned_sessions AS (
 				SELECT
@@ -624,6 +637,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					s.git_info->>'repo_url' as git_repo_url,
 					s.git_info->>'branch' as git_branch,
 					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
+					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 					true as is_owner,
 					'owner' as access_type,
 					NULL::text as shared_by_email,
@@ -636,6 +650,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					GROUP BY session_id
 				) sf_stats ON s.id = sf_stats.session_id
 				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
+				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
 				WHERE s.user_id = $1
 			),
 			-- Sessions shared with user (via session_share_recipients by user_id)
@@ -655,6 +670,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					s.git_info->>'repo_url' as git_repo_url,
 					s.git_info->>'branch' as git_branch,
 					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
+					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 					false as is_owner,
 					'private_share' as access_type,
 					u.email as shared_by_email,
@@ -670,6 +686,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					GROUP BY session_id
 				) sf_stats ON s.id = sf_stats.session_id
 				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
+				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
 				WHERE sr.user_id = $1
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
@@ -692,6 +709,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					s.git_info->>'repo_url' as git_repo_url,
 					s.git_info->>'branch' as git_branch,
 					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
+					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 					false as is_owner,
 					'system_share' as access_type,
 					u.email as shared_by_email,
@@ -707,6 +725,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					GROUP BY session_id
 				) sf_stats ON s.id = sf_stats.session_id
 				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
+				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
 				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
 				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
@@ -742,8 +761,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 	sessions := make([]SessionListItem, 0)
 	for rows.Next() {
 		var session SessionListItem
-		var gitRepoURL *string      // Full URL from git_info JSONB
-		var githubPRs pq.StringArray // GitHub PR refs as PostgreSQL text array
+		var gitRepoURL *string         // Full URL from git_info JSONB
+		var githubPRs pq.StringArray   // GitHub PR refs as PostgreSQL text array
+		var githubCommits pq.StringArray // GitHub commit SHAs as PostgreSQL text array
 		if err := rows.Scan(
 			&session.ID,
 			&session.ExternalID,
@@ -758,6 +778,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 			&gitRepoURL,
 			&session.GitBranch,
 			&githubPRs,
+			&githubCommits,
 			&session.IsOwner,
 			&session.AccessType,
 			&session.SharedByEmail,
@@ -776,6 +797,9 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 		// Convert pq.StringArray to []string (only if non-empty)
 		if len(githubPRs) > 0 {
 			session.GitHubPRs = []string(githubPRs)
+		}
+		if len(githubCommits) > 0 {
+			session.GitHubCommits = []string(githubCommits)
 		}
 
 		sessions = append(sessions, session)
@@ -2095,6 +2119,25 @@ func (db *DB) DeleteGitHubLink(ctx context.Context, linkID int64) error {
 	}
 
 	return nil
+}
+
+// DeleteGitHubLinksByType deletes all GitHub links of a given type for a session.
+// Returns the number of links deleted.
+func (db *DB) DeleteGitHubLinksByType(ctx context.Context, sessionID string, linkType models.GitHubLinkType) (int64, error) {
+	result, err := db.conn.ExecContext(ctx,
+		`DELETE FROM session_github_links WHERE session_id = $1 AND link_type = $2`,
+		sessionID, linkType,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete github links by type: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	return rowsAffected, nil
 }
 
 // GetGitHubLinkByID returns a GitHub link by ID.

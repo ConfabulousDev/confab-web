@@ -48,6 +48,12 @@ const PRIcon = (
   </svg>
 );
 
+const CommitIcon = (
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M11.93 8.5a4.002 4.002 0 0 1-7.86 0H.75a.75.75 0 0 1 0-1.5h3.32a4.002 4.002 0 0 1 7.86 0h3.32a.75.75 0 0 1 0 1.5Zm-1.43-.75a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0Z"/>
+  </svg>
+);
+
 const DeleteIcon = (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M18 6L6 18M6 6l12 12"/>
@@ -74,6 +80,7 @@ function SessionStatsSidebar({ messages, loading = false, sessionId, isOwner = f
   const [newUrl, setNewUrl] = useState('');
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [deletingCommits, setDeletingCommits] = useState(false);
 
   const fetchLinks = useCallback(async () => {
     // Skip API fetch if initialGithubLinks was provided
@@ -128,6 +135,37 @@ function SessionStatsSidebar({ messages, loading = false, sessionId, isOwner = f
       setLinksError('Failed to delete');
     } finally {
       setDeleting(null);
+    }
+  };
+
+  // Get all commit links sorted by created_at DESC (latest first)
+  const commitLinks = useMemo(() => {
+    return links
+      .filter((link) => link.link_type === 'commit')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [links]);
+
+  // Get the latest commit (first one since sorted DESC)
+  const latestCommit = commitLinks.length > 0 ? commitLinks[0] : null;
+
+  const handleDeleteAllCommits = async () => {
+    if (!sessionId || commitLinks.length === 0) return;
+
+    // Build confirmation message with all short SHAs
+    const shortShas = commitLinks.map((link) => link.ref.slice(0, 7));
+    const message = `Remove all ${commitLinks.length} commit link${commitLinks.length > 1 ? 's' : ''}?\n\n${shortShas.join('\n')}`;
+
+    if (!window.confirm(message)) return;
+
+    try {
+      setDeletingCommits(true);
+      await githubLinksAPI.deleteByType(sessionId, 'commit');
+      await fetchLinks();
+    } catch (err) {
+      console.error('Failed to delete commit links:', err);
+      setLinksError('Failed to delete');
+    } finally {
+      setDeletingCommits(false);
     }
   };
 
@@ -205,33 +243,65 @@ function SessionStatsSidebar({ messages, loading = false, sessionId, isOwner = f
                 <span className={styles.statLabel}>{spinner}</span>
               </div>
             ) : (
-              links.filter((link) => link.link_type === 'pull_request').map((link) => (
-                <div key={link.id} className={styles.linkRow}>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={styles.linkContent}
-                    title={link.title || `${link.owner}/${link.repo}`}
-                  >
-                    <span className={styles.statIcon}>
-                      {PRIcon}
-                    </span>
-                    <span className={styles.linkRef}>{formatRef(link)}</span>
-                    <span className={styles.linkRepo}>{link.owner}/{link.repo}</span>
-                  </a>
-                  {isOwner && (
-                    <button
-                      className={styles.deleteButton}
-                      onClick={() => handleDeleteLink(link.id)}
-                      disabled={deleting === link.id}
-                      title="Remove link"
+              <>
+                {/* PR Links */}
+                {links.filter((link) => link.link_type === 'pull_request').map((link) => (
+                  <div key={link.id} className={styles.linkRow}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.linkContent}
+                      title={link.title || `${link.owner}/${link.repo}`}
                     >
-                      {DeleteIcon}
-                    </button>
-                  )}
-                </div>
-              ))
+                      <span className={styles.statIcon}>
+                        {PRIcon}
+                      </span>
+                      <span className={styles.linkRef}>{formatRef(link)}</span>
+                      <span className={styles.linkRepo}>{link.owner}/{link.repo}</span>
+                    </a>
+                    {isOwner && (
+                      <button
+                        className={styles.deleteButton}
+                        onClick={() => handleDeleteLink(link.id)}
+                        disabled={deleting === link.id}
+                        title="Remove link"
+                      >
+                        {DeleteIcon}
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {/* Latest Commit Link */}
+                {latestCommit && (
+                  <div className={styles.linkRow}>
+                    <a
+                      href={latestCommit.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.linkContent}
+                      title={`${latestCommit.owner}/${latestCommit.repo}`}
+                    >
+                      <span className={styles.statIcon}>
+                        {CommitIcon}
+                      </span>
+                      <span className={styles.linkRef}>{formatRef(latestCommit)}</span>
+                      <span className={styles.linkRepo}>{latestCommit.owner}/{latestCommit.repo}</span>
+                    </a>
+                    {isOwner && (
+                      <button
+                        className={styles.deleteButton}
+                        onClick={handleDeleteAllCommits}
+                        disabled={deletingCommits}
+                        title={`Remove ${commitLinks.length} commit link${commitLinks.length > 1 ? 's' : ''}`}
+                      >
+                        {DeleteIcon}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

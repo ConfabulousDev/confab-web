@@ -340,6 +340,8 @@ Supports conditional requests for efficient polling:
     "git_repo": "org/repo",
     "git_repo_url": "https://github.com/org/repo",
     "git_branch": "main",
+    "github_prs": ["123", "456"],
+    "github_commits": ["abc1234", "def5678"],
     "is_owner": true,
     "access_type": "owner",
     "shared_by_email": null,
@@ -352,6 +354,8 @@ Supports conditional requests for efficient polling:
 **Notes:**
 - `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
 - `hostname` and `username` are **owner-only fields** for privacy. They are returned as `null` for shared sessions (`is_owner: false`).
+- `github_prs` contains linked PR refs (ordered by creation time ascending).
+- `github_commits` contains linked commit SHAs (ordered by creation time descending, so latest is first).
 
 #### Get Session Detail (Canonical Access)
 ```
@@ -626,6 +630,23 @@ Requires session ownership (web session auth only, no API key).
 
 **Errors:**
 - `404` - Link not found or not session owner
+
+#### Delete GitHub Links by Type
+```
+DELETE /api/v1/sessions/{id}/github-links?type=commit
+X-CSRF-Token: <token>
+```
+
+Deletes all GitHub links of the specified type for a session. Requires session ownership (web session auth only, no API key).
+
+**Query Parameters:**
+- `type` (required): Link type to delete. Must be `commit` or `pull_request`.
+
+**Response:** `204 No Content`
+
+**Errors:**
+- `400` - Missing or invalid type parameter
+- `404` - Session not found or not session owner
 
 ---
 
