@@ -16,6 +16,9 @@ import Chip from '@/components/Chip';
 import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
+// Strip .git suffix from repo URLs for clean GitHub links
+const cleanRepoUrl = (url: string) => url.replace(/\.git$/, '');
+
 function SessionsPage() {
   useDocumentTitle('Sessions');
   const navigate = useNavigate();
@@ -324,7 +327,7 @@ function SessionsPage() {
                               <Chip
                                 icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
                                 variant="neutral"
-                                copyValue={session.git_repo_url || session.git_repo}
+                                copyValue={session.git_repo_url ? cleanRepoUrl(session.git_repo_url) : session.git_repo}
                               >
                                 {session.git_repo}
                               </Chip>
@@ -333,7 +336,7 @@ function SessionsPage() {
                               <Chip
                                 icon={BranchIcon}
                                 variant="blue"
-                                copyValue={session.git_repo_url ? `${session.git_repo_url}/tree/${session.git_branch}` : session.git_branch}
+                                copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/tree/${session.git_branch}` : session.git_branch}
                               >
                                 {session.git_branch}
                               </Chip>
@@ -343,7 +346,7 @@ function SessionsPage() {
                                 key={pr}
                                 icon={PRIcon}
                                 variant="purple"
-                                copyValue={session.git_repo_url ? `${session.git_repo_url}/pull/${pr}` : pr}
+                                copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/pull/${pr}` : pr}
                               >
                                 #{pr}
                               </Chip>
@@ -352,7 +355,7 @@ function SessionsPage() {
                               <Chip
                                 icon={CommitIcon}
                                 variant="purple"
-                                copyValue={session.git_repo_url ? `${session.git_repo_url}/commit/${session.github_commits[0]}` : session.github_commits[0]}
+                                copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/commit/${session.github_commits[0]}` : session.github_commits[0]}
                               >
                                 {session.github_commits[0].slice(0, 7)}
                               </Chip>
