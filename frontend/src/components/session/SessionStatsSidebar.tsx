@@ -1,11 +1,14 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import type { TranscriptLine } from '@/types';
-import { useSpinner } from '@/hooks';
+import { useSpinner, useVisibility } from '@/hooks';
 import { calculateTokenStats, calculateEstimatedCost, formatTokenCount, formatCost } from '@/utils/tokenStats';
 import { calculateCompactionStats, formatResponseTime } from '@/utils/compactionStats';
 import { githubLinksAPI, type GitHubLink } from '@/services/api';
 import PageSidebar from '../PageSidebar';
 import styles from './SessionStatsSidebar.module.css';
+
+// Polling interval for GitHub links (60 seconds)
+const GITHUB_LINKS_POLL_INTERVAL_MS = 60000;
 
 interface SessionStatsSidebarProps {
   messages: TranscriptLine[];
@@ -71,6 +74,7 @@ function SessionStatsSidebar({ messages, loading = false, sessionId, isOwner = f
   const estimatedCost = useMemo(() => calculateEstimatedCost(messages), [messages]);
   const compactionStats = useMemo(() => calculateCompactionStats(messages), [messages]);
   const spinner = useSpinner(loading);
+  const isVisible = useVisibility();
 
   // GitHub links state - use initialGithubLinks if provided (for Storybook)
   const [links, setLinks] = useState<GitHubLink[]>(initialGithubLinks ?? []);
@@ -82,25 +86,39 @@ function SessionStatsSidebar({ messages, loading = false, sessionId, isOwner = f
   const [deleting, setDeleting] = useState<number | null>(null);
   const [deletingCommits, setDeletingCommits] = useState(false);
 
-  const fetchLinks = useCallback(async () => {
+  const fetchLinks = useCallback(async (showLoading = true) => {
     // Skip API fetch if initialGithubLinks was provided
     if (!sessionId || initialGithubLinks !== undefined) return;
     try {
-      setLinksLoading(true);
+      if (showLoading) setLinksLoading(true);
       const response = await githubLinksAPI.list(sessionId);
       setLinks(response.links);
       setLinksError(null);
     } catch (err) {
-      console.error('Failed to fetch GitHub links:', err);
-      setLinksError('Failed to load');
+      // Only show error on initial load, not during polling
+      if (showLoading) {
+        console.error('Failed to fetch GitHub links:', err);
+        setLinksError('Failed to load');
+      } else {
+        console.warn('Failed to poll GitHub links:', err);
+      }
     } finally {
-      setLinksLoading(false);
+      if (showLoading) setLinksLoading(false);
     }
   }, [sessionId, initialGithubLinks]);
 
   useEffect(() => {
     fetchLinks();
   }, [fetchLinks]);
+
+  // Poll for GitHub links when tab is visible
+  useEffect(() => {
+    if (!sessionId || initialGithubLinks !== undefined || !isVisible) return;
+
+    const pollLinks = () => fetchLinks(false);
+    const intervalId = setInterval(pollLinks, GITHUB_LINKS_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [sessionId, initialGithubLinks, isVisible, fetchLinks]);
 
   const handleAddLink = async (e: React.FormEvent) => {
     e.preventDefault();
