@@ -10,76 +10,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 )
 
-func TestGetRealClientIP(t *testing.T) {
-	tests := []struct {
-		name       string
-		remoteAddr string
-		headers    map[string]string
-		expected   string
-	}{
-		{
-			name:       "Fly-Client-IP takes priority",
-			remoteAddr: "172.16.29.234:54686",
-			headers: map[string]string{
-				"Fly-Client-IP": "203.0.113.45",
-			},
-			expected: "203.0.113.45",
-		},
-		{
-			name:       "Falls back to RemoteAddr when no Fly header",
-			remoteAddr: "192.168.1.100:12345",
-			headers:    map[string]string{},
-			expected:   "192.168.1.100",
-		},
-		{
-			name:       "Falls back to RemoteAddr when Fly-Client-IP is empty",
-			remoteAddr: "192.168.1.100:12345",
-			headers: map[string]string{
-				"Fly-Client-IP": "",
-			},
-			expected: "192.168.1.100",
-		},
-		{
-			name:       "Handles IPv6 in Fly-Client-IP",
-			remoteAddr: "172.16.0.1:8080",
-			headers: map[string]string{
-				"Fly-Client-IP": "2001:db8::1",
-			},
-			expected: "2001:db8::1",
-		},
-		{
-			name:       "Handles IPv6 RemoteAddr fallback",
-			remoteAddr: "[2001:db8::1]:8080",
-			headers:    map[string]string{},
-			expected:   "2001:db8::1",
-		},
-		{
-			name:       "Trims whitespace from Fly-Client-IP",
-			remoteAddr: "172.16.0.1:8080",
-			headers: map[string]string{
-				"Fly-Client-IP": "  203.0.113.45  ",
-			},
-			expected: "203.0.113.45",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/test", nil)
-			req.RemoteAddr = tt.remoteAddr
-
-			for key, value := range tt.headers {
-				req.Header.Set(key, value)
-			}
-
-			result := getRealClientIP(req)
-			if result != tt.expected {
-				t.Errorf("getRealClientIP() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
+// wrapWithClientIP wraps a handler with clientip.Middleware for tests
+// This simulates the production middleware chain where clientip runs before FlyLogger
+func wrapWithClientIP(h http.Handler) http.Handler {
+	return clientip.Middleware(h)
 }
 
 func TestFlyLoggerMiddleware_LogsCorrectClientIP(t *testing.T) {
@@ -94,8 +32,9 @@ func TestFlyLoggerMiddleware_LogsCorrectClientIP(t *testing.T) {
 		w.Write([]byte("OK"))
 	})
 
-	// Wrap with FlyLogger
-	wrapped := FlyLogger(handler)
+	// Wrap with clientip.Middleware (sets context) then FlyLogger (reads from context)
+	// This matches the production middleware order
+	wrapped := wrapWithClientIP(FlyLogger(handler))
 
 	// Create request with Fly headers
 	req := httptest.NewRequest("GET", "/api/v1/sessions", nil)
@@ -365,32 +304,6 @@ func TestResponseWriter_WriteWithoutExplicitStatus(t *testing.T) {
 	// Should show 200 status (implicit)
 	if !strings.Contains(logOutput, "200") {
 		t.Errorf("Log should contain implicit 200 status, got: %s", logOutput)
-	}
-}
-
-// Test that extractIPFromAddr handles edge cases
-func TestExtractIPFromAddr(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"192.168.1.1:8080", "192.168.1.1"},
-		{"192.168.1.1", "192.168.1.1"},
-		{"[2001:db8::1]:8080", "2001:db8::1"},
-		{"2001:db8::1", "2001:db8::1"},
-		{"[::1]:80", "::1"},
-		{"::1", "::1"},
-		{"127.0.0.1:443", "127.0.0.1"},
-		{"", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := extractIPFromAddr(tt.input)
-			if result != tt.expected {
-				t.Errorf("extractIPFromAddr(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
 	}
 }
 
@@ -770,9 +683,9 @@ func TestFlyLoggerMiddleware_SanitizesLogInjection(t *testing.T) {
 	}
 
 	// The malicious content is still in the log (sanitized), but as part of err= field
-	// not as a separate log entry. Verify it's contained within brackets.
-	if !strings.Contains(logOutput, "[") || !strings.Contains(logOutput, "err=") {
-		t.Errorf("Should contain error in bracketed section: %q", logOutput)
+	// not as a separate log entry. Verify it's in the k=v section after |.
+	if !strings.Contains(logOutput, " | ") || !strings.Contains(logOutput, "err=") {
+		t.Errorf("Should contain error in k=v section after |: %q", logOutput)
 	}
 
 	// Verify the real request path is logged, not the injected one at the start

@@ -1,12 +1,18 @@
 package ratelimit
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 )
 
-func TestGetClientIP(t *testing.T) {
+// Note: IP extraction logic is now tested in internal/clientip package.
+// These tests verify that the rate limiter correctly uses clientip.FromRequest.
+
+func TestRateLimiter_UsesClientIPFromContext(t *testing.T) {
 	tests := []struct {
 		name             string
 		remoteAddr       string
@@ -41,28 +47,6 @@ func TestGetClientIP(t *testing.T) {
 			description:      "Should include RemoteAddr, CF-Connecting-IP, and first X-Forwarded-For",
 		},
 		{
-			name:       "Nginx deployment",
-			remoteAddr: "10.1.0.50:9000",
-			headers: map[string]string{
-				"X-Real-IP":       "203.0.113.100",
-				"X-Forwarded-For": "203.0.113.100, 10.1.0.50",
-			},
-			expectedContains: []string{"10.1.0.50", "203.0.113.100"},
-			description:      "Should include RemoteAddr, X-Real-IP, and first X-Forwarded-For",
-		},
-		{
-			name:       "Multiple proxies - all headers",
-			remoteAddr: "10.0.0.1:443",
-			headers: map[string]string{
-				"Fly-Client-IP":    "203.0.113.50",
-				"CF-Connecting-IP": "203.0.113.50",
-				"X-Real-IP":        "203.0.113.50",
-				"X-Forwarded-For":  "203.0.113.50, 172.16.0.1, 10.0.0.1",
-			},
-			expectedContains: []string{"10.0.0.1", "203.0.113.50"},
-			description:      "Should deduplicate same IPs from different headers",
-		},
-		{
 			name:       "Spoofing attempt - fake X-Forwarded-For",
 			remoteAddr: "192.0.2.10:5000",
 			headers: map[string]string{
@@ -71,15 +55,6 @@ func TestGetClientIP(t *testing.T) {
 			},
 			expectedContains: []string{"192.0.2.10", "1.2.3.4"},
 			description:      "Should include spoofed IP but also trusted RemoteAddr",
-		},
-		{
-			name:       "IPv6 connection",
-			remoteAddr: "[2001:db8::1]:8080",
-			headers: map[string]string{
-				"Fly-Client-IP": "2001:db8::1",
-			},
-			expectedContains: []string{"2001:db8::1"},
-			description:      "Should handle IPv6 addresses",
 		},
 	}
 
@@ -92,53 +67,68 @@ func TestGetClientIP(t *testing.T) {
 				req.Header.Set(key, value)
 			}
 
-			result := getClientIP(req)
+			// Simulate clientip.Middleware setting the context
+			var capturedKey string
+			handler := clientip.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				capturedKey = clientip.FromRequest(r).RateLimitKey
+			}))
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
 
 			// Check that all expected IPs are in the result
 			for _, expectedIP := range tt.expectedContains {
-				if !strings.Contains(result, expectedIP) {
-					t.Errorf("%s: expected result to contain %q, but got %q",
-						tt.description, expectedIP, result)
+				if !strings.Contains(capturedKey, expectedIP) {
+					t.Errorf("%s: expected RateLimitKey to contain %q, but got %q",
+						tt.description, expectedIP, capturedKey)
 				}
 			}
 
-			// Verify it's a pipe-delimited string
-			if !strings.Contains(result, "|") && len(tt.expectedContains) > 1 {
-				// If we expect multiple IPs, we should have a pipe
-				parts := strings.Split(result, "|")
-				if len(parts) < len(tt.expectedContains) {
-					t.Errorf("%s: expected at least %d IPs in composite key, got %d (key: %q)",
-						tt.description, len(tt.expectedContains), len(parts), result)
-				}
-			}
-
-			t.Logf("%s: composite key = %q", tt.name, result)
+			t.Logf("%s: RateLimitKey = %q", tt.name, capturedKey)
 		})
 	}
 }
 
-func TestGetClientIP_Deterministic(t *testing.T) {
+func TestRateLimitKey_Deterministic(t *testing.T) {
 	// Same request should always produce same key
-	req1 := httptest.NewRequest("GET", "/test", nil)
-	req1.RemoteAddr = "192.168.1.1:8080"
-	req1.Header.Set("Fly-Client-IP", "203.0.113.50")
-	req1.Header.Set("X-Forwarded-For", "203.0.113.50, 192.168.1.1")
+	makeReq := func() *http.Request {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.RemoteAddr = "192.168.1.1:8080"
+		req.Header.Set("Fly-Client-IP", "203.0.113.50")
+		req.Header.Set("X-Forwarded-For", "203.0.113.50, 192.168.1.1")
+		return req
+	}
 
-	req2 := httptest.NewRequest("GET", "/test", nil)
-	req2.RemoteAddr = "192.168.1.1:8080"
-	req2.Header.Set("Fly-Client-IP", "203.0.113.50")
-	req2.Header.Set("X-Forwarded-For", "203.0.113.50, 192.168.1.1")
+	var key1, key2 string
 
-	key1 := getClientIP(req1)
-	key2 := getClientIP(req2)
+	handler := clientip.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if key1 == "" {
+			key1 = clientip.FromRequest(r).RateLimitKey
+		} else {
+			key2 = clientip.FromRequest(r).RateLimitKey
+		}
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), makeReq())
+	handler.ServeHTTP(httptest.NewRecorder(), makeReq())
 
 	if key1 != key2 {
 		t.Errorf("Same request should produce same key, got %q and %q", key1, key2)
 	}
 }
 
-func TestGetClientIP_DifferentRequests(t *testing.T) {
+func TestRateLimitKey_DifferentRequests(t *testing.T) {
 	// Different clients should produce different keys
+	var key1, key2 string
+
+	handler := clientip.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if key1 == "" {
+			key1 = clientip.FromRequest(r).RateLimitKey
+		} else {
+			key2 = clientip.FromRequest(r).RateLimitKey
+		}
+	}))
+
 	req1 := httptest.NewRequest("GET", "/test", nil)
 	req1.RemoteAddr = "192.168.1.1:8080"
 	req1.Header.Set("Fly-Client-IP", "203.0.113.50")
@@ -147,33 +137,10 @@ func TestGetClientIP_DifferentRequests(t *testing.T) {
 	req2.RemoteAddr = "192.168.1.2:8080"
 	req2.Header.Set("Fly-Client-IP", "203.0.113.51")
 
-	key1 := getClientIP(req1)
-	key2 := getClientIP(req2)
+	handler.ServeHTTP(httptest.NewRecorder(), req1)
+	handler.ServeHTTP(httptest.NewRecorder(), req2)
 
 	if key1 == key2 {
 		t.Errorf("Different requests should produce different keys, both got %q", key1)
-	}
-}
-
-func TestExtractIP(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"192.168.1.1:8080", "192.168.1.1"},
-		{"192.168.1.1", "192.168.1.1"},
-		{"[2001:db8::1]:8080", "2001:db8::1"},
-		{"2001:db8::1", "2001:db8::1"},
-		{"[::1]:80", "::1"},
-		{"127.0.0.1:443", "127.0.0.1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := extractIP(tt.input)
-			if result != tt.expected {
-				t.Errorf("extractIP(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
 	}
 }

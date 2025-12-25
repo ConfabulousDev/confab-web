@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/csrf"
 	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/email"
 	"github.com/ConfabulousDev/confab-web/internal/ratelimit"
@@ -129,15 +130,22 @@ func parseAllowedOrigins() ([]string, []string) {
 func (s *Server) SetupRoutes() http.Handler {
 	r := chi.NewRouter()
 
-	// Middleware
-	r.Use(FlyLogger) // Custom logger that uses Fly-Client-IP for real client IPs
+	// Middleware - order matters!
+	// 1. Recoverer: catch panics first
 	r.Use(middleware.Recoverer)
+	// 2. ClientIP: extract real client IP early (replaces chi's RealIP)
+	//    Sets r.RemoteAddr and stores IP info in context for rate limiter, logger
+	r.Use(clientip.Middleware)
+	// 3. Rate limiter: reject abusive requests early, before expensive work
+	//    Intentionally before RequestID - rejected requests don't need IDs allocated
+	r.Use(ratelimit.Middleware(s.globalLimiter))
+	// 4. RequestID: assign unique ID for request tracing (used by FlyLogger)
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(wwwRedirectMiddleware()) // Redirect www to apex domain
+	// 5. Redirects and security headers
+	r.Use(wwwRedirectMiddleware())
 	r.Use(securityHeadersMiddleware())
 
-	// Compression middleware: Brotli (preferred) + gzip (fallback)
+	// 6. Compression: Brotli (preferred) + gzip (fallback)
 	// Brotli provides 15-25% better compression than gzip for JSON
 	// Serves Brotli to modern clients (95%+), gzip to legacy clients
 	compressor := middleware.NewCompressor(5) // gzip level 5 (baseline)
@@ -147,7 +155,8 @@ func (s *Server) SetupRoutes() http.Handler {
 	})
 	r.Use(compressor.Handler)
 
-	r.Use(ratelimit.Middleware(s.globalLimiter)) // Global rate limiting
+	// 7. FlyLogger: AFTER compressor so it captures uncompressed response bodies
+	r.Use(FlyLogger)
 
 	// CORS configuration - CRITICAL SECURITY FIX
 	// Note: ALLOWED_ORIGINS is validated at startup in main.go

@@ -54,10 +54,10 @@ func extractSessionTitle(content []byte) string {
 		// Collect first text content as fallback (from any user message)
 		if firstTextContent == "" && msgType == "user" {
 			if text := extractTextFromMessage(entry); text != "" {
-				// Use first 100 characters as fallback title
+				// Use first 100 runes as fallback title (runes to avoid splitting UTF-8)
 				sanitized := sanitizeTitleText(text)
-				if len(sanitized) > 100 {
-					firstTextContent = sanitized[:100]
+				if runes := []rune(sanitized); len(runes) > 100 {
+					firstTextContent = string(runes[:100])
 				} else {
 					firstTextContent = sanitized
 				}

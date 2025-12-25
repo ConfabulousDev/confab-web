@@ -7,20 +7,28 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 )
 
 // Maximum length for error messages in logs
 const maxErrorMessageLength = 200
 
-// FlyLogger is a middleware that logs HTTP requests with Fly.io-aware client IP detection.
-// It uses the Fly-Client-IP header (set by Fly's edge proxy) as the primary client IP,
-// falling back to RemoteAddr for local development.
+// FlyLogger is a middleware that logs HTTP requests in a structured format.
+// Requires clientip.Middleware to run first to populate client IP in context.
+//
+// Log format:
+//
+//	"METHOD /path HTTP/1.1" from IP - STATUS SIZEb in DURATION | key=value...
 //
 // Features:
-//   - Logs real client IP (Fly-Client-IP or RemoteAddr)
+//   - Logs real client IP (from clientip.Middleware context, or r.RemoteAddr fallback)
+//   - Logs request ID for tracing (from middleware.RequestID)
 //   - Logs authenticated user ID when present
-//   - Logs error messages for 4xx responses (truncated if too long)
 //   - Logs Fly.io region and protocol info when present
+//   - Logs error messages for 4xx responses (truncated, sanitized)
+//   - Logs User-Agent (truncated to 100 chars, sanitized)
 func FlyLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -37,11 +45,20 @@ func FlyLogger(next http.Handler) http.Handler {
 		// Calculate duration
 		duration := time.Since(start)
 
-		// Get real client IP (Fly-Client-IP or fallback to RemoteAddr)
-		clientIP := getRealClientIP(r)
+		// Get real client IP from context (set by clientip.Middleware)
+		// Falls back to r.RemoteAddr if middleware hasn't run (shouldn't happen in prod)
+		clientIP := clientip.FromRequest(r).Primary
+		if clientIP == "" {
+			clientIP = r.RemoteAddr
+		}
 
 		// Build extra info parts
 		var extraParts []string
+
+		// Add request ID for tracing (set by middleware.RequestID)
+		if reqID := middleware.GetReqID(r.Context()); reqID != "" {
+			extraParts = append(extraParts, "req="+reqID)
+		}
 
 		// Add user ID if authenticated (set by auth middleware via LogUserIDSetter)
 		if lrw.userIDSet {
@@ -64,10 +81,20 @@ func FlyLogger(next http.Handler) http.Handler {
 			}
 		}
 
+		// Add User-Agent at end (can be long, truncate to 100 runes)
+		if ua := r.Header.Get("User-Agent"); ua != "" {
+			ua = sanitizeLogValue(ua)
+			// Truncate by runes to avoid splitting UTF-8 characters
+			if runes := []rune(ua); len(runes) > 100 {
+				ua = string(runes[:100]) + "..."
+			}
+			extraParts = append(extraParts, "ua="+ua)
+		}
+
 		// Build log message
 		extraInfo := ""
 		if len(extraParts) > 0 {
-			extraInfo = " [" + strings.Join(extraParts, " ") + "]"
+			extraInfo = " | " + strings.Join(extraParts, " ")
 		}
 
 		log.Printf("\"%s %s %s\" from %s - %d %dB in %v%s",
@@ -120,46 +147,6 @@ func extractErrorMessage(body []byte) string {
 	}
 
 	return msg
-}
-
-// getRealClientIP returns the real client IP address.
-// It prioritizes Fly-Client-IP (set by Fly's edge proxy) over RemoteAddr.
-func getRealClientIP(r *http.Request) string {
-	// Fly-Client-IP is the canonical client IP on Fly.io
-	// It's set by the edge proxy and cannot be spoofed by clients
-	if flyIP := strings.TrimSpace(r.Header.Get("Fly-Client-IP")); flyIP != "" {
-		return flyIP
-	}
-
-	// Fallback to RemoteAddr (for local development or non-Fly deployments)
-	return extractIPFromAddr(r.RemoteAddr)
-}
-
-// extractIPFromAddr extracts the IP address from an address string.
-// Handles formats: "IP:port", "[IPv6]:port", "IP", "IPv6"
-func extractIPFromAddr(addr string) string {
-	if addr == "" {
-		return ""
-	}
-
-	// Check for IPv6 with port [IPv6]:port
-	if strings.HasPrefix(addr, "[") {
-		if idx := strings.LastIndex(addr, "]:"); idx != -1 {
-			return strings.Trim(addr[:idx+1], "[]")
-		}
-		// Just [IPv6] without port
-		return strings.Trim(addr, "[]")
-	}
-
-	// Check for IPv4:port (exactly one colon)
-	if strings.Count(addr, ":") == 1 {
-		if idx := strings.LastIndex(addr, ":"); idx != -1 {
-			return addr[:idx]
-		}
-	}
-
-	// Plain IP (IPv4 or IPv6 without port)
-	return addr
 }
 
 // LogUserIDSetter is implemented by response writers that can capture the user ID for logging.
