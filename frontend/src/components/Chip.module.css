@@ -10,8 +10,6 @@
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
   line-height: 1.4;
   white-space: nowrap;
-  max-width: 140px;
-  overflow: hidden;
 }
 
 .icon {
@@ -26,16 +24,7 @@
 }
 
 .text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Leading ellipsis - shows "...repo-name" instead of "org/repo..." */
-.textEllipsisStart {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+  /* No truncation by default */
 }
 
 /* Variants */

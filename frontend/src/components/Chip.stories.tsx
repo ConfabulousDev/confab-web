@@ -64,7 +64,6 @@ export const LongText: Story = {
     children: 'very-long-hostname-that-will-truncate.local',
     variant: 'green',
     icon: ComputerIcon,
-    title: 'very-long-hostname-that-will-truncate.local',
   },
 };
 
@@ -92,7 +91,7 @@ export const SessionListExample: Story = {
       <div>
         <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px', textTransform: 'uppercase' }}>System</div>
         <div style={{ display: 'flex', gap: '4px' }}>
-          <Chip icon={ComputerIcon} variant="green" title="macbook-pro.local">macbook-pro.l...</Chip>
+          <Chip icon={ComputerIcon} variant="green">macbook-pro.local</Chip>
           <Chip icon={UserIcon} variant="purple">sarah</Chip>
         </div>
       </div>

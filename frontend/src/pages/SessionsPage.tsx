@@ -13,7 +13,7 @@ import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, ClaudeCodeIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
 function SessionsPage() {
@@ -230,16 +230,7 @@ function SessionsPage() {
                     <tr>
                       <SortableHeader
                         column="summary"
-                        label="Title"
-                        currentColumn={sortColumn}
-                        direction={sortDirection}
-                        onSort={handleSort}
-                      />
-                      <th className={styles.shrinkCol}>Git</th>
-                      {!showSharedWithMe && <th className={styles.shrinkCol}>Hostname</th>}
-                      <SortableHeader
-                        column="external_id"
-                        label="CC id"
+                        label="Session"
                         currentColumn={sortColumn}
                         direction={sortDirection}
                         onSort={handleSort}
@@ -260,44 +251,38 @@ function SessionsPage() {
                         className={styles.clickableRow}
                         onClick={() => handleRowClick(session)}
                       >
-                        <td className={styles.titleCell}>
-                          <span className={session.custom_title || session.summary || session.first_user_message ? '' : styles.untitled}>
+                        <td className={styles.sessionCell}>
+                          <div className={session.custom_title || session.summary || session.first_user_message ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
                             {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
-                          </span>
-                        </td>
-                        <td className={styles.shrinkCol}>
-                          <div className={styles.chipCell}>
+                          </div>
+                          <div className={styles.chipRow}>
+                            <Chip icon={ClaudeCodeIcon} variant="neutral">
+                              {session.external_id.substring(0, 8)}
+                            </Chip>
                             {session.git_repo && (
                               <Chip
                                 icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
                                 variant="neutral"
-                                title={session.git_repo}
-                                ellipsis="start"
                               >
                                 {session.git_repo}
                               </Chip>
                             )}
                             {session.git_branch && (
-                              <Chip icon={BranchIcon} variant="blue" title={session.git_branch}>
+                              <Chip icon={BranchIcon} variant="blue">
                                 {session.git_branch}
                               </Chip>
                             )}
-                          </div>
-                        </td>
-                        {!showSharedWithMe && (
-                          <td className={styles.shrinkCol}>
-                            {session.hostname && (
-                              <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
+                            {session.github_prs?.map((pr) => (
+                              <Chip key={pr} icon={PRIcon} variant="purple">
+                                #{pr}
+                              </Chip>
+                            ))}
+                            {!showSharedWithMe && session.hostname && (
+                              <Chip icon={ComputerIcon} variant="green">
                                 {session.hostname}
                               </Chip>
                             )}
-                          </td>
-                        )}
-                        <td
-                          className={styles.sessionId}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {session.external_id.substring(0, 8)}
+                          </div>
                         </td>
                         <td className={styles.timestamp}>
                           <span className={styles.activityContent}>

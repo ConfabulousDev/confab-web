@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, ClaudeCodeIcon } from '@/components/icons';
 import SortableHeader from '@/components/SortableHeader';
 import { formatRelativeTime, formatDuration } from '@/utils';
 import styles from './SessionsPage.module.css';
@@ -17,6 +17,7 @@ interface MockSession {
   git_repo: string | null;
   git_repo_url: string | null;
   git_branch: string | null;
+  github_prs?: string[] | null;
   hostname: string | null;
   username: string | null;
 }
@@ -34,6 +35,7 @@ const mockSessions: MockSession[] = [
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
+    github_prs: ['142'],
     hostname: 'macbook-pro.local',
     username: 'sarah',
   },
@@ -90,6 +92,7 @@ const mockSessions: MockSession[] = [
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/quickstart',
+    github_prs: ['118', '119'],
     hostname: 'ubuntu-desktop',
     username: 'alex',
   },
@@ -126,16 +129,7 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
             <tr>
               <SortableHeader
                 column="summary"
-                label="Title"
-                currentColumn={sortColumn}
-                direction={sortDirection}
-                onSort={() => {}}
-              />
-              <th className={styles.shrinkCol}>Git</th>
-              {!showSharedWithMe && <th className={styles.shrinkCol}>Hostname</th>}
-              <SortableHeader
-                column="external_id"
-                label="CC id"
+                label="Session"
                 currentColumn={sortColumn}
                 direction={sortDirection}
                 onSort={() => {}}
@@ -152,39 +146,38 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
           <tbody>
             {sessions.map((session) => (
               <tr key={session.id} className={styles.clickableRow}>
-                <td className={styles.titleCell}>
-                  <span>{session.custom_title || session.summary || session.first_user_message || 'Untitled'}</span>
-                </td>
-                <td className={styles.shrinkCol}>
-                  <div className={styles.chipCell}>
+                <td className={styles.sessionCell}>
+                  <div className={session.custom_title || session.summary || session.first_user_message ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
+                    {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
+                  </div>
+                  <div className={styles.chipRow}>
+                    <Chip icon={ClaudeCodeIcon} variant="neutral">
+                      {session.external_id.substring(0, 8)}
+                    </Chip>
                     {session.git_repo && (
                       <Chip
                         icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
                         variant="neutral"
-                        title={session.git_repo}
-                        ellipsis="start"
                       >
                         {session.git_repo}
                       </Chip>
                     )}
                     {session.git_branch && (
-                      <Chip icon={BranchIcon} variant="blue" title={session.git_branch}>
+                      <Chip icon={BranchIcon} variant="blue">
                         {session.git_branch}
                       </Chip>
                     )}
-                  </div>
-                </td>
-                {!showSharedWithMe && (
-                  <td className={styles.shrinkCol}>
-                    {session.hostname && (
-                      <Chip icon={ComputerIcon} variant="green" title={session.hostname}>
+                    {session.github_prs?.map((pr) => (
+                      <Chip key={pr} icon={PRIcon} variant="purple">
+                        #{pr}
+                      </Chip>
+                    ))}
+                    {!showSharedWithMe && session.hostname && (
+                      <Chip icon={ComputerIcon} variant="green">
                         {session.hostname}
                       </Chip>
                     )}
-                  </td>
-                )}
-                <td className={styles.sessionId}>
-                  {session.external_id.substring(0, 8)}
+                  </div>
                 </td>
                 <td className={styles.timestamp}>
                   <span className={styles.activityContent}>

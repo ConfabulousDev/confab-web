@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/lib/pq"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
@@ -548,6 +549,7 @@ type SessionListItem struct {
 	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
 	GitRepoURL       *string    `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
 	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
+	GitHubPRs        []string   `json:"github_prs,omitempty"`         // Linked GitHub PR refs (e.g., ["123", "456"])
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
@@ -576,6 +578,11 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 				COALESCE(sf_stats.total_lines, 0) as total_lines,
 				s.git_info->>'repo_url' as git_repo_url,
 				s.git_info->>'branch' as git_branch,
+				COALESCE((
+					SELECT array_agg(ref ORDER BY created_at)
+					FROM session_github_links
+					WHERE session_id = s.id AND link_type = 'pull_request'
+				), ARRAY[]::text[]) as github_prs,
 				true as is_owner,
 				'owner' as access_type,
 				NULL::text as shared_by_email,
@@ -594,6 +601,13 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 		// Shared sessions (private shares + system shares), includes owned for deduplication
 		query = `
 			WITH
+			-- GitHub PRs for each session (pre-aggregated to avoid correlated subquery in DISTINCT ON)
+			github_pr_refs AS (
+				SELECT session_id, array_agg(ref ORDER BY created_at) as prs
+				FROM session_github_links
+				WHERE link_type = 'pull_request'
+				GROUP BY session_id
+			),
 			-- User's own sessions
 			owned_sessions AS (
 				SELECT
@@ -609,6 +623,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					COALESCE(sf_stats.total_lines, 0) as total_lines,
 					s.git_info->>'repo_url' as git_repo_url,
 					s.git_info->>'branch' as git_branch,
+					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 					true as is_owner,
 					'owner' as access_type,
 					NULL::text as shared_by_email,
@@ -620,6 +635,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					FROM sync_files
 					GROUP BY session_id
 				) sf_stats ON s.id = sf_stats.session_id
+				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 				WHERE s.user_id = $1
 			),
 			-- Sessions shared with user (via session_share_recipients by user_id)
@@ -638,6 +654,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					COALESCE(sf_stats.total_lines, 0) as total_lines,
 					s.git_info->>'repo_url' as git_repo_url,
 					s.git_info->>'branch' as git_branch,
+					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 					false as is_owner,
 					'private_share' as access_type,
 					u.email as shared_by_email,
@@ -652,6 +669,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					FROM sync_files
 					GROUP BY session_id
 				) sf_stats ON s.id = sf_stats.session_id
+				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 				WHERE sr.user_id = $1
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
@@ -673,6 +691,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					COALESCE(sf_stats.total_lines, 0) as total_lines,
 					s.git_info->>'repo_url' as git_repo_url,
 					s.git_info->>'branch' as git_branch,
+					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 					false as is_owner,
 					'system_share' as access_type,
 					u.email as shared_by_email,
@@ -687,6 +706,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					FROM sync_files
 					GROUP BY session_id
 				) sf_stats ON s.id = sf_stats.session_id
+				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
 				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
@@ -722,7 +742,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 	sessions := make([]SessionListItem, 0)
 	for rows.Next() {
 		var session SessionListItem
-		var gitRepoURL *string // Full URL from git_info JSONB
+		var gitRepoURL *string      // Full URL from git_info JSONB
+		var githubPRs pq.StringArray // GitHub PR refs as PostgreSQL text array
 		if err := rows.Scan(
 			&session.ID,
 			&session.ExternalID,
@@ -736,6 +757,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 			&session.TotalLines,
 			&gitRepoURL,
 			&session.GitBranch,
+			&githubPRs,
 			&session.IsOwner,
 			&session.AccessType,
 			&session.SharedByEmail,
@@ -749,6 +771,11 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 		if gitRepoURL != nil && *gitRepoURL != "" {
 			session.GitRepo = extractRepoName(*gitRepoURL)
 			session.GitRepoURL = gitRepoURL
+		}
+
+		// Convert pq.StringArray to []string (only if non-empty)
+		if len(githubPRs) > 0 {
+			session.GitHubPRs = []string(githubPRs)
 		}
 
 		sessions = append(sessions, session)

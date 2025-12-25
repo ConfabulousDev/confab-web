@@ -294,3 +294,30 @@ func CreateTestSystemShare(t *testing.T, env *TestEnvironment, sessionID string,
 
 	return id
 }
+
+// CreateTestGitHubLink creates a GitHub link in the database for testing
+func CreateTestGitHubLink(t *testing.T, env *TestEnvironment, sessionID, linkType, ref string) int64 {
+	t.Helper()
+
+	query := `
+		INSERT INTO session_github_links (session_id, link_type, url, owner, repo, ref, source, created_at)
+		VALUES ($1, $2, $3, 'test-owner', 'test-repo', $4, 'manual', NOW())
+		RETURNING id
+	`
+
+	url := "https://github.com/test-owner/test-repo/"
+	if linkType == "pull_request" {
+		url += "pull/" + ref
+	} else {
+		url += "commit/" + ref
+	}
+
+	var id int64
+	row := env.DB.QueryRow(env.Ctx, query, sessionID, linkType, url, ref)
+	err := row.Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to create test github link: %v", err)
+	}
+
+	return id
+}

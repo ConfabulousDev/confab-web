@@ -7,16 +7,13 @@ interface ChipProps {
   children: ReactNode;
   icon?: ReactNode;
   variant?: ChipVariant;
-  title?: string;
-  ellipsis?: 'start' | 'end'; // Where to show ellipsis on overflow (default: 'end')
 }
 
-function Chip({ children, icon, variant = 'neutral', title, ellipsis = 'end' }: ChipProps) {
-  const textClass = ellipsis === 'start' ? styles.textEllipsisStart : styles.text;
+function Chip({ children, icon, variant = 'neutral' }: ChipProps) {
   return (
-    <span className={`${styles.chip} ${styles[variant]}`} title={title}>
+    <span className={`${styles.chip} ${styles[variant]}`}>
       {icon && <span className={styles.icon}>{icon}</span>}
-      <span className={textClass}>{children}</span>
+      <span className={styles.text}>{children}</span>
     </span>
   );
 }

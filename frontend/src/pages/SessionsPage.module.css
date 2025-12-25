@@ -112,8 +112,7 @@
   border-bottom: 1px solid var(--color-border-light);
   color: var(--color-text-primary);
   font-size: var(--font-sm);
-  height: 36px;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .sessionsTable tbody tr:last-child td {
@@ -129,37 +128,27 @@
   background: var(--color-bg-hover);
 }
 
-.titleCell {
-  font-weight: var(--font-medium);
+.sessionCell {
   width: 100%;
   max-width: 0; /* Forces column to respect table width constraints */
-  overflow: hidden;
-  white-space: nowrap;
 }
 
-.shrinkCol {
-  width: 1%;
+.sessionTitle {
+  font-weight: var(--font-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  margin-bottom: 4px;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .untitled {
   color: var(--color-text-muted);
-}
-
-.sessionId {
-  color: var(--color-text-muted);
-  cursor: text;
-  user-select: text;
-  width: 1%;
-  white-space: nowrap;
-}
-
-.chipCell {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 4px;
-  align-items: center;
-  white-space: nowrap;
 }
 
 .timestamp {

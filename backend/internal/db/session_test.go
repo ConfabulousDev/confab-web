@@ -892,3 +892,162 @@ func TestGetSessionsLastModified_OwnedView(t *testing.T) {
 		t.Errorf("lastModified = %v, want %v", lastModified, knownTime)
 	}
 }
+
+// =============================================================================
+// ListUserSessions GitHub PRs Tests
+// =============================================================================
+
+// TestListUserSessions_IncludesGitHubPRs tests that github_prs is returned
+func TestListUserSessions_IncludesGitHubPRs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "pr@test.com", "PR User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "session-with-prs")
+
+	ctx := context.Background()
+
+	// Create GitHub PR links (out of order to verify sorting by created_at)
+	testutil.CreateTestGitHubLink(t, env, sessionID, "pull_request", "456")
+	time.Sleep(10 * time.Millisecond) // Ensure different created_at times
+	testutil.CreateTestGitHubLink(t, env, sessionID, "pull_request", "123")
+
+	sessions, err := env.DB.ListUserSessions(ctx, user.ID, db.SessionListViewOwned)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(sessions))
+	}
+
+	session := sessions[0]
+	if len(session.GitHubPRs) != 2 {
+		t.Fatalf("expected 2 GitHub PRs, got %d", len(session.GitHubPRs))
+	}
+
+	// Verify PRs are ordered by created_at (456 was created first)
+	if session.GitHubPRs[0] != "456" {
+		t.Errorf("expected first PR to be '456', got '%s'", session.GitHubPRs[0])
+	}
+	if session.GitHubPRs[1] != "123" {
+		t.Errorf("expected second PR to be '123', got '%s'", session.GitHubPRs[1])
+	}
+}
+
+// TestListUserSessions_GitHubPRsEmpty tests that sessions without PRs have empty array
+func TestListUserSessions_GitHubPRsEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "noprs@test.com", "No PRs User")
+	testutil.CreateTestSession(t, env, user.ID, "session-no-prs")
+
+	ctx := context.Background()
+
+	sessions, err := env.DB.ListUserSessions(ctx, user.ID, db.SessionListViewOwned)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(sessions))
+	}
+
+	if sessions[0].GitHubPRs != nil && len(sessions[0].GitHubPRs) != 0 {
+		t.Errorf("expected empty GitHubPRs, got %v", sessions[0].GitHubPRs)
+	}
+}
+
+// TestListUserSessions_GitHubPRsExcludesCommits tests that commits are not included
+func TestListUserSessions_GitHubPRsExcludesCommits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "mixed@test.com", "Mixed Links User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "session-mixed-links")
+
+	ctx := context.Background()
+
+	// Create a PR and a commit link
+	testutil.CreateTestGitHubLink(t, env, sessionID, "pull_request", "42")
+	testutil.CreateTestGitHubLink(t, env, sessionID, "commit", "abc123def")
+
+	sessions, err := env.DB.ListUserSessions(ctx, user.ID, db.SessionListViewOwned)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(sessions))
+	}
+
+	// Should only have 1 PR (commit excluded)
+	if len(sessions[0].GitHubPRs) != 1 {
+		t.Fatalf("expected 1 GitHub PR (commits excluded), got %d", len(sessions[0].GitHubPRs))
+	}
+	if sessions[0].GitHubPRs[0] != "42" {
+		t.Errorf("expected PR '42', got '%s'", sessions[0].GitHubPRs[0])
+	}
+}
+
+// TestListUserSessions_GitHubPRsSharedView tests PRs are included in shared view
+func TestListUserSessions_GitHubPRsSharedView(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@test.com", "Recipient")
+
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "shared-session-with-prs")
+
+	ctx := context.Background()
+
+	// Create GitHub PR link
+	testutil.CreateTestGitHubLink(t, env, sessionID, "pull_request", "999")
+
+	// Share with recipient
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@test.com"})
+
+	// List from recipient's shared view
+	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	// Find the shared session
+	var sharedSession *db.SessionListItem
+	for i := range sessions {
+		if !sessions[i].IsOwner {
+			sharedSession = &sessions[i]
+			break
+		}
+	}
+
+	if sharedSession == nil {
+		t.Fatal("expected to find shared session")
+	}
+
+	if len(sharedSession.GitHubPRs) != 1 {
+		t.Fatalf("expected 1 GitHub PR in shared session, got %d", len(sharedSession.GitHubPRs))
+	}
+	if sharedSession.GitHubPRs[0] != "999" {
+		t.Errorf("expected PR '999', got '%s'", sharedSession.GitHubPRs[0])
+	}
+}
