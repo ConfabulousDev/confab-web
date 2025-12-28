@@ -51,51 +51,42 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   // Use initial analytics for Storybook, polled analytics for real usage
   const analytics = initialAnalytics ?? polledAnalytics;
 
-  if (loading && !analytics) {
-    return (
-      <div className={styles.panel}>
-        <div className={styles.loading}>Loading summary...</div>
-      </div>
-    );
-  }
+  const cost = analytics ? parseFloat(analytics.cost.estimated_usd) : 0;
 
-  if (error && !analytics) {
-    return (
-      <div className={styles.panel}>
-        <div className={styles.error}>
-          <strong>Error:</strong> {error.message}
+  // Render analytics cards content based on state
+  const renderAnalyticsCards = () => {
+    if (loading && !analytics) {
+      return (
+        <div className={styles.card}>
+          <div className={styles.cardContent}>
+            <div className={styles.loading}>Loading analytics...</div>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  if (!analytics) {
-    return (
-      <div className={styles.panel}>
-        <div className={styles.empty}>No analytics data available</div>
-      </div>
-    );
-  }
-
-  const cost = parseFloat(analytics.cost.estimated_usd);
-
-  return (
-    <div className={styles.panel}>
-      <div className={styles.header}>
-        <h2 className={styles.title}>Session Summary</h2>
-        <div className={styles.lastUpdated} title="When analytics were last computed">
-          Updated <RelativeTime date={analytics.computed_at} />
+    if (error && !analytics) {
+      return (
+        <div className={styles.card}>
+          <div className={styles.cardContent}>
+            <div className={styles.analyticsError}>Failed to load analytics</div>
+          </div>
         </div>
-      </div>
+      );
+    }
 
-      <div className={styles.grid}>
-        {/* GitHub Links - first in grid */}
-        <GitHubLinksCard
-          sessionId={sessionId}
-          isOwner={isOwner}
-          initialLinks={initialGithubLinks}
-        />
+    if (!analytics) {
+      return (
+        <div className={styles.card}>
+          <div className={styles.cardContent}>
+            <div className={styles.analyticsEmpty}>No analytics available</div>
+          </div>
+        </div>
+      );
+    }
 
+    return (
+      <>
         {/* Tokens Section */}
         <div className={styles.card}>
           <div className={styles.cardHeader}>Tokens</div>
@@ -167,6 +158,30 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
             </div>
           </div>
         </div>
+      </>
+    );
+  };
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>
+        <h2 className={styles.title}>Session Summary</h2>
+        {analytics && (
+          <div className={styles.lastUpdated} title="When analytics were last computed">
+            Updated <RelativeTime date={analytics.computed_at} />
+          </div>
+        )}
+      </div>
+
+      <div className={styles.grid}>
+        {/* GitHub Links - always rendered, independent of analytics */}
+        <GitHubLinksCard
+          sessionId={sessionId}
+          isOwner={isOwner}
+          initialLinks={initialGithubLinks}
+        />
+
+        {renderAnalyticsCards()}
       </div>
     </div>
   );
