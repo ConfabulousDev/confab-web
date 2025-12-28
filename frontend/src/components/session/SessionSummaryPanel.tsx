@@ -16,7 +16,6 @@ interface SessionSummaryPanelProps {
 }
 
 const TOOLTIPS = {
-  source: 'Server-computed analytics from cached JSONL parsing. Updates automatically when new data is synced.',
   cost: {
     estimated: 'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
   },
@@ -39,15 +38,6 @@ const InfoIcon = (
     <circle cx="12" cy="12" r="10" />
     <path d="M12 16v-4" />
     <path d="M12 8h.01" />
-  </svg>
-);
-
-const ServerIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
-    <line x1="6" y1="6" x2="6.01" y2="6"/>
-    <line x1="6" y1="18" x2="6.01" y2="18"/>
   </svg>
 );
 
@@ -92,13 +82,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <h2 className={styles.title}>Session Summary</h2>
-          <div className={styles.source} title={TOOLTIPS.source}>
-            {ServerIcon}
-            <span>Server-computed</span>
-          </div>
-        </div>
+        <h2 className={styles.title}>Session Summary</h2>
         <div className={styles.lastUpdated} title="When analytics were last computed">
           Updated <RelativeTime date={analytics.computed_at} />
         </div>
@@ -183,12 +167,6 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
             </div>
           </div>
         </div>
-      </div>
-
-      <div className={styles.footer}>
-        <p className={styles.footerNote}>
-          These metrics are computed server-side from the JSONL transcript and cached for performance.
-        </p>
       </div>
     </div>
   );
