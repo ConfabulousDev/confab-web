@@ -6,7 +6,10 @@ import { countCategories, type MessageCategory } from './messageCategories';
 import SessionHeader from './SessionHeader';
 import SessionStatsSidebar from './SessionStatsSidebar';
 import MessageTimeline from './MessageTimeline';
+import SessionAnalyticsPanel from './SessionAnalyticsPanel';
 import styles from './SessionViewer.module.css';
+
+type ViewTab = 'transcript' | 'analytics';
 
 // Polling interval for new transcript messages (15 seconds)
 const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
@@ -18,12 +21,17 @@ interface SessionViewerProps {
   onSessionUpdate?: (session: SessionDetail) => void;
   isOwner?: boolean;
   isShared?: boolean;
+  /** For Storybook: pass messages directly instead of fetching from API */
+  initialMessages?: TranscriptLine[];
+  /** For Storybook: pass analytics directly instead of fetching from API */
+  initialAnalytics?: import('@/services/api').SessionAnalytics;
 }
 
-function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false }: SessionViewerProps) {
-  const [loading, setLoading] = useState(true);
+function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, initialMessages, initialAnalytics }: SessionViewerProps) {
+  const [activeTab, setActiveTab] = useState<ViewTab>('transcript');
+  const [loading, setLoading] = useState(!initialMessages);
   const [error, setError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<TranscriptLine[]>([]);
+  const [messages, setMessages] = useState<TranscriptLine[]>(initialMessages ?? []);
 
   // Track the current line count for incremental fetching
   const lineCountRef = useRef(0);
@@ -44,17 +52,20 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     return messages.filter((message) => visibleCategories.has(message.type));
   }, [messages, visibleCategories]);
 
-  // Get transcript file name
-  const transcriptFileName = useMemo(() => {
-    const transcriptFile = session.files.find((f) => f.file_type === 'transcript');
-    return transcriptFile?.file_name;
+  // Get transcript file info
+  const transcriptFile = useMemo(() => {
+    return session.files.find((f) => f.file_type === 'transcript');
   }, [session.files]);
 
-  // Load transcript initially
+  const transcriptFileName = transcriptFile?.file_name;
+  const totalLines = transcriptFile?.last_synced_line ?? 0;
+
+  // Load transcript initially (skip if initialMessages provided for Storybook)
   useEffect(() => {
+    if (initialMessages !== undefined) return;
     loadTranscript();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id]);
+  }, [session.id, initialMessages]);
 
   async function loadTranscript() {
     setLoading(true);
@@ -78,9 +89,9 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     }
   }
 
-  // Poll for new messages when visible
+  // Poll for new messages when visible (skip if initialMessages provided for Storybook)
   useEffect(() => {
-    if (!isVisible || loading || !transcriptFileName) {
+    if (initialMessages !== undefined || !isVisible || loading || !transcriptFileName) {
       return;
     }
 
@@ -109,7 +120,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     return () => {
       clearInterval(intervalId);
     };
-  }, [isVisible, loading, session.id, transcriptFileName]);
+  }, [initialMessages, isVisible, loading, session.id, transcriptFileName]);
 
   // Toggle a category's visibility
   const toggleCategory = useCallback((category: MessageCategory) => {
@@ -176,15 +187,38 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           onToggleCategory={toggleCategory}
         />
 
-        <div className={styles.timelineContainer}>
-          {loading ? (
-            <div className={styles.loading}>Loading transcript...</div>
-          ) : error ? (
-            <div className={styles.error}>
-              <strong>Error:</strong> {error}
+        {/* Tabs */}
+        <div className={styles.tabs}>
+          <button
+            className={`${styles.tab} ${activeTab === 'transcript' ? styles.tabActive : ''}`}
+            onClick={() => setActiveTab('transcript')}
+          >
+            Transcript
+          </button>
+          <button
+            className={`${styles.tab} ${activeTab === 'analytics' ? styles.tabActive : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            Analytics
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div className={styles.tabContent}>
+          {activeTab === 'transcript' ? (
+            <div className={styles.timelineContainer}>
+              {loading ? (
+                <div className={styles.loading}>Loading transcript...</div>
+              ) : error ? (
+                <div className={styles.error}>
+                  <strong>Error:</strong> {error}
+                </div>
+              ) : (
+                <MessageTimeline messages={filteredMessages} allMessages={messages} />
+              )}
             </div>
           ) : (
-            <MessageTimeline messages={filteredMessages} allMessages={messages} />
+            <SessionAnalyticsPanel sessionId={session.id} totalLines={totalLines} initialAnalytics={initialAnalytics} />
           )}
         </div>
       </div>

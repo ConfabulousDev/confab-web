@@ -350,6 +350,8 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Canonical shared sync file access endpoint (CF-132)
 			// Uses same session access logic as /sessions/{id}
 			r.Get("/sessions/{id}/sync/file", withMaxBody(MaxBodyXS, s.handleCanonicalSyncFileRead))
+			// Session analytics (computed from JSONL, cached in DB)
+			r.Get("/sessions/{id}/analytics", withMaxBody(MaxBodyXS, HandleGetSessionAnalytics(s.db, s.storage)))
 			// GitHub links - list (viewable by anyone with session access)
 			r.Get("/sessions/{id}/github-links", withMaxBody(MaxBodyXS, HandleListGitHubLinks(s.db)))
 		})

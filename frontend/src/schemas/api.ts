@@ -140,6 +140,34 @@ export const GitHubLinksResponseSchema = z.object({
 });
 
 // ============================================================================
+// Analytics Schemas
+// ============================================================================
+
+export const TokenStatsSchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cache_creation: z.number(),
+  cache_read: z.number(),
+});
+
+export const CostStatsSchema = z.object({
+  estimated_usd: z.string(), // Decimal serialized as string from backend
+});
+
+export const CompactionInfoSchema = z.object({
+  auto: z.number(),
+  manual: z.number(),
+  avg_time_ms: z.number().nullable().optional(),
+});
+
+export const SessionAnalyticsSchema = z.object({
+  computed_lines: z.number(), // Line count when analytics were computed
+  tokens: TokenStatsSchema,
+  cost: CostStatsSchema,
+  compaction: CompactionInfoSchema,
+});
+
+// ============================================================================
 // Array Response Schemas
 // ============================================================================
 
@@ -164,6 +192,10 @@ export type GitHubLinkType = z.infer<typeof GitHubLinkTypeSchema>;
 export type GitHubLinkSource = z.infer<typeof GitHubLinkSourceSchema>;
 export type GitHubLink = z.infer<typeof GitHubLinkSchema>;
 export type GitHubLinksResponse = z.infer<typeof GitHubLinksResponseSchema>;
+export type TokenStats = z.infer<typeof TokenStatsSchema>;
+export type CostStats = z.infer<typeof CostStatsSchema>;
+export type CompactionInfo = z.infer<typeof CompactionInfoSchema>;
+export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 
 // ============================================================================
 // Validation Functions

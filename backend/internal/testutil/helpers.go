@@ -321,3 +321,13 @@ func CreateTestGitHubLink(t *testing.T, env *TestEnvironment, sessionID, linkTyp
 
 	return id
 }
+
+// UploadTestChunk uploads a JSONL chunk to S3 storage for testing
+func UploadTestChunk(t *testing.T, env *TestEnvironment, userID int64, externalID, fileName string, firstLine, lastLine int, data []byte) {
+	t.Helper()
+
+	_, err := env.Storage.UploadChunk(env.Ctx, userID, externalID, fileName, firstLine, lastLine, data)
+	if err != nil {
+		t.Fatalf("failed to upload test chunk: %v", err)
+	}
+}

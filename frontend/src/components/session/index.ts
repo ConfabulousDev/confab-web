@@ -1,5 +1,6 @@
 export { default as SessionViewer } from './SessionViewer';
 export { default as SessionHeader } from './SessionHeader';
+export { default as SessionAnalyticsPanel } from './SessionAnalyticsPanel';
 export { default as MetaItem } from './MetaItem';
 export { default as GitInfoMeta } from './GitInfoMeta';
 export { default as FilterSidebar } from './FilterSidebar';

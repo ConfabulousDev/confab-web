@@ -13,6 +13,7 @@ import {
   UserSchema,
   GitHubLinkSchema,
   GitHubLinksResponseSchema,
+  SessionAnalyticsSchema,
   validateResponse,
   type Session,
   type SessionDetail,
@@ -23,10 +24,11 @@ import {
   type User,
   type GitHubLink,
   type GitHubLinksResponse,
+  type SessionAnalytics,
 } from '@/schemas/api';
 
 // Re-export types for consumers
-export type { Session, SessionDetail, SessionShare, APIKey, User, GitHubLink } from '@/schemas/api';
+export type { Session, SessionDetail, SessionShare, APIKey, User, GitHubLink, SessionAnalytics } from '@/schemas/api';
 
 /**
  * Handles authentication failures by clearing cached state and redirecting to home.
@@ -461,4 +463,14 @@ export const githubLinksAPI = {
    */
   deleteByType: (sessionId: string, linkType: 'commit' | 'pull_request'): Promise<void> =>
     api.deleteVoid(`/sessions/${sessionId}/github-links?type=${linkType}`),
+};
+
+export const analyticsAPI = {
+  /**
+   * Get analytics for a session.
+   * Works for any user with session access (owner, shared, public).
+   * Analytics are cached on the backend and recomputed when stale.
+   */
+  get: (sessionId: string): Promise<SessionAnalytics> =>
+    api.getValidated(`/sessions/${sessionId}/analytics`, SessionAnalyticsSchema),
 };
