@@ -35,6 +35,7 @@ type SessionAnalytics struct {
 // AnalyticsResponse is the API response format for analytics.
 // Cache details are internal - the frontend just gets the computed data.
 type AnalyticsResponse struct {
+	ComputedAt    time.Time      `json:"computed_at"`    // When analytics were computed
 	ComputedLines int64          `json:"computed_lines"` // Line count when analytics were computed
 	Tokens        TokenStats     `json:"tokens"`
 	Cost          CostStats      `json:"cost"`

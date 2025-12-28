@@ -98,11 +98,11 @@ interface SessionHeaderProps {
   onSessionUpdate?: (session: SessionDetail) => void;
   isOwner?: boolean;
   isShared?: boolean;
-  // Filter props - currently drilled from SessionViewer -> SessionHeader -> FilterDropdown
-  // Monitor if this drilling pattern extends further; context may be warranted then.
-  categoryCounts: MessageCategoryCounts;
-  visibleCategories: Set<MessageCategory>;
-  onToggleCategory: (category: MessageCategory) => void;
+  // Filter props - optional, only shown on transcript tab
+  // Currently drilled from SessionViewer -> SessionHeader -> FilterDropdown
+  categoryCounts?: MessageCategoryCounts;
+  visibleCategories?: Set<MessageCategory>;
+  onToggleCategory?: (category: MessageCategory) => void;
 }
 
 function SessionHeader({
@@ -285,11 +285,13 @@ function SessionHeader({
       </div>
 
       <div className={styles.actions}>
-        <FilterDropdown
-          counts={categoryCounts}
-          visibleCategories={visibleCategories}
-          onToggleCategory={onToggleCategory}
-        />
+        {categoryCounts && visibleCategories && onToggleCategory && (
+          <FilterDropdown
+            counts={categoryCounts}
+            visibleCategories={visibleCategories}
+            onToggleCategory={onToggleCategory}
+          />
+        )}
         {isShared ? (
           isOwner ? (
             // Owner viewing their own share link - clickable to switch to owner view

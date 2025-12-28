@@ -2,8 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { SessionAnalytics } from '@/services/api';
 import SessionAnalyticsPanel from './SessionAnalyticsPanel';
 
-// Sample analytics from backend API - typical session (up to date)
+// Sample analytics from backend API - typical session
 const mockAnalytics: SessionAnalytics = {
+  computed_at: new Date(Date.now() - 120000).toISOString(), // 2 minutes ago
   computed_lines: 500,
   tokens: {
     input: 110000,
@@ -23,6 +24,7 @@ const mockAnalytics: SessionAnalytics = {
 
 // Empty analytics (new session, no activity)
 const emptyAnalytics: SessionAnalytics = {
+  computed_at: new Date().toISOString(),
   computed_lines: 0,
   tokens: {
     input: 0,
@@ -42,6 +44,7 @@ const emptyAnalytics: SessionAnalytics = {
 
 // Small session analytics
 const smallAnalytics: SessionAnalytics = {
+  computed_at: new Date(Date.now() - 60000).toISOString(), // 1 minute ago
   computed_lines: 25,
   tokens: {
     input: 1100,
@@ -61,6 +64,7 @@ const smallAnalytics: SessionAnalytics = {
 
 // Large session with heavy usage
 const largeAnalytics: SessionAnalytics = {
+  computed_at: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
   computed_lines: 2500,
   tokens: {
     input: 2500000,
@@ -80,6 +84,7 @@ const largeAnalytics: SessionAnalytics = {
 
 // Only auto compactions
 const autoCompactionAnalytics: SessionAnalytics = {
+  computed_at: new Date(Date.now() - 180000).toISOString(), // 3 minutes ago
   computed_lines: 800,
   tokens: {
     input: 500000,
@@ -97,8 +102,9 @@ const autoCompactionAnalytics: SessionAnalytics = {
   },
 };
 
-// Stale analytics (computed from fewer lines than current)
-const staleAnalytics: SessionAnalytics = {
+// Analytics computed a while ago
+const olderAnalytics: SessionAnalytics = {
+  computed_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
   computed_lines: 450,
   tokens: {
     input: 95000,
@@ -135,26 +141,24 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * Default view - analytics are up to date (totalLines matches computed_lines).
- * Refresh button shows "Up to date" and is disabled.
+ * Default view - analytics display with "Updated X ago" timestamp.
+ * Analytics are polled automatically when tab is visible.
  */
 export const Default: Story = {
   args: {
     sessionId: 'test-session-id',
-    totalLines: 500, // Matches computed_lines
     initialAnalytics: mockAnalytics,
   },
 };
 
 /**
- * Stale analytics - new lines available since last computation.
- * Refresh button shows "+50 lines" and is enabled.
+ * Analytics computed 1 hour ago.
+ * Shows "Updated 1 hour ago" timestamp.
  */
-export const Stale: Story = {
+export const OlderTimestamp: Story = {
   args: {
     sessionId: 'test-session-id',
-    totalLines: 500, // 50 more than computed_lines (450)
-    initialAnalytics: staleAnalytics,
+    initialAnalytics: olderAnalytics,
   },
 };
 
@@ -164,7 +168,6 @@ export const Stale: Story = {
 export const EmptySession: Story = {
   args: {
     sessionId: 'test-session-id',
-    totalLines: 0,
     initialAnalytics: emptyAnalytics,
   },
 };
@@ -175,7 +178,6 @@ export const EmptySession: Story = {
 export const SmallSession: Story = {
   args: {
     sessionId: 'test-session-id',
-    totalLines: 25,
     initialAnalytics: smallAnalytics,
   },
 };
@@ -186,7 +188,6 @@ export const SmallSession: Story = {
 export const LargeSession: Story = {
   args: {
     sessionId: 'test-session-id',
-    totalLines: 2500,
     initialAnalytics: largeAnalytics,
   },
 };
@@ -197,7 +198,6 @@ export const LargeSession: Story = {
 export const AutoCompactionsOnly: Story = {
   args: {
     sessionId: 'test-session-id',
-    totalLines: 800,
     initialAnalytics: autoCompactionAnalytics,
   },
 };

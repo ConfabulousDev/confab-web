@@ -467,10 +467,52 @@ export const githubLinksAPI = {
 
 export const analyticsAPI = {
   /**
-   * Get analytics for a session.
+   * Get analytics for a session with conditional request support.
    * Works for any user with session access (owner, shared, public).
    * Analytics are cached on the backend and recomputed when stale.
+   *
+   * @param sessionId - The session UUID
+   * @param asOfLine - Optional line count client already has analytics for.
+   *                   If provided and >= current line count, returns null (304 Not Modified).
+   * @returns SessionAnalytics or null if no new data available
    */
-  get: (sessionId: string): Promise<SessionAnalytics> =>
-    api.getValidated(`/sessions/${sessionId}/analytics`, SessionAnalyticsSchema),
+  get: async (sessionId: string, asOfLine?: number): Promise<SessionAnalytics | null> => {
+    let url = `/sessions/${sessionId}/analytics`;
+    if (asOfLine !== undefined && asOfLine > 0) {
+      url += `?as_of_line=${asOfLine}`;
+    }
+
+    const fullUrl = `${api['baseURL']}${url}`;
+
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    // Handle 304 Not Modified - no new data
+    if (response.status === 304) {
+      return null;
+    }
+
+    // Handle authentication errors
+    if (response.status === 401) {
+      handleAuthFailure();
+      throw new AuthenticationError();
+    }
+
+    // Handle other HTTP errors
+    if (!response.ok) {
+      let errorData: unknown;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = await response.text();
+      }
+      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+    }
+
+    // Parse and validate response
+    const data = await response.json();
+    return validateResponse(SessionAnalyticsSchema, data, url);
+  },
 };

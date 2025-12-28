@@ -650,6 +650,66 @@ Deletes all GitHub links of the specified type for a session. Requires session o
 
 ---
 
+### Session Analytics
+
+#### Get Session Analytics
+```
+GET /api/v1/sessions/{id}/analytics?as_of_line=<n>
+```
+
+Returns computed analytics for a session. Uses the same canonical access model as Get Session Detail.
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| as_of_line | integer | No | Client's current line count for conditional requests |
+
+**Conditional Request Behavior:**
+- If `as_of_line` >= current transcript line count: returns `304 Not Modified`
+- Useful for polling: pass the `computed_lines` from a previous response to avoid redundant computation
+
+**Response:**
+```json
+{
+  "computed_at": "2024-01-15T10:30:00Z",
+  "computed_lines": 150,
+  "tokens": {
+    "input": 125000,
+    "output": 48000,
+    "cache_creation": 5000,
+    "cache_read": 12000
+  },
+  "cost": {
+    "estimated_usd": "1.25"
+  },
+  "compaction": {
+    "auto": 3,
+    "manual": 1,
+    "avg_time_ms": 5000
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `computed_at` | string | ISO timestamp when analytics were computed |
+| `computed_lines` | int | Line count through which analytics are computed |
+| `tokens.input` | int | Total input tokens sent to model |
+| `tokens.output` | int | Total output tokens generated |
+| `tokens.cache_creation` | int | Tokens written to cache |
+| `tokens.cache_read` | int | Tokens served from cache |
+| `cost.estimated_usd` | string | Estimated API cost (assumes 5-min prompt caching) |
+| `compaction.auto` | int | Auto-triggered compaction count |
+| `compaction.manual` | int | Manual compaction count |
+| `compaction.avg_time_ms` | int\|null | Avg auto-compaction time in ms (null if none) |
+
+**Notes:**
+- Analytics are cached in the database and recomputed when new data is synced
+- Returns empty analytics if session has no transcript file
+- `304 Not Modified` has no body
+
+---
+
 ## OAuth Endpoints (No prefix)
 
 These endpoints handle OAuth authentication flow:

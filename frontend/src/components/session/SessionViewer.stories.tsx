@@ -145,6 +145,7 @@ const mockMessages: TranscriptLine[] = [
 // Mock analytics computed from the messages above
 // computed_lines matches mockSession.files[0].last_synced_line (10)
 const mockAnalytics: SessionAnalytics = {
+  computed_at: new Date(Date.now() - 60000).toISOString(), // 1 minute ago
   computed_lines: 10,
   tokens: {
     input: 33000,
@@ -236,6 +237,7 @@ export const WithCustomTitle: Story = {
  */
 // Empty analytics for new sessions
 const emptyAnalytics: SessionAnalytics = {
+  computed_at: new Date().toISOString(),
   computed_lines: 0,
   tokens: {
     input: 0,

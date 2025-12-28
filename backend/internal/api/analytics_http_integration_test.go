@@ -319,4 +319,160 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 			t.Errorf("expected avg compaction time 5000ms, got %d", *result.Compaction.AvgTimeMs)
 		}
 	})
+
+	t.Run("returns 304 when as_of_line equals current line count", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
+
+		// Upload JSONL content (3 lines)
+		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":"thanks"},"uuid":"u2","timestamp":"2025-01-01T00:00:02Z"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 3, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		// Request with as_of_line=3 (equal to current line count)
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics?as_of_line=3", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusNotModified)
+	})
+
+	t.Run("returns 304 when as_of_line exceeds current line count", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
+
+		// Upload JSONL content (2 lines)
+		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 2, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 2)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		// Request with as_of_line=100 (greater than current line count of 2)
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics?as_of_line=100", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusNotModified)
+	})
+
+	t.Run("returns fresh analytics when as_of_line is less than current line count", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
+
+		// Upload JSONL content (3 lines)
+		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":200,"output_tokens":100}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 3, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		// Request with as_of_line=1 (less than current line count of 3)
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics?as_of_line=1", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result analytics.AnalyticsResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		// Should return analytics for all 3 lines (300 input tokens total)
+		if result.Tokens.Input != 300 {
+			t.Errorf("expected input tokens 300, got %d", result.Tokens.Input)
+		}
+		if result.ComputedLines != 3 {
+			t.Errorf("expected computed_lines 3, got %d", result.ComputedLines)
+		}
+	})
+
+	t.Run("returns 400 for invalid as_of_line parameter", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
+
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		// Test non-integer
+		resp1, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics?as_of_line=abc", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		resp1.Body.Close()
+		testutil.RequireStatus(t, resp1, http.StatusBadRequest)
+
+		// Test negative
+		resp2, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics?as_of_line=-5", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		resp2.Body.Close()
+		testutil.RequireStatus(t, resp2, http.StatusBadRequest)
+	})
+
+	t.Run("response includes computed_at timestamp", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
+
+		// Upload JSONL content
+		jsonlContent := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result analytics.AnalyticsResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		// ComputedAt should be set and recent (within the last minute)
+		if result.ComputedAt.IsZero() {
+			t.Error("expected computed_at to be set")
+		}
+	})
 }

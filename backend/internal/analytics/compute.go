@@ -144,6 +144,7 @@ func (r *ComputeResult) ToSessionAnalytics(sessionID string, analyticsVersion in
 // ToResponse converts a SessionAnalytics to an API response.
 func (s *SessionAnalytics) ToResponse() *AnalyticsResponse {
 	return &AnalyticsResponse{
+		ComputedAt:    s.ComputedAt,
 		ComputedLines: s.UpToLine,
 		Tokens: TokenStats{
 			Input:         s.InputTokens,

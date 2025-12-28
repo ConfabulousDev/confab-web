@@ -187,3 +187,28 @@ export const FallbackTitle: Story = {
     onSessionUpdate: (session) => console.log('Session updated:', session),
   },
 };
+
+// Non-interactive story showing header without filter (Analytics tab view)
+type DirectStory = StoryObj<typeof SessionHeader>;
+
+export const WithoutFilter: DirectStory = {
+  render: () => (
+    <SessionHeader
+      sessionId="session-analytics"
+      title="Viewing Analytics Tab"
+      hasCustomTitle={false}
+      autoTitle="Viewing Analytics Tab"
+      externalId="analytics123"
+      model="claude-opus-4-5-20251101"
+      durationMs={3600000}
+      sessionDate={new Date('2025-12-06T10:00:00')}
+      gitInfo={sampleGitInfo}
+      isOwner={true}
+      isShared={false}
+      onShare={() => alert('Share clicked')}
+      onDelete={() => alert('Delete clicked')}
+      onSessionUpdate={(session) => console.log('Session updated:', session)}
+      // No filter props - simulates Analytics tab view
+    />
+  ),
+};

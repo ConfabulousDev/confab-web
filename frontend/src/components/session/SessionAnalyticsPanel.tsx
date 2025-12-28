@@ -1,19 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
-import { analyticsAPI, type SessionAnalytics } from '@/services/api';
+import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
+import { RelativeTime } from '@/components/RelativeTime';
+import type { SessionAnalytics } from '@/schemas/api';
 import { formatTokenCount, formatCost } from '@/utils/tokenStats';
 import { formatResponseTime } from '@/utils/compactionStats';
 import styles from './SessionAnalyticsPanel.module.css';
 
 interface SessionAnalyticsPanelProps {
   sessionId: string;
-  /** Current total lines in the session (for staleness detection) */
-  totalLines: number;
   /** For Storybook: pass analytics directly instead of fetching from API */
   initialAnalytics?: SessionAnalytics;
 }
 
 const TOOLTIPS = {
-  source: 'Server-computed analytics from cached JSONL parsing. Updates when session syncs new data.',
+  source: 'Server-computed analytics from cached JSONL parsing. Updates automatically when new data is synced.',
   cost: {
     estimated: 'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
   },
@@ -48,57 +47,17 @@ const ServerIcon = (
   </svg>
 );
 
-const RefreshIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 2v6h-6" />
-    <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-    <path d="M3 22v-6h6" />
-    <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-  </svg>
-);
+function SessionAnalyticsPanel({ sessionId, initialAnalytics }: SessionAnalyticsPanelProps) {
+  // Use polling hook for live updates (disabled in Storybook mode)
+  const { analytics: polledAnalytics, loading, error } = useAnalyticsPolling(
+    sessionId,
+    initialAnalytics === undefined // Disable polling in Storybook mode
+  );
 
-function SessionAnalyticsPanel({ sessionId, totalLines, initialAnalytics }: SessionAnalyticsPanelProps) {
-  const [analytics, setAnalytics] = useState<SessionAnalytics | null>(initialAnalytics ?? null);
-  const [loading, setLoading] = useState(!initialAnalytics);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Use initial analytics for Storybook, polled analytics for real usage
+  const analytics = initialAnalytics ?? polledAnalytics;
 
-  const fetchAnalytics = useCallback(async (isRefresh = false) => {
-    if (initialAnalytics !== undefined) return;
-
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      setError(null);
-      const data = await analyticsAPI.get(sessionId);
-      setAnalytics(data);
-    } catch (err) {
-      console.error('Failed to fetch analytics:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load analytics');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [sessionId, initialAnalytics]);
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
-
-  // Calculate staleness (disable refresh in Storybook mode where initialAnalytics is provided)
-  const computedLines = analytics?.computed_lines ?? 0;
-  const newLines = totalLines - computedLines;
-  const isStale = newLines > 0;
-  const canRefresh = isStale && initialAnalytics === undefined;
-
-  const handleRefresh = useCallback(() => {
-    fetchAnalytics(true);
-  }, [fetchAnalytics]);
-
-  if (loading) {
+  if (loading && !analytics) {
     return (
       <div className={styles.panel}>
         <div className={styles.loading}>Loading analytics...</div>
@@ -106,14 +65,11 @@ function SessionAnalyticsPanel({ sessionId, totalLines, initialAnalytics }: Sess
     );
   }
 
-  if (error) {
+  if (error && !analytics) {
     return (
       <div className={styles.panel}>
         <div className={styles.error}>
-          <strong>Error:</strong> {error}
-          <button className={styles.retryButton} onClick={() => fetchAnalytics()}>
-            Retry
-          </button>
+          <strong>Error:</strong> {error.message}
         </div>
       </div>
     );
@@ -139,15 +95,9 @@ function SessionAnalyticsPanel({ sessionId, totalLines, initialAnalytics }: Sess
             <span>Server-computed</span>
           </div>
         </div>
-        <button
-          className={`${styles.refreshButton} ${canRefresh ? styles.refreshStale : ''} ${refreshing ? styles.refreshing : ''}`}
-          onClick={handleRefresh}
-          disabled={!canRefresh || refreshing}
-          title={isStale ? `${newLines} new lines available` : 'Analytics up to date'}
-        >
-          {RefreshIcon}
-          {isStale ? `+${newLines} lines` : 'Up to date'}
-        </button>
+        <div className={styles.lastUpdated} title="When analytics were last computed">
+          Updated <RelativeTime date={analytics.computed_at} />
+        </div>
       </div>
 
       <div className={styles.grid}>

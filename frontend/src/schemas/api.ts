@@ -161,6 +161,7 @@ export const CompactionInfoSchema = z.object({
 });
 
 export const SessionAnalyticsSchema = z.object({
+  computed_at: z.string(), // ISO timestamp when analytics were computed
   computed_lines: z.number(), // Line count when analytics were computed
   tokens: TokenStatsSchema,
   cost: CostStatsSchema,

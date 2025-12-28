@@ -58,7 +58,6 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   }, [session.files]);
 
   const transcriptFileName = transcriptFile?.file_name;
-  const totalLines = transcriptFile?.last_synced_line ?? 0;
 
   // Load transcript initially (skip if initialMessages provided for Storybook)
   useEffect(() => {
@@ -182,9 +181,9 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           onSessionUpdate={onSessionUpdate}
           isOwner={isOwner}
           isShared={isShared}
-          categoryCounts={categoryCounts}
-          visibleCategories={visibleCategories}
-          onToggleCategory={toggleCategory}
+          categoryCounts={activeTab === 'transcript' ? categoryCounts : undefined}
+          visibleCategories={activeTab === 'transcript' ? visibleCategories : undefined}
+          onToggleCategory={activeTab === 'transcript' ? toggleCategory : undefined}
         />
 
         {/* Tabs */}
@@ -218,7 +217,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
               )}
             </div>
           ) : (
-            <SessionAnalyticsPanel sessionId={session.id} totalLines={totalLines} initialAnalytics={initialAnalytics} />
+            <SessionAnalyticsPanel sessionId={session.id} initialAnalytics={initialAnalytics} />
           )}
         </div>
       </div>

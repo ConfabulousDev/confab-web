@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
@@ -70,6 +71,25 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		// Current state for cache validation
 		currentLineCount := int64(fileInfo.LastSyncedLine)
+
+		// Parse optional as_of_line query parameter for conditional requests
+		// If client already has analytics up to the current line count, return 304
+		if asOfLineStr := r.URL.Query().Get("as_of_line"); asOfLineStr != "" {
+			asOfLine, err := strconv.ParseInt(asOfLineStr, 10, 64)
+			if err != nil {
+				respondError(w, http.StatusBadRequest, "as_of_line must be a valid integer")
+				return
+			}
+			if asOfLine < 0 {
+				respondError(w, http.StatusBadRequest, "as_of_line must be non-negative")
+				return
+			}
+			// Client already has analytics up to or past current line count - no new data
+			if asOfLine >= currentLineCount {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
 
 		// Check if we have valid cached analytics
 		cached, err := analyticsStore.Get(dbCtx, sessionID)
