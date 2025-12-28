@@ -216,7 +216,17 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardPr
         {loading && links.length === 0 ? (
           <div className={styles.loading}>Loading...</div>
         ) : links.length === 0 && !showAddForm ? (
-          <div className={styles.empty}>No linked PRs or commits</div>
+          <div className={styles.empty}>
+            <span>No linked PRs or commits</span>
+            {isOwner && (
+              <button
+                className={styles.emptyAddButton}
+                onClick={() => setShowAddForm(true)}
+              >
+                Add link
+              </button>
+            )}
+          </div>
         ) : (
           <>
             {/* PR Links */}
