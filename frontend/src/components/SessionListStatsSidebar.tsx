@@ -3,7 +3,7 @@ import type { Session } from '@/types';
 import { useSpinner } from '@/hooks';
 import { formatDuration } from '@/utils/formatting';
 import PageSidebar from './PageSidebar';
-import styles from './session/SessionStatsSidebar.module.css';
+import styles from './SessionListStatsSidebar.module.css';
 
 interface SessionListStatsSidebarProps {
   sessions: Session[];

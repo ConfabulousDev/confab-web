@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { SessionAnalytics } from '@/services/api';
-import SessionAnalyticsPanel from './SessionAnalyticsPanel';
+import type { SessionAnalytics, GitHubLink } from '@/services/api';
+import SessionSummaryPanel from './SessionSummaryPanel';
 
 // Sample analytics from backend API - typical session
 const mockAnalytics: SessionAnalytics = {
@@ -122,9 +122,52 @@ const olderAnalytics: SessionAnalytics = {
   },
 };
 
+// Sample GitHub links for stories
+const mockGitHubLinks: GitHubLink[] = [
+  {
+    id: 1,
+    session_id: 'test-session',
+    link_type: 'pull_request',
+    url: 'https://github.com/owner/repo/pull/123',
+    owner: 'owner',
+    repo: 'repo',
+    ref: '123',
+    title: 'Add new feature',
+    source: 'cli_hook',
+    created_at: '2025-01-15T10:30:00Z',
+  },
+  {
+    id: 2,
+    session_id: 'test-session',
+    link_type: 'pull_request',
+    url: 'https://github.com/another-org/another-repo/pull/456',
+    owner: 'another-org',
+    repo: 'another-repo',
+    ref: '456',
+    title: 'Fix critical bug',
+    source: 'manual',
+    created_at: '2025-01-15T09:00:00Z',
+  },
+];
+
+const mockCommitLinks: GitHubLink[] = [
+  {
+    id: 3,
+    session_id: 'test-session',
+    link_type: 'commit',
+    url: 'https://github.com/owner/repo/commit/abc1234567890def',
+    owner: 'owner',
+    repo: 'repo',
+    ref: 'abc1234567890def',
+    title: null,
+    source: 'cli_hook',
+    created_at: '2025-01-15T11:00:00Z',
+  },
+];
+
 const meta = {
-  title: 'Session/SessionAnalyticsPanel',
-  component: SessionAnalyticsPanel,
+  title: 'Session/SessionSummaryPanel',
+  component: SessionSummaryPanel,
   parameters: {
     layout: 'padded',
   },
@@ -135,7 +178,7 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof SessionAnalyticsPanel>;
+} satisfies Meta<typeof SessionSummaryPanel>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -147,7 +190,9 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     sessionId: 'test-session-id',
+    isOwner: true,
     initialAnalytics: mockAnalytics,
+    initialGithubLinks: [],
   },
 };
 
@@ -158,7 +203,9 @@ export const Default: Story = {
 export const OlderTimestamp: Story = {
   args: {
     sessionId: 'test-session-id',
+    isOwner: true,
     initialAnalytics: olderAnalytics,
+    initialGithubLinks: [],
   },
 };
 
@@ -168,7 +215,9 @@ export const OlderTimestamp: Story = {
 export const EmptySession: Story = {
   args: {
     sessionId: 'test-session-id',
+    isOwner: true,
     initialAnalytics: emptyAnalytics,
+    initialGithubLinks: [],
   },
 };
 
@@ -178,7 +227,9 @@ export const EmptySession: Story = {
 export const SmallSession: Story = {
   args: {
     sessionId: 'test-session-id',
+    isOwner: true,
     initialAnalytics: smallAnalytics,
+    initialGithubLinks: [],
   },
 };
 
@@ -188,7 +239,9 @@ export const SmallSession: Story = {
 export const LargeSession: Story = {
   args: {
     sessionId: 'test-session-id',
+    isOwner: true,
     initialAnalytics: largeAnalytics,
+    initialGithubLinks: [],
   },
 };
 
@@ -198,9 +251,44 @@ export const LargeSession: Story = {
 export const AutoCompactionsOnly: Story = {
   args: {
     sessionId: 'test-session-id',
+    isOwner: true,
     initialAnalytics: autoCompactionAnalytics,
+    initialGithubLinks: [],
   },
 };
 
-// Note: Loading and Error states require mocking the API
-// These can be added with MSW (Mock Service Worker) if needed
+/**
+ * Summary with GitHub PR links.
+ */
+export const WithGitHubLinks: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: true,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGitHubLinks,
+  },
+};
+
+/**
+ * Summary with GitHub PR and commit links.
+ */
+export const WithPRsAndCommits: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: true,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: [...mockGitHubLinks, ...mockCommitLinks],
+  },
+};
+
+/**
+ * View-only mode (non-owner).
+ */
+export const ViewOnly: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: false,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGitHubLinks,
+  },
+};

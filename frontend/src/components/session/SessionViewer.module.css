@@ -1,4 +1,4 @@
-/* Main session viewer container - flex layout with sidebar */
+/* Main session viewer container */
 .sessionViewer {
   display: flex;
   height: 100%;
@@ -6,7 +6,7 @@
   background: var(--color-bg);
 }
 
-/* Main content area - flexbox handles sidebar width automatically */
+/* Main content area */
 .mainContent {
   flex: 1;
   display: flex;

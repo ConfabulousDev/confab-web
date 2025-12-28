@@ -1,14 +1,18 @@
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
 import { RelativeTime } from '@/components/RelativeTime';
-import type { SessionAnalytics } from '@/schemas/api';
+import type { SessionAnalytics, GitHubLink } from '@/schemas/api';
 import { formatTokenCount, formatCost } from '@/utils/tokenStats';
 import { formatResponseTime } from '@/utils/compactionStats';
-import styles from './SessionAnalyticsPanel.module.css';
+import GitHubLinksCard from './GitHubLinksCard';
+import styles from './SessionSummaryPanel.module.css';
 
-interface SessionAnalyticsPanelProps {
+interface SessionSummaryPanelProps {
   sessionId: string;
+  isOwner: boolean;
   /** For Storybook: pass analytics directly instead of fetching from API */
   initialAnalytics?: SessionAnalytics;
+  /** For Storybook: pass GitHub links directly instead of fetching from API */
+  initialGithubLinks?: GitHubLink[];
 }
 
 const TOOLTIPS = {
@@ -29,7 +33,7 @@ const TOOLTIPS = {
   },
 };
 
-// Icons (matching sidebar style)
+// Icons
 const InfoIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="10" />
@@ -47,7 +51,7 @@ const ServerIcon = (
   </svg>
 );
 
-function SessionAnalyticsPanel({ sessionId, initialAnalytics }: SessionAnalyticsPanelProps) {
+function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks }: SessionSummaryPanelProps) {
   // Use polling hook for live updates (disabled in Storybook mode)
   const { analytics: polledAnalytics, loading, error } = useAnalyticsPolling(
     sessionId,
@@ -60,7 +64,7 @@ function SessionAnalyticsPanel({ sessionId, initialAnalytics }: SessionAnalytics
   if (loading && !analytics) {
     return (
       <div className={styles.panel}>
-        <div className={styles.loading}>Loading analytics...</div>
+        <div className={styles.loading}>Loading summary...</div>
       </div>
     );
   }
@@ -89,7 +93,7 @@ function SessionAnalyticsPanel({ sessionId, initialAnalytics }: SessionAnalytics
     <div className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <h2 className={styles.title}>Session Analytics</h2>
+          <h2 className={styles.title}>Session Summary</h2>
           <div className={styles.source} title={TOOLTIPS.source}>
             {ServerIcon}
             <span>Server-computed</span>
@@ -101,6 +105,13 @@ function SessionAnalyticsPanel({ sessionId, initialAnalytics }: SessionAnalytics
       </div>
 
       <div className={styles.grid}>
+        {/* GitHub Links - first in grid */}
+        <GitHubLinksCard
+          sessionId={sessionId}
+          isOwner={isOwner}
+          initialLinks={initialGithubLinks}
+        />
+
         {/* Tokens Section */}
         <div className={styles.card}>
           <div className={styles.cardHeader}>Tokens</div>
@@ -177,11 +188,10 @@ function SessionAnalyticsPanel({ sessionId, initialAnalytics }: SessionAnalytics
       <div className={styles.footer}>
         <p className={styles.footerNote}>
           These metrics are computed server-side from the JSONL transcript and cached for performance.
-          Compare with the sidebar&apos;s real-time client-computed stats.
         </p>
       </div>
     </div>
   );
 }
 
-export default SessionAnalyticsPanel;
+export default SessionSummaryPanel;

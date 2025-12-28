@@ -4,12 +4,11 @@ import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/tr
 import { useVisibility } from '@/hooks/useVisibility';
 import { countCategories, type MessageCategory } from './messageCategories';
 import SessionHeader from './SessionHeader';
-import SessionStatsSidebar from './SessionStatsSidebar';
 import MessageTimeline from './MessageTimeline';
-import SessionAnalyticsPanel from './SessionAnalyticsPanel';
+import SessionSummaryPanel from './SessionSummaryPanel';
 import styles from './SessionViewer.module.css';
 
-type ViewTab = 'transcript' | 'analytics';
+type ViewTab = 'summary' | 'transcript';
 
 // Polling interval for new transcript messages (15 seconds)
 const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
@@ -25,10 +24,12 @@ interface SessionViewerProps {
   initialMessages?: TranscriptLine[];
   /** For Storybook: pass analytics directly instead of fetching from API */
   initialAnalytics?: import('@/services/api').SessionAnalytics;
+  /** For Storybook: pass GitHub links directly instead of fetching from API */
+  initialGithubLinks?: import('@/services/api').GitHubLink[];
 }
 
-function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, initialMessages, initialAnalytics }: SessionViewerProps) {
-  const [activeTab, setActiveTab] = useState<ViewTab>('transcript');
+function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, initialMessages, initialAnalytics, initialGithubLinks }: SessionViewerProps) {
+  const [activeTab, setActiveTab] = useState<ViewTab>('summary');
   const [loading, setLoading] = useState(!initialMessages);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>(initialMessages ?? []);
@@ -158,13 +159,6 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
   return (
     <div className={styles.sessionViewer}>
-      <SessionStatsSidebar
-        messages={messages}
-        loading={loading}
-        sessionId={session.id}
-        isOwner={isOwner}
-      />
-
       <div className={styles.mainContent}>
         <SessionHeader
           sessionId={session.id}
@@ -189,22 +183,29 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
         {/* Tabs */}
         <div className={styles.tabs}>
           <button
+            className={`${styles.tab} ${activeTab === 'summary' ? styles.tabActive : ''}`}
+            onClick={() => setActiveTab('summary')}
+          >
+            Summary
+          </button>
+          <button
             className={`${styles.tab} ${activeTab === 'transcript' ? styles.tabActive : ''}`}
             onClick={() => setActiveTab('transcript')}
           >
             Transcript
           </button>
-          <button
-            className={`${styles.tab} ${activeTab === 'analytics' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('analytics')}
-          >
-            Analytics
-          </button>
         </div>
 
         {/* Tab Content */}
         <div className={styles.tabContent}>
-          {activeTab === 'transcript' ? (
+          {activeTab === 'summary' ? (
+            <SessionSummaryPanel
+              sessionId={session.id}
+              isOwner={isOwner}
+              initialAnalytics={initialAnalytics}
+              initialGithubLinks={initialGithubLinks}
+            />
+          ) : (
             <div className={styles.timelineContainer}>
               {loading ? (
                 <div className={styles.loading}>Loading transcript...</div>
@@ -216,8 +217,6 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
                 <MessageTimeline messages={filteredMessages} allMessages={messages} />
               )}
             </div>
-          ) : (
-            <SessionAnalyticsPanel sessionId={session.id} initialAnalytics={initialAnalytics} />
           )}
         </div>
       </div>

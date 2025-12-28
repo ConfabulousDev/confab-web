@@ -1,4 +1,4 @@
-/* Session Analytics Panel - displays server-computed analytics */
+/* Session Summary Panel - displays server-computed analytics and GitHub links */
 
 .panel {
   padding: var(--spacing-lg);

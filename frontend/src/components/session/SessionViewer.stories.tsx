@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { SessionDetail, AssistantMessage, UserMessage, TranscriptLine } from '@/types';
-import type { SessionAnalytics } from '@/services/api';
+import type { SessionAnalytics, GitHubLink } from '@/services/api';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
 import SessionViewer from './SessionViewer';
 
@@ -163,6 +163,22 @@ const mockAnalytics: SessionAnalytics = {
   },
 };
 
+// Mock GitHub links
+const mockGithubLinks: GitHubLink[] = [
+  {
+    id: 1,
+    session_id: 'test-session-uuid',
+    link_type: 'pull_request',
+    url: 'https://github.com/user/repo/pull/42',
+    owner: 'user',
+    repo: 'repo',
+    ref: '42',
+    title: 'Add analytics feature',
+    source: 'cli_hook',
+    created_at: '2025-01-15T11:00:00Z',
+  },
+];
+
 const meta = {
   title: 'Session/SessionViewer',
   component: SessionViewer,
@@ -184,8 +200,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * Default view with Transcript tab active.
- * Click the "Analytics" tab to switch views.
+ * Default view with Summary tab active.
+ * Click the "Transcript" tab to switch views.
  */
 export const Default: Story = {
   args: {
@@ -194,6 +210,7 @@ export const Default: Story = {
     isShared: false,
     initialMessages: mockMessages,
     initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
   },
 };
 
@@ -213,6 +230,7 @@ export const SharedSession: Story = {
     isShared: true,
     initialMessages: mockMessages,
     initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
   },
 };
 
@@ -229,6 +247,7 @@ export const WithCustomTitle: Story = {
     isShared: false,
     initialMessages: mockMessages,
     initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
   },
 };
 
@@ -265,5 +284,6 @@ export const EmptySession: Story = {
     isShared: false,
     initialMessages: [],
     initialAnalytics: emptyAnalytics,
+    initialGithubLinks: [],
   },
 };

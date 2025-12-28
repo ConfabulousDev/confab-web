@@ -1,0 +1,77 @@
+/* Session stats sidebar - left panel showing session statistics */
+
+.section {
+  padding: var(--spacing-md) 0;
+}
+
+.section:first-child {
+  padding-top: var(--spacing-sm);
+}
+
+.section:not(:last-child) {
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.sectionHeader {
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-sm);
+  padding: 0 var(--spacing-sm);
+}
+
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px var(--spacing-sm);
+  font-size: var(--font-xs);
+  gap: var(--spacing-sm);
+}
+
+.statLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+}
+
+.statIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted);
+}
+
+.statIcon svg {
+  display: block;
+}
+
+.statValue {
+  font-size: var(--font-xs);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Special color variants */
+.statValue.cost {
+  color: #16a34a;
+  font-weight: var(--font-medium);
+}
+
+.statValue.added {
+  color: #16a34a;
+}
+
+.statValue.removed {
+  color: #dc2626;
+}
+
+/* Collapsed state - hide content */
+.collapsed .section {
+  display: none;
+}

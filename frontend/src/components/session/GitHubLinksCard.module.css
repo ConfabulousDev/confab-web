@@ -1,90 +1,27 @@
-/* Session stats sidebar - left panel showing session statistics */
+/* GitHub Links Card - displays linked PRs and commits */
 
-.section {
-  padding: var(--spacing-md) 0;
+.card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
-.section:first-child {
-  padding-top: var(--spacing-sm);
-}
-
-.section:not(:last-child) {
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.sectionHeader {
-  font-size: 10px;
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--font-xs);
   font-weight: var(--font-semibold);
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: var(--spacing-sm);
-  padding: 0 var(--spacing-sm);
-}
-
-.statRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 3px var(--spacing-sm);
-  font-size: var(--font-xs);
-  gap: var(--spacing-sm);
-}
-
-.statLabel {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  color: var(--color-text-secondary);
-}
-
-.statIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--color-text-muted);
-}
-
-.statIcon svg {
-  display: block;
-}
-
-.statValue {
-  font-size: var(--font-xs);
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Special color variants */
-.statValue.cost {
-  color: #16a34a;
-  font-weight: var(--font-medium);
-}
-
-.statValue.added {
-  color: #16a34a;
-}
-
-.statValue.removed {
-  color: #dc2626;
-}
-
-/* Collapsed state - hide content */
-.collapsed .section {
-  display: none;
-}
-
-/* GitHub section specific styles */
-.sectionHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-bg-tertiary);
 }
 
 .addButton {
-  margin-left: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -102,17 +39,29 @@
   background: var(--color-bg-hover);
 }
 
-.errorText {
-  font-size: var(--font-xs);
-  color: var(--color-error);
-  padding: 0 var(--spacing-sm);
-  margin-bottom: var(--spacing-xs);
+.cardContent {
+  padding: var(--spacing-sm) 0;
 }
 
+.loading,
+.empty {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+
+.error {
+  padding: var(--spacing-xs) var(--spacing-md);
+  color: var(--color-error);
+  font-size: var(--font-xs);
+}
+
+/* Link rows */
 .linkRow {
   display: flex;
   align-items: center;
-  padding: 3px var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
   gap: var(--spacing-xs);
 }
 
@@ -123,17 +72,25 @@
 .linkContent {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
   flex: 1;
   min-width: 0;
   text-decoration: none;
   color: var(--color-text-secondary);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   transition: color 0.15s;
 }
 
 .linkContent:hover {
   color: var(--color-text-primary);
+}
+
+.linkIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
 }
 
 .linkRef {
@@ -154,7 +111,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  padding: 4px;
   background: none;
   border: none;
   color: var(--color-text-muted);
@@ -177,20 +134,21 @@
   opacity: 0.5;
 }
 
-/* Add form styles */
+/* Add form */
 .addForm {
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .urlInput {
   width: 100%;
-  padding: 4px 6px;
-  font-size: var(--font-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-sm);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
 }
@@ -202,7 +160,6 @@
 
 .urlInput::placeholder {
   color: var(--color-text-muted);
-  font-size: 10px;
 }
 
 .addFormButtons {
@@ -212,9 +169,9 @@
 
 .submitButton,
 .cancelButton {
-  padding: 3px 6px;
-  font-size: 10px;
-  border-radius: 4px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-xs);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color 0.15s, opacity 0.15s;
 }
