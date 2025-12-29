@@ -50,3 +50,14 @@ export function StatRow({ label, value, icon, tooltip, valueClassName }: StatRow
 export function CardLoading() {
   return <div className={styles.loading}>Loading...</div>;
 }
+
+interface SectionHeaderProps {
+  label: string;
+}
+
+/**
+ * A section header within a card to group related stats.
+ */
+export function SectionHeader({ label }: SectionHeaderProps) {
+  return <div className={styles.sectionHeader}>{label}</div>;
+}

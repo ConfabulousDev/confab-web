@@ -171,14 +171,33 @@ export const TokensCardDataSchema = z.object({
 });
 
 // Session card includes compaction info (consolidated from previous separate compaction card)
+// Note: Messages with text+tool_use count as text_responses, not tool_calls.
+// Therefore assistant_messages may not equal text_responses + tool_calls + thinking_blocks.
 export const SessionCardDataSchema = z.object({
-  user_turns: z.number(),
-  assistant_turns: z.number(),
+  // Message counts (raw line counts)
+  total_messages: z.number(),
+  user_messages: z.number(),
+  assistant_messages: z.number(),
+
+  // Message type breakdown
+  human_prompts: z.number(), // User messages with string content
+  tool_results: z.number(), // User messages with tool_result arrays
+  text_responses: z.number(), // Assistant messages containing text (counts as turn)
+  tool_calls: z.number(), // Assistant messages with ONLY tool_use (no text)
+  thinking_blocks: z.number(), // Assistant messages with ONLY thinking (no text)
+
+  // Actual conversational turns
+  user_turns: z.number(), // Same as human_prompts
+  assistant_turns: z.number(), // Same as text_responses
+
+  // Session metadata
   duration_ms: z.number().nullable().optional(),
   models_used: z.array(z.string()),
-  compaction_auto: z.number(), // Consolidated from compaction card
-  compaction_manual: z.number(), // Consolidated from compaction card
-  compaction_avg_time_ms: z.number().nullable().optional(), // Consolidated from compaction card
+
+  // Compaction stats (consolidated from previous separate compaction card)
+  compaction_auto: z.number(),
+  compaction_manual: z.number(),
+  compaction_avg_time_ms: z.number().nullable().optional(),
 });
 
 export const ToolStatsSchema = z.object({

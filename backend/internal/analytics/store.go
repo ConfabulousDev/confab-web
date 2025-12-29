@@ -152,6 +152,8 @@ func (s *Store) upsertTokensCard(ctx context.Context, record *TokensCardRecord) 
 func (s *Store) getSessionCard(ctx context.Context, sessionID string) (*SessionCardRecord, error) {
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
+			total_messages, user_messages, assistant_messages,
+			human_prompts, tool_results, text_responses, tool_calls, thinking_blocks,
 			user_turns, assistant_turns, duration_ms, models_used,
 			compaction_auto, compaction_manual, compaction_avg_time_ms
 		FROM session_card_session
@@ -165,6 +167,14 @@ func (s *Store) getSessionCard(ctx context.Context, sessionID string) (*SessionC
 		&record.Version,
 		&record.ComputedAt,
 		&record.UpToLine,
+		&record.TotalMessages,
+		&record.UserMessages,
+		&record.AssistantMessages,
+		&record.HumanPrompts,
+		&record.ToolResults,
+		&record.TextResponses,
+		&record.ToolCalls,
+		&record.ThinkingBlocks,
 		&record.UserTurns,
 		&record.AssistantTurns,
 		&record.DurationMs,
@@ -196,13 +206,23 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 	query := `
 		INSERT INTO session_card_session (
 			session_id, version, computed_at, up_to_line,
+			total_messages, user_messages, assistant_messages,
+			human_prompts, tool_results, text_responses, tool_calls, thinking_blocks,
 			user_turns, assistant_turns, duration_ms, models_used,
 			compaction_auto, compaction_manual, compaction_avg_time_ms
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
 			up_to_line = EXCLUDED.up_to_line,
+			total_messages = EXCLUDED.total_messages,
+			user_messages = EXCLUDED.user_messages,
+			assistant_messages = EXCLUDED.assistant_messages,
+			human_prompts = EXCLUDED.human_prompts,
+			tool_results = EXCLUDED.tool_results,
+			text_responses = EXCLUDED.text_responses,
+			tool_calls = EXCLUDED.tool_calls,
+			thinking_blocks = EXCLUDED.thinking_blocks,
 			user_turns = EXCLUDED.user_turns,
 			assistant_turns = EXCLUDED.assistant_turns,
 			duration_ms = EXCLUDED.duration_ms,
@@ -217,6 +237,14 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 		record.Version,
 		record.ComputedAt,
 		record.UpToLine,
+		record.TotalMessages,
+		record.UserMessages,
+		record.AssistantMessages,
+		record.HumanPrompts,
+		record.ToolResults,
+		record.TextResponses,
+		record.ToolCalls,
+		record.ThinkingBlocks,
 		record.UserTurns,
 		record.AssistantTurns,
 		record.DurationMs,
@@ -318,14 +346,27 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			EstimatedCostUSD:    r.EstimatedCostUSD,
 		},
 		Session: &SessionCardRecord{
-			SessionID:           sessionID,
-			Version:             SessionCardVersion,
-			ComputedAt:          now,
-			UpToLine:            lineCount,
-			UserTurns:           r.UserTurns,
-			AssistantTurns:      r.AssistantTurns,
-			DurationMs:          r.DurationMs,
-			ModelsUsed:          r.ModelsUsed,
+			SessionID:  sessionID,
+			Version:    SessionCardVersion,
+			ComputedAt: now,
+			UpToLine:   lineCount,
+			// Message counts
+			TotalMessages:     r.TotalMessages,
+			UserMessages:      r.UserMessages,
+			AssistantMessages: r.AssistantMessages,
+			// Message type breakdown
+			HumanPrompts:   r.HumanPrompts,
+			ToolResults:    r.ToolResults,
+			TextResponses:  r.TextResponses,
+			ToolCalls:      r.ToolCalls,
+			ThinkingBlocks: r.ThinkingBlocks,
+			// Turns
+			UserTurns:      r.UserTurns,
+			AssistantTurns: r.AssistantTurns,
+			// Metadata
+			DurationMs: r.DurationMs,
+			ModelsUsed: r.ModelsUsed,
+			// Compaction
 			CompactionAuto:      r.CompactionAuto,
 			CompactionManual:    r.CompactionManual,
 			CompactionAvgTimeMs: r.CompactionAvgTimeMs,
@@ -381,12 +422,25 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			AvgTimeMs: c.Session.CompactionAvgTimeMs,
 		}
 
-		// Cards format - session includes compaction
+		// Cards format - session includes message breakdown and compaction
 		response.Cards["session"] = SessionCardData{
-			UserTurns:           c.Session.UserTurns,
-			AssistantTurns:      c.Session.AssistantTurns,
-			DurationMs:          c.Session.DurationMs,
-			ModelsUsed:          c.Session.ModelsUsed,
+			// Message counts
+			TotalMessages:     c.Session.TotalMessages,
+			UserMessages:      c.Session.UserMessages,
+			AssistantMessages: c.Session.AssistantMessages,
+			// Message type breakdown
+			HumanPrompts:   c.Session.HumanPrompts,
+			ToolResults:    c.Session.ToolResults,
+			TextResponses:  c.Session.TextResponses,
+			ToolCalls:      c.Session.ToolCalls,
+			ThinkingBlocks: c.Session.ThinkingBlocks,
+			// Turns
+			UserTurns:      c.Session.UserTurns,
+			AssistantTurns: c.Session.AssistantTurns,
+			// Metadata
+			DurationMs: c.Session.DurationMs,
+			ModelsUsed: c.Session.ModelsUsed,
+			// Compaction
 			CompactionAuto:      c.Session.CompactionAuto,
 			CompactionManual:    c.Session.CompactionManual,
 			CompactionAvgTimeMs: c.Session.CompactionAvgTimeMs,

@@ -171,3 +171,59 @@ func (l *TranscriptLine) HasThinking() bool {
 	}
 	return false
 }
+
+// IsHumanMessage returns true if this is a user message with human-typed content (not tool_result).
+// This distinguishes actual user input from tool result messages which are also type "user".
+func (l *TranscriptLine) IsHumanMessage() bool {
+	if l.Type != "user" {
+		return false
+	}
+	// Check if content is a string (human input) vs array (tool_result)
+	if l.Message == nil || l.Message.Content == nil {
+		return false
+	}
+	_, isString := l.Message.Content.(string)
+	return isString
+}
+
+// IsToolResultMessage returns true if this is a user message containing tool_result blocks.
+func (l *TranscriptLine) IsToolResultMessage() bool {
+	if l.Type != "user" {
+		return false
+	}
+	// If content is an array, it's tool results
+	if l.Message == nil || l.Message.Content == nil {
+		return false
+	}
+	_, isArray := l.Message.Content.([]interface{})
+	return isArray
+}
+
+// HasTextContent returns true if the message contains text content.
+// For assistant messages, this checks for "text" type blocks or string content.
+func (l *TranscriptLine) HasTextContent() bool {
+	if l.Message == nil || l.Message.Content == nil {
+		return false
+	}
+	// String content is text
+	if _, isString := l.Message.Content.(string); isString {
+		return true
+	}
+	// Check for text blocks in array content
+	for _, b := range l.GetContentBlocks() {
+		if b.Type == "text" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasToolUse returns true if the message contains tool_use blocks.
+func (l *TranscriptLine) HasToolUse() bool {
+	for _, b := range l.GetContentBlocks() {
+		if b.Type == "tool_use" {
+			return true
+		}
+	}
+	return false
+}

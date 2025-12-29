@@ -3,11 +3,34 @@ package analytics
 import "time"
 
 // SessionCollector extracts session-level metrics from transcript lines.
-// This includes turn counts, duration, models used, and compaction statistics.
+// This includes message counts, turn counts, duration, models used, and compaction statistics.
+//
+// Message breakdown semantics:
+//   - HumanPrompts: user messages with string content (actual human input)
+//   - ToolResults: user messages with tool_result arrays (not human input)
+//   - TextResponses: assistant messages containing text (visible to user)
+//   - ToolCalls: assistant messages with ONLY tool_use blocks (no visible text)
+//   - ThinkingBlocks: assistant messages with ONLY thinking blocks (no visible text)
+//
+// Note: Messages with text+tool_use count as TextResponses, not ToolCalls.
+// Messages with both thinking+tool_use (no text) are counted in neither.
+// Therefore: AssistantMessages may not equal TextResponses+ToolCalls+ThinkingBlocks.
 type SessionCollector struct {
-	// Turn counts
-	UserTurns      int
-	AssistantTurns int
+	// Message counts (raw line counts)
+	TotalMessages     int
+	UserMessages      int
+	AssistantMessages int
+
+	// Message type breakdown (see struct doc for semantics)
+	HumanPrompts   int // User messages with string content (actual human input)
+	ToolResults    int // User messages with tool_result arrays
+	TextResponses  int // Assistant messages containing text (counts as a turn)
+	ToolCalls      int // Assistant messages with ONLY tool_use (no text, no thinking)
+	ThinkingBlocks int // Assistant messages with ONLY thinking (no text, no tool_use)
+
+	// Actual conversational turns (not raw message counts)
+	UserTurns      int // Same as HumanPrompts
+	AssistantTurns int // Same as TextResponses
 
 	// Models tracking
 	ModelsUsed map[string]bool
@@ -32,17 +55,45 @@ func NewSessionCollector() *SessionCollector {
 
 // Collect processes a single line for session metrics.
 func (c *SessionCollector) Collect(line *TranscriptLine, ctx *CollectContext) {
-	// Count turns
+	// Count all messages
+	c.TotalMessages++
+
+	// Count user messages and breakdown
 	if line.IsUserMessage() {
-		c.UserTurns++
+		c.UserMessages++
+
+		if line.IsHumanMessage() {
+			c.HumanPrompts++
+			c.UserTurns++ // Actual conversational turn
+		} else if line.IsToolResultMessage() {
+			c.ToolResults++
+		}
 	}
+
+	// Count assistant messages and breakdown
 	if line.IsAssistantMessage() {
-		c.AssistantTurns++
+		c.AssistantMessages++
 
 		// Track models used
 		if model := line.GetModel(); model != "" {
 			c.ModelsUsed[model] = true
 		}
+
+		// Categorize by content type
+		hasText := line.HasTextContent()
+		hasToolUse := line.HasToolUse()
+		hasThinking := line.HasThinking()
+
+		if hasText {
+			c.TextResponses++
+			c.AssistantTurns++ // Actual conversational turn
+		} else if hasToolUse && !hasThinking {
+			c.ToolCalls++
+		} else if hasThinking && !hasToolUse {
+			c.ThinkingBlocks++
+		}
+		// Note: mixed thinking+tool_use without text is counted in neither
+		// (this is an edge case that shouldn't occur often)
 	}
 
 	// Track first and last timestamps for duration

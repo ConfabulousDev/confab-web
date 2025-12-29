@@ -9,8 +9,28 @@ function createAnalytics(base: {
   tokens: { input: number; output: number; cache_creation: number; cache_read: number };
   cost: { estimated_usd: string };
   compaction: { auto: number; manual: number; avg_time_ms: number | null };
-  session?: { user_turns: number; assistant_turns: number; duration_ms: number | null; models_used: string[] };
+  session?: {
+    total_messages?: number;
+    user_messages?: number;
+    assistant_messages?: number;
+    human_prompts?: number;
+    tool_results?: number;
+    text_responses?: number;
+    tool_calls?: number;
+    thinking_blocks?: number;
+    user_turns: number;
+    assistant_turns: number;
+    duration_ms: number | null;
+    models_used: string[];
+  };
 }): SessionAnalytics {
+  const userTurns = base.session?.user_turns ?? 10;
+  const assistantTurns = base.session?.assistant_turns ?? 10;
+  // Default message breakdown assumes moderate tool usage
+  const totalMessages = base.session?.total_messages ?? (userTurns + assistantTurns) * 5;
+  const userMessages = base.session?.user_messages ?? userTurns * 3;
+  const assistantMessages = base.session?.assistant_messages ?? totalMessages - userMessages;
+
   return {
     ...base,
     cards: {
@@ -19,8 +39,20 @@ function createAnalytics(base: {
         estimated_usd: base.cost.estimated_usd,
       },
       session: {
-        user_turns: base.session?.user_turns ?? 10,
-        assistant_turns: base.session?.assistant_turns ?? 10,
+        // Message counts
+        total_messages: totalMessages,
+        user_messages: userMessages,
+        assistant_messages: assistantMessages,
+        // Message type breakdown
+        human_prompts: base.session?.human_prompts ?? userTurns,
+        tool_results: base.session?.tool_results ?? userMessages - userTurns,
+        text_responses: base.session?.text_responses ?? assistantTurns,
+        tool_calls: base.session?.tool_calls ?? Math.floor(assistantMessages * 0.6),
+        thinking_blocks: base.session?.thinking_blocks ?? Math.floor(assistantMessages * 0.3),
+        // Turns
+        user_turns: userTurns,
+        assistant_turns: assistantTurns,
+        // Metadata
         duration_ms: base.session?.duration_ms ?? 3600000,
         models_used: base.session?.models_used ?? ['claude-sonnet-4-20250514'],
         compaction_auto: base.compaction.auto,

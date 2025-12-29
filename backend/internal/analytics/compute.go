@@ -14,11 +14,27 @@ type ComputeResult struct {
 	CacheReadTokens     int64
 	EstimatedCostUSD    decimal.Decimal
 
-	// Session stats including compaction (from SessionCollector)
-	UserTurns           int
-	AssistantTurns      int
-	DurationMs          *int64
-	ModelsUsed          []string
+	// Message counts (from SessionCollector)
+	TotalMessages     int
+	UserMessages      int
+	AssistantMessages int
+
+	// Message type breakdown (from SessionCollector)
+	HumanPrompts   int
+	ToolResults    int
+	TextResponses  int
+	ToolCalls      int
+	ThinkingBlocks int
+
+	// Actual conversational turns (from SessionCollector)
+	UserTurns      int
+	AssistantTurns int
+
+	// Session metadata (from SessionCollector)
+	DurationMs *int64
+	ModelsUsed []string
+
+	// Compaction stats (from SessionCollector)
 	CompactionAuto      int
 	CompactionManual    int
 	CompactionAvgTimeMs *int
@@ -49,11 +65,27 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 		CacheReadTokens:     tokens.CacheReadTokens,
 		EstimatedCostUSD:    tokens.EstimatedCostUSD,
 
-		// Session stats (including compaction)
-		UserTurns:           session.UserTurns,
-		AssistantTurns:      session.AssistantTurns,
-		DurationMs:          session.DurationMs(),
-		ModelsUsed:          session.ModelsList(),
+		// Message counts
+		TotalMessages:     session.TotalMessages,
+		UserMessages:      session.UserMessages,
+		AssistantMessages: session.AssistantMessages,
+
+		// Message type breakdown
+		HumanPrompts:   session.HumanPrompts,
+		ToolResults:    session.ToolResults,
+		TextResponses:  session.TextResponses,
+		ToolCalls:      session.ToolCalls,
+		ThinkingBlocks: session.ThinkingBlocks,
+
+		// Actual conversational turns
+		UserTurns:      session.UserTurns,
+		AssistantTurns: session.AssistantTurns,
+
+		// Session metadata
+		DurationMs: session.DurationMs(),
+		ModelsUsed: session.ModelsList(),
+
+		// Compaction stats
 		CompactionAuto:      session.CompactionAuto,
 		CompactionManual:    session.CompactionManual,
 		CompactionAvgTimeMs: session.CompactionAvgTimeMs,

@@ -189,3 +189,181 @@ func TestGetTimestamp_Empty(t *testing.T) {
 		t.Errorf("GetTimestamp should return ErrNoTimestamp for empty timestamp, got: %v", err)
 	}
 }
+
+// =============================================================================
+// Tests for message type detection (for turn counting)
+// =============================================================================
+
+func TestIsHumanMessage(t *testing.T) {
+	t.Run("user message with string content returns true", func(t *testing.T) {
+		jsonl := `{"type":"user","message":{"role":"user","content":"hello world"},"uuid":"u1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if !line.IsHumanMessage() {
+			t.Error("IsHumanMessage should return true for user message with string content")
+		}
+	})
+
+	t.Run("user message with tool_result array returns false", func(t *testing.T) {
+		jsonl := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"file contents here"}]},"uuid":"u1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.IsHumanMessage() {
+			t.Error("IsHumanMessage should return false for user message with tool_result array")
+		}
+	})
+
+	t.Run("assistant message returns false", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":"response"},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.IsHumanMessage() {
+			t.Error("IsHumanMessage should return false for assistant messages")
+		}
+	})
+
+	t.Run("user message with empty string content returns true", func(t *testing.T) {
+		jsonl := `{"type":"user","message":{"role":"user","content":""},"uuid":"u1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		// Empty string is still a human message (user hit enter with no text)
+		if !line.IsHumanMessage() {
+			t.Error("IsHumanMessage should return true for user message with empty string")
+		}
+	})
+}
+
+func TestIsToolResultMessage(t *testing.T) {
+	t.Run("user message with tool_result array returns true", func(t *testing.T) {
+		jsonl := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"file contents"}]},"uuid":"u1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if !line.IsToolResultMessage() {
+			t.Error("IsToolResultMessage should return true for user message with tool_result array")
+		}
+	})
+
+	t.Run("user message with string content returns false", func(t *testing.T) {
+		jsonl := `{"type":"user","message":{"role":"user","content":"hello world"},"uuid":"u1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.IsToolResultMessage() {
+			t.Error("IsToolResultMessage should return false for user message with string content")
+		}
+	})
+
+	t.Run("assistant message returns false", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"response"}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.IsToolResultMessage() {
+			t.Error("IsToolResultMessage should return false for assistant messages")
+		}
+	})
+}
+
+func TestHasTextContent(t *testing.T) {
+	t.Run("assistant with text block returns true", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"Here is my response"}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if !line.HasTextContent() {
+			t.Error("HasTextContent should return true for assistant with text block")
+		}
+	})
+
+	t.Run("assistant with only tool_use returns false", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.HasTextContent() {
+			t.Error("HasTextContent should return false for assistant with only tool_use")
+		}
+	})
+
+	t.Run("assistant with only thinking returns false", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-opus-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"thinking","thinking":"Let me think..."}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.HasTextContent() {
+			t.Error("HasTextContent should return false for assistant with only thinking")
+		}
+	})
+
+	t.Run("assistant with text and tool_use returns true", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"Let me read that"},{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if !line.HasTextContent() {
+			t.Error("HasTextContent should return true for assistant with text and tool_use")
+		}
+	})
+
+	t.Run("assistant with string content returns true", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":"Simple string response"},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if !line.HasTextContent() {
+			t.Error("HasTextContent should return true for assistant with string content")
+		}
+	})
+}
+
+func TestHasToolUse(t *testing.T) {
+	t.Run("assistant with tool_use block returns true", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if !line.HasToolUse() {
+			t.Error("HasToolUse should return true for assistant with tool_use block")
+		}
+	})
+
+	t.Run("assistant with only text returns false", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"Just a text response"}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.HasToolUse() {
+			t.Error("HasToolUse should return false for assistant with only text")
+		}
+	})
+
+	t.Run("assistant with text and tool_use returns true", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"Let me do that"},{"type":"tool_use","id":"toolu_123","name":"Bash","input":{}}]},"uuid":"a1"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if !line.HasToolUse() {
+			t.Error("HasToolUse should return true for assistant with text and tool_use")
+		}
+	})
+}

@@ -9,7 +9,7 @@ import (
 // Card version constants - increment when compute logic changes
 const (
 	TokensCardVersion  = 2 // v2: added estimated_cost_usd (merged from cost card)
-	SessionCardVersion = 2 // v2: added compaction stats (merged from compaction card)
+	SessionCardVersion = 3 // v3: added message breakdown and fixed turn counting
 	ToolsCardVersion   = 2 // v2: per-tool success/error breakdown
 )
 
@@ -30,19 +30,37 @@ type TokensCardRecord struct {
 	EstimatedCostUSD    decimal.Decimal `json:"estimated_cost_usd"`
 }
 
-// SessionCardRecord is the DB record for the session card (includes compaction).
+// SessionCardRecord is the DB record for the session card (includes compaction and message breakdown).
 type SessionCardRecord struct {
-	SessionID          string    `json:"session_id"`
-	Version            int       `json:"version"`
-	ComputedAt         time.Time `json:"computed_at"`
-	UpToLine           int64     `json:"up_to_line"`
-	UserTurns          int       `json:"user_turns"`
-	AssistantTurns     int       `json:"assistant_turns"`
-	DurationMs         *int64    `json:"duration_ms,omitempty"`
-	ModelsUsed         []string  `json:"models_used"`
-	CompactionAuto     int       `json:"compaction_auto"`
-	CompactionManual   int       `json:"compaction_manual"`
-	CompactionAvgTimeMs *int     `json:"compaction_avg_time_ms,omitempty"`
+	SessionID  string    `json:"session_id"`
+	Version    int       `json:"version"`
+	ComputedAt time.Time `json:"computed_at"`
+	UpToLine   int64     `json:"up_to_line"`
+
+	// Message counts (raw line counts)
+	TotalMessages     int `json:"total_messages"`
+	UserMessages      int `json:"user_messages"`
+	AssistantMessages int `json:"assistant_messages"`
+
+	// Message type breakdown
+	HumanPrompts   int `json:"human_prompts"`
+	ToolResults    int `json:"tool_results"`
+	TextResponses  int `json:"text_responses"`
+	ToolCalls      int `json:"tool_calls"`
+	ThinkingBlocks int `json:"thinking_blocks"`
+
+	// Actual conversational turns (not raw message counts)
+	UserTurns      int `json:"user_turns"`
+	AssistantTurns int `json:"assistant_turns"`
+
+	// Session metadata
+	DurationMs *int64   `json:"duration_ms,omitempty"`
+	ModelsUsed []string `json:"models_used"`
+
+	// Compaction stats
+	CompactionAuto      int  `json:"compaction_auto"`
+	CompactionManual    int  `json:"compaction_manual"`
+	CompactionAvgTimeMs *int `json:"compaction_avg_time_ms,omitempty"`
 }
 
 // ToolsCardRecord is the DB record for the tools card.
@@ -76,15 +94,32 @@ type TokensCardData struct {
 	EstimatedUSD  string `json:"estimated_usd"` // Decimal as string for precision
 }
 
-// SessionCardData is the API response format for the session card (includes compaction).
+// SessionCardData is the API response format for the session card (includes compaction and message breakdown).
 type SessionCardData struct {
-	UserTurns          int      `json:"user_turns"`
-	AssistantTurns     int      `json:"assistant_turns"`
-	DurationMs         *int64   `json:"duration_ms,omitempty"`
-	ModelsUsed         []string `json:"models_used"`
-	CompactionAuto     int      `json:"compaction_auto"`
-	CompactionManual   int      `json:"compaction_manual"`
-	CompactionAvgTimeMs *int    `json:"compaction_avg_time_ms,omitempty"`
+	// Message counts (raw line counts)
+	TotalMessages     int `json:"total_messages"`
+	UserMessages      int `json:"user_messages"`
+	AssistantMessages int `json:"assistant_messages"`
+
+	// Message type breakdown
+	HumanPrompts   int `json:"human_prompts"`
+	ToolResults    int `json:"tool_results"`
+	TextResponses  int `json:"text_responses"`
+	ToolCalls      int `json:"tool_calls"`
+	ThinkingBlocks int `json:"thinking_blocks"`
+
+	// Actual conversational turns (not raw message counts)
+	UserTurns      int `json:"user_turns"`
+	AssistantTurns int `json:"assistant_turns"`
+
+	// Session metadata
+	DurationMs *int64   `json:"duration_ms,omitempty"`
+	ModelsUsed []string `json:"models_used"`
+
+	// Compaction stats
+	CompactionAuto      int  `json:"compaction_auto"`
+	CompactionManual    int  `json:"compaction_manual"`
+	CompactionAvgTimeMs *int `json:"compaction_avg_time_ms,omitempty"`
 }
 
 // ToolsCardData is the API response format for the tools card.

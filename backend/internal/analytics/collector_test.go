@@ -70,10 +70,11 @@ func TestTokensCollector(t *testing.T) {
 func TestSessionCollector(t *testing.T) {
 	session := NewSessionCollector()
 
+	// Modern transcript format with content arrays
 	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:10Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"Hello! How can I help?"}]},"uuid":"a1","timestamp":"2025-01-01T00:00:10Z"}
 {"type":"user","message":{"role":"user","content":"continue"},"uuid":"u2","timestamp":"2025-01-01T00:01:00Z"}
-{"type":"assistant","message":{"model":"claude-opus-4","usage":{"input_tokens":200,"output_tokens":100}},"uuid":"a2","timestamp":"2025-01-01T00:02:00Z"}
+{"type":"assistant","message":{"model":"claude-opus-4","usage":{"input_tokens":200,"output_tokens":100},"content":[{"type":"text","text":"Continuing..."}]},"uuid":"a2","timestamp":"2025-01-01T00:02:00Z"}
 {"type":"user","message":{"role":"user","content":"done"},"uuid":"u3","timestamp":"2025-01-01T00:03:00Z"}
 `
 
@@ -82,9 +83,11 @@ func TestSessionCollector(t *testing.T) {
 		t.Fatalf("RunCollectors failed: %v", err)
 	}
 
+	// UserTurns counts only human prompts (not tool results)
 	if session.UserTurns != 3 {
 		t.Errorf("UserTurns = %d, want 3", session.UserTurns)
 	}
+	// AssistantTurns counts only text responses (not tool_use only)
 	if session.AssistantTurns != 2 {
 		t.Errorf("AssistantTurns = %d, want 2", session.AssistantTurns)
 	}
@@ -170,6 +173,69 @@ func TestMultipleCollectors(t *testing.T) {
 	}
 	if session.CompactionAuto != 1 {
 		t.Errorf("session.CompactionAuto = %d, want 1", session.CompactionAuto)
+	}
+}
+
+func TestSessionCollector_MessageBreakdown(t *testing.T) {
+	session := NewSessionCollector()
+
+	// Realistic JSONL with all message types:
+	// - 2 human prompts (user with string content)
+	// - 3 tool results (user with tool_result array)
+	// - 2 text responses (assistant with text blocks)
+	// - 2 tool calls (assistant with only tool_use)
+	// - 1 thinking only (assistant with only thinking)
+	jsonl := `{"type":"user","message":{"role":"user","content":"Hello, please read a file"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"I'll read that file for you"},{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u2","timestamp":"2025-01-01T00:00:02Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_2","name":"Write","input":{}}]},"uuid":"a2","timestamp":"2025-01-01T00:00:03Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"ok"}]},"uuid":"u3","timestamp":"2025-01-01T00:00:04Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_3","name":"Bash","input":{}}]},"uuid":"a3","timestamp":"2025-01-01T00:00:05Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_3","content":"done"}]},"uuid":"u4","timestamp":"2025-01-01T00:00:06Z"}
+{"type":"assistant","message":{"model":"claude-opus-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"thinking","thinking":"Let me think about this..."}]},"uuid":"a4","timestamp":"2025-01-01T00:00:07Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"All done! The task is complete."}]},"uuid":"a5","timestamp":"2025-01-01T00:00:08Z"}
+{"type":"user","message":{"role":"user","content":"Thanks!"},"uuid":"u5","timestamp":"2025-01-01T00:00:09Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), session)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	// Message counts
+	if session.TotalMessages != 10 {
+		t.Errorf("TotalMessages = %d, want 10", session.TotalMessages)
+	}
+	if session.UserMessages != 5 {
+		t.Errorf("UserMessages = %d, want 5", session.UserMessages)
+	}
+	if session.AssistantMessages != 5 {
+		t.Errorf("AssistantMessages = %d, want 5", session.AssistantMessages)
+	}
+
+	// Message type breakdown
+	if session.HumanPrompts != 2 {
+		t.Errorf("HumanPrompts = %d, want 2", session.HumanPrompts)
+	}
+	if session.ToolResults != 3 {
+		t.Errorf("ToolResults = %d, want 3", session.ToolResults)
+	}
+	if session.TextResponses != 2 {
+		t.Errorf("TextResponses = %d, want 2", session.TextResponses)
+	}
+	if session.ToolCalls != 2 {
+		t.Errorf("ToolCalls = %d, want 2 (tool_use only, not text+tool_use)", session.ToolCalls)
+	}
+	if session.ThinkingBlocks != 1 {
+		t.Errorf("ThinkingBlocks = %d, want 1", session.ThinkingBlocks)
+	}
+
+	// Turns should equal human prompts and text responses
+	if session.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2 (should equal HumanPrompts)", session.UserTurns)
+	}
+	if session.AssistantTurns != 2 {
+		t.Errorf("AssistantTurns = %d, want 2 (should equal TextResponses)", session.AssistantTurns)
 	}
 }
 
