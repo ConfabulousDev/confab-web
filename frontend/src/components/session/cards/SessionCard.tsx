@@ -93,10 +93,9 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         />
       )}
 
-      {/* Message breakdown section */}
-      <SectionHeader label="Messages" />
+      {/* Messages */}
       <StatRow
-        label="Total"
+        label="Messages"
         value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
         tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
       />
