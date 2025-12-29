@@ -28,6 +28,7 @@ const BREAKDOWN_COLORS = {
 
 interface BreakdownEntry {
   name: string;
+  fullName: string;
   value: number;
   color: string;
   [key: string]: string | number; // Index signature for Recharts compatibility
@@ -35,11 +36,11 @@ interface BreakdownEntry {
 
 function prepareBreakdownData(data: SessionCardData): BreakdownEntry[] {
   const entries: BreakdownEntry[] = [
-    { name: 'Human prompts', value: data.human_prompts, color: BREAKDOWN_COLORS.humanPrompts },
-    { name: 'Tool results', value: data.tool_results, color: BREAKDOWN_COLORS.toolResults },
-    { name: 'Text responses', value: data.text_responses, color: BREAKDOWN_COLORS.textResponses },
-    { name: 'Tool calls', value: data.tool_calls, color: BREAKDOWN_COLORS.toolCalls },
-    { name: 'Thinking', value: data.thinking_blocks, color: BREAKDOWN_COLORS.thinkingBlocks },
+    { name: 'Prompts', fullName: 'Human prompts', value: data.human_prompts, color: BREAKDOWN_COLORS.humanPrompts },
+    { name: 'Tool res', fullName: 'Tool results', value: data.tool_results, color: BREAKDOWN_COLORS.toolResults },
+    { name: 'Txt resp', fullName: 'Text responses', value: data.text_responses, color: BREAKDOWN_COLORS.textResponses },
+    { name: 'Tool calls', fullName: 'Tool calls', value: data.tool_calls, color: BREAKDOWN_COLORS.toolCalls },
+    { name: 'Thinking', fullName: 'Thinking blocks', value: data.thinking_blocks, color: BREAKDOWN_COLORS.thinkingBlocks },
   ];
   // Filter out zero values and sort by value descending
   return entries.filter((e) => e.value > 0).sort((a, b) => b.value - a.value);
@@ -61,7 +62,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
   return (
     <div className={styles.tooltip}>
-      <div className={styles.tooltipTitle}>{entry.payload.name}</div>
+      <div className={styles.tooltipTitle}>{entry.payload.fullName}</div>
       <div className={styles.tooltipValue}>{entry.value}</div>
     </div>
   );
