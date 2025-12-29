@@ -63,7 +63,7 @@ func (c *SessionCollector) DurationMs() *int64 {
 	return &d
 }
 
-// ModelsList returns a sorted list of unique model IDs used.
+// ModelsList returns a list of unique model IDs used.
 func (c *SessionCollector) ModelsList() []string {
 	models := make([]string, 0, len(c.ModelsUsed))
 	for m := range c.ModelsUsed {
