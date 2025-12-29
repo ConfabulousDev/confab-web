@@ -2,7 +2,7 @@ import { CardWrapper, StatRow, CardLoading, SectionHeader } from './Card';
 import { formatResponseTime } from '@/utils/compactionStats';
 import type { SessionCardData } from '@/schemas/api';
 import type { CardProps } from './types';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import styles from './SessionCard.module.css';
 
 const TOOLTIPS = {
@@ -17,7 +17,7 @@ const TOOLTIPS = {
   compactionAvgTime: 'Average time for server-side summarization (auto compactions only)',
 };
 
-// Colors for the pie chart segments
+// Colors for the bar chart
 const BREAKDOWN_COLORS = {
   humanPrompts: '#3b82f6', // blue
   toolResults: '#8b5cf6', // purple
@@ -41,14 +41,13 @@ function prepareBreakdownData(data: SessionCardData): BreakdownEntry[] {
     { name: 'Tool calls', value: data.tool_calls, color: BREAKDOWN_COLORS.toolCalls },
     { name: 'Thinking', value: data.thinking_blocks, color: BREAKDOWN_COLORS.thinkingBlocks },
   ];
-  // Filter out zero values
-  return entries.filter((e) => e.value > 0);
+  // Filter out zero values and sort by value descending
+  return entries.filter((e) => e.value > 0).sort((a, b) => b.value - a.value);
 }
 
 interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{
-    name: string;
     value: number;
     payload: BreakdownEntry;
   }>;
@@ -149,40 +148,44 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         />
       )}
 
-      {/* Message type breakdown pie chart */}
+      {/* Message type breakdown bar chart */}
       {breakdownData.length > 0 && (
         <>
           <SectionHeader label="Breakdown" />
-          <div className={styles.chartContainer}>
+          <div className={styles.chartContainer} style={{ height: Math.max(80, breakdownData.length * 24) }}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={breakdownData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={25}
-                  outerRadius={45}
-                  paddingAngle={2}
-                >
+              <BarChart
+                data={breakdownData}
+                layout="vertical"
+                margin={{ top: 0, right: 24, left: 0, bottom: 0 }}
+                barSize={14}
+              >
+                <XAxis
+                  type="number"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: 'var(--color-text-tertiary)' }}
+                  tickFormatter={(value) => (value === 0 ? '' : String(value))}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+                  width={90}
+                />
+                <Tooltip
+                  content={<CustomTooltip />}
+                  cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
+                />
+                <Bar dataKey="value" radius={[2, 2, 2, 2]}>
                   {breakdownData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-          </div>
-          <div className={styles.legend}>
-            {breakdownData.map((entry) => (
-              <div key={entry.name} className={styles.legendItem}>
-                <span className={styles.legendDot} style={{ backgroundColor: entry.color }} />
-                <span>
-                  {entry.name} ({entry.value})
-                </span>
-              </div>
-            ))}
           </div>
         </>
       )}
