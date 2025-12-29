@@ -2,23 +2,71 @@ import { CardWrapper, StatRow, CardLoading, SectionHeader } from './Card';
 import { formatResponseTime } from '@/utils/compactionStats';
 import type { SessionCardData } from '@/schemas/api';
 import type { CardProps } from './types';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import styles from './SessionCard.module.css';
 
 const TOOLTIPS = {
   turns: 'Actual conversational exchanges (user prompts and text responses)',
   totalMessages: 'Total transcript lines in the session',
   userMessages: 'All user-role messages (human prompts + tool results)',
   assistantMessages: 'All assistant-role messages',
-  humanPrompts: 'User messages with human-typed content',
-  toolResults: 'User messages containing tool execution results',
-  textResponses: 'Assistant messages containing text output',
-  toolCalls: 'Assistant messages with only tool calls (no text output)',
-  thinkingBlocks: 'Assistant messages with only thinking (no text output)',
   duration: 'Time from first to last message',
   models: 'AI models used in this session',
   compactionAuto: 'Compactions triggered automatically when context limit reached',
   compactionManual: 'Compactions triggered manually by user',
   compactionAvgTime: 'Average time for server-side summarization (auto compactions only)',
 };
+
+// Colors for the pie chart segments
+const BREAKDOWN_COLORS = {
+  humanPrompts: '#3b82f6', // blue
+  toolResults: '#8b5cf6', // purple
+  textResponses: '#22c55e', // green
+  toolCalls: '#f59e0b', // amber
+  thinkingBlocks: '#ec4899', // pink
+};
+
+interface BreakdownEntry {
+  name: string;
+  value: number;
+  color: string;
+  [key: string]: string | number; // Index signature for Recharts compatibility
+}
+
+function prepareBreakdownData(data: SessionCardData): BreakdownEntry[] {
+  const entries: BreakdownEntry[] = [
+    { name: 'Human prompts', value: data.human_prompts, color: BREAKDOWN_COLORS.humanPrompts },
+    { name: 'Tool results', value: data.tool_results, color: BREAKDOWN_COLORS.toolResults },
+    { name: 'Text responses', value: data.text_responses, color: BREAKDOWN_COLORS.textResponses },
+    { name: 'Tool calls', value: data.tool_calls, color: BREAKDOWN_COLORS.toolCalls },
+    { name: 'Thinking', value: data.thinking_blocks, color: BREAKDOWN_COLORS.thinkingBlocks },
+  ];
+  // Filter out zero values
+  return entries.filter((e) => e.value > 0);
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    name: string;
+    value: number;
+    payload: BreakdownEntry;
+  }>;
+}
+
+function CustomTooltip({ active, payload }: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const entry = payload[0];
+  if (!entry) return null;
+
+  return (
+    <div className={styles.tooltip}>
+      <div className={styles.tooltipTitle}>{entry.payload.name}</div>
+      <div className={styles.tooltipValue}>{entry.value}</div>
+    </div>
+  );
+}
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -65,6 +113,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
   if (!data) return null;
 
   const hasCompaction = data.compaction_auto > 0 || data.compaction_manual > 0;
+  const breakdownData = prepareBreakdownData(data);
 
   return (
     <CardWrapper title="Session">
@@ -100,17 +149,43 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         />
       )}
 
-      {/* Message type breakdown */}
-      <SectionHeader label="Breakdown" />
-      <StatRow label="Human prompts" value={data.human_prompts} tooltip={TOOLTIPS.humanPrompts} />
-      <StatRow label="Tool results" value={data.tool_results} tooltip={TOOLTIPS.toolResults} />
-      <StatRow label="Text responses" value={data.text_responses} tooltip={TOOLTIPS.textResponses} />
-      <StatRow label="Tool calls" value={data.tool_calls} tooltip={TOOLTIPS.toolCalls} />
-      <StatRow
-        label="Thinking blocks"
-        value={data.thinking_blocks}
-        tooltip={TOOLTIPS.thinkingBlocks}
-      />
+      {/* Message type breakdown pie chart */}
+      {breakdownData.length > 0 && (
+        <>
+          <SectionHeader label="Breakdown" />
+          <div className={styles.chartContainer}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={breakdownData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={30}
+                  outerRadius={55}
+                  paddingAngle={2}
+                >
+                  {breakdownData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className={styles.legend}>
+            {breakdownData.map((entry) => (
+              <div key={entry.name} className={styles.legendItem}>
+                <span className={styles.legendDot} style={{ backgroundColor: entry.color }} />
+                <span>
+                  {entry.name} ({entry.value})
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Compaction section */}
       {hasCompaction && (
