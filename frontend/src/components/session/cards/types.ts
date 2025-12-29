@@ -26,6 +26,8 @@ export interface CardDefinition {
   component: React.ComponentType<CardProps<any>>;
   /** Display order (lower = earlier) */
   order: number;
+  /** Number of grid columns to span (default: 1) */
+  span?: 1 | 2 | 3;
 }
 
 /**

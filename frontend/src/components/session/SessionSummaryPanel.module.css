@@ -34,6 +34,23 @@
   gap: var(--spacing-md);
 }
 
+/* Card column spanning */
+.span2 {
+  grid-column: span 2;
+}
+
+.span3 {
+  grid-column: span 3;
+}
+
+/* On narrow screens, reset spans to prevent overflow */
+@media (max-width: 500px) {
+  .span2,
+  .span3 {
+    grid-column: span 1;
+  }
+}
+
 .card {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-light);

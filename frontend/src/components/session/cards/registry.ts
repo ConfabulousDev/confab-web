@@ -44,6 +44,7 @@ export const cardRegistry: CardDefinition[] = [
     title: 'Tools',
     component: ToolsCard,
     order: 4,
+    span: 2,
   },
 ];
 
