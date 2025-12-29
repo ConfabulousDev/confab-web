@@ -187,21 +187,21 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         </>
       )}
 
-      {/* Compaction section */}
+      {/* Compaction stats */}
       {hasCompaction && (
         <>
-          <SectionHeader label="Compaction" />
-          <StatRow label="Auto" value={data.compaction_auto} tooltip={TOOLTIPS.compactionAuto} />
           <StatRow
-            label="Manual"
-            value={data.compaction_manual}
-            tooltip={TOOLTIPS.compactionManual}
+            label="Compactions"
+            value={`${data.compaction_auto + data.compaction_manual} (${data.compaction_manual}/${data.compaction_auto})`}
+            tooltip={`Total compactions (manual/auto); ${TOOLTIPS.compactionManual}; ${TOOLTIPS.compactionAuto}`}
           />
-          <StatRow
-            label="Avg time"
-            value={formatResponseTime(data.compaction_avg_time_ms ?? null)}
-            tooltip={TOOLTIPS.compactionAvgTime}
-          />
+          {data.compaction_avg_time_ms != null && (
+            <StatRow
+              label="Avg time (auto)"
+              value={formatResponseTime(data.compaction_avg_time_ms)}
+              tooltip={TOOLTIPS.compactionAvgTime}
+            />
+          )}
         </>
       )}
     </CardWrapper>
