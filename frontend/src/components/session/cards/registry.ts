@@ -1,6 +1,8 @@
 import { TokensCard } from './TokensCard';
 import { CostCard } from './CostCard';
 import { CompactionCard } from './CompactionCard';
+import { SessionCard } from './SessionCard';
+import { ToolsCard } from './ToolsCard';
 import type { CardDefinition } from './types';
 
 /**
@@ -30,6 +32,18 @@ export const cardRegistry: CardDefinition[] = [
     title: 'Compaction',
     component: CompactionCard,
     order: 2,
+  },
+  {
+    key: 'session',
+    title: 'Session',
+    component: SessionCard,
+    order: 3,
+  },
+  {
+    key: 'tools',
+    title: 'Tools',
+    component: ToolsCard,
+    order: 4,
   },
 ];
 

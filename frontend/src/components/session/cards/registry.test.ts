@@ -8,6 +8,8 @@ describe('cardRegistry', () => {
     expect(keys).toContain('tokens');
     expect(keys).toContain('cost');
     expect(keys).toContain('compaction');
+    expect(keys).toContain('session');
+    expect(keys).toContain('tools');
   });
 
   it('has unique keys', () => {
@@ -50,10 +52,10 @@ describe('getOrderedCards', () => {
     expect(ordered).toEqual(cardRegistry); // Same content initially
   });
 
-  it('returns tokens, cost, compaction in that order', () => {
+  it('returns all cards in expected order', () => {
     const ordered = getOrderedCards();
     const keys = ordered.map((c) => c.key);
 
-    expect(keys).toEqual(['tokens', 'cost', 'compaction']);
+    expect(keys).toEqual(['tokens', 'cost', 'compaction', 'session', 'tools']);
   });
 });
