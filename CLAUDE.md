@@ -50,6 +50,15 @@ cd frontend && npm run storybook        # Run locally to preview
 
 Stories live alongside components (e.g., `Component.stories.tsx` next to `Component.tsx`).
 
+## Adding Analytics Cards
+
+When adding new analytics cards to the session summary panel, follow the playbook in `docs/adding-analytics-cards.md`. This covers:
+
+- Database migrations (card-per-table architecture)
+- Backend types, store operations, and compute logic
+- Frontend Zod schemas, components, and registry
+- Testing requirements
+
 ## Finding Dead Code (Go)
 
 Two complementary tools for detecting unused code in the `backend/` directory:
