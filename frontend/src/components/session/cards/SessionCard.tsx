@@ -161,7 +161,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
               <BarChart
                 data={breakdownData}
                 layout="vertical"
-                margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
+                margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
                 barSize={12}
               >
                 <XAxis
