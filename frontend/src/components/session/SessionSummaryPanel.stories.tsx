@@ -181,6 +181,30 @@ const mockCommitLinks: GitHubLink[] = [
     source: 'cli_hook',
     created_at: '2025-01-15T11:00:00Z',
   },
+  {
+    id: 4,
+    session_id: 'test-session',
+    link_type: 'commit',
+    url: 'https://github.com/owner/repo/commit/def4567890abcdef',
+    owner: 'owner',
+    repo: 'repo',
+    ref: 'def4567890abcdef',
+    title: null,
+    source: 'cli_hook',
+    created_at: '2025-01-15T10:30:00Z',
+  },
+  {
+    id: 5,
+    session_id: 'test-session',
+    link_type: 'commit',
+    url: 'https://github.com/owner/repo/commit/789abcdef0123456',
+    owner: 'owner',
+    repo: 'repo',
+    ref: '789abcdef0123456',
+    title: null,
+    source: 'cli_hook',
+    created_at: '2025-01-15T10:00:00Z',
+  },
 ];
 
 const meta = {
@@ -289,6 +313,7 @@ export const WithGitHubLinks: Story = {
 
 /**
  * Summary with GitHub PR and commit links.
+ * Shows all commits (latest first) with individual delete buttons.
  */
 export const WithPRsAndCommits: Story = {
   args: {

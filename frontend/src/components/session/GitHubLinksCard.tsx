@@ -49,7 +49,6 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardPr
   const [newUrl, setNewUrl] = useState('');
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
-  const [deletingCommits, setDeletingCommits] = useState(false);
 
   const fetchLinks = useCallback(async (showLoading = true) => {
     if (initialLinks !== undefined) return;
@@ -125,29 +124,11 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardPr
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [links]);
 
-  const latestCommit = commitLinks.length > 0 ? commitLinks[0] : null;
-
   const prLinks = useMemo(() => {
-    return links.filter((link) => link.link_type === 'pull_request');
+    return links
+      .filter((link) => link.link_type === 'pull_request')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [links]);
-
-  const handleDeleteAllCommits = async () => {
-    if (commitLinks.length === 0) return;
-    const shortShas = commitLinks.map((link) => link.ref.slice(0, 7));
-    const message = `Remove all ${commitLinks.length} commit link${commitLinks.length > 1 ? 's' : ''}?\n\n${shortShas.join('\n')}`;
-    if (!window.confirm(message)) return;
-
-    try {
-      setDeletingCommits(true);
-      await githubLinksAPI.deleteByType(sessionId, 'commit');
-      await fetchLinks();
-    } catch (err) {
-      console.error('Failed to delete commit links:', err);
-      setError('Failed to delete');
-    } finally {
-      setDeletingCommits(false);
-    }
-  };
 
   const formatRef = (link: GitHubLink) => {
     if (link.link_type === 'pull_request') {
@@ -256,32 +237,32 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardPr
               </div>
             ))}
 
-            {/* Latest Commit */}
-            {latestCommit && (
-              <div className={styles.linkRow}>
+            {/* Commit Links */}
+            {commitLinks.map((link) => (
+              <div key={link.id} className={styles.linkRow}>
                 <a
-                  href={latestCommit.url}
+                  href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={styles.linkContent}
-                  title={`${latestCommit.owner}/${latestCommit.repo}`}
+                  title={`${link.owner}/${link.repo}`}
                 >
                   <span className={styles.linkIcon}>{CommitIcon}</span>
-                  <span className={styles.linkRef}>{formatRef(latestCommit)}</span>
-                  <span className={styles.linkRepo}>{latestCommit.owner}/{latestCommit.repo}</span>
+                  <span className={styles.linkRef}>{formatRef(link)}</span>
+                  <span className={styles.linkRepo}>{link.owner}/{link.repo}</span>
                 </a>
                 {isOwner && (
                   <button
                     className={styles.deleteButton}
-                    onClick={handleDeleteAllCommits}
-                    disabled={deletingCommits}
-                    title={`Remove ${commitLinks.length} commit link${commitLinks.length > 1 ? 's' : ''}`}
+                    onClick={() => handleDeleteLink(link.id)}
+                    disabled={deleting === link.id}
+                    title="Remove link"
                   >
                     {DeleteIcon}
                   </button>
                 )}
               </div>
-            )}
+            ))}
           </>
         )}
       </div>
