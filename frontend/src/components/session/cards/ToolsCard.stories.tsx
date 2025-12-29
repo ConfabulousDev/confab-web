@@ -149,3 +149,32 @@ export const Loading: Story = {
     loading: true,
   },
 };
+
+export const WithMCPTools: Story = {
+  args: {
+    data: {
+      total_calls: 89,
+      tool_stats: {
+        Bash: { success: 25, errors: 1 },
+        Read: { success: 20, errors: 0 },
+        Edit: { success: 15, errors: 0 },
+        'mcp__linear-server__create_issue': { success: 8, errors: 0 },
+        'mcp__linear-server__list_teams': { success: 6, errors: 0 },
+        'mcp__linear-server__get_issue': { success: 5, errors: 1 },
+        'mcp__github__create_pull_request': { success: 4, errors: 0 },
+        Glob: { success: 3, errors: 0 },
+        Task: { success: 2, errors: 0 },
+      },
+      error_count: 2,
+    },
+    loading: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'MCP tool names are shortened to just the action (e.g., "create_issue"). Full name shown in tooltip on hover.',
+      },
+    },
+  },
+};
