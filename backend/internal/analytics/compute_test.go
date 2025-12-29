@@ -140,6 +140,17 @@ func TestToCards(t *testing.T) {
 		t.Errorf("Tokens.InputTokens = %d, want 1000", cards.Tokens.InputTokens)
 	}
 
+	// Verify ComputedAt is in UTC (catches timezone bugs)
+	if cards.Tokens.ComputedAt.Location().String() != "UTC" {
+		t.Errorf("Tokens.ComputedAt should be UTC, got %s", cards.Tokens.ComputedAt.Location())
+	}
+	if cards.Cost.ComputedAt.Location().String() != "UTC" {
+		t.Errorf("Cost.ComputedAt should be UTC, got %s", cards.Cost.ComputedAt.Location())
+	}
+	if cards.Compaction.ComputedAt.Location().String() != "UTC" {
+		t.Errorf("Compaction.ComputedAt should be UTC, got %s", cards.Compaction.ComputedAt.Location())
+	}
+
 	// Check cost card
 	if cards.Cost == nil {
 		t.Fatal("Cost card should not be nil")

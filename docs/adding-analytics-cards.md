@@ -8,6 +8,21 @@ The analytics system uses a **card-per-table** architecture where each card type
 - Its own database table (`session_card_<name>`)
 - Independent version constant for cache invalidation
 - Custom staleness logic (defaults to line-count based)
+- A **collector** that extracts metrics during a single JSONL pass
+
+### Collector Pattern
+
+All metrics are computed in a single pass through the transcript JSONL:
+
+```
+RunCollectors(content, tokensCollector, compactionCollector, <name>Collector, ...)
+    │
+    ├── Parse each line once
+    ├── Build shared context (timestamps, line count)
+    └── Invoke each collector's Collect() method
+```
+
+This ensures O(n) processing regardless of how many cards we add.
 
 ## Steps
 
@@ -135,7 +150,57 @@ func (s *Store) upsert<Name>Card(ctx context.Context, card *<Name>CardRecord) er
 
 Update `GetCards()` and `UpsertCards()` to include the new card.
 
-### 4. Add Compute Logic
+### 4. Create a Collector
+
+Create `backend/internal/analytics/collector_<name>.go`:
+
+```go
+package analytics
+
+// <Name>Collector extracts <name> metrics from transcript lines.
+type <Name>Collector struct {
+    MyMetric int64
+    // Add any internal state needed for computation
+}
+
+// New<Name>Collector creates a new collector.
+func New<Name>Collector() *<Name>Collector {
+    return &<Name>Collector{}
+}
+
+// Collect processes a single line.
+func (c *<Name>Collector) Collect(line *TranscriptLine, ctx *CollectContext) {
+    // Filter to relevant line types
+    if !line.IsRelevantType() {
+        return
+    }
+
+    // Extract and accumulate metrics
+    c.MyMetric += extractValue(line)
+}
+
+// Finalize is called after all lines are processed.
+// Use for post-processing like computing averages.
+func (c *<Name>Collector) Finalize(ctx *CollectContext) {
+    // Optional: compute derived values
+}
+```
+
+**Available helpers on `TranscriptLine`:**
+- `IsUserMessage()` - true for user messages
+- `IsAssistantMessage()` - true for assistant messages with usage stats
+- `IsCompactBoundary()` - true for compaction system messages
+- `GetTimestamp()` - parse timestamp (returns `ErrNoTimestamp` if empty)
+- `GetToolUses()` - extract tool_use blocks from content
+- `GetModel()` - get model ID
+- `GetStopReason()` - get stop reason (end_turn, tool_use, max_tokens)
+- `HasThinking()` - check for thinking blocks
+
+**Available in `CollectContext`:**
+- `ctx.TimestampByUUID` - map of UUID → timestamp for cross-referencing
+- `ctx.LineCount` - total lines processed
+
+### 5. Register the Collector
 
 In `backend/internal/analytics/compute.go`, add field to `ComputeResult`:
 
@@ -146,16 +211,27 @@ type ComputeResult struct {
 }
 ```
 
-Add computation logic in `ComputeFromJSONL()`:
+Update `ComputeFromJSONL()` to use your collector:
 
 ```go
-// Process relevant line types
-if line.IsRelevantType() {
-    result.MyMetric += extractValue(line)
+func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
+    tokens := NewTokensCollector()
+    compaction := NewCompactionCollector()
+    myCard := New<Name>Collector()  // Add new collector
+
+    _, err := RunCollectors(content, tokens, compaction, myCard)
+    if err != nil {
+        return nil, err
+    }
+
+    return &ComputeResult{
+        // ... existing fields
+        MyMetric: myCard.MyMetric,  // Add new field
+    }, nil
 }
 ```
 
-### 5. Wire Up Card Creation
+### 6. Wire Up Card Creation
 
 Update `ToCards()` in `store.go`:
 

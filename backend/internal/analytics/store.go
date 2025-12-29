@@ -253,7 +253,7 @@ func (s *Store) upsertCompactionCard(ctx context.Context, record *CompactionCard
 
 // ToCards converts a ComputeResult to Cards for storage.
 func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	return &Cards{
 		Tokens: &TokensCardRecord{

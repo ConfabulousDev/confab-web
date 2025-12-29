@@ -1,123 +1,49 @@
 package analytics
 
 import (
-	"bufio"
-	"bytes"
-	"fmt"
-	"time"
-
 	"github.com/shopspring/decimal"
 )
 
 // ComputeResult contains the computed analytics from JSONL content.
+// This struct aggregates results from all collectors for backward compatibility.
 type ComputeResult struct {
-	// Token stats
+	// Token stats (from TokensCollector)
 	InputTokens         int64
 	OutputTokens        int64
 	CacheCreationTokens int64
 	CacheReadTokens     int64
 
-	// Cost
+	// Cost (from TokensCollector)
 	EstimatedCostUSD decimal.Decimal
 
-	// Compaction stats
+	// Compaction stats (from CompactionCollector)
 	CompactionAuto      int
 	CompactionManual    int
 	CompactionAvgTimeMs *int
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
-// It processes lines incrementally without loading all data into memory.
+// It performs a single pass through the content using the collector pattern.
 func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
-	result := &ComputeResult{
-		EstimatedCostUSD: decimal.Zero,
+	tokens := NewTokensCollector()
+	compaction := NewCompactionCollector()
+
+	_, err := RunCollectors(content, tokens, compaction)
+	if err != nil {
+		return nil, err
 	}
 
-	// Build a map of uuid → timestamp for compaction time calculation
-	timestampByUUID := make(map[string]time.Time)
+	return &ComputeResult{
+		// Token stats
+		InputTokens:         tokens.InputTokens,
+		OutputTokens:        tokens.OutputTokens,
+		CacheCreationTokens: tokens.CacheCreationTokens,
+		CacheReadTokens:     tokens.CacheReadTokens,
+		EstimatedCostUSD:    tokens.EstimatedCostUSD,
 
-	// Track compaction times for averaging
-	var compactionTimes []int64
-
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	// Increase buffer size for large lines (some assistant messages can be huge)
-	const maxLineSize = 10 * 1024 * 1024 // 10MB
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, maxLineSize)
-
-	for scanner.Scan() {
-		line, err := ParseLine(scanner.Bytes())
-		if err != nil {
-			// Skip unparseable lines (e.g., malformed JSON)
-			continue
-		}
-
-		// Store timestamp for UUID lookup (needed for compaction time calculation)
-		if line.UUID != "" && line.Timestamp != "" {
-			if ts, err := line.GetTimestamp(); err == nil {
-				timestampByUUID[line.UUID] = ts
-			}
-		}
-
-		// Process assistant messages for token stats
-		if line.IsAssistantMessage() {
-			usage := line.Message.Usage
-			result.InputTokens += usage.InputTokens
-			result.OutputTokens += usage.OutputTokens
-			result.CacheCreationTokens += usage.CacheCreationInputTokens
-			result.CacheReadTokens += usage.CacheReadInputTokens
-
-			// Calculate cost for this message
-			pricing := GetPricing(line.Message.Model)
-			cost := CalculateCost(
-				pricing,
-				usage.InputTokens,
-				usage.OutputTokens,
-				usage.CacheCreationInputTokens,
-				usage.CacheReadInputTokens,
-			)
-			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
-		}
-
-		// Process compaction boundaries
-		if line.IsCompactBoundary() {
-			if line.CompactMetadata != nil {
-				switch line.CompactMetadata.Trigger {
-				case "auto":
-					result.CompactionAuto++
-
-					// Calculate compaction time only for auto compactions
-					// Manual compactions include user think time, not just processing time
-					if line.LogicalParentUUID != "" {
-						if parentTime, ok := timestampByUUID[line.LogicalParentUUID]; ok {
-							if compactTime, err := line.GetTimestamp(); err == nil {
-								delta := compactTime.Sub(parentTime).Milliseconds()
-								if delta >= 0 {
-									compactionTimes = append(compactionTimes, delta)
-								}
-							}
-						}
-					}
-				case "manual":
-					result.CompactionManual++
-				}
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanning JSONL: %w", err)
-	}
-
-	// Calculate average compaction time
-	if len(compactionTimes) > 0 {
-		var sum int64
-		for _, t := range compactionTimes {
-			sum += t
-		}
-		avg := int(sum / int64(len(compactionTimes)))
-		result.CompactionAvgTimeMs = &avg
-	}
-
-	return result, nil
+		// Compaction stats
+		CompactionAuto:      compaction.AutoCount,
+		CompactionManual:    compaction.ManualCount,
+		CompactionAvgTimeMs: compaction.AvgTimeMs,
+	}, nil
 }
