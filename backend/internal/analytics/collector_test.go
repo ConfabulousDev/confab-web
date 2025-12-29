@@ -117,3 +117,86 @@ func TestMultipleCollectors(t *testing.T) {
 		t.Errorf("compaction.AutoCount = %d, want 1", compaction.AutoCount)
 	}
 }
+
+func TestSessionCollector(t *testing.T) {
+	session := NewSessionCollector()
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:10Z"}
+{"type":"user","message":{"role":"user","content":"continue"},"uuid":"u2","timestamp":"2025-01-01T00:01:00Z"}
+{"type":"assistant","message":{"model":"claude-opus-4","usage":{"input_tokens":200,"output_tokens":100}},"uuid":"a2","timestamp":"2025-01-01T00:02:00Z"}
+{"type":"user","message":{"role":"user","content":"done"},"uuid":"u3","timestamp":"2025-01-01T00:03:00Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), session)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	if session.UserTurns != 3 {
+		t.Errorf("UserTurns = %d, want 3", session.UserTurns)
+	}
+	if session.AssistantTurns != 2 {
+		t.Errorf("AssistantTurns = %d, want 2", session.AssistantTurns)
+	}
+
+	duration := session.DurationMs()
+	if duration == nil {
+		t.Fatal("DurationMs should not be nil")
+	}
+	// From 00:00:00 to 00:03:00 = 180000ms
+	if *duration != 180000 {
+		t.Errorf("DurationMs = %d, want 180000", *duration)
+	}
+
+	models := session.ModelsList()
+	if len(models) != 2 {
+		t.Errorf("ModelsUsed length = %d, want 2", len(models))
+	}
+}
+
+func TestSessionCollector_NoDuration(t *testing.T) {
+	session := NewSessionCollector()
+
+	// Single message - no duration can be computed
+	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), session)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	duration := session.DurationMs()
+	if duration != nil {
+		t.Error("DurationMs should be nil for single timestamp")
+	}
+}
+
+func TestToolsCollector(t *testing.T) {
+	tools := NewToolsCollector()
+
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"text","text":"Reading file"},{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/tmp/test.txt"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_2","name":"Read","input":{}},{"type":"tool_use","id":"toolu_3","name":"Write","input":{}}],"stop_reason":"tool_use"},"uuid":"a2","timestamp":"2025-01-01T00:00:03Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"ok"},{"type":"tool_result","tool_use_id":"toolu_3","content":"error","is_error":true}]},"uuid":"u2","timestamp":"2025-01-01T00:00:04Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), tools)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	if tools.TotalCalls != 3 {
+		t.Errorf("TotalCalls = %d, want 3", tools.TotalCalls)
+	}
+	if tools.ToolBreakdown["Read"] != 2 {
+		t.Errorf("ToolBreakdown[Read] = %d, want 2", tools.ToolBreakdown["Read"])
+	}
+	if tools.ToolBreakdown["Write"] != 1 {
+		t.Errorf("ToolBreakdown[Write] = %d, want 1", tools.ToolBreakdown["Write"])
+	}
+	if tools.ErrorCount != 1 {
+		t.Errorf("ErrorCount = %d, want 1", tools.ErrorCount)
+	}
+}

@@ -701,6 +701,17 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "auto": 3,
       "manual": 1,
       "avg_time_ms": 5000
+    },
+    "session": {
+      "user_turns": 15,
+      "assistant_turns": 14,
+      "duration_ms": 3600000,
+      "models_used": ["claude-sonnet-4-20241022", "claude-opus-4"]
+    },
+    "tools": {
+      "total_calls": 42,
+      "tool_breakdown": {"Read": 15, "Write": 10, "Bash": 12, "Grep": 5},
+      "error_count": 2
     }
   }
 }
@@ -722,6 +733,13 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.compaction.auto` | int | Auto-triggered compaction count |
 | `cards.compaction.manual` | int | Manual compaction count |
 | `cards.compaction.avg_time_ms` | int\|null | Avg auto-compaction time in ms (null if none) |
+| `cards.session.user_turns` | int | Number of user messages |
+| `cards.session.assistant_turns` | int | Number of assistant messages |
+| `cards.session.duration_ms` | int\|null | Session duration in ms (null if single message) |
+| `cards.session.models_used` | string[] | Unique model IDs used in the session |
+| `cards.tools.total_calls` | int | Total number of tool invocations |
+| `cards.tools.tool_breakdown` | object | Map of tool name to call count |
+| `cards.tools.error_count` | int | Number of tool calls that returned errors |
 
 **Notes:**
 - Analytics are cached in the database and recomputed when new data is synced

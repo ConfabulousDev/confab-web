@@ -33,6 +33,24 @@ func TestCardsAllValid(t *testing.T) {
 				UpToLine:   upToLine,
 				AutoCount:  2,
 			},
+			Session: &SessionCardRecord{
+				SessionID:      "test-session",
+				Version:        version,
+				ComputedAt:     now,
+				UpToLine:       upToLine,
+				UserTurns:      5,
+				AssistantTurns: 5,
+				ModelsUsed:     []string{"claude-sonnet-4"},
+			},
+			Tools: &ToolsCardRecord{
+				SessionID:     "test-session",
+				Version:       version,
+				ComputedAt:    now,
+				UpToLine:      upToLine,
+				TotalCalls:    10,
+				ToolBreakdown: map[string]int{"Read": 5, "Write": 3, "Bash": 2},
+				ErrorCount:    1,
+			},
 		}
 	}
 

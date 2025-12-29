@@ -20,6 +20,17 @@ type ComputeResult struct {
 	CompactionAuto      int
 	CompactionManual    int
 	CompactionAvgTimeMs *int
+
+	// Session stats (from SessionCollector)
+	UserTurns      int
+	AssistantTurns int
+	DurationMs     *int64
+	ModelsUsed     []string
+
+	// Tools stats (from ToolsCollector)
+	TotalToolCalls int
+	ToolBreakdown  map[string]int
+	ToolErrorCount int
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
@@ -27,8 +38,10 @@ type ComputeResult struct {
 func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 	tokens := NewTokensCollector()
 	compaction := NewCompactionCollector()
+	session := NewSessionCollector()
+	tools := NewToolsCollector()
 
-	_, err := RunCollectors(content, tokens, compaction)
+	_, err := RunCollectors(content, tokens, compaction, session, tools)
 	if err != nil {
 		return nil, err
 	}
@@ -45,5 +58,16 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 		CompactionAuto:      compaction.AutoCount,
 		CompactionManual:    compaction.ManualCount,
 		CompactionAvgTimeMs: compaction.AvgTimeMs,
+
+		// Session stats
+		UserTurns:      session.UserTurns,
+		AssistantTurns: session.AssistantTurns,
+		DurationMs:     session.DurationMs(),
+		ModelsUsed:     session.ModelsList(),
+
+		// Tools stats
+		TotalToolCalls: tools.TotalCalls,
+		ToolBreakdown:  tools.ToolBreakdown,
+		ToolErrorCount: tools.ErrorCount,
 	}, nil
 }

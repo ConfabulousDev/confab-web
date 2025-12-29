@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -45,6 +46,20 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	}
 	cards.Compaction = compaction
 
+	// Get session card
+	session, err := s.getSessionCard(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("getting session card: %w", err)
+	}
+	cards.Session = session
+
+	// Get tools card
+	tools, err := s.getToolsCard(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("getting tools card: %w", err)
+	}
+	cards.Tools = tools
+
 	return cards, nil
 }
 
@@ -65,6 +80,18 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	if cards.Compaction != nil {
 		if err := s.upsertCompactionCard(ctx, cards.Compaction); err != nil {
 			return fmt.Errorf("upserting compaction card: %w", err)
+		}
+	}
+
+	if cards.Session != nil {
+		if err := s.upsertSessionCard(ctx, cards.Session); err != nil {
+			return fmt.Errorf("upserting session card: %w", err)
+		}
+	}
+
+	if cards.Tools != nil {
+		if err := s.upsertToolsCard(ctx, cards.Tools); err != nil {
+			return fmt.Errorf("upserting tools card: %w", err)
 		}
 	}
 
@@ -248,6 +275,147 @@ func (s *Store) upsertCompactionCard(ctx context.Context, record *CompactionCard
 }
 
 // =============================================================================
+// Session card operations
+// =============================================================================
+
+func (s *Store) getSessionCard(ctx context.Context, sessionID string) (*SessionCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			user_turns, assistant_turns, duration_ms, models_used
+		FROM session_card_session
+		WHERE session_id = $1
+	`
+
+	var record SessionCardRecord
+	var modelsJSON []byte
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.UserTurns,
+		&record.AssistantTurns,
+		&record.DurationMs,
+		&modelsJSON,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(modelsJSON, &record.ModelsUsed); err != nil {
+		return nil, fmt.Errorf("parsing models_used: %w", err)
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord) error {
+	modelsJSON, err := json.Marshal(record.ModelsUsed)
+	if err != nil {
+		return fmt.Errorf("marshaling models_used: %w", err)
+	}
+
+	query := `
+		INSERT INTO session_card_session (
+			session_id, version, computed_at, up_to_line,
+			user_turns, assistant_turns, duration_ms, models_used
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			user_turns = EXCLUDED.user_turns,
+			assistant_turns = EXCLUDED.assistant_turns,
+			duration_ms = EXCLUDED.duration_ms,
+			models_used = EXCLUDED.models_used
+	`
+
+	_, err = s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.UserTurns,
+		record.AssistantTurns,
+		record.DurationMs,
+		modelsJSON,
+	)
+	return err
+}
+
+// =============================================================================
+// Tools card operations
+// =============================================================================
+
+func (s *Store) getToolsCard(ctx context.Context, sessionID string) (*ToolsCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			total_calls, tool_breakdown, error_count
+		FROM session_card_tools
+		WHERE session_id = $1
+	`
+
+	var record ToolsCardRecord
+	var breakdownJSON []byte
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.TotalCalls,
+		&breakdownJSON,
+		&record.ErrorCount,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(breakdownJSON, &record.ToolBreakdown); err != nil {
+		return nil, fmt.Errorf("parsing tool_breakdown: %w", err)
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertToolsCard(ctx context.Context, record *ToolsCardRecord) error {
+	breakdownJSON, err := json.Marshal(record.ToolBreakdown)
+	if err != nil {
+		return fmt.Errorf("marshaling tool_breakdown: %w", err)
+	}
+
+	query := `
+		INSERT INTO session_card_tools (
+			session_id, version, computed_at, up_to_line,
+			total_calls, tool_breakdown, error_count
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			total_calls = EXCLUDED.total_calls,
+			tool_breakdown = EXCLUDED.tool_breakdown,
+			error_count = EXCLUDED.error_count
+	`
+
+	_, err = s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.TotalCalls,
+		breakdownJSON,
+		record.ErrorCount,
+	)
+	return err
+}
+
+// =============================================================================
 // Conversion helpers
 // =============================================================================
 
@@ -281,6 +449,25 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			AutoCount:   r.CompactionAuto,
 			ManualCount: r.CompactionManual,
 			AvgTimeMs:   r.CompactionAvgTimeMs,
+		},
+		Session: &SessionCardRecord{
+			SessionID:      sessionID,
+			Version:        SessionCardVersion,
+			ComputedAt:     now,
+			UpToLine:       lineCount,
+			UserTurns:      r.UserTurns,
+			AssistantTurns: r.AssistantTurns,
+			DurationMs:     r.DurationMs,
+			ModelsUsed:     r.ModelsUsed,
+		},
+		Tools: &ToolsCardRecord{
+			SessionID:     sessionID,
+			Version:       ToolsCardVersion,
+			ComputedAt:    now,
+			UpToLine:      lineCount,
+			TotalCalls:    r.TotalToolCalls,
+			ToolBreakdown: r.ToolBreakdown,
+			ErrorCount:    r.ToolErrorCount,
 		},
 	}
 }
@@ -337,6 +524,25 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			Auto:      c.Compaction.AutoCount,
 			Manual:    c.Compaction.ManualCount,
 			AvgTimeMs: c.Compaction.AvgTimeMs,
+		}
+	}
+
+	if c.Session != nil {
+		// Cards format only (no legacy format for new cards)
+		response.Cards["session"] = SessionCardData{
+			UserTurns:      c.Session.UserTurns,
+			AssistantTurns: c.Session.AssistantTurns,
+			DurationMs:     c.Session.DurationMs,
+			ModelsUsed:     c.Session.ModelsUsed,
+		}
+	}
+
+	if c.Tools != nil {
+		// Cards format only (no legacy format for new cards)
+		response.Cards["tools"] = ToolsCardData{
+			TotalCalls:    c.Tools.TotalCalls,
+			ToolBreakdown: c.Tools.ToolBreakdown,
+			ErrorCount:    c.Tools.ErrorCount,
 		}
 	}
 
