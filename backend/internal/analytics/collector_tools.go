@@ -72,11 +72,3 @@ func (c *ToolsCollector) Finalize(ctx *CollectContext) {
 	}
 }
 
-// ToolBreakdown returns a map of tool names to total calls (for backward compatibility).
-func (c *ToolsCollector) ToolBreakdown() map[string]int {
-	breakdown := make(map[string]int)
-	for name, stats := range c.ToolStats {
-		breakdown[name] = stats.Success + stats.Errors
-	}
-	return breakdown
-}

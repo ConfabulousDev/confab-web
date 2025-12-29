@@ -84,8 +84,13 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
   // Calculate dynamic height based on number of tools (min 120px, 28px per tool)
   const chartHeight = Math.max(120, chartData.length * 28);
 
+  const subtitle =
+    data.error_count > 0
+      ? `${data.total_calls} calls (${data.error_count} error${data.error_count !== 1 ? 's' : ''})`
+      : `${data.total_calls} calls`;
+
   return (
-    <CardWrapper title="Tools" subtitle={`${data.total_calls} total calls`}>
+    <CardWrapper title="Tools" subtitle={subtitle}>
       <div className={styles.chartContainer} style={{ height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
@@ -128,11 +133,6 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {data.error_count > 0 && (
-        <div className={styles.errorSummary}>
-          {data.error_count} error{data.error_count !== 1 ? 's' : ''} total
-        </div>
-      )}
     </CardWrapper>
   );
 }
