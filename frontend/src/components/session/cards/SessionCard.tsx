@@ -156,7 +156,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         return (
         <>
           <SectionHeader label="Breakdown" />
-          <div className={styles.chartContainer} style={{ height: breakdownData.length * 20 }}>
+          <div className={styles.chartContainer} style={{ height: breakdownData.length * 24 + 16 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={breakdownData}
