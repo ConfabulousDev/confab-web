@@ -150,9 +150,9 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
 
       {/* Message type breakdown bar chart */}
       {breakdownData.length > 0 && (() => {
-        // Calculate dynamic YAxis width based on longest label (~7px per char at 11px font)
+        // Calculate dynamic YAxis width based on longest label (~6.5px per char at 11px font)
         const maxLabelLength = Math.max(...breakdownData.map((d) => d.name.length));
-        const yAxisWidth = Math.max(40, maxLabelLength * 7 + 4);
+        const yAxisWidth = Math.max(80, maxLabelLength * 6.5 + 8);
         return (
         <>
           <SectionHeader label="Breakdown" />
@@ -176,7 +176,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+                  tick={{ fontSize: 11, fill: 'var(--color-text-secondary)', style: { whiteSpace: 'nowrap' } }}
                   width={yAxisWidth}
                 />
                 <Tooltip
