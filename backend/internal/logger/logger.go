@@ -61,16 +61,6 @@ func Info(msg string, args ...any) {
 	log.Info(msg, args...)
 }
 
-// Error logs an error message with structured fields
-func Error(msg string, args ...any) {
-	log.Error(msg, args...)
-}
-
-// Debug logs a debug message with structured fields
-func Debug(msg string, args ...any) {
-	log.Debug(msg, args...)
-}
-
 // Warn logs a warning message with structured fields
 func Warn(msg string, args ...any) {
 	log.Warn(msg, args...)

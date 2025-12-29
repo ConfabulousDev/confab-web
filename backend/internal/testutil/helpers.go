@@ -55,20 +55,6 @@ func AssertStatus(t *testing.T, w *httptest.ResponseRecorder, expected int) {
 	}
 }
 
-// AssertErrorResponse checks error response format and message
-func AssertErrorResponse(t *testing.T, w *httptest.ResponseRecorder, expectedStatus int, expectedMessage string) {
-	t.Helper()
-
-	AssertStatus(t, w, expectedStatus)
-
-	var resp map[string]string
-	ParseJSONResponse(t, w, &resp)
-
-	if resp["error"] != expectedMessage {
-		t.Errorf("expected error message %q, got %q", expectedMessage, resp["error"])
-	}
-}
-
 // CreateTestUser creates a user in the database for testing
 func CreateTestUser(t *testing.T, env *TestEnvironment, email, name string) *models.User {
 	t.Helper()

@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
@@ -710,21 +709,4 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 	redirectURL := fmt.Sprintf("%s/system-shares?message=System+share+created&share_url=%s",
 		AdminPathPrefix, url.QueryEscape(shareURL))
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
-}
-
-// respondJSON writes a JSON response
-func respondJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if data != nil {
-		if err := json.NewEncoder(w).Encode(data); err != nil {
-			// Note: No request context available here, use default logger
-			logger.Error("Failed to encode JSON response", "error", err)
-		}
-	}
-}
-
-// respondError writes a JSON error response
-func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, map[string]string{"error": message})
 }

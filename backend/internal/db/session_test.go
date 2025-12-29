@@ -962,7 +962,7 @@ func TestListUserSessions_GitHubPRsEmpty(t *testing.T) {
 		t.Fatalf("expected 1 session, got %d", len(sessions))
 	}
 
-	if sessions[0].GitHubPRs != nil && len(sessions[0].GitHubPRs) != 0 {
+	if len(sessions[0].GitHubPRs) != 0 {
 		t.Errorf("expected empty GitHubPRs, got %v", sessions[0].GitHubPRs)
 	}
 }

@@ -42,16 +42,6 @@ func captureLogOutput(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// parseLogLine parses a single JSON log line into a map.
-func parseLogLine(t *testing.T, line string) map[string]interface{} {
-	t.Helper()
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(line), &result); err != nil {
-		t.Fatalf("Failed to parse log line as JSON: %v\nLine: %s", err, line)
-	}
-	return result
-}
-
 // wrapWithClientIP wraps a handler with clientip.Middleware for tests
 // This simulates the production middleware chain where clientip runs before FlyLogger
 func wrapWithClientIP(h http.Handler) http.Handler {
