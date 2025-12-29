@@ -68,7 +68,14 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
 
   return (
     <CardWrapper title="Session">
-      {/* Turns - the key metric */}
+      {/* Messages */}
+      <StatRow
+        label="Messages"
+        value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
+        tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
+      />
+
+      {/* Turns */}
       <StatRow
         label="Turns"
         value={`${data.user_turns + data.assistant_turns} (${data.user_turns}/${data.assistant_turns})`}
@@ -92,13 +99,6 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
           tooltip={TOOLTIPS.models}
         />
       )}
-
-      {/* Messages */}
-      <StatRow
-        label="Messages"
-        value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
-        tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
-      />
 
       {/* Message type breakdown */}
       <SectionHeader label="Breakdown" />
