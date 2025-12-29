@@ -152,17 +152,17 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
       {breakdownData.length > 0 && (() => {
         // Calculate dynamic YAxis width based on longest label (~7px per char at 11px font)
         const maxLabelLength = Math.max(...breakdownData.map((d) => d.name.length));
-        const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
+        const yAxisWidth = Math.max(40, maxLabelLength * 7 + 4);
         return (
         <>
           <SectionHeader label="Breakdown" />
-          <div className={styles.chartContainer} style={{ height: Math.max(120, breakdownData.length * 28) }}>
+          <div className={styles.chartContainer} style={{ height: breakdownData.length * 20 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={breakdownData}
                 layout="vertical"
-                margin={{ top: 0, right: 24, left: 0, bottom: 0 }}
-                barSize={16}
+                margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
+                barSize={12}
               >
                 <XAxis
                   type="number"
