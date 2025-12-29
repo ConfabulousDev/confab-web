@@ -360,7 +360,6 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireSession(s.db))
 			r.Delete("/sessions/{id}/github-links/{linkID}", withMaxBody(MaxBodyXS, HandleDeleteGitHubLink(s.db)))
-			r.Delete("/sessions/{id}/github-links", withMaxBody(MaxBodyXS, HandleDeleteGitHubLinksByType(s.db)))
 		})
 	})
 

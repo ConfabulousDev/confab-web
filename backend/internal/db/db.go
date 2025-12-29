@@ -2121,25 +2121,6 @@ func (db *DB) DeleteGitHubLink(ctx context.Context, linkID int64) error {
 	return nil
 }
 
-// DeleteGitHubLinksByType deletes all GitHub links of a given type for a session.
-// Returns the number of links deleted.
-func (db *DB) DeleteGitHubLinksByType(ctx context.Context, sessionID string, linkType models.GitHubLinkType) (int64, error) {
-	result, err := db.conn.ExecContext(ctx,
-		`DELETE FROM session_github_links WHERE session_id = $1 AND link_type = $2`,
-		sessionID, linkType,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("failed to delete github links by type: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("failed to check rows affected: %w", err)
-	}
-
-	return rowsAffected, nil
-}
-
 // GetGitHubLinkByID returns a GitHub link by ID.
 // Returns ErrGitHubLinkNotFound if link doesn't exist.
 func (db *DB) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitHubLink, error) {

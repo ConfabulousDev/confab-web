@@ -631,23 +631,6 @@ Requires session ownership (web session auth only, no API key).
 **Errors:**
 - `404` - Link not found or not session owner
 
-#### Delete GitHub Links by Type
-```
-DELETE /api/v1/sessions/{id}/github-links?type=commit
-X-CSRF-Token: <token>
-```
-
-Deletes all GitHub links of the specified type for a session. Requires session ownership (web session auth only, no API key).
-
-**Query Parameters:**
-- `type` (required): Link type to delete. Must be `commit` or `pull_request`.
-
-**Response:** `204 No Content`
-
-**Errors:**
-- `400` - Missing or invalid type parameter
-- `404` - Session not found or not session owner
-
 ---
 
 ### Session Analytics
