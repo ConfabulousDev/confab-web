@@ -71,7 +71,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
       {/* Turns - the key metric */}
       <StatRow
         label="Turns"
-        value={`${data.user_turns} / ${data.assistant_turns}`}
+        value={`${data.user_turns + data.assistant_turns} (${data.user_turns}/${data.assistant_turns})`}
         tooltip={TOOLTIPS.turns}
       />
 
