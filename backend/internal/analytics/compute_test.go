@@ -110,7 +110,7 @@ not valid json
 	}
 }
 
-func TestToSessionAnalytics(t *testing.T) {
+func TestToCards(t *testing.T) {
 	result := &ComputeResult{
 		InputTokens:         1000,
 		OutputTokens:        500,
@@ -121,41 +121,65 @@ func TestToSessionAnalytics(t *testing.T) {
 		CompactionManual:    1,
 	}
 
-	analytics := result.ToSessionAnalytics("session-123", 1, 500)
+	cards := result.ToCards("session-123", 500)
 
-	if analytics.SessionID != "session-123" {
-		t.Errorf("SessionID = %s, want session-123", analytics.SessionID)
+	// Check tokens card
+	if cards.Tokens == nil {
+		t.Fatal("Tokens card should not be nil")
 	}
-	if analytics.AnalyticsVersion != 1 {
-		t.Errorf("AnalyticsVersion = %d, want 1", analytics.AnalyticsVersion)
+	if cards.Tokens.SessionID != "session-123" {
+		t.Errorf("Tokens.SessionID = %s, want session-123", cards.Tokens.SessionID)
 	}
-	if analytics.UpToLine != 500 {
-		t.Errorf("UpToLine = %d, want 500", analytics.UpToLine)
+	if cards.Tokens.Version != TokensCardVersion {
+		t.Errorf("Tokens.Version = %d, want %d", cards.Tokens.Version, TokensCardVersion)
 	}
-	if analytics.InputTokens != 1000 {
-		t.Errorf("InputTokens = %d, want 1000", analytics.InputTokens)
+	if cards.Tokens.UpToLine != 500 {
+		t.Errorf("Tokens.UpToLine = %d, want 500", cards.Tokens.UpToLine)
 	}
-	if analytics.CompactionAuto != 2 {
-		t.Errorf("CompactionAuto = %d, want 2", analytics.CompactionAuto)
+	if cards.Tokens.InputTokens != 1000 {
+		t.Errorf("Tokens.InputTokens = %d, want 1000", cards.Tokens.InputTokens)
+	}
+
+	// Check cost card
+	if cards.Cost == nil {
+		t.Fatal("Cost card should not be nil")
+	}
+	if !cards.Cost.EstimatedCostUSD.Equal(decimal.NewFromFloat(1.50)) {
+		t.Errorf("Cost.EstimatedCostUSD = %s, want 1.50", cards.Cost.EstimatedCostUSD)
+	}
+
+	// Check compaction card
+	if cards.Compaction == nil {
+		t.Fatal("Compaction card should not be nil")
+	}
+	if cards.Compaction.AutoCount != 2 {
+		t.Errorf("Compaction.AutoCount = %d, want 2", cards.Compaction.AutoCount)
 	}
 }
 
-func TestToResponse(t *testing.T) {
+func TestCardsToResponse(t *testing.T) {
 	avgTime := 5000
-	analytics := &SessionAnalytics{
-		UpToLine:            1500,
-		InputTokens:         1000,
-		OutputTokens:        500,
-		CacheCreationTokens: 100,
-		CacheReadTokens:     200,
-		EstimatedCostUSD:    decimal.NewFromFloat(1.50),
-		CompactionAuto:      2,
-		CompactionManual:    1,
-		CompactionAvgTimeMs: &avgTime,
+	cards := &Cards{
+		Tokens: &TokensCardRecord{
+			UpToLine:            1500,
+			InputTokens:         1000,
+			OutputTokens:        500,
+			CacheCreationTokens: 100,
+			CacheReadTokens:     200,
+		},
+		Cost: &CostCardRecord{
+			EstimatedCostUSD: decimal.NewFromFloat(1.50),
+		},
+		Compaction: &CompactionCardRecord{
+			AutoCount:   2,
+			ManualCount: 1,
+			AvgTimeMs:   &avgTime,
+		},
 	}
 
-	response := analytics.ToResponse()
+	response := cards.ToResponse()
 
+	// Check legacy flat format
 	if response.ComputedLines != 1500 {
 		t.Errorf("ComputedLines = %d, want 1500", response.ComputedLines)
 	}
@@ -173,5 +197,40 @@ func TestToResponse(t *testing.T) {
 	}
 	if *response.Compaction.AvgTimeMs != 5000 {
 		t.Errorf("Compaction.AvgTimeMs = %d, want 5000", *response.Compaction.AvgTimeMs)
+	}
+
+	// Check new cards format
+	if response.Cards == nil {
+		t.Fatal("Cards should not be nil")
+	}
+	if len(response.Cards) != 3 {
+		t.Errorf("Cards length = %d, want 3", len(response.Cards))
+	}
+
+	// Verify tokens card
+	tokens, ok := response.Cards["tokens"].(TokensCardData)
+	if !ok {
+		t.Fatal("tokens card not found or wrong type")
+	}
+	if tokens.Input != 1000 {
+		t.Errorf("cards.tokens.Input = %d, want 1000", tokens.Input)
+	}
+
+	// Verify cost card
+	cost, ok := response.Cards["cost"].(CostCardData)
+	if !ok {
+		t.Fatal("cost card not found or wrong type")
+	}
+	if cost.EstimatedUSD != "1.5" {
+		t.Errorf("cards.cost.EstimatedUSD = %s, want 1.5", cost.EstimatedUSD)
+	}
+
+	// Verify compaction card
+	compaction, ok := response.Cards["compaction"].(CompactionCardData)
+	if !ok {
+		t.Fatal("compaction card not found or wrong type")
+	}
+	if compaction.Auto != 2 {
+		t.Errorf("cards.compaction.Auto = %d, want 2", compaction.Auto)
 	}
 }

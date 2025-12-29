@@ -7,42 +7,24 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// SessionAnalytics represents computed analytics for a session.
-type SessionAnalytics struct {
-	SessionID         string    `json:"session_id"`
-	AnalyticsVersion  int       `json:"analytics_version"`
-	UpToLine          int64     `json:"up_to_line"`
-	ComputedAt        time.Time `json:"computed_at"`
-
-	// Token stats
-	InputTokens         int64 `json:"input_tokens"`
-	OutputTokens        int64 `json:"output_tokens"`
-	CacheCreationTokens int64 `json:"cache_creation_tokens"`
-	CacheReadTokens     int64 `json:"cache_read_tokens"`
-
-	// Cost
-	EstimatedCostUSD decimal.Decimal `json:"estimated_cost_usd"`
-
-	// Compaction stats
-	CompactionAuto      int  `json:"compaction_auto"`
-	CompactionManual    int  `json:"compaction_manual"`
-	CompactionAvgTimeMs *int `json:"compaction_avg_time_ms,omitempty"`
-
-	// Flexible details for future expansion
-	Details map[string]interface{} `json:"details,omitempty"`
-}
-
 // AnalyticsResponse is the API response format for analytics.
-// Cache details are internal - the frontend just gets the computed data.
+// This response includes both the legacy flat format (Tokens, Cost, Compaction)
+// and the new cards-based format (Cards map). During migration, frontend can
+// transition from flat fields to Cards. Once complete, flat fields will be removed.
 type AnalyticsResponse struct {
-	ComputedAt    time.Time      `json:"computed_at"`    // When analytics were computed
-	ComputedLines int64          `json:"computed_lines"` // Line count when analytics were computed
-	Tokens        TokenStats     `json:"tokens"`
-	Cost          CostStats      `json:"cost"`
-	Compaction    CompactionInfo `json:"compaction"`
+	ComputedAt    time.Time `json:"computed_at"`    // When analytics were computed
+	ComputedLines int64     `json:"computed_lines"` // Line count when analytics were computed
+
+	// Legacy flat format (deprecated - use Cards instead)
+	Tokens     TokenStats     `json:"tokens"`
+	Cost       CostStats      `json:"cost"`
+	Compaction CompactionInfo `json:"compaction"`
+
+	// New cards-based format
+	Cards map[string]interface{} `json:"cards"`
 }
 
-// TokenStats contains token usage information.
+// TokenStats contains token usage information (legacy flat format).
 type TokenStats struct {
 	Input         int64 `json:"input"`
 	Output        int64 `json:"output"`
@@ -50,12 +32,12 @@ type TokenStats struct {
 	CacheRead     int64 `json:"cache_read"`
 }
 
-// CostStats contains cost information.
+// CostStats contains cost information (legacy flat format).
 type CostStats struct {
 	EstimatedUSD decimal.Decimal `json:"estimated_usd"`
 }
 
-// CompactionInfo contains compaction statistics.
+// CompactionInfo contains compaction statistics (legacy flat format).
 type CompactionInfo struct {
 	Auto      int  `json:"auto"`
 	Manual    int  `json:"manual"`

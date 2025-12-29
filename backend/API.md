@@ -686,6 +686,22 @@ Returns computed analytics for a session. Uses the same canonical access model a
     "auto": 3,
     "manual": 1,
     "avg_time_ms": 5000
+  },
+  "cards": {
+    "tokens": {
+      "input": 125000,
+      "output": 48000,
+      "cache_creation": 5000,
+      "cache_read": 12000
+    },
+    "cost": {
+      "estimated_usd": "1.25"
+    },
+    "compaction": {
+      "auto": 3,
+      "manual": 1,
+      "avg_time_ms": 5000
+    }
   }
 }
 ```
@@ -694,14 +710,18 @@ Returns computed analytics for a session. Uses the same canonical access model a
 |-------|------|-------------|
 | `computed_at` | string | ISO timestamp when analytics were computed |
 | `computed_lines` | int | Line count through which analytics are computed |
-| `tokens.input` | int | Total input tokens sent to model |
-| `tokens.output` | int | Total output tokens generated |
-| `tokens.cache_creation` | int | Tokens written to cache |
-| `tokens.cache_read` | int | Tokens served from cache |
-| `cost.estimated_usd` | string | Estimated API cost (assumes 5-min prompt caching) |
-| `compaction.auto` | int | Auto-triggered compaction count |
-| `compaction.manual` | int | Manual compaction count |
-| `compaction.avg_time_ms` | int\|null | Avg auto-compaction time in ms (null if none) |
+| `tokens.*` | object | *Deprecated:* Use `cards.tokens` instead |
+| `cost.*` | object | *Deprecated:* Use `cards.cost` instead |
+| `compaction.*` | object | *Deprecated:* Use `cards.compaction` instead |
+| `cards` | object | Card-based analytics data (keyed by card name) |
+| `cards.tokens.input` | int | Total input tokens sent to model |
+| `cards.tokens.output` | int | Total output tokens generated |
+| `cards.tokens.cache_creation` | int | Tokens written to cache |
+| `cards.tokens.cache_read` | int | Tokens served from cache |
+| `cards.cost.estimated_usd` | string | Estimated API cost (assumes 5-min prompt caching) |
+| `cards.compaction.auto` | int | Auto-triggered compaction count |
+| `cards.compaction.manual` | int | Manual compaction count |
+| `cards.compaction.avg_time_ms` | int\|null | Avg auto-compaction time in ms (null if none) |
 
 **Notes:**
 - Analytics are cached in the database and recomputed when new data is synced

@@ -160,12 +160,41 @@ export const CompactionInfoSchema = z.object({
   avg_time_ms: z.number().nullable().optional(),
 });
 
+// Card data schemas for the new cards-based format
+export const TokensCardDataSchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cache_creation: z.number(),
+  cache_read: z.number(),
+});
+
+export const CostCardDataSchema = z.object({
+  estimated_usd: z.string(),
+});
+
+export const CompactionCardDataSchema = z.object({
+  auto: z.number(),
+  manual: z.number(),
+  avg_time_ms: z.number().nullable().optional(),
+});
+
+// Cards map schema - extensible for future cards
+// All fields optional to handle empty analytics (session with no transcript)
+export const AnalyticsCardsSchema = z.object({
+  tokens: TokensCardDataSchema.optional(),
+  cost: CostCardDataSchema.optional(),
+  compaction: CompactionCardDataSchema.optional(),
+});
+
 export const SessionAnalyticsSchema = z.object({
   computed_at: z.string(), // ISO timestamp when analytics were computed
   computed_lines: z.number(), // Line count when analytics were computed
+  // Legacy flat format (deprecated - use cards instead)
   tokens: TokenStatsSchema,
   cost: CostStatsSchema,
   compaction: CompactionInfoSchema,
+  // New cards-based format (optional for empty analytics)
+  cards: AnalyticsCardsSchema.optional().nullable(),
 });
 
 // ============================================================================
@@ -196,6 +225,10 @@ export type GitHubLinksResponse = z.infer<typeof GitHubLinksResponseSchema>;
 export type TokenStats = z.infer<typeof TokenStatsSchema>;
 export type CostStats = z.infer<typeof CostStatsSchema>;
 export type CompactionInfo = z.infer<typeof CompactionInfoSchema>;
+export type TokensCardData = z.infer<typeof TokensCardDataSchema>;
+export type CostCardData = z.infer<typeof CostCardDataSchema>;
+export type CompactionCardData = z.infer<typeof CompactionCardDataSchema>;
+export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 
 // ============================================================================

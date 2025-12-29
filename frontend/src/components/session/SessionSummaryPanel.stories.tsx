@@ -1,9 +1,27 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { SessionAnalytics, GitHubLink } from '@/services/api';
+import type { SessionAnalytics, GitHubLink } from '@/schemas/api';
 import SessionSummaryPanel from './SessionSummaryPanel';
 
+// Helper to create analytics with both legacy and cards format
+function createAnalytics(base: {
+  computed_at: string;
+  computed_lines: number;
+  tokens: { input: number; output: number; cache_creation: number; cache_read: number };
+  cost: { estimated_usd: string };
+  compaction: { auto: number; manual: number; avg_time_ms: number | null };
+}): SessionAnalytics {
+  return {
+    ...base,
+    cards: {
+      tokens: base.tokens,
+      cost: base.cost,
+      compaction: base.compaction,
+    },
+  };
+}
+
 // Sample analytics from backend API - typical session
-const mockAnalytics: SessionAnalytics = {
+const mockAnalytics = createAnalytics({
   computed_at: new Date(Date.now() - 120000).toISOString(), // 2 minutes ago
   computed_lines: 500,
   tokens: {
@@ -20,10 +38,10 @@ const mockAnalytics: SessionAnalytics = {
     manual: 1,
     avg_time_ms: 48500, // 48.5 seconds
   },
-};
+});
 
 // Empty analytics (new session, no activity)
-const emptyAnalytics: SessionAnalytics = {
+const emptyAnalytics = createAnalytics({
   computed_at: new Date().toISOString(),
   computed_lines: 0,
   tokens: {
@@ -40,10 +58,10 @@ const emptyAnalytics: SessionAnalytics = {
     manual: 0,
     avg_time_ms: null,
   },
-};
+});
 
 // Small session analytics
-const smallAnalytics: SessionAnalytics = {
+const smallAnalytics = createAnalytics({
   computed_at: new Date(Date.now() - 60000).toISOString(), // 1 minute ago
   computed_lines: 25,
   tokens: {
@@ -60,10 +78,10 @@ const smallAnalytics: SessionAnalytics = {
     manual: 0,
     avg_time_ms: null,
   },
-};
+});
 
 // Large session with heavy usage
-const largeAnalytics: SessionAnalytics = {
+const largeAnalytics = createAnalytics({
   computed_at: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
   computed_lines: 2500,
   tokens: {
@@ -80,10 +98,10 @@ const largeAnalytics: SessionAnalytics = {
     manual: 3,
     avg_time_ms: 52300,
   },
-};
+});
 
 // Only auto compactions
-const autoCompactionAnalytics: SessionAnalytics = {
+const autoCompactionAnalytics = createAnalytics({
   computed_at: new Date(Date.now() - 180000).toISOString(), // 3 minutes ago
   computed_lines: 800,
   tokens: {
@@ -100,10 +118,10 @@ const autoCompactionAnalytics: SessionAnalytics = {
     manual: 0,
     avg_time_ms: 45000,
   },
-};
+});
 
 // Analytics computed a while ago
-const olderAnalytics: SessionAnalytics = {
+const olderAnalytics = createAnalytics({
   computed_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
   computed_lines: 450,
   tokens: {
@@ -120,7 +138,7 @@ const olderAnalytics: SessionAnalytics = {
     manual: 0,
     avg_time_ms: 42000,
   },
-};
+});
 
 // Sample GitHub links for stories
 const mockGitHubLinks: GitHubLink[] = [

@@ -91,14 +91,14 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			}
 		}
 
-		// Check if we have valid cached analytics
-		cached, err := analyticsStore.Get(dbCtx, sessionID)
+		// Check if we have valid cached cards
+		cached, err := analyticsStore.GetCards(dbCtx, sessionID)
 		if err != nil {
-			log.Error("Failed to get cached analytics", "error", err, "session_id", sessionID)
+			log.Error("Failed to get cached cards", "error", err, "session_id", sessionID)
 			// Continue to compute fresh analytics
 		}
 
-		if analytics.IsCacheValid(cached, analytics.CurrentAnalyticsVersion, currentLineCount) {
+		if cached.AllValid(currentLineCount) {
 			// Cache hit - return cached data
 			respondJSON(w, http.StatusOK, cached.ToResponse())
 			return
@@ -131,7 +131,6 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Download and merge all chunks
-		// TODO: Extract common getFullFileContent() helper shared with handleCanonicalSyncFileRead
 		chunks, err := downloadChunks(storageCtx, store, chunkKeys)
 		if err != nil {
 			log.Error("Failed to download chunks", "error", err, "session_id", sessionID)
@@ -155,14 +154,14 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			return
 		}
 
-		// Convert to SessionAnalytics and cache
-		sessionAnalytics := computed.ToSessionAnalytics(sessionID, analytics.CurrentAnalyticsVersion, currentLineCount)
+		// Convert to Cards and cache
+		cards := computed.ToCards(sessionID, currentLineCount)
 
 		// Store in cache (errors logged but not returned - we can still return computed result)
-		if err := analyticsStore.Upsert(dbCtx, sessionAnalytics); err != nil {
-			log.Error("Failed to cache analytics", "error", err, "session_id", sessionID)
+		if err := analyticsStore.UpsertCards(dbCtx, cards); err != nil {
+			log.Error("Failed to cache cards", "error", err, "session_id", sessionID)
 		}
 
-		respondJSON(w, http.StatusOK, sessionAnalytics.ToResponse())
+		respondJSON(w, http.StatusOK, cards.ToResponse())
 	}
 }

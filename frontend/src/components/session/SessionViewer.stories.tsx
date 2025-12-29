@@ -142,9 +142,27 @@ const mockMessages: TranscriptLine[] = [
   mockAssistantMessage2,
 ];
 
+// Helper to create analytics with both legacy and cards format
+function createAnalytics(base: {
+  computed_at: string;
+  computed_lines: number;
+  tokens: { input: number; output: number; cache_creation: number; cache_read: number };
+  cost: { estimated_usd: string };
+  compaction: { auto: number; manual: number; avg_time_ms: number | null };
+}): SessionAnalytics {
+  return {
+    ...base,
+    cards: {
+      tokens: base.tokens,
+      cost: base.cost,
+      compaction: base.compaction,
+    },
+  };
+}
+
 // Mock analytics computed from the messages above
 // computed_lines matches mockSession.files[0].last_synced_line (10)
-const mockAnalytics: SessionAnalytics = {
+const mockAnalytics = createAnalytics({
   computed_at: new Date(Date.now() - 60000).toISOString(), // 1 minute ago
   computed_lines: 10,
   tokens: {
@@ -161,7 +179,7 @@ const mockAnalytics: SessionAnalytics = {
     manual: 0,
     avg_time_ms: null,
   },
-};
+});
 
 // Mock GitHub links
 const mockGithubLinks: GitHubLink[] = [
@@ -255,7 +273,7 @@ export const WithCustomTitle: Story = {
  * Empty session with no messages yet.
  */
 // Empty analytics for new sessions
-const emptyAnalytics: SessionAnalytics = {
+const emptyAnalytics = createAnalytics({
   computed_at: new Date().toISOString(),
   computed_lines: 0,
   tokens: {
@@ -272,7 +290,7 @@ const emptyAnalytics: SessionAnalytics = {
     manual: 0,
     avg_time_ms: null,
   },
-};
+});
 
 export const EmptySession: Story = {
   args: {
