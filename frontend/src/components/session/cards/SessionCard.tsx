@@ -162,8 +162,8 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={30}
-                  outerRadius={55}
+                  innerRadius={25}
+                  outerRadius={45}
                   paddingAngle={2}
                 >
                   {breakdownData.map((entry, index) => (
