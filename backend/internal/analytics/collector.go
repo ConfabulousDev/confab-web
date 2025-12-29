@@ -15,6 +15,11 @@ type CollectContext struct {
 	// to reference other messages (e.g., compaction time calculation).
 	TimestampByUUID map[string]time.Time
 
+	// ToolUseIDToName maps tool_use IDs to tool names.
+	// Built from tool_use blocks, used to attribute tool_result errors
+	// to specific tools.
+	ToolUseIDToName map[string]string
+
 	// LineCount tracks the total number of lines processed.
 	LineCount int64
 }
@@ -36,6 +41,7 @@ type Collector interface {
 func RunCollectors(content []byte, collectors ...Collector) (*CollectContext, error) {
 	ctx := &CollectContext{
 		TimestampByUUID: make(map[string]time.Time),
+		ToolUseIDToName: make(map[string]string),
 	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(content))

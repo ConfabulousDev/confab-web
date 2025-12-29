@@ -12,7 +12,7 @@ const (
 	CostCardVersion       = 1
 	CompactionCardVersion = 1
 	SessionCardVersion    = 1
-	ToolsCardVersion      = 1
+	ToolsCardVersion      = 2 // v2: per-tool success/error breakdown
 )
 
 // =============================================================================
@@ -65,13 +65,13 @@ type SessionCardRecord struct {
 
 // ToolsCardRecord is the DB record for the tools card.
 type ToolsCardRecord struct {
-	SessionID     string         `json:"session_id"`
-	Version       int            `json:"version"`
-	ComputedAt    time.Time      `json:"computed_at"`
-	UpToLine      int64          `json:"up_to_line"`
-	TotalCalls    int            `json:"total_calls"`
-	ToolBreakdown map[string]int `json:"tool_breakdown"` // Stored as JSON object
-	ErrorCount    int            `json:"error_count"`
+	SessionID  string                `json:"session_id"`
+	Version    int                   `json:"version"`
+	ComputedAt time.Time             `json:"computed_at"`
+	UpToLine   int64                 `json:"up_to_line"`
+	TotalCalls int                   `json:"total_calls"`
+	ToolStats  map[string]*ToolStats `json:"tool_stats"` // Per-tool success/error counts
+	ErrorCount int                   `json:"error_count"`
 }
 
 // Cards aggregates all card data for a session.
@@ -117,9 +117,9 @@ type SessionCardData struct {
 
 // ToolsCardData is the API response format for the tools card.
 type ToolsCardData struct {
-	TotalCalls    int            `json:"total_calls"`
-	ToolBreakdown map[string]int `json:"tool_breakdown"`
-	ErrorCount    int            `json:"error_count"`
+	TotalCalls int                   `json:"total_calls"`
+	ToolStats  map[string]*ToolStats `json:"tool_stats"` // Per-tool success/error counts
+	ErrorCount int                   `json:"error_count"`
 }
 
 // =============================================================================

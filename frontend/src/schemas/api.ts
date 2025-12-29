@@ -185,9 +185,14 @@ export const SessionCardDataSchema = z.object({
   models_used: z.array(z.string()),
 });
 
+export const ToolStatsSchema = z.object({
+  success: z.number(),
+  errors: z.number(),
+});
+
 export const ToolsCardDataSchema = z.object({
   total_calls: z.number(),
-  tool_breakdown: z.record(z.string(), z.number()),
+  tool_stats: z.record(z.string(), ToolStatsSchema),
   error_count: z.number(),
 });
 
@@ -244,6 +249,7 @@ export type TokensCardData = z.infer<typeof TokensCardDataSchema>;
 export type CostCardData = z.infer<typeof CostCardDataSchema>;
 export type CompactionCardData = z.infer<typeof CompactionCardDataSchema>;
 export type SessionCardData = z.infer<typeof SessionCardDataSchema>;
+export type ToolStats = z.infer<typeof ToolStatsSchema>;
 export type ToolsCardData = z.infer<typeof ToolsCardDataSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;

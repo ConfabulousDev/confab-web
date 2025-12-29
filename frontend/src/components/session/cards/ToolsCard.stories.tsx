@@ -9,7 +9,7 @@ const meta: Meta<typeof ToolsCard> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '280px' }}>
+      <div style={{ width: '300px' }}>
         <Story />
       </div>
     ),
@@ -23,13 +23,13 @@ export const Default: Story = {
   args: {
     data: {
       total_calls: 45,
-      tool_breakdown: {
-        Read: 20,
-        Bash: 15,
-        Edit: 8,
-        Grep: 2,
+      tool_stats: {
+        Read: { success: 20, errors: 0 },
+        Bash: { success: 13, errors: 2 },
+        Edit: { success: 8, errors: 0 },
+        Grep: { success: 2, errors: 0 },
       },
-      error_count: 0,
+      error_count: 2,
     },
     loading: false,
   },
@@ -39,12 +39,12 @@ export const WithErrors: Story = {
   args: {
     data: {
       total_calls: 32,
-      tool_breakdown: {
-        Bash: 18,
-        Read: 10,
-        Write: 4,
+      tool_stats: {
+        Bash: { success: 14, errors: 4 },
+        Read: { success: 10, errors: 0 },
+        Write: { success: 2, errors: 2 },
       },
-      error_count: 3,
+      error_count: 6,
     },
     loading: false,
   },
@@ -54,8 +54,8 @@ export const SingleTool: Story = {
   args: {
     data: {
       total_calls: 12,
-      tool_breakdown: {
-        Read: 12,
+      tool_stats: {
+        Read: { success: 12, errors: 0 },
       },
       error_count: 0,
     },
@@ -67,15 +67,29 @@ export const ManyTools: Story = {
   args: {
     data: {
       total_calls: 150,
-      tool_breakdown: {
-        Bash: 45,
-        Read: 35,
-        Edit: 30,
-        Grep: 20,
-        Glob: 15,
-        Write: 5,
+      tool_stats: {
+        Bash: { success: 43, errors: 2 },
+        Read: { success: 35, errors: 0 },
+        Edit: { success: 28, errors: 2 },
+        Grep: { success: 20, errors: 0 },
+        Glob: { success: 15, errors: 0 },
+        Write: { success: 3, errors: 2 },
       },
-      error_count: 2,
+      error_count: 6,
+    },
+    loading: false,
+  },
+};
+
+export const AllErrors: Story = {
+  args: {
+    data: {
+      total_calls: 5,
+      tool_stats: {
+        Bash: { success: 0, errors: 3 },
+        Write: { success: 0, errors: 2 },
+      },
+      error_count: 5,
     },
     loading: false,
   },
@@ -85,7 +99,7 @@ export const NoTools: Story = {
   args: {
     data: {
       total_calls: 0,
-      tool_breakdown: {},
+      tool_stats: {},
       error_count: 0,
     },
     loading: false,

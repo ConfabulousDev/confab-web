@@ -49,10 +49,11 @@ type CompactMetadata struct {
 
 // ContentBlock represents a content block in assistant messages.
 type ContentBlock struct {
-	Type    string `json:"type"`              // "text", "tool_use", "thinking", etc.
-	Name    string `json:"name,omitempty"`    // Tool name (for tool_use)
-	ID      string `json:"id,omitempty"`      // Tool use ID
-	IsError bool   `json:"is_error,omitempty"` // For tool_result blocks
+	Type      string `json:"type"`                // "text", "tool_use", "thinking", etc.
+	Name      string `json:"name,omitempty"`      // Tool name (for tool_use)
+	ID        string `json:"id,omitempty"`        // Tool use ID (for tool_use)
+	ToolUseID string `json:"tool_use_id,omitempty"` // Reference to tool_use ID (for tool_result)
+	IsError   bool   `json:"is_error,omitempty"`  // For tool_result blocks
 }
 
 // ParseLine parses a single JSONL line for analytics purposes.
@@ -136,6 +137,9 @@ func (l *TranscriptLine) GetContentBlocks() []ContentBlock {
 		}
 		if id, ok := blockMap["id"].(string); ok {
 			block.ID = id
+		}
+		if toolUseID, ok := blockMap["tool_use_id"].(string); ok {
+			block.ToolUseID = toolUseID
 		}
 		if isErr, ok := blockMap["is_error"].(bool); ok {
 			block.IsError = isErr

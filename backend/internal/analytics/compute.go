@@ -29,7 +29,7 @@ type ComputeResult struct {
 
 	// Tools stats (from ToolsCollector)
 	TotalToolCalls int
-	ToolBreakdown  map[string]int
+	ToolStats      map[string]*ToolStats
 	ToolErrorCount int
 }
 
@@ -67,7 +67,7 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 
 		// Tools stats
 		TotalToolCalls: tools.TotalCalls,
-		ToolBreakdown:  tools.ToolBreakdown,
+		ToolStats:      tools.ToolStats,
 		ToolErrorCount: tools.ErrorCount,
 	}, nil
 }

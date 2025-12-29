@@ -1,21 +1,68 @@
-import { CardWrapper, StatRow, CardLoading } from './Card';
+import { CardWrapper, CardLoading } from './Card';
 import type { ToolsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import styles from './ToolsCard.module.css';
 
-const TOOLTIPS = {
-  totalCalls: 'Total number of tool invocations',
-  topTools: 'Most frequently used tools',
-  errors: 'Tool calls that returned errors',
-};
+interface ToolChartData {
+  name: string;
+  success: number;
+  errors: number;
+  total: number;
+}
 
-function getTopTools(breakdown: Record<string, number>, limit = 3): string {
-  const sorted = Object.entries(breakdown)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, limit);
+function prepareChartData(toolStats: Record<string, { success: number; errors: number }>): ToolChartData[] {
+  return Object.entries(toolStats)
+    .map(([name, stats]) => ({
+      name,
+      success: stats.success,
+      errors: stats.errors,
+      total: stats.success + stats.errors,
+    }))
+    .sort((a, b) => b.total - a.total); // Longest bar first
+}
 
-  if (sorted.length === 0) return 'None';
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    name: string;
+    value: number;
+    dataKey: string;
+    color: string;
+  }>;
+  label?: string;
+}
 
-  return sorted.map(([name, count]) => `${name} (${count})`).join(', ');
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const success = payload.find((p) => p.dataKey === 'success')?.value ?? 0;
+  const errors = payload.find((p) => p.dataKey === 'errors')?.value ?? 0;
+  const total = success + errors;
+
+  return (
+    <div className={styles.tooltip}>
+      <div className={styles.tooltipTitle}>{label}</div>
+      <div className={styles.tooltipRow}>
+        <span className={styles.tooltipDot} style={{ backgroundColor: 'var(--color-success)' }} />
+        <span>Success: {success}</span>
+      </div>
+      {errors > 0 && (
+        <div className={styles.tooltipRow}>
+          <span className={styles.tooltipDot} style={{ backgroundColor: 'var(--color-error)' }} />
+          <span>Errors: {errors}</span>
+        </div>
+      )}
+      <div className={styles.tooltipTotal}>Total: {total}</div>
+    </div>
+  );
 }
 
 export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
@@ -32,16 +79,59 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
   // Don't render the card if no tools were used
   if (data.total_calls === 0) return null;
 
+  const chartData = prepareChartData(data.tool_stats);
+
+  // Calculate dynamic height based on number of tools (min 120px, 28px per tool)
+  const chartHeight = Math.max(120, chartData.length * 28);
+
   return (
-    <CardWrapper title="Tools">
-      <StatRow label="Total calls" value={data.total_calls} tooltip={TOOLTIPS.totalCalls} />
-      <StatRow
-        label="Top tools"
-        value={getTopTools(data.tool_breakdown)}
-        tooltip={TOOLTIPS.topTools}
-      />
+    <CardWrapper title="Tools" subtitle={`${data.total_calls} total calls`}>
+      <div className={styles.chartContainer} style={{ height: chartHeight }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ top: 0, right: 12, left: 0, bottom: 0 }}
+            barSize={16}
+          >
+            <XAxis
+              type="number"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 10, fill: 'var(--color-text-tertiary)' }}
+              tickFormatter={(value) => (value === 0 ? '' : String(value))}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+              width={56}
+            />
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
+            />
+            <Bar
+              dataKey="success"
+              stackId="stack"
+              fill="var(--color-success)"
+              radius={[2, 2, 2, 2]}
+            />
+            <Bar
+              dataKey="errors"
+              stackId="stack"
+              fill="var(--color-error)"
+              radius={[2, 2, 2, 2]}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
       {data.error_count > 0 && (
-        <StatRow label="Errors" value={data.error_count} tooltip={TOOLTIPS.errors} />
+        <div className={styles.errorSummary}>
+          {data.error_count} error{data.error_count !== 1 ? 's' : ''} total
+        </div>
       )}
     </CardWrapper>
   );

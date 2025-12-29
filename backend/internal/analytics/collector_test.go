@@ -190,11 +190,25 @@ func TestToolsCollector(t *testing.T) {
 	if tools.TotalCalls != 3 {
 		t.Errorf("TotalCalls = %d, want 3", tools.TotalCalls)
 	}
-	if tools.ToolBreakdown["Read"] != 2 {
-		t.Errorf("ToolBreakdown[Read] = %d, want 2", tools.ToolBreakdown["Read"])
+	// Read: 2 calls, 0 errors
+	if tools.ToolStats["Read"] == nil {
+		t.Fatal("ToolStats[Read] is nil")
 	}
-	if tools.ToolBreakdown["Write"] != 1 {
-		t.Errorf("ToolBreakdown[Write] = %d, want 1", tools.ToolBreakdown["Write"])
+	if tools.ToolStats["Read"].Success != 2 {
+		t.Errorf("ToolStats[Read].Success = %d, want 2", tools.ToolStats["Read"].Success)
+	}
+	if tools.ToolStats["Read"].Errors != 0 {
+		t.Errorf("ToolStats[Read].Errors = %d, want 0", tools.ToolStats["Read"].Errors)
+	}
+	// Write: 1 call, 1 error (so 0 success)
+	if tools.ToolStats["Write"] == nil {
+		t.Fatal("ToolStats[Write] is nil")
+	}
+	if tools.ToolStats["Write"].Success != 0 {
+		t.Errorf("ToolStats[Write].Success = %d, want 0", tools.ToolStats["Write"].Success)
+	}
+	if tools.ToolStats["Write"].Errors != 1 {
+		t.Errorf("ToolStats[Write].Errors = %d, want 1", tools.ToolStats["Write"].Errors)
 	}
 	if tools.ErrorCount != 1 {
 		t.Errorf("ErrorCount = %d, want 1", tools.ErrorCount)

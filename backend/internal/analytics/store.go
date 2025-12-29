@@ -376,17 +376,17 @@ func (s *Store) getToolsCard(ctx context.Context, sessionID string) (*ToolsCardR
 		return nil, err
 	}
 
-	if err := json.Unmarshal(breakdownJSON, &record.ToolBreakdown); err != nil {
-		return nil, fmt.Errorf("parsing tool_breakdown: %w", err)
+	if err := json.Unmarshal(breakdownJSON, &record.ToolStats); err != nil {
+		return nil, fmt.Errorf("parsing tool_stats: %w", err)
 	}
 
 	return &record, nil
 }
 
 func (s *Store) upsertToolsCard(ctx context.Context, record *ToolsCardRecord) error {
-	breakdownJSON, err := json.Marshal(record.ToolBreakdown)
+	statsJSON, err := json.Marshal(record.ToolStats)
 	if err != nil {
-		return fmt.Errorf("marshaling tool_breakdown: %w", err)
+		return fmt.Errorf("marshaling tool_stats: %w", err)
 	}
 
 	query := `
@@ -409,7 +409,7 @@ func (s *Store) upsertToolsCard(ctx context.Context, record *ToolsCardRecord) er
 		record.ComputedAt,
 		record.UpToLine,
 		record.TotalCalls,
-		breakdownJSON,
+		statsJSON,
 		record.ErrorCount,
 	)
 	return err
@@ -461,13 +461,13 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			ModelsUsed:     r.ModelsUsed,
 		},
 		Tools: &ToolsCardRecord{
-			SessionID:     sessionID,
-			Version:       ToolsCardVersion,
-			ComputedAt:    now,
-			UpToLine:      lineCount,
-			TotalCalls:    r.TotalToolCalls,
-			ToolBreakdown: r.ToolBreakdown,
-			ErrorCount:    r.ToolErrorCount,
+			SessionID:  sessionID,
+			Version:    ToolsCardVersion,
+			ComputedAt: now,
+			UpToLine:   lineCount,
+			TotalCalls: r.TotalToolCalls,
+			ToolStats:  r.ToolStats,
+			ErrorCount: r.ToolErrorCount,
 		},
 	}
 }
@@ -540,9 +540,9 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 	if c.Tools != nil {
 		// Cards format only (no legacy format for new cards)
 		response.Cards["tools"] = ToolsCardData{
-			TotalCalls:    c.Tools.TotalCalls,
-			ToolBreakdown: c.Tools.ToolBreakdown,
-			ErrorCount:    c.Tools.ErrorCount,
+			TotalCalls: c.Tools.TotalCalls,
+			ToolStats:  c.Tools.ToolStats,
+			ErrorCount: c.Tools.ErrorCount,
 		}
 	}
 
