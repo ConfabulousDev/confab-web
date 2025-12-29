@@ -81,6 +81,36 @@ export const ManyTools: Story = {
   },
 };
 
+export const LongToolNames: Story = {
+  args: {
+    data: {
+      total_calls: 491,
+      tool_stats: {
+        Read: { success: 120, errors: 5 },
+        Bash: { success: 108, errors: 7 },
+        Edit: { success: 85, errors: 0 },
+        Write: { success: 42, errors: 0 },
+        Grep: { success: 35, errors: 0 },
+        TodoWrite: { success: 28, errors: 2 },
+        Glob: { success: 25, errors: 0 },
+        WebFetch: { success: 12, errors: 1 },
+        WebSearch: { success: 8, errors: 0 },
+        TaskOutput: { success: 5, errors: 1 },
+        Task: { success: 4, errors: 0 },
+      },
+      error_count: 16,
+    },
+    loading: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Tests dynamic YAxis width with long tool names like TodoWrite, WebSearch, TaskOutput',
+      },
+    },
+  },
+};
+
 export const AllErrors: Story = {
   args: {
     data: {

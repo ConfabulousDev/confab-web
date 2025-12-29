@@ -84,6 +84,10 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
   // Calculate dynamic height based on number of tools (min 120px, 28px per tool)
   const chartHeight = Math.max(120, chartData.length * 28);
 
+  // Calculate dynamic YAxis width based on longest label (~7px per char at 11px font)
+  const maxLabelLength = Math.max(...chartData.map((d) => d.name.length));
+  const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
+
   const subtitle =
     data.error_count > 0
       ? `${data.total_calls} calls (${data.error_count} error${data.error_count !== 1 ? 's' : ''})`
@@ -112,7 +116,7 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
               axisLine={false}
               tickLine={false}
               tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
-              width={56}
+              width={yAxisWidth}
             />
             <Tooltip
               content={<CustomTooltip />}
