@@ -161,28 +161,24 @@ export const CompactionInfoSchema = z.object({
 });
 
 // Card data schemas for the new cards-based format
+// Tokens card includes cost info (consolidated from previous separate cost card)
 export const TokensCardDataSchema = z.object({
   input: z.number(),
   output: z.number(),
   cache_creation: z.number(),
   cache_read: z.number(),
+  estimated_usd: z.string(), // Consolidated from cost card
 });
 
-export const CostCardDataSchema = z.object({
-  estimated_usd: z.string(),
-});
-
-export const CompactionCardDataSchema = z.object({
-  auto: z.number(),
-  manual: z.number(),
-  avg_time_ms: z.number().nullable().optional(),
-});
-
+// Session card includes compaction info (consolidated from previous separate compaction card)
 export const SessionCardDataSchema = z.object({
   user_turns: z.number(),
   assistant_turns: z.number(),
   duration_ms: z.number().nullable().optional(),
   models_used: z.array(z.string()),
+  compaction_auto: z.number(), // Consolidated from compaction card
+  compaction_manual: z.number(), // Consolidated from compaction card
+  compaction_avg_time_ms: z.number().nullable().optional(), // Consolidated from compaction card
 });
 
 export const ToolStatsSchema = z.object({
@@ -198,10 +194,9 @@ export const ToolsCardDataSchema = z.object({
 
 // Cards map schema - extensible for future cards
 // All fields optional to handle empty analytics (session with no transcript)
+// Note: cost is now part of tokens card, compaction is now part of session card
 export const AnalyticsCardsSchema = z.object({
   tokens: TokensCardDataSchema.optional(),
-  cost: CostCardDataSchema.optional(),
-  compaction: CompactionCardDataSchema.optional(),
   session: SessionCardDataSchema.optional(),
   tools: ToolsCardDataSchema.optional(),
 });
@@ -246,8 +241,6 @@ export type TokenStats = z.infer<typeof TokenStatsSchema>;
 export type CostStats = z.infer<typeof CostStatsSchema>;
 export type CompactionInfo = z.infer<typeof CompactionInfoSchema>;
 export type TokensCardData = z.infer<typeof TokensCardDataSchema>;
-export type CostCardData = z.infer<typeof CostCardDataSchema>;
-export type CompactionCardData = z.infer<typeof CompactionCardDataSchema>;
 export type SessionCardData = z.infer<typeof SessionCardDataSchema>;
 export type ToolStats = z.infer<typeof ToolStatsSchema>;
 export type ToolsCardData = z.infer<typeof ToolsCardDataSchema>;

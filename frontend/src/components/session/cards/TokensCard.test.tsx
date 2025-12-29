@@ -7,6 +7,7 @@ const mockData = {
   output: 20800,
   cache_creation: 23000,
   cache_read: 36000,
+  estimated_usd: '4.25',
 };
 
 describe('TokensCard', () => {
@@ -22,6 +23,8 @@ describe('TokensCard', () => {
     expect(screen.getByText('23.0k')).toBeInTheDocument();
     expect(screen.getByText('Cache read')).toBeInTheDocument();
     expect(screen.getByText('36.0k')).toBeInTheDocument();
+    expect(screen.getByText('Estimated cost')).toBeInTheDocument();
+    expect(screen.getByText('$4.25')).toBeInTheDocument();
   });
 
   it('shows loading state when loading with no data', () => {

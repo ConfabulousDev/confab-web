@@ -25,28 +25,14 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) {
 	cards := &Cards{}
 
-	// Get tokens card
+	// Get tokens card (includes cost)
 	tokens, err := s.getTokensCard(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("getting tokens card: %w", err)
 	}
 	cards.Tokens = tokens
 
-	// Get cost card
-	cost, err := s.getCostCard(ctx, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("getting cost card: %w", err)
-	}
-	cards.Cost = cost
-
-	// Get compaction card
-	compaction, err := s.getCompactionCard(ctx, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("getting compaction card: %w", err)
-	}
-	cards.Compaction = compaction
-
-	// Get session card
+	// Get session card (includes compaction)
 	session, err := s.getSessionCard(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("getting session card: %w", err)
@@ -71,18 +57,6 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 		}
 	}
 
-	if cards.Cost != nil {
-		if err := s.upsertCostCard(ctx, cards.Cost); err != nil {
-			return fmt.Errorf("upserting cost card: %w", err)
-		}
-	}
-
-	if cards.Compaction != nil {
-		if err := s.upsertCompactionCard(ctx, cards.Compaction); err != nil {
-			return fmt.Errorf("upserting compaction card: %w", err)
-		}
-	}
-
 	if cards.Session != nil {
 		if err := s.upsertSessionCard(ctx, cards.Session); err != nil {
 			return fmt.Errorf("upserting session card: %w", err)
@@ -99,18 +73,20 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 }
 
 // =============================================================================
-// Tokens card operations
+// Tokens card operations (includes cost)
 // =============================================================================
 
 func (s *Store) getTokensCard(ctx context.Context, sessionID string) (*TokensCardRecord, error) {
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
-			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+			estimated_cost_usd
 		FROM session_card_tokens
 		WHERE session_id = $1
 	`
 
 	var record TokensCardRecord
+	var costStr string
 	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
 		&record.SessionID,
 		&record.Version,
@@ -120,63 +96,6 @@ func (s *Store) getTokensCard(ctx context.Context, sessionID string) (*TokensCar
 		&record.OutputTokens,
 		&record.CacheCreationTokens,
 		&record.CacheReadTokens,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &record, nil
-}
-
-func (s *Store) upsertTokensCard(ctx context.Context, record *TokensCardRecord) error {
-	query := `
-		INSERT INTO session_card_tokens (
-			session_id, version, computed_at, up_to_line,
-			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (session_id) DO UPDATE SET
-			version = EXCLUDED.version,
-			computed_at = EXCLUDED.computed_at,
-			up_to_line = EXCLUDED.up_to_line,
-			input_tokens = EXCLUDED.input_tokens,
-			output_tokens = EXCLUDED.output_tokens,
-			cache_creation_tokens = EXCLUDED.cache_creation_tokens,
-			cache_read_tokens = EXCLUDED.cache_read_tokens
-	`
-
-	_, err := s.db.ExecContext(ctx, query,
-		record.SessionID,
-		record.Version,
-		record.ComputedAt,
-		record.UpToLine,
-		record.InputTokens,
-		record.OutputTokens,
-		record.CacheCreationTokens,
-		record.CacheReadTokens,
-	)
-	return err
-}
-
-// =============================================================================
-// Cost card operations
-// =============================================================================
-
-func (s *Store) getCostCard(ctx context.Context, sessionID string) (*CostCardRecord, error) {
-	query := `
-		SELECT session_id, version, computed_at, up_to_line, estimated_cost_usd
-		FROM session_card_cost
-		WHERE session_id = $1
-	`
-
-	var record CostCardRecord
-	var costStr string
-	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
-		&record.SessionID,
-		&record.Version,
-		&record.ComputedAt,
-		&record.UpToLine,
 		&costStr,
 	)
 	if err == sql.ErrNoRows {
@@ -194,15 +113,21 @@ func (s *Store) getCostCard(ctx context.Context, sessionID string) (*CostCardRec
 	return &record, nil
 }
 
-func (s *Store) upsertCostCard(ctx context.Context, record *CostCardRecord) error {
+func (s *Store) upsertTokensCard(ctx context.Context, record *TokensCardRecord) error {
 	query := `
-		INSERT INTO session_card_cost (
-			session_id, version, computed_at, up_to_line, estimated_cost_usd
-		) VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO session_card_tokens (
+			session_id, version, computed_at, up_to_line,
+			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+			estimated_cost_usd
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
 			up_to_line = EXCLUDED.up_to_line,
+			input_tokens = EXCLUDED.input_tokens,
+			output_tokens = EXCLUDED.output_tokens,
+			cache_creation_tokens = EXCLUDED.cache_creation_tokens,
+			cache_read_tokens = EXCLUDED.cache_read_tokens,
 			estimated_cost_usd = EXCLUDED.estimated_cost_usd
 	`
 
@@ -211,77 +136,24 @@ func (s *Store) upsertCostCard(ctx context.Context, record *CostCardRecord) erro
 		record.Version,
 		record.ComputedAt,
 		record.UpToLine,
+		record.InputTokens,
+		record.OutputTokens,
+		record.CacheCreationTokens,
+		record.CacheReadTokens,
 		record.EstimatedCostUSD.String(),
 	)
 	return err
 }
 
 // =============================================================================
-// Compaction card operations
-// =============================================================================
-
-func (s *Store) getCompactionCard(ctx context.Context, sessionID string) (*CompactionCardRecord, error) {
-	query := `
-		SELECT session_id, version, computed_at, up_to_line,
-			auto_count, manual_count, avg_time_ms
-		FROM session_card_compaction
-		WHERE session_id = $1
-	`
-
-	var record CompactionCardRecord
-	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
-		&record.SessionID,
-		&record.Version,
-		&record.ComputedAt,
-		&record.UpToLine,
-		&record.AutoCount,
-		&record.ManualCount,
-		&record.AvgTimeMs,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &record, nil
-}
-
-func (s *Store) upsertCompactionCard(ctx context.Context, record *CompactionCardRecord) error {
-	query := `
-		INSERT INTO session_card_compaction (
-			session_id, version, computed_at, up_to_line,
-			auto_count, manual_count, avg_time_ms
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (session_id) DO UPDATE SET
-			version = EXCLUDED.version,
-			computed_at = EXCLUDED.computed_at,
-			up_to_line = EXCLUDED.up_to_line,
-			auto_count = EXCLUDED.auto_count,
-			manual_count = EXCLUDED.manual_count,
-			avg_time_ms = EXCLUDED.avg_time_ms
-	`
-
-	_, err := s.db.ExecContext(ctx, query,
-		record.SessionID,
-		record.Version,
-		record.ComputedAt,
-		record.UpToLine,
-		record.AutoCount,
-		record.ManualCount,
-		record.AvgTimeMs,
-	)
-	return err
-}
-
-// =============================================================================
-// Session card operations
+// Session card operations (includes compaction)
 // =============================================================================
 
 func (s *Store) getSessionCard(ctx context.Context, sessionID string) (*SessionCardRecord, error) {
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
-			user_turns, assistant_turns, duration_ms, models_used
+			user_turns, assistant_turns, duration_ms, models_used,
+			compaction_auto, compaction_manual, compaction_avg_time_ms
 		FROM session_card_session
 		WHERE session_id = $1
 	`
@@ -297,6 +169,9 @@ func (s *Store) getSessionCard(ctx context.Context, sessionID string) (*SessionC
 		&record.AssistantTurns,
 		&record.DurationMs,
 		&modelsJSON,
+		&record.CompactionAuto,
+		&record.CompactionManual,
+		&record.CompactionAvgTimeMs,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -321,8 +196,9 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 	query := `
 		INSERT INTO session_card_session (
 			session_id, version, computed_at, up_to_line,
-			user_turns, assistant_turns, duration_ms, models_used
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			user_turns, assistant_turns, duration_ms, models_used,
+			compaction_auto, compaction_manual, compaction_avg_time_ms
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
@@ -330,7 +206,10 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 			user_turns = EXCLUDED.user_turns,
 			assistant_turns = EXCLUDED.assistant_turns,
 			duration_ms = EXCLUDED.duration_ms,
-			models_used = EXCLUDED.models_used
+			models_used = EXCLUDED.models_used,
+			compaction_auto = EXCLUDED.compaction_auto,
+			compaction_manual = EXCLUDED.compaction_manual,
+			compaction_avg_time_ms = EXCLUDED.compaction_avg_time_ms
 	`
 
 	_, err = s.db.ExecContext(ctx, query,
@@ -342,6 +221,9 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 		record.AssistantTurns,
 		record.DurationMs,
 		modelsJSON,
+		record.CompactionAuto,
+		record.CompactionManual,
+		record.CompactionAvgTimeMs,
 	)
 	return err
 }
@@ -433,32 +315,20 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			OutputTokens:        r.OutputTokens,
 			CacheCreationTokens: r.CacheCreationTokens,
 			CacheReadTokens:     r.CacheReadTokens,
-		},
-		Cost: &CostCardRecord{
-			SessionID:        sessionID,
-			Version:          CostCardVersion,
-			ComputedAt:       now,
-			UpToLine:         lineCount,
-			EstimatedCostUSD: r.EstimatedCostUSD,
-		},
-		Compaction: &CompactionCardRecord{
-			SessionID:   sessionID,
-			Version:     CompactionCardVersion,
-			ComputedAt:  now,
-			UpToLine:    lineCount,
-			AutoCount:   r.CompactionAuto,
-			ManualCount: r.CompactionManual,
-			AvgTimeMs:   r.CompactionAvgTimeMs,
+			EstimatedCostUSD:    r.EstimatedCostUSD,
 		},
 		Session: &SessionCardRecord{
-			SessionID:      sessionID,
-			Version:        SessionCardVersion,
-			ComputedAt:     now,
-			UpToLine:       lineCount,
-			UserTurns:      r.UserTurns,
-			AssistantTurns: r.AssistantTurns,
-			DurationMs:     r.DurationMs,
-			ModelsUsed:     r.ModelsUsed,
+			SessionID:           sessionID,
+			Version:             SessionCardVersion,
+			ComputedAt:          now,
+			UpToLine:            lineCount,
+			UserTurns:           r.UserTurns,
+			AssistantTurns:      r.AssistantTurns,
+			DurationMs:          r.DurationMs,
+			ModelsUsed:          r.ModelsUsed,
+			CompactionAuto:      r.CompactionAuto,
+			CompactionManual:    r.CompactionManual,
+			CompactionAvgTimeMs: r.CompactionAvgTimeMs,
 		},
 		Tools: &ToolsCardRecord{
 			SessionID:  sessionID,
@@ -482,63 +352,49 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		response.ComputedAt = c.Tokens.ComputedAt
 		response.ComputedLines = c.Tokens.UpToLine
 
-		// Legacy flat format
+		// Legacy flat format (deprecated)
 		response.Tokens = TokenStats{
 			Input:         c.Tokens.InputTokens,
 			Output:        c.Tokens.OutputTokens,
 			CacheCreation: c.Tokens.CacheCreationTokens,
 			CacheRead:     c.Tokens.CacheReadTokens,
 		}
+		response.Cost = CostStats{
+			EstimatedUSD: c.Tokens.EstimatedCostUSD,
+		}
 
-		// Cards format
+		// Cards format - tokens includes cost
 		response.Cards["tokens"] = TokensCardData{
 			Input:         c.Tokens.InputTokens,
 			Output:        c.Tokens.OutputTokens,
 			CacheCreation: c.Tokens.CacheCreationTokens,
 			CacheRead:     c.Tokens.CacheReadTokens,
-		}
-	}
-
-	if c.Cost != nil {
-		// Legacy flat format
-		response.Cost = CostStats{
-			EstimatedUSD: c.Cost.EstimatedCostUSD,
-		}
-
-		// Cards format
-		response.Cards["cost"] = CostCardData{
-			EstimatedUSD: c.Cost.EstimatedCostUSD.String(),
-		}
-	}
-
-	if c.Compaction != nil {
-		// Legacy flat format
-		response.Compaction = CompactionInfo{
-			Auto:      c.Compaction.AutoCount,
-			Manual:    c.Compaction.ManualCount,
-			AvgTimeMs: c.Compaction.AvgTimeMs,
-		}
-
-		// Cards format
-		response.Cards["compaction"] = CompactionCardData{
-			Auto:      c.Compaction.AutoCount,
-			Manual:    c.Compaction.ManualCount,
-			AvgTimeMs: c.Compaction.AvgTimeMs,
+			EstimatedUSD:  c.Tokens.EstimatedCostUSD.String(),
 		}
 	}
 
 	if c.Session != nil {
-		// Cards format only (no legacy format for new cards)
+		// Legacy flat format (deprecated)
+		response.Compaction = CompactionInfo{
+			Auto:      c.Session.CompactionAuto,
+			Manual:    c.Session.CompactionManual,
+			AvgTimeMs: c.Session.CompactionAvgTimeMs,
+		}
+
+		// Cards format - session includes compaction
 		response.Cards["session"] = SessionCardData{
-			UserTurns:      c.Session.UserTurns,
-			AssistantTurns: c.Session.AssistantTurns,
-			DurationMs:     c.Session.DurationMs,
-			ModelsUsed:     c.Session.ModelsUsed,
+			UserTurns:           c.Session.UserTurns,
+			AssistantTurns:      c.Session.AssistantTurns,
+			DurationMs:          c.Session.DurationMs,
+			ModelsUsed:          c.Session.ModelsUsed,
+			CompactionAuto:      c.Session.CompactionAuto,
+			CompactionManual:    c.Session.CompactionManual,
+			CompactionAvgTimeMs: c.Session.CompactionAvgTimeMs,
 		}
 	}
 
 	if c.Tools != nil {
-		// Cards format only (no legacy format for new cards)
+		// Cards format only (no legacy format for tools)
 		response.Cards["tools"] = ToolsCardData{
 			TotalCalls: c.Tools.TotalCalls,
 			ToolStats:  c.Tools.ToolStats,

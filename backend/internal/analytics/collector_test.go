@@ -67,57 +67,6 @@ func TestTokensCollector(t *testing.T) {
 	}
 }
 
-func TestCompactionCollector(t *testing.T) {
-	compaction := NewCompactionCollector()
-
-	jsonl := `{"type":"assistant","uuid":"a1","timestamp":"2025-01-01T00:00:10Z","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}}}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z"}
-{"type":"assistant","uuid":"a2","timestamp":"2025-01-01T00:01:00Z","message":{"model":"claude-sonnet-4","usage":{"input_tokens":80,"output_tokens":40}}}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":60000},"logicalParentUuid":"a2","uuid":"c2","timestamp":"2025-01-01T00:02:00Z"}
-`
-
-	_, err := RunCollectors([]byte(jsonl), compaction)
-	if err != nil {
-		t.Fatalf("RunCollectors failed: %v", err)
-	}
-
-	if compaction.AutoCount != 1 {
-		t.Errorf("AutoCount = %d, want 1", compaction.AutoCount)
-	}
-	if compaction.ManualCount != 1 {
-		t.Errorf("ManualCount = %d, want 1", compaction.ManualCount)
-	}
-	if compaction.AvgTimeMs == nil {
-		t.Fatal("AvgTimeMs should not be nil")
-	}
-	// a1 at 00:00:10, c1 at 00:00:15 = 5000ms
-	if *compaction.AvgTimeMs != 5000 {
-		t.Errorf("AvgTimeMs = %d, want 5000", *compaction.AvgTimeMs)
-	}
-}
-
-func TestMultipleCollectors(t *testing.T) {
-	tokens := NewTokensCollector()
-	compaction := NewCompactionCollector()
-
-	jsonl := `{"type":"assistant","uuid":"a1","timestamp":"2025-01-01T00:00:10Z","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}}}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z"}
-`
-
-	_, err := RunCollectors([]byte(jsonl), tokens, compaction)
-	if err != nil {
-		t.Fatalf("RunCollectors failed: %v", err)
-	}
-
-	// Verify both collectors received data
-	if tokens.InputTokens != 100 {
-		t.Errorf("tokens.InputTokens = %d, want 100", tokens.InputTokens)
-	}
-	if compaction.AutoCount != 1 {
-		t.Errorf("compaction.AutoCount = %d, want 1", compaction.AutoCount)
-	}
-}
-
 func TestSessionCollector(t *testing.T) {
 	session := NewSessionCollector()
 
@@ -170,6 +119,57 @@ func TestSessionCollector_NoDuration(t *testing.T) {
 	duration := session.DurationMs()
 	if duration != nil {
 		t.Error("DurationMs should be nil for single timestamp")
+	}
+}
+
+func TestSessionCollector_Compaction(t *testing.T) {
+	session := NewSessionCollector()
+
+	jsonl := `{"type":"assistant","uuid":"a1","timestamp":"2025-01-01T00:00:10Z","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}}}
+{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z"}
+{"type":"assistant","uuid":"a2","timestamp":"2025-01-01T00:01:00Z","message":{"model":"claude-sonnet-4","usage":{"input_tokens":80,"output_tokens":40}}}
+{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":60000},"logicalParentUuid":"a2","uuid":"c2","timestamp":"2025-01-01T00:02:00Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), session)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	if session.CompactionAuto != 1 {
+		t.Errorf("CompactionAuto = %d, want 1", session.CompactionAuto)
+	}
+	if session.CompactionManual != 1 {
+		t.Errorf("CompactionManual = %d, want 1", session.CompactionManual)
+	}
+	if session.CompactionAvgTimeMs == nil {
+		t.Fatal("CompactionAvgTimeMs should not be nil")
+	}
+	// a1 at 00:00:10, c1 at 00:00:15 = 5000ms
+	if *session.CompactionAvgTimeMs != 5000 {
+		t.Errorf("CompactionAvgTimeMs = %d, want 5000", *session.CompactionAvgTimeMs)
+	}
+}
+
+func TestMultipleCollectors(t *testing.T) {
+	tokens := NewTokensCollector()
+	session := NewSessionCollector()
+
+	jsonl := `{"type":"assistant","uuid":"a1","timestamp":"2025-01-01T00:00:10Z","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}}}
+{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), tokens, session)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	// Verify both collectors received data
+	if tokens.InputTokens != 100 {
+		t.Errorf("tokens.InputTokens = %d, want 100", tokens.InputTokens)
+	}
+	if session.CompactionAuto != 1 {
+		t.Errorf("session.CompactionAuto = %d, want 1", session.CompactionAuto)
 	}
 }
 

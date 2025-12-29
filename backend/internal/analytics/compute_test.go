@@ -117,13 +117,16 @@ func TestToCards(t *testing.T) {
 		CacheCreationTokens: 100,
 		CacheReadTokens:     200,
 		EstimatedCostUSD:    decimal.NewFromFloat(1.50),
+		UserTurns:           5,
+		AssistantTurns:      4,
+		ModelsUsed:          []string{"claude-sonnet-4"},
 		CompactionAuto:      2,
 		CompactionManual:    1,
 	}
 
 	cards := result.ToCards("session-123", 500)
 
-	// Check tokens card
+	// Check tokens card (now includes cost)
 	if cards.Tokens == nil {
 		t.Fatal("Tokens card should not be nil")
 	}
@@ -139,32 +142,30 @@ func TestToCards(t *testing.T) {
 	if cards.Tokens.InputTokens != 1000 {
 		t.Errorf("Tokens.InputTokens = %d, want 1000", cards.Tokens.InputTokens)
 	}
+	if !cards.Tokens.EstimatedCostUSD.Equal(decimal.NewFromFloat(1.50)) {
+		t.Errorf("Tokens.EstimatedCostUSD = %s, want 1.50", cards.Tokens.EstimatedCostUSD)
+	}
 
 	// Verify ComputedAt is in UTC (catches timezone bugs)
 	if cards.Tokens.ComputedAt.Location().String() != "UTC" {
 		t.Errorf("Tokens.ComputedAt should be UTC, got %s", cards.Tokens.ComputedAt.Location())
 	}
-	if cards.Cost.ComputedAt.Location().String() != "UTC" {
-		t.Errorf("Cost.ComputedAt should be UTC, got %s", cards.Cost.ComputedAt.Location())
-	}
-	if cards.Compaction.ComputedAt.Location().String() != "UTC" {
-		t.Errorf("Compaction.ComputedAt should be UTC, got %s", cards.Compaction.ComputedAt.Location())
+	if cards.Session.ComputedAt.Location().String() != "UTC" {
+		t.Errorf("Session.ComputedAt should be UTC, got %s", cards.Session.ComputedAt.Location())
 	}
 
-	// Check cost card
-	if cards.Cost == nil {
-		t.Fatal("Cost card should not be nil")
+	// Check session card (now includes compaction)
+	if cards.Session == nil {
+		t.Fatal("Session card should not be nil")
 	}
-	if !cards.Cost.EstimatedCostUSD.Equal(decimal.NewFromFloat(1.50)) {
-		t.Errorf("Cost.EstimatedCostUSD = %s, want 1.50", cards.Cost.EstimatedCostUSD)
+	if cards.Session.UserTurns != 5 {
+		t.Errorf("Session.UserTurns = %d, want 5", cards.Session.UserTurns)
 	}
-
-	// Check compaction card
-	if cards.Compaction == nil {
-		t.Fatal("Compaction card should not be nil")
+	if cards.Session.CompactionAuto != 2 {
+		t.Errorf("Session.CompactionAuto = %d, want 2", cards.Session.CompactionAuto)
 	}
-	if cards.Compaction.AutoCount != 2 {
-		t.Errorf("Compaction.AutoCount = %d, want 2", cards.Compaction.AutoCount)
+	if cards.Session.CompactionManual != 1 {
+		t.Errorf("Session.CompactionManual = %d, want 1", cards.Session.CompactionManual)
 	}
 }
 
@@ -177,14 +178,22 @@ func TestCardsToResponse(t *testing.T) {
 			OutputTokens:        500,
 			CacheCreationTokens: 100,
 			CacheReadTokens:     200,
+			EstimatedCostUSD:    decimal.NewFromFloat(1.50),
 		},
-		Cost: &CostCardRecord{
-			EstimatedCostUSD: decimal.NewFromFloat(1.50),
+		Session: &SessionCardRecord{
+			UserTurns:           5,
+			AssistantTurns:      4,
+			ModelsUsed:          []string{"claude-sonnet-4"},
+			CompactionAuto:      2,
+			CompactionManual:    1,
+			CompactionAvgTimeMs: &avgTime,
 		},
-		Compaction: &CompactionCardRecord{
-			AutoCount:   2,
-			ManualCount: 1,
-			AvgTimeMs:   &avgTime,
+		Tools: &ToolsCardRecord{
+			TotalCalls: 10,
+			ToolStats: map[string]*ToolStats{
+				"Read": {Success: 5, Errors: 0},
+			},
+			ErrorCount: 0,
 		},
 	}
 
@@ -218,7 +227,7 @@ func TestCardsToResponse(t *testing.T) {
 		t.Errorf("Cards length = %d, want 3", len(response.Cards))
 	}
 
-	// Verify tokens card
+	// Verify tokens card (now includes cost)
 	tokens, ok := response.Cards["tokens"].(TokensCardData)
 	if !ok {
 		t.Fatal("tokens card not found or wrong type")
@@ -226,22 +235,28 @@ func TestCardsToResponse(t *testing.T) {
 	if tokens.Input != 1000 {
 		t.Errorf("cards.tokens.Input = %d, want 1000", tokens.Input)
 	}
-
-	// Verify cost card
-	cost, ok := response.Cards["cost"].(CostCardData)
-	if !ok {
-		t.Fatal("cost card not found or wrong type")
-	}
-	if cost.EstimatedUSD != "1.5" {
-		t.Errorf("cards.cost.EstimatedUSD = %s, want 1.5", cost.EstimatedUSD)
+	if tokens.EstimatedUSD != "1.5" {
+		t.Errorf("cards.tokens.EstimatedUSD = %s, want 1.5", tokens.EstimatedUSD)
 	}
 
-	// Verify compaction card
-	compaction, ok := response.Cards["compaction"].(CompactionCardData)
+	// Verify session card (now includes compaction)
+	session, ok := response.Cards["session"].(SessionCardData)
 	if !ok {
-		t.Fatal("compaction card not found or wrong type")
+		t.Fatal("session card not found or wrong type")
 	}
-	if compaction.Auto != 2 {
-		t.Errorf("cards.compaction.Auto = %d, want 2", compaction.Auto)
+	if session.UserTurns != 5 {
+		t.Errorf("cards.session.UserTurns = %d, want 5", session.UserTurns)
+	}
+	if session.CompactionAuto != 2 {
+		t.Errorf("cards.session.CompactionAuto = %d, want 2", session.CompactionAuto)
+	}
+
+	// Verify tools card
+	tools, ok := response.Cards["tools"].(ToolsCardData)
+	if !ok {
+		t.Fatal("tools card not found or wrong type")
+	}
+	if tools.TotalCalls != 10 {
+		t.Errorf("cards.tools.TotalCalls = %d, want 10", tools.TotalCalls)
 	}
 }

@@ -26,6 +26,7 @@ export const Default: Story = {
       output: 45000,
       cache_creation: 80000,
       cache_read: 320000,
+      estimated_usd: '1.85',
     },
     loading: false,
   },
@@ -38,6 +39,7 @@ export const LowUsage: Story = {
       output: 800,
       cache_creation: 500,
       cache_read: 2000,
+      estimated_usd: '0.02',
     },
     loading: false,
   },
@@ -50,6 +52,7 @@ export const HighUsage: Story = {
       output: 1200000,
       cache_creation: 500000,
       cache_read: 8500000,
+      estimated_usd: '45.50',
     },
     loading: false,
   },
@@ -62,6 +65,20 @@ export const NoCaching: Story = {
       output: 25000,
       cache_creation: 0,
       cache_read: 0,
+      estimated_usd: '0.75',
+    },
+    loading: false,
+  },
+};
+
+export const ZeroCost: Story = {
+  args: {
+    data: {
+      input: 100,
+      output: 50,
+      cache_creation: 0,
+      cache_read: 100,
+      estimated_usd: '0.00',
     },
     loading: false,
   },

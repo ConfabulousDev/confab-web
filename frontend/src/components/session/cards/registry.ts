@@ -1,6 +1,4 @@
 import { TokensCard } from './TokensCard';
-import { CostCard } from './CostCard';
-import { CompactionCard } from './CompactionCard';
 import { SessionCard } from './SessionCard';
 import { ToolsCard } from './ToolsCard';
 import type { CardDefinition } from './types';
@@ -13,6 +11,9 @@ import type { CardDefinition } from './types';
  * 1. Add the card data type to AnalyticsCards schema
  * 2. Create a card component in this directory
  * 3. Add it to this registry with appropriate order
+ *
+ * Note: Cost is now included in the Tokens card, and
+ * Compaction stats are now included in the Session card.
  */
 export const cardRegistry: CardDefinition[] = [
   {
@@ -22,28 +23,16 @@ export const cardRegistry: CardDefinition[] = [
     order: 0,
   },
   {
-    key: 'cost',
-    title: 'Cost',
-    component: CostCard,
-    order: 1,
-  },
-  {
-    key: 'compaction',
-    title: 'Compaction',
-    component: CompactionCard,
-    order: 2,
-  },
-  {
     key: 'session',
     title: 'Session',
     component: SessionCard,
-    order: 3,
+    order: 1,
   },
   {
     key: 'tools',
     title: 'Tools',
     component: ToolsCard,
-    order: 4,
+    order: 2,
     span: 2,
   },
 ];

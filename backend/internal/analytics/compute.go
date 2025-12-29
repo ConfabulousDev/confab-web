@@ -5,27 +5,23 @@ import (
 )
 
 // ComputeResult contains the computed analytics from JSONL content.
-// This struct aggregates results from all collectors for backward compatibility.
+// This struct aggregates results from all collectors.
 type ComputeResult struct {
-	// Token stats (from TokensCollector)
+	// Token and cost stats (from TokensCollector)
 	InputTokens         int64
 	OutputTokens        int64
 	CacheCreationTokens int64
 	CacheReadTokens     int64
+	EstimatedCostUSD    decimal.Decimal
 
-	// Cost (from TokensCollector)
-	EstimatedCostUSD decimal.Decimal
-
-	// Compaction stats (from CompactionCollector)
+	// Session stats including compaction (from SessionCollector)
+	UserTurns           int
+	AssistantTurns      int
+	DurationMs          *int64
+	ModelsUsed          []string
 	CompactionAuto      int
 	CompactionManual    int
 	CompactionAvgTimeMs *int
-
-	// Session stats (from SessionCollector)
-	UserTurns      int
-	AssistantTurns int
-	DurationMs     *int64
-	ModelsUsed     []string
 
 	// Tools stats (from ToolsCollector)
 	TotalToolCalls int
@@ -37,33 +33,30 @@ type ComputeResult struct {
 // It performs a single pass through the content using the collector pattern.
 func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 	tokens := NewTokensCollector()
-	compaction := NewCompactionCollector()
 	session := NewSessionCollector()
 	tools := NewToolsCollector()
 
-	_, err := RunCollectors(content, tokens, compaction, session, tools)
+	_, err := RunCollectors(content, tokens, session, tools)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ComputeResult{
-		// Token stats
+		// Token and cost stats
 		InputTokens:         tokens.InputTokens,
 		OutputTokens:        tokens.OutputTokens,
 		CacheCreationTokens: tokens.CacheCreationTokens,
 		CacheReadTokens:     tokens.CacheReadTokens,
 		EstimatedCostUSD:    tokens.EstimatedCostUSD,
 
-		// Compaction stats
-		CompactionAuto:      compaction.AutoCount,
-		CompactionManual:    compaction.ManualCount,
-		CompactionAvgTimeMs: compaction.AvgTimeMs,
-
-		// Session stats
-		UserTurns:      session.UserTurns,
-		AssistantTurns: session.AssistantTurns,
-		DurationMs:     session.DurationMs(),
-		ModelsUsed:     session.ModelsList(),
+		// Session stats (including compaction)
+		UserTurns:           session.UserTurns,
+		AssistantTurns:      session.AssistantTurns,
+		DurationMs:          session.DurationMs(),
+		ModelsUsed:          session.ModelsList(),
+		CompactionAuto:      session.CompactionAuto,
+		CompactionManual:    session.CompactionManual,
+		CompactionAvgTimeMs: session.CompactionAvgTimeMs,
 
 		// Tools stats
 		TotalToolCalls: tools.TotalCalls,

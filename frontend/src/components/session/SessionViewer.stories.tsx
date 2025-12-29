@@ -149,13 +149,24 @@ function createAnalytics(base: {
   tokens: { input: number; output: number; cache_creation: number; cache_read: number };
   cost: { estimated_usd: string };
   compaction: { auto: number; manual: number; avg_time_ms: number | null };
+  session?: { user_turns: number; assistant_turns: number; duration_ms: number | null; models_used: string[] };
 }): SessionAnalytics {
   return {
     ...base,
     cards: {
-      tokens: base.tokens,
-      cost: base.cost,
-      compaction: base.compaction,
+      tokens: {
+        ...base.tokens,
+        estimated_usd: base.cost.estimated_usd,
+      },
+      session: {
+        user_turns: base.session?.user_turns ?? 2,
+        assistant_turns: base.session?.assistant_turns ?? 2,
+        duration_ms: base.session?.duration_ms ?? 70000,
+        models_used: base.session?.models_used ?? ['claude-sonnet-4-20250514'],
+        compaction_auto: base.compaction.auto,
+        compaction_manual: base.compaction.manual,
+        compaction_avg_time_ms: base.compaction.avg_time_ms,
+      },
     },
   };
 }
@@ -289,6 +300,12 @@ const emptyAnalytics = createAnalytics({
     auto: 0,
     manual: 0,
     avg_time_ms: null,
+  },
+  session: {
+    user_turns: 0,
+    assistant_turns: 0,
+    duration_ms: null,
+    models_used: [],
   },
 });
 

@@ -8,59 +8,41 @@ import (
 
 // Card version constants - increment when compute logic changes
 const (
-	TokensCardVersion     = 1
-	CostCardVersion       = 1
-	CompactionCardVersion = 1
-	SessionCardVersion    = 1
-	ToolsCardVersion      = 2 // v2: per-tool success/error breakdown
+	TokensCardVersion  = 2 // v2: added estimated_cost_usd (merged from cost card)
+	SessionCardVersion = 2 // v2: added compaction stats (merged from compaction card)
+	ToolsCardVersion   = 2 // v2: per-tool success/error breakdown
 )
 
 // =============================================================================
 // Database record types (stored in session_card_* tables)
 // =============================================================================
 
-// TokensCardRecord is the DB record for the tokens card.
+// TokensCardRecord is the DB record for the tokens card (includes cost).
 type TokensCardRecord struct {
-	SessionID           string    `json:"session_id"`
-	Version             int       `json:"version"`
-	ComputedAt          time.Time `json:"computed_at"`
-	UpToLine            int64     `json:"up_to_line"`
-	InputTokens         int64     `json:"input_tokens"`
-	OutputTokens        int64     `json:"output_tokens"`
-	CacheCreationTokens int64     `json:"cache_creation_tokens"`
-	CacheReadTokens     int64     `json:"cache_read_tokens"`
+	SessionID           string          `json:"session_id"`
+	Version             int             `json:"version"`
+	ComputedAt          time.Time       `json:"computed_at"`
+	UpToLine            int64           `json:"up_to_line"`
+	InputTokens         int64           `json:"input_tokens"`
+	OutputTokens        int64           `json:"output_tokens"`
+	CacheCreationTokens int64           `json:"cache_creation_tokens"`
+	CacheReadTokens     int64           `json:"cache_read_tokens"`
+	EstimatedCostUSD    decimal.Decimal `json:"estimated_cost_usd"`
 }
 
-// CostCardRecord is the DB record for the cost card.
-type CostCardRecord struct {
-	SessionID        string          `json:"session_id"`
-	Version          int             `json:"version"`
-	ComputedAt       time.Time       `json:"computed_at"`
-	UpToLine         int64           `json:"up_to_line"`
-	EstimatedCostUSD decimal.Decimal `json:"estimated_cost_usd"`
-}
-
-// CompactionCardRecord is the DB record for the compaction card.
-type CompactionCardRecord struct {
-	SessionID   string    `json:"session_id"`
-	Version     int       `json:"version"`
-	ComputedAt  time.Time `json:"computed_at"`
-	UpToLine    int64     `json:"up_to_line"`
-	AutoCount   int       `json:"auto_count"`
-	ManualCount int       `json:"manual_count"`
-	AvgTimeMs   *int      `json:"avg_time_ms,omitempty"`
-}
-
-// SessionCardRecord is the DB record for the session card.
+// SessionCardRecord is the DB record for the session card (includes compaction).
 type SessionCardRecord struct {
-	SessionID      string    `json:"session_id"`
-	Version        int       `json:"version"`
-	ComputedAt     time.Time `json:"computed_at"`
-	UpToLine       int64     `json:"up_to_line"`
-	UserTurns      int       `json:"user_turns"`
-	AssistantTurns int       `json:"assistant_turns"`
-	DurationMs     *int64    `json:"duration_ms,omitempty"`
-	ModelsUsed     []string  `json:"models_used"` // Stored as JSON array
+	SessionID          string    `json:"session_id"`
+	Version            int       `json:"version"`
+	ComputedAt         time.Time `json:"computed_at"`
+	UpToLine           int64     `json:"up_to_line"`
+	UserTurns          int       `json:"user_turns"`
+	AssistantTurns     int       `json:"assistant_turns"`
+	DurationMs         *int64    `json:"duration_ms,omitempty"`
+	ModelsUsed         []string  `json:"models_used"`
+	CompactionAuto     int       `json:"compaction_auto"`
+	CompactionManual   int       `json:"compaction_manual"`
+	CompactionAvgTimeMs *int     `json:"compaction_avg_time_ms,omitempty"`
 }
 
 // ToolsCardRecord is the DB record for the tools card.
@@ -76,43 +58,33 @@ type ToolsCardRecord struct {
 
 // Cards aggregates all card data for a session.
 type Cards struct {
-	Tokens     *TokensCardRecord
-	Cost       *CostCardRecord
-	Compaction *CompactionCardRecord
-	Session    *SessionCardRecord
-	Tools      *ToolsCardRecord
+	Tokens  *TokensCardRecord
+	Session *SessionCardRecord
+	Tools   *ToolsCardRecord
 }
 
 // =============================================================================
 // API response types (returned in JSON)
 // =============================================================================
 
-// TokensCardData is the API response format for the tokens card.
+// TokensCardData is the API response format for the tokens card (includes cost).
 type TokensCardData struct {
-	Input         int64 `json:"input"`
-	Output        int64 `json:"output"`
-	CacheCreation int64 `json:"cache_creation"`
-	CacheRead     int64 `json:"cache_read"`
+	Input         int64  `json:"input"`
+	Output        int64  `json:"output"`
+	CacheCreation int64  `json:"cache_creation"`
+	CacheRead     int64  `json:"cache_read"`
+	EstimatedUSD  string `json:"estimated_usd"` // Decimal as string for precision
 }
 
-// CostCardData is the API response format for the cost card.
-type CostCardData struct {
-	EstimatedUSD string `json:"estimated_usd"` // Decimal as string for precision
-}
-
-// CompactionCardData is the API response format for the compaction card.
-type CompactionCardData struct {
-	Auto      int  `json:"auto"`
-	Manual    int  `json:"manual"`
-	AvgTimeMs *int `json:"avg_time_ms,omitempty"`
-}
-
-// SessionCardData is the API response format for the session card.
+// SessionCardData is the API response format for the session card (includes compaction).
 type SessionCardData struct {
-	UserTurns      int      `json:"user_turns"`
-	AssistantTurns int      `json:"assistant_turns"`
-	DurationMs     *int64   `json:"duration_ms,omitempty"`
-	ModelsUsed     []string `json:"models_used"`
+	UserTurns          int      `json:"user_turns"`
+	AssistantTurns     int      `json:"assistant_turns"`
+	DurationMs         *int64   `json:"duration_ms,omitempty"`
+	ModelsUsed         []string `json:"models_used"`
+	CompactionAuto     int      `json:"compaction_auto"`
+	CompactionManual   int      `json:"compaction_manual"`
+	CompactionAvgTimeMs *int    `json:"compaction_avg_time_ms,omitempty"`
 }
 
 // ToolsCardData is the API response format for the tools card.
@@ -131,16 +103,6 @@ func (c *TokensCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == TokensCardVersion && c.UpToLine == currentLineCount
 }
 
-// IsValid checks if a cost card record is valid for the current line count.
-func (c *CostCardRecord) IsValid(currentLineCount int64) bool {
-	return c != nil && c.Version == CostCardVersion && c.UpToLine == currentLineCount
-}
-
-// IsValid checks if a compaction card record is valid for the current line count.
-func (c *CompactionCardRecord) IsValid(currentLineCount int64) bool {
-	return c != nil && c.Version == CompactionCardVersion && c.UpToLine == currentLineCount
-}
-
 // IsValid checks if a session card record is valid for the current line count.
 func (c *SessionCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == SessionCardVersion && c.UpToLine == currentLineCount
@@ -157,8 +119,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		return false
 	}
 	return c.Tokens.IsValid(currentLineCount) &&
-		c.Cost.IsValid(currentLineCount) &&
-		c.Compaction.IsValid(currentLineCount) &&
 		c.Session.IsValid(currentLineCount) &&
 		c.Tools.IsValid(currentLineCount)
 }

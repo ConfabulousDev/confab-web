@@ -1,4 +1,5 @@
 import { CardWrapper, StatRow, CardLoading } from './Card';
+import { formatResponseTime } from '@/utils/compactionStats';
 import type { SessionCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 
@@ -7,6 +8,9 @@ const TOOLTIPS = {
   assistantTurns: 'Number of responses from Claude',
   duration: 'Time from first to last message',
   models: 'AI models used in this session',
+  compactionAuto: 'Compactions triggered automatically when context limit reached',
+  compactionManual: 'Compactions triggered manually by user',
+  compactionAvgTime: 'Average time for server-side summarization (auto compactions only)',
 };
 
 function formatDuration(ms: number): string {
@@ -54,6 +58,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
   if (!data) return null;
 
   const totalTurns = data.user_turns + data.assistant_turns;
+  const hasCompaction = data.compaction_auto > 0 || data.compaction_manual > 0;
 
   return (
     <CardWrapper title="Session">
@@ -71,6 +76,25 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
           value={data.models_used.map(formatModelName).join(', ')}
           tooltip={TOOLTIPS.models}
         />
+      )}
+      {hasCompaction && (
+        <>
+          <StatRow
+            label="Compaction (auto)"
+            value={data.compaction_auto}
+            tooltip={TOOLTIPS.compactionAuto}
+          />
+          <StatRow
+            label="Compaction (manual)"
+            value={data.compaction_manual}
+            tooltip={TOOLTIPS.compactionManual}
+          />
+          <StatRow
+            label="Avg compaction time"
+            value={formatResponseTime(data.compaction_avg_time_ms ?? null)}
+            tooltip={TOOLTIPS.compactionAvgTime}
+          />
+        </>
       )}
     </CardWrapper>
   );

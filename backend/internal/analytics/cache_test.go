@@ -13,34 +13,24 @@ func TestCardsAllValid(t *testing.T) {
 		now := time.Now().UTC()
 		return &Cards{
 			Tokens: &TokensCardRecord{
-				SessionID:   "test-session",
-				Version:     TokensCardVersion,
-				ComputedAt:  now,
-				UpToLine:    upToLine,
-				InputTokens: 1000,
-			},
-			Cost: &CostCardRecord{
 				SessionID:        "test-session",
-				Version:          CostCardVersion,
+				Version:          TokensCardVersion,
 				ComputedAt:       now,
 				UpToLine:         upToLine,
+				InputTokens:      1000,
 				EstimatedCostUSD: decimal.NewFromFloat(1.50),
 			},
-			Compaction: &CompactionCardRecord{
-				SessionID:  "test-session",
-				Version:    CompactionCardVersion,
-				ComputedAt: now,
-				UpToLine:   upToLine,
-				AutoCount:  2,
-			},
 			Session: &SessionCardRecord{
-				SessionID:      "test-session",
-				Version:        SessionCardVersion,
-				ComputedAt:     now,
-				UpToLine:       upToLine,
-				UserTurns:      5,
-				AssistantTurns: 5,
-				ModelsUsed:     []string{"claude-sonnet-4"},
+				SessionID:           "test-session",
+				Version:             SessionCardVersion,
+				ComputedAt:          now,
+				UpToLine:            upToLine,
+				UserTurns:           5,
+				AssistantTurns:      5,
+				ModelsUsed:          []string{"claude-sonnet-4"},
+				CompactionAuto:      2,
+				CompactionManual:    1,
+				CompactionAvgTimeMs: nil,
 			},
 			Tools: &ToolsCardRecord{
 				SessionID:  "test-session",
@@ -63,8 +53,6 @@ func TestCardsAllValid(t *testing.T) {
 		cards := makeCards(upToLine)
 		// Override all versions with the specified version (for testing version mismatch)
 		cards.Tokens.Version = version
-		cards.Cost.Version = version
-		cards.Compaction.Version = version
 		cards.Session.Version = version
 		cards.Tools.Version = version
 		return cards
@@ -82,6 +70,22 @@ func TestCardsAllValid(t *testing.T) {
 		cards.Tokens = nil
 		if cards.AllValid(100) {
 			t.Error("expected false when tokens card is nil")
+		}
+	})
+
+	t.Run("returns false when session card is nil", func(t *testing.T) {
+		cards := makeCards(100)
+		cards.Session = nil
+		if cards.AllValid(100) {
+			t.Error("expected false when session card is nil")
+		}
+	})
+
+	t.Run("returns false when tools card is nil", func(t *testing.T) {
+		cards := makeCards(100)
+		cards.Tools = nil
+		if cards.AllValid(100) {
+			t.Error("expected false when tools card is nil")
 		}
 	})
 
@@ -141,6 +145,29 @@ func TestTokensCardRecordIsValid(t *testing.T) {
 
 	t.Run("returns true when valid", func(t *testing.T) {
 		card := &TokensCardRecord{Version: TokensCardVersion, UpToLine: 100}
+		if !card.IsValid(100) {
+			t.Error("expected true when valid")
+		}
+	})
+}
+
+func TestSessionCardRecordIsValid(t *testing.T) {
+	t.Run("returns false when nil", func(t *testing.T) {
+		var card *SessionCardRecord
+		if card.IsValid(100) {
+			t.Error("expected false for nil card")
+		}
+	})
+
+	t.Run("returns false when version mismatch", func(t *testing.T) {
+		card := &SessionCardRecord{Version: 999, UpToLine: 100}
+		if card.IsValid(100) {
+			t.Error("expected false for version mismatch")
+		}
+	})
+
+	t.Run("returns true when valid", func(t *testing.T) {
+		card := &SessionCardRecord{Version: SessionCardVersion, UpToLine: 100}
 		if !card.IsValid(100) {
 			t.Error("expected true when valid")
 		}
