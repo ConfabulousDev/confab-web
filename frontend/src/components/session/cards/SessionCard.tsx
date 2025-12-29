@@ -176,8 +176,9 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: 'var(--color-text-secondary)', style: { whiteSpace: 'nowrap' } }}
+                  tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
                   width={yAxisWidth}
+                  interval={0}
                 />
                 <Tooltip
                   content={<CustomTooltip />}
