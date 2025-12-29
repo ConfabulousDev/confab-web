@@ -69,10 +69,37 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardPr
     }
   }, [sessionId, initialLinks]);
 
-  // Initial fetch
+  // Initial fetch with cleanup to prevent race conditions
   useEffect(() => {
-    fetchLinks();
-  }, [fetchLinks]);
+    let cancelled = false;
+
+    const doFetch = async () => {
+      if (initialLinks !== undefined) return;
+      try {
+        setLoading(true);
+        const response = await githubLinksAPI.list(sessionId);
+        if (!cancelled) {
+          setLinks(response.links);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to fetch GitHub links:', err);
+          setError('Failed to load');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    doFetch();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, initialLinks]);
 
   // Poll when visible
   useEffect(() => {

@@ -100,7 +100,7 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
           <BarChart
             data={chartData}
             layout="vertical"
-            margin={{ top: 0, right: 12, left: 0, bottom: 0 }}
+            margin={{ top: 0, right: 24, left: 0, bottom: 0 }}
             barSize={16}
           >
             <XAxis
