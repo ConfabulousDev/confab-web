@@ -35,9 +35,15 @@ go install honnef.co/go/tools/cmd/staticcheck@latest
 go install golang.org/x/tools/cmd/deadcode@latest
 
 # Run from backend dir
-~/go/bin/staticcheck ./backend/...
-~/go/bin/deadcode -test ./backend/...
+~/go/bin/staticcheck ./...
+~/go/bin/deadcode -test ./...
 ```
+
+**IMPORTANT:** Always auto-fix staticcheck and deadcode findings immediately, as long as:
+- No functional/logic changes are required
+- Just removing unused code, fixing lint warnings, removing unused imports
+
+Do NOT ask for permission - just fix and report what was cleaned up.
 
 **Frontend (TypeScript)**
 ```bash
@@ -59,8 +65,10 @@ cd frontend && npm audit
 ### Test Coverage
 
 ```bash
-# Backend (use -short to skip integration tests)
-cd backend && go test -short -cover ./...
+# Backend - IMPORTANT: Run FULL test suite for accurate coverage
+# The -short flag skips integration tests which provide most of the coverage
+# Example: internal/db goes from 0% (-short) to 69.5% (full)
+cd backend && DOCKER_HOST=unix:///Users/jackie/.orbstack/run/docker.sock go test -cover ./...
 
 # Frontend (use --run to avoid watch mode)
 cd frontend && npm test -- --coverage --run
