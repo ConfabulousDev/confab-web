@@ -9,6 +9,7 @@ const SessionsPage = lazy(() => import('@/pages/SessionsPage'));
 const SessionDetailPage = lazy(() => import('@/pages/SessionDetailPage'));
 const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
+const TrendsPage = lazy(() => import('@/pages/TrendsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 /** Redirect old /sessions/:id/shared/:token URLs to canonical /sessions/:id (CF-132) */
@@ -33,6 +34,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: page(<HomePage />) },
       { path: 'sessions', element: page(<SessionsPage />, true) },
+      { path: 'trends', element: page(<TrendsPage />, true) },
       { path: 'sessions/:id', element: page(<SessionDetailPage />) },
       { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },
       { path: 'keys', element: page(<APIKeysPage />, true) },

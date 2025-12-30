@@ -84,6 +84,7 @@ function Header() {
 
       <nav className={styles.nav}>
         <Link to="/sessions" className={styles.navLink}>Sessions</Link>
+        <Link to="/trends" className={styles.navLink}>Trends</Link>
       </nav>
 
       <div className={styles.right} ref={menuRef}>
