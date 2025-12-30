@@ -197,7 +197,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
                   content={<CustomTooltip />}
                   cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
                 />
-                <Bar dataKey="value" radius={[2, 2, 2, 2]}>
+                <Bar dataKey="value" radius={[2, 2, 2, 2]} isAnimationActive={false}>
                   {breakdownData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
