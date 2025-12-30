@@ -145,10 +145,17 @@
 /* Stats Grid */
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   grid-auto-rows: min-content;
   grid-auto-flow: dense;
   gap: var(--spacing-md);
+}
+
+/* Cap at 5 columns on very wide screens */
+@media (min-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
 }
 
 /* Card column spanning */
@@ -158,6 +165,16 @@
 
 .span3 {
   grid-column: span 3;
+}
+
+/* Responsive grid: 3 columns on medium-large screens */
+@media (min-width: 801px) and (max-width: 1199px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .span3 {
+    grid-column: span 3;
+  }
 }
 
 /* Responsive grid: 2 columns on medium screens */

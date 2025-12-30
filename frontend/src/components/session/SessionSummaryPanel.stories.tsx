@@ -480,7 +480,7 @@ export const ViewOnlyNoGitHub: Story = {
 };
 
 /**
- * All cards in a wide container to showcase grid layout.
+ * All cards in a wide container (5-column layout).
  * Tests the dense grid packing with cards of varying heights.
  */
 export const AllCardsWide: Story = {
@@ -492,7 +492,47 @@ export const AllCardsWide: Story = {
   },
   decorators: [
     (Story) => (
-      <div style={{ maxWidth: '1200px', height: '800px', background: 'var(--color-bg)' }}>
+      <div style={{ maxWidth: '1400px', height: '800px', background: 'var(--color-bg)' }}>
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+/**
+ * All cards in an extra-wide container (5-column layout, ultrawide).
+ * Tests maximum column layout on very wide screens.
+ */
+export const AllCardsUltrawide: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: true,
+    initialAnalytics: largeAnalytics,
+    initialGithubLinks: [...mockGitHubLinks, ...mockCommitLinks],
+  },
+  decorators: [
+    (Story) => (
+      <div style={{ maxWidth: '1800px', height: '800px', background: 'var(--color-bg)' }}>
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+/**
+ * All cards in a 3-column container.
+ * Tests responsive breakpoint between 801-1199px.
+ */
+export const AllCards3Column: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: true,
+    initialAnalytics: largeAnalytics,
+    initialGithubLinks: [...mockGitHubLinks, ...mockCommitLinks],
+  },
+  decorators: [
+    (Story) => (
+      <div style={{ maxWidth: '1000px', height: '800px', background: 'var(--color-bg)' }}>
         <Story />
       </div>
     ),
