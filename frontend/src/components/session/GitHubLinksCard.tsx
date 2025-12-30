@@ -12,10 +12,8 @@ interface GitHubLinksCardProps {
   isOwner: boolean;
   /** For Storybook: pass links directly instead of fetching from API */
   initialLinks?: GitHubLink[];
-  /** Force the card to show even when empty (used by menu reveal) */
+  /** Force the card to show (toggle is on) */
   forceShow?: boolean;
-  /** Callback when links change (for parent to track if card has content) */
-  onLinksChange?: (hasLinks: boolean) => void;
 }
 
 // Icons
@@ -43,7 +41,7 @@ const PlusIcon = (
   </svg>
 );
 
-function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onLinksChange }: GitHubLinksCardProps) {
+function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow }: GitHubLinksCardProps) {
   const isVisible = useVisibility();
 
   // State
@@ -114,11 +112,6 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onLinksC
     return () => clearInterval(intervalId);
   }, [initialLinks, isVisible, fetchLinks]);
 
-  // Notify parent of link changes
-  useEffect(() => {
-    onLinksChange?.(links.length > 0);
-  }, [links.length, onLinksChange]);
-
   // Auto-show add form when revealed via menu (only if empty)
   useEffect(() => {
     if (forceShow && links.length === 0 && !showAddForm && !loading) {
@@ -182,12 +175,12 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onLinksC
   };
 
   // Don't render if:
-  // - No links AND not owner (can't add)
-  // - No links AND owner but not forceShow (hidden by default)
-  if (!loading && links.length === 0 && !isOwner) {
+  // - Non-owner with no links (nothing to show, can't add)
+  // - Owner with forceShow=false (toggle is off)
+  if (!loading && !isOwner && links.length === 0) {
     return null;
   }
-  if (!loading && links.length === 0 && isOwner && !forceShow) {
+  if (!loading && isOwner && !forceShow) {
     return null;
   }
 

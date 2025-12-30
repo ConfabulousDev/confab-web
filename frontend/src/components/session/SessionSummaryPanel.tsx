@@ -27,18 +27,16 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   // Use initial analytics for Storybook, polled analytics for real usage
   const analytics = initialAnalytics ?? polledAnalytics;
 
-  // State for revealing GitHub card when empty
-  const [showGitHubCard, setShowGitHubCard] = useState(false);
-  const [hasGitHubLinks, setHasGitHubLinks] = useState(
-    (initialGithubLinks?.length ?? 0) > 0
-  );
+  // State for revealing GitHub card - default to true if there are initial links
+  const hasInitialLinks = (initialGithubLinks?.length ?? 0) > 0;
+  const [showGitHubCard, setShowGitHubCard] = useState(hasInitialLinks);
 
   // Dropdown for actions menu
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
-  // Handle "Link to GitHub" menu action
-  const handleLinkToGitHub = () => {
-    setShowGitHubCard(true);
+  // Toggle GitHub card visibility
+  const handleToggleGitHubCard = () => {
+    setShowGitHubCard(!showGitHubCard);
     toggle();
   };
 
@@ -124,11 +122,13 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
                 <div className={styles.menuDropdown}>
                   <button
                     className={styles.menuItem}
-                    onClick={handleLinkToGitHub}
-                    disabled={hasGitHubLinks || showGitHubCard}
+                    onClick={handleToggleGitHubCard}
                   >
                     <span className={styles.menuItemIcon}>{GitHubIcon}</span>
-                    Link to GitHub
+                    <span className={styles.menuItemLabel}>Show GitHub card</span>
+                    <span className={`${styles.toggle} ${showGitHubCard ? styles.on : ''}`}>
+                      <span className={styles.toggleKnob} />
+                    </span>
                   </button>
                 </div>
               )}
@@ -138,13 +138,12 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       </div>
 
       <div className={styles.grid}>
-        {/* GitHub Links - hidden by default when empty for owners */}
+        {/* GitHub Links - visibility controlled by toggle for owners */}
         <GitHubLinksCard
           sessionId={sessionId}
           isOwner={isOwner}
           initialLinks={initialGithubLinks}
           forceShow={showGitHubCard}
-          onLinksChange={setHasGitHubLinks}
         />
 
         {renderAnalyticsCards()}

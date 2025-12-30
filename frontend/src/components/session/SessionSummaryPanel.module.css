@@ -93,9 +93,41 @@
   background: var(--color-bg-hover);
 }
 
-.menuItem:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.menuItemLabel {
+  flex: 1;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Toggle switch */
+.toggle {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  background: var(--color-border-dark);
+  border-radius: 8px;
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.toggle.on {
+  background: var(--color-primary);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+}
+
+.toggle.on .toggleKnob {
+  transform: translateX(12px);
 }
 
 .menuItemIcon {

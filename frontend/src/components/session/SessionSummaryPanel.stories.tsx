@@ -288,8 +288,7 @@ type Story = StoryObj<typeof meta>;
 
 /**
  * Default view for owners with no GitHub links.
- * GitHub card is hidden by default. Use the "..." menu to reveal it.
- * Analytics are polled automatically when tab is visible.
+ * GitHub card is hidden (toggle off). Use the "..." menu to toggle visibility.
  */
 export const Default: Story = {
   args: {
@@ -362,7 +361,8 @@ export const AutoCompactionsOnly: Story = {
 };
 
 /**
- * Summary with GitHub PR links.
+ * Owner with GitHub PR links.
+ * GitHub card is visible (toggle on). Toggle can hide the card.
  */
 export const WithGitHubLinks: Story = {
   args: {
