@@ -1,5 +1,6 @@
 import { TokensCard } from './TokensCard';
 import { SessionCard } from './SessionCard';
+import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
 import type { CardDefinition } from './types';
 
@@ -29,10 +30,16 @@ export const cardRegistry: CardDefinition[] = [
     order: 1,
   },
   {
+    key: 'code_activity',
+    title: 'Code Activity',
+    component: CodeActivityCard,
+    order: 2,
+  },
+  {
     key: 'tools',
     title: 'Tools',
     component: ToolsCard,
-    order: 2,
+    order: 3,
     span: 2,
   },
 ];

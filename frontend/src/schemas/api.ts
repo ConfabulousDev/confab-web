@@ -211,6 +211,15 @@ export const ToolsCardDataSchema = z.object({
   error_count: z.number(),
 });
 
+export const CodeActivityCardDataSchema = z.object({
+  files_read: z.number(),
+  files_modified: z.number(),
+  lines_added: z.number(),
+  lines_removed: z.number(),
+  search_count: z.number(),
+  language_breakdown: z.record(z.string(), z.number()),
+});
+
 // Cards map schema - extensible for future cards
 // All fields optional to handle empty analytics (session with no transcript)
 // Note: cost is now part of tokens card, compaction is now part of session card
@@ -218,6 +227,7 @@ export const AnalyticsCardsSchema = z.object({
   tokens: TokensCardDataSchema.optional(),
   session: SessionCardDataSchema.optional(),
   tools: ToolsCardDataSchema.optional(),
+  code_activity: CodeActivityCardDataSchema.optional(),
 });
 
 export const SessionAnalyticsSchema = z.object({
@@ -263,6 +273,7 @@ export type TokensCardData = z.infer<typeof TokensCardDataSchema>;
 export type SessionCardData = z.infer<typeof SessionCardDataSchema>;
 export type ToolStats = z.infer<typeof ToolStatsSchema>;
 export type ToolsCardData = z.infer<typeof ToolsCardDataSchema>;
+export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 

@@ -695,6 +695,14 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "total_calls": 42,
       "tool_breakdown": {"Read": 15, "Write": 10, "Bash": 12, "Grep": 5},
       "error_count": 2
+    },
+    "code_activity": {
+      "files_read": 42,
+      "files_modified": 12,
+      "lines_added": 156,
+      "lines_removed": 23,
+      "search_count": 18,
+      "language_breakdown": {"go": 28, "ts": 18, "css": 5}
     }
   }
 }

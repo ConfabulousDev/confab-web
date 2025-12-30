@@ -46,6 +46,13 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	}
 	cards.Tools = tools
 
+	// Get code activity card
+	codeActivity, err := s.getCodeActivityCard(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("getting code activity card: %w", err)
+	}
+	cards.CodeActivity = codeActivity
+
 	return cards, nil
 }
 
@@ -66,6 +73,12 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	if cards.Tools != nil {
 		if err := s.upsertToolsCard(ctx, cards.Tools); err != nil {
 			return fmt.Errorf("upserting tools card: %w", err)
+		}
+	}
+
+	if cards.CodeActivity != nil {
+		if err := s.upsertCodeActivityCard(ctx, cards.CodeActivity); err != nil {
+			return fmt.Errorf("upserting code activity card: %w", err)
 		}
 	}
 
@@ -326,6 +339,86 @@ func (s *Store) upsertToolsCard(ctx context.Context, record *ToolsCardRecord) er
 }
 
 // =============================================================================
+// Code Activity card operations
+// =============================================================================
+
+func (s *Store) getCodeActivityCard(ctx context.Context, sessionID string) (*CodeActivityCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			files_read, files_modified, lines_added, lines_removed, search_count,
+			language_breakdown
+		FROM session_card_code_activity
+		WHERE session_id = $1
+	`
+
+	var record CodeActivityCardRecord
+	var breakdownJSON []byte
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.FilesRead,
+		&record.FilesModified,
+		&record.LinesAdded,
+		&record.LinesRemoved,
+		&record.SearchCount,
+		&breakdownJSON,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(breakdownJSON, &record.LanguageBreakdown); err != nil {
+		return nil, fmt.Errorf("parsing language_breakdown: %w", err)
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertCodeActivityCard(ctx context.Context, record *CodeActivityCardRecord) error {
+	breakdownJSON, err := json.Marshal(record.LanguageBreakdown)
+	if err != nil {
+		return fmt.Errorf("marshaling language_breakdown: %w", err)
+	}
+
+	query := `
+		INSERT INTO session_card_code_activity (
+			session_id, version, computed_at, up_to_line,
+			files_read, files_modified, lines_added, lines_removed, search_count,
+			language_breakdown
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			files_read = EXCLUDED.files_read,
+			files_modified = EXCLUDED.files_modified,
+			lines_added = EXCLUDED.lines_added,
+			lines_removed = EXCLUDED.lines_removed,
+			search_count = EXCLUDED.search_count,
+			language_breakdown = EXCLUDED.language_breakdown
+	`
+
+	_, err = s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.FilesRead,
+		record.FilesModified,
+		record.LinesAdded,
+		record.LinesRemoved,
+		record.SearchCount,
+		breakdownJSON,
+	)
+	return err
+}
+
+// =============================================================================
 // Conversion helpers
 // =============================================================================
 
@@ -379,6 +472,18 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			TotalCalls: r.TotalToolCalls,
 			ToolStats:  r.ToolStats,
 			ErrorCount: r.ToolErrorCount,
+		},
+		CodeActivity: &CodeActivityCardRecord{
+			SessionID:         sessionID,
+			Version:           CodeActivityCardVersion,
+			ComputedAt:        now,
+			UpToLine:          lineCount,
+			FilesRead:         r.FilesRead,
+			FilesModified:     r.FilesModified,
+			LinesAdded:        r.LinesAdded,
+			LinesRemoved:      r.LinesRemoved,
+			SearchCount:       r.SearchCount,
+			LanguageBreakdown: r.LanguageBreakdown,
 		},
 	}
 }
@@ -453,6 +558,18 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			TotalCalls: c.Tools.TotalCalls,
 			ToolStats:  c.Tools.ToolStats,
 			ErrorCount: c.Tools.ErrorCount,
+		}
+	}
+
+	if c.CodeActivity != nil {
+		// Cards format only (no legacy format for code activity)
+		response.Cards["code_activity"] = CodeActivityCardData{
+			FilesRead:         c.CodeActivity.FilesRead,
+			FilesModified:     c.CodeActivity.FilesModified,
+			LinesAdded:        c.CodeActivity.LinesAdded,
+			LinesRemoved:      c.CodeActivity.LinesRemoved,
+			SearchCount:       c.CodeActivity.SearchCount,
+			LanguageBreakdown: c.CodeActivity.LanguageBreakdown,
 		}
 	}
 

@@ -43,6 +43,14 @@ type ComputeResult struct {
 	TotalToolCalls int
 	ToolStats      map[string]*ToolStats
 	ToolErrorCount int
+
+	// Code activity stats (from CodeActivityCollector)
+	FilesRead         int
+	FilesModified     int
+	LinesAdded        int
+	LinesRemoved      int
+	SearchCount       int
+	LanguageBreakdown map[string]int
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
@@ -51,8 +59,9 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 	tokens := NewTokensCollector()
 	session := NewSessionCollector()
 	tools := NewToolsCollector()
+	codeActivity := NewCodeActivityCollector()
 
-	_, err := RunCollectors(content, tokens, session, tools)
+	_, err := RunCollectors(content, tokens, session, tools, codeActivity)
 	if err != nil {
 		return nil, err
 	}
@@ -94,5 +103,13 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 		TotalToolCalls: tools.TotalCalls,
 		ToolStats:      tools.ToolStats,
 		ToolErrorCount: tools.ErrorCount,
+
+		// Code activity stats
+		FilesRead:         codeActivity.FilesRead(),
+		FilesModified:     codeActivity.FilesModified(),
+		LinesAdded:        codeActivity.LinesAdded,
+		LinesRemoved:      codeActivity.LinesRemoved,
+		SearchCount:       codeActivity.SearchCount,
+		LanguageBreakdown: codeActivity.LanguageBreakdown(),
 	}, nil
 }

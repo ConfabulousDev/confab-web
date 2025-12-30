@@ -187,6 +187,14 @@ export const WrenchIcon = (
 );
 
 // Vertical ellipsis (more options) icon
+// Code brackets icon for Code Activity card header
+export const CodeIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </svg>
+);
+
 export const MoreVerticalIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
     <circle cx="12" cy="5" r="2" />

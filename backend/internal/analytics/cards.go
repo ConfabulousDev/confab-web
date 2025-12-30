@@ -8,9 +8,10 @@ import (
 
 // Card version constants - increment when compute logic changes
 const (
-	TokensCardVersion  = 2 // v2: added estimated_cost_usd (merged from cost card)
-	SessionCardVersion = 3 // v3: added message breakdown and fixed turn counting
-	ToolsCardVersion   = 2 // v2: per-tool success/error breakdown
+	TokensCardVersion       = 2 // v2: added estimated_cost_usd (merged from cost card)
+	SessionCardVersion      = 3 // v3: added message breakdown and fixed turn counting
+	ToolsCardVersion        = 2 // v2: per-tool success/error breakdown
+	CodeActivityCardVersion = 1 // v1: initial version
 )
 
 // =============================================================================
@@ -74,11 +75,26 @@ type ToolsCardRecord struct {
 	ErrorCount int                   `json:"error_count"`
 }
 
+// CodeActivityCardRecord is the DB record for the code activity card.
+type CodeActivityCardRecord struct {
+	SessionID         string         `json:"session_id"`
+	Version           int            `json:"version"`
+	ComputedAt        time.Time      `json:"computed_at"`
+	UpToLine          int64          `json:"up_to_line"`
+	FilesRead         int            `json:"files_read"`
+	FilesModified     int            `json:"files_modified"`
+	LinesAdded        int            `json:"lines_added"`
+	LinesRemoved      int            `json:"lines_removed"`
+	SearchCount       int            `json:"search_count"`
+	LanguageBreakdown map[string]int `json:"language_breakdown"` // extension -> count
+}
+
 // Cards aggregates all card data for a session.
 type Cards struct {
-	Tokens  *TokensCardRecord
-	Session *SessionCardRecord
-	Tools   *ToolsCardRecord
+	Tokens       *TokensCardRecord
+	Session      *SessionCardRecord
+	Tools        *ToolsCardRecord
+	CodeActivity *CodeActivityCardRecord
 }
 
 // =============================================================================
@@ -129,6 +145,16 @@ type ToolsCardData struct {
 	ErrorCount int                   `json:"error_count"`
 }
 
+// CodeActivityCardData is the API response format for the code activity card.
+type CodeActivityCardData struct {
+	FilesRead         int            `json:"files_read"`
+	FilesModified     int            `json:"files_modified"`
+	LinesAdded        int            `json:"lines_added"`
+	LinesRemoved      int            `json:"lines_removed"`
+	SearchCount       int            `json:"search_count"`
+	LanguageBreakdown map[string]int `json:"language_breakdown"`
+}
+
 // =============================================================================
 // Validation helpers
 // =============================================================================
@@ -148,6 +174,11 @@ func (c *ToolsCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == ToolsCardVersion && c.UpToLine == currentLineCount
 }
 
+// IsValid checks if a code activity card record is valid for the current line count.
+func (c *CodeActivityCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == CodeActivityCardVersion && c.UpToLine == currentLineCount
+}
+
 // AllValid checks if all cards are valid for the current line count.
 func (c *Cards) AllValid(currentLineCount int64) bool {
 	if c == nil {
@@ -155,5 +186,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 	}
 	return c.Tokens.IsValid(currentLineCount) &&
 		c.Session.IsValid(currentLineCount) &&
-		c.Tools.IsValid(currentLineCount)
+		c.Tools.IsValid(currentLineCount) &&
+		c.CodeActivity.IsValid(currentLineCount)
 }

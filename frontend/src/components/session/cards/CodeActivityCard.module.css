@@ -1,0 +1,38 @@
+.statsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.linesAdded {
+  color: var(--color-success);
+}
+
+.linesRemoved {
+  color: var(--color-error);
+}
+
+.chartContainer {
+  width: 100%;
+  min-height: 80px;
+  margin-top: 4px;
+}
+
+.tooltip {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tooltipTitle {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.tooltipRow {
+  color: var(--color-text-secondary);
+}
