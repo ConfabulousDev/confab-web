@@ -150,7 +150,7 @@ export function CodeActivityCard({ data, loading }: CardProps<CodeActivityCardDa
                   content={<CustomTooltip />}
                   cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
                 />
-                <Bar dataKey="count" fill="var(--color-accent)" radius={[2, 2, 2, 2]} animationDuration={150} />
+                <Bar dataKey="count" fill="var(--color-accent)" radius={[2, 2, 2, 2]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>

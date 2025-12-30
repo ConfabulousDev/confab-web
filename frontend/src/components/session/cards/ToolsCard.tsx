@@ -148,14 +148,14 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
               stackId="stack"
               fill="var(--color-success)"
               radius={[2, 2, 2, 2]}
-              animationDuration={150}
+              isAnimationActive={false}
             />
             <Bar
               dataKey="errors"
               stackId="stack"
               fill="var(--color-error)"
               radius={[2, 2, 2, 2]}
-              animationDuration={150}
+              isAnimationActive={false}
             />
           </BarChart>
         </ResponsiveContainer>
