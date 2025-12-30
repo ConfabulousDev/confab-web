@@ -15,7 +15,10 @@ func TestMergeChunks(t *testing.T) {
 			{key: "chunk_00000001_00000003.jsonl", firstLine: 1, lastLine: 3, data: []byte("line1\nline2\nline3\n")},
 		}
 
-		result := mergeChunks(chunks)
+		result, err := mergeChunks(chunks)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		expected := "line1\nline2\nline3\n"
 
 		if string(result) != expected {
@@ -29,7 +32,10 @@ func TestMergeChunks(t *testing.T) {
 			{key: "chunk_00000003_00000004.jsonl", firstLine: 3, lastLine: 4, data: []byte("line3\nline4\n")},
 		}
 
-		result := mergeChunks(chunks)
+		result, err := mergeChunks(chunks)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		expected := "line1\nline2\nline3\nline4\n"
 
 		if string(result) != expected {
@@ -45,7 +51,10 @@ func TestMergeChunks(t *testing.T) {
 			{key: "chunk_00000001_00000010.jsonl", firstLine: 1, lastLine: 10, data: []byte("new1\nnew2\nnew3\nnew4\nnew5\nnew6\nnew7\nnew8\nnew9\nnew10\n")},
 		}
 
-		result := mergeChunks(chunks)
+		result, err := mergeChunks(chunks)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		lines := strings.Split(strings.TrimSpace(string(result)), "\n")
 
 		if len(lines) != 10 {
@@ -74,7 +83,10 @@ func TestMergeChunks(t *testing.T) {
 			{key: "chunk_00000003_00000010.jsonl", firstLine: 3, lastLine: 10, data: []byte("B3\nB4\nB5\nB6\nB7\nB8\nB9\nB10\n")},
 		}
 
-		result := mergeChunks(chunks)
+		result, err := mergeChunks(chunks)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		lines := strings.Split(strings.TrimSpace(string(result)), "\n")
 
 		if len(lines) != 10 {
@@ -100,7 +112,10 @@ func TestMergeChunks(t *testing.T) {
 			{key: "chunk_00000004_00000010.jsonl", firstLine: 4, lastLine: 10, data: []byte("Z4\nZ5\nZ6\nZ7\nZ8\nZ9\nZ10\n")},
 		}
 
-		result := mergeChunks(chunks)
+		result, err := mergeChunks(chunks)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		lines := strings.Split(strings.TrimSpace(string(result)), "\n")
 
 		if len(lines) != 10 {
@@ -126,7 +141,10 @@ func TestMergeChunks(t *testing.T) {
 			{key: "chunk_00000006_00000008.jsonl", firstLine: 6, lastLine: 8, data: []byte("F\nG\nH\n")},
 		}
 
-		result := mergeChunks(chunks)
+		result, err := mergeChunks(chunks)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		lines := strings.Split(strings.TrimSpace(string(result)), "\n")
 
 		// Should have 6 lines (gap is skipped)
@@ -143,7 +161,10 @@ func TestMergeChunks(t *testing.T) {
 	})
 
 	t.Run("empty chunks slice", func(t *testing.T) {
-		result := mergeChunks(nil)
+		result, err := mergeChunks(nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if result != nil {
 			t.Errorf("expected nil, got %q", string(result))
 		}
@@ -154,7 +175,10 @@ func TestMergeChunks(t *testing.T) {
 			{key: "chunk_00000001_00000002.jsonl", firstLine: 1, lastLine: 2, data: []byte("line1\nline2")}, // no trailing newline
 		}
 
-		result := mergeChunks(chunks)
+		result, err := mergeChunks(chunks)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		lines := strings.Split(strings.TrimSpace(string(result)), "\n")
 
 		if len(lines) != 2 {
@@ -162,6 +186,22 @@ func TestMergeChunks(t *testing.T) {
 		}
 		if lines[0] != "line1" || lines[1] != "line2" {
 			t.Errorf("unexpected lines: %v", lines)
+		}
+	})
+
+	t.Run("exceeds MaxMergeLines returns error", func(t *testing.T) {
+		// Create chunks that would require more than MaxMergeLines
+		chunks := []chunkInfo{
+			{key: "chunk_00000001_00000010.jsonl", firstLine: 1, lastLine: 10, data: []byte("a\n")},
+			{key: "chunk_99999990_99999999.jsonl", firstLine: MaxMergeLines + 1, lastLine: MaxMergeLines + 10, data: []byte("b\n")},
+		}
+
+		_, err := mergeChunks(chunks)
+		if err == nil {
+			t.Error("expected error for exceeding MaxMergeLines, got nil")
+		}
+		if !strings.Contains(err.Error(), "exceeds safety limit") {
+			t.Errorf("expected error message about safety limit, got: %v", err)
 		}
 	})
 }

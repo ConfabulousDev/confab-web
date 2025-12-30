@@ -144,7 +144,12 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Merge chunks to get complete JSONL content
-		content := mergeChunks(chunks)
+		content, err := mergeChunks(chunks)
+		if err != nil {
+			log.Error("Failed to merge chunks", "error", err, "session_id", sessionID)
+			respondError(w, http.StatusInternalServerError, "Failed to process session data")
+			return
+		}
 
 		// Compute analytics from JSONL
 		computed, err := analytics.ComputeFromJSONL(content)

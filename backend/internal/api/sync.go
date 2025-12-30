@@ -710,6 +710,15 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 	return chunks, nil
 }
 
+// MaxMergeLines is the maximum number of lines allowed in a merge operation.
+// This prevents memory exhaustion from corrupted chunk filenames.
+// Normal operation limit: 30,000 chunks × 100 lines = 3M lines.
+// We set 10M as a generous safety margin.
+const MaxMergeLines = 10_000_000
+
+// LargeMergeWarningThreshold is the line count at which we log a warning.
+const LargeMergeWarningThreshold = 1_000_000
+
 // mergeChunks takes downloaded chunks and merges them, handling overlaps.
 // Uses a simple array indexed by line number - each chunk's lines are written
 // to the array, and later chunks overwrite earlier ones for the same line.
@@ -717,12 +726,14 @@ func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []st
 //
 // If overlapping lines have different content (shouldn't happen normally),
 // a warning is logged since this may indicate data corruption.
-func mergeChunks(chunks []chunkInfo) []byte {
+//
+// Returns an error if maxLine exceeds MaxMergeLines to prevent memory exhaustion.
+func mergeChunks(chunks []chunkInfo) ([]byte, error) {
 	if len(chunks) == 0 {
-		return nil
+		return nil, nil
 	}
 	if len(chunks) == 1 {
-		return chunks[0].data
+		return chunks[0].data, nil
 	}
 
 	// Find max line number
@@ -731,6 +742,19 @@ func mergeChunks(chunks []chunkInfo) []byte {
 		if c.lastLine > maxLine {
 			maxLine = c.lastLine
 		}
+	}
+
+	// Safety check: prevent memory exhaustion from corrupted data
+	if maxLine > MaxMergeLines {
+		return nil, fmt.Errorf("maxLine %d exceeds safety limit %d", maxLine, MaxMergeLines)
+	}
+
+	// Log warning for unusually large merges
+	if maxLine > LargeMergeWarningThreshold {
+		logger.Warn("Large chunk merge operation",
+			"max_line", maxLine,
+			"chunk_count", len(chunks),
+			"threshold", LargeMergeWarningThreshold)
 	}
 
 	// Build array indexed by line number (0-indexed, so line 1 is at index 0)
@@ -765,7 +789,7 @@ func mergeChunks(chunks []chunkInfo) []byte {
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 // splitLines splits data into lines, preserving each line's content without the newline
@@ -971,7 +995,12 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Merge chunks, handling any overlaps from partial upload failures
-	merged := mergeChunks(chunks)
+	merged, err := mergeChunks(chunks)
+	if err != nil {
+		log.Error("Failed to merge chunks", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to process session data")
+		return
+	}
 
 	// If line_offset is specified, filter output to only lines after offset
 	if lineOffset > 0 {
