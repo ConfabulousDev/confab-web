@@ -220,7 +220,7 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onHasLin
               type="url"
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
-              placeholder="github.com/owner/repo/pull/123"
+              placeholder="https://github.com/owner/repo/pull/123"
               className={styles.urlInput}
               disabled={adding}
               autoFocus
