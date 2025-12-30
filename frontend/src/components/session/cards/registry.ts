@@ -2,6 +2,7 @@ import { TokensCard } from './TokensCard';
 import { SessionCard } from './SessionCard';
 import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
+import { ConversationCard } from './ConversationCard';
 import type { CardDefinition } from './types';
 
 /**
@@ -30,16 +31,22 @@ export const cardRegistry: CardDefinition[] = [
     order: 1,
   },
   {
+    key: 'conversation',
+    title: 'Conversation',
+    component: ConversationCard,
+    order: 2,
+  },
+  {
     key: 'code_activity',
     title: 'Code Activity',
     component: CodeActivityCard,
-    order: 2,
+    order: 3,
   },
   {
     key: 'tools',
     title: 'Tools',
     component: ToolsCard,
-    order: 3,
+    order: 4,
     span: 2,
   },
 ];

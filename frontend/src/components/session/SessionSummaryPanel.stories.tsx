@@ -18,10 +18,14 @@ function createAnalytics(base: {
     text_responses?: number;
     tool_calls?: number;
     thinking_blocks?: number;
-    user_turns: number;
-    assistant_turns: number;
     duration_ms: number | null;
     models_used: string[];
+  };
+  conversation?: {
+    user_turns: number;
+    assistant_turns: number;
+    avg_assistant_turn_ms?: number | null;
+    avg_user_thinking_ms?: number | null;
   };
   tools?: {
     total_calls: number;
@@ -37,8 +41,8 @@ function createAnalytics(base: {
     language_breakdown: Record<string, number>;
   };
 }): SessionAnalytics {
-  const userTurns = base.session?.user_turns ?? 10;
-  const assistantTurns = base.session?.assistant_turns ?? 10;
+  const userTurns = base.conversation?.user_turns ?? 10;
+  const assistantTurns = base.conversation?.assistant_turns ?? 10;
   // Default message breakdown assumes moderate tool usage
   const totalMessages = base.session?.total_messages ?? (userTurns + assistantTurns) * 5;
   const userMessages = base.session?.user_messages ?? userTurns * 3;
@@ -62,15 +66,18 @@ function createAnalytics(base: {
         text_responses: base.session?.text_responses ?? assistantTurns,
         tool_calls: base.session?.tool_calls ?? Math.floor(assistantMessages * 0.6),
         thinking_blocks: base.session?.thinking_blocks ?? Math.floor(assistantMessages * 0.3),
-        // Turns
-        user_turns: userTurns,
-        assistant_turns: assistantTurns,
         // Metadata
         duration_ms: base.session?.duration_ms ?? 3600000,
         models_used: base.session?.models_used ?? ['claude-sonnet-4-20250514'],
         compaction_auto: base.compaction.auto,
         compaction_manual: base.compaction.manual,
         compaction_avg_time_ms: base.compaction.avg_time_ms,
+      },
+      conversation: {
+        user_turns: userTurns,
+        assistant_turns: assistantTurns,
+        avg_assistant_turn_ms: base.conversation?.avg_assistant_turn_ms ?? null,
+        avg_user_thinking_ms: base.conversation?.avg_user_thinking_ms ?? null,
       },
       tools: base.tools,
       code_activity: base.code_activity,
@@ -140,10 +147,12 @@ const emptyAnalytics = createAnalytics({
     avg_time_ms: null,
   },
   session: {
-    user_turns: 0,
-    assistant_turns: 0,
     duration_ms: null,
     models_used: [],
+  },
+  conversation: {
+    user_turns: 0,
+    assistant_turns: 0,
   },
 });
 
@@ -166,10 +175,12 @@ const smallAnalytics = createAnalytics({
     avg_time_ms: null,
   },
   session: {
-    user_turns: 3,
-    assistant_turns: 3,
     duration_ms: 180000,
     models_used: ['claude-sonnet-4-20250514'],
+  },
+  conversation: {
+    user_turns: 3,
+    assistant_turns: 3,
   },
 });
 
@@ -192,10 +203,12 @@ const largeAnalytics = createAnalytics({
     avg_time_ms: 52300,
   },
   session: {
-    user_turns: 50,
-    assistant_turns: 50,
     duration_ms: 14400000,
     models_used: ['claude-sonnet-4-20250514', 'claude-opus-4-5-20251101'],
+  },
+  conversation: {
+    user_turns: 50,
+    assistant_turns: 50,
   },
   tools: {
     total_calls: 312,

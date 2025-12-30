@@ -52,12 +52,12 @@ Stories live alongside components (e.g., `Component.stories.tsx` next to `Compon
 
 ## Adding Analytics Cards
 
-When adding new analytics cards to the session summary panel, follow the playbook in `docs/adding-analytics-cards.md`. This covers:
+When adding new analytics cards to the session summary panel, **use the `/add-session-card` skill**. This provides a step-by-step playbook covering:
 
 - Database migrations (card-per-table architecture)
-- Backend types, store operations, and compute logic
+- Backend collector, types, store operations, and compute logic
 - Frontend Zod schemas, components, and registry
-- Testing requirements
+- Storybook stories and testing requirements
 
 ## Finding Dead Code (Go)
 

@@ -7,10 +7,11 @@ describe('cardRegistry', () => {
 
     expect(keys).toContain('tokens');
     expect(keys).toContain('session');
+    expect(keys).toContain('conversation');
     expect(keys).toContain('code_activity');
     expect(keys).toContain('tools');
     // Note: cost is now part of tokens card, compaction is part of session card
-    expect(keys).toHaveLength(4);
+    expect(keys).toHaveLength(5);
   });
 
   it('has unique keys', () => {
@@ -57,6 +58,6 @@ describe('getOrderedCards', () => {
     const ordered = getOrderedCards();
     const keys = ordered.map((c) => c.key);
 
-    expect(keys).toEqual(['tokens', 'session', 'code_activity', 'tools']);
+    expect(keys).toEqual(['tokens', 'session', 'conversation', 'code_activity', 'tools']);
   });
 });

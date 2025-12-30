@@ -69,6 +69,7 @@ func TestTokensCollector(t *testing.T) {
 
 func TestSessionCollector(t *testing.T) {
 	session := NewSessionCollector()
+	conversation := NewConversationCollector()
 
 	// Modern transcript format with content arrays
 	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
@@ -78,18 +79,19 @@ func TestSessionCollector(t *testing.T) {
 {"type":"user","message":{"role":"user","content":"done"},"uuid":"u3","timestamp":"2025-01-01T00:03:00Z"}
 `
 
-	_, err := RunCollectors([]byte(jsonl), session)
+	_, err := RunCollectors([]byte(jsonl), session, conversation)
 	if err != nil {
 		t.Fatalf("RunCollectors failed: %v", err)
 	}
 
+	// Turn counts are in the ConversationCollector
 	// UserTurns counts only human prompts (not tool results)
-	if session.UserTurns != 3 {
-		t.Errorf("UserTurns = %d, want 3", session.UserTurns)
+	if conversation.UserTurns != 3 {
+		t.Errorf("UserTurns = %d, want 3", conversation.UserTurns)
 	}
 	// AssistantTurns counts only text responses (not tool_use only)
-	if session.AssistantTurns != 2 {
-		t.Errorf("AssistantTurns = %d, want 2", session.AssistantTurns)
+	if conversation.AssistantTurns != 2 {
+		t.Errorf("AssistantTurns = %d, want 2", conversation.AssistantTurns)
 	}
 
 	duration := session.DurationMs()
@@ -178,6 +180,7 @@ func TestMultipleCollectors(t *testing.T) {
 
 func TestSessionCollector_MessageBreakdown(t *testing.T) {
 	session := NewSessionCollector()
+	conversation := NewConversationCollector()
 
 	// Realistic JSONL with all message types:
 	// - 2 human prompts (user with string content)
@@ -197,7 +200,7 @@ func TestSessionCollector_MessageBreakdown(t *testing.T) {
 {"type":"user","message":{"role":"user","content":"Thanks!"},"uuid":"u5","timestamp":"2025-01-01T00:00:09Z"}
 `
 
-	_, err := RunCollectors([]byte(jsonl), session)
+	_, err := RunCollectors([]byte(jsonl), session, conversation)
 	if err != nil {
 		t.Fatalf("RunCollectors failed: %v", err)
 	}
@@ -230,12 +233,12 @@ func TestSessionCollector_MessageBreakdown(t *testing.T) {
 		t.Errorf("ThinkingBlocks = %d, want 1", session.ThinkingBlocks)
 	}
 
-	// Turns should equal human prompts and text responses
-	if session.UserTurns != 2 {
-		t.Errorf("UserTurns = %d, want 2 (should equal HumanPrompts)", session.UserTurns)
+	// Turns are in the ConversationCollector and should equal human prompts and text responses
+	if conversation.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2 (should equal HumanPrompts)", conversation.UserTurns)
 	}
-	if session.AssistantTurns != 2 {
-		t.Errorf("AssistantTurns = %d, want 2 (should equal TextResponses)", session.AssistantTurns)
+	if conversation.AssistantTurns != 2 {
+		t.Errorf("AssistantTurns = %d, want 2 (should equal TextResponses)", conversation.AssistantTurns)
 	}
 }
 

@@ -3,7 +3,6 @@ import { formatResponseTime } from '@/utils/compactionStats';
 import {
   TerminalIcon,
   ChatIcon,
-  RefreshIcon,
   DurationIcon,
   RobotIcon,
   CompressIcon,
@@ -14,7 +13,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import styles from './SessionCard.module.css';
 
 const TOOLTIPS = {
-  turns: 'Actual conversational exchanges (user prompts and text responses)',
   totalMessages: 'Total transcript lines in the session',
   userMessages: 'All user-role messages (human prompts + tool results)',
   assistantMessages: 'All assistant-role messages',
@@ -131,14 +129,6 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
         icon={ChatIcon}
         tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
-      />
-
-      {/* Turns */}
-      <StatRow
-        label="Turns"
-        value={`${data.user_turns + data.assistant_turns} (${data.user_turns}/${data.assistant_turns})`}
-        icon={RefreshIcon}
-        tooltip={TOOLTIPS.turns}
       />
 
       {/* Duration */}

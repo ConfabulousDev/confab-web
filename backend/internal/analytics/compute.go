@@ -26,7 +26,7 @@ type ComputeResult struct {
 	ToolCalls      int
 	ThinkingBlocks int
 
-	// Actual conversational turns (from SessionCollector)
+	// Actual conversational turns (from ConversationCollector)
 	UserTurns      int
 	AssistantTurns int
 
@@ -51,6 +51,10 @@ type ComputeResult struct {
 	LinesRemoved      int
 	SearchCount       int
 	LanguageBreakdown map[string]int
+
+	// Conversation stats (from ConversationCollector)
+	AvgAssistantTurnMs *int64
+	AvgUserThinkingMs  *int64
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
@@ -60,8 +64,9 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 	session := NewSessionCollector()
 	tools := NewToolsCollector()
 	codeActivity := NewCodeActivityCollector()
+	conversation := NewConversationCollector()
 
-	_, err := RunCollectors(content, tokens, session, tools, codeActivity)
+	_, err := RunCollectors(content, tokens, session, tools, codeActivity, conversation)
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +92,8 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 		ThinkingBlocks: session.ThinkingBlocks,
 
 		// Actual conversational turns
-		UserTurns:      session.UserTurns,
-		AssistantTurns: session.AssistantTurns,
+		UserTurns:      conversation.UserTurns,
+		AssistantTurns: conversation.AssistantTurns,
 
 		// Session metadata
 		DurationMs: session.DurationMs(),
@@ -111,5 +116,9 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 		LinesRemoved:      codeActivity.LinesRemoved,
 		SearchCount:       codeActivity.SearchCount,
 		LanguageBreakdown: codeActivity.LanguageBreakdown(),
+
+		// Conversation stats (turns and timing)
+		AvgAssistantTurnMs: conversation.AvgAssistantTurnMs,
+		AvgUserThinkingMs:  conversation.AvgUserThinkingMs,
 	}, nil
 }

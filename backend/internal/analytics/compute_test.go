@@ -158,9 +158,6 @@ func TestToCards(t *testing.T) {
 	if cards.Session == nil {
 		t.Fatal("Session card should not be nil")
 	}
-	if cards.Session.UserTurns != 5 {
-		t.Errorf("Session.UserTurns = %d, want 5", cards.Session.UserTurns)
-	}
 	if cards.Session.CompactionAuto != 2 {
 		t.Errorf("Session.CompactionAuto = %d, want 2", cards.Session.CompactionAuto)
 	}
@@ -181,8 +178,6 @@ func TestCardsToResponse(t *testing.T) {
 			EstimatedCostUSD:    decimal.NewFromFloat(1.50),
 		},
 		Session: &SessionCardRecord{
-			UserTurns:           5,
-			AssistantTurns:      4,
 			ModelsUsed:          []string{"claude-sonnet-4"},
 			CompactionAuto:      2,
 			CompactionManual:    1,
@@ -243,9 +238,6 @@ func TestCardsToResponse(t *testing.T) {
 	session, ok := response.Cards["session"].(SessionCardData)
 	if !ok {
 		t.Fatal("session card not found or wrong type")
-	}
-	if session.UserTurns != 5 {
-		t.Errorf("cards.session.UserTurns = %d, want 5", session.UserTurns)
 	}
 	if session.CompactionAuto != 2 {
 		t.Errorf("cards.session.CompactionAuto = %d, want 2", session.CompactionAuto)

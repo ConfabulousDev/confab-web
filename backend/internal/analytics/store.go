@@ -53,6 +53,13 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	}
 	cards.CodeActivity = codeActivity
 
+	// Get conversation card
+	conversation, err := s.getConversationCard(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("getting conversation card: %w", err)
+	}
+	cards.Conversation = conversation
+
 	return cards, nil
 }
 
@@ -79,6 +86,12 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	if cards.CodeActivity != nil {
 		if err := s.upsertCodeActivityCard(ctx, cards.CodeActivity); err != nil {
 			return fmt.Errorf("upserting code activity card: %w", err)
+		}
+	}
+
+	if cards.Conversation != nil {
+		if err := s.upsertConversationCard(ctx, cards.Conversation); err != nil {
+			return fmt.Errorf("upserting conversation card: %w", err)
 		}
 	}
 
@@ -167,7 +180,7 @@ func (s *Store) getSessionCard(ctx context.Context, sessionID string) (*SessionC
 		SELECT session_id, version, computed_at, up_to_line,
 			total_messages, user_messages, assistant_messages,
 			human_prompts, tool_results, text_responses, tool_calls, thinking_blocks,
-			user_turns, assistant_turns, duration_ms, models_used,
+			duration_ms, models_used,
 			compaction_auto, compaction_manual, compaction_avg_time_ms
 		FROM session_card_session
 		WHERE session_id = $1
@@ -188,8 +201,6 @@ func (s *Store) getSessionCard(ctx context.Context, sessionID string) (*SessionC
 		&record.TextResponses,
 		&record.ToolCalls,
 		&record.ThinkingBlocks,
-		&record.UserTurns,
-		&record.AssistantTurns,
 		&record.DurationMs,
 		&modelsJSON,
 		&record.CompactionAuto,
@@ -221,9 +232,9 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 			session_id, version, computed_at, up_to_line,
 			total_messages, user_messages, assistant_messages,
 			human_prompts, tool_results, text_responses, tool_calls, thinking_blocks,
-			user_turns, assistant_turns, duration_ms, models_used,
+			duration_ms, models_used,
 			compaction_auto, compaction_manual, compaction_avg_time_ms
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
@@ -236,8 +247,6 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 			text_responses = EXCLUDED.text_responses,
 			tool_calls = EXCLUDED.tool_calls,
 			thinking_blocks = EXCLUDED.thinking_blocks,
-			user_turns = EXCLUDED.user_turns,
-			assistant_turns = EXCLUDED.assistant_turns,
 			duration_ms = EXCLUDED.duration_ms,
 			models_used = EXCLUDED.models_used,
 			compaction_auto = EXCLUDED.compaction_auto,
@@ -258,8 +267,6 @@ func (s *Store) upsertSessionCard(ctx context.Context, record *SessionCardRecord
 		record.TextResponses,
 		record.ToolCalls,
 		record.ThinkingBlocks,
-		record.UserTurns,
-		record.AssistantTurns,
 		record.DurationMs,
 		modelsJSON,
 		record.CompactionAuto,
@@ -419,6 +426,68 @@ func (s *Store) upsertCodeActivityCard(ctx context.Context, record *CodeActivity
 }
 
 // =============================================================================
+// Conversation card operations
+// =============================================================================
+
+func (s *Store) getConversationCard(ctx context.Context, sessionID string) (*ConversationCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms
+		FROM session_card_conversation
+		WHERE session_id = $1
+	`
+
+	var record ConversationCardRecord
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.UserTurns,
+		&record.AssistantTurns,
+		&record.AvgAssistantTurnMs,
+		&record.AvgUserThinkingMs,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertConversationCard(ctx context.Context, record *ConversationCardRecord) error {
+	query := `
+		INSERT INTO session_card_conversation (
+			session_id, version, computed_at, up_to_line,
+			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			user_turns = EXCLUDED.user_turns,
+			assistant_turns = EXCLUDED.assistant_turns,
+			avg_assistant_turn_ms = EXCLUDED.avg_assistant_turn_ms,
+			avg_user_thinking_ms = EXCLUDED.avg_user_thinking_ms
+	`
+
+	_, err := s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.UserTurns,
+		record.AssistantTurns,
+		record.AvgAssistantTurnMs,
+		record.AvgUserThinkingMs,
+	)
+	return err
+}
+
+// =============================================================================
 // Conversion helpers
 // =============================================================================
 
@@ -453,9 +522,6 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			TextResponses:  r.TextResponses,
 			ToolCalls:      r.ToolCalls,
 			ThinkingBlocks: r.ThinkingBlocks,
-			// Turns
-			UserTurns:      r.UserTurns,
-			AssistantTurns: r.AssistantTurns,
 			// Metadata
 			DurationMs: r.DurationMs,
 			ModelsUsed: r.ModelsUsed,
@@ -484,6 +550,16 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			LinesRemoved:      r.LinesRemoved,
 			SearchCount:       r.SearchCount,
 			LanguageBreakdown: r.LanguageBreakdown,
+		},
+		Conversation: &ConversationCardRecord{
+			SessionID:          sessionID,
+			Version:            ConversationCardVersion,
+			ComputedAt:         now,
+			UpToLine:           lineCount,
+			UserTurns:          r.UserTurns,
+			AssistantTurns:     r.AssistantTurns,
+			AvgAssistantTurnMs: r.AvgAssistantTurnMs,
+			AvgUserThinkingMs:  r.AvgUserThinkingMs,
 		},
 	}
 }
@@ -539,9 +615,6 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			TextResponses:  c.Session.TextResponses,
 			ToolCalls:      c.Session.ToolCalls,
 			ThinkingBlocks: c.Session.ThinkingBlocks,
-			// Turns
-			UserTurns:      c.Session.UserTurns,
-			AssistantTurns: c.Session.AssistantTurns,
 			// Metadata
 			DurationMs: c.Session.DurationMs,
 			ModelsUsed: c.Session.ModelsUsed,
@@ -570,6 +643,16 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			LinesRemoved:      c.CodeActivity.LinesRemoved,
 			SearchCount:       c.CodeActivity.SearchCount,
 			LanguageBreakdown: c.CodeActivity.LanguageBreakdown,
+		}
+	}
+
+	if c.Conversation != nil {
+		// Cards format only (no legacy format for conversation)
+		response.Cards["conversation"] = ConversationCardData{
+			UserTurns:          c.Conversation.UserTurns,
+			AssistantTurns:     c.Conversation.AssistantTurns,
+			AvgAssistantTurnMs: c.Conversation.AvgAssistantTurnMs,
+			AvgUserThinkingMs:  c.Conversation.AvgUserThinkingMs,
 		}
 	}
 

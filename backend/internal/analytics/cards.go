@@ -9,9 +9,10 @@ import (
 // Card version constants - increment when compute logic changes
 const (
 	TokensCardVersion       = 2 // v2: added estimated_cost_usd (merged from cost card)
-	SessionCardVersion      = 3 // v3: added message breakdown and fixed turn counting
+	SessionCardVersion      = 4 // v4: moved turn counts to conversation card
 	ToolsCardVersion        = 2 // v2: per-tool success/error breakdown
 	CodeActivityCardVersion = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
+	ConversationCardVersion = 1 // v1: initial version with turn timing metrics
 )
 
 // =============================================================================
@@ -32,6 +33,7 @@ type TokensCardRecord struct {
 }
 
 // SessionCardRecord is the DB record for the session card (includes compaction and message breakdown).
+// Note: Turn counts are in the Conversation card.
 type SessionCardRecord struct {
 	SessionID  string    `json:"session_id"`
 	Version    int       `json:"version"`
@@ -49,10 +51,6 @@ type SessionCardRecord struct {
 	TextResponses  int `json:"text_responses"`
 	ToolCalls      int `json:"tool_calls"`
 	ThinkingBlocks int `json:"thinking_blocks"`
-
-	// Actual conversational turns (not raw message counts)
-	UserTurns      int `json:"user_turns"`
-	AssistantTurns int `json:"assistant_turns"`
 
 	// Session metadata
 	DurationMs *int64   `json:"duration_ms,omitempty"`
@@ -89,12 +87,26 @@ type CodeActivityCardRecord struct {
 	LanguageBreakdown map[string]int `json:"language_breakdown"` // extension -> count
 }
 
+// ConversationCardRecord is the DB record for the conversation card.
+// It tracks turn counts and timing metrics for conversational turns.
+type ConversationCardRecord struct {
+	SessionID          string    `json:"session_id"`
+	Version            int       `json:"version"`
+	ComputedAt         time.Time `json:"computed_at"`
+	UpToLine           int64     `json:"up_to_line"`
+	UserTurns          int       `json:"user_turns"`                      // Count of human prompts
+	AssistantTurns     int       `json:"assistant_turns"`                 // Count of text responses
+	AvgAssistantTurnMs *int64    `json:"avg_assistant_turn_ms,omitempty"` // Average assistant turn duration
+	AvgUserThinkingMs  *int64    `json:"avg_user_thinking_ms,omitempty"`  // Average user thinking time
+}
+
 // Cards aggregates all card data for a session.
 type Cards struct {
 	Tokens       *TokensCardRecord
 	Session      *SessionCardRecord
 	Tools        *ToolsCardRecord
 	CodeActivity *CodeActivityCardRecord
+	Conversation *ConversationCardRecord
 }
 
 // =============================================================================
@@ -111,6 +123,7 @@ type TokensCardData struct {
 }
 
 // SessionCardData is the API response format for the session card (includes compaction and message breakdown).
+// Note: Turn counts are in the Conversation card.
 type SessionCardData struct {
 	// Message counts (raw line counts)
 	TotalMessages     int `json:"total_messages"`
@@ -123,10 +136,6 @@ type SessionCardData struct {
 	TextResponses  int `json:"text_responses"`
 	ToolCalls      int `json:"tool_calls"`
 	ThinkingBlocks int `json:"thinking_blocks"`
-
-	// Actual conversational turns (not raw message counts)
-	UserTurns      int `json:"user_turns"`
-	AssistantTurns int `json:"assistant_turns"`
 
 	// Session metadata
 	DurationMs *int64   `json:"duration_ms,omitempty"`
@@ -155,6 +164,14 @@ type CodeActivityCardData struct {
 	LanguageBreakdown map[string]int `json:"language_breakdown"`
 }
 
+// ConversationCardData is the API response format for the conversation card.
+type ConversationCardData struct {
+	UserTurns          int    `json:"user_turns"`
+	AssistantTurns     int    `json:"assistant_turns"`
+	AvgAssistantTurnMs *int64 `json:"avg_assistant_turn_ms,omitempty"`
+	AvgUserThinkingMs  *int64 `json:"avg_user_thinking_ms,omitempty"`
+}
+
 // =============================================================================
 // Validation helpers
 // =============================================================================
@@ -179,6 +196,11 @@ func (c *CodeActivityCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == CodeActivityCardVersion && c.UpToLine == currentLineCount
 }
 
+// IsValid checks if a conversation card record is valid for the current line count.
+func (c *ConversationCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == ConversationCardVersion && c.UpToLine == currentLineCount
+}
+
 // AllValid checks if all cards are valid for the current line count.
 func (c *Cards) AllValid(currentLineCount int64) bool {
 	if c == nil {
@@ -187,5 +209,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 	return c.Tokens.IsValid(currentLineCount) &&
 		c.Session.IsValid(currentLineCount) &&
 		c.Tools.IsValid(currentLineCount) &&
-		c.CodeActivity.IsValid(currentLineCount)
+		c.CodeActivity.IsValid(currentLineCount) &&
+		c.Conversation.IsValid(currentLineCount)
 }

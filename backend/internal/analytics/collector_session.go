@@ -3,7 +3,8 @@ package analytics
 import "time"
 
 // SessionCollector extracts session-level metrics from transcript lines.
-// This includes message counts, turn counts, duration, models used, and compaction statistics.
+// This includes message counts, duration, models used, and compaction statistics.
+// Note: Turn counts are in the ConversationCollector.
 //
 // Message breakdown semantics:
 //   - HumanPrompts: user messages with string content (actual human input)
@@ -24,13 +25,9 @@ type SessionCollector struct {
 	// Message type breakdown (see struct doc for semantics)
 	HumanPrompts   int // User messages with string content (actual human input)
 	ToolResults    int // User messages with tool_result arrays
-	TextResponses  int // Assistant messages containing text (counts as a turn)
+	TextResponses  int // Assistant messages containing text (visible to user)
 	ToolCalls      int // Assistant messages with ONLY tool_use (no text, no thinking)
 	ThinkingBlocks int // Assistant messages with ONLY thinking (no text, no tool_use)
-
-	// Actual conversational turns (not raw message counts)
-	UserTurns      int // Same as HumanPrompts
-	AssistantTurns int // Same as TextResponses
 
 	// Models tracking
 	ModelsUsed map[string]bool
@@ -64,7 +61,6 @@ func (c *SessionCollector) Collect(line *TranscriptLine, ctx *CollectContext) {
 
 		if line.IsHumanMessage() {
 			c.HumanPrompts++
-			c.UserTurns++ // Actual conversational turn
 		} else if line.IsToolResultMessage() {
 			c.ToolResults++
 		}
@@ -86,7 +82,6 @@ func (c *SessionCollector) Collect(line *TranscriptLine, ctx *CollectContext) {
 
 		if hasText {
 			c.TextResponses++
-			c.AssistantTurns++ // Actual conversational turn
 		} else if hasToolUse && !hasThinking {
 			c.ToolCalls++
 		} else if hasThinking && !hasToolUse {

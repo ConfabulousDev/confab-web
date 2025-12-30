@@ -25,8 +25,6 @@ func TestCardsAllValid(t *testing.T) {
 				Version:             SessionCardVersion,
 				ComputedAt:          now,
 				UpToLine:            upToLine,
-				UserTurns:           5,
-				AssistantTurns:      5,
 				ModelsUsed:          []string{"claude-sonnet-4"},
 				CompactionAuto:      2,
 				CompactionManual:    1,
@@ -57,6 +55,16 @@ func TestCardsAllValid(t *testing.T) {
 				SearchCount:       10,
 				LanguageBreakdown: map[string]int{"go": 5, "ts": 3},
 			},
+			Conversation: &ConversationCardRecord{
+				SessionID:          "test-session",
+				Version:            ConversationCardVersion,
+				ComputedAt:         now,
+				UpToLine:           upToLine,
+				UserTurns:          5,
+				AssistantTurns:     5,
+				AvgAssistantTurnMs: nil,
+				AvgUserThinkingMs:  nil,
+			},
 		}
 	}
 
@@ -68,6 +76,7 @@ func TestCardsAllValid(t *testing.T) {
 		cards.Session.Version = version
 		cards.Tools.Version = version
 		cards.CodeActivity.Version = version
+		cards.Conversation.Version = version
 		return cards
 	}
 
@@ -107,6 +116,14 @@ func TestCardsAllValid(t *testing.T) {
 		cards.CodeActivity = nil
 		if cards.AllValid(100) {
 			t.Error("expected false when code activity card is nil")
+		}
+	})
+
+	t.Run("returns false when conversation card is nil", func(t *testing.T) {
+		cards := makeCards(100)
+		cards.Conversation = nil
+		if cards.AllValid(100) {
+			t.Error("expected false when conversation card is nil")
 		}
 	})
 

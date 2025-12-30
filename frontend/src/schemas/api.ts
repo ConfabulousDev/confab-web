@@ -173,6 +173,7 @@ export const TokensCardDataSchema = z.object({
 // Session card includes compaction info (consolidated from previous separate compaction card)
 // Note: Messages with text+tool_use count as text_responses, not tool_calls.
 // Therefore assistant_messages may not equal text_responses + tool_calls + thinking_blocks.
+// Note: Turn counts are in the Conversation card.
 export const SessionCardDataSchema = z.object({
   // Message counts (raw line counts)
   total_messages: z.number(),
@@ -185,10 +186,6 @@ export const SessionCardDataSchema = z.object({
   text_responses: z.number(), // Assistant messages containing text (counts as turn)
   tool_calls: z.number(), // Assistant messages with ONLY tool_use (no text)
   thinking_blocks: z.number(), // Assistant messages with ONLY thinking (no text)
-
-  // Actual conversational turns
-  user_turns: z.number(), // Same as human_prompts
-  assistant_turns: z.number(), // Same as text_responses
 
   // Session metadata
   duration_ms: z.number().nullable().optional(),
@@ -220,6 +217,14 @@ export const CodeActivityCardDataSchema = z.object({
   language_breakdown: z.record(z.string(), z.number()),
 });
 
+// Conversation card: tracks timing metrics for conversational turns
+export const ConversationCardDataSchema = z.object({
+  user_turns: z.number(),
+  assistant_turns: z.number(),
+  avg_assistant_turn_ms: z.number().nullable().optional(),
+  avg_user_thinking_ms: z.number().nullable().optional(),
+});
+
 // Cards map schema - extensible for future cards
 // All fields optional to handle empty analytics (session with no transcript)
 // Note: cost is now part of tokens card, compaction is now part of session card
@@ -228,6 +233,7 @@ export const AnalyticsCardsSchema = z.object({
   session: SessionCardDataSchema.optional(),
   tools: ToolsCardDataSchema.optional(),
   code_activity: CodeActivityCardDataSchema.optional(),
+  conversation: ConversationCardDataSchema.optional(),
 });
 
 export const SessionAnalyticsSchema = z.object({
@@ -274,6 +280,7 @@ export type SessionCardData = z.infer<typeof SessionCardDataSchema>;
 export type ToolStats = z.infer<typeof ToolStatsSchema>;
 export type ToolsCardData = z.infer<typeof ToolsCardDataSchema>;
 export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
+export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 

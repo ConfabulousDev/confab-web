@@ -686,8 +686,6 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "avg_time_ms": 5000
     },
     "session": {
-      "user_turns": 15,
-      "assistant_turns": 14,
       "duration_ms": 3600000,
       "models_used": ["claude-sonnet-4-20241022", "claude-opus-4"]
     },
@@ -703,6 +701,12 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "lines_removed": 23,
       "search_count": 18,
       "language_breakdown": {"go": 28, "ts": 18, "css": 5}
+    },
+    "conversation": {
+      "user_turns": 15,
+      "assistant_turns": 14,
+      "avg_assistant_turn_ms": 45000,
+      "avg_user_thinking_ms": 120000
     }
   }
 }
@@ -724,13 +728,21 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.compaction.auto` | int | Auto-triggered compaction count |
 | `cards.compaction.manual` | int | Manual compaction count |
 | `cards.compaction.avg_time_ms` | int\|null | Avg auto-compaction time in ms (null if none) |
-| `cards.session.user_turns` | int | Number of user messages |
-| `cards.session.assistant_turns` | int | Number of assistant messages |
 | `cards.session.duration_ms` | int\|null | Session duration in ms (null if single message) |
 | `cards.session.models_used` | string[] | Unique model IDs used in the session |
 | `cards.tools.total_calls` | int | Total number of tool invocations |
 | `cards.tools.tool_breakdown` | object | Map of tool name to call count |
 | `cards.tools.error_count` | int | Number of tool calls that returned errors |
+| `cards.code_activity.files_read` | int | Number of unique files read |
+| `cards.code_activity.files_modified` | int | Number of unique files modified |
+| `cards.code_activity.lines_added` | int | Total lines added across all edits |
+| `cards.code_activity.lines_removed` | int | Total lines removed across all edits |
+| `cards.code_activity.search_count` | int | Number of search operations (Grep/Glob) |
+| `cards.code_activity.language_breakdown` | object | Map of file extension to count |
+| `cards.conversation.user_turns` | int | Number of user prompts (human messages) |
+| `cards.conversation.assistant_turns` | int | Number of assistant text responses |
+| `cards.conversation.avg_assistant_turn_ms` | int\|null | Average time per assistant turn including tool calls (null if no data) |
+| `cards.conversation.avg_user_thinking_ms` | int\|null | Average time between assistant response and next user prompt (null if no data) |
 
 **Notes:**
 - Analytics are cached in the database and recomputed when new data is synced
