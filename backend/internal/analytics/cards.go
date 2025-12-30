@@ -11,7 +11,7 @@ const (
 	TokensCardVersion       = 2 // v2: added estimated_cost_usd (merged from cost card)
 	SessionCardVersion      = 3 // v3: added message breakdown and fixed turn counting
 	ToolsCardVersion        = 2 // v2: per-tool success/error breakdown
-	CodeActivityCardVersion = 1 // v1: initial version
+	CodeActivityCardVersion = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
 )
 
 // =============================================================================
