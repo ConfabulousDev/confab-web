@@ -5,7 +5,25 @@
 
 set -e
 
+# Create deploy breadcrumb log
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_LOG_DIR="${SCRIPT_DIR}/deploy-logs"
+mkdir -p "$DEPLOY_LOG_DIR"
+TIMESTAMP=$(date -u +"%Y%m%d-%H%M%S")
+COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DIRTY_SUFFIX=""
+if ! git diff --quiet HEAD 2>/dev/null || git status --porcelain 2>/dev/null | grep -q .; then
+    DIRTY_SUFFIX="-dirty"
+fi
+DEPLOY_LOG_FILE="${DEPLOY_LOG_DIR}/${TIMESTAMP}-${COMMIT_HASH}${DIRTY_SUFFIX}.log"
+
+# Start logging
+exec > >(tee -a "$DEPLOY_LOG_FILE") 2>&1
+
 echo "=== Confab Fly.io Deployment ==="
+echo "Log file: $DEPLOY_LOG_FILE"
+echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "Commit: $COMMIT_HASH ($(git log -1 --format='%s' 2>/dev/null || echo 'unknown'))"
 echo ""
 
 # Check for required tools

@@ -38,3 +38,6 @@ fly-secrets.sh
 .env
 .env.local
 .env.production
+
+# Deploy logs
+deploy-logs/
