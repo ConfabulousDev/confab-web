@@ -49,12 +49,22 @@ type CompactMetadata struct {
 
 // ContentBlock represents a content block in assistant messages.
 type ContentBlock struct {
-	Type      string                 `json:"type"`                   // "text", "tool_use", "thinking", etc.
-	Name      string                 `json:"name,omitempty"`         // Tool name (for tool_use)
-	ID        string                 `json:"id,omitempty"`           // Tool use ID (for tool_use)
-	Input     map[string]interface{} `json:"input,omitempty"`        // Tool input parameters (for tool_use)
-	ToolUseID string                 `json:"tool_use_id,omitempty"`  // Reference to tool_use ID (for tool_result)
-	IsError   bool                   `json:"is_error,omitempty"`     // For tool_result blocks
+	Type          string                 `json:"type"`                   // "text", "tool_use", "thinking", etc.
+	Name          string                 `json:"name,omitempty"`         // Tool name (for tool_use)
+	ID            string                 `json:"id,omitempty"`           // Tool use ID (for tool_use)
+	Input         map[string]interface{} `json:"input,omitempty"`        // Tool input parameters (for tool_use)
+	ToolUseID     string                 `json:"tool_use_id,omitempty"`  // Reference to tool_use ID (for tool_result)
+	IsError       bool                   `json:"is_error,omitempty"`     // For tool_result blocks
+	ToolUseResult *ToolUseResult         `json:"toolUseResult,omitempty"` // For tool_result blocks (agent results)
+}
+
+// ToolUseResult contains metadata from subagent/Task tool executions.
+// This is embedded in tool_result content blocks when the tool was a Task/agent.
+type ToolUseResult struct {
+	AgentID           string      `json:"agentId,omitempty"`           // Subagent identifier (present for agent results)
+	Usage             *TokenUsage `json:"usage,omitempty"`             // Cumulative token usage for the agent
+	TotalTokens       int64       `json:"totalTokens,omitempty"`       // Total tokens used by the agent
+	TotalToolUseCount int         `json:"totalToolUseCount,omitempty"` // Number of tool calls made by the agent
 }
 
 // ParseLine parses a single JSONL line for analytics purposes.
@@ -148,6 +158,10 @@ func (l *TranscriptLine) GetContentBlocks() []ContentBlock {
 		if isErr, ok := blockMap["is_error"].(bool); ok {
 			block.IsError = isErr
 		}
+		// Parse toolUseResult for tool_result blocks (contains agent usage data)
+		if tur, ok := blockMap["toolUseResult"].(map[string]interface{}); ok {
+			block.ToolUseResult = parseToolUseResult(tur)
+		}
 		blocks = append(blocks, block)
 	}
 
@@ -230,4 +244,71 @@ func (l *TranscriptLine) HasToolUse() bool {
 		}
 	}
 	return false
+}
+
+// GetAgentUsage returns token usage from subagent/Task tool results.
+// This extracts usage data from toolUseResult blocks that have agentId.
+// Returns nil if no agent usage is found.
+func (l *TranscriptLine) GetAgentUsage() []*TokenUsage {
+	var usages []*TokenUsage
+	for _, result := range l.GetAgentResults() {
+		if result.Usage != nil {
+			usages = append(usages, result.Usage)
+		}
+	}
+	return usages
+}
+
+// GetAgentResults returns all ToolUseResult from subagent/Task tool results.
+// This extracts full agent result metadata including tool counts.
+// Returns nil if no agent results are found.
+func (l *TranscriptLine) GetAgentResults() []*ToolUseResult {
+	if !l.IsToolResultMessage() {
+		return nil
+	}
+
+	var results []*ToolUseResult
+	for _, block := range l.GetContentBlocks() {
+		if block.Type == "tool_result" && block.ToolUseResult != nil {
+			// Only include results that have agentId (subagent results)
+			if block.ToolUseResult.AgentID != "" {
+				results = append(results, block.ToolUseResult)
+			}
+		}
+	}
+	return results
+}
+
+// parseToolUseResult extracts ToolUseResult from a map.
+func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
+	result := &ToolUseResult{}
+
+	if agentID, ok := m["agentId"].(string); ok {
+		result.AgentID = agentID
+	}
+	if totalTokens, ok := m["totalTokens"].(float64); ok {
+		result.TotalTokens = int64(totalTokens)
+	}
+	if totalToolUseCount, ok := m["totalToolUseCount"].(float64); ok {
+		result.TotalToolUseCount = int(totalToolUseCount)
+	}
+
+	// Parse usage sub-object
+	if usageMap, ok := m["usage"].(map[string]interface{}); ok {
+		result.Usage = &TokenUsage{}
+		if v, ok := usageMap["input_tokens"].(float64); ok {
+			result.Usage.InputTokens = int64(v)
+		}
+		if v, ok := usageMap["output_tokens"].(float64); ok {
+			result.Usage.OutputTokens = int64(v)
+		}
+		if v, ok := usageMap["cache_creation_input_tokens"].(float64); ok {
+			result.Usage.CacheCreationInputTokens = int64(v)
+		}
+		if v, ok := usageMap["cache_read_input_tokens"].(float64); ok {
+			result.Usage.CacheReadInputTokens = int64(v)
+		}
+	}
+
+	return result
 }

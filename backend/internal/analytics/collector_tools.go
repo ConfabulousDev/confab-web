@@ -60,6 +60,12 @@ func (c *ToolsCollector) Collect(line *TranscriptLine, ctx *CollectContext) {
 			}
 		}
 	}
+
+	// Count tool calls from subagent/Task results
+	// We only have the total count, not per-tool breakdown, so add to TotalCalls only
+	for _, result := range line.GetAgentResults() {
+		c.TotalCalls += result.TotalToolUseCount
+	}
 }
 
 // Finalize is called after all lines are processed.

@@ -242,6 +242,84 @@ func TestSessionCollector_MessageBreakdown(t *testing.T) {
 	}
 }
 
+func TestTokensCollector_AgentUsage(t *testing.T) {
+	tokens := NewTokensCollector()
+
+	// JSONL with assistant message and a tool_result containing agent usage
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{"prompt":"Do something"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":[{"type":"text","text":"Agent completed"}],"toolUseResult":{"status":"completed","agentId":"abc123","totalTokens":1000,"usage":{"input_tokens":50,"output_tokens":200,"cache_creation_input_tokens":100,"cache_read_input_tokens":500}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), tokens)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	// Main transcript: 100 input + 50 output
+	// Agent: 50 input + 200 output + 100 cache_create + 500 cache_read
+	if tokens.InputTokens != 150 {
+		t.Errorf("InputTokens = %d, want 150 (100 main + 50 agent)", tokens.InputTokens)
+	}
+	if tokens.OutputTokens != 250 {
+		t.Errorf("OutputTokens = %d, want 250 (50 main + 200 agent)", tokens.OutputTokens)
+	}
+	if tokens.CacheCreationTokens != 100 {
+		t.Errorf("CacheCreationTokens = %d, want 100", tokens.CacheCreationTokens)
+	}
+	if tokens.CacheReadTokens != 500 {
+		t.Errorf("CacheReadTokens = %d, want 500", tokens.CacheReadTokens)
+	}
+}
+
+func TestTokensCollector_NonAgentToolResult(t *testing.T) {
+	tokens := NewTokensCollector()
+
+	// JSONL with a regular tool_result (no agentId) - should NOT count extra tokens
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/test.txt"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), tokens)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	// Only main transcript tokens should be counted
+	if tokens.InputTokens != 100 {
+		t.Errorf("InputTokens = %d, want 100", tokens.InputTokens)
+	}
+	if tokens.OutputTokens != 50 {
+		t.Errorf("OutputTokens = %d, want 50", tokens.OutputTokens)
+	}
+}
+
+func TestToolsCollector_AgentToolCalls(t *testing.T) {
+	tools := NewToolsCollector()
+
+	// JSONL with a main tool call (Read) and a Task tool that spawned an agent with 25 tool calls
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/test.txt"}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{"prompt":"Do something"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"},{"type":"tool_result","tool_use_id":"toolu_2","content":[{"type":"text","text":"Done"}],"toolUseResult":{"status":"completed","agentId":"abc123","totalToolUseCount":25,"usage":{"input_tokens":500,"output_tokens":1000}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	_, err := RunCollectors([]byte(jsonl), tools)
+	if err != nil {
+		t.Fatalf("RunCollectors failed: %v", err)
+	}
+
+	// TotalCalls should be 2 (main) + 25 (agent) = 27
+	if tools.TotalCalls != 27 {
+		t.Errorf("TotalCalls = %d, want 27 (2 main + 25 agent)", tools.TotalCalls)
+	}
+
+	// Per-tool breakdown only includes main transcript tools
+	if tools.ToolStats["Read"] == nil || tools.ToolStats["Read"].Success != 1 {
+		t.Errorf("Read tool should have 1 success call")
+	}
+	if tools.ToolStats["Task"] == nil || tools.ToolStats["Task"].Success != 1 {
+		t.Errorf("Task tool should have 1 success call")
+	}
+}
+
 func TestToolsCollector(t *testing.T) {
 	tools := NewToolsCollector()
 
