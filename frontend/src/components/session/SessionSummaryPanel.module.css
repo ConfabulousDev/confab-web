@@ -151,10 +151,17 @@
   gap: var(--spacing-md);
 }
 
-/* Cap at 5 columns on very wide screens */
-@media (min-width: 1200px) {
+/* Cap at 5 columns on ultrawide screens */
+@media (min-width: 1400px) {
   .grid {
     grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* 4 columns on large screens */
+@media (min-width: 1100px) and (max-width: 1399px) {
+  .grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -168,7 +175,7 @@
 }
 
 /* Responsive grid: 3 columns on medium-large screens */
-@media (min-width: 801px) and (max-width: 1199px) {
+@media (min-width: 801px) and (max-width: 1099px) {
   .grid {
     grid-template-columns: repeat(3, 1fr);
   }

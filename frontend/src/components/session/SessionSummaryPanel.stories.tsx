@@ -480,10 +480,9 @@ export const ViewOnlyNoGitHub: Story = {
 };
 
 /**
- * All cards in a wide container (5-column layout).
- * Tests the dense grid packing with cards of varying heights.
+ * All cards in a 5-column layout (ultrawide ≥1400px).
  */
-export const AllCardsWide: Story = {
+export const AllCards5Column: Story = {
   args: {
     sessionId: 'test-session-id',
     isOwner: true,
@@ -492,7 +491,7 @@ export const AllCardsWide: Story = {
   },
   decorators: [
     (Story) => (
-      <div style={{ maxWidth: '1400px', height: '800px', background: 'var(--color-bg)' }}>
+      <div style={{ maxWidth: '1600px', height: '800px', background: 'var(--color-bg)' }}>
         <Story />
       </div>
     ),
@@ -500,10 +499,9 @@ export const AllCardsWide: Story = {
 };
 
 /**
- * All cards in an extra-wide container (5-column layout, ultrawide).
- * Tests maximum column layout on very wide screens.
+ * All cards in a 4-column layout (1100-1399px).
  */
-export const AllCardsUltrawide: Story = {
+export const AllCards4Column: Story = {
   args: {
     sessionId: 'test-session-id',
     isOwner: true,
@@ -512,7 +510,7 @@ export const AllCardsUltrawide: Story = {
   },
   decorators: [
     (Story) => (
-      <div style={{ maxWidth: '1800px', height: '800px', background: 'var(--color-bg)' }}>
+      <div style={{ maxWidth: '1200px', height: '800px', background: 'var(--color-bg)' }}>
         <Story />
       </div>
     ),
@@ -520,8 +518,7 @@ export const AllCardsUltrawide: Story = {
 };
 
 /**
- * All cards in a 3-column container.
- * Tests responsive breakpoint between 801-1199px.
+ * All cards in a 3-column layout (801-1099px).
  */
 export const AllCards3Column: Story = {
   args: {
@@ -532,7 +529,7 @@ export const AllCards3Column: Story = {
   },
   decorators: [
     (Story) => (
-      <div style={{ maxWidth: '1000px', height: '800px', background: 'var(--color-bg)' }}>
+      <div style={{ maxWidth: '950px', height: '800px', background: 'var(--color-bg)' }}>
         <Story />
       </div>
     ),
