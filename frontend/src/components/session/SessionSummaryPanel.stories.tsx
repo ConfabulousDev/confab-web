@@ -23,6 +23,19 @@ function createAnalytics(base: {
     duration_ms: number | null;
     models_used: string[];
   };
+  tools?: {
+    total_calls: number;
+    tool_stats: Record<string, { success: number; errors: number }>;
+    error_count: number;
+  };
+  code_activity?: {
+    files_read: number;
+    files_modified: number;
+    lines_added: number;
+    lines_removed: number;
+    search_count: number;
+    language_breakdown: Record<string, number>;
+  };
 }): SessionAnalytics {
   const userTurns = base.session?.user_turns ?? 10;
   const assistantTurns = base.session?.assistant_turns ?? 10;
@@ -59,6 +72,8 @@ function createAnalytics(base: {
         compaction_manual: base.compaction.manual,
         compaction_avg_time_ms: base.compaction.avg_time_ms,
       },
+      tools: base.tools,
+      code_activity: base.code_activity,
     },
   };
 }
@@ -80,6 +95,29 @@ const mockAnalytics = createAnalytics({
     auto: 2,
     manual: 1,
     avg_time_ms: 48500, // 48.5 seconds
+  },
+  tools: {
+    total_calls: 47,
+    tool_stats: {
+      Read: { success: 18, errors: 0 },
+      Edit: { success: 12, errors: 1 },
+      Bash: { success: 8, errors: 2 },
+      Grep: { success: 5, errors: 0 },
+      Glob: { success: 3, errors: 0 },
+    },
+    error_count: 3,
+  },
+  code_activity: {
+    files_read: 24,
+    files_modified: 8,
+    lines_added: 156,
+    lines_removed: 42,
+    search_count: 12,
+    language_breakdown: {
+      TypeScript: 180,
+      CSS: 45,
+      JSON: 12,
+    },
   },
 });
 
@@ -158,6 +196,35 @@ const largeAnalytics = createAnalytics({
     assistant_turns: 50,
     duration_ms: 14400000,
     models_used: ['claude-sonnet-4-20250514', 'claude-opus-4-5-20251101'],
+  },
+  tools: {
+    total_calls: 312,
+    tool_stats: {
+      Read: { success: 89, errors: 2 },
+      Edit: { success: 67, errors: 5 },
+      Write: { success: 23, errors: 1 },
+      Bash: { success: 45, errors: 8 },
+      Grep: { success: 38, errors: 0 },
+      Glob: { success: 28, errors: 0 },
+      Task: { success: 12, errors: 0 },
+      WebFetch: { success: 7, errors: 3 },
+    },
+    error_count: 19,
+  },
+  code_activity: {
+    files_read: 156,
+    files_modified: 42,
+    lines_added: 2847,
+    lines_removed: 892,
+    search_count: 78,
+    language_breakdown: {
+      TypeScript: 1850,
+      Go: 720,
+      CSS: 340,
+      JSON: 180,
+      Markdown: 120,
+      YAML: 45,
+    },
   },
 });
 
@@ -410,4 +477,64 @@ export const ViewOnlyNoGitHub: Story = {
     initialAnalytics: mockAnalytics,
     initialGithubLinks: [],
   },
+};
+
+/**
+ * All cards in a wide container to showcase grid layout.
+ * Tests the dense grid packing with cards of varying heights.
+ */
+export const AllCardsWide: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: true,
+    initialAnalytics: largeAnalytics,
+    initialGithubLinks: [...mockGitHubLinks, ...mockCommitLinks],
+  },
+  decorators: [
+    (Story) => (
+      <div style={{ maxWidth: '1200px', height: '800px', background: 'var(--color-bg)' }}>
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+/**
+ * All cards in a medium container (2-column layout).
+ * Tests responsive breakpoint at 800px.
+ */
+export const AllCardsMedium: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: true,
+    initialAnalytics: largeAnalytics,
+    initialGithubLinks: [...mockGitHubLinks, ...mockCommitLinks],
+  },
+  decorators: [
+    (Story) => (
+      <div style={{ maxWidth: '700px', height: '800px', background: 'var(--color-bg)' }}>
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+/**
+ * All cards in a narrow container (single-column layout).
+ * Tests responsive breakpoint at 500px.
+ */
+export const AllCardsNarrow: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: true,
+    initialAnalytics: largeAnalytics,
+    initialGithubLinks: [...mockGitHubLinks, ...mockCommitLinks],
+  },
+  decorators: [
+    (Story) => (
+      <div style={{ maxWidth: '400px', height: '1000px', background: 'var(--color-bg)' }}>
+        <Story />
+      </div>
+    ),
+  ],
 };

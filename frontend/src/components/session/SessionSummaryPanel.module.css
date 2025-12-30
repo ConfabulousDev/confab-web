@@ -145,7 +145,9 @@
 /* Stats Grid */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: min-content;
+  grid-auto-flow: dense;
   gap: var(--spacing-md);
 }
 
@@ -158,8 +160,21 @@
   grid-column: span 3;
 }
 
-/* On narrow screens, reset spans to prevent overflow */
+/* Responsive grid: 2 columns on medium screens */
+@media (max-width: 800px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .span3 {
+    grid-column: span 2;
+  }
+}
+
+/* On narrow screens, single column */
 @media (max-width: 500px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
   .span2,
   .span3 {
     grid-column: span 1;
