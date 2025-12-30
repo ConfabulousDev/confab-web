@@ -11,7 +11,6 @@ export { useToggleSet } from './useToggleSet';
 export { useLoadSession } from './useLoadSession';
 export { useSessionFilters } from './useSessionFilters';
 export { useKeyboardShortcut } from './useKeyboardShortcut';
-export { useSpinner } from './useSpinner';
 export { useDropdown } from './useDropdown';
 export { useRelativeTime } from './useRelativeTime';
 export { useVisibility } from './useVisibility';

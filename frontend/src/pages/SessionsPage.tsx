@@ -5,7 +5,6 @@ import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { formatDuration, sortData } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import { RelativeTime } from '@/components/RelativeTime';
-import SessionListStatsSidebar from '@/components/SessionListStatsSidebar';
 import SessionsFilterDropdown from '@/components/SessionsFilterDropdown';
 import SortableHeader from '@/components/SortableHeader';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
@@ -208,8 +207,6 @@ function SessionsPage() {
 
   return (
     <div className={styles.pageWrapper}>
-      <SessionListStatsSidebar sessions={sortedSessions} loading={loading} />
-
       <div className={styles.mainContent}>
         <PageHeader
           leftContent={
