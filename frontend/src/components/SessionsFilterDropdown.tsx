@@ -7,24 +7,22 @@ interface SessionsFilterDropdownProps {
   branches: string[];
   hostnames: string[];
   prs: string[];
-  commits: string[];
   selectedRepo: string | null;
   selectedBranch: string | null;
   selectedHostname: string | null;
   selectedPR: string | null;
-  selectedCommit: string | null;
+  commitSearch: string;
   repoCounts: Record<string, number>;
   branchCounts: Record<string, number>;
   hostnameCounts: Record<string, number>;
   prCounts: Record<string, number>;
-  commitCounts: Record<string, number>;
   totalCount: number;
   searchQuery: string;
   onRepoClick: (repo: string | null) => void;
   onBranchClick: (branch: string | null) => void;
   onHostnameClick: (hostname: string | null) => void;
   onPRClick: (pr: string | null) => void;
-  onCommitClick: (commit: string | null) => void;
+  onCommitSearchChange: (commit: string) => void;
   onSearchChange: (query: string) => void;
 }
 
@@ -33,30 +31,28 @@ function SessionsFilterDropdown({
   branches,
   hostnames,
   prs,
-  commits,
   selectedRepo,
   selectedBranch,
   selectedHostname,
   selectedPR,
-  selectedCommit,
+  commitSearch,
   repoCounts,
   branchCounts,
   hostnameCounts,
   prCounts,
-  commitCounts,
   totalCount,
   searchQuery,
   onRepoClick,
   onBranchClick,
   onHostnameClick,
   onPRClick,
-  onCommitClick,
+  onCommitSearchChange,
   onSearchChange,
 }: SessionsFilterDropdownProps) {
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
   // Check if any filters are active
-  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null || selectedHostname !== null || selectedPR !== null || selectedCommit !== null || searchQuery !== '';
+  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null || selectedHostname !== null || selectedPR !== null || commitSearch !== '' || searchQuery !== '';
 
   // Get visible branches (only show branches with sessions when a repo is selected)
   const visibleBranches = selectedRepo
@@ -66,11 +62,6 @@ function SessionsFilterDropdown({
   // Get visible PRs (only show when a repo is selected and PRs have matching sessions)
   const visiblePRs = selectedRepo
     ? prs.filter((pr) => (prCounts[pr] ?? 0) > 0)
-    : [];
-
-  // Get visible commits (only show when a repo is selected and commits have matching sessions)
-  const visibleCommits = selectedRepo
-    ? commits.filter((commit) => (commitCounts[commit] ?? 0) > 0)
     : [];
 
   return (
@@ -104,15 +95,15 @@ function SessionsFilterDropdown({
 
             {/* All Sessions option */}
             <button
-              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname && !selectedPR && !selectedCommit ? styles.selected : ''}`}
+              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname && !selectedPR && !commitSearch ? styles.selected : ''}`}
               onClick={() => {
                 onRepoClick(null);
                 onHostnameClick(null);
                 onPRClick(null);
-                onCommitClick(null);
+                onCommitSearchChange('');
               }}
             >
-              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname && !selectedPR && !selectedCommit ? styles.checked : ''}`}>
+              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname && !selectedPR && !commitSearch ? styles.checked : ''}`}>
                 {CheckIcon}
               </span>
               <span className={styles.filterLabel}>All Sessions</span>
@@ -185,25 +176,22 @@ function SessionsFilterDropdown({
               </>
             )}
 
-            {/* Commits section - only show when a repo is selected */}
-            {visibleCommits.length > 0 && (
+            {/* Commit search - only show when a repo is selected */}
+            {selectedRepo && (
               <>
                 <div className={styles.sectionDivider} />
-                <div className={styles.sectionLabel}>Commits</div>
-                {visibleCommits.map((commit) => (
-                  <button
-                    key={commit}
-                    className={`${styles.filterItem} ${selectedCommit === commit ? styles.selected : ''}`}
-                    onClick={() => onCommitClick(selectedCommit === commit ? null : commit)}
-                  >
-                    <span className={`${styles.checkbox} ${selectedCommit === commit ? styles.checked : ''}`}>
-                      {CheckIcon}
-                    </span>
-                    <span className={styles.iconWrapper}>{CommitIcon}</span>
-                    <span className={styles.filterLabel}>{commit.slice(0, 7)}</span>
-                    <span className={styles.filterCount}>{commitCounts[commit] || 0}</span>
-                  </button>
-                ))}
+                <div className={styles.sectionLabel}>Commit</div>
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>{CommitIcon}</span>
+                  <input
+                    type="text"
+                    className={styles.searchInput}
+                    placeholder="Filter by commit SHA..."
+                    value={commitSearch}
+                    onChange={(e) => onCommitSearchChange(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
               </>
             )}
 

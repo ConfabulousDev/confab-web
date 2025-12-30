@@ -52,20 +52,18 @@ function SessionsPage() {
   const { sessions, loading, error } = useSessionsPolling(showSharedWithMe ? 'shared' : 'owned');
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
-  // Get unique repos, branches, hostnames, PRs, and commits for filtering
-  const { repos, branches, hostnames, prs, commits } = useMemo(() => {
+  // Get unique repos, branches, hostnames, and PRs for filtering
+  const { repos, branches, hostnames, prs } = useMemo(() => {
     const repoSet = new Set<string>();
     const branchSet = new Set<string>();
     const hostnameSet = new Set<string>();
     const prSet = new Set<string>();
-    const commitSet = new Set<string>();
 
     sessions.forEach((s) => {
       if (s.git_repo) repoSet.add(s.git_repo);
       if (s.git_branch) branchSet.add(s.git_branch);
       if (s.hostname) hostnameSet.add(s.hostname);
       s.github_prs?.forEach((pr) => prSet.add(pr));
-      s.github_commits?.forEach((commit) => commitSet.add(commit));
     });
 
     return {
@@ -81,8 +79,6 @@ function SessionsPage() {
         if (Number.isNaN(numB)) return -1;
         return numB - numA;
       }),
-      // Sort commits by most recent first (based on session last_sync_time)
-      commits: Array.from(commitSet),
     };
   }, [sessions]);
 
@@ -108,8 +104,12 @@ function SessionsPage() {
         if (selectedHostname && s.hostname !== selectedHostname) return false;
         // Filter by selected PR
         if (selectedPR && !s.github_prs?.includes(selectedPR)) return false;
-        // Filter by selected commit
-        if (selectedCommit && !s.github_commits?.includes(selectedCommit)) return false;
+        // Filter by commit search (prefix match)
+        if (selectedCommit) {
+          const commitLower = selectedCommit.toLowerCase();
+          const hasMatch = s.github_commits?.some((c) => c.toLowerCase().startsWith(commitLower));
+          if (!hasMatch) return false;
+        }
         // Filter by search query (match against title fields)
         if (lowerQuery) {
           const title = (s.custom_title || s.summary || s.first_user_message || '').toLowerCase();
@@ -181,21 +181,6 @@ function SessionsPage() {
     return counts;
   }, [sessions, passesBaseFilters, selectedRepo]);
 
-  const commitCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      if (passesBaseFilters(s)) {
-        // Only count commits for sessions in the selected repo (if one is selected)
-        if (!selectedRepo || s.git_repo === selectedRepo) {
-          s.github_commits?.forEach((commit) => {
-            counts[commit] = (counts[commit] || 0) + 1;
-          });
-        }
-      }
-    });
-    return counts;
-  }, [sessions, passesBaseFilters, selectedRepo]);
-
   const totalCount = useMemo(() => {
     return sessions.filter(passesBaseFilters).length;
   }, [sessions, passesBaseFilters]);
@@ -237,24 +222,22 @@ function SessionsPage() {
               branches={branches}
               hostnames={showSharedWithMe ? [] : hostnames}
               prs={prs}
-              commits={commits}
               selectedRepo={selectedRepo}
               selectedBranch={selectedBranch}
               selectedHostname={selectedHostname}
               selectedPR={selectedPR}
-              selectedCommit={selectedCommit}
+              commitSearch={selectedCommit || ''}
               repoCounts={repoCounts}
               branchCounts={branchCounts}
               hostnameCounts={hostnameCounts}
               prCounts={prCounts}
-              commitCounts={commitCounts}
               totalCount={totalCount}
               searchQuery={searchQuery}
               onRepoClick={handleRepoClick}
               onBranchClick={(branch) => setSelectedBranch(branch)}
               onHostnameClick={handleHostnameClick}
               onPRClick={(pr) => setSelectedPR(pr)}
-              onCommitClick={(commit) => setSelectedCommit(commit)}
+              onCommitSearchChange={(commit) => setSelectedCommit(commit || null)}
               onSearchChange={setSearchQuery}
             />
           }

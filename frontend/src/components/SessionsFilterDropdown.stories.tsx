@@ -7,7 +7,6 @@ const sampleRepos = ['confab-web', 'confab-cli', 'my-app'];
 const sampleBranches = ['main', 'feature/auth', 'fix/bug-123', 'develop'];
 const sampleHostnames = ['macbook-pro', 'desktop-linux', 'work-laptop'];
 const samplePRs = ['142', '138', '125', '119'];
-const sampleCommits = ['a1b2c3d4e5f6789', 'b2c3d4e5f6789a1', 'c3d4e5f6789a1b2'];
 
 const sampleRepoCounts: Record<string, number> = {
   'confab-web': 45,
@@ -35,55 +34,45 @@ const samplePRCounts: Record<string, number> = {
   '119': 2,
 };
 
-const sampleCommitCounts: Record<string, number> = {
-  'a1b2c3d4e5f6789': 4,
-  'b2c3d4e5f6789a1': 3,
-  'c3d4e5f6789a1b2': 2,
-};
-
 // Interactive wrapper component
 function SessionsFilterDropdownInteractive({
   repos = sampleRepos,
   branches = sampleBranches,
   hostnames = sampleHostnames,
   prs = samplePRs,
-  commits = sampleCommits,
   repoCounts = sampleRepoCounts,
   branchCounts = sampleBranchCounts,
   hostnameCounts = sampleHostnameCounts,
   prCounts = samplePRCounts,
-  commitCounts = sampleCommitCounts,
   totalCount = 80,
   initialRepo = null,
   initialBranch = null,
   initialHostname = null,
   initialPR = null,
-  initialCommit = null,
+  initialCommitSearch = '',
   initialSearchQuery = '',
 }: {
   repos?: string[];
   branches?: string[];
   hostnames?: string[];
   prs?: string[];
-  commits?: string[];
   repoCounts?: Record<string, number>;
   branchCounts?: Record<string, number>;
   hostnameCounts?: Record<string, number>;
   prCounts?: Record<string, number>;
-  commitCounts?: Record<string, number>;
   totalCount?: number;
   initialRepo?: string | null;
   initialBranch?: string | null;
   initialHostname?: string | null;
   initialPR?: string | null;
-  initialCommit?: string | null;
+  initialCommitSearch?: string;
   initialSearchQuery?: string;
 }) {
   const [selectedRepo, setSelectedRepo] = useState<string | null>(initialRepo);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(initialBranch);
   const [selectedHostname, setSelectedHostname] = useState<string | null>(initialHostname);
   const [selectedPR, setSelectedPR] = useState<string | null>(initialPR);
-  const [selectedCommit, setSelectedCommit] = useState<string | null>(initialCommit);
+  const [commitSearch, setCommitSearch] = useState<string>(initialCommitSearch);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
 
   const handleRepoClick = (repo: string | null) => {
@@ -91,7 +80,7 @@ function SessionsFilterDropdownInteractive({
     // Reset repo-scoped filters when repo changes
     setSelectedBranch(null);
     setSelectedPR(null);
-    setSelectedCommit(null);
+    setCommitSearch('');
   };
 
   const handleBranchClick = (branch: string | null) => {
@@ -106,34 +95,28 @@ function SessionsFilterDropdownInteractive({
     setSelectedPR(pr);
   };
 
-  const handleCommitClick = (commit: string | null) => {
-    setSelectedCommit(commit);
-  };
-
   return (
     <SessionsFilterDropdown
       repos={repos}
       branches={branches}
       hostnames={hostnames}
       prs={prs}
-      commits={commits}
       selectedRepo={selectedRepo}
       selectedBranch={selectedBranch}
       selectedHostname={selectedHostname}
       selectedPR={selectedPR}
-      selectedCommit={selectedCommit}
+      commitSearch={commitSearch}
       repoCounts={repoCounts}
       branchCounts={branchCounts}
       hostnameCounts={hostnameCounts}
       prCounts={prCounts}
-      commitCounts={commitCounts}
       totalCount={totalCount}
       searchQuery={searchQuery}
       onRepoClick={handleRepoClick}
       onBranchClick={handleBranchClick}
       onHostnameClick={handleHostnameClick}
       onPRClick={handlePRClick}
-      onCommitClick={handleCommitClick}
+      onCommitSearchChange={setCommitSearch}
       onSearchChange={setSearchQuery}
     />
   );
@@ -253,7 +236,7 @@ export const AllFiltersActive: Story = {
     initialBranch: 'main',
     initialHostname: 'macbook-pro',
     initialPR: '142',
-    initialCommit: 'a1b2c3d4e5f6789',
+    initialCommitSearch: 'a1b2c3d',
     initialSearchQuery: 'test',
   },
 };
@@ -265,27 +248,25 @@ export const WithPRSelected: Story = {
   },
 };
 
-export const WithCommitSelected: Story = {
+export const WithCommitSearch: Story = {
   args: {
     initialRepo: 'confab-web',
-    initialCommit: 'a1b2c3d4e5f6789',
+    initialCommitSearch: 'a1b2c3d',
   },
 };
 
-export const WithPRAndCommitSelected: Story = {
+export const WithPRAndCommitSearch: Story = {
   args: {
     initialRepo: 'confab-web',
     initialPR: '142',
-    initialCommit: 'a1b2c3d4e5f6789',
+    initialCommitSearch: 'a1b2c3d',
   },
 };
 
-export const NoPRsOrCommits: Story = {
+export const NoPRs: Story = {
   args: {
     prs: [],
-    commits: [],
     prCounts: {},
-    commitCounts: {},
     initialRepo: 'confab-web',
   },
 };
