@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useVisibility } from '@/hooks';
 import { githubLinksAPI, type GitHubLink } from '@/services/api';
+import { GitHubIcon } from '@/components/icons';
 import styles from './GitHubLinksCard.module.css';
 
 // Polling interval for GitHub links (60 seconds)
@@ -11,6 +12,10 @@ interface GitHubLinksCardProps {
   isOwner: boolean;
   /** For Storybook: pass links directly instead of fetching from API */
   initialLinks?: GitHubLink[];
+  /** Force the card to show even when empty (used by menu reveal) */
+  forceShow?: boolean;
+  /** Callback when links change (for parent to track if card has content) */
+  onLinksChange?: (hasLinks: boolean) => void;
 }
 
 // Icons
@@ -38,7 +43,7 @@ const PlusIcon = (
   </svg>
 );
 
-function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardProps) {
+function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onLinksChange }: GitHubLinksCardProps) {
   const isVisible = useVisibility();
 
   // State
@@ -109,6 +114,18 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardPr
     return () => clearInterval(intervalId);
   }, [initialLinks, isVisible, fetchLinks]);
 
+  // Notify parent of link changes
+  useEffect(() => {
+    onLinksChange?.(links.length > 0);
+  }, [links.length, onLinksChange]);
+
+  // Auto-show add form when revealed via menu (only if empty)
+  useEffect(() => {
+    if (forceShow && links.length === 0 && !showAddForm && !loading) {
+      setShowAddForm(true);
+    }
+  }, [forceShow, links.length, showAddForm, loading]);
+
   const handleAddLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUrl.trim()) return;
@@ -164,15 +181,23 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks }: GitHubLinksCardPr
     return link.ref.slice(0, 7);
   };
 
-  // Don't render if no links and not owner (can't add)
+  // Don't render if:
+  // - No links AND not owner (can't add)
+  // - No links AND owner but not forceShow (hidden by default)
   if (!loading && links.length === 0 && !isOwner) {
+    return null;
+  }
+  if (!loading && links.length === 0 && isOwner && !forceShow) {
     return null;
   }
 
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
-        <span>GitHub</span>
+        <span className={styles.cardTitle}>
+          <span className={styles.cardTitleIcon}>{GitHubIcon}</span>
+          GitHub
+        </span>
         {isOwner && !showAddForm && (
           <button
             className={styles.addButton}

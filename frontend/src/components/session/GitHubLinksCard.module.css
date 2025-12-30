@@ -5,6 +5,18 @@
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  animation: revealCard 0.2s ease-out;
+}
+
+@keyframes revealCard {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .cardHeader {
@@ -19,6 +31,23 @@
   padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--color-border-light);
   background: var(--color-bg-tertiary);
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.cardTitleIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
+
+.cardTitleIcon svg {
+  display: block;
 }
 
 .addButton {

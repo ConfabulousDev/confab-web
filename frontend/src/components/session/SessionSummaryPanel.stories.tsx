@@ -287,7 +287,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * Default view - analytics display with "Updated X ago" timestamp.
+ * Default view for owners with no GitHub links.
+ * GitHub card is hidden by default. Use the "..." menu to reveal it.
  * Analytics are polled automatically when tab is visible.
  */
 export const Default: Story = {
@@ -386,7 +387,8 @@ export const WithPRsAndCommits: Story = {
 };
 
 /**
- * View-only mode (non-owner).
+ * View-only mode (non-owner) with GitHub links.
+ * No actions menu shown. GitHub card visible because there are links.
  */
 export const ViewOnly: Story = {
   args: {
@@ -394,5 +396,18 @@ export const ViewOnly: Story = {
     isOwner: false,
     initialAnalytics: mockAnalytics,
     initialGithubLinks: mockGitHubLinks,
+  },
+};
+
+/**
+ * View-only mode (non-owner) with no GitHub links.
+ * No actions menu and no GitHub card.
+ */
+export const ViewOnlyNoGitHub: Story = {
+  args: {
+    sessionId: 'test-session-id',
+    isOwner: false,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: [],
   },
 };

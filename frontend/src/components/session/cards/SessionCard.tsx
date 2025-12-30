@@ -1,5 +1,13 @@
 import { CardWrapper, StatRow, CardLoading, SectionHeader } from './Card';
 import { formatResponseTime } from '@/utils/compactionStats';
+import {
+  TerminalIcon,
+  ChatIcon,
+  RefreshIcon,
+  DurationIcon,
+  RobotIcon,
+  CompressIcon,
+} from '@/components/icons';
 import type { SessionCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -104,7 +112,7 @@ function formatModelName(model: string): string {
 export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
   if (loading && !data) {
     return (
-      <CardWrapper title="Session">
+      <CardWrapper title="Session" icon={TerminalIcon}>
         <CardLoading />
       </CardWrapper>
     );
@@ -116,11 +124,12 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
   const breakdownData = prepareBreakdownData(data);
 
   return (
-    <CardWrapper title="Session">
+    <CardWrapper title="Session" icon={TerminalIcon}>
       {/* Messages */}
       <StatRow
         label="Messages"
         value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
+        icon={ChatIcon}
         tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
       />
 
@@ -128,6 +137,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
       <StatRow
         label="Turns"
         value={`${data.user_turns + data.assistant_turns} (${data.user_turns}/${data.assistant_turns})`}
+        icon={RefreshIcon}
         tooltip={TOOLTIPS.turns}
       />
 
@@ -136,6 +146,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         <StatRow
           label="Duration"
           value={formatDuration(data.duration_ms)}
+          icon={DurationIcon}
           tooltip={TOOLTIPS.duration}
         />
       )}
@@ -145,6 +156,7 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         <StatRow
           label={data.models_used.length === 1 ? 'Model' : 'Models'}
           value={data.models_used.map(formatModelName).join(', ')}
+          icon={RobotIcon}
           tooltip={TOOLTIPS.models}
         />
       )}
@@ -203,12 +215,14 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
           <StatRow
             label="Compactions"
             value={`${data.compaction_auto + data.compaction_manual} (${data.compaction_manual}/${data.compaction_auto})`}
+            icon={CompressIcon}
             tooltip={`Total compactions (manual/auto); ${TOOLTIPS.compactionManual}; ${TOOLTIPS.compactionAuto}`}
           />
           {data.compaction_avg_time_ms != null && (
             <StatRow
               label="Avg time (auto)"
               value={formatResponseTime(data.compaction_avg_time_ms)}
+              icon={DurationIcon}
               tooltip={TOOLTIPS.compactionAvgTime}
             />
           )}

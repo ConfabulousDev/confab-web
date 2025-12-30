@@ -1,5 +1,13 @@
 import { CardWrapper, StatRow, CardLoading } from './Card';
 import { formatTokenCount, formatCost } from '@/utils/tokenStats';
+import {
+  TokenIcon,
+  DollarIcon,
+  ArrowRightIcon,
+  ArrowLeftIcon,
+  DiamondOutlineIcon,
+  DiamondFilledIcon,
+} from '@/components/icons';
 import type { TokensCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import styles from '../SessionSummaryPanel.module.css';
@@ -12,18 +20,10 @@ const TOOLTIPS = {
   cost: 'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
 };
 
-const CostIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M12 16v-4" />
-    <path d="M12 8h.01" />
-  </svg>
-);
-
 export function TokensCard({ data, loading }: CardProps<TokensCardData>) {
   if (loading && !data) {
     return (
-      <CardWrapper title="Tokens">
+      <CardWrapper title="Tokens" icon={TokenIcon}>
         <CardLoading />
       </CardWrapper>
     );
@@ -34,35 +34,35 @@ export function TokensCard({ data, loading }: CardProps<TokensCardData>) {
   const cost = parseFloat(data.estimated_usd);
 
   return (
-    <CardWrapper title="Tokens">
+    <CardWrapper title="Tokens" icon={TokenIcon}>
       <StatRow
         label="Input"
         value={formatTokenCount(data.input)}
-        icon={<span>&#8594;</span>}
+        icon={ArrowRightIcon}
         tooltip={TOOLTIPS.input}
       />
       <StatRow
         label="Output"
         value={formatTokenCount(data.output)}
-        icon={<span>&#8592;</span>}
+        icon={ArrowLeftIcon}
         tooltip={TOOLTIPS.output}
       />
       <StatRow
         label="Cache created"
         value={formatTokenCount(data.cache_creation)}
-        icon={<span>&#9671;</span>}
+        icon={DiamondOutlineIcon}
         tooltip={TOOLTIPS.cacheCreated}
       />
       <StatRow
         label="Cache read"
         value={formatTokenCount(data.cache_read)}
-        icon={<span>&#9670;</span>}
+        icon={DiamondFilledIcon}
         tooltip={TOOLTIPS.cacheRead}
       />
       <StatRow
         label="Estimated cost"
         value={formatCost(cost)}
-        icon={CostIcon}
+        icon={DollarIcon}
         tooltip={TOOLTIPS.cost}
         valueClassName={styles.cost}
       />

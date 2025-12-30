@@ -3,17 +3,21 @@ import styles from '../SessionSummaryPanel.module.css';
 interface CardWrapperProps {
   title: string;
   subtitle?: string;
+  icon?: React.ReactNode;
   children: React.ReactNode;
 }
 
 /**
  * Base wrapper for summary cards. Provides consistent header and styling.
  */
-export function CardWrapper({ title, subtitle, children }: CardWrapperProps) {
+export function CardWrapper({ title, subtitle, icon, children }: CardWrapperProps) {
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
-        <span>{title}</span>
+        <span className={styles.cardTitle}>
+          {icon && <span className={styles.cardTitleIcon}>{icon}</span>}
+          {title}
+        </span>
         {subtitle && <span className={styles.cardSubtitle}>{subtitle}</span>}
       </div>
       <div className={styles.cardContent}>{children}</div>

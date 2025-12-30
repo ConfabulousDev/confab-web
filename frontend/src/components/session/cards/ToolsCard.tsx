@@ -1,4 +1,5 @@
 import { CardWrapper, CardLoading } from './Card';
+import { WrenchIcon } from '@/components/icons';
 import type { ToolsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import {
@@ -88,7 +89,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
   if (loading && !data) {
     return (
-      <CardWrapper title="Tools">
+      <CardWrapper title="Tools" icon={WrenchIcon}>
         <CardLoading />
       </CardWrapper>
     );
@@ -114,7 +115,7 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
       : `${data.total_calls} calls`;
 
   return (
-    <CardWrapper title="Tools" subtitle={subtitle}>
+    <CardWrapper title="Tools" icon={WrenchIcon} subtitle={subtitle}>
       <div className={styles.chartContainer} style={{ height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart

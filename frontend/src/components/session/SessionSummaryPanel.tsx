@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
 import { RelativeTime } from '@/components/RelativeTime';
+import { MoreVerticalIcon, GitHubIcon } from '@/components/icons';
 import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api';
 import { getOrderedCards } from './cards';
 import GitHubLinksCard from './GitHubLinksCard';
@@ -23,6 +26,21 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
 
   // Use initial analytics for Storybook, polled analytics for real usage
   const analytics = initialAnalytics ?? polledAnalytics;
+
+  // State for revealing GitHub card when empty
+  const [showGitHubCard, setShowGitHubCard] = useState(false);
+  const [hasGitHubLinks, setHasGitHubLinks] = useState(
+    (initialGithubLinks?.length ?? 0) > 0
+  );
+
+  // Dropdown for actions menu
+  const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
+
+  // Handle "Link to GitHub" menu action
+  const handleLinkToGitHub = () => {
+    setShowGitHubCard(true);
+    toggle();
+  };
 
   // Get cards data from the new cards-based format
   const cards: Partial<AnalyticsCards> = analytics?.cards ?? {};
@@ -85,19 +103,48 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
     <div className={styles.panel}>
       <div className={styles.header}>
         <h2 className={styles.title}>Session Summary</h2>
-        {analytics && (
-          <div className={styles.lastUpdated} title="When analytics were last computed">
-            Updated <RelativeTime date={analytics.computed_at} />
-          </div>
-        )}
+        <div className={styles.headerRight}>
+          {analytics && (
+            <div className={styles.lastUpdated} title="When analytics were last computed">
+              Updated <RelativeTime date={analytics.computed_at} />
+            </div>
+          )}
+          {isOwner && (
+            <div className={styles.menuContainer} ref={containerRef}>
+              <button
+                className={styles.menuButton}
+                onClick={toggle}
+                title="Actions"
+                aria-label="Actions menu"
+                aria-expanded={isOpen}
+              >
+                {MoreVerticalIcon}
+              </button>
+              {isOpen && (
+                <div className={styles.menuDropdown}>
+                  <button
+                    className={styles.menuItem}
+                    onClick={handleLinkToGitHub}
+                    disabled={hasGitHubLinks || showGitHubCard}
+                  >
+                    <span className={styles.menuItemIcon}>{GitHubIcon}</span>
+                    Link to GitHub
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className={styles.grid}>
-        {/* GitHub Links - always rendered, independent of analytics */}
+        {/* GitHub Links - hidden by default when empty for owners */}
         <GitHubLinksCard
           sessionId={sessionId}
           isOwner={isOwner}
           initialLinks={initialGithubLinks}
+          forceShow={showGitHubCard}
+          onLinksChange={setHasGitHubLinks}
         />
 
         {renderAnalyticsCards()}

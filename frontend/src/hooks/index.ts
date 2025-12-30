@@ -17,4 +17,5 @@ export { useRelativeTime } from './useRelativeTime';
 export { useVisibility } from './useVisibility';
 export { useUserActivity } from './useUserActivity';
 export { useSmartPolling } from './useSmartPolling';
+export { useAnalyticsPolling } from './useAnalyticsPolling';
 export type { SessionErrorType } from './useLoadSession';
