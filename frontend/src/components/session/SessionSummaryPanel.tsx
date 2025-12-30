@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
 import { RelativeTime } from '@/components/RelativeTime';
@@ -39,6 +39,13 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
     setShowGitHubCard(!showGitHubCard);
     toggle();
   };
+
+  // Auto-show card when links are fetched from API
+  const handleHasLinksChange = useCallback((hasLinks: boolean) => {
+    if (hasLinks) {
+      setShowGitHubCard(true);
+    }
+  }, []);
 
   // Get cards data from the new cards-based format
   const cards: Partial<AnalyticsCards> = analytics?.cards ?? {};
@@ -144,6 +151,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           isOwner={isOwner}
           initialLinks={initialGithubLinks}
           forceShow={showGitHubCard}
+          onHasLinksChange={handleHasLinksChange}
         />
 
         {renderAnalyticsCards()}

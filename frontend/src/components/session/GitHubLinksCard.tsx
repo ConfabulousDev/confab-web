@@ -14,6 +14,8 @@ interface GitHubLinksCardProps {
   initialLinks?: GitHubLink[];
   /** Force the card to show (toggle is on) */
   forceShow?: boolean;
+  /** Callback when links are loaded/changed - used to sync toggle state */
+  onHasLinksChange?: (hasLinks: boolean) => void;
 }
 
 // Icons
@@ -41,7 +43,7 @@ const PlusIcon = (
   </svg>
 );
 
-function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow }: GitHubLinksCardProps) {
+function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onHasLinksChange }: GitHubLinksCardProps) {
   const isVisible = useVisibility();
 
   // State
@@ -118,6 +120,13 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow }: GitHub
       setShowAddForm(true);
     }
   }, [forceShow, links.length, showAddForm, loading]);
+
+  // Notify parent when links availability changes (for syncing toggle state)
+  useEffect(() => {
+    if (!loading && onHasLinksChange) {
+      onHasLinksChange(links.length > 0);
+    }
+  }, [links.length, loading, onHasLinksChange]);
 
   const handleAddLink = async (e: React.FormEvent) => {
     e.preventDefault();
