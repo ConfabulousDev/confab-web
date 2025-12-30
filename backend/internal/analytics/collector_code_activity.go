@@ -53,16 +53,11 @@ func (c *CodeActivityCollector) Collect(line *TranscriptLine, ctx *CollectContex
 			if path := c.getFilePath(tool.Input); path != "" {
 				c.filesModified[path] = true
 				c.trackExtension(path)
-				// Calculate line diff
+				// Count old lines as removed, new lines as added (matches GitHub diff behavior)
 				oldStr, _ := tool.Input["old_string"].(string)
 				newStr, _ := tool.Input["new_string"].(string)
-				oldLines := countLines(oldStr)
-				newLines := countLines(newStr)
-				if newLines > oldLines {
-					c.LinesAdded += newLines - oldLines
-				} else if oldLines > newLines {
-					c.LinesRemoved += oldLines - newLines
-				}
+				c.LinesRemoved += countLines(oldStr)
+				c.LinesAdded += countLines(newStr)
 			}
 
 		case "Glob", "Grep":

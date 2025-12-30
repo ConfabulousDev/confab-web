@@ -10,8 +10,8 @@ import (
 //
 // Expected values derived from testdata/session_comprehensive.jsonl:
 //   - Read: 10 unique file paths
-//   - Write: 1 unique file path (368 lines)
-//   - Edit: 6 unique file paths (net +8 lines, -0 lines)
+//   - Write: 1 unique file path (367 lines)
+//   - Edit: 6 unique file paths (34 lines added, 26 lines removed)
 //   - Glob: 3 calls
 //   - Grep: 1 call
 //   - FilesModified: 7 (Write + Edit, no overlap)
@@ -42,16 +42,16 @@ func TestCodeActivityCollector_RealSession(t *testing.T) {
 		}
 	})
 
-	// Test line counts
+	// Test line counts (matches GitHub diff behavior: old lines removed, new lines added)
 	t.Run("LinesAdded", func(t *testing.T) {
-		expected := 375 // 367 from Write + 8 net from Edit (trailing newlines ignored)
+		expected := 401 // 367 from Write + 34 from Edit new_strings
 		if result.LinesAdded != expected {
 			t.Errorf("LinesAdded = %d, want %d", result.LinesAdded, expected)
 		}
 	})
 
 	t.Run("LinesRemoved", func(t *testing.T) {
-		expected := 0
+		expected := 26 // From Edit old_strings
 		if result.LinesRemoved != expected {
 			t.Errorf("LinesRemoved = %d, want %d", result.LinesRemoved, expected)
 		}
