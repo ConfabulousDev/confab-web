@@ -1,6 +1,6 @@
 ---
 name: add-session-card
-description: Add a new analytics card to the session summary panel. Covers backend collector, database migration, API response, and frontend component with Storybook stories.
+description: Add a new analytics card to the session summary panel. Covers backend analyzer, database migration, API response, and frontend component with Storybook stories.
 ---
 
 # Add Session Analytics Card
@@ -12,7 +12,7 @@ Add a new analytics card to the session summary panel following the card-per-tab
 The analytics system uses a **card-per-table** architecture where each card type has:
 - Its own database table (`session_card_<name>`)
 - Independent version constant for cache invalidation
-- A **collector** that extracts metrics during a single JSONL pass
+- An **analyzer** that extracts metrics from a `FileCollection`
 - Frontend component registered in the card registry
 
 ## Instructions for Claude
@@ -91,60 +91,109 @@ type <Name>CardData struct {
 
 4. **Add to Cards struct and AllValid()**
 
-### Phase 4: Backend - Collector
+### Phase 4: Backend - Analyzer
 
-Create `backend/internal/analytics/collector_<name>.go`:
+Create `backend/internal/analytics/analyzer_<name>.go`:
 
 ```go
 package analytics
 
-// <Name>Collector extracts <name> metrics from transcript lines.
-type <Name>Collector struct {
+// <Name>Result contains <name> metrics.
+type <Name>Result struct {
     MyMetric int64
 }
 
-func New<Name>Collector() *<Name>Collector {
-    return &<Name>Collector{}
-}
+// <Name>Analyzer extracts <name> metrics from transcripts.
+type <Name>Analyzer struct{}
 
-func (c *<Name>Collector) Collect(line *TranscriptLine, ctx *CollectContext) {
-    // Process relevant line types
-    // Use line helpers: IsUserMessage(), IsAssistantMessage(), GetToolUses(), etc.
-}
+// Analyze processes the file collection and returns <name> metrics.
+func (a *<Name>Analyzer) Analyze(fc *FileCollection) (*<Name>Result, error) {
+    result := &<Name>Result{}
 
-func (c *<Name>Collector) Finalize(ctx *CollectContext) {
-    // Post-processing (compute averages, etc.)
+    // Process files - typically main transcript, sometimes agents too
+    for _, line := range fc.Main.Lines {
+        // Use line helpers to extract data
+        if line.IsAssistantMessage() {
+            // Process assistant messages
+        }
+        if line.IsUserMessage() {
+            // Process user messages
+        }
+    }
+
+    return result, nil
 }
 ```
+
+**FileCollection methods:**
+- `fc.Main` - main transcript file
+- `fc.Agents` - slice of agent transcript files
+- `fc.AllFiles()` - iterate over main + all agents
 
 **TranscriptLine helpers:**
 - `IsUserMessage()` - true for user messages
 - `IsAssistantMessage()` - true for assistant messages with usage
+- `IsHumanMessage()` - true for human prompts (not tool results)
+- `IsToolResultMessage()` - true for tool result messages
 - `IsCompactBoundary()` - true for compaction markers
 - `GetTimestamp()` - parse timestamp
 - `GetToolUses()` - extract tool_use blocks
+- `GetContentBlocks()` - get all content blocks
+- `GetAgentResults()` - get subagent/Task results
 - `GetModel()` - get model ID
 - `GetStopReason()` - get stop reason
+- `HasTextContent()` - true if message has text
+- `HasThinking()` - true if message has thinking block
 
 ### Phase 5: Backend - Wire Up
 
-1. **Register collector** in `compute.go`:
-   - Add to `ComputeResult` struct
-   - Create collector in `ComputeFromJSONL()`
-   - Pass to `RunCollectors()`
-   - Extract result after run
+1. **Add to ComputeResult** in `compute.go`:
+```go
+// In ComputeResult struct
+MyMetric int64
+```
 
-2. **Store operations** in `store.go`:
+2. **Run analyzer** in `ComputeFromFileCollection()`:
+```go
+<name>, err := (&<Name>Analyzer{}).Analyze(fc)
+if err != nil {
+    return nil, err
+}
+```
+
+3. **Populate result** in `ComputeFromFileCollection()`:
+```go
+return &ComputeResult{
+    // ... existing fields ...
+    MyMetric: <name>.MyMetric,
+}, nil
+```
+
+4. **Store operations** in `store.go`:
    - Add `get<Name>Card()` method
    - Add `upsert<Name>Card()` method
    - Update `GetCards()` to include new card
    - Update `UpsertCards()` to include new card
 
-3. **Card creation** in `store.go`:
-   - Update `ToCards()` to create record from `ComputeResult`
+5. **Card creation** in `store.go` `ToCards()`:
+```go
+<Name>: &<Name>CardRecord{
+    SessionID:  sessionID,
+    Version:    <Name>CardVersion,
+    ComputedAt: now,
+    UpToLine:   lineCount,
+    MyMetric:   r.MyMetric,
+},
+```
 
-4. **API response** in `store.go`:
-   - Update `ToResponse()` to include card data in `Cards` map
+6. **API response** in `store.go` `ToResponse()`:
+```go
+if c.<Name> != nil {
+    response.Cards["<name>"] = <Name>CardData{
+        MyMetric: c.<Name>.MyMetric,
+    }
+}
+```
 
 ### Phase 6: Backend - Tests
 
@@ -293,11 +342,30 @@ For cards that shouldn't show when empty:
 if (data.total_count === 0) return null;
 ```
 
+### Processing agent files
+
+For metrics that include subagent data:
+```go
+// Process all files - main and agents
+for _, file := range fc.AllFiles() {
+    for _, line := range file.Lines {
+        // Process each line
+    }
+}
+```
+
+### Building tool ID maps
+
+For correlating tool_use with tool_result:
+```go
+toolIDToName := file.BuildToolUseIDToNameMap()
+```
+
 ## Checklist Before Commit
 
 - [ ] Migration creates and drops table correctly
 - [ ] Version constant is defined
-- [ ] Collector extracts correct metrics
+- [ ] Analyzer extracts correct metrics
 - [ ] Store operations handle get/upsert
 - [ ] API response includes new card
 - [ ] Zod schema validates card data

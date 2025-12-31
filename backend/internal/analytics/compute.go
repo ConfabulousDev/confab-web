@@ -55,6 +55,10 @@ type ComputeResult struct {
 	// Conversation stats (from ConversationAnalyzer)
 	AvgAssistantTurnMs *int64
 	AvgUserThinkingMs  *int64
+
+	// Agent stats (from AgentsAnalyzer)
+	TotalAgentInvocations int
+	AgentStats            map[string]*AgentStats
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
@@ -94,6 +98,11 @@ func ComputeFromFileCollection(fc *FileCollection) (*ComputeResult, error) {
 	}
 
 	conversation, err := (&ConversationAnalyzer{}).Analyze(fc)
+	if err != nil {
+		return nil, err
+	}
+
+	agents, err := (&AgentsAnalyzer{}).Analyze(fc)
 	if err != nil {
 		return nil, err
 	}
@@ -147,5 +156,9 @@ func ComputeFromFileCollection(fc *FileCollection) (*ComputeResult, error) {
 		// Conversation stats (turns and timing)
 		AvgAssistantTurnMs: conversation.AvgAssistantTurnMs,
 		AvgUserThinkingMs:  conversation.AvgUserThinkingMs,
+
+		// Agent stats
+		TotalAgentInvocations: agents.TotalInvocations,
+		AgentStats:            agents.AgentStats,
 	}, nil
 }

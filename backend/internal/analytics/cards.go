@@ -13,6 +13,7 @@ const (
 	ToolsCardVersion        = 2 // v2: per-tool success/error breakdown
 	CodeActivityCardVersion = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
 	ConversationCardVersion = 1 // v1: initial version with turn timing metrics
+	AgentsCardVersion       = 1 // v1: initial version with agent invocation counts by type
 )
 
 // =============================================================================
@@ -100,6 +101,22 @@ type ConversationCardRecord struct {
 	AvgUserThinkingMs  *int64    `json:"avg_user_thinking_ms,omitempty"`  // Average user thinking time
 }
 
+// AgentStats holds success and error counts for a single agent type.
+type AgentStats struct {
+	Success int `json:"success"`
+	Errors  int `json:"errors"`
+}
+
+// AgentsCardRecord is the DB record for the agents card.
+type AgentsCardRecord struct {
+	SessionID        string                 `json:"session_id"`
+	Version          int                    `json:"version"`
+	ComputedAt       time.Time              `json:"computed_at"`
+	UpToLine         int64                  `json:"up_to_line"`
+	TotalInvocations int                    `json:"total_invocations"`
+	AgentStats       map[string]*AgentStats `json:"agent_stats"` // Per-agent-type success/error counts
+}
+
 // Cards aggregates all card data for a session.
 type Cards struct {
 	Tokens       *TokensCardRecord
@@ -107,6 +124,7 @@ type Cards struct {
 	Tools        *ToolsCardRecord
 	CodeActivity *CodeActivityCardRecord
 	Conversation *ConversationCardRecord
+	Agents       *AgentsCardRecord
 }
 
 // =============================================================================
@@ -172,6 +190,12 @@ type ConversationCardData struct {
 	AvgUserThinkingMs  *int64 `json:"avg_user_thinking_ms,omitempty"`
 }
 
+// AgentsCardData is the API response format for the agents card.
+type AgentsCardData struct {
+	TotalInvocations int                    `json:"total_invocations"`
+	AgentStats       map[string]*AgentStats `json:"agent_stats"` // Per-agent-type success/error counts
+}
+
 // =============================================================================
 // Validation helpers
 // =============================================================================
@@ -201,6 +225,11 @@ func (c *ConversationCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == ConversationCardVersion && c.UpToLine == currentLineCount
 }
 
+// IsValid checks if an agents card record is valid for the current line count.
+func (c *AgentsCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == AgentsCardVersion && c.UpToLine == currentLineCount
+}
+
 // AllValid checks if all cards are valid for the current line count.
 func (c *Cards) AllValid(currentLineCount int64) bool {
 	if c == nil {
@@ -210,5 +239,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		c.Session.IsValid(currentLineCount) &&
 		c.Tools.IsValid(currentLineCount) &&
 		c.CodeActivity.IsValid(currentLineCount) &&
-		c.Conversation.IsValid(currentLineCount)
+		c.Conversation.IsValid(currentLineCount) &&
+		c.Agents.IsValid(currentLineCount)
 }

@@ -3,6 +3,7 @@ import { SessionCard } from './SessionCard';
 import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
 import { ConversationCard } from './ConversationCard';
+import { AgentsCard } from './AgentsCard';
 import type { CardDefinition } from './types';
 
 /**
@@ -47,6 +48,13 @@ export const cardRegistry: CardDefinition[] = [
     title: 'Tools',
     component: ToolsCard,
     order: 4,
+    span: 2,
+  },
+  {
+    key: 'agents',
+    title: 'Agents',
+    component: AgentsCard,
+    order: 5,
     span: 2,
   },
 ];

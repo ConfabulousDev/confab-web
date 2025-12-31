@@ -707,6 +707,13 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "assistant_turns": 14,
       "avg_assistant_turn_ms": 45000,
       "avg_user_thinking_ms": 120000
+    },
+    "agents": {
+      "total_invocations": 5,
+      "agent_stats": {
+        "Explore": {"success": 3, "errors": 0},
+        "Plan": {"success": 2, "errors": 0}
+      }
     }
   }
 }
@@ -743,6 +750,10 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.conversation.assistant_turns` | int | Number of assistant text responses |
 | `cards.conversation.avg_assistant_turn_ms` | int\|null | Average time per assistant turn including tool calls (null if no data) |
 | `cards.conversation.avg_user_thinking_ms` | int\|null | Average time between assistant response and next user prompt (null if no data) |
+| `cards.agents.total_invocations` | int | Total number of subagent/Task invocations |
+| `cards.agents.agent_stats` | object | Map of agent type to stats object |
+| `cards.agents.agent_stats[type].success` | int | Successful invocations of this agent type |
+| `cards.agents.agent_stats[type].errors` | int | Failed invocations of this agent type |
 
 **Notes:**
 - Analytics are cached in the database and recomputed when new data is synced

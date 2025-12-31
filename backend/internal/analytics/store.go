@@ -60,6 +60,13 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	}
 	cards.Conversation = conversation
 
+	// Get agents card
+	agents, err := s.getAgentsCard(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("getting agents card: %w", err)
+	}
+	cards.Agents = agents
+
 	return cards, nil
 }
 
@@ -92,6 +99,12 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	if cards.Conversation != nil {
 		if err := s.upsertConversationCard(ctx, cards.Conversation); err != nil {
 			return fmt.Errorf("upserting conversation card: %w", err)
+		}
+	}
+
+	if cards.Agents != nil {
+		if err := s.upsertAgentsCard(ctx, cards.Agents); err != nil {
+			return fmt.Errorf("upserting agents card: %w", err)
 		}
 	}
 
@@ -488,6 +501,72 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 }
 
 // =============================================================================
+// Agents card operations
+// =============================================================================
+
+func (s *Store) getAgentsCard(ctx context.Context, sessionID string) (*AgentsCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			total_invocations, agent_stats
+		FROM session_card_agents
+		WHERE session_id = $1
+	`
+
+	var record AgentsCardRecord
+	var statsJSON []byte
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.TotalInvocations,
+		&statsJSON,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(statsJSON, &record.AgentStats); err != nil {
+		return nil, fmt.Errorf("parsing agent_stats: %w", err)
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertAgentsCard(ctx context.Context, record *AgentsCardRecord) error {
+	statsJSON, err := json.Marshal(record.AgentStats)
+	if err != nil {
+		return fmt.Errorf("marshaling agent_stats: %w", err)
+	}
+
+	query := `
+		INSERT INTO session_card_agents (
+			session_id, version, computed_at, up_to_line,
+			total_invocations, agent_stats
+		) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			total_invocations = EXCLUDED.total_invocations,
+			agent_stats = EXCLUDED.agent_stats
+	`
+
+	_, err = s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.TotalInvocations,
+		statsJSON,
+	)
+	return err
+}
+
+// =============================================================================
 // Conversion helpers
 // =============================================================================
 
@@ -560,6 +639,14 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			AssistantTurns:     r.AssistantTurns,
 			AvgAssistantTurnMs: r.AvgAssistantTurnMs,
 			AvgUserThinkingMs:  r.AvgUserThinkingMs,
+		},
+		Agents: &AgentsCardRecord{
+			SessionID:        sessionID,
+			Version:          AgentsCardVersion,
+			ComputedAt:       now,
+			UpToLine:         lineCount,
+			TotalInvocations: r.TotalAgentInvocations,
+			AgentStats:       r.AgentStats,
 		},
 	}
 }
@@ -653,6 +740,14 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			AssistantTurns:     c.Conversation.AssistantTurns,
 			AvgAssistantTurnMs: c.Conversation.AvgAssistantTurnMs,
 			AvgUserThinkingMs:  c.Conversation.AvgUserThinkingMs,
+		}
+	}
+
+	if c.Agents != nil {
+		// Cards format only (no legacy format for agents)
+		response.Cards["agents"] = AgentsCardData{
+			TotalInvocations: c.Agents.TotalInvocations,
+			AgentStats:       c.Agents.AgentStats,
 		}
 	}
 
