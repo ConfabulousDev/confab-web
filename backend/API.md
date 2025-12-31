@@ -706,7 +706,10 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "user_turns": 15,
       "assistant_turns": 14,
       "avg_assistant_turn_ms": 45000,
-      "avg_user_thinking_ms": 120000
+      "avg_user_thinking_ms": 120000,
+      "total_assistant_duration_ms": 630000,
+      "total_user_duration_ms": 1680000,
+      "assistant_utilization": 27.3
     },
     "agents_and_skills": {
       "agent_invocations": 5,
@@ -755,6 +758,9 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.conversation.assistant_turns` | int | Number of assistant text responses |
 | `cards.conversation.avg_assistant_turn_ms` | int\|null | Average time per assistant turn including tool calls (null if no data) |
 | `cards.conversation.avg_user_thinking_ms` | int\|null | Average time between assistant response and next user prompt (null if no data) |
+| `cards.conversation.total_assistant_duration_ms` | int\|null | Total time Claude spent working across all turns (null if no data) |
+| `cards.conversation.total_user_duration_ms` | int\|null | Total time user spent thinking between turns (null if no data) |
+| `cards.conversation.assistant_utilization` | float\|null | Percentage of session time Claude was actively working (null if no data) |
 | `cards.agents_and_skills.agent_invocations` | int | Total number of subagent/Task invocations |
 | `cards.agents_and_skills.skill_invocations` | int | Total number of Skill invocations |
 | `cards.agents_and_skills.agent_stats` | object | Map of agent type to stats object |

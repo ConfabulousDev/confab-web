@@ -53,8 +53,11 @@ type ComputeResult struct {
 	LanguageBreakdown map[string]int
 
 	// Conversation stats (from ConversationAnalyzer)
-	AvgAssistantTurnMs *int64
-	AvgUserThinkingMs  *int64
+	AvgAssistantTurnMs       *int64
+	AvgUserThinkingMs        *int64
+	TotalAssistantDurationMs *int64
+	TotalUserDurationMs      *int64
+	AssistantUtilization     *float64
 
 	// Agent stats (from AgentsAnalyzer)
 	TotalAgentInvocations int
@@ -163,8 +166,11 @@ func ComputeFromFileCollection(fc *FileCollection) (*ComputeResult, error) {
 		LanguageBreakdown: codeActivity.LanguageBreakdown,
 
 		// Conversation stats (turns and timing)
-		AvgAssistantTurnMs: conversation.AvgAssistantTurnMs,
-		AvgUserThinkingMs:  conversation.AvgUserThinkingMs,
+		AvgAssistantTurnMs:       conversation.AvgAssistantTurnMs,
+		AvgUserThinkingMs:        conversation.AvgUserThinkingMs,
+		TotalAssistantDurationMs: conversation.TotalAssistantDurationMs,
+		TotalUserDurationMs:      conversation.TotalUserDurationMs,
+		AssistantUtilization:     conversation.AssistantUtilization,
 
 		// Agent stats
 		TotalAgentInvocations: agents.TotalInvocations,

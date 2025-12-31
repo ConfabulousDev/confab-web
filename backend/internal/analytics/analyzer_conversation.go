@@ -8,9 +8,16 @@ type ConversationResult struct {
 	UserTurns      int
 	AssistantTurns int
 
-	// Timing data
+	// Timing data - averages
 	AvgAssistantTurnMs *int64
 	AvgUserThinkingMs  *int64
+
+	// Timing data - totals
+	TotalAssistantDurationMs *int64
+	TotalUserDurationMs      *int64
+
+	// Utilization percentage (assistant time / total time * 100)
+	AssistantUtilization *float64
 }
 
 // ConversationAnalyzer extracts conversation metrics from transcripts.
@@ -100,7 +107,7 @@ func (a *ConversationAnalyzer) Analyze(fc *FileCollection) (*ConversationResult,
 		}
 	}
 
-	// Compute average assistant turn duration
+	// Compute assistant turn duration stats
 	if len(assistantTurnDurations) > 0 {
 		var sum int64
 		for _, d := range assistantTurnDurations {
@@ -108,9 +115,10 @@ func (a *ConversationAnalyzer) Analyze(fc *FileCollection) (*ConversationResult,
 		}
 		avg := sum / int64(len(assistantTurnDurations))
 		result.AvgAssistantTurnMs = &avg
+		result.TotalAssistantDurationMs = &sum
 	}
 
-	// Compute average user thinking time
+	// Compute user thinking time stats
 	if len(userThinkingDurations) > 0 {
 		var sum int64
 		for _, d := range userThinkingDurations {
@@ -118,6 +126,16 @@ func (a *ConversationAnalyzer) Analyze(fc *FileCollection) (*ConversationResult,
 		}
 		avg := sum / int64(len(userThinkingDurations))
 		result.AvgUserThinkingMs = &avg
+		result.TotalUserDurationMs = &sum
+	}
+
+	// Compute assistant utilization (% of time Claude was working vs user thinking)
+	if result.TotalAssistantDurationMs != nil && result.TotalUserDurationMs != nil {
+		totalTime := float64(*result.TotalAssistantDurationMs + *result.TotalUserDurationMs)
+		if totalTime > 0 {
+			utilization := float64(*result.TotalAssistantDurationMs) / totalTime * 100
+			result.AssistantUtilization = &utilization
+		}
 	}
 
 	return result, nil

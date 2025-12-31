@@ -445,7 +445,8 @@ func (s *Store) upsertCodeActivityCard(ctx context.Context, record *CodeActivity
 func (s *Store) getConversationCard(ctx context.Context, sessionID string) (*ConversationCardRecord, error) {
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
-			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms
+			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms,
+			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization
 		FROM session_card_conversation
 		WHERE session_id = $1
 	`
@@ -460,6 +461,9 @@ func (s *Store) getConversationCard(ctx context.Context, sessionID string) (*Con
 		&record.AssistantTurns,
 		&record.AvgAssistantTurnMs,
 		&record.AvgUserThinkingMs,
+		&record.TotalAssistantDurationMs,
+		&record.TotalUserDurationMs,
+		&record.AssistantUtilization,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -475,8 +479,9 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 	query := `
 		INSERT INTO session_card_conversation (
 			session_id, version, computed_at, up_to_line,
-			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms,
+			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
@@ -484,7 +489,10 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 			user_turns = EXCLUDED.user_turns,
 			assistant_turns = EXCLUDED.assistant_turns,
 			avg_assistant_turn_ms = EXCLUDED.avg_assistant_turn_ms,
-			avg_user_thinking_ms = EXCLUDED.avg_user_thinking_ms
+			avg_user_thinking_ms = EXCLUDED.avg_user_thinking_ms,
+			total_assistant_duration_ms = EXCLUDED.total_assistant_duration_ms,
+			total_user_duration_ms = EXCLUDED.total_user_duration_ms,
+			assistant_utilization = EXCLUDED.assistant_utilization
 	`
 
 	_, err := s.db.ExecContext(ctx, query,
@@ -496,6 +504,9 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 		record.AssistantTurns,
 		record.AvgAssistantTurnMs,
 		record.AvgUserThinkingMs,
+		record.TotalAssistantDurationMs,
+		record.TotalUserDurationMs,
+		record.AssistantUtilization,
 	)
 	return err
 }
@@ -644,14 +655,17 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			LanguageBreakdown: r.LanguageBreakdown,
 		},
 		Conversation: &ConversationCardRecord{
-			SessionID:          sessionID,
-			Version:            ConversationCardVersion,
-			ComputedAt:         now,
-			UpToLine:           lineCount,
-			UserTurns:          r.UserTurns,
-			AssistantTurns:     r.AssistantTurns,
-			AvgAssistantTurnMs: r.AvgAssistantTurnMs,
-			AvgUserThinkingMs:  r.AvgUserThinkingMs,
+			SessionID:                sessionID,
+			Version:                  ConversationCardVersion,
+			ComputedAt:               now,
+			UpToLine:                 lineCount,
+			UserTurns:                r.UserTurns,
+			AssistantTurns:           r.AssistantTurns,
+			AvgAssistantTurnMs:       r.AvgAssistantTurnMs,
+			AvgUserThinkingMs:        r.AvgUserThinkingMs,
+			TotalAssistantDurationMs: r.TotalAssistantDurationMs,
+			TotalUserDurationMs:      r.TotalUserDurationMs,
+			AssistantUtilization:     r.AssistantUtilization,
 		},
 		AgentsAndSkills: &AgentsAndSkillsCardRecord{
 			SessionID:        sessionID,
@@ -751,10 +765,13 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 	if c.Conversation != nil {
 		// Cards format only (no legacy format for conversation)
 		response.Cards["conversation"] = ConversationCardData{
-			UserTurns:          c.Conversation.UserTurns,
-			AssistantTurns:     c.Conversation.AssistantTurns,
-			AvgAssistantTurnMs: c.Conversation.AvgAssistantTurnMs,
-			AvgUserThinkingMs:  c.Conversation.AvgUserThinkingMs,
+			UserTurns:                c.Conversation.UserTurns,
+			AssistantTurns:           c.Conversation.AssistantTurns,
+			AvgAssistantTurnMs:       c.Conversation.AvgAssistantTurnMs,
+			AvgUserThinkingMs:        c.Conversation.AvgUserThinkingMs,
+			TotalAssistantDurationMs: c.Conversation.TotalAssistantDurationMs,
+			TotalUserDurationMs:      c.Conversation.TotalUserDurationMs,
+			AssistantUtilization:     c.Conversation.AssistantUtilization,
 		}
 	}
 

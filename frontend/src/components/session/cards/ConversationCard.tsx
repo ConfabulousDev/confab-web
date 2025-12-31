@@ -4,6 +4,7 @@ import {
   RefreshIcon,
   DurationIcon,
   ThinkingIcon,
+  ZapIcon,
 } from '@/components/icons';
 import type { ConversationCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -13,6 +14,9 @@ const TOOLTIPS = {
   assistantTurns: 'Number of assistant text responses',
   avgAssistantTurn: 'Average time Claude spent per turn (including tool calls)',
   avgUserThinking: 'Average time between Claude finishing and user responding',
+  totalAssistantDuration: 'Total time Claude spent working across all turns',
+  totalUserDuration: 'Total time user spent thinking between turns',
+  assistantUtilization: 'Percentage of session time Claude was actively working',
 };
 
 function formatDuration(ms: number): string {
@@ -45,7 +49,12 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
 
   if (!data) return null;
 
-  const hasTiming = data.avg_assistant_turn_ms != null || data.avg_user_thinking_ms != null;
+  const hasTiming =
+    data.avg_assistant_turn_ms != null ||
+    data.avg_user_thinking_ms != null ||
+    data.total_assistant_duration_ms != null ||
+    data.total_user_duration_ms != null ||
+    data.assistant_utilization != null;
 
   return (
     <CardWrapper title="Conversation" icon={ConversationIcon}>
@@ -67,6 +76,30 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
       {hasTiming && (
         <>
           <SectionHeader label="Timing" />
+          {data.total_assistant_duration_ms != null && (
+            <StatRow
+              label="Total Claude time"
+              value={formatDuration(data.total_assistant_duration_ms)}
+              icon={DurationIcon}
+              tooltip={TOOLTIPS.totalAssistantDuration}
+            />
+          )}
+          {data.total_user_duration_ms != null && (
+            <StatRow
+              label="Total user time"
+              value={formatDuration(data.total_user_duration_ms)}
+              icon={ThinkingIcon}
+              tooltip={TOOLTIPS.totalUserDuration}
+            />
+          )}
+          {data.assistant_utilization != null && (
+            <StatRow
+              label="Claude utilization"
+              value={`${data.assistant_utilization.toFixed(0)}%`}
+              icon={ZapIcon}
+              tooltip={TOOLTIPS.assistantUtilization}
+            />
+          )}
           {data.avg_assistant_turn_ms != null && (
             <StatRow
               label="Avg Claude turn"

@@ -12,7 +12,7 @@ const (
 	SessionCardVersion         = 4 // v4: moved turn counts to conversation card
 	ToolsCardVersion           = 2 // v2: per-tool success/error breakdown
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
-	ConversationCardVersion    = 1 // v1: initial version with turn timing metrics
+	ConversationCardVersion    = 2 // v2: added total durations and utilization
 	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
 )
 
@@ -91,14 +91,17 @@ type CodeActivityCardRecord struct {
 // ConversationCardRecord is the DB record for the conversation card.
 // It tracks turn counts and timing metrics for conversational turns.
 type ConversationCardRecord struct {
-	SessionID          string    `json:"session_id"`
-	Version            int       `json:"version"`
-	ComputedAt         time.Time `json:"computed_at"`
-	UpToLine           int64     `json:"up_to_line"`
-	UserTurns          int       `json:"user_turns"`                      // Count of human prompts
-	AssistantTurns     int       `json:"assistant_turns"`                 // Count of text responses
-	AvgAssistantTurnMs *int64    `json:"avg_assistant_turn_ms,omitempty"` // Average assistant turn duration
-	AvgUserThinkingMs  *int64    `json:"avg_user_thinking_ms,omitempty"`  // Average user thinking time
+	SessionID                string    `json:"session_id"`
+	Version                  int       `json:"version"`
+	ComputedAt               time.Time `json:"computed_at"`
+	UpToLine                 int64     `json:"up_to_line"`
+	UserTurns                int       `json:"user_turns"`                           // Count of human prompts
+	AssistantTurns           int       `json:"assistant_turns"`                      // Count of text responses
+	AvgAssistantTurnMs       *int64    `json:"avg_assistant_turn_ms,omitempty"`      // Average assistant turn duration
+	AvgUserThinkingMs        *int64    `json:"avg_user_thinking_ms,omitempty"`       // Average user thinking time
+	TotalAssistantDurationMs *int64    `json:"total_assistant_duration_ms,omitempty"` // Total assistant turn duration
+	TotalUserDurationMs      *int64    `json:"total_user_duration_ms,omitempty"`      // Total user thinking time
+	AssistantUtilization     *float64  `json:"assistant_utilization,omitempty"`       // % of time Claude was working
 }
 
 // AgentStats holds success and error counts for a single agent type.
@@ -192,10 +195,13 @@ type CodeActivityCardData struct {
 
 // ConversationCardData is the API response format for the conversation card.
 type ConversationCardData struct {
-	UserTurns          int    `json:"user_turns"`
-	AssistantTurns     int    `json:"assistant_turns"`
-	AvgAssistantTurnMs *int64 `json:"avg_assistant_turn_ms,omitempty"`
-	AvgUserThinkingMs  *int64 `json:"avg_user_thinking_ms,omitempty"`
+	UserTurns                int      `json:"user_turns"`
+	AssistantTurns           int      `json:"assistant_turns"`
+	AvgAssistantTurnMs       *int64   `json:"avg_assistant_turn_ms,omitempty"`
+	AvgUserThinkingMs        *int64   `json:"avg_user_thinking_ms,omitempty"`
+	TotalAssistantDurationMs *int64   `json:"total_assistant_duration_ms,omitempty"`
+	TotalUserDurationMs      *int64   `json:"total_user_duration_ms,omitempty"`
+	AssistantUtilization     *float64 `json:"assistant_utilization,omitempty"`
 }
 
 // AgentsAndSkillsCardData is the API response format for the combined agents and skills card.

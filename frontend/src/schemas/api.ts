@@ -223,6 +223,9 @@ export const ConversationCardDataSchema = z.object({
   assistant_turns: z.number(),
   avg_assistant_turn_ms: z.number().nullable().optional(),
   avg_user_thinking_ms: z.number().nullable().optional(),
+  total_assistant_duration_ms: z.number().nullable().optional(),
+  total_user_duration_ms: z.number().nullable().optional(),
+  assistant_utilization: z.number().nullable().optional(),
 });
 
 // Agent stats: per-agent-type success/error counts (same structure as ToolStats)
