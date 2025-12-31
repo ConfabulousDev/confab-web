@@ -5,46 +5,46 @@ import (
 )
 
 // ComputeResult contains the computed analytics from JSONL content.
-// This struct aggregates results from all collectors.
+// This struct aggregates results from all analyzers.
 type ComputeResult struct {
-	// Token and cost stats (from TokensCollector)
+	// Token and cost stats (from TokensAnalyzer)
 	InputTokens         int64
 	OutputTokens        int64
 	CacheCreationTokens int64
 	CacheReadTokens     int64
 	EstimatedCostUSD    decimal.Decimal
 
-	// Message counts (from SessionCollector)
+	// Message counts (from SessionAnalyzer)
 	TotalMessages     int
 	UserMessages      int
 	AssistantMessages int
 
-	// Message type breakdown (from SessionCollector)
+	// Message type breakdown (from SessionAnalyzer)
 	HumanPrompts   int
 	ToolResults    int
 	TextResponses  int
 	ToolCalls      int
 	ThinkingBlocks int
 
-	// Actual conversational turns (from ConversationCollector)
+	// Actual conversational turns (from ConversationAnalyzer)
 	UserTurns      int
 	AssistantTurns int
 
-	// Session metadata (from SessionCollector)
+	// Session metadata (from SessionAnalyzer)
 	DurationMs *int64
 	ModelsUsed []string
 
-	// Compaction stats (from SessionCollector)
+	// Compaction stats (from SessionAnalyzer)
 	CompactionAuto      int
 	CompactionManual    int
 	CompactionAvgTimeMs *int
 
-	// Tools stats (from ToolsCollector)
+	// Tools stats (from ToolsAnalyzer)
 	TotalToolCalls int
 	ToolStats      map[string]*ToolStats
 	ToolErrorCount int
 
-	// Code activity stats (from CodeActivityCollector)
+	// Code activity stats (from CodeActivityAnalyzer)
 	FilesRead         int
 	FilesModified     int
 	LinesAdded        int
@@ -52,21 +52,48 @@ type ComputeResult struct {
 	SearchCount       int
 	LanguageBreakdown map[string]int
 
-	// Conversation stats (from ConversationCollector)
+	// Conversation stats (from ConversationAnalyzer)
 	AvgAssistantTurnMs *int64
 	AvgUserThinkingMs  *int64
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
-// It performs a single pass through the content using the collector pattern.
+// It uses the analyzer pattern where each analyzer processes the full file collection.
 func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
-	tokens := NewTokensCollector()
-	session := NewSessionCollector()
-	tools := NewToolsCollector()
-	codeActivity := NewCodeActivityCollector()
-	conversation := NewConversationCollector()
+	// Build file collection (with empty agents for now)
+	fc, err := NewFileCollection(content)
+	if err != nil {
+		return nil, err
+	}
 
-	_, err := RunCollectors(content, tokens, session, tools, codeActivity, conversation)
+	return ComputeFromFileCollection(fc)
+}
+
+// ComputeFromFileCollection computes analytics from a FileCollection.
+// This is the main entry point that runs all analyzers.
+func ComputeFromFileCollection(fc *FileCollection) (*ComputeResult, error) {
+	// Run all analyzers
+	tokens, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := (&SessionAnalyzer{}).Analyze(fc)
+	if err != nil {
+		return nil, err
+	}
+
+	tools, err := (&ToolsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		return nil, err
+	}
+
+	codeActivity, err := (&CodeActivityAnalyzer{}).Analyze(fc)
+	if err != nil {
+		return nil, err
+	}
+
+	conversation, err := (&ConversationAnalyzer{}).Analyze(fc)
 	if err != nil {
 		return nil, err
 	}
@@ -96,8 +123,8 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 		AssistantTurns: conversation.AssistantTurns,
 
 		// Session metadata
-		DurationMs: session.DurationMs(),
-		ModelsUsed: session.ModelsList(),
+		DurationMs: session.DurationMs,
+		ModelsUsed: session.ModelsUsed,
 
 		// Compaction stats
 		CompactionAuto:      session.CompactionAuto,
@@ -110,12 +137,12 @@ func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
 		ToolErrorCount: tools.ErrorCount,
 
 		// Code activity stats
-		FilesRead:         codeActivity.FilesRead(),
-		FilesModified:     codeActivity.FilesModified(),
+		FilesRead:         codeActivity.FilesRead,
+		FilesModified:     codeActivity.FilesModified,
 		LinesAdded:        codeActivity.LinesAdded,
 		LinesRemoved:      codeActivity.LinesRemoved,
 		SearchCount:       codeActivity.SearchCount,
-		LanguageBreakdown: codeActivity.LanguageBreakdown(),
+		LanguageBreakdown: codeActivity.LanguageBreakdown,
 
 		// Conversation stats (turns and timing)
 		AvgAssistantTurnMs: conversation.AvgAssistantTurnMs,
