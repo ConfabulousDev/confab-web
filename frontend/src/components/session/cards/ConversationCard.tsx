@@ -1,4 +1,4 @@
-import { CardWrapper, StatRow, CardLoading, SectionHeader } from './Card';
+import { CardWrapper, StatRow, CardLoading } from './Card';
 import {
   ConversationIcon,
   RefreshIcon,
@@ -10,13 +10,12 @@ import type { ConversationCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 
 const TOOLTIPS = {
-  userTurns: 'Number of user prompts in the conversation',
-  assistantTurns: 'Number of assistant text responses',
-  avgAssistantTurn: 'Average time Claude spent per turn (including tool calls)',
-  avgUserThinking: 'Average time between Claude finishing and user responding',
-  totalAssistantDuration: 'Total time Claude spent working across all turns',
-  totalUserDuration: 'Total time user spent thinking between turns',
-  assistantUtilization: 'Percentage of session time Claude was actively working',
+  userPrompts: 'Number of user prompts in the conversation',
+  avgClaudeTime: 'Average time Claude spent responding per prompt',
+  avgUserTime: 'Average time between Claude finishing and user responding',
+  totalClaudeTime: 'Total time Claude spent working across all prompts',
+  totalUserTime: 'Total time user spent between prompts',
+  claudeUtilization: 'Percentage of session time Claude was actively working',
 };
 
 function formatDuration(ms: number): string {
@@ -58,30 +57,22 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
 
   return (
     <CardWrapper title="Conversation" icon={ConversationIcon}>
-      {/* Turn counts */}
       <StatRow
-        label="User turns"
+        label="User prompts"
         value={data.user_turns}
         icon={RefreshIcon}
-        tooltip={TOOLTIPS.userTurns}
-      />
-      <StatRow
-        label="Assistant turns"
-        value={data.assistant_turns}
-        icon={RefreshIcon}
-        tooltip={TOOLTIPS.assistantTurns}
+        tooltip={TOOLTIPS.userPrompts}
       />
 
       {/* Timing metrics */}
       {hasTiming && (
         <>
-          <SectionHeader label="Timing" />
           {data.total_assistant_duration_ms != null && (
             <StatRow
               label="Total Claude time"
               value={formatDuration(data.total_assistant_duration_ms)}
               icon={DurationIcon}
-              tooltip={TOOLTIPS.totalAssistantDuration}
+              tooltip={TOOLTIPS.totalClaudeTime}
             />
           )}
           {data.total_user_duration_ms != null && (
@@ -89,7 +80,7 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
               label="Total user time"
               value={formatDuration(data.total_user_duration_ms)}
               icon={ThinkingIcon}
-              tooltip={TOOLTIPS.totalUserDuration}
+              tooltip={TOOLTIPS.totalUserTime}
             />
           )}
           {data.assistant_utilization != null && (
@@ -97,23 +88,23 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
               label="Claude utilization"
               value={`${data.assistant_utilization.toFixed(0)}%`}
               icon={ZapIcon}
-              tooltip={TOOLTIPS.assistantUtilization}
+              tooltip={TOOLTIPS.claudeUtilization}
             />
           )}
           {data.avg_assistant_turn_ms != null && (
             <StatRow
-              label="Avg Claude turn"
+              label="Avg Claude time"
               value={formatDuration(data.avg_assistant_turn_ms)}
               icon={DurationIcon}
-              tooltip={TOOLTIPS.avgAssistantTurn}
+              tooltip={TOOLTIPS.avgClaudeTime}
             />
           )}
           {data.avg_user_thinking_ms != null && (
             <StatRow
-              label="Avg user thinking"
+              label="Avg user time"
               value={formatDuration(data.avg_user_thinking_ms)}
               icon={ThinkingIcon}
-              tooltip={TOOLTIPS.avgUserThinking}
+              tooltip={TOOLTIPS.avgUserTime}
             />
           )}
         </>
