@@ -28,6 +28,8 @@ export interface CardDefinition {
   order: number;
   /** Number of grid columns to span (default: 1) */
   span?: 1 | 2 | 3;
+  /** Height hint for consistent grid alignment (default: 'standard') */
+  size?: 'compact' | 'standard' | 'tall';
 }
 
 /**

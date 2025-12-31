@@ -1,3 +1,29 @@
+.stats {
+  margin-bottom: 12px;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  padding-right: 24px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .chartContainer {
   width: 100%;
   min-height: 120px;
@@ -13,9 +39,21 @@
 }
 
 .tooltipTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
   color: var(--color-text-primary);
   margin-bottom: 4px;
+}
+
+.tooltipType {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .tooltipRow {

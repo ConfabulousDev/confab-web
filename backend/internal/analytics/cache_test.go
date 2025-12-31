@@ -65,23 +65,17 @@ func TestCardsAllValid(t *testing.T) {
 				AvgAssistantTurnMs: nil,
 				AvgUserThinkingMs:  nil,
 			},
-			Agents: &AgentsCardRecord{
+			AgentsAndSkills: &AgentsAndSkillsCardRecord{
 				SessionID:        "test-session",
-				Version:          AgentsCardVersion,
+				Version:          AgentsAndSkillsCardVersion,
 				ComputedAt:       now,
 				UpToLine:         upToLine,
-				TotalInvocations: 3,
+				AgentInvocations: 3,
+				SkillInvocations: 2,
 				AgentStats: map[string]*AgentStats{
 					"Explore": {Success: 2, Errors: 0},
 					"Plan":    {Success: 1, Errors: 0},
 				},
-			},
-			Skills: &SkillsCardRecord{
-				SessionID:        "test-session",
-				Version:          SkillsCardVersion,
-				ComputedAt:       now,
-				UpToLine:         upToLine,
-				TotalInvocations: 2,
 				SkillStats: map[string]*SkillStats{
 					"commit": {Success: 2, Errors: 0},
 				},
@@ -98,8 +92,7 @@ func TestCardsAllValid(t *testing.T) {
 		cards.Tools.Version = version
 		cards.CodeActivity.Version = version
 		cards.Conversation.Version = version
-		cards.Agents.Version = version
-		cards.Skills.Version = version
+		cards.AgentsAndSkills.Version = version
 		return cards
 	}
 
@@ -150,19 +143,11 @@ func TestCardsAllValid(t *testing.T) {
 		}
 	})
 
-	t.Run("returns false when agents card is nil", func(t *testing.T) {
+	t.Run("returns false when agents and skills card is nil", func(t *testing.T) {
 		cards := makeCards(100)
-		cards.Agents = nil
+		cards.AgentsAndSkills = nil
 		if cards.AllValid(100) {
-			t.Error("expected false when agents card is nil")
-		}
-	})
-
-	t.Run("returns false when skills card is nil", func(t *testing.T) {
-		cards := makeCards(100)
-		cards.Skills = nil
-		if cards.AllValid(100) {
-			t.Error("expected false when skills card is nil")
+			t.Error("expected false when agents and skills card is nil")
 		}
 	})
 

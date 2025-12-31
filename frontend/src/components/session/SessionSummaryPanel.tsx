@@ -90,9 +90,12 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
         {orderedCards.map((cardDef) => {
           const CardComponent = cardDef.component;
           const cardData = cards[cardDef.key] ?? null;
-          const spanClass = cardDef.span === 2 ? styles.span2 : cardDef.span === 3 ? styles.span3 : undefined;
+          const spanClass = cardDef.span === 2 ? styles.span2 : cardDef.span === 3 ? styles.span3 : '';
+          const sizeClass = cardDef.size === 'compact' ? styles.sizeCompact
+            : cardDef.size === 'tall' ? styles.sizeTall
+            : styles.sizeStandard;
           return (
-            <div key={cardDef.key} className={spanClass}>
+            <div key={cardDef.key} className={`${spanClass} ${sizeClass}`.trim()}>
               <CardComponent
                 data={cardData}
                 loading={loading}

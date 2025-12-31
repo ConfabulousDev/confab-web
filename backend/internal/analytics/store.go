@@ -60,19 +60,12 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	}
 	cards.Conversation = conversation
 
-	// Get agents card
-	agents, err := s.getAgentsCard(ctx, sessionID)
+	// Get agents and skills card
+	agentsAndSkills, err := s.getAgentsAndSkillsCard(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("getting agents card: %w", err)
+		return nil, fmt.Errorf("getting agents and skills card: %w", err)
 	}
-	cards.Agents = agents
-
-	// Get skills card
-	skills, err := s.getSkillsCard(ctx, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("getting skills card: %w", err)
-	}
-	cards.Skills = skills
+	cards.AgentsAndSkills = agentsAndSkills
 
 	return cards, nil
 }
@@ -109,15 +102,9 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 		}
 	}
 
-	if cards.Agents != nil {
-		if err := s.upsertAgentsCard(ctx, cards.Agents); err != nil {
-			return fmt.Errorf("upserting agents card: %w", err)
-		}
-	}
-
-	if cards.Skills != nil {
-		if err := s.upsertSkillsCard(ctx, cards.Skills); err != nil {
-			return fmt.Errorf("upserting skills card: %w", err)
+	if cards.AgentsAndSkills != nil {
+		if err := s.upsertAgentsAndSkillsCard(ctx, cards.AgentsAndSkills); err != nil {
+			return fmt.Errorf("upserting agents and skills card: %w", err)
 		}
 	}
 
@@ -514,26 +501,28 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 }
 
 // =============================================================================
-// Agents card operations
+// Agents and Skills card operations
 // =============================================================================
 
-func (s *Store) getAgentsCard(ctx context.Context, sessionID string) (*AgentsCardRecord, error) {
+func (s *Store) getAgentsAndSkillsCard(ctx context.Context, sessionID string) (*AgentsAndSkillsCardRecord, error) {
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
-			total_invocations, agent_stats
-		FROM session_card_agents
+			agent_invocations, skill_invocations, agent_stats, skill_stats
+		FROM session_card_agents_and_skills
 		WHERE session_id = $1
 	`
 
-	var record AgentsCardRecord
-	var statsJSON []byte
+	var record AgentsAndSkillsCardRecord
+	var agentStatsJSON, skillStatsJSON []byte
 	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
 		&record.SessionID,
 		&record.Version,
 		&record.ComputedAt,
 		&record.UpToLine,
-		&record.TotalInvocations,
-		&statsJSON,
+		&record.AgentInvocations,
+		&record.SkillInvocations,
+		&agentStatsJSON,
+		&skillStatsJSON,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -542,95 +531,38 @@ func (s *Store) getAgentsCard(ctx context.Context, sessionID string) (*AgentsCar
 		return nil, err
 	}
 
-	if err := json.Unmarshal(statsJSON, &record.AgentStats); err != nil {
+	if err := json.Unmarshal(agentStatsJSON, &record.AgentStats); err != nil {
 		return nil, fmt.Errorf("parsing agent_stats: %w", err)
 	}
-
-	return &record, nil
-}
-
-func (s *Store) upsertAgentsCard(ctx context.Context, record *AgentsCardRecord) error {
-	statsJSON, err := json.Marshal(record.AgentStats)
-	if err != nil {
-		return fmt.Errorf("marshaling agent_stats: %w", err)
-	}
-
-	query := `
-		INSERT INTO session_card_agents (
-			session_id, version, computed_at, up_to_line,
-			total_invocations, agent_stats
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (session_id) DO UPDATE SET
-			version = EXCLUDED.version,
-			computed_at = EXCLUDED.computed_at,
-			up_to_line = EXCLUDED.up_to_line,
-			total_invocations = EXCLUDED.total_invocations,
-			agent_stats = EXCLUDED.agent_stats
-	`
-
-	_, err = s.db.ExecContext(ctx, query,
-		record.SessionID,
-		record.Version,
-		record.ComputedAt,
-		record.UpToLine,
-		record.TotalInvocations,
-		statsJSON,
-	)
-	return err
-}
-
-// =============================================================================
-// Skills card operations
-// =============================================================================
-
-func (s *Store) getSkillsCard(ctx context.Context, sessionID string) (*SkillsCardRecord, error) {
-	query := `
-		SELECT session_id, version, computed_at, up_to_line,
-			total_invocations, skill_stats
-		FROM session_card_skills
-		WHERE session_id = $1
-	`
-
-	var record SkillsCardRecord
-	var statsJSON []byte
-	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
-		&record.SessionID,
-		&record.Version,
-		&record.ComputedAt,
-		&record.UpToLine,
-		&record.TotalInvocations,
-		&statsJSON,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(statsJSON, &record.SkillStats); err != nil {
+	if err := json.Unmarshal(skillStatsJSON, &record.SkillStats); err != nil {
 		return nil, fmt.Errorf("parsing skill_stats: %w", err)
 	}
 
 	return &record, nil
 }
 
-func (s *Store) upsertSkillsCard(ctx context.Context, record *SkillsCardRecord) error {
-	statsJSON, err := json.Marshal(record.SkillStats)
+func (s *Store) upsertAgentsAndSkillsCard(ctx context.Context, record *AgentsAndSkillsCardRecord) error {
+	agentStatsJSON, err := json.Marshal(record.AgentStats)
+	if err != nil {
+		return fmt.Errorf("marshaling agent_stats: %w", err)
+	}
+	skillStatsJSON, err := json.Marshal(record.SkillStats)
 	if err != nil {
 		return fmt.Errorf("marshaling skill_stats: %w", err)
 	}
 
 	query := `
-		INSERT INTO session_card_skills (
+		INSERT INTO session_card_agents_and_skills (
 			session_id, version, computed_at, up_to_line,
-			total_invocations, skill_stats
-		) VALUES ($1, $2, $3, $4, $5, $6)
+			agent_invocations, skill_invocations, agent_stats, skill_stats
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
 			up_to_line = EXCLUDED.up_to_line,
-			total_invocations = EXCLUDED.total_invocations,
+			agent_invocations = EXCLUDED.agent_invocations,
+			skill_invocations = EXCLUDED.skill_invocations,
+			agent_stats = EXCLUDED.agent_stats,
 			skill_stats = EXCLUDED.skill_stats
 	`
 
@@ -639,8 +571,10 @@ func (s *Store) upsertSkillsCard(ctx context.Context, record *SkillsCardRecord) 
 		record.Version,
 		record.ComputedAt,
 		record.UpToLine,
-		record.TotalInvocations,
-		statsJSON,
+		record.AgentInvocations,
+		record.SkillInvocations,
+		agentStatsJSON,
+		skillStatsJSON,
 	)
 	return err
 }
@@ -719,20 +653,14 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			AvgAssistantTurnMs: r.AvgAssistantTurnMs,
 			AvgUserThinkingMs:  r.AvgUserThinkingMs,
 		},
-		Agents: &AgentsCardRecord{
+		AgentsAndSkills: &AgentsAndSkillsCardRecord{
 			SessionID:        sessionID,
-			Version:          AgentsCardVersion,
+			Version:          AgentsAndSkillsCardVersion,
 			ComputedAt:       now,
 			UpToLine:         lineCount,
-			TotalInvocations: r.TotalAgentInvocations,
+			AgentInvocations: r.TotalAgentInvocations,
+			SkillInvocations: r.TotalSkillInvocations,
 			AgentStats:       r.AgentStats,
-		},
-		Skills: &SkillsCardRecord{
-			SessionID:        sessionID,
-			Version:          SkillsCardVersion,
-			ComputedAt:       now,
-			UpToLine:         lineCount,
-			TotalInvocations: r.TotalSkillInvocations,
 			SkillStats:       r.SkillStats,
 		},
 	}
@@ -830,19 +758,12 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		}
 	}
 
-	if c.Agents != nil {
-		// Cards format only (no legacy format for agents)
-		response.Cards["agents"] = AgentsCardData{
-			TotalInvocations: c.Agents.TotalInvocations,
-			AgentStats:       c.Agents.AgentStats,
-		}
-	}
-
-	if c.Skills != nil {
-		// Cards format only (no legacy format for skills)
-		response.Cards["skills"] = SkillsCardData{
-			TotalInvocations: c.Skills.TotalInvocations,
-			SkillStats:       c.Skills.SkillStats,
+	if c.AgentsAndSkills != nil {
+		response.Cards["agents_and_skills"] = AgentsAndSkillsCardData{
+			AgentInvocations: c.AgentsAndSkills.AgentInvocations,
+			SkillInvocations: c.AgentsAndSkills.SkillInvocations,
+			AgentStats:       c.AgentsAndSkills.AgentStats,
+			SkillStats:       c.AgentsAndSkills.SkillStats,
 		}
 	}
 

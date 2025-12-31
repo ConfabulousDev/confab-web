@@ -8,13 +8,12 @@ import (
 
 // Card version constants - increment when compute logic changes
 const (
-	TokensCardVersion       = 2 // v2: added estimated_cost_usd (merged from cost card)
-	SessionCardVersion      = 4 // v4: moved turn counts to conversation card
-	ToolsCardVersion        = 2 // v2: per-tool success/error breakdown
-	CodeActivityCardVersion = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
-	ConversationCardVersion = 1 // v1: initial version with turn timing metrics
-	AgentsCardVersion       = 1 // v1: initial version with agent invocation counts by type
-	SkillsCardVersion       = 1 // v1: initial version with skill invocation counts by name
+	TokensCardVersion          = 2 // v2: added estimated_cost_usd (merged from cost card)
+	SessionCardVersion         = 4 // v4: moved turn counts to conversation card
+	ToolsCardVersion           = 2 // v2: per-tool success/error breakdown
+	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
+	ConversationCardVersion    = 1 // v1: initial version with turn timing metrics
+	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
 )
 
 // =============================================================================
@@ -108,41 +107,32 @@ type AgentStats struct {
 	Errors  int `json:"errors"`
 }
 
-// AgentsCardRecord is the DB record for the agents card.
-type AgentsCardRecord struct {
-	SessionID        string                 `json:"session_id"`
-	Version          int                    `json:"version"`
-	ComputedAt       time.Time              `json:"computed_at"`
-	UpToLine         int64                  `json:"up_to_line"`
-	TotalInvocations int                    `json:"total_invocations"`
-	AgentStats       map[string]*AgentStats `json:"agent_stats"` // Per-agent-type success/error counts
-}
-
 // SkillStats holds success and error counts for a single skill.
 type SkillStats struct {
 	Success int `json:"success"`
 	Errors  int `json:"errors"`
 }
 
-// SkillsCardRecord is the DB record for the skills card.
-type SkillsCardRecord struct {
+// AgentsAndSkillsCardRecord is the DB record for the combined agents and skills card.
+type AgentsAndSkillsCardRecord struct {
 	SessionID        string                 `json:"session_id"`
 	Version          int                    `json:"version"`
 	ComputedAt       time.Time              `json:"computed_at"`
 	UpToLine         int64                  `json:"up_to_line"`
-	TotalInvocations int                    `json:"total_invocations"`
+	AgentInvocations int                    `json:"agent_invocations"`
+	SkillInvocations int                    `json:"skill_invocations"`
+	AgentStats       map[string]*AgentStats `json:"agent_stats"` // Per-agent-type success/error counts
 	SkillStats       map[string]*SkillStats `json:"skill_stats"` // Per-skill success/error counts
 }
 
 // Cards aggregates all card data for a session.
 type Cards struct {
-	Tokens       *TokensCardRecord
-	Session      *SessionCardRecord
-	Tools        *ToolsCardRecord
-	CodeActivity *CodeActivityCardRecord
-	Conversation *ConversationCardRecord
-	Agents       *AgentsCardRecord
-	Skills       *SkillsCardRecord
+	Tokens          *TokensCardRecord
+	Session         *SessionCardRecord
+	Tools           *ToolsCardRecord
+	CodeActivity    *CodeActivityCardRecord
+	Conversation    *ConversationCardRecord
+	AgentsAndSkills *AgentsAndSkillsCardRecord
 }
 
 // =============================================================================
@@ -208,15 +198,11 @@ type ConversationCardData struct {
 	AvgUserThinkingMs  *int64 `json:"avg_user_thinking_ms,omitempty"`
 }
 
-// AgentsCardData is the API response format for the agents card.
-type AgentsCardData struct {
-	TotalInvocations int                    `json:"total_invocations"`
+// AgentsAndSkillsCardData is the API response format for the combined agents and skills card.
+type AgentsAndSkillsCardData struct {
+	AgentInvocations int                    `json:"agent_invocations"`
+	SkillInvocations int                    `json:"skill_invocations"`
 	AgentStats       map[string]*AgentStats `json:"agent_stats"` // Per-agent-type success/error counts
-}
-
-// SkillsCardData is the API response format for the skills card.
-type SkillsCardData struct {
-	TotalInvocations int                    `json:"total_invocations"`
 	SkillStats       map[string]*SkillStats `json:"skill_stats"` // Per-skill success/error counts
 }
 
@@ -249,14 +235,9 @@ func (c *ConversationCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == ConversationCardVersion && c.UpToLine == currentLineCount
 }
 
-// IsValid checks if an agents card record is valid for the current line count.
-func (c *AgentsCardRecord) IsValid(currentLineCount int64) bool {
-	return c != nil && c.Version == AgentsCardVersion && c.UpToLine == currentLineCount
-}
-
-// IsValid checks if a skills card record is valid for the current line count.
-func (c *SkillsCardRecord) IsValid(currentLineCount int64) bool {
-	return c != nil && c.Version == SkillsCardVersion && c.UpToLine == currentLineCount
+// IsValid checks if an agents and skills card record is valid for the current line count.
+func (c *AgentsAndSkillsCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == AgentsAndSkillsCardVersion && c.UpToLine == currentLineCount
 }
 
 // AllValid checks if all cards are valid for the current line count.
@@ -269,6 +250,5 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		c.Tools.IsValid(currentLineCount) &&
 		c.CodeActivity.IsValid(currentLineCount) &&
 		c.Conversation.IsValid(currentLineCount) &&
-		c.Agents.IsValid(currentLineCount) &&
-		c.Skills.IsValid(currentLineCount)
+		c.AgentsAndSkills.IsValid(currentLineCount)
 }

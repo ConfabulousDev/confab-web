@@ -3,8 +3,7 @@ import { SessionCard } from './SessionCard';
 import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
 import { ConversationCard } from './ConversationCard';
-import { AgentsCard } from './AgentsCard';
-import { SkillsCard } from './SkillsCard';
+import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
 import type { CardDefinition } from './types';
 
 /**
@@ -25,24 +24,28 @@ export const cardRegistry: CardDefinition[] = [
     title: 'Tokens',
     component: TokensCard,
     order: 0,
+    size: 'standard',
   },
   {
     key: 'session',
     title: 'Session',
     component: SessionCard,
     order: 1,
+    size: 'standard',
   },
   {
     key: 'conversation',
     title: 'Conversation',
     component: ConversationCard,
     order: 2,
+    size: 'compact',
   },
   {
     key: 'code_activity',
     title: 'Code Activity',
     component: CodeActivityCard,
     order: 3,
+    size: 'standard',
   },
   {
     key: 'tools',
@@ -50,20 +53,15 @@ export const cardRegistry: CardDefinition[] = [
     component: ToolsCard,
     order: 4,
     span: 2,
+    size: 'tall',
   },
   {
-    key: 'agents',
-    title: 'Agents',
-    component: AgentsCard,
+    key: 'agents_and_skills',
+    title: 'Agents and Skills',
+    component: AgentsAndSkillsCard,
     order: 5,
     span: 2,
-  },
-  {
-    key: 'skills',
-    title: 'Skills',
-    component: SkillsCard,
-    order: 6,
-    span: 2,
+    size: 'tall',
   },
 ];
 
