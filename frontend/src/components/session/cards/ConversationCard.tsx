@@ -48,66 +48,53 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
 
   if (!data) return null;
 
-  const hasTiming =
-    data.avg_assistant_turn_ms != null ||
-    data.avg_user_thinking_ms != null ||
-    data.total_assistant_duration_ms != null ||
-    data.total_user_duration_ms != null ||
-    data.assistant_utilization != null;
-
   return (
     <CardWrapper title="Conversation" icon={ConversationIcon}>
+      {data.assistant_utilization != null && (
+        <StatRow
+          label="Claude utilization"
+          value={`${data.assistant_utilization.toFixed(0)}%`}
+          icon={ZapIcon}
+          tooltip={TOOLTIPS.claudeUtilization}
+        />
+      )}
+      {data.total_assistant_duration_ms != null && (
+        <StatRow
+          label="Total Claude time"
+          value={formatDuration(data.total_assistant_duration_ms)}
+          icon={DurationIcon}
+          tooltip={TOOLTIPS.totalClaudeTime}
+        />
+      )}
+      {data.total_user_duration_ms != null && (
+        <StatRow
+          label="Total user time"
+          value={formatDuration(data.total_user_duration_ms)}
+          icon={ThinkingIcon}
+          tooltip={TOOLTIPS.totalUserTime}
+        />
+      )}
       <StatRow
         label="User prompts"
         value={data.user_turns}
         icon={RefreshIcon}
         tooltip={TOOLTIPS.userPrompts}
       />
-
-      {/* Timing metrics */}
-      {hasTiming && (
-        <>
-          {data.total_assistant_duration_ms != null && (
-            <StatRow
-              label="Total Claude time"
-              value={formatDuration(data.total_assistant_duration_ms)}
-              icon={DurationIcon}
-              tooltip={TOOLTIPS.totalClaudeTime}
-            />
-          )}
-          {data.total_user_duration_ms != null && (
-            <StatRow
-              label="Total user time"
-              value={formatDuration(data.total_user_duration_ms)}
-              icon={ThinkingIcon}
-              tooltip={TOOLTIPS.totalUserTime}
-            />
-          )}
-          {data.assistant_utilization != null && (
-            <StatRow
-              label="Claude utilization"
-              value={`${data.assistant_utilization.toFixed(0)}%`}
-              icon={ZapIcon}
-              tooltip={TOOLTIPS.claudeUtilization}
-            />
-          )}
-          {data.avg_assistant_turn_ms != null && (
-            <StatRow
-              label="Avg Claude time"
-              value={formatDuration(data.avg_assistant_turn_ms)}
-              icon={DurationIcon}
-              tooltip={TOOLTIPS.avgClaudeTime}
-            />
-          )}
-          {data.avg_user_thinking_ms != null && (
-            <StatRow
-              label="Avg user time"
-              value={formatDuration(data.avg_user_thinking_ms)}
-              icon={ThinkingIcon}
-              tooltip={TOOLTIPS.avgUserTime}
-            />
-          )}
-        </>
+      {data.avg_assistant_turn_ms != null && (
+        <StatRow
+          label="Avg Claude time"
+          value={formatDuration(data.avg_assistant_turn_ms)}
+          icon={DurationIcon}
+          tooltip={TOOLTIPS.avgClaudeTime}
+        />
+      )}
+      {data.avg_user_thinking_ms != null && (
+        <StatRow
+          label="Avg user time"
+          value={formatDuration(data.avg_user_thinking_ms)}
+          icon={ThinkingIcon}
+          tooltip={TOOLTIPS.avgUserTime}
+        />
       )}
     </CardWrapper>
   );
