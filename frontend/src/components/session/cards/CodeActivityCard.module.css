@@ -1,9 +1,3 @@
-.statsGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .linesAdded {
   color: var(--color-success);
 }

@@ -132,14 +132,12 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
 
   return (
     <CardWrapper title="Agents and Skills" icon={UsersIcon}>
-      <div className={styles.stats}>
-        <StatRow label="Agent invocations" value={data.agent_invocations} icon={UsersIcon} />
-        <StatRow label="Skill invocations" value={data.skill_invocations} icon={ZapIcon} />
-      </div>
+      <StatRow label="Agent invocations" value={data.agent_invocations} icon={UsersIcon} />
+      <StatRow label="Skill invocations" value={data.skill_invocations} icon={ZapIcon} />
 
       {chartData.length > 0 && (
         <>
-          <div className={styles.legend}>
+          <div className={styles.legend} style={{ marginTop: 'var(--spacing-sm)' }}>
             <div className={styles.legendItem}>
               <span className={styles.legendDot} style={{ backgroundColor: COLORS.agent.success }} />
               <span>Agents</span>

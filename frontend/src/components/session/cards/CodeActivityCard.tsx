@@ -101,23 +101,21 @@ export function CodeActivityCard({ data, loading }: CardProps<CodeActivityCardDa
 
   return (
     <CardWrapper title="Code Activity" icon={CodeIcon}>
-      <div className={styles.statsGrid}>
-        <StatRow label="Files read" value={data.files_read} icon={FileReadIcon} />
-        <StatRow label="Files modified" value={data.files_modified} icon={FileEditIcon} />
-        <StatRow
-          label="Lines added"
-          value={data.lines_added}
-          icon={PlusIcon}
-          valueClassName={styles.linesAdded}
-        />
-        <StatRow
-          label="Lines removed"
-          value={data.lines_removed}
-          icon={MinusIcon}
-          valueClassName={styles.linesRemoved}
-        />
-        <StatRow label="Searches" value={data.search_count} icon={SearchIcon} />
-      </div>
+      <StatRow label="Files read" value={data.files_read} icon={FileReadIcon} />
+      <StatRow label="Files modified" value={data.files_modified} icon={FileEditIcon} />
+      <StatRow
+        label="Lines added"
+        value={data.lines_added}
+        icon={PlusIcon}
+        valueClassName={styles.linesAdded}
+      />
+      <StatRow
+        label="Lines removed"
+        value={data.lines_removed}
+        icon={MinusIcon}
+        valueClassName={styles.linesRemoved}
+      />
+      <StatRow label="Searches" value={data.search_count} icon={SearchIcon} />
 
       {hasLanguages && (
         <>
