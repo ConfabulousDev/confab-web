@@ -142,6 +142,7 @@ export function ToolsCard({ data, loading }: CardProps<ToolsCardData>) {
             <Tooltip
               content={<CustomTooltip />}
               cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
+              isAnimationActive={false}
             />
             <Bar
               dataKey="success"

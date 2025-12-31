@@ -180,6 +180,7 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
                   cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
                   wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
                   allowEscapeViewBox={{ x: true, y: true }}
+                  isAnimationActive={false}
                 />
                 <Bar dataKey="success" stackId="stack" radius={[2, 2, 2, 2]} isAnimationActive={false}>
                   {chartData.map((entry, index) => (
