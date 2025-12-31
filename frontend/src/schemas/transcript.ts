@@ -128,6 +128,8 @@ export const UserMessageSchema = BaseMessageSchema.extend({
   thinkingMetadata: ThinkingMetadataSchema.optional(),
   slug: z.string().optional(), // Session slug for display
   todos: z.array(TodoItemSchema).nullable().optional(), // Todo list state
+  isMeta: z.boolean().optional(), // Skill expansion messages have isMeta: true
+  sourceToolUseID: z.string().optional(), // Links skill expansion to the Skill tool_use
   message: z.object({
     role: z.literal('user'),
     content: z.union([z.string(), z.array(ContentBlockSchema)]),
@@ -523,6 +525,13 @@ export function isToolResultMessage(message: UserMessage): boolean {
   const content = message.message.content;
   if (typeof content === 'string') return false;
   return content.some(isToolResultBlock);
+}
+
+/**
+ * Check if user message is a skill expansion (injected skill content)
+ */
+export function isSkillExpansionMessage(message: UserMessage): boolean {
+  return message.isMeta === true && message.sourceToolUseID !== undefined;
 }
 
 /**

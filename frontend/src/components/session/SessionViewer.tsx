@@ -134,8 +134,8 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
       const next = { ...prev };
       if (category === 'user') {
         // Toggle all user subcategories
-        const allVisible = prev.user.prompt && prev.user['tool-result'];
-        next.user = { prompt: !allVisible, 'tool-result': !allVisible };
+        const allVisible = prev.user.prompt && prev.user['tool-result'] && prev.user.skill;
+        next.user = { prompt: !allVisible, 'tool-result': !allVisible, skill: !allVisible };
       } else if (category === 'assistant') {
         // Toggle all assistant subcategories
         const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;

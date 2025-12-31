@@ -14,7 +14,7 @@ import type { GitInfo } from '@/types';
 
 // Sample hierarchical counts
 const sampleCounts: HierarchicalCounts = {
-  user: { total: 194, prompt: 42, 'tool-result': 152 },
+  user: { total: 194, prompt: 40, 'tool-result': 152, skill: 2 },
   assistant: { total: 271, text: 50, 'tool-use': 180, thinking: 41 },
   system: 0,
   'file-history-snapshot': 39,
@@ -45,8 +45,8 @@ function SessionHeaderInteractive(
     setFilterState((prev) => {
       const next = { ...prev };
       if (category === 'user') {
-        const allVisible = prev.user.prompt && prev.user['tool-result'];
-        next.user = { prompt: !allVisible, 'tool-result': !allVisible };
+        const allVisible = prev.user.prompt && prev.user['tool-result'] && prev.user.skill;
+        next.user = { prompt: !allVisible, 'tool-result': !allVisible, skill: !allVisible };
       } else if (category === 'assistant') {
         const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
         next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };

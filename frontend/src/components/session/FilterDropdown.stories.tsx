@@ -12,7 +12,7 @@ import { DEFAULT_FILTER_STATE } from './messageCategories';
 
 // Sample hierarchical counts for stories
 const sampleCounts: HierarchicalCounts = {
-  user: { total: 194, prompt: 42, 'tool-result': 152 },
+  user: { total: 194, prompt: 40, 'tool-result': 152, skill: 2 },
   assistant: { total: 271, text: 50, 'tool-use': 180, thinking: 41 },
   system: 0,
   'file-history-snapshot': 39,
@@ -34,8 +34,8 @@ function FilterDropdownInteractive({
     setFilterState((prev) => {
       const next = { ...prev };
       if (category === 'user') {
-        const allVisible = prev.user.prompt && prev.user['tool-result'];
-        next.user = { prompt: !allVisible, 'tool-result': !allVisible };
+        const allVisible = prev.user.prompt && prev.user['tool-result'] && prev.user.skill;
+        next.user = { prompt: !allVisible, 'tool-result': !allVisible, skill: !allVisible };
       } else if (category === 'assistant') {
         const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
         next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
@@ -96,7 +96,7 @@ export const Default: Story = {
 export const AllFiltersActive: Story = {
   args: {
     initialFilterState: {
-      user: { prompt: true, 'tool-result': true },
+      user: { prompt: true, 'tool-result': true, skill: true },
       assistant: { text: true, 'tool-use': true, thinking: true },
       system: true,
       'file-history-snapshot': true,
@@ -109,7 +109,7 @@ export const AllFiltersActive: Story = {
 export const SomeFiltersHidden: Story = {
   args: {
     initialFilterState: {
-      user: { prompt: true, 'tool-result': false },
+      user: { prompt: true, 'tool-result': false, skill: true },
       assistant: { text: true, 'tool-use': true, thinking: false },
       system: false,
       'file-history-snapshot': false,
@@ -122,7 +122,7 @@ export const SomeFiltersHidden: Story = {
 export const IndeterminateState: Story = {
   args: {
     initialFilterState: {
-      user: { prompt: true, 'tool-result': false }, // indeterminate
+      user: { prompt: true, 'tool-result': false, skill: true }, // indeterminate
       assistant: { text: false, 'tool-use': true, thinking: false }, // indeterminate
       system: true,
       'file-history-snapshot': false,
@@ -135,7 +135,7 @@ export const IndeterminateState: Story = {
 export const AllCategoriesHaveMessages: Story = {
   args: {
     counts: {
-      user: { total: 192, prompt: 40, 'tool-result': 152 },
+      user: { total: 195, prompt: 40, 'tool-result': 152, skill: 3 },
       assistant: { total: 200, text: 80, 'tool-use': 100, thinking: 20 },
       system: 25,
       'file-history-snapshot': 40,

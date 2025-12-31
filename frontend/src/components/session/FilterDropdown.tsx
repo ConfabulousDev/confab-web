@@ -23,6 +23,7 @@ interface FilterDropdownProps {
 const USER_SUBCATEGORIES: Array<{ key: UserSubcategory; label: string }> = [
   { key: 'prompt', label: 'Prompts' },
   { key: 'tool-result', label: 'Tool Results' },
+  { key: 'skill', label: 'Skills' },
 ];
 
 const ASSISTANT_SUBCATEGORIES: Array<{ key: AssistantSubcategory; label: string }> = [
@@ -71,9 +72,9 @@ function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSub
 
   // Calculate checkbox state for hierarchical categories
   function getUserCheckboxState(): CheckboxState {
-    const { prompt, 'tool-result': toolResult } = filterState.user;
-    if (prompt && toolResult) return 'checked';
-    if (!prompt && !toolResult) return 'unchecked';
+    const { prompt, 'tool-result': toolResult, skill } = filterState.user;
+    if (prompt && toolResult && skill) return 'checked';
+    if (!prompt && !toolResult && !skill) return 'unchecked';
     return 'indeterminate';
   }
 
@@ -89,6 +90,7 @@ function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSub
     // Check user subcategories
     if (counts.user.prompt > 0 && !filterState.user.prompt) return true;
     if (counts.user['tool-result'] > 0 && !filterState.user['tool-result']) return true;
+    if (counts.user.skill > 0 && !filterState.user.skill) return true;
 
     // Check assistant subcategories
     if (counts.assistant.text > 0 && !filterState.assistant.text) return true;

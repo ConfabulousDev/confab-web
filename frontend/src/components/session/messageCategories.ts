@@ -1,11 +1,11 @@
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
-import { isToolResultMessage, isUserMessage, isAssistantMessage } from '@/schemas/transcript';
+import { isToolResultMessage, isSkillExpansionMessage, isUserMessage, isAssistantMessage } from '@/schemas/transcript';
 
 // Message categories for filtering - matches top-level transcript types
 export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation';
 
 // Subcategory types for hierarchical filtering
-export type UserSubcategory = 'prompt' | 'tool-result';
+export type UserSubcategory = 'prompt' | 'tool-result' | 'skill';
 export type AssistantSubcategory = 'text' | 'tool-use' | 'thinking';
 export type MessageSubcategory = UserSubcategory | AssistantSubcategory;
 
@@ -13,6 +13,7 @@ export type MessageSubcategory = UserSubcategory | AssistantSubcategory;
 export interface UserSubcategoryCounts {
   prompt: number;
   'tool-result': number;
+  skill: number;
 }
 
 export interface AssistantSubcategoryCounts {
@@ -43,7 +44,7 @@ export interface MessageCategoryCounts {
 
 // Filter state - tracks which subcategories are visible
 export interface FilterState {
-  user: { prompt: boolean; 'tool-result': boolean };
+  user: { prompt: boolean; 'tool-result': boolean; skill: boolean };
   assistant: { text: boolean; 'tool-use': boolean; thinking: boolean };
   system: boolean;
   'file-history-snapshot': boolean;
@@ -53,7 +54,7 @@ export interface FilterState {
 
 // Default filter state (user and assistant visible with all subs, system visible, others hidden)
 export const DEFAULT_FILTER_STATE: FilterState = {
-  user: { prompt: true, 'tool-result': true },
+  user: { prompt: true, 'tool-result': true, skill: true },
   assistant: { text: true, 'tool-use': true, thinking: true },
   system: true,
   'file-history-snapshot': false,
@@ -70,9 +71,12 @@ export function categorizeMessage(line: TranscriptLine): MessageCategory {
 
 /**
  * Get the subcategory for a user message
+ * Priority: skill > tool-result > prompt
  */
 export function categorizeUserMessage(message: UserMessage): UserSubcategory {
-  return isToolResultMessage(message) ? 'tool-result' : 'prompt';
+  if (isSkillExpansionMessage(message)) return 'skill';
+  if (isToolResultMessage(message)) return 'tool-result';
+  return 'prompt';
 }
 
 /**
@@ -94,7 +98,7 @@ export function categorizeAssistantMessage(message: AssistantMessage): Assistant
  */
 export function countHierarchicalCategories(messages: TranscriptLine[]): HierarchicalCounts {
   const counts: HierarchicalCounts = {
-    user: { total: 0, prompt: 0, 'tool-result': 0 },
+    user: { total: 0, prompt: 0, 'tool-result': 0, skill: 0 },
     assistant: { total: 0, text: 0, 'tool-use': 0, thinking: 0 },
     system: 0,
     'file-history-snapshot': 0,
