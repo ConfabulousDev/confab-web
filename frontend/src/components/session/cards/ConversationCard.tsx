@@ -3,7 +3,7 @@ import {
   ConversationIcon,
   RefreshIcon,
   DurationIcon,
-  ThinkingIcon,
+  UserIcon,
   ZapIcon,
 } from '@/components/icons';
 import type { ConversationCardData } from '@/schemas/api';
@@ -70,7 +70,7 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
         <StatRow
           label="Total user time"
           value={formatDuration(data.total_user_duration_ms)}
-          icon={ThinkingIcon}
+          icon={UserIcon}
           tooltip={TOOLTIPS.totalUserTime}
         />
       )}
@@ -92,7 +92,7 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
         <StatRow
           label="Avg user time"
           value={formatDuration(data.avg_user_thinking_ms)}
-          icon={ThinkingIcon}
+          icon={UserIcon}
           tooltip={TOOLTIPS.avgUserTime}
         />
       )}
