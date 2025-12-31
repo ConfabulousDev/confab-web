@@ -237,6 +237,18 @@ export const AgentsCardDataSchema = z.object({
   agent_stats: z.record(z.string(), AgentStatsSchema),
 });
 
+// Skill stats: per-skill success/error counts (same structure as AgentStats)
+export const SkillStatsSchema = z.object({
+  success: z.number(),
+  errors: z.number(),
+});
+
+// Skills card: tracks Skill invocations by name
+export const SkillsCardDataSchema = z.object({
+  total_invocations: z.number(),
+  skill_stats: z.record(z.string(), SkillStatsSchema),
+});
+
 // Cards map schema - extensible for future cards
 // All fields optional to handle empty analytics (session with no transcript)
 // Note: cost is now part of tokens card, compaction is now part of session card
@@ -247,6 +259,7 @@ export const AnalyticsCardsSchema = z.object({
   code_activity: CodeActivityCardDataSchema.optional(),
   conversation: ConversationCardDataSchema.optional(),
   agents: AgentsCardDataSchema.optional(),
+  skills: SkillsCardDataSchema.optional(),
 });
 
 export const SessionAnalyticsSchema = z.object({
@@ -296,6 +309,8 @@ export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
 export type AgentStats = z.infer<typeof AgentStatsSchema>;
 export type AgentsCardData = z.infer<typeof AgentsCardDataSchema>;
+export type SkillStats = z.infer<typeof SkillStatsSchema>;
+export type SkillsCardData = z.infer<typeof SkillsCardDataSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 

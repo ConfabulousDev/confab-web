@@ -230,3 +230,10 @@ export const UsersIcon = (
     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
   </svg>
 );
+
+// Zap/lightning icon for Skills card header
+export const ZapIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+);

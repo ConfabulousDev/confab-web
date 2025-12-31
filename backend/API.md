@@ -714,6 +714,13 @@ Returns computed analytics for a session. Uses the same canonical access model a
         "Explore": {"success": 3, "errors": 0},
         "Plan": {"success": 2, "errors": 0}
       }
+    },
+    "skills": {
+      "total_invocations": 3,
+      "skill_stats": {
+        "commit": {"success": 2, "errors": 0},
+        "codebase-maintenance": {"success": 1, "errors": 0}
+      }
     }
   }
 }
@@ -754,6 +761,10 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.agents.agent_stats` | object | Map of agent type to stats object |
 | `cards.agents.agent_stats[type].success` | int | Successful invocations of this agent type |
 | `cards.agents.agent_stats[type].errors` | int | Failed invocations of this agent type |
+| `cards.skills.total_invocations` | int | Total number of Skill invocations |
+| `cards.skills.skill_stats` | object | Map of skill name to stats object |
+| `cards.skills.skill_stats[name].success` | int | Successful invocations of this skill |
+| `cards.skills.skill_stats[name].errors` | int | Failed invocations of this skill |
 
 **Notes:**
 - Analytics are cached in the database and recomputed when new data is synced

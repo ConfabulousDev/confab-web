@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"os"
 	"testing"
 )
 
@@ -241,8 +242,9 @@ func TestSessionAnalyzer_MessageBreakdown(t *testing.T) {
 
 func TestTokensAnalyzer_AgentUsage(t *testing.T) {
 	// JSONL with assistant message and a tool_result containing agent usage
-	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{"prompt":"Do something"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":[{"type":"text","text":"Agent completed"}],"toolUseResult":{"status":"completed","agentId":"abc123","totalTokens":1000,"usage":{"input_tokens":50,"output_tokens":200,"cache_creation_input_tokens":100,"cache_read_input_tokens":500}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+	// NOTE: toolUseResult is at the top level of the transcript line, not inside the content block
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{"prompt":"Do something","subagent_type":"Explore"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":[{"type":"text","text":"Agent completed"}]}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z","toolUseResult":{"status":"completed","agentId":"abc123","totalTokens":1000,"usage":{"input_tokens":50,"output_tokens":200,"cache_creation_input_tokens":100,"cache_read_input_tokens":500}}}
 `
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -343,8 +345,10 @@ func TestToolsAnalyzer(t *testing.T) {
 
 func TestToolsAnalyzer_AgentToolCalls(t *testing.T) {
 	// JSONL with a main tool call (Read) and a Task tool that spawned an agent with 25 tool calls
-	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/test.txt"}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{"prompt":"Do something"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"},{"type":"tool_result","tool_use_id":"toolu_2","content":[{"type":"text","text":"Done"}],"toolUseResult":{"status":"completed","agentId":"abc123","totalToolUseCount":25,"usage":{"input_tokens":500,"output_tokens":1000}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+	// NOTE: toolUseResult is at the top level of the user message, not inside content blocks
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/test.txt"}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{"prompt":"Do something","subagent_type":"Explore"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u1a","timestamp":"2025-01-01T00:00:01.5Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":[{"type":"text","text":"Done"}]}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z","toolUseResult":{"status":"completed","agentId":"abc123","totalToolUseCount":25,"usage":{"input_tokens":500,"output_tokens":1000}}}
 `
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -467,8 +471,9 @@ func TestTokensAnalyzer_WithAgentFile(t *testing.T) {
 
 func TestTokensAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
 	// Main transcript with Task tool and toolUseResult, but NO agent file
-	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":5,"usage":{"input_tokens":200,"output_tokens":100}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+	// NOTE: toolUseResult is at the top level of the user message
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{"subagent_type":"Explore"}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Done"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":5,"usage":{"input_tokens":200,"output_tokens":100}}}
 `
 
 	// Without agent file: should use toolUseResult fallback
@@ -495,8 +500,10 @@ func TestTokensAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
 
 func TestToolsAnalyzer_WithAgentFile(t *testing.T) {
 	// Main transcript with Task tool
-	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"},{"type":"tool_result","tool_use_id":"toolu_2","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":10,"usage":{}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+	// NOTE: toolUseResult is at the top level of the user message
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{"subagent_type":"Explore"}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u1a","timestamp":"2025-01-01T00:00:01.5Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"Done"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":10,"usage":{}}}
 `
 	// Agent file with 3 tool calls
 	agentJsonl := `{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":50,"output_tokens":25},"content":[{"type":"tool_use","id":"toolu_a1","name":"Read","input":{}}]},"uuid":"aa1","timestamp":"2025-01-01T00:00:01.5Z"}
@@ -536,8 +543,10 @@ func TestToolsAnalyzer_WithAgentFile(t *testing.T) {
 
 func TestToolsAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
 	// Main transcript with Task tool, but NO agent file
-	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"},{"type":"tool_result","tool_use_id":"toolu_2","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":10,"usage":{}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+	// NOTE: toolUseResult is at the top level of the user message
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{"subagent_type":"Explore"}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u1a","timestamp":"2025-01-01T00:00:01.5Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"Done"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":10,"usage":{}}}
 `
 
 	// Without agent file: should use totalToolUseCount fallback
@@ -620,5 +629,272 @@ func TestCodeActivityAnalyzer_WithAgentFile(t *testing.T) {
 	// Should count files from both main and agent
 	if result.FilesRead != 2 {
 		t.Errorf("FilesRead = %d, want 2", result.FilesRead)
+	}
+}
+
+func TestAgentsAnalyzer_BasicAgentInvocation(t *testing.T) {
+	// Real JSONL format: Task tool_use followed by tool_result with top-level toolUseResult
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_01ABC123","name":"Task","input":{"description":"Explore codebase","prompt":"Find the main function","subagent_type":"Explore"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01ABC123","content":[{"type":"text","text":"Found main function in main.go"}]}]},"uuid":"u1","timestamp":"2025-01-01T00:00:10Z","toolUseResult":{"status":"completed","agentId":"agent_xyz","totalTokens":5000,"totalToolUseCount":12}}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&AgentsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 1 {
+		t.Errorf("TotalInvocations = %d, want 1", result.TotalInvocations)
+	}
+
+	if result.AgentStats["Explore"] == nil {
+		t.Fatal("AgentStats should have 'Explore' entry")
+	}
+	if result.AgentStats["Explore"].Success != 1 {
+		t.Errorf("AgentStats[Explore].Success = %d, want 1", result.AgentStats["Explore"].Success)
+	}
+	if result.AgentStats["Explore"].Errors != 0 {
+		t.Errorf("AgentStats[Explore].Errors = %d, want 0", result.AgentStats["Explore"].Errors)
+	}
+}
+
+func TestAgentsAnalyzer_MultipleAgentTypes(t *testing.T) {
+	// Multiple agent invocations of different types
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_explore","name":"Task","input":{"subagent_type":"Explore"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_explore","content":"Done"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z","toolUseResult":{"agentId":"agent1"}}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_plan","name":"Task","input":{"subagent_type":"Plan"}}],"stop_reason":"tool_use"},"uuid":"a2","timestamp":"2025-01-01T00:00:03Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_plan","content":"Done"}]},"uuid":"u2","timestamp":"2025-01-01T00:00:04Z","toolUseResult":{"agentId":"agent2"}}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_explore2","name":"Task","input":{"subagent_type":"Explore"}}],"stop_reason":"tool_use"},"uuid":"a3","timestamp":"2025-01-01T00:00:05Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_explore2","content":"error","is_error":true}]},"uuid":"u3","timestamp":"2025-01-01T00:00:06Z","toolUseResult":{"agentId":"agent3"}}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&AgentsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 3 {
+		t.Errorf("TotalInvocations = %d, want 3", result.TotalInvocations)
+	}
+
+	// Check Explore stats (2 invocations: 1 success, 1 error)
+	if result.AgentStats["Explore"] == nil {
+		t.Fatal("AgentStats should have 'Explore' entry")
+	}
+	if result.AgentStats["Explore"].Success != 1 {
+		t.Errorf("AgentStats[Explore].Success = %d, want 1", result.AgentStats["Explore"].Success)
+	}
+	if result.AgentStats["Explore"].Errors != 1 {
+		t.Errorf("AgentStats[Explore].Errors = %d, want 1", result.AgentStats["Explore"].Errors)
+	}
+
+	// Check Plan stats (1 success)
+	if result.AgentStats["Plan"] == nil {
+		t.Fatal("AgentStats should have 'Plan' entry")
+	}
+	if result.AgentStats["Plan"].Success != 1 {
+		t.Errorf("AgentStats[Plan].Success = %d, want 1", result.AgentStats["Plan"].Success)
+	}
+}
+
+func TestAgentsAnalyzer_NoAgentInvocations(t *testing.T) {
+	// Regular tool usage without Task/agents
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/test.txt"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&AgentsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 0 {
+		t.Errorf("TotalInvocations = %d, want 0", result.TotalInvocations)
+	}
+	if len(result.AgentStats) != 0 {
+		t.Errorf("AgentStats length = %d, want 0", len(result.AgentStats))
+	}
+}
+
+func TestAgentsAnalyzer_UnknownAgentType(t *testing.T) {
+	// Task tool without subagent_type but with agentId in result (should count as "unknown")
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{"prompt":"Do something"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Done"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z","toolUseResult":{"agentId":"agent_orphan"}}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&AgentsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 1 {
+		t.Errorf("TotalInvocations = %d, want 1", result.TotalInvocations)
+	}
+
+	if result.AgentStats["unknown"] == nil {
+		t.Fatal("AgentStats should have 'unknown' entry for Task without subagent_type")
+	}
+	if result.AgentStats["unknown"].Success != 1 {
+		t.Errorf("AgentStats[unknown].Success = %d, want 1", result.AgentStats["unknown"].Success)
+	}
+}
+
+// TestAgentsAnalyzer_RealSession tests the analyzer against a real session transcript.
+// The test fixture is a copy of an actual Claude Code session.
+// Expected values derived from testdata/session_comprehensive.jsonl:
+//   - 1 Task tool invocation with subagent_type "Explore"
+//   - 1 successful agent result
+func TestAgentsAnalyzer_RealSession(t *testing.T) {
+	content, err := os.ReadFile("testdata/session_comprehensive.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to read test fixture: %v", err)
+	}
+
+	fc, err := NewFileCollection(content)
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&AgentsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	t.Run("TotalInvocations", func(t *testing.T) {
+		expected := 1
+		if result.TotalInvocations != expected {
+			t.Errorf("TotalInvocations = %d, want %d", result.TotalInvocations, expected)
+		}
+	})
+
+	t.Run("ExploreAgentStats", func(t *testing.T) {
+		if result.AgentStats["Explore"] == nil {
+			t.Fatal("AgentStats should have 'Explore' entry")
+		}
+		if result.AgentStats["Explore"].Success != 1 {
+			t.Errorf("AgentStats[Explore].Success = %d, want 1", result.AgentStats["Explore"].Success)
+		}
+		if result.AgentStats["Explore"].Errors != 0 {
+			t.Errorf("AgentStats[Explore].Errors = %d, want 0", result.AgentStats["Explore"].Errors)
+		}
+	})
+}
+
+func TestSkillsAnalyzer_BasicSkillInvocation(t *testing.T) {
+	// Skill tool_use followed by tool_result
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_skill1","name":"Skill","input":{"skill":"commit","args":"-m 'test'"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_skill1","content":"Skill executed successfully"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&SkillsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 1 {
+		t.Errorf("TotalInvocations = %d, want 1", result.TotalInvocations)
+	}
+
+	if result.SkillStats["commit"] == nil {
+		t.Fatal("SkillStats should have 'commit' entry")
+	}
+	if result.SkillStats["commit"].Success != 1 {
+		t.Errorf("SkillStats[commit].Success = %d, want 1", result.SkillStats["commit"].Success)
+	}
+	if result.SkillStats["commit"].Errors != 0 {
+		t.Errorf("SkillStats[commit].Errors = %d, want 0", result.SkillStats["commit"].Errors)
+	}
+}
+
+func TestSkillsAnalyzer_MultipleSkillTypes(t *testing.T) {
+	// Multiple skill invocations of different types
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_s1","name":"Skill","input":{"skill":"commit"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_s1","content":"Done"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_s2","name":"Skill","input":{"skill":"codebase-maintenance"}}],"stop_reason":"tool_use"},"uuid":"a2","timestamp":"2025-01-01T00:00:03Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_s2","content":"Done"}]},"uuid":"u2","timestamp":"2025-01-01T00:00:04Z"}
+{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_s3","name":"Skill","input":{"skill":"commit"}}],"stop_reason":"tool_use"},"uuid":"a3","timestamp":"2025-01-01T00:00:05Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_s3","content":"error","is_error":true}]},"uuid":"u3","timestamp":"2025-01-01T00:00:06Z"}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&SkillsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 3 {
+		t.Errorf("TotalInvocations = %d, want 3", result.TotalInvocations)
+	}
+
+	// Check commit stats (2 invocations: 1 success, 1 error)
+	if result.SkillStats["commit"] == nil {
+		t.Fatal("SkillStats should have 'commit' entry")
+	}
+	if result.SkillStats["commit"].Success != 1 {
+		t.Errorf("SkillStats[commit].Success = %d, want 1", result.SkillStats["commit"].Success)
+	}
+	if result.SkillStats["commit"].Errors != 1 {
+		t.Errorf("SkillStats[commit].Errors = %d, want 1", result.SkillStats["commit"].Errors)
+	}
+
+	// Check codebase-maintenance stats (1 success)
+	if result.SkillStats["codebase-maintenance"] == nil {
+		t.Fatal("SkillStats should have 'codebase-maintenance' entry")
+	}
+	if result.SkillStats["codebase-maintenance"].Success != 1 {
+		t.Errorf("SkillStats[codebase-maintenance].Success = %d, want 1", result.SkillStats["codebase-maintenance"].Success)
+	}
+}
+
+func TestSkillsAnalyzer_NoSkillInvocations(t *testing.T) {
+	// Regular tool usage without Skills
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/test.txt"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&SkillsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 0 {
+		t.Errorf("TotalInvocations = %d, want 0", result.TotalInvocations)
+	}
+	if len(result.SkillStats) != 0 {
+		t.Errorf("SkillStats length = %d, want 0", len(result.SkillStats))
 	}
 }

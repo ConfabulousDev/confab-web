@@ -4,6 +4,7 @@ import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
 import { ConversationCard } from './ConversationCard';
 import { AgentsCard } from './AgentsCard';
+import { SkillsCard } from './SkillsCard';
 import type { CardDefinition } from './types';
 
 /**
@@ -55,6 +56,13 @@ export const cardRegistry: CardDefinition[] = [
     title: 'Agents',
     component: AgentsCard,
     order: 5,
+    span: 2,
+  },
+  {
+    key: 'skills',
+    title: 'Skills',
+    component: SkillsCard,
+    order: 6,
     span: 2,
   },
 ];

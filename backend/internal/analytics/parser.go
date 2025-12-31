@@ -16,6 +16,9 @@ type TranscriptLine struct {
 	// For assistant messages
 	Message *MessageContent `json:"message,omitempty"`
 
+	// For user messages with tool results (e.g., Task/agent completions)
+	ToolUseResult *ToolUseResult `json:"toolUseResult,omitempty"` // Agent result metadata
+
 	// For system messages
 	Subtype           string           `json:"subtype,omitempty"`           // e.g., "compact_boundary"
 	CompactMetadata   *CompactMetadata `json:"compactMetadata,omitempty"`   // Compaction info
@@ -259,24 +262,20 @@ func (l *TranscriptLine) GetAgentUsage() []*TokenUsage {
 	return usages
 }
 
-// GetAgentResults returns all ToolUseResult from subagent/Task tool results.
-// This extracts full agent result metadata including tool counts.
-// Returns nil if no agent results are found.
+// GetAgentResults returns the ToolUseResult if this is an agent result message.
+// The toolUseResult is on the TranscriptLine level, not inside content blocks.
+// Returns nil if no agent result is found.
 func (l *TranscriptLine) GetAgentResults() []*ToolUseResult {
 	if !l.IsToolResultMessage() {
 		return nil
 	}
 
-	var results []*ToolUseResult
-	for _, block := range l.GetContentBlocks() {
-		if block.Type == "tool_result" && block.ToolUseResult != nil {
-			// Only include results that have agentId (subagent results)
-			if block.ToolUseResult.AgentID != "" {
-				results = append(results, block.ToolUseResult)
-			}
-		}
+	// Check for top-level toolUseResult with agentId
+	if l.ToolUseResult != nil && l.ToolUseResult.AgentID != "" {
+		return []*ToolUseResult{l.ToolUseResult}
 	}
-	return results
+
+	return nil
 }
 
 // parseToolUseResult extracts ToolUseResult from a map.

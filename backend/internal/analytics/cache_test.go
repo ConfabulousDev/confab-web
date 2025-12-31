@@ -76,6 +76,16 @@ func TestCardsAllValid(t *testing.T) {
 					"Plan":    {Success: 1, Errors: 0},
 				},
 			},
+			Skills: &SkillsCardRecord{
+				SessionID:        "test-session",
+				Version:          SkillsCardVersion,
+				ComputedAt:       now,
+				UpToLine:         upToLine,
+				TotalInvocations: 2,
+				SkillStats: map[string]*SkillStats{
+					"commit": {Success: 2, Errors: 0},
+				},
+			},
 		}
 	}
 
@@ -89,6 +99,7 @@ func TestCardsAllValid(t *testing.T) {
 		cards.CodeActivity.Version = version
 		cards.Conversation.Version = version
 		cards.Agents.Version = version
+		cards.Skills.Version = version
 		return cards
 	}
 
@@ -144,6 +155,14 @@ func TestCardsAllValid(t *testing.T) {
 		cards.Agents = nil
 		if cards.AllValid(100) {
 			t.Error("expected false when agents card is nil")
+		}
+	})
+
+	t.Run("returns false when skills card is nil", func(t *testing.T) {
+		cards := makeCards(100)
+		cards.Skills = nil
+		if cards.AllValid(100) {
+			t.Error("expected false when skills card is nil")
 		}
 	})
 

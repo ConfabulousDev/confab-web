@@ -14,6 +14,7 @@ const (
 	CodeActivityCardVersion = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
 	ConversationCardVersion = 1 // v1: initial version with turn timing metrics
 	AgentsCardVersion       = 1 // v1: initial version with agent invocation counts by type
+	SkillsCardVersion       = 1 // v1: initial version with skill invocation counts by name
 )
 
 // =============================================================================
@@ -117,6 +118,22 @@ type AgentsCardRecord struct {
 	AgentStats       map[string]*AgentStats `json:"agent_stats"` // Per-agent-type success/error counts
 }
 
+// SkillStats holds success and error counts for a single skill.
+type SkillStats struct {
+	Success int `json:"success"`
+	Errors  int `json:"errors"`
+}
+
+// SkillsCardRecord is the DB record for the skills card.
+type SkillsCardRecord struct {
+	SessionID        string                 `json:"session_id"`
+	Version          int                    `json:"version"`
+	ComputedAt       time.Time              `json:"computed_at"`
+	UpToLine         int64                  `json:"up_to_line"`
+	TotalInvocations int                    `json:"total_invocations"`
+	SkillStats       map[string]*SkillStats `json:"skill_stats"` // Per-skill success/error counts
+}
+
 // Cards aggregates all card data for a session.
 type Cards struct {
 	Tokens       *TokensCardRecord
@@ -125,6 +142,7 @@ type Cards struct {
 	CodeActivity *CodeActivityCardRecord
 	Conversation *ConversationCardRecord
 	Agents       *AgentsCardRecord
+	Skills       *SkillsCardRecord
 }
 
 // =============================================================================
@@ -196,6 +214,12 @@ type AgentsCardData struct {
 	AgentStats       map[string]*AgentStats `json:"agent_stats"` // Per-agent-type success/error counts
 }
 
+// SkillsCardData is the API response format for the skills card.
+type SkillsCardData struct {
+	TotalInvocations int                    `json:"total_invocations"`
+	SkillStats       map[string]*SkillStats `json:"skill_stats"` // Per-skill success/error counts
+}
+
 // =============================================================================
 // Validation helpers
 // =============================================================================
@@ -230,6 +254,11 @@ func (c *AgentsCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == AgentsCardVersion && c.UpToLine == currentLineCount
 }
 
+// IsValid checks if a skills card record is valid for the current line count.
+func (c *SkillsCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == SkillsCardVersion && c.UpToLine == currentLineCount
+}
+
 // AllValid checks if all cards are valid for the current line count.
 func (c *Cards) AllValid(currentLineCount int64) bool {
 	if c == nil {
@@ -240,5 +269,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		c.Tools.IsValid(currentLineCount) &&
 		c.CodeActivity.IsValid(currentLineCount) &&
 		c.Conversation.IsValid(currentLineCount) &&
-		c.Agents.IsValid(currentLineCount)
+		c.Agents.IsValid(currentLineCount) &&
+		c.Skills.IsValid(currentLineCount)
 }

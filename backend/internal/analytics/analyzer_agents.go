@@ -32,29 +32,37 @@ func (a *AgentsAnalyzer) Analyze(fc *FileCollection) (*AgentsResult, error) {
 			}
 		}
 
-		// Find tool_result blocks with agentId and determine outcome
-		if line.IsToolResultMessage() {
+		// Find tool_result messages with agentId in top-level toolUseResult
+		// The toolUseResult is on the TranscriptLine, not inside content blocks
+		if line.IsToolResultMessage() && line.ToolUseResult != nil && line.ToolUseResult.AgentID != "" {
+			// Find the tool_use_id from the content block to look up the agent type
+			var toolUseID string
+			var isError bool
 			for _, block := range line.GetContentBlocks() {
-				if block.Type == "tool_result" && block.ToolUseResult != nil && block.ToolUseResult.AgentID != "" {
-					// Look up the agent type from the tool_use_id
-					agentType := toolUseIDToAgentType[block.ToolUseID]
-					if agentType == "" {
-						// Fallback: use "unknown" if we can't find the type
-						agentType = "unknown"
-					}
-
-					// Initialize stats if needed
-					if result.AgentStats[agentType] == nil {
-						result.AgentStats[agentType] = &AgentStats{}
-					}
-
-					result.TotalInvocations++
-					if block.IsError {
-						result.AgentStats[agentType].Errors++
-					} else {
-						result.AgentStats[agentType].Success++
-					}
+				if block.Type == "tool_result" {
+					toolUseID = block.ToolUseID
+					isError = block.IsError
+					break
 				}
+			}
+
+			// Look up the agent type from the tool_use_id
+			agentType := toolUseIDToAgentType[toolUseID]
+			if agentType == "" {
+				// Fallback: use "unknown" if we can't find the type
+				agentType = "unknown"
+			}
+
+			// Initialize stats if needed
+			if result.AgentStats[agentType] == nil {
+				result.AgentStats[agentType] = &AgentStats{}
+			}
+
+			result.TotalInvocations++
+			if isError {
+				result.AgentStats[agentType].Errors++
+			} else {
+				result.AgentStats[agentType].Success++
 			}
 		}
 	}
