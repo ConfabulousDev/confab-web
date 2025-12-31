@@ -20,21 +20,14 @@ type FileCollection struct {
 }
 
 // NewFileCollection creates a FileCollection from raw JSONL content.
-// For now, agents is empty - this maintains existing functionality.
+// This is a convenience wrapper for sessions without agent files.
 func NewFileCollection(mainContent []byte) (*FileCollection, error) {
-	main, err := parseTranscriptFile(mainContent, "")
-	if err != nil {
-		return nil, err
-	}
-
-	return &FileCollection{
-		Main:   main,
-		Agents: nil,
-	}, nil
+	return NewFileCollectionWithAgents(mainContent, nil)
 }
 
-// NewFileCollectionWithAgents creates a FileCollection with agent files.
-// agentContents maps agentID to raw JSONL content.
+// NewFileCollectionWithAgents creates a FileCollection from main + agent content.
+// agentContents maps agentID (extracted from filename) -> JSONL bytes.
+// Missing or empty agent content is skipped gracefully.
 func NewFileCollectionWithAgents(mainContent []byte, agentContents map[string][]byte) (*FileCollection, error) {
 	main, err := parseTranscriptFile(mainContent, "")
 	if err != nil {
@@ -43,9 +36,12 @@ func NewFileCollectionWithAgents(mainContent []byte, agentContents map[string][]
 
 	var agents []*TranscriptFile
 	for agentID, content := range agentContents {
+		if len(content) == 0 {
+			continue
+		}
 		agent, err := parseTranscriptFile(content, agentID)
 		if err != nil {
-			// Skip unparseable agent files rather than failing entirely
+			// Skip unparseable agent files, continue with others
 			continue
 		}
 		agents = append(agents, agent)
@@ -69,6 +65,32 @@ func (fc *FileCollection) AllFiles() []*TranscriptFile {
 // Used for cache invalidation.
 func (fc *FileCollection) MainLineCount() int64 {
 	return int64(len(fc.Main.Lines))
+}
+
+// TotalLineCount returns the sum of lines across all files (main + agents).
+// Used for cache invalidation when agent files are present.
+func (fc *FileCollection) TotalLineCount() int64 {
+	total := int64(len(fc.Main.Lines))
+	for _, agent := range fc.Agents {
+		total += int64(len(agent.Lines))
+	}
+	return total
+}
+
+// HasAgentFile returns true if we have an agent file with the given ID.
+// Used to avoid double-counting when toolUseResult data is also present.
+func (fc *FileCollection) HasAgentFile(agentID string) bool {
+	for _, agent := range fc.Agents {
+		if agent.AgentID == agentID {
+			return true
+		}
+	}
+	return false
+}
+
+// AgentCount returns the number of agent files in the collection.
+func (fc *FileCollection) AgentCount() int {
+	return len(fc.Agents)
 }
 
 // parseTranscriptFile parses raw JSONL content into a TranscriptFile.

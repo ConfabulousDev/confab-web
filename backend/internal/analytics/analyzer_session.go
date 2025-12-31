@@ -27,7 +27,7 @@ type SessionResult struct {
 }
 
 // SessionAnalyzer extracts session-level metrics from transcripts.
-// It only processes the main transcript for session-level stats.
+// It processes main transcript for session stats, and all files for models.
 type SessionAnalyzer struct{}
 
 // Analyze processes the file collection and returns session metrics.
@@ -119,6 +119,15 @@ func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
 	if firstTimestamp != nil && lastTimestamp != nil && !firstTimestamp.Equal(*lastTimestamp) {
 		d := lastTimestamp.Sub(*firstTimestamp).Milliseconds()
 		result.DurationMs = &d
+	}
+
+	// Collect models from agent files
+	for _, agent := range fc.Agents {
+		for _, line := range agent.Lines {
+			if model := line.GetModel(); model != "" {
+				modelsUsed[model] = true
+			}
+		}
 	}
 
 	// Compute models list

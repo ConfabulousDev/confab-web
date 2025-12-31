@@ -341,6 +341,36 @@ func TestToolsAnalyzer(t *testing.T) {
 	}
 }
 
+func TestToolsAnalyzer_AgentToolCalls(t *testing.T) {
+	// JSONL with a main tool call (Read) and a Task tool that spawned an agent with 25 tool calls
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/test.txt"}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{"prompt":"Do something"}}],"stop_reason":"tool_use"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"},{"type":"tool_result","tool_use_id":"toolu_2","content":[{"type":"text","text":"Done"}],"toolUseResult":{"status":"completed","agentId":"abc123","totalToolUseCount":25,"usage":{"input_tokens":500,"output_tokens":1000}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&ToolsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// TotalCalls should be 2 (main) + 25 (agent) = 27
+	if result.TotalCalls != 27 {
+		t.Errorf("TotalCalls = %d, want 27 (2 main + 25 agent)", result.TotalCalls)
+	}
+
+	// Per-tool breakdown only includes main transcript tools
+	if result.ToolStats["Read"] == nil || result.ToolStats["Read"].Success != 1 {
+		t.Errorf("Read tool should have 1 success call")
+	}
+	if result.ToolStats["Task"] == nil || result.ToolStats["Task"].Success != 1 {
+		t.Errorf("Task tool should have 1 success call")
+	}
+}
+
 func TestComputeFromJSONL(t *testing.T) {
 	// Integration test using the main entry point
 	jsonl := `{"type":"assistant","uuid":"a1","timestamp":"2025-01-01T00:00:10Z","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}}}
@@ -358,5 +388,237 @@ func TestComputeFromJSONL(t *testing.T) {
 	}
 	if result.CompactionAuto != 1 {
 		t.Errorf("CompactionAuto = %d, want 1", result.CompactionAuto)
+	}
+}
+
+func TestFileCollectionWithAgents(t *testing.T) {
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":10,"usage":{"input_tokens":200,"output_tokens":100}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+	agentJsonl := `{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":200,"output_tokens":100},"content":[{"type":"tool_use","id":"toolu_a1","name":"Read","input":{}}]},"uuid":"aa1","timestamp":"2025-01-01T00:00:01.5Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a1","content":"file contents"}]},"uuid":"au1","timestamp":"2025-01-01T00:00:01.6Z"}
+`
+
+	agentContents := map[string][]byte{
+		"agent1": []byte(agentJsonl),
+	}
+
+	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), agentContents)
+	if err != nil {
+		t.Fatalf("NewFileCollectionWithAgents failed: %v", err)
+	}
+
+	// Test HasAgentFile
+	if !fc.HasAgentFile("agent1") {
+		t.Error("HasAgentFile should return true for agent1")
+	}
+	if fc.HasAgentFile("agent2") {
+		t.Error("HasAgentFile should return false for agent2")
+	}
+
+	// Test AgentCount
+	if fc.AgentCount() != 1 {
+		t.Errorf("AgentCount = %d, want 1", fc.AgentCount())
+	}
+
+	// Test TotalLineCount
+	if fc.TotalLineCount() != 4 { // 2 main + 2 agent
+		t.Errorf("TotalLineCount = %d, want 4", fc.TotalLineCount())
+	}
+
+	// Test AllFiles
+	allFiles := fc.AllFiles()
+	if len(allFiles) != 2 {
+		t.Errorf("AllFiles length = %d, want 2", len(allFiles))
+	}
+}
+
+func TestTokensAnalyzer_WithAgentFile(t *testing.T) {
+	// Main transcript with Task tool and toolUseResult
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":5,"usage":{"input_tokens":200,"output_tokens":100}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+	// Agent file with actual token usage
+	agentJsonl := `{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":150,"output_tokens":75}},"uuid":"aa1","timestamp":"2025-01-01T00:00:01.5Z"}
+{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":50,"output_tokens":25}},"uuid":"aa2","timestamp":"2025-01-01T00:00:01.6Z"}
+`
+
+	// With agent file: should use agent file tokens (not toolUseResult fallback)
+	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{"agent1": []byte(agentJsonl)})
+	if err != nil {
+		t.Fatalf("NewFileCollectionWithAgents failed: %v", err)
+	}
+
+	result, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// Main: 100 input, 50 output
+	// Agent: 150+50=200 input, 75+25=100 output
+	// Total: 300 input, 150 output
+	if result.InputTokens != 300 {
+		t.Errorf("InputTokens = %d, want 300 (100 main + 200 agent)", result.InputTokens)
+	}
+	if result.OutputTokens != 150 {
+		t.Errorf("OutputTokens = %d, want 150 (50 main + 100 agent)", result.OutputTokens)
+	}
+}
+
+func TestTokensAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
+	// Main transcript with Task tool and toolUseResult, but NO agent file
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":5,"usage":{"input_tokens":200,"output_tokens":100}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	// Without agent file: should use toolUseResult fallback
+	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), nil)
+	if err != nil {
+		t.Fatalf("NewFileCollectionWithAgents failed: %v", err)
+	}
+
+	result, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// Main: 100 input, 50 output
+	// Fallback: 200 input, 100 output
+	// Total: 300 input, 150 output
+	if result.InputTokens != 300 {
+		t.Errorf("InputTokens = %d, want 300 (100 main + 200 fallback)", result.InputTokens)
+	}
+	if result.OutputTokens != 150 {
+		t.Errorf("OutputTokens = %d, want 150 (50 main + 100 fallback)", result.OutputTokens)
+	}
+}
+
+func TestToolsAnalyzer_WithAgentFile(t *testing.T) {
+	// Main transcript with Task tool
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"},{"type":"tool_result","tool_use_id":"toolu_2","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":10,"usage":{}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+	// Agent file with 3 tool calls
+	agentJsonl := `{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":50,"output_tokens":25},"content":[{"type":"tool_use","id":"toolu_a1","name":"Read","input":{}}]},"uuid":"aa1","timestamp":"2025-01-01T00:00:01.5Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a1","content":"ok"}]},"uuid":"au1","timestamp":"2025-01-01T00:00:01.6Z"}
+{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":50,"output_tokens":25},"content":[{"type":"tool_use","id":"toolu_a2","name":"Write","input":{}},{"type":"tool_use","id":"toolu_a3","name":"Grep","input":{}}]},"uuid":"aa2","timestamp":"2025-01-01T00:00:01.7Z"}
+`
+
+	// With agent file: should count agent tool calls directly (not use totalToolUseCount)
+	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{"agent1": []byte(agentJsonl)})
+	if err != nil {
+		t.Fatalf("NewFileCollectionWithAgents failed: %v", err)
+	}
+
+	result, err := (&ToolsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// Main: 2 tool calls (Read, Task)
+	// Agent: 3 tool calls (Read, Write, Grep)
+	// Total: 5 (NOT 2 + 10 from totalToolUseCount)
+	if result.TotalCalls != 5 {
+		t.Errorf("TotalCalls = %d, want 5 (2 main + 3 agent)", result.TotalCalls)
+	}
+
+	// Should have per-tool breakdown from agent
+	if result.ToolStats["Read"].Success != 2 { // 1 main + 1 agent
+		t.Errorf("Read.Success = %d, want 2", result.ToolStats["Read"].Success)
+	}
+	if result.ToolStats["Write"].Success != 1 {
+		t.Errorf("Write.Success = %d, want 1", result.ToolStats["Write"].Success)
+	}
+	if result.ToolStats["Grep"].Success != 1 {
+		t.Errorf("Grep.Success = %d, want 1", result.ToolStats["Grep"].Success)
+	}
+}
+
+func TestToolsAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
+	// Main transcript with Task tool, but NO agent file
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}},{"type":"tool_use","id":"toolu_2","name":"Task","input":{}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents"},{"type":"tool_result","tool_use_id":"toolu_2","content":"Done","toolUseResult":{"status":"completed","agentId":"agent1","totalToolUseCount":10,"usage":{}}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+
+	// Without agent file: should use totalToolUseCount fallback
+	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), nil)
+	if err != nil {
+		t.Fatalf("NewFileCollectionWithAgents failed: %v", err)
+	}
+
+	result, err := (&ToolsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// Main: 2 tool calls + 10 from totalToolUseCount = 12
+	if result.TotalCalls != 12 {
+		t.Errorf("TotalCalls = %d, want 12 (2 main + 10 fallback)", result.TotalCalls)
+	}
+}
+
+func TestSessionAnalyzer_AgentModels(t *testing.T) {
+	// Main transcript uses sonnet
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Done","toolUseResult":{"agentId":"agent1"}}]},"uuid":"u1","timestamp":"2025-01-01T00:00:02Z"}
+`
+	// Agent uses haiku
+	agentJsonl := `{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":50,"output_tokens":25}},"uuid":"aa1","timestamp":"2025-01-01T00:00:01.5Z"}
+`
+
+	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{"agent1": []byte(agentJsonl)})
+	if err != nil {
+		t.Fatalf("NewFileCollectionWithAgents failed: %v", err)
+	}
+
+	result, err := (&SessionAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// Should include both models
+	if len(result.ModelsUsed) != 2 {
+		t.Errorf("ModelsUsed length = %d, want 2", len(result.ModelsUsed))
+	}
+
+	hasHaiku := false
+	hasSonnet := false
+	for _, m := range result.ModelsUsed {
+		if m == "claude-haiku-3" {
+			hasHaiku = true
+		}
+		if m == "claude-sonnet-4" {
+			hasSonnet = true
+		}
+	}
+	if !hasHaiku {
+		t.Error("ModelsUsed should include claude-haiku-3 from agent")
+	}
+	if !hasSonnet {
+		t.Error("ModelsUsed should include claude-sonnet-4 from main")
+	}
+}
+
+func TestCodeActivityAnalyzer_WithAgentFile(t *testing.T) {
+	// Main transcript reads one file
+	mainJsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/main.go"}}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+`
+	// Agent reads another file
+	agentJsonl := `{"type":"assistant","message":{"model":"claude-haiku-3","usage":{"input_tokens":50,"output_tokens":25},"content":[{"type":"tool_use","id":"toolu_a1","name":"Read","input":{"file_path":"/agent.go"}}]},"uuid":"aa1","timestamp":"2025-01-01T00:00:01.5Z"}
+`
+
+	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{"agent1": []byte(agentJsonl)})
+	if err != nil {
+		t.Fatalf("NewFileCollectionWithAgents failed: %v", err)
+	}
+
+	result, err := (&CodeActivityAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// Should count files from both main and agent
+	if result.FilesRead != 2 {
+		t.Errorf("FilesRead = %d, want 2", result.FilesRead)
 	}
 }

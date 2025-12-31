@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
@@ -55,22 +56,28 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		session := result.Session
 
-		// Find the main transcript file
-		var fileInfo *db.SyncFileDetail
+		// Collect transcript and agent files
+		var mainFile *db.SyncFileDetail
+		var agentFiles []db.SyncFileDetail
 		for i := range session.Files {
-			if session.Files[i].FileType == "transcript" {
-				fileInfo = &session.Files[i]
-				break
+			switch session.Files[i].FileType {
+			case "transcript":
+				mainFile = &session.Files[i]
+			case "agent":
+				agentFiles = append(agentFiles, session.Files[i])
 			}
 		}
-		if fileInfo == nil {
+		if mainFile == nil {
 			// No transcript file - return empty analytics
 			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 			return
 		}
 
-		// Current state for cache validation
-		currentLineCount := int64(fileInfo.LastSyncedLine)
+		// Current state for cache validation (sum of all file line counts)
+		totalLineCount := int64(mainFile.LastSyncedLine)
+		for _, af := range agentFiles {
+			totalLineCount += int64(af.LastSyncedLine)
+		}
 
 		// Parse optional as_of_line query parameter for conditional requests
 		// If client already has analytics up to the current line count, return 304
@@ -85,7 +92,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				return
 			}
 			// Client already has analytics up to or past current line count - no new data
-			if asOfLine >= currentLineCount {
+			if asOfLine >= totalLineCount {
 				w.WriteHeader(http.StatusNotModified)
 				return
 			}
@@ -98,7 +105,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			// Continue to compute fresh analytics
 		}
 
-		if cached.AllValid(currentLineCount) {
+		if cached.AllValid(totalLineCount) {
 			// Cache hit - return cached data
 			respondJSON(w, http.StatusOK, cached.ToResponse())
 			return
@@ -113,46 +120,49 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			return
 		}
 
-		// List all chunks for this file
 		storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 		defer storageCancel()
 
-		chunkKeys, err := store.ListChunks(storageCtx, sessionUserID, externalID, fileInfo.FileName)
+		// Download main transcript
+		mainContent, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, mainFile.FileName)
 		if err != nil {
-			log.Error("Failed to list chunks", "error", err, "session_id", sessionID)
-			respondStorageError(w, err, "Failed to list chunks")
+			respondStorageError(w, err, "Failed to download transcript")
 			return
 		}
-
-		if len(chunkKeys) == 0 {
+		if mainContent == nil {
 			// No chunks - return empty analytics
 			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 			return
 		}
 
-		// Download and merge all chunks
-		chunks, err := downloadChunks(storageCtx, store, chunkKeys)
-		if err != nil {
-			log.Error("Failed to download chunks", "error", err, "session_id", sessionID)
-			respondStorageError(w, err, "Failed to download file chunks")
-			return
+		// Download agent files
+		agentContents := make(map[string][]byte)
+		for _, af := range agentFiles {
+			agentID := extractAgentID(af.FileName)
+			if agentID == "" {
+				continue
+			}
+			content, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, af.FileName)
+			if err != nil {
+				// Log but continue - graceful degradation
+				log.Warn("Failed to download agent file", "error", err, "file", af.FileName)
+				continue
+			}
+			if content != nil {
+				agentContents[agentID] = content
+			}
 		}
 
-		if len(chunks) == 0 {
-			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
-			return
-		}
-
-		// Merge chunks to get complete JSONL content
-		content, err := mergeChunks(chunks)
+		// Build FileCollection with agents
+		fc, err := analytics.NewFileCollectionWithAgents(mainContent, agentContents)
 		if err != nil {
-			log.Error("Failed to merge chunks", "error", err, "session_id", sessionID)
+			log.Error("Failed to parse transcript", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to process session data")
 			return
 		}
 
-		// Compute analytics from JSONL
-		computed, err := analytics.ComputeFromJSONL(content)
+		// Compute analytics from FileCollection
+		computed, err := analytics.ComputeFromFileCollection(fc)
 		if err != nil {
 			log.Error("Failed to compute analytics", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to compute analytics")
@@ -160,7 +170,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Convert to Cards and cache
-		cards := computed.ToCards(sessionID, currentLineCount)
+		cards := computed.ToCards(sessionID, totalLineCount)
 
 		// Store in cache (errors logged but not returned - we can still return computed result)
 		if err := analyticsStore.UpsertCards(dbCtx, cards); err != nil {
@@ -169,4 +179,36 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		respondJSON(w, http.StatusOK, cards.ToResponse())
 	}
+}
+
+// downloadAndMergeFile downloads and merges all chunks for a file.
+// Returns nil content if no chunks exist (not an error).
+func downloadAndMergeFile(ctx context.Context, store *storage.S3Storage, userID int64, externalID, fileName string) ([]byte, error) {
+	chunkKeys, err := store.ListChunks(ctx, userID, externalID, fileName)
+	if err != nil {
+		return nil, err
+	}
+	if len(chunkKeys) == 0 {
+		return nil, nil
+	}
+
+	chunks, err := downloadChunks(ctx, store, chunkKeys)
+	if err != nil {
+		return nil, err
+	}
+	if len(chunks) == 0 {
+		return nil, nil
+	}
+
+	return mergeChunks(chunks)
+}
+
+// extractAgentID extracts the agent ID from a filename like "agent-{id}.jsonl".
+// Returns empty string if the filename doesn't match the expected pattern.
+func extractAgentID(fileName string) string {
+	if !strings.HasPrefix(fileName, "agent-") || !strings.HasSuffix(fileName, ".jsonl") {
+		return ""
+	}
+	// Remove "agent-" prefix and ".jsonl" suffix
+	return strings.TrimSuffix(strings.TrimPrefix(fileName, "agent-"), ".jsonl")
 }

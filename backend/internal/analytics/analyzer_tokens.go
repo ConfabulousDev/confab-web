@@ -12,8 +12,8 @@ type TokensResult struct {
 }
 
 // TokensAnalyzer extracts token usage and cost metrics from transcripts.
-// It only processes the main transcript - agent tokens are included via
-// toolUseResult.usage which is already in the main transcript.
+// It processes all files (main + agents) for accurate model-specific pricing.
+// Falls back to toolUseResult.usage for agents without files.
 type TokensAnalyzer struct{}
 
 // Analyze processes the file collection and returns token metrics.
@@ -22,17 +22,20 @@ func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 		EstimatedCostUSD: decimal.Zero,
 	}
 
-	// Only process main transcript - agent tokens come from toolUseResult.usage
-	for _, line := range fc.Main.Lines {
-		// Count tokens from assistant messages
-		if line.IsAssistantMessage() {
+	// Process all files - main and agents
+	for _, file := range fc.AllFiles() {
+		for _, line := range file.Lines {
+			if !line.IsAssistantMessage() {
+				continue
+			}
+
 			usage := line.Message.Usage
 			result.InputTokens += usage.InputTokens
 			result.OutputTokens += usage.OutputTokens
 			result.CacheCreationTokens += usage.CacheCreationInputTokens
 			result.CacheReadTokens += usage.CacheReadInputTokens
 
-			// Calculate cost for this message
+			// Calculate cost with model-specific pricing
 			pricing := GetPricing(line.Message.Model)
 			cost := CalculateCost(
 				pricing,
@@ -43,10 +46,19 @@ func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 			)
 			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
 		}
+	}
 
-		// Count tokens from subagent/Task tool results (in user messages)
-		// These contain cumulative token usage for the entire agent session
-		for _, usage := range line.GetAgentUsage() {
+	// Fallback: count tokens from toolUseResult for agents we don't have files for
+	for _, line := range fc.Main.Lines {
+		for _, agentResult := range line.GetAgentResults() {
+			if fc.HasAgentFile(agentResult.AgentID) {
+				continue // Already counted from agent file
+			}
+			if agentResult.Usage == nil {
+				continue
+			}
+
+			usage := agentResult.Usage
 			result.InputTokens += usage.InputTokens
 			result.OutputTokens += usage.OutputTokens
 			result.CacheCreationTokens += usage.CacheCreationInputTokens

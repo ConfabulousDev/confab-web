@@ -25,7 +25,7 @@ func (a *ToolsAnalyzer) Analyze(fc *FileCollection) (*ToolsResult, error) {
 
 	// Process all files - main and agents
 	for _, file := range fc.AllFiles() {
-		a.processFile(file, result)
+		a.processFile(file, fc, result)
 	}
 
 	// Ensure no negative success counts (in case of data inconsistency)
@@ -39,7 +39,7 @@ func (a *ToolsAnalyzer) Analyze(fc *FileCollection) (*ToolsResult, error) {
 }
 
 // processFile processes a single transcript file for tool metrics.
-func (a *ToolsAnalyzer) processFile(file *TranscriptFile, result *ToolsResult) {
+func (a *ToolsAnalyzer) processFile(file *TranscriptFile, fc *FileCollection, result *ToolsResult) {
 	// Build tool ID -> name map for this file
 	toolIDToName := file.BuildToolUseIDToNameMap()
 
@@ -71,6 +71,14 @@ func (a *ToolsAnalyzer) processFile(file *TranscriptFile, result *ToolsResult) {
 						result.ToolStats[toolName].Success--
 						result.ToolStats[toolName].Errors++
 					}
+				}
+			}
+
+			// Count tool calls from subagent/Task results (fallback only)
+			// Only use toolUseResult.totalToolUseCount when we don't have the agent file
+			for _, agentResult := range line.GetAgentResults() {
+				if !fc.HasAgentFile(agentResult.AgentID) {
+					result.TotalCalls += agentResult.TotalToolUseCount
 				}
 			}
 		}
