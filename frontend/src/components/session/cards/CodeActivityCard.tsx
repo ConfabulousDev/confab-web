@@ -1,5 +1,5 @@
 import { CardWrapper, CardLoading, StatRow, SectionHeader } from './Card';
-import { CodeIcon, SearchIcon } from '@/components/icons';
+import { CodeIcon, SearchIcon, FileIcon } from '@/components/icons';
 import type { CodeActivityCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -121,7 +121,7 @@ export function CodeActivityCard({ data, loading }: CardProps<CodeActivityCardDa
 
       {hasLanguages && (
         <>
-          <SectionHeader label="File extensions" />
+          <SectionHeader label="File extensions" icon={FileIcon} />
           <div className={styles.chartContainer} style={{ height: chartHeight }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart

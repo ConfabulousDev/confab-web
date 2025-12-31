@@ -304,12 +304,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-.statValue.cost {
+.statValue.cost,
+.statValue.utilization {
   color: #16a34a;
 }
 
 /* Section header within a card */
 .sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-md);
   margin-top: var(--spacing-xs);
   font-size: var(--font-xs);
@@ -318,6 +322,12 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-top: 1px solid var(--color-border-light);
+}
+
+.sectionHeaderIcon {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
 }
 
 /* Analytics loading/error/empty states (within a card) */

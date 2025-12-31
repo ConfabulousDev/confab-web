@@ -8,6 +8,7 @@ import {
 } from '@/components/icons';
 import type { ConversationCardData } from '@/schemas/api';
 import type { CardProps } from './types';
+import styles from '../SessionSummaryPanel.module.css';
 
 const TOOLTIPS = {
   userPrompts: 'Number of user prompts in the conversation',
@@ -56,6 +57,7 @@ export function ConversationCard({ data, loading }: CardProps<ConversationCardDa
           value={`${data.assistant_utilization.toFixed(0)}%`}
           icon={ZapIcon}
           tooltip={TOOLTIPS.claudeUtilization}
+          valueClassName={styles.utilization}
         />
       )}
       {data.total_assistant_duration_ms != null && (

@@ -1,5 +1,5 @@
 import { CardWrapper, StatRow, CardLoading } from './Card';
-import { UsersIcon } from '@/components/icons';
+import { UsersIcon, ZapIcon } from '@/components/icons';
 import type { AgentsAndSkillsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import {
@@ -133,8 +133,8 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
   return (
     <CardWrapper title="Agents and Skills" icon={UsersIcon}>
       <div className={styles.stats}>
-        <StatRow label="Agent invocations" value={data.agent_invocations} />
-        <StatRow label="Skill invocations" value={data.skill_invocations} />
+        <StatRow label="Agent invocations" value={data.agent_invocations} icon={UsersIcon} />
+        <StatRow label="Skill invocations" value={data.skill_invocations} icon={ZapIcon} />
       </div>
 
       {chartData.length > 0 && (

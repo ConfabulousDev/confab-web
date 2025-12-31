@@ -36,6 +36,13 @@ export function TokensCard({ data, loading }: CardProps<TokensCardData>) {
   return (
     <CardWrapper title="Tokens" icon={TokenIcon}>
       <StatRow
+        label="Estimated cost"
+        value={formatCost(cost)}
+        icon={DollarIcon}
+        tooltip={TOOLTIPS.cost}
+        valueClassName={styles.cost}
+      />
+      <StatRow
         label="Input"
         value={formatTokenCount(data.input)}
         icon={ArrowRightIcon}
@@ -58,13 +65,6 @@ export function TokensCard({ data, loading }: CardProps<TokensCardData>) {
         value={formatTokenCount(data.cache_read)}
         icon={DiamondFilledIcon}
         tooltip={TOOLTIPS.cacheRead}
-      />
-      <StatRow
-        label="Estimated cost"
-        value={formatCost(cost)}
-        icon={DollarIcon}
-        tooltip={TOOLTIPS.cost}
-        valueClassName={styles.cost}
       />
     </CardWrapper>
   );

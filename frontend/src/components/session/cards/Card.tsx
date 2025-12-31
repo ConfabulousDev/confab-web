@@ -57,11 +57,17 @@ export function CardLoading() {
 
 interface SectionHeaderProps {
   label: string;
+  icon?: React.ReactNode;
 }
 
 /**
  * A section header within a card to group related stats.
  */
-export function SectionHeader({ label }: SectionHeaderProps) {
-  return <div className={styles.sectionHeader}>{label}</div>;
+export function SectionHeader({ label, icon }: SectionHeaderProps) {
+  return (
+    <div className={styles.sectionHeader}>
+      {icon && <span className={styles.sectionHeaderIcon}>{icon}</span>}
+      {label}
+    </div>
+  );
 }
