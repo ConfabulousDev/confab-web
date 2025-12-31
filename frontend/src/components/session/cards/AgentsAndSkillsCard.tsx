@@ -178,7 +178,7 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
                 <Tooltip
                   content={<CustomTooltip />}
                   cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
-                  wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
+                  wrapperStyle={{ zIndex: 9999, pointerEvents: 'none', transition: 'none' }}
                   allowEscapeViewBox={{ x: true, y: true }}
                   isAnimationActive={false}
                 />
