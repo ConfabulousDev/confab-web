@@ -1,4 +1,3 @@
-import { createPortal } from 'react-dom';
 import { CardWrapper, StatRow, CardLoading } from './Card';
 import { UsersIcon } from '@/components/icons';
 import type { AgentsAndSkillsCardData } from '@/schemas/api';
@@ -60,7 +59,6 @@ function prepareChartData(
 
 interface CustomTooltipProps {
   active?: boolean;
-  coordinate?: { x: number; y: number };
   payload?: Array<{
     name: string;
     value: number;
@@ -70,8 +68,8 @@ interface CustomTooltipProps {
   }>;
 }
 
-function CustomTooltip({ active, coordinate, payload }: CustomTooltipProps) {
-  if (!active || !payload || payload.length === 0 || !coordinate) return null;
+function CustomTooltip({ active, payload }: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
 
   const firstPayload = payload[0];
   if (!firstPayload) return null;
@@ -82,16 +80,8 @@ function CustomTooltip({ active, coordinate, payload }: CustomTooltipProps) {
   const typeLabel = item.type === 'agent' ? 'Agent' : 'Skill';
   const colors = COLORS[item.type];
 
-  const tooltipContent = (
-    <div
-      className={styles.tooltip}
-      style={{
-        position: 'fixed',
-        left: coordinate.x + 10,
-        top: coordinate.y - 10,
-        pointerEvents: 'none',
-      }}
-    >
+  return (
+    <div className={styles.tooltip}>
       <div className={styles.tooltipTitle}>
         {item.name}
         <span className={styles.tooltipType}>{typeLabel}</span>
@@ -109,8 +99,6 @@ function CustomTooltip({ active, coordinate, payload }: CustomTooltipProps) {
       <div className={styles.tooltipTotal}>Total: {total}</div>
     </div>
   );
-
-  return createPortal(tooltipContent, document.body);
 }
 
 export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkillsCardData>) {
@@ -190,7 +178,7 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
                 <Tooltip
                   content={<CustomTooltip />}
                   cursor={{ fill: 'var(--color-bg-hover)', opacity: 0.5 }}
-                  wrapperStyle={{ visibility: 'visible', zIndex: 9999 }}
+                  wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
                   allowEscapeViewBox={{ x: true, y: true }}
                 />
                 <Bar dataKey="success" stackId="stack" radius={[2, 2, 2, 2]} isAnimationActive={false}>
