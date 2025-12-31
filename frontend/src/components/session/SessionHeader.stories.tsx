@@ -2,24 +2,25 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import SessionHeader from './SessionHeader';
-import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
+import type {
+  MessageCategory,
+  UserSubcategory,
+  AssistantSubcategory,
+  HierarchicalCounts,
+  FilterState,
+} from './messageCategories';
+import { DEFAULT_FILTER_STATE } from './messageCategories';
 import type { GitInfo } from '@/types';
 
-// Sample data
-const sampleCounts: MessageCategoryCounts = {
-  user: 194,
-  assistant: 271,
+// Sample hierarchical counts
+const sampleCounts: HierarchicalCounts = {
+  user: { total: 194, prompt: 42, 'tool-result': 152 },
+  assistant: { total: 271, text: 50, 'tool-use': 180, thinking: 41 },
   system: 0,
   'file-history-snapshot': 39,
   summary: 0,
   'queue-operation': 6,
 };
-
-const defaultVisibleCategories = new Set<MessageCategory>([
-  'user',
-  'assistant',
-  'system',
-]);
 
 const sampleGitInfo: GitInfo = {
   repo_url: 'https://github.com/ConfabulousDev/confab',
@@ -31,33 +32,53 @@ const sampleGitInfo: GitInfo = {
 function SessionHeaderInteractive(
   props: Omit<
     React.ComponentProps<typeof SessionHeader>,
-    'categoryCounts' | 'visibleCategories' | 'onToggleCategory'
+    'categoryCounts' | 'filterState' | 'onToggleCategory' | 'onToggleUserSubcategory' | 'onToggleAssistantSubcategory'
   > & {
-    counts?: MessageCategoryCounts;
-    initialVisible?: Set<MessageCategory>;
+    counts?: HierarchicalCounts;
+    initialFilterState?: FilterState;
   }
 ) {
-  const { counts = sampleCounts, initialVisible = defaultVisibleCategories, ...rest } = props;
-  const [visibleCategories, setVisibleCategories] = useState(initialVisible);
+  const { counts = sampleCounts, initialFilterState = DEFAULT_FILTER_STATE, ...rest } = props;
+  const [filterState, setFilterState] = useState(initialFilterState);
 
-  const handleToggle = (category: MessageCategory) => {
-    setVisibleCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) {
-        next.delete(category);
+  const handleToggleCategory = (category: MessageCategory) => {
+    setFilterState((prev) => {
+      const next = { ...prev };
+      if (category === 'user') {
+        const allVisible = prev.user.prompt && prev.user['tool-result'];
+        next.user = { prompt: !allVisible, 'tool-result': !allVisible };
+      } else if (category === 'assistant') {
+        const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
+        next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
       } else {
-        next.add(category);
+        next[category] = !prev[category];
       }
       return next;
     });
+  };
+
+  const handleToggleUserSubcategory = (subcategory: UserSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
+    }));
+  };
+
+  const handleToggleAssistantSubcategory = (subcategory: AssistantSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
+    }));
   };
 
   return (
     <SessionHeader
       {...rest}
       categoryCounts={counts}
-      visibleCategories={visibleCategories}
-      onToggleCategory={handleToggle}
+      filterState={filterState}
+      onToggleCategory={handleToggleCategory}
+      onToggleUserSubcategory={handleToggleUserSubcategory}
+      onToggleAssistantSubcategory={handleToggleAssistantSubcategory}
     />
   );
 }

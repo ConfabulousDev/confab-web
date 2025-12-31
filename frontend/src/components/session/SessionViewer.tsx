@@ -2,7 +2,15 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { SessionDetail, TranscriptLine } from '@/types';
 import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
 import { useVisibility } from '@/hooks/useVisibility';
-import { countCategories, type MessageCategory } from './messageCategories';
+import {
+  countHierarchicalCategories,
+  messageMatchesFilter,
+  DEFAULT_FILTER_STATE,
+  type MessageCategory,
+  type UserSubcategory,
+  type AssistantSubcategory,
+  type FilterState,
+} from './messageCategories';
 import SessionHeader from './SessionHeader';
 import MessageTimeline from './MessageTimeline';
 import SessionSummaryPanel from './SessionSummaryPanel';
@@ -40,18 +48,16 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   // Track visibility for smart polling
   const isVisible = useVisibility();
 
-  // Filter state - user, assistant, system visible by default
-  const [visibleCategories, setVisibleCategories] = useState<Set<MessageCategory>>(
-    new Set(['user', 'assistant', 'system'])
-  );
+  // Filter state - hierarchical visibility for subcategories
+  const [filterState, setFilterState] = useState<FilterState>(DEFAULT_FILTER_STATE);
 
-  // Compute category counts
-  const categoryCounts = useMemo(() => countCategories(messages), [messages]);
+  // Compute hierarchical category counts
+  const categoryCounts = useMemo(() => countHierarchicalCategories(messages), [messages]);
 
-  // Filter messages based on visible categories
+  // Filter messages based on filter state
   const filteredMessages = useMemo(() => {
-    return messages.filter((message) => visibleCategories.has(message.type));
-  }, [messages, visibleCategories]);
+    return messages.filter((message) => messageMatchesFilter(message, filterState));
+  }, [messages, filterState]);
 
   // Get transcript file info
   const transcriptFile = useMemo(() => {
@@ -122,17 +128,40 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     };
   }, [initialMessages, isVisible, loading, session.id, transcriptFileName]);
 
-  // Toggle a category's visibility
+  // Toggle a top-level category's visibility (toggles all subcategories for hierarchical cats)
   const toggleCategory = useCallback((category: MessageCategory) => {
-    setVisibleCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) {
-        next.delete(category);
+    setFilterState((prev) => {
+      const next = { ...prev };
+      if (category === 'user') {
+        // Toggle all user subcategories
+        const allVisible = prev.user.prompt && prev.user['tool-result'];
+        next.user = { prompt: !allVisible, 'tool-result': !allVisible };
+      } else if (category === 'assistant') {
+        // Toggle all assistant subcategories
+        const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
+        next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
       } else {
-        next.add(category);
+        // Flat category - simple toggle
+        next[category] = !prev[category];
       }
       return next;
     });
+  }, []);
+
+  // Toggle a user subcategory's visibility
+  const toggleUserSubcategory = useCallback((subcategory: UserSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
+    }));
+  }, []);
+
+  // Toggle an assistant subcategory's visibility
+  const toggleAssistantSubcategory = useCallback((subcategory: AssistantSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
+    }));
   }, []);
 
   // Compute session metadata for header
@@ -176,8 +205,10 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           isOwner={isOwner}
           isShared={isShared}
           categoryCounts={activeTab === 'transcript' ? categoryCounts : undefined}
-          visibleCategories={activeTab === 'transcript' ? visibleCategories : undefined}
+          filterState={activeTab === 'transcript' ? filterState : undefined}
           onToggleCategory={activeTab === 'transcript' ? toggleCategory : undefined}
+          onToggleUserSubcategory={activeTab === 'transcript' ? toggleUserSubcategory : undefined}
+          onToggleAssistantSubcategory={activeTab === 'transcript' ? toggleAssistantSubcategory : undefined}
         />
 
         {/* Tabs */}

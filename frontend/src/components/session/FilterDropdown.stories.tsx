@@ -1,51 +1,72 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import FilterDropdown from './FilterDropdown';
-import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
+import type {
+  MessageCategory,
+  UserSubcategory,
+  AssistantSubcategory,
+  HierarchicalCounts,
+  FilterState,
+} from './messageCategories';
+import { DEFAULT_FILTER_STATE } from './messageCategories';
 
-// Sample counts for stories
-const sampleCounts: MessageCategoryCounts = {
-  user: 194,
-  assistant: 271,
+// Sample hierarchical counts for stories
+const sampleCounts: HierarchicalCounts = {
+  user: { total: 194, prompt: 42, 'tool-result': 152 },
+  assistant: { total: 271, text: 50, 'tool-use': 180, thinking: 41 },
   system: 0,
   'file-history-snapshot': 39,
   summary: 0,
   'queue-operation': 6,
 };
 
-const defaultVisibleCategories = new Set<MessageCategory>([
-  'user',
-  'assistant',
-  'system',
-]);
-
 // Interactive wrapper component
 function FilterDropdownInteractive({
-  initialVisible = defaultVisibleCategories,
+  initialFilterState = DEFAULT_FILTER_STATE,
   counts = sampleCounts,
 }: {
-  initialVisible?: Set<MessageCategory>;
-  counts?: MessageCategoryCounts;
+  initialFilterState?: FilterState;
+  counts?: HierarchicalCounts;
 }) {
-  const [visibleCategories, setVisibleCategories] = useState(initialVisible);
+  const [filterState, setFilterState] = useState(initialFilterState);
 
-  const handleToggle = (category: MessageCategory) => {
-    setVisibleCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) {
-        next.delete(category);
+  const handleToggleCategory = (category: MessageCategory) => {
+    setFilterState((prev) => {
+      const next = { ...prev };
+      if (category === 'user') {
+        const allVisible = prev.user.prompt && prev.user['tool-result'];
+        next.user = { prompt: !allVisible, 'tool-result': !allVisible };
+      } else if (category === 'assistant') {
+        const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
+        next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
       } else {
-        next.add(category);
+        next[category] = !prev[category];
       }
       return next;
     });
   };
 
+  const handleToggleUserSubcategory = (subcategory: UserSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
+    }));
+  };
+
+  const handleToggleAssistantSubcategory = (subcategory: AssistantSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
+    }));
+  };
+
   return (
     <FilterDropdown
       counts={counts}
-      visibleCategories={visibleCategories}
-      onToggleCategory={handleToggle}
+      filterState={filterState}
+      onToggleCategory={handleToggleCategory}
+      onToggleUserSubcategory={handleToggleUserSubcategory}
+      onToggleAssistantSubcategory={handleToggleAssistantSubcategory}
     />
   );
 }
@@ -74,28 +95,48 @@ export const Default: Story = {
 
 export const AllFiltersActive: Story = {
   args: {
-    initialVisible: new Set([
-      'user',
-      'assistant',
-      'system',
-      'file-history-snapshot',
-      'summary',
-      'queue-operation',
-    ]),
+    initialFilterState: {
+      user: { prompt: true, 'tool-result': true },
+      assistant: { text: true, 'tool-use': true, thinking: true },
+      system: true,
+      'file-history-snapshot': true,
+      summary: true,
+      'queue-operation': true,
+    },
   },
 };
 
 export const SomeFiltersHidden: Story = {
   args: {
-    initialVisible: new Set(['user', 'assistant']),
+    initialFilterState: {
+      user: { prompt: true, 'tool-result': false },
+      assistant: { text: true, 'tool-use': true, thinking: false },
+      system: false,
+      'file-history-snapshot': false,
+      summary: false,
+      'queue-operation': false,
+    },
+  },
+};
+
+export const IndeterminateState: Story = {
+  args: {
+    initialFilterState: {
+      user: { prompt: true, 'tool-result': false }, // indeterminate
+      assistant: { text: false, 'tool-use': true, thinking: false }, // indeterminate
+      system: true,
+      'file-history-snapshot': false,
+      summary: false,
+      'queue-operation': false,
+    },
   },
 };
 
 export const AllCategoriesHaveMessages: Story = {
   args: {
     counts: {
-      user: 150,
-      assistant: 200,
+      user: { total: 192, prompt: 40, 'tool-result': 152 },
+      assistant: { total: 200, text: 80, 'tool-use': 100, thinking: 20 },
       system: 25,
       'file-history-snapshot': 40,
       summary: 5,

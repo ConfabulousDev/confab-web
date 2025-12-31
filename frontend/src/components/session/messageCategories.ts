@@ -1,8 +1,37 @@
-import type { TranscriptLine } from '@/types';
+import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
+import { isToolResultMessage, isUserMessage, isAssistantMessage } from '@/schemas/transcript';
 
 // Message categories for filtering - matches top-level transcript types
 export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation';
 
+// Subcategory types for hierarchical filtering
+export type UserSubcategory = 'prompt' | 'tool-result';
+export type AssistantSubcategory = 'text' | 'tool-use' | 'thinking';
+export type MessageSubcategory = UserSubcategory | AssistantSubcategory;
+
+// Subcategory counts for hierarchical categories
+export interface UserSubcategoryCounts {
+  prompt: number;
+  'tool-result': number;
+}
+
+export interface AssistantSubcategoryCounts {
+  text: number;
+  'tool-use': number;
+  thinking: number;
+}
+
+// Hierarchical counts structure
+export interface HierarchicalCounts {
+  user: { total: number } & UserSubcategoryCounts;
+  assistant: { total: number } & AssistantSubcategoryCounts;
+  system: number;
+  'file-history-snapshot': number;
+  summary: number;
+  'queue-operation': number;
+}
+
+// Legacy flat counts interface (for backwards compat during transition)
 export interface MessageCategoryCounts {
   user: number;
   assistant: number;
@@ -12,6 +41,26 @@ export interface MessageCategoryCounts {
   'queue-operation': number;
 }
 
+// Filter state - tracks which subcategories are visible
+export interface FilterState {
+  user: { prompt: boolean; 'tool-result': boolean };
+  assistant: { text: boolean; 'tool-use': boolean; thinking: boolean };
+  system: boolean;
+  'file-history-snapshot': boolean;
+  summary: boolean;
+  'queue-operation': boolean;
+}
+
+// Default filter state (user and assistant visible with all subs, system visible, others hidden)
+export const DEFAULT_FILTER_STATE: FilterState = {
+  user: { prompt: true, 'tool-result': true },
+  assistant: { text: true, 'tool-use': true, thinking: true },
+  system: true,
+  'file-history-snapshot': false,
+  summary: false,
+  'queue-operation': false,
+};
+
 /**
  * Get the category for a transcript line (direct mapping from type)
  */
@@ -20,12 +69,33 @@ export function categorizeMessage(line: TranscriptLine): MessageCategory {
 }
 
 /**
- * Count messages in each category
+ * Get the subcategory for a user message
  */
-export function countCategories(messages: TranscriptLine[]): MessageCategoryCounts {
-  const counts: MessageCategoryCounts = {
-    user: 0,
-    assistant: 0,
+export function categorizeUserMessage(message: UserMessage): UserSubcategory {
+  return isToolResultMessage(message) ? 'tool-result' : 'prompt';
+}
+
+/**
+ * Get the subcategory for an assistant message.
+ * Priority: thinking > tool-use > text (a message can have multiple block types)
+ */
+export function categorizeAssistantMessage(message: AssistantMessage): AssistantSubcategory {
+  const content = message.message.content;
+  const hasThinking = content.some((block) => block.type === 'thinking');
+  const hasToolUse = content.some((block) => block.type === 'tool_use');
+
+  if (hasThinking) return 'thinking';
+  if (hasToolUse) return 'tool-use';
+  return 'text';
+}
+
+/**
+ * Count messages in each category with hierarchical subcategories
+ */
+export function countHierarchicalCategories(messages: TranscriptLine[]): HierarchicalCounts {
+  const counts: HierarchicalCounts = {
+    user: { total: 0, prompt: 0, 'tool-result': 0 },
+    assistant: { total: 0, text: 0, 'tool-use': 0, thinking: 0 },
     system: 0,
     'file-history-snapshot': 0,
     summary: 0,
@@ -33,8 +103,68 @@ export function countCategories(messages: TranscriptLine[]): MessageCategoryCoun
   };
 
   for (const message of messages) {
-    counts[message.type]++;
+    if (isUserMessage(message)) {
+      counts.user.total++;
+      const subcategory = categorizeUserMessage(message);
+      counts.user[subcategory]++;
+    } else if (isAssistantMessage(message)) {
+      counts.assistant.total++;
+      const subcategory = categorizeAssistantMessage(message);
+      counts.assistant[subcategory]++;
+    } else {
+      // Flat categories - increment the specific counter
+      const msgType = message.type;
+      if (msgType === 'system') {
+        counts.system++;
+      } else if (msgType === 'file-history-snapshot') {
+        counts['file-history-snapshot']++;
+      } else if (msgType === 'summary') {
+        counts.summary++;
+      } else if (msgType === 'queue-operation') {
+        counts['queue-operation']++;
+      }
+    }
   }
 
   return counts;
+}
+
+/**
+ * Count messages in each category (legacy flat interface)
+ */
+export function countCategories(messages: TranscriptLine[]): MessageCategoryCounts {
+  const hierarchical = countHierarchicalCategories(messages);
+  return {
+    user: hierarchical.user.total,
+    assistant: hierarchical.assistant.total,
+    system: hierarchical.system,
+    'file-history-snapshot': hierarchical['file-history-snapshot'],
+    summary: hierarchical.summary,
+    'queue-operation': hierarchical['queue-operation'],
+  };
+}
+
+/**
+ * Check if a message matches the current filter state
+ */
+export function messageMatchesFilter(message: TranscriptLine, filterState: FilterState): boolean {
+  if (isUserMessage(message)) {
+    const subcategory = categorizeUserMessage(message);
+    return filterState.user[subcategory];
+  }
+
+  if (isAssistantMessage(message)) {
+    const subcategory = categorizeAssistantMessage(message);
+    return filterState.assistant[subcategory];
+  }
+
+  // Flat categories - check the specific filter state
+  const msgType = message.type;
+  if (msgType === 'system') return filterState.system;
+  if (msgType === 'file-history-snapshot') return filterState['file-history-snapshot'];
+  if (msgType === 'summary') return filterState.summary;
+  if (msgType === 'queue-operation') return filterState['queue-operation'];
+
+  // This shouldn't happen, but default to visible
+  return true;
 }

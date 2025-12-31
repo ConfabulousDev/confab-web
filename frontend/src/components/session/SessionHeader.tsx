@@ -4,7 +4,13 @@ import type { GitInfo, SessionDetail } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import { formatDuration, formatDateTime, formatModelName } from '@/utils/formatting';
 import { sessionsAPI } from '@/services/api';
-import type { MessageCategory, MessageCategoryCounts } from './messageCategories';
+import type {
+  MessageCategory,
+  UserSubcategory,
+  AssistantSubcategory,
+  HierarchicalCounts,
+  FilterState,
+} from './messageCategories';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
 import FilterDropdown from './FilterDropdown';
@@ -100,9 +106,11 @@ interface SessionHeaderProps {
   isShared?: boolean;
   // Filter props - optional, only shown on transcript tab
   // Currently drilled from SessionViewer -> SessionHeader -> FilterDropdown
-  categoryCounts?: MessageCategoryCounts;
-  visibleCategories?: Set<MessageCategory>;
+  categoryCounts?: HierarchicalCounts;
+  filterState?: FilterState;
   onToggleCategory?: (category: MessageCategory) => void;
+  onToggleUserSubcategory?: (subcategory: UserSubcategory) => void;
+  onToggleAssistantSubcategory?: (subcategory: AssistantSubcategory) => void;
 }
 
 function SessionHeader({
@@ -121,8 +129,10 @@ function SessionHeader({
   isOwner = true,
   isShared = false,
   categoryCounts,
-  visibleCategories,
+  filterState,
   onToggleCategory,
+  onToggleUserSubcategory,
+  onToggleAssistantSubcategory,
 }: SessionHeaderProps) {
   const { copy, copied } = useCopyToClipboard();
   const displayTitle = title || `Session ${externalId.substring(0, 8)}`;
@@ -285,11 +295,13 @@ function SessionHeader({
       </div>
 
       <div className={styles.actions}>
-        {categoryCounts && visibleCategories && onToggleCategory && (
+        {categoryCounts && filterState && onToggleCategory && onToggleUserSubcategory && onToggleAssistantSubcategory && (
           <FilterDropdown
             counts={categoryCounts}
-            visibleCategories={visibleCategories}
+            filterState={filterState}
             onToggleCategory={onToggleCategory}
+            onToggleUserSubcategory={onToggleUserSubcategory}
+            onToggleAssistantSubcategory={onToggleAssistantSubcategory}
           />
         )}
         {isShared ? (

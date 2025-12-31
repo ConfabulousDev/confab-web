@@ -115,38 +115,6 @@
   color: white;
 }
 
-/* Color dot indicator */
-.colorDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.colorDot.green {
-  background: #16a34a;
-}
-
-.colorDot.blue {
-  background: #2563eb;
-}
-
-.colorDot.gray {
-  background: #6b7280;
-}
-
-.colorDot.cyan {
-  background: #0284c7;
-}
-
-.colorDot.purple {
-  background: #7c3aed;
-}
-
-.colorDot.amber {
-  background: #d97706;
-}
-
 /* Label and count */
 .filterLabel {
   flex: 1;
@@ -158,4 +126,110 @@
   font-size: var(--font-xs);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Category group for hierarchical items */
+.categoryGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Subcategories container - indented to align under parent checkbox */
+.subcategories {
+  display: flex;
+  flex-direction: column;
+  margin-left: 28px; /* Width of expand button */
+  padding-left: var(--spacing-sm);
+  border-left: 1px solid var(--color-border-light);
+}
+
+/* Subcategory item */
+.subcategoryItem {
+  padding-left: var(--spacing-sm);
+}
+
+/* Flat item - needs padding to align with hierarchical items */
+.flatItem {
+  padding-left: calc(var(--spacing-sm) + 20px);
+}
+
+/* Parent item for hierarchical categories (contains expand + checkbox buttons) */
+.parentItem {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  cursor: default;
+}
+
+/* Expand/collapse button */
+.expandBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.expandBtn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* Checkbox button (main clickable area for toggling) */
+.checkboxBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+  padding: var(--spacing-sm);
+  padding-left: 0;
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+}
+
+.checkboxBtn:hover {
+  background: var(--color-bg-hover);
+}
+
+.checkboxBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.checkboxBtn:disabled:hover {
+  background: none;
+}
+
+/* Expand icon rotation */
+.expandIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition-fast);
+}
+
+.expandIcon.expanded {
+  transform: rotate(90deg);
+}
+
+/* Indeterminate checkbox state */
+.checkbox.indeterminate {
+  background: currentColor;
+  border-color: currentColor;
+}
+
+.checkbox.indeterminate svg {
+  display: block;
+  color: white;
 }
