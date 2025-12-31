@@ -1,4 +1,4 @@
-import { CardWrapper, StatRow, CardLoading, SectionHeader } from './Card';
+import { CardWrapper, StatRow, CardLoading } from './Card';
 import { formatResponseTime } from '@/utils/compactionStats';
 import {
   TerminalIcon,
@@ -123,14 +123,6 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
 
   return (
     <CardWrapper title="Session" icon={TerminalIcon}>
-      {/* Messages */}
-      <StatRow
-        label="Messages"
-        value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
-        icon={ChatIcon}
-        tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
-      />
-
       {/* Duration */}
       {data.duration_ms != null && (
         <StatRow
@@ -151,14 +143,20 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
         />
       )}
 
+      {/* Messages */}
+      <StatRow
+        label="Messages"
+        value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
+        icon={ChatIcon}
+        tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
+      />
+
       {/* Message type breakdown bar chart */}
       {breakdownData.length > 0 && (() => {
         // Calculate dynamic YAxis width based on longest label (~6.5px per char at 11px font)
         const maxLabelLength = Math.max(...breakdownData.map((d) => d.name.length));
         const yAxisWidth = Math.max(80, maxLabelLength * 6.5 + 8);
         return (
-        <>
-          <SectionHeader label="Breakdown" />
           <div className={styles.chartContainer} style={{ height: breakdownData.length * 24 + 16 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -195,7 +193,6 @@ export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </>
         );
       })()}
 
