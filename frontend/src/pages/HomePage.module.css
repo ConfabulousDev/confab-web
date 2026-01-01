@@ -4,12 +4,31 @@
 }
 
 .container {
-  padding: var(--spacing-xl);
-  max-width: 900px;
+  padding: var(--spacing-3xl) var(--spacing-xl);
+  max-width: 780px;
   width: 100%;
   margin: 0 auto;
 }
 
 .errorAlert {
   margin-bottom: var(--spacing-xl);
+}
+
+.hero {
+  text-align: center;
+  margin-bottom: var(--spacing-3xl);
+}
+
+.headline {
+  font-size: var(--font-4xl);
+  font-weight: var(--font-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  font-size: var(--font-lg);
+  color: var(--color-text-secondary);
+  margin: 0;
 }

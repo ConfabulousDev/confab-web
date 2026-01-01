@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import Alert from '@/components/Alert';
-import Quickstart from '@/components/Quickstart';
+import HeroCards from '@/components/HeroCards';
 import styles from './HomePage.module.css';
 
 const SUPPORT_EMAIL = 'help@confabulous.dev';
@@ -69,7 +69,12 @@ function HomePage() {
           </Alert>
         )}
 
-        <Quickstart />
+        <div className={styles.hero}>
+          <h1 className={styles.headline}>Confabulous</h1>
+          <p className={styles.tagline}>Your Claude Code session companion</p>
+        </div>
+
+        <HeroCards />
       </div>
     </div>
   );
