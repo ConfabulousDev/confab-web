@@ -11,6 +11,7 @@ function Footer() {
         <a href={`mailto:${SUPPORT_EMAIL}`}>Help</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
+        <a href="/legal">Legal</a>
       </div>
       <div className={styles.copyright}>
         © {new Date().getFullYear()} Confabulous

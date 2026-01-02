@@ -70,8 +70,7 @@ function HomePage() {
         )}
 
         <div className={styles.hero}>
-          <h1 className={styles.headline}>Confabulous</h1>
-          <p className={styles.tagline}>Your Claude Code session companion</p>
+          <h1 className={styles.headline}>Understand your Claude Code sessions</h1>
         </div>
 
         <HeroCards />

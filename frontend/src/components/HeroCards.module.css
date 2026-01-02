@@ -10,6 +10,18 @@
   gap: var(--spacing-md);
 }
 
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .card {
   display: flex;
   flex-direction: column;
