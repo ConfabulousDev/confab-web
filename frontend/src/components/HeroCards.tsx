@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import AnalysisModal from './AnalysisModal';
 import HowItWorksModal from './HowItWorksModal';
 import QuickstartModal from './QuickstartModal';
 import styles from './HeroCards.module.css';
@@ -50,17 +51,20 @@ const cards: HeroCard[] = [
   },
 ];
 
-const CLICKABLE_CARDS = ['quickstart', 'how-it-works'];
+const CLICKABLE_CARDS = ['quickstart', 'how-it-works', 'analysis'];
 
 function HeroCards() {
   const [quickstartOpen, setQuickstartOpen] = useState(false);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   const handleCardClick = (cardId: string) => {
     if (cardId === 'quickstart') {
       setQuickstartOpen(true);
     } else if (cardId === 'how-it-works') {
       setHowItWorksOpen(true);
+    } else if (cardId === 'analysis') {
+      setAnalysisOpen(true);
     }
   };
 
@@ -100,6 +104,10 @@ function HeroCards() {
       <HowItWorksModal
         isOpen={howItWorksOpen}
         onClose={() => setHowItWorksOpen(false)}
+      />
+      <AnalysisModal
+        isOpen={analysisOpen}
+        onClose={() => setAnalysisOpen(false)}
       />
     </div>
   );
