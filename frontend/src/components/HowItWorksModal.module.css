@@ -1,0 +1,174 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+
+.modal {
+  position: relative;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-xl);
+  max-width: 720px;
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-xl);
+}
+
+.closeBtn {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.closeBtn:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-hover);
+}
+
+.title {
+  font-size: var(--font-xl);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--spacing-lg) 0;
+  text-align: center;
+}
+
+.diagram {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+/* SVG Styles */
+.sidecarOutline {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 3;
+}
+
+.boxPrimary {
+  fill: var(--color-bg-secondary);
+  stroke: var(--color-border-dark);
+  stroke-width: 1.5;
+}
+
+.boxAccent {
+  fill: var(--color-accent-light);
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+}
+
+.boxSecondary {
+  fill: #fff8e6;
+  stroke: var(--color-warning);
+  stroke-width: 1.5;
+}
+
+.boxSuccess {
+  fill: var(--color-success-bg);
+  stroke: var(--color-success);
+  stroke-width: 1.5;
+}
+
+.labelPrimary {
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--color-text-primary);
+}
+
+.labelAccent {
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--color-accent);
+}
+
+.labelSecondary {
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--color-warning-text);
+}
+
+.labelSuccess {
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--color-success-text);
+}
+
+.labelMuted {
+  font-size: 11px;
+  fill: var(--color-text-muted);
+}
+
+.labelSmall {
+  font-size: 11px;
+  fill: var(--color-text-secondary);
+}
+
+.labelTiny {
+  font-size: 10px;
+  fill: var(--color-text-muted);
+}
+
+.arrow {
+  stroke: var(--color-border-dark);
+  stroke-width: 1.5;
+}
+
+.arrowHead {
+  fill: var(--color-border-dark);
+}
+
+.syncArc {
+  stroke: var(--color-text-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 2;
+}
+
+/* Features list */
+.features {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.features li {
+  position: relative;
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-sm) 0;
+  padding-left: var(--spacing-lg);
+  line-height: var(--leading-relaxed);
+}
+
+.features li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--color-success);
+  font-weight: var(--font-semibold);
+}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import HowItWorksModal from './HowItWorksModal';
 import QuickstartModal from './QuickstartModal';
 import styles from './HeroCards.module.css';
 
@@ -36,10 +37,10 @@ const cards: HeroCard[] = [
     description: 'Track token usage, costs, and productivity metrics across all your sessions.',
   },
   {
-    id: 'demo',
-    icon: '▶️',
-    title: 'Demo',
-    description: 'See Confabulous in action with a sample session walkthrough.',
+    id: 'how-it-works',
+    icon: '⚙️',
+    title: 'How it works',
+    description: 'Learn how Confabulous syncs and organizes your Claude Code sessions.',
   },
   {
     id: 'quickstart',
@@ -49,12 +50,17 @@ const cards: HeroCard[] = [
   },
 ];
 
+const CLICKABLE_CARDS = ['quickstart', 'how-it-works'];
+
 function HeroCards() {
   const [quickstartOpen, setQuickstartOpen] = useState(false);
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
 
   const handleCardClick = (cardId: string) => {
     if (cardId === 'quickstart') {
       setQuickstartOpen(true);
+    } else if (cardId === 'how-it-works') {
+      setHowItWorksOpen(true);
     }
   };
 
@@ -62,7 +68,7 @@ function HeroCards() {
     <div className={styles.container}>
       <div className={styles.grid}>
         {cards.map((card) => {
-          const isClickable = card.id === 'quickstart';
+          const isClickable = CLICKABLE_CARDS.includes(card.id);
           return (
             <div
               key={card.id}
@@ -90,6 +96,10 @@ function HeroCards() {
       <QuickstartModal
         isOpen={quickstartOpen}
         onClose={() => setQuickstartOpen(false)}
+      />
+      <HowItWorksModal
+        isOpen={howItWorksOpen}
+        onClose={() => setHowItWorksOpen(false)}
       />
     </div>
   );
