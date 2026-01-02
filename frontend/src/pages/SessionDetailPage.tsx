@@ -6,19 +6,39 @@ import { sessionsAPI } from '@/services/api';
 import { useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
 import type { SessionDetail } from '@/types';
 import { getErrorIcon, getErrorDescription } from '@/utils/sessionErrors';
-import { SessionViewer } from '@/components/session';
+import { SessionViewer, type ViewTab } from '@/components/session';
 import ShareDialog from '@/components/ShareDialog';
 import styles from './SessionDetailPage.module.css';
+
+function isValidViewTab(value: string | null): value is ViewTab {
+  return value === 'summary' || value === 'transcript';
+}
 
 function SessionDetailPage() {
   const { id: sessionId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     message: successMessage,
     fading: successFading,
   } = useSuccessMessage();
+
+  // Tab state from URL params (defaults to 'summary')
+  const tabParam = searchParams.get('tab');
+  const activeTab: ViewTab = isValidViewTab(tabParam) ? tabParam : 'summary';
+
+  const handleTabChange = useCallback((tab: ViewTab) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (tab === 'summary') {
+        next.delete('tab');
+      } else {
+        next.set('tab', tab);
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Email mismatch query params (for recipient shares with wrong account)
   const emailMismatch = searchParams.get('email_mismatch') === '1';
@@ -173,6 +193,8 @@ function SessionDetailPage() {
         } : undefined}
         isOwner={isOwner}
         isShared={!isOwner}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
       />
 
       {/* Share Dialog Modal */}
