@@ -16,18 +16,19 @@ function ZoomableImage({ src, alt, className }: ZoomableImageProps) {
   const [showZoom, setShowZoom] = useState(false);
 
   return (
-    <div
-      className={styles.zoomContainer}
-      onMouseEnter={() => setShowZoom(true)}
-      onMouseLeave={() => setShowZoom(false)}
-    >
-      <img src={src} alt={alt} className={className} />
+    <>
+      <img
+        src={src}
+        alt={alt}
+        className={`${className} ${styles.zoomable}`}
+        onClick={() => setShowZoom(true)}
+      />
       {showZoom && (
-        <div className={styles.zoomPopup}>
+        <div className={styles.zoomPopup} onClick={() => setShowZoom(false)}>
           <img src={src} alt={alt} />
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -70,19 +71,19 @@ function PRLinkingModal({ isOpen, onClose }: PRLinkingModalProps) {
             </h3>
 
             <div className={styles.subsection}>
-              <h4 className={styles.subsectionTitle}>Commits</h4>
-              <ZoomableImage
-                src="/github-to-confab-commit.png"
-                alt="GitHub commit with Confabulous link in commit message"
+              <h4 className={styles.subsectionTitle}>Pull Requests</h4>
+              <img
+                src="/github-to-confab.png"
+                alt="GitHub PR with Confabulous link"
                 className={styles.image}
               />
             </div>
 
             <div className={styles.subsection}>
-              <h4 className={styles.subsectionTitle}>Pull Requests</h4>
-              <img
-                src="/github-to-confab.png"
-                alt="GitHub PR with Confabulous link"
+              <h4 className={styles.subsectionTitle}>Commits</h4>
+              <ZoomableImage
+                src="/github-to-confab-commit.png"
+                alt="GitHub commit with Confabulous link in commit message"
                 className={styles.image}
               />
             </div>

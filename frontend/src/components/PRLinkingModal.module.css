@@ -108,10 +108,6 @@
   margin: 0 0 var(--spacing-xs) 0;
 }
 
-.zoomContainer {
-  position: relative;
-}
-
 .image {
   width: 85%;
   height: auto;
@@ -119,12 +115,12 @@
   border: 1px solid var(--color-border);
 }
 
-.zoomContainer .image {
+.zoomable {
   cursor: zoom-in;
   transition: opacity var(--transition-fast);
 }
 
-.zoomContainer:hover .image {
+.zoomable:hover {
   opacity: 0.9;
 }
 
@@ -140,6 +136,7 @@
   box-shadow: var(--shadow-lg), 0 0 0 9999px rgba(0, 0, 0, 0.6);
   max-width: 60vw;
   max-height: 60vh;
+  cursor: zoom-out;
 }
 
 .zoomPopup img {
