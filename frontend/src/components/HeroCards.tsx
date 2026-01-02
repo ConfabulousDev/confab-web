@@ -3,6 +3,7 @@ import AnalysisModal from './AnalysisModal';
 import HowItWorksModal from './HowItWorksModal';
 import PRLinkingModal from './PRLinkingModal';
 import QuickstartModal from './QuickstartModal';
+import ReviewModal from './ReviewModal';
 import styles from './HeroCards.module.css';
 
 interface HeroCard {
@@ -52,13 +53,14 @@ const cards: HeroCard[] = [
   },
 ];
 
-const CLICKABLE_CARDS = ['quickstart', 'how-it-works', 'analysis', 'pr-linking'];
+const CLICKABLE_CARDS = ['quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review'];
 
 function HeroCards() {
   const [quickstartOpen, setQuickstartOpen] = useState(false);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [prLinkingOpen, setPrLinkingOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const handleCardClick = (cardId: string) => {
     if (cardId === 'quickstart') {
@@ -69,6 +71,8 @@ function HeroCards() {
       setAnalysisOpen(true);
     } else if (cardId === 'pr-linking') {
       setPrLinkingOpen(true);
+    } else if (cardId === 'review') {
+      setReviewOpen(true);
     }
   };
 
@@ -116,6 +120,10 @@ function HeroCards() {
       <PRLinkingModal
         isOpen={prLinkingOpen}
         onClose={() => setPrLinkingOpen(false)}
+      />
+      <ReviewModal
+        isOpen={reviewOpen}
+        onClose={() => setReviewOpen(false)}
       />
     </div>
   );
