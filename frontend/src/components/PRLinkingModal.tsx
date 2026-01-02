@@ -24,8 +24,10 @@ function ZoomableImage({ src, alt, className }: ZoomableImageProps) {
         onClick={() => setShowZoom(true)}
       />
       {showZoom && (
-        <div className={styles.zoomPopup} onClick={() => setShowZoom(false)}>
-          <img src={src} alt={alt} />
+        <div className={styles.zoomOverlay} onClick={() => setShowZoom(false)}>
+          <div className={styles.zoomPopup}>
+            <img src={src} alt={alt} />
+          </div>
         </div>
       )}
     </>
@@ -44,7 +46,7 @@ function ConfabIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className}>
       <rect width="32" height="32" rx="6" fill="#1a1a1a"/>
-      <text x="16" y="24" fontFamily="Georgia, serif" fontSize="22" fill="#ffffff" textAnchor="middle">C</text>
+      <text x="16" y="24" fontFamily="Lobster, cursive" fontSize="22" fill="#ffffff" textAnchor="middle">C</text>
     </svg>
   );
 }
@@ -58,12 +60,24 @@ function PRLinkingModal({ isOpen, onClose }: PRLinkingModalProps) {
         <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
           ×
         </button>
-        <h2 className={styles.title}>PR Linking</h2>
-        <p className={styles.subtitle}>
-          Two-way linking between Confabulous and GitHub
-        </p>
+        <h2 className={styles.title}>Two-way linking between Confabulous and GitHub</h2>
 
         <div className={styles.sections}>
+          <div className={styles.section}>
+            <h3 className={styles.sectionTitle}>
+              <ConfabIcon className={styles.icon} />
+              <span className={styles.confabName}>Confabulous</span>
+            </h3>
+            <p className={styles.sectionDesc}>
+              Session links PRs and commits
+            </p>
+            <img
+              src="/confab-to-github.png"
+              alt="Confabulous session showing linked GitHub PRs and commits"
+              className={`${styles.image} ${styles.imageSmall}`}
+            />
+          </div>
+
           <div className={styles.section}>
             <h3 className={styles.sectionTitle}>
               <GitHubIcon className={styles.icon} />
@@ -71,37 +85,22 @@ function PRLinkingModal({ isOpen, onClose }: PRLinkingModalProps) {
             </h3>
 
             <div className={styles.subsection}>
-              <h4 className={styles.subsectionTitle}>Pull Requests</h4>
+              <p className={styles.sectionDesc}>PR links to session in Confabulous</p>
               <img
                 src="/github-to-confab.png"
                 alt="GitHub PR with Confabulous link"
-                className={styles.image}
+                className={`${styles.image} ${styles.imageSmall}`}
               />
             </div>
 
             <div className={styles.subsection}>
-              <h4 className={styles.subsectionTitle}>Commits</h4>
+              <p className={styles.sectionDesc}>Commit too</p>
               <ZoomableImage
                 src="/github-to-confab-commit.png"
                 alt="GitHub commit with Confabulous link in commit message"
                 className={styles.image}
               />
             </div>
-          </div>
-
-          <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>
-              <ConfabIcon className={styles.icon} />
-              Confabulous
-            </h3>
-            <p className={styles.sectionDesc}>
-              Sessions show all linked PRs and commits
-            </p>
-            <img
-              src="/confab-to-github.png"
-              alt="Confabulous session showing linked GitHub PRs and commits"
-              className={styles.image}
-            />
           </div>
         </div>
       </div>

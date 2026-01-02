@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Lobster&display=swap');
+
 .overlay {
   position: fixed;
   top: 0;
@@ -52,7 +54,7 @@
   font-size: var(--font-xl);
   font-weight: var(--font-semibold);
   color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-xs) 0;
+  margin: 0 0 var(--spacing-xl) 0;
   text-align: center;
 }
 
@@ -66,13 +68,23 @@
 .sections {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-2xl);
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-lg);
+}
+
+.section:first-child {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.section:last-child {
+  align-items: flex-start;
+  text-align: left;
 }
 
 .sectionTitle {
@@ -91,6 +103,11 @@
   flex-shrink: 0;
 }
 
+.confabName {
+  font-family: 'Lobster', cursive;
+  font-size: 1.25rem;
+}
+
 .sectionDesc {
   font-size: var(--font-sm);
   color: var(--color-text-secondary);
@@ -98,7 +115,7 @@
 }
 
 .subsection {
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
 }
 
 .subsectionTitle {
@@ -109,10 +126,14 @@
 }
 
 .image {
-  width: 85%;
+  width: 100%;
   height: auto;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
+}
+
+.imageSmall {
+  width: 85%;
 }
 
 .zoomable {
@@ -124,24 +145,32 @@
   opacity: 0.9;
 }
 
-.zoomPopup {
+.zoomOverlay {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(1.5);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
   z-index: calc(var(--z-modal) + 10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.zoomPopup {
   background: var(--color-bg-primary);
   padding: var(--spacing-md);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg), 0 0 0 9999px rgba(0, 0, 0, 0.6);
-  max-width: 60vw;
-  max-height: 60vh;
-  cursor: zoom-out;
+  box-shadow: var(--shadow-lg);
+  max-width: 80vw;
+  max-height: 80vh;
 }
 
 .zoomPopup img {
   max-width: 100%;
-  max-height: 55vh;
+  max-height: 75vh;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
 }
