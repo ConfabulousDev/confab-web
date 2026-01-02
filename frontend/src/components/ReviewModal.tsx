@@ -23,14 +23,16 @@ function ReviewModal({ isOpen, onClose }: ReviewModalProps) {
           alt="Confabulous session transcript view"
           className={styles.image}
         />
-        <a
-          href="https://confabulous.dev/sessions/3b46a065-6d73-4035-9564-089b0c372806"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles.link}
-        >
-          View this session live
-        </a>
+        <div className={styles.linkWrapper}>
+          <a
+            href="https://confabulous.dev/sessions/3b46a065-6d73-4035-9564-089b0c372806?tab=transcript"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.link}
+          >
+            View full session
+          </a>
+        </div>
       </div>
     </div>
   );

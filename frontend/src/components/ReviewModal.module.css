@@ -73,18 +73,24 @@
 }
 
 .link {
-  display: block;
-  margin-top: var(--spacing-lg);
-  padding: var(--spacing-md) var(--spacing-xl);
-  background: var(--color-primary);
+  display: inline-block;
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: #2e7d32;
   color: white;
-  text-align: center;
   text-decoration: none;
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-sm);
   transition: background-color var(--transition-fast);
 }
 
 .link:hover {
-  background: var(--color-primary-hover);
+  background: #256b29;
+  color: white;
+}
+
+.linkWrapper {
+  text-align: center;
+  margin-top: var(--spacing-sm);
 }
