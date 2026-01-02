@@ -172,6 +172,7 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
                   tickLine={false}
                   tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
                   width={yAxisWidth}
+                  interval={0}
                 />
                 <Tooltip
                   content={<CustomTooltip />}
