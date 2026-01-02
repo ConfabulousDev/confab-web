@@ -15,8 +15,7 @@
   position: relative;
   background: var(--color-bg-primary);
   border-radius: var(--radius-xl);
-  max-width: 860px;
-  width: 95%;
+  max-width: fit-content;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
@@ -70,21 +69,4 @@
   margin: 0 auto;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
-}
-
-.link {
-  display: block;
-  margin-top: var(--spacing-lg);
-  padding: var(--spacing-md) var(--spacing-xl);
-  background: var(--color-primary);
-  color: white;
-  text-align: center;
-  text-decoration: none;
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  transition: background-color var(--transition-fast);
-}
-
-.link:hover {
-  background: var(--color-primary-hover);
 }
