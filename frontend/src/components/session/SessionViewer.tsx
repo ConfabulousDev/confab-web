@@ -16,7 +16,7 @@ import MessageTimeline from './MessageTimeline';
 import SessionSummaryPanel from './SessionSummaryPanel';
 import styles from './SessionViewer.module.css';
 
-type ViewTab = 'summary' | 'transcript';
+export type ViewTab = 'summary' | 'transcript';
 
 // Polling interval for new transcript messages (15 seconds)
 const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
@@ -28,6 +28,10 @@ interface SessionViewerProps {
   onSessionUpdate?: (session: SessionDetail) => void;
   isOwner?: boolean;
   isShared?: boolean;
+  /** Controlled active tab - if provided, component is controlled */
+  activeTab?: ViewTab;
+  /** Callback when tab changes - required if activeTab is provided */
+  onTabChange?: (tab: ViewTab) => void;
   /** For Storybook: pass messages directly instead of fetching from API */
   initialMessages?: TranscriptLine[];
   /** For Storybook: pass analytics directly instead of fetching from API */
@@ -36,8 +40,11 @@ interface SessionViewerProps {
   initialGithubLinks?: import('@/services/api').GitHubLink[];
 }
 
-function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, initialMessages, initialAnalytics, initialGithubLinks }: SessionViewerProps) {
-  const [activeTab, setActiveTab] = useState<ViewTab>('summary');
+function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, activeTab: controlledTab, onTabChange, initialMessages, initialAnalytics, initialGithubLinks }: SessionViewerProps) {
+  // Support both controlled and uncontrolled modes
+  const [uncontrolledTab, setUncontrolledTab] = useState<ViewTab>('summary');
+  const activeTab = controlledTab ?? uncontrolledTab;
+  const setActiveTab = onTabChange ?? setUncontrolledTab;
   const [loading, setLoading] = useState(!initialMessages);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>(initialMessages ?? []);

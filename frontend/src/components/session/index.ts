@@ -1,4 +1,5 @@
 export { default as SessionViewer } from './SessionViewer';
+export type { ViewTab } from './SessionViewer';
 export { default as SessionHeader } from './SessionHeader';
 export { default as SessionSummaryPanel } from './SessionSummaryPanel';
 export { default as GitHubLinksCard } from './GitHubLinksCard';
