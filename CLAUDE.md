@@ -27,13 +27,16 @@ cd frontend && npm run build && npm run lint && npm test
 
 ### Sharded Backend Tests (Faster)
 
-For faster test runs, shard by package using 2 parallel Bash tool calls:
+For faster test runs, shard by package using 3 parallel Bash tool calls:
 
 ```bash
-# Shard 1: Heavy packages (api, db, analytics)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/... ./internal/db/... ./internal/analytics/...
+# Shard 1: api package
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...
 
-# Shard 2: Everything else
+# Shard 2: db and analytics packages
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/... ./internal/analytics/...
+
+# Shard 3: Everything else
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/... ./internal/storage/... ./internal/admin/... ./internal/clientip/... ./internal/email/... ./internal/logger/... ./internal/models/... ./internal/ratelimit/... ./internal/validation/...
 ```
 
