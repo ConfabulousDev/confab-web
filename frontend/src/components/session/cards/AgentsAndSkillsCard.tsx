@@ -119,8 +119,8 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
 
   const chartData = prepareChartData(data.agent_stats, data.skill_stats);
 
-  // Calculate dynamic height based on number of items (28px per item, min 56px)
-  const chartHeight = Math.max(56, chartData.length * 28);
+  // Calculate dynamic height based on number of items (24px per item, min 80px)
+  const chartHeight = Math.max(80, chartData.length * 24);
 
   // Calculate dynamic YAxis width based on longest label (~7px per char at 11px font)
   const maxLabelLength = Math.max(...chartData.map((d) => d.name.length), 6);
@@ -154,7 +154,7 @@ export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkills
                 data={chartData}
                 layout="vertical"
                 margin={{ top: 0, right: 24, left: 0, bottom: 0 }}
-                barSize={16}
+                barSize={14}
               >
                 <XAxis
                   type="number"
