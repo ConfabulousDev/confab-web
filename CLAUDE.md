@@ -25,6 +25,20 @@ cd backend && go test -short ./...
 cd frontend && npm run build && npm run lint && npm test
 ```
 
+### Sharded Backend Tests (Faster)
+
+For faster test runs, shard by package using 2 parallel Bash tool calls:
+
+```bash
+# Shard 1: Heavy packages (api, db, analytics)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/... ./internal/db/... ./internal/analytics/...
+
+# Shard 2: Everything else
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/... ./internal/storage/... ./internal/admin/... ./internal/clientip/... ./internal/email/... ./internal/logger/... ./internal/models/... ./internal/ratelimit/... ./internal/validation/...
+```
+
+Claude Code can run multiple Bash commands in parallel and aggregate results across all shards.
+
 Note: CLI is in a separate repo: https://github.com/ConfabulousDev/confab-cli
 
 ## Frontend Development
