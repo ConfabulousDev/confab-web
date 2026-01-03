@@ -30,6 +30,14 @@ export interface CardDefinition {
   span?: 1 | 2 | 3;
   /** Height hint for consistent grid alignment (default: 'standard') */
   size?: 'compact' | 'standard' | 'tall';
+  /**
+   * Check if the card should render based on its data.
+   * If this returns false, the card wrapper is not rendered at all,
+   * avoiding empty grid cells that disrupt layout.
+   * Default: renders if data is truthy.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shouldRender?: (data: any) => boolean;
 }
 
 /**

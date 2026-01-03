@@ -90,6 +90,12 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
         {orderedCards.map((cardDef) => {
           const CardComponent = cardDef.component;
           const cardData = cards[cardDef.key] ?? null;
+
+          // Skip rendering wrapper if card wouldn't render (avoids empty grid cells)
+          if (cardDef.shouldRender && !loading && !cardDef.shouldRender(cardData)) {
+            return null;
+          }
+
           const spanClass = cardDef.span === 2 ? styles.span2 : cardDef.span === 3 ? styles.span3 : '';
           const sizeClass = cardDef.size === 'compact' ? styles.sizeCompact
             : cardDef.size === 'tall' ? styles.sizeTall

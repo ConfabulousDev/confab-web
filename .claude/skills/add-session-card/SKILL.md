@@ -335,12 +335,30 @@ func (c *<Name>CardRecord) IsValid(currentLineCount int64) bool {
 }
 ```
 
-### Conditional rendering
+### Conditional rendering and grid layout
 
-For cards that shouldn't show when empty:
+Cards that shouldn't show when empty need **two things**:
+
+1. **Component returns null** when data is empty:
 ```typescript
 if (data.total_count === 0) return null;
 ```
+
+2. **Registry has `shouldRender`** to prevent empty grid cells:
+```typescript
+{
+  key: 'my_card',
+  title: 'My Card',
+  component: MyCard,
+  order: 5,
+  span: 2,  // Important: cards with span > 1 MUST have shouldRender
+  shouldRender: (data: MyCardData | null) => !!data && data.total_count > 0,
+}
+```
+
+**Why both?** The card component is wrapped in a `<div>` with grid span/size classes. If the component returns `null` but the wrapper is still rendered, CSS Grid reserves the columns for the empty div, creating gaps in the layout. The `shouldRender` function prevents the wrapper from rendering at all.
+
+**Rule of thumb:** Any card that can return `null` based on data content (not just `!data`) should have a matching `shouldRender` function in the registry. This is especially critical for cards with `span: 2` or `span: 3`.
 
 ### Processing agent files
 
@@ -371,6 +389,7 @@ toolIDToName := file.BuildToolUseIDToNameMap()
 - [ ] Zod schema validates card data
 - [ ] Frontend component renders correctly
 - [ ] Card is registered in registry
+- [ ] If card can return null when empty, `shouldRender` is defined in registry
 - [ ] Storybook stories cover key states
 - [ ] All backend tests pass
 - [ ] All frontend tests pass

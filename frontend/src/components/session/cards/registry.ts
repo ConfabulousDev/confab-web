@@ -6,6 +6,11 @@ import { ConversationCard } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
 import { RedactionsCard } from './RedactionsCard';
 import type { CardDefinition } from './types';
+import type {
+  ToolsCardData,
+  AgentsAndSkillsCardData,
+  RedactionsCardData,
+} from '@/schemas/api';
 
 /**
  * Registry of all summary cards.
@@ -55,6 +60,7 @@ export const cardRegistry: CardDefinition[] = [
     order: 4,
     span: 2,
     size: 'tall',
+    shouldRender: (data: ToolsCardData | null) => !!data && data.total_calls > 0,
   },
   {
     key: 'agents_and_skills',
@@ -63,6 +69,8 @@ export const cardRegistry: CardDefinition[] = [
     order: 5,
     span: 2,
     size: 'tall',
+    shouldRender: (data: AgentsAndSkillsCardData | null) =>
+      !!data && data.agent_invocations + data.skill_invocations > 0,
   },
   {
     key: 'redactions',
@@ -70,6 +78,8 @@ export const cardRegistry: CardDefinition[] = [
     component: RedactionsCard,
     order: 6,
     size: 'compact',
+    shouldRender: (data: RedactionsCardData | null) =>
+      !!data && data.total_redactions > 0,
   },
 ];
 
