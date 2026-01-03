@@ -10,7 +10,13 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+var tracer = otel.Tracer("confab/storage")
 
 // Sentinel errors for storage operations
 var (
@@ -80,6 +86,14 @@ func NewS3Storage(config S3Config) (*S3Storage, error) {
 // Upload uploads a file to S3/MinIO
 // Returns the S3 key where the file was stored
 func (s *S3Storage) Upload(ctx context.Context, userID int64, sessionType, externalID string, runID int64, filename string, data []byte) (string, error) {
+	ctx, span := tracer.Start(ctx, "storage.upload",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.external_id", externalID),
+			attribute.Int("file.size", len(data)),
+		))
+	defer span.End()
+
 	// Organize files by user/session_type/external_id/run_id
 	key := s.generateKey(userID, sessionType, externalID, runID, filename)
 
@@ -88,6 +102,8 @@ func (s *S3Storage) Upload(ctx context.Context, userID int64, sessionType, exter
 		ContentType: "application/json", // All our files are JSONL
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", classifyStorageError(err, "upload")
 	}
 
@@ -96,25 +112,39 @@ func (s *S3Storage) Upload(ctx context.Context, userID int64, sessionType, exter
 
 // Download retrieves a file from S3/MinIO
 func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
+	ctx, span := tracer.Start(ctx, "storage.download",
+		trace.WithAttributes(attribute.String("storage.key", key)))
+	defer span.End()
+
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, classifyStorageError(err, "download")
 	}
 	defer object.Close()
 
 	data, err := io.ReadAll(object)
 	if err != nil {
-		// Check if error is from S3 response (e.g., NoSuchKey)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, classifyStorageError(err, "download")
 	}
 
+	span.SetAttributes(attribute.Int("file.size", len(data)))
 	return data, nil
 }
 
 // Delete removes a file from S3/MinIO
 func (s *S3Storage) Delete(ctx context.Context, key string) error {
+	ctx, span := tracer.Start(ctx, "storage.delete",
+		trace.WithAttributes(attribute.String("storage.key", key)))
+	defer span.End()
+
 	err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete from S3: %w", err)
 	}
 	return nil
@@ -195,6 +225,17 @@ func containsAny(s string, substrs []string) bool {
 // UploadChunk uploads a chunk file for incremental sync
 // Key format: {user_id}/claude-code/{external_id}/chunks/{file_name}/chunk_{first:08d}_{last:08d}.jsonl
 func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, fileName string, firstLine, lastLine int, data []byte) (string, error) {
+	ctx, span := tracer.Start(ctx, "storage.upload_chunk",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.external_id", externalID),
+			attribute.String("file.name", fileName),
+			attribute.Int("chunk.first_line", firstLine),
+			attribute.Int("chunk.last_line", lastLine),
+			attribute.Int("file.size", len(data)),
+		))
+	defer span.End()
+
 	key := fmt.Sprintf("%d/claude-code/%s/chunks/%s/chunk_%08d_%08d.jsonl",
 		userID, externalID, fileName, firstLine, lastLine)
 
@@ -203,6 +244,8 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, f
 		ContentType: "application/json",
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", classifyStorageError(err, "upload chunk")
 	}
 
@@ -213,6 +256,14 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, f
 // Returns keys sorted by name (which gives correct line order due to zero-padded naming)
 // Returns ErrTooManyChunks if the file exceeds MaxChunksPerFile.
 func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fileName string) ([]string, error) {
+	ctx, span := tracer.Start(ctx, "storage.list_chunks",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.external_id", externalID),
+			attribute.String("file.name", fileName),
+		))
+	defer span.End()
+
 	prefix := fmt.Sprintf("%d/claude-code/%s/chunks/%s/", userID, externalID, fileName)
 
 	var keys []string
@@ -223,15 +274,22 @@ func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fi
 
 	for obj := range objectCh {
 		if obj.Err != nil {
+			span.RecordError(obj.Err)
+			span.SetStatus(codes.Error, obj.Err.Error())
 			return nil, classifyStorageError(obj.Err, "list chunks")
 		}
 		keys = append(keys, obj.Key)
 
 		// Sanity check to prevent unbounded memory usage
 		if len(keys) > MaxChunksPerFile {
-			return nil, fmt.Errorf("list chunks: %w (limit: %d)", ErrTooManyChunks, MaxChunksPerFile)
+			err := fmt.Errorf("list chunks: %w (limit: %d)", ErrTooManyChunks, MaxChunksPerFile)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
 		}
 	}
+
+	span.SetAttributes(attribute.Int("chunks.count", len(keys)))
 
 	// Keys are already sorted by ListObjects (lexicographic order)
 	// Due to zero-padded line numbers, this gives correct order
@@ -240,13 +298,27 @@ func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fi
 
 // DeleteChunks deletes all chunks for a session/file
 func (s *S3Storage) DeleteChunks(ctx context.Context, userID int64, externalID, fileName string) error {
+	ctx, span := tracer.Start(ctx, "storage.delete_chunks",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.external_id", externalID),
+			attribute.String("file.name", fileName),
+		))
+	defer span.End()
+
 	keys, err := s.ListChunks(ctx, userID, externalID, fileName)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
+	span.SetAttributes(attribute.Int("chunks.count", len(keys)))
+
 	for _, key := range keys {
 		if err := s.Delete(ctx, key); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("failed to delete chunk %s: %w", key, err)
 		}
 	}
@@ -256,8 +328,16 @@ func (s *S3Storage) DeleteChunks(ctx context.Context, userID int64, externalID, 
 
 // DeleteAllSessionChunks deletes all chunks for all files in a session
 func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, externalID string) error {
+	ctx, span := tracer.Start(ctx, "storage.delete_all_session_chunks",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.external_id", externalID),
+		))
+	defer span.End()
+
 	prefix := fmt.Sprintf("%d/claude-code/%s/chunks/", userID, externalID)
 
+	var deletedCount int
 	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: true,
@@ -265,12 +345,19 @@ func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, ex
 
 	for obj := range objectCh {
 		if obj.Err != nil {
+			span.RecordError(obj.Err)
+			span.SetStatus(codes.Error, obj.Err.Error())
 			return classifyStorageError(obj.Err, "list session chunks")
 		}
 		if err := s.Delete(ctx, obj.Key); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("failed to delete chunk %s: %w", obj.Key, err)
 		}
+		deletedCount++
 	}
+
+	span.SetAttributes(attribute.Int("chunks.deleted", deletedCount))
 
 	return nil
 }

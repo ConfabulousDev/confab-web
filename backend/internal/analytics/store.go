@@ -8,7 +8,13 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+var tracer = otel.Tracer("confab/analytics")
 
 // Store provides database operations for session analytics cards.
 type Store struct {
@@ -23,11 +29,17 @@ func NewStore(db *sql.DB) *Store {
 // GetCards retrieves all cached card data for a session.
 // Returns a Cards struct with nil fields for cards that don't exist.
 func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) {
+	ctx, span := tracer.Start(ctx, "analytics.get_cards",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
 	cards := &Cards{}
 
 	// Get tokens card (includes cost)
 	tokens, err := s.getTokensCard(ctx, sessionID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("getting tokens card: %w", err)
 	}
 	cards.Tokens = tokens
@@ -35,6 +47,8 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	// Get session card (includes compaction)
 	session, err := s.getSessionCard(ctx, sessionID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("getting session card: %w", err)
 	}
 	cards.Session = session
@@ -42,6 +56,8 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	// Get tools card
 	tools, err := s.getToolsCard(ctx, sessionID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("getting tools card: %w", err)
 	}
 	cards.Tools = tools
@@ -49,6 +65,8 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	// Get code activity card
 	codeActivity, err := s.getCodeActivityCard(ctx, sessionID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("getting code activity card: %w", err)
 	}
 	cards.CodeActivity = codeActivity
@@ -56,6 +74,8 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	// Get conversation card
 	conversation, err := s.getConversationCard(ctx, sessionID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("getting conversation card: %w", err)
 	}
 	cards.Conversation = conversation
@@ -63,48 +83,91 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	// Get agents and skills card
 	agentsAndSkills, err := s.getAgentsAndSkillsCard(ctx, sessionID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("getting agents and skills card: %w", err)
 	}
 	cards.AgentsAndSkills = agentsAndSkills
+
+	// Get redactions card
+	redactions, err := s.getRedactionsCard(ctx, sessionID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("getting redactions card: %w", err)
+	}
+	cards.Redactions = redactions
 
 	return cards, nil
 }
 
 // UpsertCards inserts or updates all cards for a session.
 func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
+	// Get session ID from the first available card for tracing
+	var sessionID string
+	if cards.Tokens != nil {
+		sessionID = cards.Tokens.SessionID
+	} else if cards.Session != nil {
+		sessionID = cards.Session.SessionID
+	}
+
+	ctx, span := tracer.Start(ctx, "analytics.upsert_cards",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
 	if cards.Tokens != nil {
 		if err := s.upsertTokensCard(ctx, cards.Tokens); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("upserting tokens card: %w", err)
 		}
 	}
 
 	if cards.Session != nil {
 		if err := s.upsertSessionCard(ctx, cards.Session); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("upserting session card: %w", err)
 		}
 	}
 
 	if cards.Tools != nil {
 		if err := s.upsertToolsCard(ctx, cards.Tools); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("upserting tools card: %w", err)
 		}
 	}
 
 	if cards.CodeActivity != nil {
 		if err := s.upsertCodeActivityCard(ctx, cards.CodeActivity); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("upserting code activity card: %w", err)
 		}
 	}
 
 	if cards.Conversation != nil {
 		if err := s.upsertConversationCard(ctx, cards.Conversation); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("upserting conversation card: %w", err)
 		}
 	}
 
 	if cards.AgentsAndSkills != nil {
 		if err := s.upsertAgentsAndSkillsCard(ctx, cards.AgentsAndSkills); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("upserting agents and skills card: %w", err)
+		}
+	}
+
+	if cards.Redactions != nil {
+		if err := s.upsertRedactionsCard(ctx, cards.Redactions); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("upserting redactions card: %w", err)
 		}
 	}
 
@@ -591,6 +654,72 @@ func (s *Store) upsertAgentsAndSkillsCard(ctx context.Context, record *AgentsAnd
 }
 
 // =============================================================================
+// Redactions card operations
+// =============================================================================
+
+func (s *Store) getRedactionsCard(ctx context.Context, sessionID string) (*RedactionsCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			total_redactions, redaction_counts
+		FROM session_card_redactions
+		WHERE session_id = $1
+	`
+
+	var record RedactionsCardRecord
+	var countsJSON []byte
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.TotalRedactions,
+		&countsJSON,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(countsJSON, &record.RedactionCounts); err != nil {
+		return nil, fmt.Errorf("parsing redaction_counts: %w", err)
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertRedactionsCard(ctx context.Context, record *RedactionsCardRecord) error {
+	countsJSON, err := json.Marshal(record.RedactionCounts)
+	if err != nil {
+		return fmt.Errorf("marshaling redaction_counts: %w", err)
+	}
+
+	query := `
+		INSERT INTO session_card_redactions (
+			session_id, version, computed_at, up_to_line,
+			total_redactions, redaction_counts
+		) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			total_redactions = EXCLUDED.total_redactions,
+			redaction_counts = EXCLUDED.redaction_counts
+	`
+
+	_, err = s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.TotalRedactions,
+		countsJSON,
+	)
+	return err
+}
+
+// =============================================================================
 // Conversion helpers
 // =============================================================================
 
@@ -676,6 +805,14 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			SkillInvocations: r.TotalSkillInvocations,
 			AgentStats:       r.AgentStats,
 			SkillStats:       r.SkillStats,
+		},
+		Redactions: &RedactionsCardRecord{
+			SessionID:       sessionID,
+			Version:         RedactionsCardVersion,
+			ComputedAt:      now,
+			UpToLine:        lineCount,
+			TotalRedactions: r.TotalRedactions,
+			RedactionCounts: r.RedactionCounts,
 		},
 	}
 }
@@ -781,6 +918,14 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			SkillInvocations: c.AgentsAndSkills.SkillInvocations,
 			AgentStats:       c.AgentsAndSkills.AgentStats,
 			SkillStats:       c.AgentsAndSkills.SkillStats,
+		}
+	}
+
+	// Only include redactions card if there are redactions (hide if empty)
+	if c.Redactions != nil && c.Redactions.TotalRedactions > 0 {
+		response.Cards["redactions"] = RedactionsCardData{
+			TotalRedactions: c.Redactions.TotalRedactions,
+			RedactionCounts: c.Redactions.RedactionCounts,
 		}
 	}
 
