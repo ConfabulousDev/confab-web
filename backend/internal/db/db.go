@@ -72,6 +72,10 @@ func (db *DB) Conn() *sql.DB {
 
 // GetUserByID retrieves a user by ID
 func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
+	ctx, span := tracer.Start(ctx, "db.get_user_by_id",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
@@ -88,6 +92,8 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 		if err == sql.ErrNoRows {
 			return nil, ErrUserNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
@@ -96,6 +102,9 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 
 // ValidateAPIKey checks if an API key is valid and returns the associated user ID, key ID, user email, and user status
 func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userEmail string, userStatus models.UserStatus, err error) {
+	ctx, span := tracer.Start(ctx, "db.validate_api_key")
+	defer span.End()
+
 	query := `
 		SELECT ak.id, ak.user_id, u.email, u.status
 		FROM api_keys ak
@@ -106,11 +115,15 @@ func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64,
 	err = db.conn.QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userEmail, &userStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			// Don't record as error - invalid key is expected behavior
 			return 0, 0, "", "", fmt.Errorf("invalid API key")
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, 0, "", "", fmt.Errorf("failed to validate API key: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int64("user.id", userID))
 	return userID, keyID, userEmail, userStatus, nil
 }
 
@@ -542,6 +555,9 @@ func (db *DB) CreateWebSession(ctx context.Context, sessionID string, userID int
 
 // GetWebSession retrieves a web session by ID and validates it's not expired
 func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebSession, error) {
+	ctx, span := tracer.Start(ctx, "db.get_web_session")
+	defer span.End()
+
 	query := `
 		SELECT ws.id, ws.user_id, u.email, u.status, ws.created_at, ws.expires_at
 		FROM web_sessions ws
@@ -560,11 +576,15 @@ func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebS
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			// Don't record as error - expired/missing session is expected
 			return nil, fmt.Errorf("session not found or expired")
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int64("user.id", session.UserID))
 	return &session, nil
 }
 
@@ -916,6 +936,13 @@ const (
 // TODO: If this becomes a bottleneck at scale, consider maintaining a separate
 // user_sessions_metadata table with a denormalized last_sync_at column, updated on each sync.
 func (db *DB) GetSessionsLastModified(ctx context.Context, userID int64, view SessionListView) (time.Time, error) {
+	ctx, span := tracer.Start(ctx, "db.get_sessions_last_modified",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.view", string(view)),
+		))
+	defer span.End()
+
 	var query string
 	switch view {
 	case SessionListViewOwned:
@@ -947,12 +974,17 @@ func (db *DB) GetSessionsLastModified(ctx context.Context, userID int64, view Se
 			) combined
 		`
 	default:
-		return time.Time{}, fmt.Errorf("invalid session list view: %s", view)
+		err := fmt.Errorf("invalid session list view: %s", view)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return time.Time{}, err
 	}
 
 	var lastModified time.Time
 	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&lastModified)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return time.Time{}, fmt.Errorf("failed to get sessions last modified: %w", err)
 	}
 
@@ -988,6 +1020,13 @@ type SyncFileDetail struct {
 // GetSessionDetail returns detailed information about a session by its UUID primary key
 // Uses sync_files table for file information
 func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int64) (*SessionDetail, error) {
+	ctx, span := tracer.Start(ctx, "db.get_session_detail",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	// Get the session with all metadata and verify ownership
 	var session SessionDetail
 	var gitInfoBytes []byte
@@ -1017,14 +1056,20 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
 	// Unmarshal git_info and load sync files
 	if err := db.unmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if err := db.loadSessionSyncFiles(ctx, &session); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
@@ -1712,6 +1757,13 @@ func (db *DB) loadShareRecipients(ctx context.Context, shareID int64) ([]string,
 // VerifySessionOwnership checks if a session exists and is owned by the user
 // Returns the external_id if found, or an error
 func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, userID int64) (externalID string, err error) {
+	ctx, span := tracer.Start(ctx, "db.verify_session_ownership",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	query := `SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`
 	err = db.conn.QueryRowContext(ctx, query, sessionID, userID).Scan(&externalID)
 	if err == sql.ErrNoRows {
@@ -1719,19 +1771,27 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 		var exists bool
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)`
 		if checkErr := db.conn.QueryRowContext(ctx, checkQuery, sessionID).Scan(&exists); checkErr != nil {
+			span.RecordError(checkErr)
+			span.SetStatus(codes.Error, checkErr.Error())
 			return "", fmt.Errorf("failed to check session existence: %w", checkErr)
 		}
 		if exists {
+			span.SetAttributes(attribute.String("result", "forbidden"))
 			return "", ErrForbidden
 		}
+		span.SetAttributes(attribute.String("result", "not_found"))
 		return "", ErrSessionNotFound
 	}
 	if err != nil {
 		if isInvalidUUIDError(err) {
+			span.SetAttributes(attribute.String("result", "not_found"))
 			return "", ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", fmt.Errorf("failed to verify session ownership: %w", err)
 	}
+	span.SetAttributes(attribute.String("result", "owner"))
 	return externalID, nil
 }
 
@@ -2016,6 +2076,14 @@ type SessionAccessInfo struct {
 // Returns the access type and the share ID (if applicable).
 // viewerUserID can be nil for unauthenticated users.
 func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewerUserID *int64) (*SessionAccessInfo, error) {
+	ctx, span := tracer.Start(ctx, "db.get_session_access_type",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
+	if viewerUserID != nil {
+		span.SetAttributes(attribute.Int64("user.id", *viewerUserID))
+	}
+
 	// First, check if session exists and get owner
 	var ownerUserID int64
 	err := db.conn.QueryRowContext(ctx,
@@ -2027,11 +2095,14 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
 	// Check if viewer is the owner (most specific)
 	if viewerUserID != nil && *viewerUserID == ownerUserID {
+		span.SetAttributes(attribute.String("access.type", "owner"))
 		return &SessionAccessInfo{AccessType: SessionAccessOwner}, nil
 	}
 
@@ -2070,11 +2141,16 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 
 	if err == sql.ErrNoRows {
 		// No shares exist for this session
+		span.SetAttributes(attribute.String("access.type", "none"))
 		return &SessionAccessInfo{AccessType: SessionAccessNone, AuthMayHelp: false}, nil
 	}
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to check share access: %w", err)
 	}
+
+	span.SetAttributes(attribute.String("access.type", accessType))
 
 	switch accessType {
 	case "recipient":
@@ -2094,6 +2170,16 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 // Hostname and username are only returned for owners.
 // Updates last_accessed_at on the share if accessed via share.
 func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, viewerUserID *int64, accessInfo *SessionAccessInfo) (*SessionDetail, error) {
+	ctx, span := tracer.Start(ctx, "db.get_session_detail_with_access",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.String("access.type", string(accessInfo.AccessType)),
+		))
+	defer span.End()
+	if viewerUserID != nil {
+		span.SetAttributes(attribute.Int64("viewer.user_id", *viewerUserID))
+	}
+
 	// Check owner's status to block access if deactivated
 	var session SessionDetail
 	var gitInfoBytes []byte
@@ -2128,6 +2214,8 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
@@ -2148,9 +2236,13 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 
 	// Unmarshal git_info and load sync files
 	if err := db.unmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if err := db.loadSessionSyncFiles(ctx, &session); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
