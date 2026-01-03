@@ -129,9 +129,15 @@ func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64,
 
 // UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key
 func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
+	ctx, span := tracer.Start(ctx, "db.update_api_key_last_used",
+		trace.WithAttributes(attribute.Int64("key.id", keyID)))
+	defer span.End()
+
 	query := `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`
 	_, err := db.conn.ExecContext(ctx, query, keyID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update API key last used: %w", err)
 	}
 	return nil
@@ -298,9 +304,15 @@ func (db *DB) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
 // CreateAPIKeyWithReturn creates a new API key and returns the key ID and created_at
 // Returns ErrAPIKeyLimitExceeded if the user already has MaxAPIKeysPerUser keys
 func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
+	ctx, span := tracer.Start(ctx, "db.create_api_key",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	// Check if user has reached the limit
 	count, err := db.CountAPIKeys(ctx, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, time.Time{}, err
 	}
 	if count >= MaxAPIKeysPerUser {
@@ -316,18 +328,27 @@ func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash,
 		if isUniqueViolation(err) {
 			return 0, time.Time{}, ErrAPIKeyNameExists
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, time.Time{}, fmt.Errorf("failed to create API key: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int64("key.id", keyID))
 	return keyID, createdAt, nil
 }
 
 // ListAPIKeys returns all API keys for a user (without hashes)
 func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
+	ctx, span := tracer.Start(ctx, "db.list_api_keys",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	query := `SELECT id, user_id, name, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`
 
 	rows, err := db.conn.QueryContext(ctx, query, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to list API keys: %w", err)
 	}
 	defer rows.Close()
@@ -336,20 +357,32 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, e
 	for rows.Next() {
 		var key models.APIKey
 		if err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.CreatedAt, &key.LastUsedAt); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("failed to scan API key: %w", err)
 		}
 		keys = append(keys, key)
 	}
 
+	span.SetAttributes(attribute.Int("keys.count", len(keys)))
 	return keys, nil
 }
 
 // DeleteAPIKey deletes an API key
 func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
+	ctx, span := tracer.Start(ctx, "db.delete_api_key",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.Int64("key.id", keyID),
+		))
+	defer span.End()
+
 	query := `DELETE FROM api_keys WHERE id = $1 AND user_id = $2`
 
 	result, err := db.conn.ExecContext(ctx, query, keyID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete API key: %w", err)
 	}
 
@@ -366,8 +399,14 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 // If no key with the same name exists, a new key is created (subject to MaxAPIKeysPerUser limit).
 // Returns the new key ID and created_at timestamp.
 func (db *DB) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
+	ctx, span := tracer.Start(ctx, "db.replace_api_key",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, time.Time{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -428,8 +467,14 @@ func (db *DB) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name str
 // It handles account linking: if an identity doesn't exist but the email matches
 // an existing user, it links the new identity to that user.
 func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUserInfo) (*models.User, error) {
+	ctx, span := tracer.Start(ctx, "db.find_or_create_user_by_oauth",
+		trace.WithAttributes(attribute.String("oauth.provider", string(info.Provider))))
+	defer span.End()
+
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -545,9 +590,15 @@ func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUser
 
 // CreateWebSession creates a new web session for a user
 func (db *DB) CreateWebSession(ctx context.Context, sessionID string, userID int64, expiresAt time.Time) error {
+	ctx, span := tracer.Start(ctx, "db.create_web_session",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	query := `INSERT INTO web_sessions (id, user_id, created_at, expires_at) VALUES ($1, $2, NOW(), $3)`
 	_, err := db.conn.ExecContext(ctx, query, sessionID, userID, expiresAt)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to create web session: %w", err)
 	}
 	return nil
@@ -590,9 +641,14 @@ func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebS
 
 // DeleteWebSession deletes a web session (logout)
 func (db *DB) DeleteWebSession(ctx context.Context, sessionID string) error {
+	ctx, span := tracer.Start(ctx, "db.delete_web_session")
+	defer span.End()
+
 	query := `DELETE FROM web_sessions WHERE id = $1`
 	_, err := db.conn.ExecContext(ctx, query, sessionID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 	return nil
@@ -1134,8 +1190,18 @@ type SessionShare struct {
 // isPublic: true for public shares (anyone with link), false for recipient-only shares
 // recipientEmails: email addresses to grant access (ignored if isPublic)
 func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*SessionShare, error) {
+	ctx, span := tracer.Start(ctx, "db.create_share",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.Int64("user.id", userID),
+			attribute.Bool("share.is_public", isPublic),
+		))
+	defer span.End()
+
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -1301,6 +1367,13 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 
 // ListShares returns all shares for a session (by UUID primary key)
 func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([]SessionShare, error) {
+	ctx, span := tracer.Start(ctx, "db.list_shares",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	// Verify session exists for this user and get external_id for display
 	var externalID string
 	err := db.conn.QueryRowContext(ctx,
@@ -1313,6 +1386,8 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
 
@@ -1368,6 +1443,10 @@ type ShareWithSessionInfo struct {
 
 // ListAllUserShares returns all shares for a user across all sessions
 func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithSessionInfo, error) {
+	ctx, span := tracer.Start(ctx, "db.list_all_user_shares",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	// Get all shares for the user with session info and public status
 	query := `
 		SELECT
@@ -1421,6 +1500,13 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 
 // RevokeShare deletes a share by ID
 func (db *DB) RevokeShare(ctx context.Context, shareID int64, userID int64) error {
+	ctx, span := tracer.Start(ctx, "db.revoke_share",
+		trace.WithAttributes(
+			attribute.Int64("share.id", shareID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	// Verify ownership via session and delete
 	result, err := db.conn.ExecContext(ctx,
 		`DELETE FROM session_shares ss
@@ -1428,6 +1514,8 @@ func (db *DB) RevokeShare(ctx context.Context, shareID int64, userID int64) erro
 		 WHERE ss.session_id = s.id AND ss.id = $1 AND s.user_id = $2`,
 		shareID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to revoke share: %w", err)
 	}
 
@@ -1443,8 +1531,17 @@ func (db *DB) RevokeShare(ctx context.Context, shareID int64, userID int64) erro
 // DeleteSessionFromDB deletes an entire session and all its runs from the database
 // S3 objects must be deleted BEFORE calling this function
 func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string, userID int64) error {
+	ctx, span := tracer.Start(ctx, "db.delete_session",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -1453,6 +1550,8 @@ func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string, userID 
 	deleteSessionQuery := `DELETE FROM sessions WHERE id = $1 AND user_id = $2`
 	result, err := tx.ExecContext(ctx, deleteSessionQuery, sessionID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 
@@ -1462,6 +1561,8 @@ func (db *DB) DeleteSessionFromDB(ctx context.Context, sessionID string, userID 
 	}
 
 	if err := tx.Commit(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
@@ -1486,9 +1587,14 @@ type DeviceCode struct {
 
 // CreateDeviceCode creates a new device code for CLI authentication
 func (db *DB) CreateDeviceCode(ctx context.Context, deviceCode, userCode, keyName string, expiresAt time.Time) error {
+	ctx, span := tracer.Start(ctx, "db.create_device_code")
+	defer span.End()
+
 	query := `INSERT INTO device_codes (device_code, user_code, key_name, expires_at) VALUES ($1, $2, $3, $4)`
 	_, err := db.conn.ExecContext(ctx, query, deviceCode, userCode, keyName, expiresAt)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to create device code: %w", err)
 	}
 	return nil
@@ -1496,6 +1602,9 @@ func (db *DB) CreateDeviceCode(ctx context.Context, deviceCode, userCode, keyNam
 
 // GetDeviceCodeByUserCode retrieves a device code by user code (for web verification page)
 func (db *DB) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*DeviceCode, error) {
+	ctx, span := tracer.Start(ctx, "db.get_device_code_by_user_code")
+	defer span.End()
+
 	query := `SELECT id, device_code, user_code, key_name, user_id, expires_at, authorized_at, created_at
 	          FROM device_codes WHERE user_code = $1 AND expires_at > NOW()`
 
@@ -1508,6 +1617,8 @@ func (db *DB) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*De
 		if err == sql.ErrNoRows {
 			return nil, ErrDeviceCodeNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get device code: %w", err)
 	}
 	return &dc, nil
@@ -1515,6 +1626,9 @@ func (db *DB) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*De
 
 // GetDeviceCodeByDeviceCode retrieves a device code by device code (for CLI polling)
 func (db *DB) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string) (*DeviceCode, error) {
+	ctx, span := tracer.Start(ctx, "db.get_device_code_by_device_code")
+	defer span.End()
+
 	query := `SELECT id, device_code, user_code, key_name, user_id, expires_at, authorized_at, created_at
 	          FROM device_codes WHERE device_code = $1`
 
@@ -1527,6 +1641,8 @@ func (db *DB) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string) 
 		if err == sql.ErrNoRows {
 			return nil, ErrDeviceCodeNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get device code: %w", err)
 	}
 	return &dc, nil
@@ -1534,11 +1650,17 @@ func (db *DB) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string) 
 
 // AuthorizeDeviceCode marks a device code as authorized by a user
 func (db *DB) AuthorizeDeviceCode(ctx context.Context, userCode string, userID int64) error {
+	ctx, span := tracer.Start(ctx, "db.authorize_device_code",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	query := `UPDATE device_codes SET user_id = $1, authorized_at = NOW()
 	          WHERE user_code = $2 AND expires_at > NOW() AND authorized_at IS NULL`
 
 	result, err := db.conn.ExecContext(ctx, query, userID, userCode)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to authorize device code: %w", err)
 	}
 
@@ -1798,6 +1920,13 @@ func (db *DB) VerifySessionOwnership(ctx context.Context, sessionID string, user
 // UpdateSessionSummary updates the summary field for a session identified by external_id
 // Returns ErrSessionNotFound if session doesn't exist, ErrForbidden if user doesn't own it
 func (db *DB) UpdateSessionSummary(ctx context.Context, externalID string, userID int64, summary string) error {
+	ctx, span := tracer.Start(ctx, "db.update_session_summary",
+		trace.WithAttributes(
+			attribute.String("session.external_id", externalID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	query := `
 		UPDATE sessions
 		SET summary = $1
@@ -1805,6 +1934,8 @@ func (db *DB) UpdateSessionSummary(ctx context.Context, externalID string, userI
 	`
 	result, err := db.conn.ExecContext(ctx, query, summary, externalID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update session summary: %w", err)
 	}
 
@@ -1833,6 +1964,13 @@ func (db *DB) UpdateSessionSummary(ctx context.Context, externalID string, userI
 // Pass nil to clear the custom title (revert to auto-derived title)
 // Returns ErrSessionNotFound if session doesn't exist, ErrForbidden if user doesn't own it
 func (db *DB) UpdateSessionCustomTitle(ctx context.Context, sessionID string, userID int64, customTitle *string) error {
+	ctx, span := tracer.Start(ctx, "db.update_session_custom_title",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	query := `
 		UPDATE sessions
 		SET custom_title = $1
@@ -2003,26 +2141,42 @@ func (db *DB) UpdateSyncFileChunkCount(ctx context.Context, sessionID, fileName 
 // GetSessionOwnerAndExternalID returns the user_id and external_id for a session
 // Used for S3 path construction when accessing shared sessions
 func (db *DB) GetSessionOwnerAndExternalID(ctx context.Context, sessionID string) (userID int64, externalID string, err error) {
+	ctx, span := tracer.Start(ctx, "db.get_session_owner_and_external_id",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
 	query := `SELECT user_id, external_id FROM sessions WHERE id = $1`
 	err = db.conn.QueryRowContext(ctx, query, sessionID).Scan(&userID, &externalID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, "", ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, "", fmt.Errorf("failed to get session: %w", err)
 	}
+	span.SetAttributes(attribute.Int64("user.id", userID))
 	return userID, externalID, nil
 }
 
 // GetSessionIDByExternalID looks up the internal session ID by external_id for a specific user.
 // Returns the internal UUID, or ErrSessionNotFound if not found or not owned by user.
 func (db *DB) GetSessionIDByExternalID(ctx context.Context, externalID string, userID int64) (sessionID string, err error) {
+	ctx, span := tracer.Start(ctx, "db.get_session_id_by_external_id",
+		trace.WithAttributes(
+			attribute.String("session.external_id", externalID),
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	query := `SELECT id FROM sessions WHERE external_id = $1 AND user_id = $2`
 	err = db.conn.QueryRowContext(ctx, query, externalID, userID).Scan(&sessionID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", fmt.Errorf("failed to get session: %w", err)
 	}
 	return sessionID, nil
@@ -2038,12 +2192,21 @@ type SessionEventParams struct {
 
 // InsertSessionEvent inserts a new event into the session_events table
 func (db *DB) InsertSessionEvent(ctx context.Context, params SessionEventParams) error {
+	ctx, span := tracer.Start(ctx, "db.insert_session_event",
+		trace.WithAttributes(
+			attribute.String("session.id", params.SessionID),
+			attribute.String("event.type", params.EventType),
+		))
+	defer span.End()
+
 	query := `
 		INSERT INTO session_events (session_id, event_type, event_timestamp, payload)
 		VALUES ($1, $2, $3, $4)
 	`
 	_, err := db.conn.ExecContext(ctx, query, params.SessionID, params.EventType, params.EventTimestamp, params.Payload)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to insert session event: %w", err)
 	}
 	return nil
@@ -2260,6 +2423,13 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 // CreateGitHubLink creates a new GitHub link for a session.
 // Returns ErrGitHubLinkDuplicate if link already exists.
 func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink) (*models.GitHubLink, error) {
+	ctx, span := tracer.Start(ctx, "db.create_github_link",
+		trace.WithAttributes(
+			attribute.String("session.id", link.SessionID),
+			attribute.String("link.type", string(link.LinkType)),
+		))
+	defer span.End()
+
 	query := `
 		INSERT INTO session_github_links (session_id, link_type, url, owner, repo, ref, title, source)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -2280,14 +2450,21 @@ func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink) (*m
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return nil, ErrGitHubLinkDuplicate
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to create github link: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int64("link.id", link.ID))
 	return link, nil
 }
 
 // GetGitHubLinksForSession returns all GitHub links for a session.
 func (db *DB) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([]models.GitHubLink, error) {
+	ctx, span := tracer.Start(ctx, "db.get_github_links_for_session",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
 	query := `
 		SELECT id, session_id, link_type, url, owner, repo, ref, title, source, created_at
 		FROM session_github_links
@@ -2299,6 +2476,8 @@ func (db *DB) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([
 		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get github links: %w", err)
 	}
 	defer rows.Close()
@@ -2319,31 +2498,44 @@ func (db *DB) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([
 			&link.CreatedAt,
 		)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("failed to scan github link: %w", err)
 		}
 		links = append(links, link)
 	}
 
 	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("error iterating github links: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int("links.count", len(links)))
 	return links, nil
 }
 
 // DeleteGitHubLink deletes a GitHub link by ID.
 // Returns ErrGitHubLinkNotFound if link doesn't exist.
 func (db *DB) DeleteGitHubLink(ctx context.Context, linkID int64) error {
+	ctx, span := tracer.Start(ctx, "db.delete_github_link",
+		trace.WithAttributes(attribute.Int64("link.id", linkID)))
+	defer span.End()
+
 	result, err := db.conn.ExecContext(ctx,
 		`DELETE FROM session_github_links WHERE id = $1`,
 		linkID,
 	)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete github link: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
