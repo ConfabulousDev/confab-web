@@ -83,6 +83,14 @@ func TestCardsAllValid(t *testing.T) {
 					"commit": {Success: 2, Errors: 0},
 				},
 			},
+			Redactions: &RedactionsCardRecord{
+				SessionID:       "test-session",
+				Version:         RedactionsCardVersion,
+				ComputedAt:      now,
+				UpToLine:        upToLine,
+				TotalRedactions: 2,
+				RedactionCounts: map[string]int{"GITHUB_TOKEN": 1, "API_KEY": 1},
+			},
 		}
 	}
 
@@ -96,6 +104,7 @@ func TestCardsAllValid(t *testing.T) {
 		cards.CodeActivity.Version = version
 		cards.Conversation.Version = version
 		cards.AgentsAndSkills.Version = version
+		cards.Redactions.Version = version
 		return cards
 	}
 
@@ -151,6 +160,14 @@ func TestCardsAllValid(t *testing.T) {
 		cards.AgentsAndSkills = nil
 		if cards.AllValid(100) {
 			t.Error("expected false when agents and skills card is nil")
+		}
+	})
+
+	t.Run("returns false when redactions card is nil", func(t *testing.T) {
+		cards := makeCards(100)
+		cards.Redactions = nil
+		if cards.AllValid(100) {
+			t.Error("expected false when redactions card is nil")
 		}
 	})
 

@@ -722,6 +722,13 @@ Returns computed analytics for a session. Uses the same canonical access model a
         "commit": {"success": 2, "errors": 0},
         "codebase-maintenance": {"success": 1, "errors": 0}
       }
+    },
+    "redactions": {
+      "total_redactions": 5,
+      "redaction_counts": {
+        "GITHUB_TOKEN": 3,
+        "API_KEY": 2
+      }
     }
   }
 }
@@ -769,6 +776,9 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.agents_and_skills.skill_stats` | object | Map of skill name to stats object |
 | `cards.agents_and_skills.skill_stats[name].success` | int | Successful invocations of this skill |
 | `cards.agents_and_skills.skill_stats[name].errors` | int | Failed invocations of this skill |
+| `cards.redactions` | object\|null | Redaction metrics (null/omitted if no redactions) |
+| `cards.redactions.total_redactions` | int | Total count of [REDACTED:TYPE] markers found |
+| `cards.redactions.redaction_counts` | object | Map of redaction type to occurrence count |
 
 **Notes:**
 - Analytics are cached in the database and recomputed when new data is synced

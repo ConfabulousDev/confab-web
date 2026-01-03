@@ -14,6 +14,7 @@ const (
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
 	ConversationCardVersion    = 2 // v2: added total durations and utilization
 	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
+	RedactionsCardVersion      = 1 // v1: initial redactions card
 )
 
 // =============================================================================
@@ -128,6 +129,16 @@ type AgentsAndSkillsCardRecord struct {
 	SkillStats       map[string]*SkillStats `json:"skill_stats"` // Per-skill success/error counts
 }
 
+// RedactionsCardRecord is the DB record for the redactions card.
+type RedactionsCardRecord struct {
+	SessionID        string         `json:"session_id"`
+	Version          int            `json:"version"`
+	ComputedAt       time.Time      `json:"computed_at"`
+	UpToLine         int64          `json:"up_to_line"`
+	TotalRedactions  int            `json:"total_redactions"`
+	RedactionCounts  map[string]int `json:"redaction_counts"` // Type -> count (e.g., "GITHUB_TOKEN" -> 5)
+}
+
 // Cards aggregates all card data for a session.
 type Cards struct {
 	Tokens          *TokensCardRecord
@@ -136,6 +147,7 @@ type Cards struct {
 	CodeActivity    *CodeActivityCardRecord
 	Conversation    *ConversationCardRecord
 	AgentsAndSkills *AgentsAndSkillsCardRecord
+	Redactions      *RedactionsCardRecord
 }
 
 // =============================================================================
@@ -212,6 +224,12 @@ type AgentsAndSkillsCardData struct {
 	SkillStats       map[string]*SkillStats `json:"skill_stats"` // Per-skill success/error counts
 }
 
+// RedactionsCardData is the API response format for the redactions card.
+type RedactionsCardData struct {
+	TotalRedactions int            `json:"total_redactions"`
+	RedactionCounts map[string]int `json:"redaction_counts"` // Type -> count
+}
+
 // =============================================================================
 // Validation helpers
 // =============================================================================
@@ -246,6 +264,11 @@ func (c *AgentsAndSkillsCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == AgentsAndSkillsCardVersion && c.UpToLine == currentLineCount
 }
 
+// IsValid checks if a redactions card record is valid for the current line count.
+func (c *RedactionsCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == RedactionsCardVersion && c.UpToLine == currentLineCount
+}
+
 // AllValid checks if all cards are valid for the current line count.
 func (c *Cards) AllValid(currentLineCount int64) bool {
 	if c == nil {
@@ -256,5 +279,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		c.Tools.IsValid(currentLineCount) &&
 		c.CodeActivity.IsValid(currentLineCount) &&
 		c.Conversation.IsValid(currentLineCount) &&
-		c.AgentsAndSkills.IsValid(currentLineCount)
+		c.AgentsAndSkills.IsValid(currentLineCount) &&
+		c.Redactions.IsValid(currentLineCount)
 }

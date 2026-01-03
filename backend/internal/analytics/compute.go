@@ -66,6 +66,10 @@ type ComputeResult struct {
 	// Skill stats (from SkillsAnalyzer)
 	TotalSkillInvocations int
 	SkillStats            map[string]*SkillStats
+
+	// Redaction stats (from RedactionsAnalyzer)
+	TotalRedactions int
+	RedactionCounts map[string]int
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
@@ -115,6 +119,11 @@ func ComputeFromFileCollection(fc *FileCollection) (*ComputeResult, error) {
 	}
 
 	skills, err := (&SkillsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		return nil, err
+	}
+
+	redactions, err := (&RedactionsAnalyzer{}).Analyze(fc)
 	if err != nil {
 		return nil, err
 	}
@@ -179,5 +188,9 @@ func ComputeFromFileCollection(fc *FileCollection) (*ComputeResult, error) {
 		// Skill stats
 		TotalSkillInvocations: skills.TotalInvocations,
 		SkillStats:            skills.SkillStats,
+
+		// Redaction stats
+		TotalRedactions: redactions.TotalRedactions,
+		RedactionCounts: redactions.RedactionCounts,
 	}, nil
 }

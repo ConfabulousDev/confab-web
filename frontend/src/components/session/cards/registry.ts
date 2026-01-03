@@ -4,6 +4,7 @@ import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
 import { ConversationCard } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
+import { RedactionsCard } from './RedactionsCard';
 import type { CardDefinition } from './types';
 
 /**
@@ -62,6 +63,13 @@ export const cardRegistry: CardDefinition[] = [
     order: 5,
     span: 2,
     size: 'tall',
+  },
+  {
+    key: 'redactions',
+    title: 'Redactions',
+    component: RedactionsCard,
+    order: 6,
+    size: 'compact',
   },
 ];
 

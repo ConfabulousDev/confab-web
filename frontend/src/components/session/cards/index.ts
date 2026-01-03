@@ -5,5 +5,6 @@ export { CodeActivityCard } from './CodeActivityCard';
 export { ToolsCard } from './ToolsCard';
 export { ConversationCard } from './ConversationCard';
 export { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
+export { RedactionsCard } from './RedactionsCard';
 export { cardRegistry, getOrderedCards } from './registry';
 export type { CardProps, CardDefinition, CardRegistry } from './types';
