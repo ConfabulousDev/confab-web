@@ -1,8 +1,9 @@
-import { useMemo, useRef, useCallback } from 'react';
+import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
 import TimelineMessage from './TimelineMessage';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
+import TimelineBar from '@/components/transcript/TimelineBar';
 import styles from './MessageTimeline.module.css';
 
 interface MessageTimelineProps {
@@ -12,7 +13,7 @@ interface MessageTimelineProps {
 
 // Item types for virtual list
 type VirtualItem =
-  | { type: 'message'; message: TranscriptLine; index: number }
+  | { type: 'message'; message: TranscriptLine; index: number; filteredIndex: number }
   | { type: 'separator'; timestamp: string };
 
 /**
@@ -76,16 +77,39 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
 
 function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
 
+  // Build a map from message reference to its index in allMessages
+  // This is needed because TimelineBar uses allMessages indices
+  const messageToAllIndex = useMemo(() => {
+    const map = new Map<TranscriptLine, number>();
+    allMessages.forEach((msg, idx) => map.set(msg, idx));
+    return map;
+  }, [allMessages]);
+
+  // Set of allMessages indices that are in the filtered view
+  // Used by TimelineBar to show filtered-out segments as grey
+  const visibleIndices = useMemo(() => {
+    const set = new Set<number>();
+    messages.forEach((msg) => {
+      const idx = messageToAllIndex.get(msg);
+      if (idx !== undefined) set.add(idx);
+    });
+    return set;
+  }, [messages, messageToAllIndex]);
+
   // Build virtual items list with time separators
+  // Note: item.index is the index in allMessages (for TimelineBar compatibility)
+  // item.filteredIndex is the index in the filtered messages array
   const virtualItems = useMemo<VirtualItem[]>(() => {
     const items: VirtualItem[] = [];
 
-    messages.forEach((message, index) => {
-      const prevMessage = index > 0 ? messages[index - 1] : undefined;
+    messages.forEach((message, filteredIndex) => {
+      const prevMessage = filteredIndex > 0 ? messages[filteredIndex - 1] : undefined;
 
       // Add time separator if needed
       if (shouldShowTimeSeparator(message, prevMessage)) {
@@ -94,12 +118,13 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
         }
       }
 
-      // Add message
-      items.push({ type: 'message', message, index });
+      // Use allMessages index for TimelineBar compatibility
+      const allIndex = messageToAllIndex.get(message) ?? filteredIndex;
+      items.push({ type: 'message', message, index: allIndex, filteredIndex });
     });
 
     return items;
-  }, [messages]);
+  }, [messages, messageToAllIndex]);
 
   // Setup virtual scrolling
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
@@ -128,6 +153,68 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
     },
     overscan: 5,
   });
+
+  // Build a map from message index to virtual item index for scrollToMessage
+  const messageIndexToVirtualIndex = useMemo(() => {
+    const map = new Map<number, number>();
+    virtualItems.forEach((item, virtualIndex) => {
+      if (item.type === 'message') {
+        map.set(item.index, virtualIndex);
+      }
+    });
+    return map;
+  }, [virtualItems]);
+
+  // Track first visible message for TimelineBar position indicator
+  const updateFirstVisible = useCallback(() => {
+    const visibleItems = virtualizer.getVirtualItems();
+    if (visibleItems.length === 0) return;
+
+    // Find first visible message (skip separators)
+    for (const vItem of visibleItems) {
+      const item = virtualItems[vItem.index];
+      if (item && item.type === 'message') {
+        setFirstVisibleIndex(item.index);
+        return;
+      }
+    }
+  }, [virtualizer, virtualItems]);
+
+  // Attach scroll listener
+  useEffect(() => {
+    const scrollElement = parentRef.current;
+    if (!scrollElement) return;
+
+    scrollElement.addEventListener('scroll', updateFirstVisible, { passive: true });
+    updateFirstVisible(); // Initial position
+
+    return () => {
+      scrollElement.removeEventListener('scroll', updateFirstVisible);
+    };
+  }, [updateFirstVisible]);
+
+  // Scroll to a message in the given range (used by TimelineBar)
+  // Tries each index from startIndex to endIndex until finding one in view
+  const scrollToMessage = useCallback((startIndex: number, endIndex: number) => {
+    for (let i = startIndex; i <= endIndex; i++) {
+      const virtualIndex = messageIndexToVirtualIndex.get(i);
+      if (virtualIndex !== undefined) {
+        virtualizer.scrollToIndex(virtualIndex, { align: 'start' });
+        setSelectedIndex(i);
+        return;
+      }
+    }
+    // No messages in range are visible (all filtered out)
+  }, [messageIndexToVirtualIndex, virtualizer]);
+
+  // Handle message hover
+  const handleMessageHover = useCallback((messageIndex: number | null) => {
+    setSelectedIndex(messageIndex);
+  }, []);
+
+  // Selected message drives the position indicator
+  // Falls back to first visible message when nothing is explicitly selected
+  const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
 
   const scrollToTop = useCallback(() => {
     const scrollWithRetry = (attempts = 0) => {
@@ -180,55 +267,69 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   }
 
   return (
-    <div ref={parentRef} className={styles.timeline}>
-      <ScrollNavButtons
-        scrollRef={parentRef}
-        onScrollToTop={scrollToTop}
-        onScrollToBottom={scrollToBottom}
-        contentDependency={messages.length}
-      />
+    <div className={styles.timelineContainer}>
+      <div ref={parentRef} className={styles.timeline}>
+        <ScrollNavButtons
+          scrollRef={parentRef}
+          onScrollToTop={scrollToTop}
+          onScrollToBottom={scrollToBottom}
+          contentDependency={messages.length}
+        />
 
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const item = virtualItems[virtualItem.index];
-          if (!item) return null;
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const item = virtualItems[virtualItem.index];
+            if (!item) return null;
 
-          return (
-            <div
-              key={virtualItem.index}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                transform: `translateY(${virtualItem.start}px)`,
-              }}
-              ref={virtualizer.measureElement}
-              data-index={virtualItem.index}
-            >
-              {item.type === 'separator' ? (
-                <div className={styles.timeSeparator}>
-                  <span className={styles.separatorLine} />
-                  <span className={styles.separatorText}>{formatTimeSeparator(item.timestamp)}</span>
-                  <span className={styles.separatorLine} />
-                </div>
-              ) : (
-                <TimelineMessage
-                  message={item.message}
-                  toolNameMap={toolNameMap}
-                  previousMessage={item.index > 0 ? messages[item.index - 1] : undefined}
-                />
-              )}
-            </div>
-          );
-        })}
+            const isMessage = item.type === 'message';
+            const isSelected = isMessage && item.index === selectedIndex;
+
+            return (
+              <div
+                key={virtualItem.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
+                onMouseEnter={isMessage ? () => handleMessageHover(item.index) : undefined}
+              >
+                {item.type === 'separator' ? (
+                  <div className={styles.timeSeparator}>
+                    <span className={styles.separatorLine} />
+                    <span className={styles.separatorText}>{formatTimeSeparator(item.timestamp)}</span>
+                    <span className={styles.separatorLine} />
+                  </div>
+                ) : (
+                  <TimelineMessage
+                    message={item.message}
+                    toolNameMap={toolNameMap}
+                    previousMessage={item.filteredIndex > 0 ? messages[item.filteredIndex - 1] : undefined}
+                    isSelected={isSelected}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      <TimelineBar
+        messages={allMessages}
+        selectedIndex={effectiveSelectedIndex}
+        visibleIndices={visibleIndices}
+        onSeek={scrollToMessage}
+      />
     </div>
   );
 }

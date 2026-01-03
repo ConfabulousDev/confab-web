@@ -1,4 +1,4 @@
-import { useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, useRef, forwardRef, useImperativeHandle, useEffect, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine, AgentNode, SessionDetail } from '@/types';
 import { getAgentInsertionIndex } from '@/services/agentTreeBuilder';
@@ -16,14 +16,17 @@ interface MessageListProps {
   messages: TranscriptLine[];
   agents: AgentNode[];
   session: SessionDetail;
+  /** Callback when scroll position changes (0-1 progress) */
+  onScrollProgress?: (progress: number) => void;
 }
 
 export interface MessageListHandle {
   scrollToEnd: () => void;
+  scrollToMessage: (messageIndex: number) => void;
 }
 
 const MessageList = forwardRef<MessageListHandle, MessageListProps>(
-  ({ messages, agents, session }, ref) => {
+  ({ messages, agents, session, onScrollProgress }, ref) => {
     const parentRef = useRef<HTMLDivElement>(null);
 
     // Build a map of where to insert agents
@@ -101,14 +104,60 @@ const MessageList = forwardRef<MessageListHandle, MessageListProps>(
       overscan: 5, // Number of items to render outside visible area
     });
 
-    // Expose scrollToEnd method via ref
+    // Build a map from message index to virtual item index for scrollToMessage
+    const messageIndexToVirtualIndex = useMemo(() => {
+      const map = new Map<number, number>();
+      virtualItems.forEach((item, virtualIndex) => {
+        if (item.type === 'message') {
+          map.set(item.index, virtualIndex);
+        }
+      });
+      return map;
+    }, [virtualItems]);
+
+    // Expose scrollToEnd and scrollToMessage methods via ref
     useImperativeHandle(ref, () => ({
       scrollToEnd: () => {
         if (virtualItems.length > 0) {
           virtualizer.scrollToIndex(virtualItems.length - 1, { align: 'end' });
         }
       },
+      scrollToMessage: (messageIndex: number) => {
+        const virtualIndex = messageIndexToVirtualIndex.get(messageIndex);
+        if (virtualIndex !== undefined) {
+          virtualizer.scrollToIndex(virtualIndex, { align: 'start' });
+        }
+      },
     }));
+
+    // Track scroll progress
+    const handleScroll = useCallback(() => {
+      if (!parentRef.current || !onScrollProgress) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = parentRef.current;
+      const maxScroll = scrollHeight - clientHeight;
+      if (maxScroll <= 0) {
+        onScrollProgress(0);
+        return;
+      }
+
+      const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
+      onScrollProgress(progress);
+    }, [onScrollProgress]);
+
+    // Attach scroll listener
+    useEffect(() => {
+      const scrollElement = parentRef.current;
+      if (!scrollElement || !onScrollProgress) return;
+
+      scrollElement.addEventListener('scroll', handleScroll, { passive: true });
+      // Initial progress update
+      handleScroll();
+
+      return () => {
+        scrollElement.removeEventListener('scroll', handleScroll);
+      };
+    }, [handleScroll, onScrollProgress]);
 
     // Check if we should show a time separator
     function shouldShowTimeSeparator(current: TranscriptLine, previous: TranscriptLine | null): boolean {

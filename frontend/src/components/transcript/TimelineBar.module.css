@@ -1,0 +1,77 @@
+/* Timeline Bar - vertical conversation rhythm visualization */
+
+.timelineBar {
+  position: relative;
+  width: 22px;
+  height: 100%;
+  flex-shrink: 0;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  overflow: visible;
+}
+
+.segmentsContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.segment {
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), filter var(--transition-fast);
+  min-height: 2px; /* Ensure very short segments are still visible */
+}
+
+.segment:hover {
+  filter: brightness(1.1);
+}
+
+/* Claude/Assistant segments - warm orange (pale) */
+.segment.assistant {
+  background: #F0D9C8;
+}
+
+/* User segments - cool teal/blue (pale) */
+.segment.user {
+  background: #D0EBE8;
+}
+
+/* Filtered segments - all messages filtered out */
+.segment.filtered {
+  background: #E5E5E5;
+  cursor: default;
+}
+
+/* Position indicator */
+.positionIndicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-text-primary);
+  border-radius: 1.5px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  transition: top 0.1s ease-out;
+}
+
+/* Tooltip - appears to the left of the timeline bar */
+.tooltip {
+  position: fixed;
+  transform: translate(-100%, -50%);
+  margin-left: -8px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  z-index: 9999;
+  pointer-events: none;
+  font-size: 12px;
+  color: #333;
+}

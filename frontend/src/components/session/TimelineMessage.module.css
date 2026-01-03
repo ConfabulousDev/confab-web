@@ -12,6 +12,11 @@
   border-color: var(--color-border);
 }
 
+/* Selected message highlight */
+.message.selected {
+  box-shadow: inset 0 0 0 2px #bbb;
+}
+
 /* Add visual separation for new speakers */
 .message.newSpeaker {
   margin-top: var(--spacing-md);

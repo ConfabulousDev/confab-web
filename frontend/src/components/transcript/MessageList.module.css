@@ -1,7 +1,9 @@
 .messageListWrapper {
-  height: 80vh;
+  height: 100%;
   width: 100%;
   overflow: auto;
+  flex: 1;
+  min-width: 0; /* Allow shrinking in flex container */
 }
 
 /* Item wrappers for proper spacing */
@@ -78,10 +80,6 @@
 
 /* Mobile responsive styles */
 @media (max-width: 768px) {
-  .messageListWrapper {
-    max-height: 85vh;
-  }
-
   .messageWrapper,
   .agentWrapper {
     padding: 0 var(--spacing-xs);

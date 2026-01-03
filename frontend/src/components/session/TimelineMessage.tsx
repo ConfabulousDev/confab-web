@@ -9,6 +9,7 @@ interface TimelineMessageProps {
   message: TranscriptLine;
   toolNameMap: Map<string, string>;
   previousMessage?: TranscriptLine;
+  isSelected?: boolean;
 }
 
 /**
@@ -189,7 +190,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage }: TimelineMessageProps) {
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected }: TimelineMessageProps) {
   const { copy, copied } = useCopyToClipboard();
 
   const styleClass = getStyleClass(message.type);
@@ -220,7 +221,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage }: TimelineMess
 
   return (
     <div
-      className={`${styles.message} ${styles[styleClass]} ${isDifferentRole ? styles.newSpeaker : ''}`}
+      className={`${styles.message} ${styles[styleClass]} ${isDifferentRole ? styles.newSpeaker : ''} ${isSelected ? styles.selected : ''}`}
     >
       <div className={styles.header}>
         <div className={styles.headerLeft}>
