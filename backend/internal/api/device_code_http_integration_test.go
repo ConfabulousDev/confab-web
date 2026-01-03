@@ -557,4 +557,148 @@ func TestDeviceCodeFlow_HTTP_Integration(t *testing.T) {
 			t.Errorf("expected user_id %d, got %d", user.ID, userID)
 		}
 	})
+
+	t.Run("re-auth replaces existing key with same name", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "reauth@example.com", "Re-auth User")
+		keyName := "MacBook-Pro (Confab CLI)"
+
+		ts := setupDeviceCodeTestServer(t, env)
+		client := testutil.NewTestClient(t, ts)
+
+		// First auth flow
+		codeResp1, err := client.Post("/auth/device/code", auth.DeviceCodeRequest{KeyName: keyName})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, codeResp1, http.StatusOK)
+
+		var codeResult1 auth.DeviceCodeResponse
+		testutil.ParseJSON(t, codeResp1, &codeResult1)
+
+		testutil.AuthorizeTestDeviceCode(t, env, codeResult1.UserCode, user.ID)
+
+		tokenResp1, err := client.Post("/auth/device/token", auth.DeviceTokenRequest{DeviceCode: codeResult1.DeviceCode})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, tokenResp1, http.StatusOK)
+
+		var tokenResult1 auth.DeviceTokenResponse
+		testutil.ParseJSON(t, tokenResp1, &tokenResult1)
+		firstToken := tokenResult1.AccessToken
+
+		// Second auth flow with same key name
+		codeResp2, err := client.Post("/auth/device/code", auth.DeviceCodeRequest{KeyName: keyName})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, codeResp2, http.StatusOK)
+
+		var codeResult2 auth.DeviceCodeResponse
+		testutil.ParseJSON(t, codeResp2, &codeResult2)
+
+		testutil.AuthorizeTestDeviceCode(t, env, codeResult2.UserCode, user.ID)
+
+		tokenResp2, err := client.Post("/auth/device/token", auth.DeviceTokenRequest{DeviceCode: codeResult2.DeviceCode})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, tokenResp2, http.StatusOK)
+
+		var tokenResult2 auth.DeviceTokenResponse
+		testutil.ParseJSON(t, tokenResp2, &tokenResult2)
+		secondToken := tokenResult2.AccessToken
+
+		// Tokens should be different
+		if firstToken == secondToken {
+			t.Error("expected different tokens after re-auth")
+		}
+
+		// First token should no longer work
+		firstKeyHash := auth.HashAPIKey(firstToken)
+		_, _, _, _, err = env.DB.ValidateAPIKey(env.Ctx, firstKeyHash)
+		if err == nil {
+			t.Error("expected first token to be invalid after re-auth")
+		}
+
+		// Second token should work
+		secondKeyHash := auth.HashAPIKey(secondToken)
+		userID, _, _, _, err := env.DB.ValidateAPIKey(env.Ctx, secondKeyHash)
+		if err != nil {
+			t.Fatalf("second token validation failed: %v", err)
+		}
+		if userID != user.ID {
+			t.Errorf("expected user_id %d, got %d", user.ID, userID)
+		}
+
+		// Should only have one key
+		keys, err := env.DB.ListAPIKeys(env.Ctx, user.ID)
+		if err != nil {
+			t.Fatalf("ListAPIKeys failed: %v", err)
+		}
+		if len(keys) != 1 {
+			t.Errorf("expected 1 key after re-auth, got %d", len(keys))
+		}
+		if keys[0].Name != keyName {
+			t.Errorf("key name = %s, want %s", keys[0].Name, keyName)
+		}
+	})
+
+	t.Run("different key names create separate keys", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "multikey@example.com", "Multi-key User")
+
+		ts := setupDeviceCodeTestServer(t, env)
+		client := testutil.NewTestClient(t, ts)
+
+		keyNames := []string{"MacBook-Pro (Confab CLI)", "iMac (Confab CLI)", "Work Laptop (Confab CLI)"}
+		tokens := make([]string, 0, len(keyNames))
+
+		for _, keyName := range keyNames {
+			codeResp, err := client.Post("/auth/device/code", auth.DeviceCodeRequest{KeyName: keyName})
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			testutil.RequireStatus(t, codeResp, http.StatusOK)
+
+			var codeResult auth.DeviceCodeResponse
+			testutil.ParseJSON(t, codeResp, &codeResult)
+
+			testutil.AuthorizeTestDeviceCode(t, env, codeResult.UserCode, user.ID)
+
+			tokenResp, err := client.Post("/auth/device/token", auth.DeviceTokenRequest{DeviceCode: codeResult.DeviceCode})
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			testutil.RequireStatus(t, tokenResp, http.StatusOK)
+
+			var tokenResult auth.DeviceTokenResponse
+			testutil.ParseJSON(t, tokenResp, &tokenResult)
+			tokens = append(tokens, tokenResult.AccessToken)
+		}
+
+		// All tokens should work
+		for i, token := range tokens {
+			keyHash := auth.HashAPIKey(token)
+			userID, _, _, _, err := env.DB.ValidateAPIKey(env.Ctx, keyHash)
+			if err != nil {
+				t.Errorf("token %d validation failed: %v", i, err)
+			}
+			if userID != user.ID {
+				t.Errorf("token %d: expected user_id %d, got %d", i, user.ID, userID)
+			}
+		}
+
+		// Should have 3 keys
+		keys, err := env.DB.ListAPIKeys(env.Ctx, user.ID)
+		if err != nil {
+			t.Fatalf("ListAPIKeys failed: %v", err)
+		}
+		if len(keys) != 3 {
+			t.Errorf("expected 3 keys, got %d", len(keys))
+		}
+	})
 }

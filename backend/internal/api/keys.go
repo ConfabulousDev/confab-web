@@ -75,6 +75,10 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 				respondError(w, http.StatusConflict, "API key limit reached. Please delete some existing keys before creating new ones.")
 				return
 			}
+			if errors.Is(err, db.ErrAPIKeyNameExists) {
+				respondError(w, http.StatusConflict, "An API key with this name already exists. Please choose a different name.")
+				return
+			}
 			log.Error("Failed to create API key in database", "error", err, "name", req.Name)
 			respondError(w, http.StatusInternalServerError, "Failed to create API key")
 			return

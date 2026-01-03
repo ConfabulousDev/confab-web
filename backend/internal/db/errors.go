@@ -22,8 +22,9 @@ var (
 	ErrOwnerInactive  = errors.New("session owner is inactive")
 
 	// API key errors
-	ErrAPIKeyNotFound    = errors.New("API key not found")
+	ErrAPIKeyNotFound      = errors.New("API key not found")
 	ErrAPIKeyLimitExceeded = errors.New("API key limit exceeded")
+	ErrAPIKeyNameExists    = errors.New("API key with this name already exists")
 
 	// Rate limiting errors
 	ErrRateLimitExceeded = errors.New("weekly upload limit exceeded")

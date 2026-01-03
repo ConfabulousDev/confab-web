@@ -11,8 +11,15 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lib/pq"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
+
+var tracer = otel.Tracer("confab/db")
 
 // DB wraps a PostgreSQL database connection
 type DB struct {
@@ -259,7 +266,7 @@ func (db *DB) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, er
 }
 
 // MaxAPIKeysPerUser is the maximum number of API keys a user can have
-const MaxAPIKeysPerUser = 100
+const MaxAPIKeysPerUser = 500
 
 // MaxCustomTitleLength is the maximum length of a custom session title
 const MaxCustomTitleLength = 255
@@ -293,6 +300,9 @@ func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash,
 	var createdAt time.Time
 	err = db.conn.QueryRowContext(ctx, query, userID, keyHash, name).Scan(&keyID, &createdAt)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return 0, time.Time{}, ErrAPIKeyNameExists
+		}
 		return 0, time.Time{}, fmt.Errorf("failed to create API key: %w", err)
 	}
 
@@ -336,6 +346,69 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 	}
 
 	return nil
+}
+
+// ReplaceAPIKey atomically replaces an existing API key with the same name, or creates a new one.
+// If a key with the same name exists for the user, it is deleted and a new key is created.
+// If no key with the same name exists, a new key is created (subject to MaxAPIKeysPerUser limit).
+// Returns the new key ID and created_at timestamp.
+func (db *DB) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Check if a key with the same name already exists
+	var existingKeyID int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM api_keys WHERE user_id = $1 AND name = $2`,
+		userID, name).Scan(&existingKeyID)
+
+	keyExists := err == nil
+	if err != nil && err != sql.ErrNoRows {
+		return 0, time.Time{}, fmt.Errorf("failed to check existing key: %w", err)
+	}
+
+	// If no existing key, check the limit
+	if !keyExists {
+		var count int
+		err = tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM api_keys WHERE user_id = $1`,
+			userID).Scan(&count)
+		if err != nil {
+			return 0, time.Time{}, fmt.Errorf("failed to count API keys: %w", err)
+		}
+		if count >= MaxAPIKeysPerUser {
+			return 0, time.Time{}, ErrAPIKeyLimitExceeded
+		}
+	}
+
+	// Delete existing key if it exists
+	if keyExists {
+		_, err = tx.ExecContext(ctx,
+			`DELETE FROM api_keys WHERE id = $1`,
+			existingKeyID)
+		if err != nil {
+			return 0, time.Time{}, fmt.Errorf("failed to delete existing key: %w", err)
+		}
+	}
+
+	// Create new key
+	var keyID int64
+	var createdAt time.Time
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO api_keys (user_id, key_hash, name) VALUES ($1, $2, $3) RETURNING id, created_at`,
+		userID, keyHash, name).Scan(&keyID, &createdAt)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("failed to create API key: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, time.Time{}, fmt.Errorf("failed to commit: %w", err)
+	}
+
+	return keyID, createdAt, nil
 }
 
 // FindOrCreateUserByOAuth finds or creates a user by OAuth provider identity.
@@ -562,6 +635,13 @@ type SessionListItem struct {
 // ListUserSessions returns sessions for a user based on the specified view.
 // Uses sync_files table for file counts and sync state.
 func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionListView) ([]SessionListItem, error) {
+	ctx, span := tracer.Start(ctx, "db.list_user_sessions",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.view", string(view)),
+		))
+	defer span.End()
+
 	var query string
 	switch view {
 	case SessionListViewOwned:
@@ -750,11 +830,16 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
 	default:
-		return nil, fmt.Errorf("invalid session list view: %s", view)
+		err := fmt.Errorf("invalid session list view: %s", view)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
 	}
 
 	rows, err := db.conn.QueryContext(ctx, query, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to query sessions: %w", err)
 	}
 	defer rows.Close()
@@ -786,6 +871,8 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 			&session.Hostname,
 			&session.Username,
 		); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
 
@@ -807,9 +894,12 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 	}
 
 	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("error iterating sessions: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
 	return sessions, nil
 }
 
@@ -1467,18 +1557,35 @@ type SyncSessionParams struct {
 // Uses catch-and-retry to handle race conditions on concurrent creates
 // Also updates session metadata (cwd, transcript_path, git_info) on each call
 func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params SyncSessionParams) (sessionID string, files map[string]SyncFileState, err error) {
+	ctx, span := tracer.Start(ctx, "db.find_or_create_sync_session",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("session.external_id", params.ExternalID),
+		))
+	defer span.End()
+
 	selectQuery := `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = 'Claude Code'`
 
 	// Try to find existing session first
 	err = db.conn.QueryRowContext(ctx, selectQuery, userID, params.ExternalID).Scan(&sessionID)
 	if err == nil {
 		// Session exists - update metadata and get sync state
+		span.SetAttributes(attribute.Bool("session.created", false))
 		if err := db.updateSessionMetadata(ctx, sessionID, params); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return "", nil, fmt.Errorf("failed to update session metadata: %w", err)
 		}
-		return db.getSyncFilesForSession(ctx, sessionID)
+		sid, files, err := db.getSyncFilesForSession(ctx, sessionID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		return sid, files, err
 	}
 	if err != sql.ErrNoRows {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return "", nil, fmt.Errorf("failed to find session: %w", err)
 	}
 
@@ -1491,23 +1598,36 @@ func (db *DB) FindOrCreateSyncSession(ctx context.Context, userID int64, params 
 	_, err = db.conn.ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo, params.Hostname, params.Username)
 	if err == nil {
 		// Successfully created - new session has no synced files
+		span.SetAttributes(attribute.Bool("session.created", true))
 		return sessionID, make(map[string]SyncFileState), nil
 	}
 
 	// Check if it's a unique constraint violation (race condition - another request created it)
 	if isUniqueViolation(err) {
+		span.SetAttributes(attribute.Bool("session.race_condition", true))
 		// Retry the SELECT - session was created by concurrent request
 		err = db.conn.QueryRowContext(ctx, selectQuery, userID, params.ExternalID).Scan(&sessionID)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return "", nil, fmt.Errorf("failed to find session after conflict: %w", err)
 		}
 		// Update metadata for the existing session
 		if err := db.updateSessionMetadata(ctx, sessionID, params); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return "", nil, fmt.Errorf("failed to update session metadata: %w", err)
 		}
-		return db.getSyncFilesForSession(ctx, sessionID)
+		sid, files, err := db.getSyncFilesForSession(ctx, sessionID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		return sid, files, err
 	}
 
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 	return "", nil, fmt.Errorf("failed to create session: %w", err)
 }
 
@@ -1697,8 +1817,19 @@ func (db *DB) UpdateSessionCustomTitle(ctx context.Context, sessionID string, us
 // If summary/firstUserMessage is provided (not nil), sets them (last write wins; empty string clears)
 // If gitInfo is provided (not nil and not empty), updates session.git_info
 func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, summary, firstUserMessage *string, gitInfo json.RawMessage) error {
+	ctx, span := tracer.Start(ctx, "db.update_sync_file_state",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.String("file.name", fileName),
+			attribute.String("file.type", fileType),
+			attribute.Int("sync.last_line", lastSyncedLine),
+		))
+	defer span.End()
+
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -1714,6 +1845,8 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 	`
 	_, err = tx.ExecContext(ctx, syncQuery, sessionID, fileName, fileType, lastSyncedLine)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update sync file state: %w", err)
 	}
 
@@ -1759,6 +1892,8 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 		sessionQuery += " WHERE id = $1"
 		_, err = tx.ExecContext(ctx, sessionQuery, args...)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("failed to update session metadata: %w", err)
 		}
 	} else {
@@ -1766,11 +1901,15 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 		sessionQuery := `UPDATE sessions SET last_sync_at = NOW() WHERE id = $1`
 		_, err = tx.ExecContext(ctx, sessionQuery, sessionID)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("failed to update session last_sync_at: %w", err)
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 

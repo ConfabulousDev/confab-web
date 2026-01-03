@@ -1238,8 +1238,9 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Store in database
-		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, session.UserID, keyHash, keyName)
+		// Replace existing API key with same name, or create new one
+		// This prevents unbounded key growth when re-authenticating from the same machine
+		keyID, createdAt, err := database.ReplaceAPIKey(ctx, session.UserID, keyHash, keyName)
 		if err != nil {
 			if err == db.ErrAPIKeyLimitExceeded {
 				// Redirect to callback with error that CLI can handle
@@ -1264,7 +1265,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 <body>
     <div class="container">
         <h1>API Key Limit Reached</h1>
-        <p>You have reached the maximum of 100 API keys. Please delete some unused keys before creating new ones.</p>
+        <p>You have reached the maximum number of API keys. Please delete some unused keys before creating new ones.</p>
         <p><a href="%s/settings/api-keys">Manage your API keys</a></p>
         <p style="font-size: 0.75rem; color: #999;">Redirecting to CLI in 5 seconds...</p>
     </div>
@@ -1482,8 +1483,9 @@ func HandleDeviceToken(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Store API key
-		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, *dc.UserID, keyHash, dc.KeyName)
+		// Replace existing API key with same name, or create new one
+		// This prevents unbounded key growth when re-authenticating from the same machine
+		keyID, createdAt, err := database.ReplaceAPIKey(ctx, *dc.UserID, keyHash, dc.KeyName)
 		if err != nil {
 			if err == db.ErrAPIKeyLimitExceeded {
 				log.Warn("API key limit exceeded during device flow", "user_id", *dc.UserID)
