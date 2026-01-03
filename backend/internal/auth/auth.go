@@ -12,6 +12,8 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
@@ -48,10 +50,33 @@ func HashAPIKey(rawKey string) string {
 	return fmt.Sprintf("%x", hash)
 }
 
+// enrichSpanWithUser adds user attributes to the current span for tracing
+// Uses one-hot encoding for auth mode (exactly one of authAPIKey/authSession should be true)
+func enrichSpanWithUser(ctx context.Context, userID int64, userEmail string, authAPIKey, authSession bool) {
+	span := trace.SpanFromContext(ctx)
+	attrs := []attribute.KeyValue{
+		attribute.Int64("user.id", userID),
+		attribute.String("user.email", userEmail),
+	}
+	if authAPIKey {
+		attrs = append(attrs, attribute.Bool("auth.api_key", true))
+	}
+	if authSession {
+		attrs = append(attrs, attribute.Bool("auth.session", true))
+	}
+	span.SetAttributes(attrs...)
+}
+
+// apiKeyAuthResult contains the result of API key authentication
+type apiKeyAuthResult struct {
+	userID    int64
+	userEmail string
+}
+
 // TryAPIKeyAuth attempts to authenticate using an API key from the Authorization header.
-// Returns the user ID if successful, nil otherwise.
+// Returns the auth result if successful, nil otherwise.
 // Does not reject - callers decide whether to require auth.
-func TryAPIKeyAuth(r *http.Request, database *db.DB) *int64 {
+func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return nil
@@ -67,7 +92,7 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *int64 {
 	keyHash := HashAPIKey(rawKey)
 
 	// Validate key in database
-	userID, keyID, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
+	userID, keyID, userEmail, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
 	if err != nil {
 		return nil
 	}
@@ -84,7 +109,7 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *int64 {
 		}
 	}()
 
-	return &userID
+	return &apiKeyAuthResult{userID: userID, userEmail: userEmail}
 }
 
 // RequireAPIKey returns an HTTP middleware that requires API key authentication.
@@ -109,7 +134,7 @@ func RequireAPIKey(database *db.DB) func(http.Handler) http.Handler {
 			keyHash := HashAPIKey(rawKey)
 
 			// Validate key in database
-			userID, keyID, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
+			userID, keyID, userEmail, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
 			if err != nil {
 				http.Error(w, "Invalid API key", http.StatusUnauthorized)
 				return
@@ -134,6 +159,9 @@ func RequireAPIKey(database *db.DB) func(http.Handler) http.Handler {
 			// Enrich request-scoped logger with user_id
 			log := logger.Ctx(r.Context()).With("user_id", userID)
 			ctx := logger.WithLogger(r.Context(), log)
+
+			// Enrich OpenTelemetry span with user info
+			enrichSpanWithUser(ctx, userID, userEmail, true, false)
 
 			// Add user ID to request context
 			ctx = context.WithValue(ctx, userIDContextKey, userID)

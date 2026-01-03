@@ -63,7 +63,7 @@ func main() {
 
 	// Wrap router with OpenTelemetry HTTP instrumentation
 	// This automatically traces all incoming HTTP requests
-	handler := otelhttp.NewHandler(router, "confab-backend")
+	handler := otelhttp.NewHandler(router, "confabulous-backend-prod")
 
 	// HTTP server configuration
 	httpServer := &http.Server{

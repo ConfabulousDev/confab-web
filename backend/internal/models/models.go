@@ -61,6 +61,7 @@ type OAuthUserInfo struct {
 type WebSession struct {
 	ID         string     `json:"id"`
 	UserID     int64      `json:"user_id"`
+	UserEmail  string     `json:"-"` // For tracing, not serialized
 	UserStatus UserStatus `json:"-"` // For auth check, not serialized
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`

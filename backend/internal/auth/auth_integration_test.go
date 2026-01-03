@@ -404,7 +404,7 @@ func TestValidateAPIKey_ActiveUser(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key - should succeed with active status
-	userID, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	userID, _, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestValidateAPIKey_InactiveUser(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key - should return inactive status
-	userID, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	userID, _, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Step 1: Verify user starts as active
-	_, _, apiStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -570,7 +570,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	}
 
 	// Verify both auth methods return inactive
-	_, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey after deactivation failed: %v", err)
 	}
@@ -593,7 +593,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	}
 
 	// Verify both auth methods return active again
-	_, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey after reactivation failed: %v", err)
 	}

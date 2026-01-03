@@ -87,24 +87,24 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 	return &user, nil
 }
 
-// ValidateAPIKey checks if an API key is valid and returns the associated user ID, key ID, and user status
-func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userStatus models.UserStatus, err error) {
+// ValidateAPIKey checks if an API key is valid and returns the associated user ID, key ID, user email, and user status
+func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userEmail string, userStatus models.UserStatus, err error) {
 	query := `
-		SELECT ak.id, ak.user_id, u.status
+		SELECT ak.id, ak.user_id, u.email, u.status
 		FROM api_keys ak
 		JOIN users u ON ak.user_id = u.id
 		WHERE ak.key_hash = $1
 	`
 
-	err = db.conn.QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userStatus)
+	err = db.conn.QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userEmail, &userStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, 0, "", fmt.Errorf("invalid API key")
+			return 0, 0, "", "", fmt.Errorf("invalid API key")
 		}
-		return 0, 0, "", fmt.Errorf("failed to validate API key: %w", err)
+		return 0, 0, "", "", fmt.Errorf("failed to validate API key: %w", err)
 	}
 
-	return userID, keyID, userStatus, nil
+	return userID, keyID, userEmail, userStatus, nil
 }
 
 // UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key
@@ -470,7 +470,7 @@ func (db *DB) CreateWebSession(ctx context.Context, sessionID string, userID int
 // GetWebSession retrieves a web session by ID and validates it's not expired
 func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebSession, error) {
 	query := `
-		SELECT ws.id, ws.user_id, u.status, ws.created_at, ws.expires_at
+		SELECT ws.id, ws.user_id, u.email, u.status, ws.created_at, ws.expires_at
 		FROM web_sessions ws
 		JOIN users u ON ws.user_id = u.id
 		WHERE ws.id = $1 AND ws.expires_at > NOW()
@@ -480,6 +480,7 @@ func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebS
 	err := db.conn.QueryRowContext(ctx, query, sessionID).Scan(
 		&session.ID,
 		&session.UserID,
+		&session.UserEmail,
 		&session.UserStatus,
 		&session.CreatedAt,
 		&session.ExpiresAt,

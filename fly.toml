@@ -36,6 +36,13 @@ primary_region = 'sjc'
   # Admin Configuration
   SUPER_ADMIN_EMAILS = "jackie.tung@gmail.com"
 
+  # OpenTelemetry / Honeycomb Tracing
+  # Note: OTEL_EXPORTER_OTLP_HEADERS must be set as a Fly secret:
+  # fly secrets set OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=YOUR_API_KEY"
+  OTEL_SERVICE_NAME = "confabulous-backend-prod"
+  OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+  OTEL_EXPORTER_OTLP_ENDPOINT = "https://api.honeycomb.io"
+
 [http_service]
   internal_port = 8080
   force_https = true

@@ -549,7 +549,7 @@ func TestDeviceCodeFlow_HTTP_Integration(t *testing.T) {
 
 		// Verify API key works
 		keyHash := auth.HashAPIKey(tokenResult.AccessToken)
-		userID, _, _, err := env.DB.ValidateAPIKey(env.Ctx, keyHash)
+		userID, _, _, _, err := env.DB.ValidateAPIKey(env.Ctx, keyHash)
 		if err != nil {
 			t.Fatalf("failed to validate API key: %v", err)
 		}

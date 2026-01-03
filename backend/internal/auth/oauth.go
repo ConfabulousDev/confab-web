@@ -384,10 +384,16 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 	}
 }
 
+// sessionAuthResult contains the result of session authentication
+type sessionAuthResult struct {
+	userID    int64
+	userEmail string
+}
+
 // TrySessionAuth attempts to authenticate using a session cookie.
-// Returns the user ID if successful, nil otherwise.
+// Returns the auth result if successful, nil otherwise.
 // Does not reject - callers decide whether to require auth.
-func TrySessionAuth(r *http.Request, database *db.DB) *int64 {
+func TrySessionAuth(r *http.Request, database *db.DB) *sessionAuthResult {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		return nil
@@ -403,7 +409,7 @@ func TrySessionAuth(r *http.Request, database *db.DB) *int64 {
 		return nil
 	}
 
-	return &session.UserID
+	return &sessionAuthResult{userID: session.UserID, userEmail: session.UserEmail}
 }
 
 // RequireSession returns an HTTP middleware that requires session cookie authentication.
@@ -411,21 +417,24 @@ func TrySessionAuth(r *http.Request, database *db.DB) *int64 {
 func RequireSession(database *db.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID := TrySessionAuth(r, database)
-			if userID == nil {
+			authResult := TrySessionAuth(r, database)
+			if authResult == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// Set user ID on logger's response writer
-			setLogUserID(w, *userID)
+			setLogUserID(w, authResult.userID)
 
 			// Enrich request-scoped logger with user_id
-			log := logger.Ctx(r.Context()).With("user_id", *userID)
+			log := logger.Ctx(r.Context()).With("user_id", authResult.userID)
 			ctx := logger.WithLogger(r.Context(), log)
 
+			// Enrich OpenTelemetry span with user info
+			enrichSpanWithUser(ctx, authResult.userID, authResult.userEmail, false, true)
+
 			// Add user ID to context
-			ctx = context.WithValue(ctx, userIDContextKey, *userID)
+			ctx = context.WithValue(ctx, userIDContextKey, authResult.userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -436,28 +445,37 @@ func RequireSession(database *db.DB) func(http.Handler) http.Handler {
 func RequireSessionOrAPIKey(database *db.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var userID int64
+			var userEmail string
+			var authAPIKey, authSession bool
+
 			// Try session cookie first
-			userID := TrySessionAuth(r, database)
-
-			// Fall back to API key
-			if userID == nil {
-				userID = TryAPIKeyAuth(r, database)
-			}
-
-			if userID == nil {
+			if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
+				userID = sessionAuth.userID
+				userEmail = sessionAuth.userEmail
+				authSession = true
+			} else if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
+				// Fall back to API key
+				userID = apiKeyAuth.userID
+				userEmail = apiKeyAuth.userEmail
+				authAPIKey = true
+			} else {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// Set user ID on logger's response writer
-			setLogUserID(w, *userID)
+			setLogUserID(w, userID)
 
 			// Enrich request-scoped logger with user_id
-			log := logger.Ctx(r.Context()).With("user_id", *userID)
+			log := logger.Ctx(r.Context()).With("user_id", userID)
 			ctx := logger.WithLogger(r.Context(), log)
 
+			// Enrich OpenTelemetry span with user info
+			enrichSpanWithUser(ctx, userID, userEmail, authAPIKey, authSession)
+
 			// Add user ID to context
-			ctx = context.WithValue(ctx, userIDContextKey, *userID)
+			ctx = context.WithValue(ctx, userIDContextKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -471,20 +489,22 @@ func OptionalAuth(database *db.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Try API key first, then session cookie
-			if userID := TryAPIKeyAuth(r, database); userID != nil {
-				setLogUserID(w, *userID)
-				log := logger.Ctx(r.Context()).With("user_id", *userID)
+			if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
+				setLogUserID(w, apiKeyAuth.userID)
+				log := logger.Ctx(r.Context()).With("user_id", apiKeyAuth.userID)
 				ctx := logger.WithLogger(r.Context(), log)
-				ctx = context.WithValue(ctx, userIDContextKey, *userID)
+				enrichSpanWithUser(ctx, apiKeyAuth.userID, apiKeyAuth.userEmail, true, false)
+				ctx = context.WithValue(ctx, userIDContextKey, apiKeyAuth.userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			if userID := TrySessionAuth(r, database); userID != nil {
-				setLogUserID(w, *userID)
-				log := logger.Ctx(r.Context()).With("user_id", *userID)
+			if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
+				setLogUserID(w, sessionAuth.userID)
+				log := logger.Ctx(r.Context()).With("user_id", sessionAuth.userID)
 				ctx := logger.WithLogger(r.Context(), log)
-				ctx = context.WithValue(ctx, userIDContextKey, *userID)
+				enrichSpanWithUser(ctx, sessionAuth.userID, sessionAuth.userEmail, false, true)
+				ctx = context.WithValue(ctx, userIDContextKey, sessionAuth.userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
