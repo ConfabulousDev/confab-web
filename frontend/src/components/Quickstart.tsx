@@ -30,6 +30,7 @@ function Quickstart() {
       <p className={styles.description}>
         Install the CLI to automatically sync your <em>Claude Code</em> sessions.
       </p>
+      <p className={styles.platformNote}>macOS & Linux only</p>
 
       <div className={styles.steps}>
         <div className={styles.step}>
