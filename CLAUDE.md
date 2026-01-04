@@ -55,6 +55,19 @@ Note: CLI is in a separate repo: https://github.com/ConfabulousDev/confab-cli
 
 ## Frontend Development
 
+### Theme Support
+
+The frontend supports light and dark themes. When adding CSS, use theme-aware CSS variables from `frontend/src/styles/variables.css`:
+
+- `--color-bg-primary`, `--color-bg-secondary` for backgrounds
+- `--color-text-primary`, `--color-text-secondary`, `--color-text-muted` for text
+- `--color-accent`, `--color-accent-hover` for accent colors
+- `--color-border` for borders
+
+Avoid hardcoded colors. Test changes in both themes.
+
+### Build and Test
+
 Always run build, lint, and test after every change:
 
 ```bash

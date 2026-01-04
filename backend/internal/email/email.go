@@ -62,7 +62,14 @@ func (s *RateLimitedService) CheckRateLimit(userID int64, count int) error {
 	return nil
 }
 
-// EmailRateLimiter tracks email sends per user per hour
+// EmailRateLimiter tracks email sends per user per hour using a sliding window algorithm.
+//
+// NOTE: This is intentionally separate from internal/ratelimit.InMemoryRateLimiter.
+// The generic rate limiter uses a token bucket algorithm (golang.org/x/time/rate) which
+// allows bursts and provides smooth rate limiting for APIs. This email limiter uses a
+// sliding window with exact timestamp tracking to enforce strict "X emails per hour"
+// limits without allowing bursts - important for preventing email spam and staying
+// within email provider quotas.
 type EmailRateLimiter struct {
 	mu      sync.Mutex
 	records map[int64]*rateLimitRecord

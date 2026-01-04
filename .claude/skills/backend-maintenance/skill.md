@@ -73,27 +73,46 @@ Track with TodoWrite:
 - [ ] Review package structure (use Task/Explore agent)
 - [ ] Security review
 - [ ] Code smell detection
-- [ ] Duplication analysis
+- [ ] Duplication analysis (DRY violations)
+- [ ] Simplification opportunities
 
 ### Security Review Checklist
 
+**POSITIVE patterns to verify are in place:**
+
 - [ ] SQL queries use parameterized queries (not string concatenation)
-- [ ] User input is validated before use
+- [ ] User input validated via `internal/validation` package
 - [ ] Authentication/authorization checks on all protected endpoints
-- [ ] Secrets not hardcoded (check env vars)
-- [ ] Rate limiting on sensitive endpoints
-- [ ] CSRF protection on state-changing operations
-- [ ] Proper error handling (no stack traces leaked to users)
+- [ ] Secrets from env vars only (never hardcoded)
+- [ ] Rate limiting on sensitive endpoints (`internal/ratelimit`)
+- [ ] CSRF protection via gorilla/csrf on state-changing operations
+- [ ] Cookie security: HttpOnly, SameSite=Lax, Secure flag
+- [ ] API keys hashed with SHA-256 before storage
+- [ ] Open redirect prevention (validate redirect URLs)
+- [ ] User status checks (block inactive users)
+
+**NEGATIVE patterns to search for (vulnerabilities):**
+
+```bash
+# SQL injection risks - string concatenation in queries
+grep -r 'fmt.Sprintf.*SELECT\|fmt.Sprintf.*INSERT\|fmt.Sprintf.*UPDATE\|fmt.Sprintf.*DELETE'
+
+# Hardcoded secrets
+grep -ri 'password.*=.*"\|secret.*=.*"\|apikey.*=.*"\|api_key.*=.*"'
+
+# Ignored errors on sensitive operations
+grep -r 'body, _ := io.ReadAll'
+```
 
 ### Code Smell Patterns to Search
 
 Use Grep to find these patterns:
 
 ```
-# Long parameter lists
+# Long parameter lists (5+ params)
 Pattern: "func.*\(.*,.*,.*,.*,.*,"
 
-# Magic numbers
+# Magic numbers (undocumented constants)
 Pattern: "[^0-9][0-9]{3,}[^0-9]"
 
 # Commented-out code blocks
@@ -103,30 +122,68 @@ Pattern: "//.*func |//.*if |//.*for "
 Pattern: "return$"
 
 # Empty error handling
-Pattern: "if err != nil {\s*}"
+Pattern: "if err != nil {\s*}" (multiline)
+
+# Silent error ignoring
+Pattern: ", _ :="
 ```
 
-### Duplication Patterns to Check
+### DRY Violations - Known Hotspots
 
-Read the largest files and look for:
-- Repeated error handling patterns
-- Similar API response structures
-- Copy-pasted validation logic
-- Nearly identical functions
+**Reviewed and marked as acceptable (see code comments):**
 
-**Known duplication hotspots in this codebase:**
-- OAuth callbacks (GitHub vs Google) share similar flow
-- Sync file read handlers (owned vs shared) have similar logic
-- Database list queries with similar CTE patterns
+1. **OAuth Callbacks** (`internal/auth/oauth.go`) - ACCEPTABLE
+   - `HandleGitHubCallback` and `HandleGoogleCallback` share similar logic
+   - Kept separate for clarity, easier debugging, and provider-specific customization
+   - See NOTE comments on each function
+
+2. **Inline HTML Templates** (`internal/auth/oauth.go`, `internal/admin/handlers.go`) - ACCEPTABLE
+   - Simple, self-contained pages that rarely change
+   - Avoids external template file dependencies
+   - See NOTE comments on `generateDevicePageHTML`, `HandleLoginSelector`, `HandleListUsers`
+
+3. **Cookie Operations** (`internal/auth/oauth.go`) - FIXED
+   - Now uses `clearCookie(w, name)` helper function
+
+4. **Two Rate Limiter Implementations** - ACCEPTABLE
+   - `internal/ratelimit`: Token bucket for API rate limiting (allows bursts)
+   - `internal/email`: Sliding window for strict email quotas (no bursts)
+   - Different algorithms for different requirements
+   - See NOTE comment on `EmailRateLimiter` type
+
+5. **Session List Queries** (`internal/db/sessions.go`) - ACCEPTABLE
+   - Complex SQL with repeated CTEs for owned/shared/system views
+   - Keeping in Go code provides better tooling than database views
+   - See NOTE comment on `ListUserSessions` function
+
+**Remaining items to consider (lower priority):**
+
+6. **Analytics Store Operations** (`internal/analytics/store.go`)
+   - Repetitive get/upsert patterns for each card type (7 card types)
+   - Each has nearly identical structure
+   - **Consider**: Generics or code generation (if adding many more card types)
 
 ### Files to Prioritize for Review
 
-**Largest/most complex:**
-1. `internal/db/db.go` (~1765 lines) - All DB operations
-2. `internal/auth/oauth.go` (~1641 lines) - OAuth flows
-3. `internal/api/sync.go` (~987 lines) - Sync logic
-4. `internal/api/server.go` (~670 lines) - Routing
-5. `internal/admin/handlers.go` (~737 lines) - Admin ops
+**By size/complexity (lines of production code):**
+
+| File | Lines | Notes |
+|------|-------|-------|
+| `internal/auth/oauth.go` | ~1910 | OAuth flows, device auth, login selector |
+| `internal/api/sync.go` | ~1150 | Sync init/chunk/read handlers |
+| `internal/analytics/store.go` | ~995 | Card storage operations |
+| `internal/admin/handlers.go` | ~711 | Admin user management UI |
+| `internal/db/sessions.go` | ~693 | Session CRUD operations |
+| `internal/api/server.go` | ~715 | Routing, middleware setup |
+| `internal/api/shares.go` | ~650 | Share creation/management |
+| `internal/storage/s3.go` | ~363 | S3/MinIO operations |
+
+### Simplification Opportunities
+
+1. ~~**Extract shared OAuth logic**~~ - Marked acceptable (see code comments)
+2. ~~**Template files for HTML**~~ - Marked acceptable (see code comments)
+3. ~~**Cookie helper functions**~~ - DONE (`clearCookie` helper added)
+4. **Consolidate error response helpers** - Medium value, low risk (optional)
 
 ## Phase 3: Triage and Report
 
@@ -139,7 +196,8 @@ Create a summary with:
 | Security | High/Med/Low | Description | file:line | Fix/Ticket/Ignore |
 | Dead Code | ... | ... | ... | ... |
 | Code Smell | ... | ... | ... | ... |
-| Duplication | ... | ... | ... | ... |
+| DRY Violation | ... | ... | ... | ... |
+| Simplification | ... | ... | ... | ... |
 
 ### Severity Guidelines
 
@@ -160,12 +218,41 @@ Create a summary with:
 - Delete commented-out code
 - Fix linting warnings
 - Run go mod tidy
+- Remove unused imports
+
+### Medium-Risk (Review Carefully)
+- Extract helper functions
+- Move HTML to templates
+- Add missing error handling
 
 ### Higher-Risk (Plan Carefully)
 - Changing function signatures
 - Restructuring packages
 - Database schema changes
 - Shared type modifications
+- OAuth flow changes
+
+## Architecture Notes
+
+**Positive patterns in this codebase:**
+
+- Clear package separation (api, db, auth, storage, email, analytics)
+- Interface usage for testability (RateLimiter, email.Service)
+- Context propagation with timeouts throughout
+- OpenTelemetry tracing instrumentation
+- Sentinel errors (ErrSessionNotFound, ErrForbidden, etc.)
+- Validation package with DB-aligned length limits
+- Graceful shutdown handling
+
+**Areas reviewed and marked acceptable:**
+
+- OAuth callbacks: Duplication is intentional for clarity (see code comments)
+- Inline HTML: Kept inline to avoid template dependencies (see code comments)
+- Cookie operations: Now use `clearCookie` helper
+
+**Minor items to watch:**
+
+- Some silent error ignoring (`_, _ :=` patterns) - low severity
 
 ## Tracking Tech Debt
 
@@ -174,3 +261,4 @@ Create Linear tickets with label `tech-debt`:
 - Why it matters
 - Effort estimate (S/M/L)
 - Blocking dependencies
+- Risk level

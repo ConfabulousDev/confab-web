@@ -36,6 +36,16 @@ func cookieSecure() bool {
 	return os.Getenv("INSECURE_DEV_MODE") != "true"
 }
 
+// clearCookie clears a cookie by setting it with an empty value and MaxAge -1
+func clearCookie(w http.ResponseWriter, name string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:   name,
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	})
+}
+
 // oauthHTTPClient returns an HTTP client with timeout for OAuth API calls
 func oauthHTTPClient() *http.Client {
 	return &http.Client{
@@ -138,6 +148,9 @@ func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
 }
 
 // HandleGitHubCallback handles the OAuth callback from GitHub
+// NOTE: This handler shares similar logic with HandleGoogleCallback. The duplication
+// is intentional and acceptable - the handlers are kept separate for clarity, easier
+// debugging, and to allow provider-specific customization without complex abstractions.
 func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -151,12 +164,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		}
 
 		// Clear state cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:   "oauth_state",
-			Value:  "",
-			Path:   "/",
-			MaxAge: -1,
-		})
+		clearCookie(w, "oauth_state")
 
 		// Get authorization code
 		code := r.URL.Query().Get("code")
@@ -270,12 +278,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		if expectedEmailCookie, err := r.Cookie("expected_email"); err == nil && expectedEmailCookie.Value != "" {
 			expectedEmail = expectedEmailCookie.Value
 			// Clear the cookie
-			http.SetCookie(w, &http.Cookie{
-				Name:   "expected_email",
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
-			})
+			clearCookie(w, "expected_email")
 			// Compare emails (case-insensitive)
 			if !strings.EqualFold(expectedEmail, user.Email) {
 				emailMismatch = true
@@ -289,12 +292,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Check if this was a CLI login flow
 		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
 			// Clear the cli_redirect cookie
-			http.SetCookie(w, &http.Cookie{
-				Name:   "cli_redirect",
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
-			})
+			clearCookie(w, "cli_redirect")
 			// Redirect back to CLI authorize endpoint
 			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
 			return
@@ -303,12 +301,7 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
 		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
 			// Clear the cookie
-			http.SetCookie(w, &http.Cookie{
-				Name:   "post_login_redirect",
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
-			})
+			clearCookie(w, "post_login_redirect")
 			redirectURL := postLoginRedirect.Value
 			// SECURITY: Only allow relative paths to prevent open redirect attacks
 			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
@@ -355,12 +348,7 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 		}
 
 		// Clear session cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:   SessionCookieName,
-			Value:  "",
-			Path:   "/",
-			MaxAge: -1,
-		})
+		clearCookie(w, SessionCookieName)
 
 		// Check for redirect URL (e.g., for re-login with different account)
 		frontendURL := os.Getenv("FRONTEND_URL")
@@ -713,6 +701,9 @@ func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
 }
 
 // HandleGoogleCallback handles the OAuth callback from Google
+// NOTE: This handler shares similar logic with HandleGitHubCallback. The duplication
+// is intentional and acceptable - the handlers are kept separate for clarity, easier
+// debugging, and to allow provider-specific customization without complex abstractions.
 func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -727,12 +718,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		}
 
 		// Clear state cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:   "oauth_state",
-			Value:  "",
-			Path:   "/",
-			MaxAge: -1,
-		})
+		clearCookie(w, "oauth_state")
 
 		// Get authorization code
 		code := r.URL.Query().Get("code")
@@ -843,12 +829,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		if expectedEmailCookie, err := r.Cookie("expected_email"); err == nil && expectedEmailCookie.Value != "" {
 			expectedEmail = expectedEmailCookie.Value
 			// Clear the cookie
-			http.SetCookie(w, &http.Cookie{
-				Name:   "expected_email",
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
-			})
+			clearCookie(w, "expected_email")
 			// Compare emails (case-insensitive)
 			if !strings.EqualFold(expectedEmail, user.Email) {
 				emailMismatch = true
@@ -861,12 +842,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 
 		// Check if this was a CLI login flow
 		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
-			http.SetCookie(w, &http.Cookie{
-				Name:   "cli_redirect",
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
-			})
+			clearCookie(w, "cli_redirect")
 			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
 			return
 		}
@@ -874,12 +850,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 		// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
 		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
 			// Clear the cookie
-			http.SetCookie(w, &http.Cookie{
-				Name:   "post_login_redirect",
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
-			})
+			clearCookie(w, "post_login_redirect")
 			redirectURL := postLoginRedirect.Value
 			// SECURITY: Only allow relative paths to prevent open redirect attacks
 			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
@@ -990,6 +961,7 @@ func generateRandomString(length int) (string, error) {
 }
 
 // HandleLoginSelector serves a page where users can choose their OAuth provider
+// NOTE: Inline HTML is intentional - see comment on generateDevicePageHTML.
 func HandleLoginSelector() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Preserve any redirect URL and email in query params
@@ -1173,12 +1145,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		session, err := database.GetWebSession(ctx, cookie.Value)
 		if err != nil {
 			// Session is invalid or expired - clear the stale cookie and redirect to login
-			http.SetCookie(w, &http.Cookie{
-				Name:   SessionCookieName,
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
-			})
+			clearCookie(w, SessionCookieName)
 
 			// Redirect to login selector, then back here
 			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1"
@@ -1618,6 +1585,10 @@ func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 	}
 }
 
+// generateDevicePageHTML generates the HTML for the device authorization page.
+// NOTE: Inline HTML is intentional here - these are simple, self-contained pages that
+// rarely change. Keeping them inline avoids external template file dependencies and
+// simplifies deployment. This is acceptable for low-churn auth UI pages.
 func generateDevicePageHTML(prefilledCode string) string {
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -1715,6 +1686,8 @@ func generateDevicePageHTML(prefilledCode string) string {
 </html>`, prefilledCode)
 }
 
+// generateDeviceResultHTML generates the HTML for the device authorization result page.
+// NOTE: Inline HTML is intentional - see comment on generateDevicePageHTML.
 func generateDeviceResultHTML(success bool, message string) string {
 	icon := "✗"
 	iconColor := "#dc2626"

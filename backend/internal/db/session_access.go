@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -197,15 +196,4 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	}
 
 	return &session, nil
-}
-
-// unmarshalSessionGitInfoForAccess unmarshals git_info JSONB if present
-// This is a package-local helper that mirrors the one in sessions.go
-func unmarshalSessionGitInfoForAccess(session *SessionDetail, gitInfoBytes []byte) error {
-	if len(gitInfoBytes) > 0 {
-		if err := json.Unmarshal(gitInfoBytes, &session.GitInfo); err != nil {
-			return fmt.Errorf("failed to unmarshal git_info: %w", err)
-		}
-	}
-	return nil
 }

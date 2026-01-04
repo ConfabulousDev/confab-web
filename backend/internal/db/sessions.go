@@ -45,6 +45,11 @@ func extractRepoName(repoURL string) *string {
 
 // ListUserSessions returns sessions for a user based on the specified view.
 // Uses sync_files table for file counts and sync state.
+//
+// NOTE: The SharedWithMe query is intentionally complex (6 CTEs, ~140 lines). While this
+// could be simplified with a database view, keeping the SQL inline in Go code provides
+// better tooling (IDE support, refactoring, grep, version control diffs) and makes the
+// query logic explicit and self-contained. The duplication across CTEs is acceptable.
 func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionListView) ([]SessionListItem, error) {
 	ctx, span := tracer.Start(ctx, "db.list_user_sessions",
 		trace.WithAttributes(

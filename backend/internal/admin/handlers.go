@@ -41,6 +41,9 @@ func NewHandlers(database *db.DB, store *storage.S3Storage) *Handlers {
 }
 
 // HandleListUsers renders the admin user list page
+// NOTE: Inline HTML is intentional for admin pages - these are internal tools that
+// rarely change. Keeping them inline avoids external template file dependencies and
+// simplifies deployment. This is acceptable for low-churn admin UI pages.
 func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	log := logger.Ctx(r.Context())
 
