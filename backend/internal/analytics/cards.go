@@ -14,7 +14,7 @@ const (
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
 	ConversationCardVersion    = 2 // v2: added total durations and utilization
 	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
-	RedactionsCardVersion      = 1 // v1: initial redactions card
+	RedactionsCardVersion      = 2 // v2: filter out "TYPE" placeholder
 )
 
 // =============================================================================

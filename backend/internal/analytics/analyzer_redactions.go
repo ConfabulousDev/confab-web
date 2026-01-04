@@ -68,6 +68,10 @@ func (a *RedactionsAnalyzer) countRedactionsInString(s string, result *Redaction
 	for _, match := range matches {
 		if len(match) >= 2 {
 			redactionType := match[1]
+			// Skip "TYPE" - it's a documentation placeholder, not a real category
+			if redactionType == "TYPE" {
+				continue
+			}
 			result.RedactionCounts[redactionType]++
 			result.TotalRedactions++
 		}

@@ -283,6 +283,32 @@ func TestRedactionsAnalyzer_NotARedaction(t *testing.T) {
 	}
 }
 
+func TestRedactionsAnalyzer_FiltersTYPEPlaceholder(t *testing.T) {
+	// "TYPE" is a documentation placeholder, not a real redaction category
+	content := []byte(`{"type":"user","message":{"content":"[REDACTED:TYPE] and [REDACTED:GITHUB_TOKEN]"}}`)
+
+	fc, err := NewFileCollection(content)
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&RedactionsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// TYPE should be filtered out, only GITHUB_TOKEN should be counted
+	if result.TotalRedactions != 1 {
+		t.Errorf("TotalRedactions = %d, want 1", result.TotalRedactions)
+	}
+	if result.RedactionCounts["TYPE"] != 0 {
+		t.Errorf("TYPE count = %d, want 0 (should be filtered)", result.RedactionCounts["TYPE"])
+	}
+	if result.RedactionCounts["GITHUB_TOKEN"] != 1 {
+		t.Errorf("GITHUB_TOKEN count = %d, want 1", result.RedactionCounts["GITHUB_TOKEN"])
+	}
+}
+
 func TestRedactionsAnalyzer_EmptyContent(t *testing.T) {
 	content := []byte(``)
 
