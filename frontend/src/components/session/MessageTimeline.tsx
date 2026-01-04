@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
 import TimelineMessage from './TimelineMessage';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
-import TimelineBar from '@/components/transcript/TimelineBar';
+import { TimelineBar } from '@/components/transcript/TimelineBar';
 import styles from './MessageTimeline.module.css';
 
 interface MessageTimelineProps {

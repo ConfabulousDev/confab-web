@@ -28,13 +28,13 @@ import {
 } from '@/schemas/api';
 
 // Re-export types for consumers
-export type { Session, SessionDetail, SessionShare, APIKey, User, GitHubLink, SessionAnalytics } from '@/schemas/api';
+export type { GitHubLink, SessionAnalytics } from '@/schemas/api';
 
 /**
  * Handles authentication failures by clearing cached state and redirecting to home.
  * Call this when a 401 response is received.
  */
-export function handleAuthFailure(): void {
+function handleAuthFailure(): void {
   clearCSRFToken();
   window.location.href = '/';
 }
@@ -339,8 +339,8 @@ class APIClient {
   }
 }
 
-// Export singleton instance
-export const api = new APIClient();
+// Singleton instance
+const api = new APIClient();
 
 // Export validated API methods for common endpoints
 // All responses are validated with Zod schemas at runtime

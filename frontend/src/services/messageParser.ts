@@ -103,16 +103,6 @@ export function buildToolNameMap(content: ContentBlock[]): Map<string, string> {
 }
 
 /**
- * Get the tool name for a tool_result block
- */
-export function getToolNameForResult(block: ContentBlock, toolNameMap: Map<string, string>): string {
-  if (block.type === 'tool_result' && block.tool_use_id) {
-    return toolNameMap.get(block.tool_use_id) || '';
-  }
-  return '';
-}
-
-/**
  * Extract plain text content from a message for copying
  */
 export function extractTextContent(content: ContentBlock[]): string {
@@ -133,18 +123,6 @@ export function extractTextContent(content: ContentBlock[]): string {
   }
 
   return parts.join('\n\n');
-}
-
-/**
- * Format timestamp for display
- */
-export function formatTimestamp(timestamp: string): string {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
 }
 
 /**

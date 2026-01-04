@@ -7,7 +7,6 @@ export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-sn
 // Subcategory types for hierarchical filtering
 export type UserSubcategory = 'prompt' | 'tool-result' | 'skill';
 export type AssistantSubcategory = 'text' | 'tool-use' | 'thinking';
-export type MessageSubcategory = UserSubcategory | AssistantSubcategory;
 
 // Subcategory counts for hierarchical categories
 export interface UserSubcategoryCounts {
@@ -32,15 +31,6 @@ export interface HierarchicalCounts {
   'queue-operation': number;
 }
 
-// Legacy flat counts interface (for backwards compat during transition)
-export interface MessageCategoryCounts {
-  user: number;
-  assistant: number;
-  system: number;
-  'file-history-snapshot': number;
-  summary: number;
-  'queue-operation': number;
-}
 
 // Filter state - tracks which subcategories are visible
 export interface FilterState {
@@ -63,17 +53,10 @@ export const DEFAULT_FILTER_STATE: FilterState = {
 };
 
 /**
- * Get the category for a transcript line (direct mapping from type)
- */
-export function categorizeMessage(line: TranscriptLine): MessageCategory {
-  return line.type;
-}
-
-/**
  * Get the subcategory for a user message
  * Priority: skill > tool-result > prompt
  */
-export function categorizeUserMessage(message: UserMessage): UserSubcategory {
+function categorizeUserMessage(message: UserMessage): UserSubcategory {
   if (isSkillExpansionMessage(message)) return 'skill';
   if (isToolResultMessage(message)) return 'tool-result';
   return 'prompt';
@@ -83,7 +66,7 @@ export function categorizeUserMessage(message: UserMessage): UserSubcategory {
  * Get the subcategory for an assistant message.
  * Priority: thinking > tool-use > text (a message can have multiple block types)
  */
-export function categorizeAssistantMessage(message: AssistantMessage): AssistantSubcategory {
+function categorizeAssistantMessage(message: AssistantMessage): AssistantSubcategory {
   const content = message.message.content;
   const hasThinking = content.some((block) => block.type === 'thinking');
   const hasToolUse = content.some((block) => block.type === 'tool_use');
@@ -131,21 +114,6 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
   }
 
   return counts;
-}
-
-/**
- * Count messages in each category (legacy flat interface)
- */
-export function countCategories(messages: TranscriptLine[]): MessageCategoryCounts {
-  const hierarchical = countHierarchicalCategories(messages);
-  return {
-    user: hierarchical.user.total,
-    assistant: hierarchical.assistant.total,
-    system: hierarchical.system,
-    'file-history-snapshot': hierarchical['file-history-snapshot'],
-    summary: hierarchical.summary,
-    'queue-operation': hierarchical['queue-operation'],
-  };
 }
 
 /**

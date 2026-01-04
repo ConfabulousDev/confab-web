@@ -385,4 +385,4 @@ export function TimelineBar({ messages, selectedIndex, visibleIndices, onSeek }:
   );
 }
 
-export default TimelineBar;
+// Default export only - TimelineBar also exported as named from component

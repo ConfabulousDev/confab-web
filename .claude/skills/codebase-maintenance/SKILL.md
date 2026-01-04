@@ -47,8 +47,18 @@ Do NOT ask for permission - just fix and report what was cleaned up.
 
 **Frontend (TypeScript)**
 ```bash
+# Knip: finds unused files, exports, and dependencies
+cd frontend && npm run knip
+
+# ESLint for general linting
 cd frontend && npm run lint
 ```
+
+**IMPORTANT:** The knip report should be **clean** (no output = no issues).
+- **Unused files**: Delete immediately (truly dead code)
+- **Unused exports**: Remove export keyword or delete if truly unused
+- **Unused dependencies**: Verify before removing (@types/* packages may be implicit)
+- If knip reports issues, fix them before continuing with other maintenance tasks
 
 ### Dependency Audit
 
@@ -155,9 +165,8 @@ Read the largest files and look for:
 
 **Frontend (largest/most complex):**
 1. `schemas/transcript.ts` (~545 lines) - Validation
-2. `services/agentTreeBuilder.ts` (~348 lines) - Business logic
-3. `pages/ShareLinksPage.tsx` (~347 lines) - Complex UI
-4. `pages/APIKeysPage.tsx` (~316 lines) - Complex UI
+2. `pages/ShareLinksPage.tsx` (~347 lines) - Complex UI
+3. `pages/APIKeysPage.tsx` (~316 lines) - Complex UI
 
 ## Phase 3: Triage and Report
 

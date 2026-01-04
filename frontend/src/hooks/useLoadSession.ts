@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import type { SessionDetail } from '@/types';
 import { type SessionErrorType, statusToErrorType, getErrorMessage } from '@/utils/sessionErrors';
 
-export type { SessionErrorType } from '@/utils/sessionErrors';
 
 /** Type guard for objects with a status property */
 function hasStatusProperty(err: unknown): err is { status: number } {

@@ -43,4 +43,4 @@ export interface CardDefinition {
 /**
  * Type for the full registry of all cards.
  */
-export type CardRegistry = CardDefinition[];
+// CardRegistry type available via CardDefinition[]

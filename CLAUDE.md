@@ -76,7 +76,22 @@ When adding new analytics cards to the session summary panel, **use the `/add-se
 - Frontend Zod schemas, components, and registry
 - Storybook stories and testing requirements
 
-## Finding Dead Code (Go)
+## Finding Dead Code
+
+### Frontend (TypeScript)
+
+Use **knip** to find unused files, exports, and dependencies:
+
+```bash
+cd frontend && npm run knip
+```
+
+Knip categories:
+- **Unused files**: Truly dead code - delete these
+- **Unused exports**: Often intentional (barrel files, public API) - use judgment
+- **Unused dependencies**: Verify before removing (@types/* may be implicit)
+
+### Backend (Go)
 
 Two complementary tools for detecting unused code in the `backend/` directory:
 

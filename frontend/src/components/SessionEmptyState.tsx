@@ -1,6 +1,6 @@
 import styles from './SessionEmptyState.module.css';
 
-export type SessionEmptyStateVariant = 'no-shared' | 'no-matches';
+type SessionEmptyStateVariant = 'no-shared' | 'no-matches';
 
 interface SessionEmptyStateProps {
   variant: SessionEmptyStateVariant;

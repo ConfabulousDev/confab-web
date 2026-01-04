@@ -2,7 +2,7 @@ import { useState, type ReactNode, type MouseEvent } from 'react';
 import styles from './Chip.module.css';
 import { ClipboardCheckIcon } from './icons';
 
-export type ChipVariant = 'neutral' | 'blue' | 'green' | 'purple';
+type ChipVariant = 'neutral' | 'blue' | 'green' | 'purple';
 
 interface ChipProps {
   children: ReactNode;

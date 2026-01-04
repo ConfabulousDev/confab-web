@@ -6,7 +6,7 @@ import { z } from 'zod';
 // Common Schemas
 // ============================================================================
 
-export const GitInfoSchema = z.object({
+const GitInfoSchema = z.object({
   repo_url: z.string().optional(),
   branch: z.string().optional(),
   commit_sha: z.string().optional(),
@@ -15,7 +15,7 @@ export const GitInfoSchema = z.object({
   is_dirty: z.boolean().optional(),
 });
 
-export const SyncFileDetailSchema = z.object({
+const SyncFileDetailSchema = z.object({
   file_name: z.string(),
   file_type: z.string(),
   last_synced_line: z.number(),
@@ -26,7 +26,7 @@ export const SyncFileDetailSchema = z.object({
 // Session Schemas
 // ============================================================================
 
-export const SessionSchema = z.object({
+const SessionSchema = z.object({
   id: z.string(),
   external_id: z.string(),
   first_seen: z.string(),
@@ -66,7 +66,7 @@ export const SessionDetailSchema = z.object({
   is_owner: z.boolean().optional(), // True if viewer is session owner (shared sessions only)
 });
 
-export const SessionShareSchema = z.object({
+const SessionShareSchema = z.object({
   id: z.number(),
   session_id: z.string(),
   external_id: z.string(),
@@ -93,7 +93,7 @@ export const UserSchema = z.object({
 // API Key Schemas
 // ============================================================================
 
-export const APIKeySchema = z.object({
+const APIKeySchema = z.object({
   id: z.number(),
   name: z.string(),
   created_at: z.string(),
@@ -119,8 +119,8 @@ export const CreateShareResponseSchema = z.object({
 // GitHub Link Schemas
 // ============================================================================
 
-export const GitHubLinkTypeSchema = z.enum(['commit', 'pull_request']);
-export const GitHubLinkSourceSchema = z.enum(['cli_hook', 'manual']);
+const GitHubLinkTypeSchema = z.enum(['commit', 'pull_request']);
+const GitHubLinkSourceSchema = z.enum(['cli_hook', 'manual']);
 
 export const GitHubLinkSchema = z.object({
   id: z.number(),
@@ -143,18 +143,18 @@ export const GitHubLinksResponseSchema = z.object({
 // Analytics Schemas
 // ============================================================================
 
-export const TokenStatsSchema = z.object({
+const TokenStatsSchema = z.object({
   input: z.number(),
   output: z.number(),
   cache_creation: z.number(),
   cache_read: z.number(),
 });
 
-export const CostStatsSchema = z.object({
+const CostStatsSchema = z.object({
   estimated_usd: z.string(), // Decimal serialized as string from backend
 });
 
-export const CompactionInfoSchema = z.object({
+const CompactionInfoSchema = z.object({
   auto: z.number(),
   manual: z.number(),
   avg_time_ms: z.number().nullable().optional(),
@@ -162,7 +162,7 @@ export const CompactionInfoSchema = z.object({
 
 // Card data schemas for the new cards-based format
 // Tokens card includes cost info (consolidated from previous separate cost card)
-export const TokensCardDataSchema = z.object({
+const TokensCardDataSchema = z.object({
   input: z.number(),
   output: z.number(),
   cache_creation: z.number(),
@@ -174,7 +174,7 @@ export const TokensCardDataSchema = z.object({
 // Note: Messages with text+tool_use count as text_responses, not tool_calls.
 // Therefore assistant_messages may not equal text_responses + tool_calls + thinking_blocks.
 // Note: Turn counts are in the Conversation card.
-export const SessionCardDataSchema = z.object({
+const SessionCardDataSchema = z.object({
   // Message counts (raw line counts)
   total_messages: z.number(),
   user_messages: z.number(),
@@ -197,18 +197,18 @@ export const SessionCardDataSchema = z.object({
   compaction_avg_time_ms: z.number().nullable().optional(),
 });
 
-export const ToolStatsSchema = z.object({
+const ToolStatsSchema = z.object({
   success: z.number(),
   errors: z.number(),
 });
 
-export const ToolsCardDataSchema = z.object({
+const ToolsCardDataSchema = z.object({
   total_calls: z.number(),
   tool_stats: z.record(z.string(), ToolStatsSchema),
   error_count: z.number(),
 });
 
-export const CodeActivityCardDataSchema = z.object({
+const CodeActivityCardDataSchema = z.object({
   files_read: z.number(),
   files_modified: z.number(),
   lines_added: z.number(),
@@ -218,7 +218,7 @@ export const CodeActivityCardDataSchema = z.object({
 });
 
 // Conversation card: tracks timing metrics for conversational turns
-export const ConversationCardDataSchema = z.object({
+const ConversationCardDataSchema = z.object({
   user_turns: z.number(),
   assistant_turns: z.number(),
   avg_assistant_turn_ms: z.number().nullable().optional(),
@@ -229,31 +229,19 @@ export const ConversationCardDataSchema = z.object({
 });
 
 // Agent stats: per-agent-type success/error counts (same structure as ToolStats)
-export const AgentStatsSchema = z.object({
+const AgentStatsSchema = z.object({
   success: z.number(),
   errors: z.number(),
-});
-
-// Agents card: tracks subagent/Task invocations by type
-export const AgentsCardDataSchema = z.object({
-  total_invocations: z.number(),
-  agent_stats: z.record(z.string(), AgentStatsSchema),
 });
 
 // Skill stats: per-skill success/error counts (same structure as AgentStats)
-export const SkillStatsSchema = z.object({
+const SkillStatsSchema = z.object({
   success: z.number(),
   errors: z.number(),
 });
 
-// Skills card: tracks Skill invocations by name
-export const SkillsCardDataSchema = z.object({
-  total_invocations: z.number(),
-  skill_stats: z.record(z.string(), SkillStatsSchema),
-});
-
 // Combined Agents and Skills card: unified view of both agent and skill invocations
-export const AgentsAndSkillsCardDataSchema = z.object({
+const AgentsAndSkillsCardDataSchema = z.object({
   agent_invocations: z.number(),
   skill_invocations: z.number(),
   agent_stats: z.record(z.string(), AgentStatsSchema),
@@ -261,7 +249,7 @@ export const AgentsAndSkillsCardDataSchema = z.object({
 });
 
 // Redactions card: tracks [REDACTED:TYPE] markers in transcript
-export const RedactionsCardDataSchema = z.object({
+const RedactionsCardDataSchema = z.object({
   total_redactions: z.number(),
   redaction_counts: z.record(z.string(), z.number()), // Type -> count
 });
@@ -269,7 +257,7 @@ export const RedactionsCardDataSchema = z.object({
 // Cards map schema - extensible for future cards
 // All fields optional to handle empty analytics (session with no transcript)
 // Note: cost is now part of tokens card, compaction is now part of session card
-export const AnalyticsCardsSchema = z.object({
+const AnalyticsCardsSchema = z.object({
   tokens: TokensCardDataSchema.optional(),
   session: SessionCardDataSchema.optional(),
   tools: ToolsCardDataSchema.optional(),
@@ -303,7 +291,6 @@ export const APIKeyListSchema = z.array(APIKeySchema);
 // ============================================================================
 
 export type GitInfo = z.infer<typeof GitInfoSchema>;
-export type SyncFileDetail = z.infer<typeof SyncFileDetailSchema>;
 export type Session = z.infer<typeof SessionSchema>;
 export type SessionDetail = z.infer<typeof SessionDetailSchema>;
 export type SessionShare = z.infer<typeof SessionShareSchema>;
@@ -311,23 +298,13 @@ export type User = z.infer<typeof UserSchema>;
 export type APIKey = z.infer<typeof APIKeySchema>;
 export type CreateAPIKeyResponse = z.infer<typeof CreateAPIKeyResponseSchema>;
 export type CreateShareResponse = z.infer<typeof CreateShareResponseSchema>;
-export type GitHubLinkType = z.infer<typeof GitHubLinkTypeSchema>;
-export type GitHubLinkSource = z.infer<typeof GitHubLinkSourceSchema>;
 export type GitHubLink = z.infer<typeof GitHubLinkSchema>;
 export type GitHubLinksResponse = z.infer<typeof GitHubLinksResponseSchema>;
-export type TokenStats = z.infer<typeof TokenStatsSchema>;
-export type CostStats = z.infer<typeof CostStatsSchema>;
-export type CompactionInfo = z.infer<typeof CompactionInfoSchema>;
 export type TokensCardData = z.infer<typeof TokensCardDataSchema>;
 export type SessionCardData = z.infer<typeof SessionCardDataSchema>;
-export type ToolStats = z.infer<typeof ToolStatsSchema>;
 export type ToolsCardData = z.infer<typeof ToolsCardDataSchema>;
 export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
-export type AgentStats = z.infer<typeof AgentStatsSchema>;
-export type AgentsCardData = z.infer<typeof AgentsCardDataSchema>;
-export type SkillStats = z.infer<typeof SkillStatsSchema>;
-export type SkillsCardData = z.infer<typeof SkillsCardDataSchema>;
 export type AgentsAndSkillsCardData = z.infer<typeof AgentsAndSkillsCardDataSchema>;
 export type RedactionsCardData = z.infer<typeof RedactionsCardDataSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
@@ -353,7 +330,7 @@ export function validateResponse<T>(schema: z.ZodType<T>, data: unknown, endpoin
 /**
  * Custom error class for API validation failures
  */
-export class APIValidationError extends Error {
+class APIValidationError extends Error {
   endpoint: string;
   zodError: z.ZodError;
 

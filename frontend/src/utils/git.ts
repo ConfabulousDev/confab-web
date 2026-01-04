@@ -42,20 +42,3 @@ export function getBranchURL(gitInfo?: GitInfo): string | null {
   return null;
 }
 
-/**
- * Get a web URL for a specific commit
- * Supports GitHub and GitLab
- */
-export function getCommitURL(gitInfo?: GitInfo): string | null {
-  const repoUrl = getRepoWebURL(gitInfo?.repo_url);
-  if (!repoUrl || !gitInfo?.commit_sha) return null;
-
-  if (repoUrl.includes('github.com')) {
-    return `${repoUrl}/commit/${gitInfo.commit_sha}`;
-  }
-  if (repoUrl.includes('gitlab.com')) {
-    return `${repoUrl}/-/commit/${gitInfo.commit_sha}`;
-  }
-
-  return null;
-}

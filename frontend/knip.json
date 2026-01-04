@@ -1,0 +1,8 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": ["src/main.tsx", "src/**/*.stories.tsx"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": ["src/**/*.test.{ts,tsx}", "src/**/*.stories.tsx"],
+  "ignoreDependencies": ["@types/dompurify"],
+  "ignoreBinaries": ["tsx"]
+}

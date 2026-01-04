@@ -10,18 +10,18 @@ import { z } from 'zod';
 // Content Block Schemas
 // ============================================================================
 
-export const TextBlockSchema = z.object({
+const TextBlockSchema = z.object({
   type: z.literal('text'),
   text: z.string(),
 });
 
-export const ThinkingBlockSchema = z.object({
+const ThinkingBlockSchema = z.object({
   type: z.literal('thinking'),
   thinking: z.string(),
   signature: z.string().optional(), // Optional for forward compat
 });
 
-export const ToolUseBlockSchema = z.object({
+const ToolUseBlockSchema = z.object({
   type: z.literal('tool_use'),
   id: z.string(),
   name: z.string(),
@@ -29,14 +29,14 @@ export const ToolUseBlockSchema = z.object({
 });
 
 // ToolResultBlock can contain nested content blocks or a string
-export const ToolResultBlockSchema = z.object({
+const ToolResultBlockSchema = z.object({
   type: z.literal('tool_result'),
   tool_use_id: z.string(),
   content: z.union([z.string(), z.array(z.lazy(() => ContentBlockSchema))]),
   is_error: z.boolean().optional(),
 });
 
-export const ImageBlockSchema = z.object({
+const ImageBlockSchema = z.object({
   type: z.literal('image'),
   source: z.object({
     type: z.string(), // 'base64' | 'url' - use string for forward compat
@@ -46,7 +46,7 @@ export const ImageBlockSchema = z.object({
   }),
 });
 
-export const ContentBlockSchema: z.ZodType<ContentBlock> = z.union([
+const ContentBlockSchema: z.ZodType<ContentBlock> = z.union([
   TextBlockSchema,
   ThinkingBlockSchema,
   ToolUseBlockSchema,
@@ -72,7 +72,7 @@ export type ContentBlock =
 // Token Usage Schema
 // ============================================================================
 
-export const TokenUsageSchema = z.object({
+const TokenUsageSchema = z.object({
   input_tokens: z.number(),
   cache_creation_input_tokens: z.number().optional(),
   cache_read_input_tokens: z.number().optional(),
@@ -102,7 +102,7 @@ const BaseMessageSchema = z.object({
   gitBranch: z.string().optional(),
 });
 
-export const ThinkingMetadataSchema = z.object({
+const ThinkingMetadataSchema = z.object({
   level: z.string(), // 'high' | 'medium' | 'low' | 'off' - use string for forward compat
   disabled: z.boolean(),
   triggers: z.array(z.string()),
@@ -111,19 +111,19 @@ export const ThinkingMetadataSchema = z.object({
 // ToolUseResult contains tool-specific metadata about what the tool returned.
 // This is highly variable depending on the tool (Bash, Read, Grep, etc.) so we use
 // a flexible schema that accepts any structure.
-export const ToolUseResultSchema = z.union([
+const ToolUseResultSchema = z.union([
   z.string(), // Error messages or simple results
   z.record(z.string(), z.unknown()), // Tool-specific structured data
 ]);
 
 // Todo item from TodoWrite tool
-export const TodoItemSchema = z.object({
+const TodoItemSchema = z.object({
   content: z.string(),
   status: z.string(), // 'pending' | 'in_progress' | 'completed'
   activeForm: z.string(),
 });
 
-export const UserMessageSchema = BaseMessageSchema.extend({
+const UserMessageSchema = BaseMessageSchema.extend({
   type: z.literal('user'),
   thinkingMetadata: ThinkingMetadataSchema.optional(),
   slug: z.string().optional(), // Session slug for display
@@ -137,7 +137,7 @@ export const UserMessageSchema = BaseMessageSchema.extend({
   toolUseResult: ToolUseResultSchema.optional(),
 });
 
-export const AssistantMessageSchema = BaseMessageSchema.extend({
+const AssistantMessageSchema = BaseMessageSchema.extend({
   type: z.literal('assistant'),
   requestId: z.string().optional(), // Optional for synthetic error messages
   agentId: z.string().optional(),
@@ -153,13 +153,13 @@ export const AssistantMessageSchema = BaseMessageSchema.extend({
   }),
 });
 
-export const FileBackupSchema = z.object({
+const FileBackupSchema = z.object({
   backupFileName: z.string().nullable(),
   version: z.number(),
   backupTime: z.string(),
 });
 
-export const FileHistorySnapshotSchema = z.object({
+const FileHistorySnapshotSchema = z.object({
   type: z.literal('file-history-snapshot'),
   messageId: z.string(),
   isSnapshotUpdate: z.boolean(),
@@ -170,7 +170,7 @@ export const FileHistorySnapshotSchema = z.object({
   }),
 });
 
-export const SystemMessageSchema = BaseMessageSchema.extend({
+const SystemMessageSchema = BaseMessageSchema.extend({
   type: z.literal('system'),
   logicalParentUuid: z.string().optional(),
   subtype: z.string(),
@@ -185,13 +185,13 @@ export const SystemMessageSchema = BaseMessageSchema.extend({
     .optional(),
 });
 
-export const SummaryMessageSchema = z.object({
+const SummaryMessageSchema = z.object({
   type: z.literal('summary'),
   summary: z.string(),
   leafUuid: z.string(),
 });
 
-export const QueueOperationMessageSchema = z.object({
+const QueueOperationMessageSchema = z.object({
   type: z.literal('queue-operation'),
   operation: z.string(),
   timestamp: z.string(),
@@ -199,7 +199,7 @@ export const QueueOperationMessageSchema = z.object({
   sessionId: z.string(),
 });
 
-export const TranscriptLineSchema = z.union([
+const TranscriptLineSchema = z.union([
   UserMessageSchema,
   AssistantMessageSchema,
   FileHistorySnapshotSchema,
@@ -373,30 +373,6 @@ export function formatValidationErrorsForLog(errors: TranscriptValidationError[]
 }
 
 /**
- * Parse and validate a single transcript line.
- * Returns the validated data or throws a detailed error.
- */
-export function parseTranscriptLine(data: unknown): TranscriptLine {
-  return TranscriptLineSchema.parse(data);
-}
-
-/**
- * Safely parse a transcript line, returning null on failure.
- * Logs validation errors for debugging.
- */
-export function safeParseTranscriptLine(
-  data: unknown,
-  lineIndex?: number
-): { success: true; data: TranscriptLine } | { success: false; error: z.ZodError } {
-  const result = TranscriptLineSchema.safeParse(data);
-  if (!result.success) {
-    const prefix = lineIndex !== undefined ? `Line ${lineIndex + 1}: ` : '';
-    console.warn(`${prefix}Transcript validation failed:`, result.error.issues);
-  }
-  return result;
-}
-
-/**
  * Parse transcript line with structured error for UI display
  */
 export function parseTranscriptLineWithError(
@@ -488,10 +464,6 @@ export function isQueueOperationMessage(line: TranscriptLine): line is z.infer<t
 export type UserMessage = z.infer<typeof UserMessageSchema>;
 export type AssistantMessage = z.infer<typeof AssistantMessageSchema>;
 export type SystemMessage = z.infer<typeof SystemMessageSchema>;
-export type FileHistorySnapshot = z.infer<typeof FileHistorySnapshotSchema>;
-export type SummaryMessage = z.infer<typeof SummaryMessageSchema>;
-export type QueueOperationMessage = z.infer<typeof QueueOperationMessageSchema>;
-export type ToolResultBlock = { type: 'tool_result'; tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean };
 
 // ============================================================================
 // Utility Functions
@@ -512,13 +484,6 @@ export function usesTools(message: AssistantMessage): boolean {
 }
 
 /**
- * Get all tool uses from an assistant message
- */
-export function getToolUses(message: AssistantMessage): ToolUseBlock[] {
-  return message.message.content.filter(isToolUseBlock);
-}
-
-/**
  * Check if user message is a tool result
  */
 export function isToolResultMessage(message: UserMessage): boolean {
@@ -534,21 +499,3 @@ export function isSkillExpansionMessage(message: UserMessage): boolean {
   return message.isMeta === true && message.sourceToolUseID !== undefined;
 }
 
-/**
- * Get tool results from user message
- */
-export function getToolResults(message: UserMessage): ToolResultBlock[] {
-  const content = message.message.content;
-  if (typeof content === 'string') return [];
-  return content.filter(isToolResultBlock);
-}
-
-/**
- * Get message content as plain text (strips formatting)
- */
-export function getPlainTextContent(content: ContentBlock[]): string {
-  return content
-    .filter(isTextBlock)
-    .map((block) => block.text)
-    .join('\n');
-}

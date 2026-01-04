@@ -9,8 +9,6 @@ import {
 } from '@/schemas/transcript';
 import { syncFilesAPI } from './api';
 
-// Re-export types for consumers
-export type { TranscriptLine, TranscriptValidationError, TranscriptParseResult } from '@/schemas/transcript';
 
 /**
  * Parsed transcript with metadata
@@ -35,7 +33,7 @@ export interface ParsedTranscript {
 /**
  * Agent node for hierarchical transcript display
  */
-export interface AgentNode {
+interface AgentNode {
   agentId: string;
   transcript: TranscriptLine[];
   parentToolUseId: string;
@@ -57,7 +55,7 @@ export interface AgentNode {
  * @param fileName - Name of the transcript file
  * @param lineOffset - Optional: Return only lines after this line number
  */
-export async function fetchTranscriptContent(
+async function fetchTranscriptContent(
   sessionId: string,
   fileName: string,
   lineOffset?: number
@@ -109,24 +107,10 @@ interface CacheEntry {
 const transcriptCacheV2 = new Map<string, CacheEntry>();
 
 /**
- * Fetch and parse a transcript file
- * Results are cached to avoid re-fetching
- * Returns only messages for backward compatibility - use fetchTranscriptWithErrors for full result
- */
-export async function fetchTranscript(
-  sessionId: string,
-  fileName: string,
-  options: { skipCache?: boolean } = {}
-): Promise<TranscriptLine[]> {
-  const result = await fetchTranscriptWithErrors(sessionId, fileName, options);
-  return result.messages;
-}
-
-/**
  * Fetch and parse a transcript file with validation errors
  * Returns both successfully parsed messages and structured validation errors
  */
-export async function fetchTranscriptWithErrors(
+async function fetchTranscriptWithErrors(
   sessionId: string,
   fileName: string,
   options: { skipCache?: boolean } = {}
@@ -232,28 +216,3 @@ export async function fetchNewTranscriptMessages(
   };
 }
 
-/**
- * Clear the transcript cache
- * Useful for forcing a refresh
- */
-export function clearTranscriptCache(): void {
-  transcriptCacheV2.clear();
-}
-
-/**
- * Clear a specific transcript from cache
- */
-export function clearTranscriptFromCache(sessionId: string, fileName: string): void {
-  const cacheKey = `${sessionId}-${fileName}`;
-  transcriptCacheV2.delete(cacheKey);
-}
-
-/**
- * Get cache statistics
- */
-export function getCacheStats(): { size: number; keys: string[] } {
-  return {
-    size: transcriptCacheV2.size,
-    keys: Array.from(transcriptCacheV2.keys()),
-  };
-}
