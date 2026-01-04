@@ -46,6 +46,10 @@ interface FormatDurationOptions {
 /**
  * Format duration in a human-readable way.
  * Examples: "1d 2h", "5h 30m", "15m", "45s", "4.2s" (with decimalSeconds)
+ *
+ * NOTE: Context-specific variants exist for different UI needs:
+ * - SessionCard: Simplified ("5m" not "5m 30s") for session overview
+ * - ConversationCard/TimelineBar: Precise ("5m 30s", "500ms") for timing display
  */
 export function formatDuration(ms: number, options: FormatDurationOptions = {}): string {
   const { decimalSeconds = false } = options;
@@ -91,12 +95,15 @@ export function formatDateTime(date: Date): string {
 }
 
 /**
- * Extract a short model name from the full model string
+ * Extract a short model name from the full model string (technical format).
  * Examples:
  *   "claude-3-5-sonnet-20241022" -> "claude-sonnet-3.5"
  *   "claude-opus-4-20250514" -> "claude-opus-4"
  *   "claude-sonnet-4-5-20250514" -> "claude-sonnet-4.5"
- *   "opus" -> "opus"
+ *   "opus" -> "claude-opus"
+ *
+ * NOTE: SessionCard has a different variant that returns user-friendly format
+ * ("Sonnet 4" instead of "claude-sonnet-4") for the card UI.
  */
 export function formatModelName(model: string): string {
   const lowerModel = model.toLowerCase();

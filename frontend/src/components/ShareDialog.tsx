@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useCopyToClipboard, useAuth, useShareDialog } from '@/hooks';
 import { formatDateString } from '@/utils';
 import { getFieldError } from '@/schemas/validation';
+import Modal from './Modal';
 import FormField from './FormField';
 import Button from './Button';
 import styles from './ShareDialog.module.css';
@@ -49,19 +50,16 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2>Share Session</h2>
-          <button className={styles.closeBtn} onClick={onClose}>
-            ×
-          </button>
-        </div>
+    <Modal isOpen={isOpen} onClose={onClose} className={styles.modal} ariaLabel="Share Session" showCloseButton={false}>
+      <div className={styles.modalHeader}>
+        <h2>Share Session</h2>
+        <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </div>
 
-        <div className={styles.modalBody}>
+      <div className={styles.modalBody}>
           {createdShareURL ? (
             <div className={styles.successMessage}>
               <h3>✓ Share Created</h3>
@@ -203,9 +201,8 @@ function ShareDialog({ sessionId, isOpen, onClose }: ShareDialogProps) {
               ))
             )}
           </div>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -280,5 +280,5 @@ Add a comment to the ticket with:
 ## When NOT to Use This Skill
 
 - New features (use a feature skill instead)
-- Major refactoring (use codebase-maintenance)
+- Major refactoring (use frontend-maintenance or backend-maintenance)
 - Security vulnerabilities (may need faster response)

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import styles from './PRLinkingModal.module.css';
+import Modal from './Modal';
 import ThemedImage from './ThemedImage';
 import { useTheme } from '@/hooks/useTheme';
+import styles from './PRLinkingModal.module.css';
 
 interface PRLinkingModalProps {
   isOpen: boolean;
@@ -67,59 +68,52 @@ function ConfabIcon({ className }: { className?: string }) {
 }
 
 function PRLinkingModal({ isOpen, onClose }: PRLinkingModalProps) {
-  if (!isOpen) return null;
-
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
-          ×
-        </button>
-        <h2 className={styles.title}>Two-way linking between Confabulous and GitHub</h2>
+    <Modal isOpen={isOpen} onClose={onClose} className={styles.modal} ariaLabel="Two-way linking between Confabulous and GitHub">
+      <h2 className={styles.title}>Two-way linking between Confabulous and GitHub</h2>
 
-        <div className={styles.sections}>
-          <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>
-              <ConfabIcon className={styles.icon} />
-              <span className={styles.confabName}>Confabulous</span>
-            </h3>
-            <p className={styles.sectionDesc}>
-              Session links PRs and commits
-            </p>
+      <div className={styles.sections}>
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>
+            <ConfabIcon className={styles.icon} />
+            <span className={styles.confabName}>Confabulous</span>
+          </h3>
+          <p className={styles.sectionDesc}>
+            Session links PRs and commits
+          </p>
+          <ThemedImage
+            src="/confab-to-github.png"
+            alt="Confabulous session showing linked GitHub PRs and commits"
+            className={`${styles.image} ${styles.imageSmall}`}
+          />
+        </div>
+
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>
+            <GitHubIcon className={styles.icon} />
+            GitHub
+          </h3>
+
+          <div className={styles.subsection}>
+            <p className={styles.sectionDesc}>PR links to session in Confabulous</p>
             <ThemedImage
-              src="/confab-to-github.png"
-              alt="Confabulous session showing linked GitHub PRs and commits"
+              src="/github-to-confab.png"
+              alt="GitHub PR with Confabulous link"
               className={`${styles.image} ${styles.imageSmall}`}
             />
           </div>
 
-          <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>
-              <GitHubIcon className={styles.icon} />
-              GitHub
-            </h3>
-
-            <div className={styles.subsection}>
-              <p className={styles.sectionDesc}>PR links to session in Confabulous</p>
-              <ThemedImage
-                src="/github-to-confab.png"
-                alt="GitHub PR with Confabulous link"
-                className={`${styles.image} ${styles.imageSmall}`}
-              />
-            </div>
-
-            <div className={styles.subsection}>
-              <p className={styles.sectionDesc}>Commit too</p>
-              <ZoomableImage
-                src="/github-to-confab-commit.png"
-                alt="GitHub commit with Confabulous link in commit message"
-                className={styles.image}
-              />
-            </div>
+          <div className={styles.subsection}>
+            <p className={styles.sectionDesc}>Commit too</p>
+            <ZoomableImage
+              src="/github-to-confab-commit.png"
+              alt="GitHub commit with Confabulous link in commit message"
+              className={styles.image}
+            />
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

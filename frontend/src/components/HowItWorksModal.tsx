@@ -1,3 +1,4 @@
+import Modal from './Modal';
 import styles from './HowItWorksModal.module.css';
 
 interface HowItWorksModalProps {
@@ -115,18 +116,11 @@ function HowItWorksDiagram() {
 }
 
 function HowItWorksModal({ isOpen, onClose }: HowItWorksModalProps) {
-  if (!isOpen) return null;
-
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
-          ×
-        </button>
-        <h2 className={styles.title}>How it works</h2>
-        <HowItWorksDiagram />
-      </div>
-    </div>
+    <Modal isOpen={isOpen} onClose={onClose} className={styles.modal} ariaLabel="How it works">
+      <h2 className={styles.title}>How it works</h2>
+      <HowItWorksDiagram />
+    </Modal>
   );
 }
 

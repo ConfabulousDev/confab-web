@@ -146,7 +146,13 @@ function computeSegments(messages: TranscriptLine[]): TimelineSegment[] {
 }
 
 /**
- * Format duration for tooltip display
+ * Format duration for timeline tooltip display.
+ *
+ * NOTE: This variant differs from utils/formatting.ts and SessionCard:
+ * - Shows "5m 30s" (includes seconds for timing precision)
+ * - Shows "500ms" for sub-second durations (useful for quick messages)
+ *
+ * Same implementation as ConversationCard - both need precise timing display.
  */
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);

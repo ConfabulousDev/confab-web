@@ -1,16 +1,16 @@
 ---
-name: codebase-maintenance
-description: Periodic codebase evaluation, cleanup, and tech debt repayment. Use when asked to run maintenance, cleanup, refactor, find dead code, or address tech debt.
+name: backend-maintenance
+description: Backend codebase maintenance - dead code detection, linting, dependency updates, and cleanup for Go code.
 ---
 
-# Codebase Maintenance
+# Backend Maintenance
 
-Periodic evaluation and cleanup to keep the codebase healthy.
+Periodic evaluation and cleanup for the backend codebase.
 
 ## Instructions for Claude
 
 1. Use **TodoWrite** to create a checklist and track progress
-2. Run commands from project root using full paths
+2. Run commands from backend directory
 3. Use the **Grep** tool instead of bash grep for searching
 4. Use the **Task** tool with `subagent_type=Explore` for codebase exploration
 5. Collect all findings, then triage and summarize at the end
@@ -19,24 +19,23 @@ Periodic evaluation and cleanup to keep the codebase healthy.
 
 Track with TodoWrite:
 
-- [ ] Dead code detection (backend)
-- [ ] Dead code detection (frontend)
-- [ ] Linting warnings
+- [ ] Dead code detection (staticcheck)
+- [ ] Dead code detection (deadcode)
+- [ ] Linting (go vet)
 - [ ] Outdated dependencies
 - [ ] TODO/FIXME audit
-- [ ] Test coverage gaps
+- [ ] Test coverage
 
 ### Dead Code Detection
 
-**Backend (Go)**
 ```bash
 # Install if needed
 go install honnef.co/go/tools/cmd/staticcheck@latest
 go install golang.org/x/tools/cmd/deadcode@latest
 
 # Run from backend dir
-~/go/bin/staticcheck ./...
-~/go/bin/deadcode -test ./...
+cd backend && ~/go/bin/staticcheck ./...
+cd backend && ~/go/bin/deadcode -test ./...
 ```
 
 **IMPORTANT:** Always auto-fix staticcheck and deadcode findings immediately, as long as:
@@ -45,67 +44,39 @@ go install golang.org/x/tools/cmd/deadcode@latest
 
 Do NOT ask for permission - just fix and report what was cleaned up.
 
-**Frontend (TypeScript)**
+### Linting
+
 ```bash
-# Knip: finds unused files, exports, and dependencies
-cd frontend && npm run knip
-
-# ESLint for general linting
-cd frontend && npm run lint
+cd backend && go vet ./...
 ```
-
-**IMPORTANT:** The knip report should be **clean** (no output = no issues).
-- **Unused files**: Delete immediately (truly dead code)
-- **Unused exports**: Remove export keyword or delete if truly unused
-- **Unused dependencies**: Verify before removing (@types/* packages may be implicit)
-- If knip reports issues, fix them before continuing with other maintenance tasks
 
 ### Dependency Audit
 
 ```bash
-# Backend
 cd backend && go mod tidy && git diff go.mod go.sum
 cd backend && go list -m -u all | grep '\['
-
-# Frontend
-cd frontend && npm outdated
-cd frontend && npm audit
 ```
 
 ### Test Coverage
 
 ```bash
-# Backend - IMPORTANT: Run FULL test suite for accurate coverage
+# IMPORTANT: Run FULL test suite for accurate coverage
 # The -short flag skips integration tests which provide most of the coverage
 # Example: internal/db goes from 0% (-short) to 69.5% (full)
 cd backend && DOCKER_HOST=unix:///Users/jackie/.orbstack/run/docker.sock go test -cover ./...
-
-# Frontend (use --run to avoid watch mode)
-cd frontend && npm test -- --coverage --run
 ```
 
 ## Phase 2: Manual Code Review
 
-**Critical** - Read and analyze actual code, don't just run tools.
-
 Track with TodoWrite:
 
-- [ ] Review backend structure (use Task/Explore agent)
-- [ ] Review frontend structure (use Task/Explore agent)
+- [ ] Review package structure (use Task/Explore agent)
 - [ ] Security review
 - [ ] Code smell detection
 - [ ] Duplication analysis
 
-### Codebase Exploration
-
-Use the Task tool with `subagent_type=Explore` to get an overview:
-- Architecture and package organization
-- Largest files by line count (prioritize for review)
-- File size distribution
-
 ### Security Review Checklist
 
-**Backend:**
 - [ ] SQL queries use parameterized queries (not string concatenation)
 - [ ] User input is validated before use
 - [ ] Authentication/authorization checks on all protected endpoints
@@ -114,31 +85,25 @@ Use the Task tool with `subagent_type=Explore` to get an overview:
 - [ ] CSRF protection on state-changing operations
 - [ ] Proper error handling (no stack traces leaked to users)
 
-**Frontend:**
-- [ ] XSS prevention: `dangerouslySetInnerHTML` uses DOMPurify
-- [ ] User input sanitized before display
-- [ ] No secrets in client-side code
-- [ ] API errors handled gracefully
-
 ### Code Smell Patterns to Search
 
 Use Grep to find these patterns:
 
 ```
-# Deeply nested conditionals
-Pattern: "if.*{[^}]*if.*{[^}]*if"
-
 # Long parameter lists
 Pattern: "func.*\(.*,.*,.*,.*,.*,"
 
 # Magic numbers
 Pattern: "[^0-9][0-9]{3,}[^0-9]"
 
-# Empty catch blocks
-Pattern: "catch.*\{\s*\}"
-
 # Commented-out code blocks
 Pattern: "//.*func |//.*if |//.*for "
+
+# Naked returns in long functions
+Pattern: "return$"
+
+# Empty error handling
+Pattern: "if err != nil {\s*}"
 ```
 
 ### Duplication Patterns to Check
@@ -156,17 +121,12 @@ Read the largest files and look for:
 
 ### Files to Prioritize for Review
 
-**Backend (largest/most complex):**
+**Largest/most complex:**
 1. `internal/db/db.go` (~1765 lines) - All DB operations
 2. `internal/auth/oauth.go` (~1641 lines) - OAuth flows
 3. `internal/api/sync.go` (~987 lines) - Sync logic
 4. `internal/api/server.go` (~670 lines) - Routing
 5. `internal/admin/handlers.go` (~737 lines) - Admin ops
-
-**Frontend (largest/most complex):**
-1. `schemas/transcript.ts` (~545 lines) - Validation
-2. `pages/ShareLinksPage.tsx` (~347 lines) - Complex UI
-3. `pages/APIKeysPage.tsx` (~316 lines) - Complex UI
 
 ## Phase 3: Triage and Report
 
@@ -177,7 +137,7 @@ Create a summary with:
 | Category | Severity | Issue | Location | Action |
 |----------|----------|-------|----------|--------|
 | Security | High/Med/Low | Description | file:line | Fix/Ticket/Ignore |
-| Bug | ... | ... | ... | ... |
+| Dead Code | ... | ... | ... | ... |
 | Code Smell | ... | ... | ... | ... |
 | Duplication | ... | ... | ... | ... |
 
@@ -189,7 +149,7 @@ Create a summary with:
 
 ### Action Guidelines
 
-- **Fix now**: Low-risk, high-value improvements
+- **Fix now**: Low-risk, high-value improvements (dead code, unused imports)
 - **Create ticket**: Larger refactors needing planning
 - **Ignore**: Acceptable tradeoffs, false positives
 
@@ -199,11 +159,11 @@ Create a summary with:
 - Remove dead code flagged by tools
 - Delete commented-out code
 - Fix linting warnings
-- Update minor dependencies
+- Run go mod tidy
 
 ### Higher-Risk (Plan Carefully)
 - Changing function signatures
-- Restructuring modules
+- Restructuring packages
 - Database schema changes
 - Shared type modifications
 

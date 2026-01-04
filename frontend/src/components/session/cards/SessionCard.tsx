@@ -74,6 +74,15 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   );
 }
 
+/**
+ * Format duration for session overview display.
+ *
+ * NOTE: This is intentionally simpler than utils/formatting.ts formatDuration.
+ * - Shows "5m" not "5m 30s" - session overview doesn't need second-level precision
+ * - No millisecond display - sessions are always long enough to show seconds
+ *
+ * For precise timing display, see ConversationCard or TimelineBar variants.
+ */
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -89,10 +98,18 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
+/**
+ * Format model name for user-friendly display.
+ *
+ * NOTE: This differs from utils/formatting.ts formatModelName which returns
+ * technical format ("claude-sonnet-4"). This version returns friendly format
+ * ("Sonnet 4") for the session card UI.
+ *
+ * Examples:
+ *   "claude-sonnet-4-20241022" -> "Sonnet 4"
+ *   "claude-opus-4-5-20251101" -> "Opus 4.5"
+ */
 function formatModelName(model: string): string {
-  // Extract the model family and version for display
-  // e.g., "claude-sonnet-4-20241022" -> "Sonnet 4"
-  // e.g., "claude-opus-4-5-20251101" -> "Opus 4.5"
   const match = model.match(/claude-(\w+)-(\d+)(?:-(\d+))?/);
   if (match) {
     const family = match[1];

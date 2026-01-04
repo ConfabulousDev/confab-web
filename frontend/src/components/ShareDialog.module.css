@@ -1,16 +1,4 @@
-.modalOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
+/* Modal size/spacing customization - base styles are in Modal.module.css */
 .modal {
   background: var(--color-bg-primary);
   border-radius: 8px;

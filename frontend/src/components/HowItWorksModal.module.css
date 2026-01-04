@@ -1,51 +1,8 @@
-.overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-}
-
+/* Modal size/spacing customization - base styles are in Modal.module.css */
 .modal {
-  position: relative;
-  background: var(--color-bg-primary);
-  border-radius: var(--radius-xl);
   max-width: 720px;
   width: 95%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-lg);
   padding: var(--spacing-xl);
-}
-
-.closeBtn {
-  position: absolute;
-  top: var(--spacing-md);
-  right: var(--spacing-md);
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  line-height: 1;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  transition: color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.closeBtn:hover {
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-hover);
 }
 
 .title {

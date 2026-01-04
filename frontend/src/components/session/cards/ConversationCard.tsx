@@ -19,6 +19,15 @@ const TOOLTIPS = {
   claudeUtilization: 'Percentage of session time Claude was actively working',
 };
 
+/**
+ * Format duration for conversation timing display.
+ *
+ * NOTE: This variant differs from utils/formatting.ts and SessionCard:
+ * - Shows "5m 30s" (includes seconds for timing precision)
+ * - Shows "500ms" for sub-second durations (useful for response times)
+ *
+ * Used for Claude/user turn times where precision matters.
+ */
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
