@@ -33,7 +33,7 @@ function TermsPage() {
           </p>
         </section>
 
-        <section className={styles.section}>
+        <section id="privacy" className={styles.section}>
           <h2 className={styles.sectionTitle}>Data and Privacy</h2>
           <p className={styles.text}>
             Session transcripts you upload are stored securely and are only accessible to
