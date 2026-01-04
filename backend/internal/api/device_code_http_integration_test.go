@@ -417,6 +417,59 @@ func TestDeviceVerify_HTTP_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("handles alternative dash characters", func(t *testing.T) {
+		// Test various dash-like characters that users might paste:
+		// - en-dash (–), em-dash (—), hyphen (‐), minus (−), non-breaking hyphen (‑)
+		dashVariants := []struct {
+			name string
+			code string // stored in DB with regular hyphen
+			input string // what user pastes with alternative dash
+		}{
+			{"en-dash", "DASH-EN12", "DASH–EN12"},  // U+2013
+			{"em-dash", "DASH-EM34", "DASH—EM34"},  // U+2014
+			{"hyphen", "DASH-HY56", "DASH‐HY56"},   // U+2010
+			{"minus", "DASH-MI78", "DASH−MI78"},    // U+2212
+			{"non-breaking hyphen", "DASH-NB90", "DASH‑NB90"}, // U+2011
+		}
+
+		for _, tc := range dashVariants {
+			t.Run(tc.name, func(t *testing.T) {
+				env.CleanDB(t)
+
+				user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+				sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+				deviceCode := "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+				expiresAt := time.Now().UTC().Add(15 * time.Minute)
+				testutil.CreateTestDeviceCode(t, env, deviceCode, tc.code, "Test Key", expiresAt)
+
+				ts := setupDeviceCodeTestServer(t, env)
+				client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+				// Send code with alternative dash character
+				resp, err := client.PostForm("/auth/device/verify", "code="+tc.input)
+				if err != nil {
+					t.Fatalf("request failed: %v", err)
+				}
+				defer resp.Body.Close()
+
+				testutil.RequireStatus(t, resp, http.StatusOK)
+
+				// Verify it was authorized
+				var userID *int64
+				row := env.DB.QueryRow(env.Ctx,
+					"SELECT user_id FROM device_codes WHERE user_code = $1",
+					tc.code)
+				if err := row.Scan(&userID); err != nil {
+					t.Fatalf("failed to query device_codes: %v", err)
+				}
+				if userID == nil {
+					t.Errorf("expected device code to be authorized with %s", tc.name)
+				}
+			})
+		}
+	})
+
 	t.Run("returns error for invalid code", func(t *testing.T) {
 		env.CleanDB(t)
 

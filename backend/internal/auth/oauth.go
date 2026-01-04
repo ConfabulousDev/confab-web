@@ -1557,8 +1557,11 @@ func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Normalize: remove any dashes and re-add in correct position
-		userCode = strings.ReplaceAll(userCode, "-", "")
+		// Normalize: remove any dash-like characters and re-add in correct position
+		// Handle various dash characters that might be pasted (hyphen, en-dash, em-dash, etc.)
+		for _, dash := range []string{"-", "–", "—", "‐", "−", "‑"} {
+			userCode = strings.ReplaceAll(userCode, dash, "")
+		}
 		if len(userCode) == 8 {
 			userCode = userCode[:4] + "-" + userCode[4:]
 		}
