@@ -63,4 +63,3 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 }
 
 export { ThemeContext };
-export type { ThemeContextValue };
