@@ -58,12 +58,19 @@ func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
 
 // CountAPIKeys returns the number of API keys for a user
 func (db *DB) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
+	ctx, span := tracer.Start(ctx, "db.count_api_keys",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
 	query := `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`
 	var count int
 	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&count)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, fmt.Errorf("failed to count API keys: %w", err)
 	}
+	span.SetAttributes(attribute.Int("keys.count", count))
 	return count, nil
 }
 

@@ -242,6 +242,13 @@ func (db *DB) UpdateSyncFileState(ctx context.Context, sessionID, fileName, file
 
 // GetSyncFileState retrieves the sync state for a specific file
 func (db *DB) GetSyncFileState(ctx context.Context, sessionID, fileName string) (*SyncFileState, error) {
+	ctx, span := tracer.Start(ctx, "db.get_sync_file_state",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.String("file.name", fileName),
+		))
+	defer span.End()
+
 	query := `SELECT file_name, file_type, last_synced_line, chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2`
 	var state SyncFileState
 	err := db.conn.QueryRowContext(ctx, query, sessionID, fileName).Scan(&state.FileName, &state.FileType, &state.LastSyncedLine, &state.ChunkCount)
@@ -249,16 +256,29 @@ func (db *DB) GetSyncFileState(ctx context.Context, sessionID, fileName string) 
 		return nil, ErrFileNotFound
 	}
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get sync file state: %w", err)
 	}
+	span.SetAttributes(attribute.Int("sync.last_line", state.LastSyncedLine))
 	return &state, nil
 }
 
 // UpdateSyncFileChunkCount sets the chunk_count for a file (used for self-healing on read)
 func (db *DB) UpdateSyncFileChunkCount(ctx context.Context, sessionID, fileName string, chunkCount int) error {
+	ctx, span := tracer.Start(ctx, "db.update_sync_file_chunk_count",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.String("file.name", fileName),
+			attribute.Int("chunk.count", chunkCount),
+		))
+	defer span.End()
+
 	query := `UPDATE sync_files SET chunk_count = $3, updated_at = NOW() WHERE session_id = $1 AND file_name = $2`
 	_, err := db.conn.ExecContext(ctx, query, sessionID, fileName, chunkCount)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update chunk count: %w", err)
 	}
 	return nil

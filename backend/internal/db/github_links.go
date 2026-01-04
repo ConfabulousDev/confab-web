@@ -141,6 +141,10 @@ func (db *DB) DeleteGitHubLink(ctx context.Context, linkID int64) error {
 // GetGitHubLinkByID returns a GitHub link by ID.
 // Returns ErrGitHubLinkNotFound if link doesn't exist.
 func (db *DB) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitHubLink, error) {
+	ctx, span := tracer.Start(ctx, "db.get_github_link_by_id",
+		trace.WithAttributes(attribute.Int64("link.id", linkID)))
+	defer span.End()
+
 	query := `
 		SELECT id, session_id, link_type, url, owner, repo, ref, title, source, created_at
 		FROM session_github_links
@@ -163,6 +167,8 @@ func (db *DB) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitH
 		if err == sql.ErrNoRows {
 			return nil, ErrGitHubLinkNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get github link: %w", err)
 	}
 

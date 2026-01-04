@@ -139,8 +139,14 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, i
 // CreateSystemShare creates a system-wide share for a session (admin only, no ownership check)
 // System shares are accessible to any authenticated user
 func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt *time.Time) (*SessionShare, error) {
+	ctx, span := tracer.Start(ctx, "db.create_system_share",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -157,6 +163,8 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 		if isInvalidUUIDError(err) {
 			return nil, ErrSessionNotFound
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
@@ -173,6 +181,8 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 		 RETURNING id, created_at`,
 		sessionID, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
 
@@ -181,13 +191,18 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 		`INSERT INTO session_share_system (share_id) VALUES ($1)`,
 		share.ID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to create system share: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int64("share.id", share.ID))
 	return &share, nil
 }
 

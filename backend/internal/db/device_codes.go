@@ -99,9 +99,14 @@ func (db *DB) AuthorizeDeviceCode(ctx context.Context, userCode string, userID i
 
 // DeleteDeviceCode removes a device code (after successful token exchange or expiration)
 func (db *DB) DeleteDeviceCode(ctx context.Context, deviceCode string) error {
+	ctx, span := tracer.Start(ctx, "db.delete_device_code")
+	defer span.End()
+
 	query := `DELETE FROM device_codes WHERE device_code = $1`
 	_, err := db.conn.ExecContext(ctx, query, deviceCode)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete device code: %w", err)
 	}
 	return nil
@@ -109,11 +114,17 @@ func (db *DB) DeleteDeviceCode(ctx context.Context, deviceCode string) error {
 
 // CleanupExpiredDeviceCodes removes expired device codes
 func (db *DB) CleanupExpiredDeviceCodes(ctx context.Context) (int64, error) {
+	ctx, span := tracer.Start(ctx, "db.cleanup_expired_device_codes")
+	defer span.End()
+
 	query := `DELETE FROM device_codes WHERE expires_at < NOW()`
 	result, err := db.conn.ExecContext(ctx, query)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, fmt.Errorf("failed to cleanup expired device codes: %w", err)
 	}
 	rows, _ := result.RowsAffected()
+	span.SetAttributes(attribute.Int64("codes.deleted", rows))
 	return rows, nil
 }
