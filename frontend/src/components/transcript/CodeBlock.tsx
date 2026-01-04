@@ -16,7 +16,7 @@ import 'prismjs/components/prism-sql';
 import 'prismjs/components/prism-css';
 import 'prismjs/components/prism-markup'; // HTML/XML
 
-// Import a clean theme
+// Import Prism light theme (dark mode overrides in CodeBlock.module.css)
 import 'prismjs/themes/prism.css';
 import styles from './CodeBlock.module.css';
 

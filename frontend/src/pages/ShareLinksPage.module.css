@@ -153,7 +153,12 @@
 }
 
 .expiredRow {
-  opacity: 0.5;
+  opacity: 0.75;
+}
+
+/* Dark mode: use higher opacity for better readability */
+:global([data-theme="dark"]) .expiredRow {
+  opacity: 0.8;
 }
 
 .timestamp {

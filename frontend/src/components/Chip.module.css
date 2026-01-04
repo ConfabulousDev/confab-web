@@ -67,6 +67,7 @@
   cursor: default;
   border: 1px solid transparent;
   transition: border-color 0.15s ease;
+  user-select: none;
 }
 
 .clickable:hover {

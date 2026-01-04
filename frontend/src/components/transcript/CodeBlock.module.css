@@ -40,6 +40,7 @@ pre {
   font-size: var(--font-xs);
   line-height: 1.5;
   background: transparent !important;
+  color: var(--color-text-primary);
 }
 
 code {
@@ -49,6 +50,7 @@ code {
   white-space: pre-wrap !important;
   word-wrap: break-word !important;
   word-break: break-word !important;
+  color: inherit;
 }
 
 /* Custom scrollbar for code blocks */
@@ -123,4 +125,78 @@ pre::-webkit-scrollbar-thumb:hover {
 
 .expandToggle:hover {
   background: var(--color-primary-hover);
+}
+
+/* Dark mode: Override Prism.js default light theme */
+:global([data-theme="dark"]) .codeBlock :global(code[class*="language-"]),
+:global([data-theme="dark"]) .codeBlock :global(pre[class*="language-"]) {
+  color: #d4d4d4 !important;
+  background: none !important;
+  text-shadow: none !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.comment),
+:global([data-theme="dark"]) .codeBlock :global(.token.prolog),
+:global([data-theme="dark"]) .codeBlock :global(.token.doctype),
+:global([data-theme="dark"]) .codeBlock :global(.token.cdata) {
+  color: #6a9955 !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.punctuation) {
+  color: #d4d4d4 !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.operator) {
+  color: #d4d4d4 !important;
+  background: none !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.property) {
+  color: #9cdcfe !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.tag),
+:global([data-theme="dark"]) .codeBlock :global(.token.constant),
+:global([data-theme="dark"]) .codeBlock :global(.token.symbol),
+:global([data-theme="dark"]) .codeBlock :global(.token.deleted) {
+  color: #f87171 !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.boolean),
+:global([data-theme="dark"]) .codeBlock :global(.token.number) {
+  color: #b5cea8 !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.selector),
+:global([data-theme="dark"]) .codeBlock :global(.token.attr-name),
+:global([data-theme="dark"]) .codeBlock :global(.token.string),
+:global([data-theme="dark"]) .codeBlock :global(.token.char),
+:global([data-theme="dark"]) .codeBlock :global(.token.builtin),
+:global([data-theme="dark"]) .codeBlock :global(.token.inserted) {
+  color: #ce9178 !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.entity),
+:global([data-theme="dark"]) .codeBlock :global(.token.url),
+:global([data-theme="dark"]) .codeBlock :global(.language-css) :global(.token.string),
+:global([data-theme="dark"]) .codeBlock :global(.style) :global(.token.string) {
+  color: #d4d4d4 !important;
+  background: none !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.atrule),
+:global([data-theme="dark"]) .codeBlock :global(.token.attr-value),
+:global([data-theme="dark"]) .codeBlock :global(.token.keyword) {
+  color: #569cd6 !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.function),
+:global([data-theme="dark"]) .codeBlock :global(.token.class-name) {
+  color: #dcdcaa !important;
+}
+
+:global([data-theme="dark"]) .codeBlock :global(.token.regex),
+:global([data-theme="dark"]) .codeBlock :global(.token.important),
+:global([data-theme="dark"]) .codeBlock :global(.token.variable) {
+  color: #d19a66 !important;
 }

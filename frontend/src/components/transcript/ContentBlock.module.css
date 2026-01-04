@@ -46,6 +46,13 @@
   padding: 0;
 }
 
+/* Dark mode: ensure code blocks in text are readable */
+:global([data-theme="dark"]) .textBlock :global(pre),
+:global([data-theme="dark"]) .textBlock :global(code) {
+  color: var(--color-text-primary);
+  text-shadow: none;
+}
+
 .textBlock :global(ul),
 .textBlock :global(ol) {
   margin: var(--spacing-xs) 0;
