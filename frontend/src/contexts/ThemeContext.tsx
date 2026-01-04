@@ -11,11 +11,6 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'confab-theme';
 
-function getSystemTheme(): Theme {
-  if (typeof window === 'undefined') return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
 function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute('data-theme', theme);
 }
@@ -26,13 +21,12 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'light';
+    if (typeof window === 'undefined') return 'dark';
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'light' || stored === 'dark') {
       return stored;
     }
-    // Use system preference as initial default
-    return getSystemTheme();
+    return 'dark';
   });
 
   const setTheme = useCallback((newTheme: Theme) => {
