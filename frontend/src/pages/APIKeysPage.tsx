@@ -14,7 +14,7 @@ import Button from '@/components/Button';
 import Alert from '@/components/Alert';
 import styles from './APIKeysPage.module.css';
 
-const MAX_API_KEYS = 100;
+const MAX_API_KEYS = 500;
 
 // SVG Icons
 const AllIcon = (
