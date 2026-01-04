@@ -200,10 +200,15 @@ function APIKeysPage() {
           {error && <ErrorDisplay message={error instanceof Error ? error.message : 'Failed to load API keys'} retry={refetch} />}
           {createMutation.error && (
             <Alert variant="error">
-              {createMutation.error instanceof APIError && createMutation.error.status === 409 ? (
+              {createMutation.error instanceof APIError && createMutation.error.message.includes('limit') ? (
                 <>
                   <strong>API Key Limit Reached</strong>
                   <p>You have reached the maximum of {MAX_API_KEYS} API keys. Please delete some unused keys below before creating new ones.</p>
+                </>
+              ) : createMutation.error instanceof APIError && createMutation.error.message.includes('already exists') ? (
+                <>
+                  <strong>Duplicate Key Name</strong>
+                  <p>An API key with this name already exists. Please choose a different name.</p>
                 </>
               ) : (
                 createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create key'
