@@ -56,8 +56,11 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 			wait.ForAll(
 				wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
-					WithStartupTimeout(30*time.Second),
-				wait.ForListeningPort("5432/tcp"),
+					WithStartupTimeout(10*time.Second).
+					WithPollInterval(100*time.Millisecond),
+				wait.ForListeningPort("5432/tcp").
+					WithStartupTimeout(5*time.Second).
+					WithPollInterval(50*time.Millisecond),
 			)),
 	)
 	if err != nil {
@@ -102,7 +105,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	// Create S3 storage client with retry (MinIO needs time to initialize)
 	t.Log("Initializing S3 storage...")
 	var s3Storage *storage.S3Storage
-	maxRetries := 10
+	maxRetries := 20
 	for i := 0; i < maxRetries; i++ {
 		s3Storage, err = storage.NewS3Storage(storage.S3Config{
 			Endpoint:        minioEndpoint,
@@ -117,8 +120,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		if i == maxRetries-1 {
 			t.Fatalf("Failed to create S3 storage after %d retries: %v", maxRetries, err)
 		}
-		t.Logf("MinIO not ready yet, retrying... (%d/%d)", i+1, maxRetries)
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	env := &TestEnvironment{
