@@ -1,35 +1,22 @@
-import { useState } from 'react';
 import { useTheme } from '@/hooks/useTheme';
 
 interface ThemedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
-  darkSrc?: string;
 }
 
 /**
- * Image component that automatically switches between light and dark versions.
- *
- * If darkSrc is not provided, it will be derived from src by inserting '-dark'
- * before the file extension (e.g., '/image.png' -> '/image-dark.png').
- *
- * Falls back to light image if dark version fails to load.
+ * Image component that reduces opacity in dark mode for better visual integration.
  */
-function ThemedImage({ src, darkSrc, alt, onError, ...props }: ThemedImageProps) {
-  const { resolvedTheme } = useTheme();
-  const [darkFailed, setDarkFailed] = useState(false);
+function ThemedImage({ src, alt, style, ...props }: ThemedImageProps) {
+  const { theme } = useTheme();
 
-  const derivedDarkSrc = darkSrc ?? src.replace(/(\.[^.]+)$/, '-dark$1');
-  const shouldUseDark = resolvedTheme === 'dark' && !darkFailed;
-  const imageSrc = shouldUseDark ? derivedDarkSrc : src;
-
-  const handleError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    if (shouldUseDark) {
-      setDarkFailed(true);
-    }
-    onError?.(e);
+  const themedStyle: React.CSSProperties = {
+    ...style,
+    opacity: theme === 'dark' ? 0.8 : 1,
+    transition: 'opacity 0.2s ease',
   };
 
-  return <img src={imageSrc} alt={alt} onError={handleError} {...props} />;
+  return <img src={src} alt={alt} style={themedStyle} {...props} />;
 }
 
 export default ThemedImage;
