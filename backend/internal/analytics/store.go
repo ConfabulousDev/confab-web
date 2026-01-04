@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -28,80 +30,125 @@ func NewStore(db *sql.DB) *Store {
 
 // GetCards retrieves all cached card data for a session.
 // Returns a Cards struct with nil fields for cards that don't exist.
+// All card queries run in parallel to minimize latency.
 func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) {
 	ctx, span := tracer.Start(ctx, "analytics.get_cards",
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
 	defer span.End()
 
 	cards := &Cards{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	errs := make(chan error, 7)
 
-	// Get tokens card (includes cost)
-	tokens, err := s.getTokensCard(ctx, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("getting tokens card: %w", err)
+	// Helper to run a getter in parallel
+	runGet := func(name string, fn func() error) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := fn(); err != nil {
+				errs <- fmt.Errorf("%s: %w", name, err)
+			}
+		}()
 	}
-	cards.Tokens = tokens
 
-	// Get session card (includes compaction)
-	session, err := s.getSessionCard(ctx, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("getting session card: %w", err)
-	}
-	cards.Session = session
+	runGet("tokens", func() error {
+		result, err := s.getTokensCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.Tokens = result
+		mu.Unlock()
+		return nil
+	})
 
-	// Get tools card
-	tools, err := s.getToolsCard(ctx, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("getting tools card: %w", err)
-	}
-	cards.Tools = tools
+	runGet("session", func() error {
+		result, err := s.getSessionCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.Session = result
+		mu.Unlock()
+		return nil
+	})
 
-	// Get code activity card
-	codeActivity, err := s.getCodeActivityCard(ctx, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("getting code activity card: %w", err)
-	}
-	cards.CodeActivity = codeActivity
+	runGet("tools", func() error {
+		result, err := s.getToolsCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.Tools = result
+		mu.Unlock()
+		return nil
+	})
 
-	// Get conversation card
-	conversation, err := s.getConversationCard(ctx, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("getting conversation card: %w", err)
-	}
-	cards.Conversation = conversation
+	runGet("code_activity", func() error {
+		result, err := s.getCodeActivityCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.CodeActivity = result
+		mu.Unlock()
+		return nil
+	})
 
-	// Get agents and skills card
-	agentsAndSkills, err := s.getAgentsAndSkillsCard(ctx, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("getting agents and skills card: %w", err)
-	}
-	cards.AgentsAndSkills = agentsAndSkills
+	runGet("conversation", func() error {
+		result, err := s.getConversationCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.Conversation = result
+		mu.Unlock()
+		return nil
+	})
 
-	// Get redactions card
-	redactions, err := s.getRedactionsCard(ctx, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("getting redactions card: %w", err)
+	runGet("agents_and_skills", func() error {
+		result, err := s.getAgentsAndSkillsCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.AgentsAndSkills = result
+		mu.Unlock()
+		return nil
+	})
+
+	runGet("redactions", func() error {
+		result, err := s.getRedactionsCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.Redactions = result
+		mu.Unlock()
+		return nil
+	})
+
+	wg.Wait()
+	close(errs)
+
+	// Collect all errors
+	var allErrs []error
+	for err := range errs {
+		allErrs = append(allErrs, err)
 	}
-	cards.Redactions = redactions
+	if len(allErrs) > 0 {
+		combined := errors.Join(allErrs...)
+		span.RecordError(combined)
+		span.SetStatus(codes.Error, combined.Error())
+		return nil, combined
+	}
 
 	return cards, nil
 }
 
 // UpsertCards inserts or updates all cards for a session.
+// All card upserts run in parallel to minimize latency.
 func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	// Get session ID from the first available card for tracing
 	var sessionID string
@@ -115,60 +162,75 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
 	defer span.End()
 
+	var wg sync.WaitGroup
+	errs := make(chan error, 7)
+
+	// Helper to run an upsert in parallel
+	runUpsert := func(name string, fn func() error) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := fn(); err != nil {
+				errs <- fmt.Errorf("%s: %w", name, err)
+			}
+		}()
+	}
+
 	if cards.Tokens != nil {
-		if err := s.upsertTokensCard(ctx, cards.Tokens); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("upserting tokens card: %w", err)
-		}
+		runUpsert("tokens", func() error {
+			return s.upsertTokensCard(ctx, cards.Tokens)
+		})
 	}
 
 	if cards.Session != nil {
-		if err := s.upsertSessionCard(ctx, cards.Session); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("upserting session card: %w", err)
-		}
+		runUpsert("session", func() error {
+			return s.upsertSessionCard(ctx, cards.Session)
+		})
 	}
 
 	if cards.Tools != nil {
-		if err := s.upsertToolsCard(ctx, cards.Tools); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("upserting tools card: %w", err)
-		}
+		runUpsert("tools", func() error {
+			return s.upsertToolsCard(ctx, cards.Tools)
+		})
 	}
 
 	if cards.CodeActivity != nil {
-		if err := s.upsertCodeActivityCard(ctx, cards.CodeActivity); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("upserting code activity card: %w", err)
-		}
+		runUpsert("code_activity", func() error {
+			return s.upsertCodeActivityCard(ctx, cards.CodeActivity)
+		})
 	}
 
 	if cards.Conversation != nil {
-		if err := s.upsertConversationCard(ctx, cards.Conversation); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("upserting conversation card: %w", err)
-		}
+		runUpsert("conversation", func() error {
+			return s.upsertConversationCard(ctx, cards.Conversation)
+		})
 	}
 
 	if cards.AgentsAndSkills != nil {
-		if err := s.upsertAgentsAndSkillsCard(ctx, cards.AgentsAndSkills); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("upserting agents and skills card: %w", err)
-		}
+		runUpsert("agents_and_skills", func() error {
+			return s.upsertAgentsAndSkillsCard(ctx, cards.AgentsAndSkills)
+		})
 	}
 
 	if cards.Redactions != nil {
-		if err := s.upsertRedactionsCard(ctx, cards.Redactions); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("upserting redactions card: %w", err)
-		}
+		runUpsert("redactions", func() error {
+			return s.upsertRedactionsCard(ctx, cards.Redactions)
+		})
+	}
+
+	wg.Wait()
+	close(errs)
+
+	// Collect all errors
+	var allErrs []error
+	for err := range errs {
+		allErrs = append(allErrs, err)
+	}
+	if len(allErrs) > 0 {
+		combined := errors.Join(allErrs...)
+		span.RecordError(combined)
+		span.SetStatus(codes.Error, combined.Error())
+		return combined
 	}
 
 	return nil
