@@ -1,4 +1,5 @@
 import styles from './ReviewModal.module.css';
+import ThemedImage from './ThemedImage';
 
 interface ReviewModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ function ReviewModal({ isOpen, onClose }: ReviewModalProps) {
         <p className={styles.subtitle}>
           Browse conversations with full context and history
         </p>
-        <img
+        <ThemedImage
           src="/review.png"
           alt="Confabulous session transcript view"
           className={styles.image}

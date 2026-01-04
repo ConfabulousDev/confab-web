@@ -201,7 +201,7 @@ function IntegratedDemo() {
     <div style={{
       display: 'flex',
       height: '100vh',
-      background: '#fafafa',
+      background: 'var(--color-bg)',
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
       {/* Message list */}
@@ -213,7 +213,7 @@ function IntegratedDemo() {
           padding: '16px 24px',
         }}
       >
-        <div style={{ marginBottom: '16px', color: '#666', fontSize: '14px' }}>
+        <div style={{ marginBottom: '16px', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
           <strong>{messages.length} messages</strong> — Click on the timeline bar to jump to a segment
         </div>
         {messages.map((msg, index) => {
@@ -234,18 +234,18 @@ function IntegratedDemo() {
               style={{
                 padding: '12px 16px',
                 marginBottom: '8px',
-                background: highlightedIndex === index ? '#fff3cd' : '#fff',
-                border: '1px solid #e5e5e5',
+                background: highlightedIndex === index ? 'var(--color-warning-bg)' : 'var(--color-bg-primary)',
+                border: '1px solid var(--color-border)',
                 borderRadius: '6px',
-                borderLeft: msg.type === 'user' ? '3px solid #0066cc' : '3px solid #E57B3A',
-                boxShadow: selectedIndex === index ? 'inset 0 0 0 2px #bbb' : 'none',
+                borderLeft: msg.type === 'user' ? '3px solid var(--color-accent)' : '3px solid #E57B3A',
+                boxShadow: selectedIndex === index ? 'inset 0 0 0 2px var(--color-border-dark)' : 'none',
                 transition: 'background 0.2s ease, box-shadow 0.2s ease',
                 cursor: 'pointer',
               }}
             >
               <div style={{
                 fontSize: '11px',
-                color: msg.type === 'user' ? '#0066cc' : '#E57B3A',
+                color: msg.type === 'user' ? 'var(--color-accent)' : '#E57B3A',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 marginBottom: '4px',
@@ -253,14 +253,14 @@ function IntegratedDemo() {
                 {msg.type === 'user' ? 'User' : 'Claude'}
                 <span style={{
                   marginLeft: '8px',
-                  color: '#999',
+                  color: 'var(--color-text-muted)',
                   fontWeight: 400,
                   textTransform: 'none',
                 }}>
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
-              <div style={{ fontSize: '14px', color: '#333' }}>
+              <div style={{ fontSize: '14px', color: 'var(--color-text-primary)' }}>
                 {content}
               </div>
             </div>
@@ -272,8 +272,8 @@ function IntegratedDemo() {
       <div style={{
         width: '40px',
         padding: '16px 8px 16px 8px',
-        background: '#f5f5f5',
-        borderLeft: '1px solid #e5e5e5',
+        background: 'var(--color-bg-secondary)',
+        borderLeft: '1px solid var(--color-border)',
         position: 'relative',
       }}>
         <TimelineBar
@@ -294,9 +294,9 @@ function SmallDemo() {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   return (
-    <div style={{ padding: '24px', background: '#fafafa', minHeight: '100vh' }}>
+    <div style={{ padding: '24px', background: 'var(--color-bg)', minHeight: '100vh', color: 'var(--color-text-primary)' }}>
       <h3 style={{ marginBottom: '16px' }}>Timeline Bar - Isolated Test</h3>
-      <p style={{ marginBottom: '16px', color: '#666', fontSize: '14px' }}>
+      <p style={{ marginBottom: '16px', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
         Hover over segments to see duration and message count.
         Use the slider to simulate scroll position.
       </p>
@@ -305,7 +305,7 @@ function SmallDemo() {
         <div style={{
           height: '400px',
           width: '200px',
-          background: '#f5f5f5',
+          background: 'var(--color-bg-secondary)',
           borderRadius: '4px',
           padding: '8px 8px 8px 160px',
           position: 'relative',

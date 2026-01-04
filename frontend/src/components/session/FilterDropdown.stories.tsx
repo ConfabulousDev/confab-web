@@ -79,7 +79,7 @@ const meta: Meta<typeof FilterDropdownInteractive> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ padding: '100px', background: '#fafafa' }}>
+      <div style={{ padding: '100px', background: 'var(--color-bg)' }}>
         <Story />
       </div>
     ),

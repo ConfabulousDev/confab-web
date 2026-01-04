@@ -1,4 +1,5 @@
 import styles from './ShareModal.module.css';
+import ThemedImage from './ThemedImage';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ function ShareModal({ isOpen, onClose }: ShareModalProps) {
         <p className={styles.subtitle}>
           Generate shareable links for collaboration
         </p>
-        <img
+        <ThemedImage
           src="/share.png"
           alt="Confabulous share links interface"
           className={styles.image}

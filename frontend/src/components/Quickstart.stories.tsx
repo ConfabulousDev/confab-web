@@ -9,7 +9,7 @@ const meta: Meta<typeof Quickstart> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '600px', background: '#fff', borderRadius: '8px' }}>
+      <div style={{ width: '600px', background: 'var(--color-bg-primary)', borderRadius: '8px' }}>
         <Story />
       </div>
     ),

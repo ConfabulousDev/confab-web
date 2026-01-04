@@ -1,4 +1,5 @@
 import styles from './AnalysisModal.module.css';
+import ThemedImage from './ThemedImage';
 
 interface AnalysisModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
         <p className={styles.subtitle}>
           Track metrics, timing, and code activity for every session
         </p>
-        <img
+        <ThemedImage
           src="/analysis.png"
           alt="Session analytics showing duration, messages, Claude utilization, and code activity metrics"
           className={styles.image}

@@ -83,7 +83,7 @@
 }
 
 .boxSecondary {
-  fill: #fff8e6;
+  fill: var(--color-warning-bg);
   stroke: var(--color-warning);
   stroke-width: 1.5;
 }

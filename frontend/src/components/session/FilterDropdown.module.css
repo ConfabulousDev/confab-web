@@ -25,9 +25,9 @@
 }
 
 .filterBtn.active {
-  background: #f5f3ff;
-  border-color: #7c3aed;
-  color: #7c3aed;
+  background: var(--color-selected-bg);
+  border-color: var(--color-selected-border);
+  color: var(--color-selected);
 }
 
 .filterBtn svg {

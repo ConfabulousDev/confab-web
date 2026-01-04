@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import styles from './PRLinkingModal.module.css';
+import ThemedImage from './ThemedImage';
+import { useTheme } from '@/hooks/useTheme';
 
 interface PRLinkingModalProps {
   isOpen: boolean;
@@ -14,19 +16,32 @@ interface ZoomableImageProps {
 
 function ZoomableImage({ src, alt, className }: ZoomableImageProps) {
   const [showZoom, setShowZoom] = useState(false);
+  const [darkFailed, setDarkFailed] = useState(false);
+  const { resolvedTheme } = useTheme();
+
+  const darkSrc = src.replace(/(\.[^.]+)$/, '-dark$1');
+  const shouldUseDark = resolvedTheme === 'dark' && !darkFailed;
+  const themedSrc = shouldUseDark ? darkSrc : src;
+
+  const handleError = () => {
+    if (shouldUseDark) {
+      setDarkFailed(true);
+    }
+  };
 
   return (
     <>
       <img
-        src={src}
+        src={themedSrc}
         alt={alt}
         className={`${className} ${styles.zoomable}`}
         onClick={() => setShowZoom(true)}
+        onError={handleError}
       />
       {showZoom && (
         <div className={styles.zoomOverlay} onClick={() => setShowZoom(false)}>
           <div className={styles.zoomPopup}>
-            <img src={src} alt={alt} />
+            <img src={themedSrc} alt={alt} />
           </div>
         </div>
       )}
@@ -71,7 +86,7 @@ function PRLinkingModal({ isOpen, onClose }: PRLinkingModalProps) {
             <p className={styles.sectionDesc}>
               Session links PRs and commits
             </p>
-            <img
+            <ThemedImage
               src="/confab-to-github.png"
               alt="Confabulous session showing linked GitHub PRs and commits"
               className={`${styles.image} ${styles.imageSmall}`}
@@ -86,7 +101,7 @@ function PRLinkingModal({ isOpen, onClose }: PRLinkingModalProps) {
 
             <div className={styles.subsection}>
               <p className={styles.sectionDesc}>PR links to session in Confabulous</p>
-              <img
+              <ThemedImage
                 src="/github-to-confab.png"
                 alt="GitHub PR with Confabulous link"
                 className={`${styles.image} ${styles.imageSmall}`}

@@ -10,9 +10,9 @@
 .skeletonBlock {
   background: linear-gradient(
     90deg,
-    #f0f0f0 25%,
-    #e0e0e0 50%,
-    #f0f0f0 75%
+    var(--color-skeleton-base) 25%,
+    var(--color-skeleton-shine) 50%,
+    var(--color-skeleton-base) 75%
   );
   background-size: 1000px 100%;
   animation: shimmer 2s infinite;
@@ -29,9 +29,9 @@
   margin: 0.5rem 0;
   background: linear-gradient(
     90deg,
-    #f0f0f0 25%,
-    #e0e0e0 50%,
-    #f0f0f0 75%
+    var(--color-skeleton-base) 25%,
+    var(--color-skeleton-shine) 50%,
+    var(--color-skeleton-base) 75%
   );
   background-size: 1000px 100%;
   animation: shimmer 2s infinite;
@@ -53,8 +53,8 @@
 }
 
 .card {
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1.5rem;
 }
@@ -83,7 +83,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
 }

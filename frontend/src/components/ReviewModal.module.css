@@ -73,7 +73,7 @@
   display: inline-block;
   margin-top: var(--spacing-md);
   padding: var(--spacing-xs) var(--spacing-md);
-  background: #2e7d32;
+  background: var(--color-success);
   color: white;
   text-decoration: none;
   font-size: var(--font-sm);
@@ -83,7 +83,7 @@
 }
 
 .link:hover {
-  background: #256b29;
+  background: var(--color-success-text);
   color: white;
 }
 

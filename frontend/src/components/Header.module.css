@@ -39,8 +39,14 @@
   color: var(--color-text-primary);
 }
 
-.right {
+.actions {
+  display: flex;
+  align-items: center;
   margin-left: auto;
+  margin-right: var(--spacing-md);
+}
+
+.right {
   position: relative;
 }
 

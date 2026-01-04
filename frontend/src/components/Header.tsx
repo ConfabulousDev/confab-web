@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import ThemeToggle from './ThemeToggle';
 import styles from './Header.module.css';
 
 function Header() {
@@ -41,6 +42,9 @@ function Header() {
     return (
       <header className={styles.header}>
         <Link to="/" className={styles.logo}>Confabulous</Link>
+        <div className={styles.actions}>
+          <ThemeToggle />
+        </div>
         <div className={styles.right} ref={menuRef}>
           <button
             className={styles.loginBtn}
@@ -86,6 +90,10 @@ function Header() {
         <Link to="/sessions" className={styles.navLink}>Sessions</Link>
         <Link to="/trends" className={styles.navLink}>Trends</Link>
       </nav>
+
+      <div className={styles.actions}>
+        <ThemeToggle />
+      </div>
 
       <div className={styles.right} ref={menuRef}>
         <button

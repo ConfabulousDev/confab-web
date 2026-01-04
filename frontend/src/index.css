@@ -8,6 +8,17 @@
   box-sizing: border-box;
 }
 
+/* Theme transition - applied after user interaction only */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 0.15s ease,
+              border-color 0.15s ease,
+              color 0.15s ease,
+              box-shadow 0.15s ease !important;
+}
+
 :root {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   font-size: 16px;
@@ -108,6 +119,23 @@ pre code {
 button, input, select, textarea {
   font-family: inherit;
   font-size: inherit;
+}
+
+/* Form input styling for dark mode compatibility */
+input, select, textarea {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--color-primary);
 }
 
 button {

@@ -48,18 +48,18 @@
 }
 
 .blue {
-  background: #e8f1fb;
-  color: #1a5fb4;
+  background: var(--color-chip-blue-bg);
+  color: var(--color-chip-blue-text);
 }
 
 .green {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--color-chip-green-bg);
+  color: var(--color-chip-green-text);
 }
 
 .purple {
-  background: #f3e8fb;
-  color: #7b1fa2;
+  background: var(--color-chip-purple-bg);
+  color: var(--color-chip-purple-text);
 }
 
 /* Clickable chips (with copy functionality) */

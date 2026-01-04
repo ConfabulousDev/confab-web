@@ -130,7 +130,7 @@ const meta: Meta<typeof SessionsFilterDropdownInteractive> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ padding: '100px', background: '#fafafa' }}>
+      <div style={{ padding: '100px', background: 'var(--color-bg)' }}>
         <Story />
       </div>
     ),

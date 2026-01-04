@@ -92,7 +92,7 @@ const meta: Meta<typeof SessionHeaderInteractive> = {
   decorators: [
     (Story) => (
       <MemoryRouter>
-        <div style={{ background: '#fafafa', minHeight: '200px' }}>
+        <div style={{ background: 'var(--color-bg)', minHeight: '200px' }}>
           <Story />
         </div>
       </MemoryRouter>
