@@ -11,7 +11,7 @@ const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const TrendsPage = lazy(() => import('@/pages/TrendsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
-const LegalPage = lazy(() => import('@/pages/LegalPage'));
+const TermsPage = lazy(() => import('@/pages/TermsPage'));
 
 /** Redirect old /sessions/:id/shared/:token URLs to canonical /sessions/:id (CF-132) */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
       { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },
       { path: 'keys', element: page(<APIKeysPage />, true) },
       { path: 'shares', element: page(<ShareLinksPage />, true) },
-      { path: 'legal', element: page(<LegalPage />) },
+      { path: 'terms', element: page(<TermsPage />) },
       { path: '*', element: page(<NotFoundPage />) },
     ],
   },
