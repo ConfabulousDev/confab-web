@@ -60,6 +60,11 @@
   width: 100%;
   height: auto;
   border-radius: var(--radius-md);
+  transition: opacity 0.2s ease;
+}
+
+[data-theme="dark"] .diagram {
+  opacity: 0.75;
 }
 
 /* SVG Styles */

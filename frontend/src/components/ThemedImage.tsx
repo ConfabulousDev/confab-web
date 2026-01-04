@@ -12,7 +12,7 @@ function ThemedImage({ src, alt, style, ...props }: ThemedImageProps) {
 
   const themedStyle: React.CSSProperties = {
     ...style,
-    opacity: theme === 'dark' ? 0.8 : 1,
+    opacity: theme === 'dark' ? 0.75 : 1,
     transition: 'opacity 0.2s ease',
   };
 
