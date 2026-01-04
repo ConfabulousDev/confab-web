@@ -104,6 +104,7 @@
   font-size: var(--font-sm);
   color: var(--color-text-primary);
   white-space: nowrap;
+  overflow-x: auto;
 }
 
 .copyBtn {
