@@ -27,17 +27,23 @@ cd frontend && npm run build && npm run lint && npm test
 
 ### Sharded Backend Tests (Faster)
 
-For faster test runs, shard by package using 3 parallel Bash tool calls:
+For faster test runs, shard by package using 5 parallel Bash tool calls:
 
 ```bash
-# Shard 1: api package
+# Shard 1: db package - session/sync tests (~160s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "Session|Sync" ./internal/db/...
+
+# Shard 2: db package - everything else (~160s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "APIKey|Device|OAuth|Share|User|Web" ./internal/db/...
+
+# Shard 3: api package (~130s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...
 
-# Shard 2: db and analytics packages
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/... ./internal/analytics/...
+# Shard 4: auth package (~40s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/...
 
-# Shard 3: Everything else
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/... ./internal/storage/... ./internal/admin/... ./internal/clientip/... ./internal/email/... ./internal/logger/... ./internal/models/... ./internal/ratelimit/... ./internal/validation/...
+# Shard 5: Everything else (fast)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/analytics/... ./internal/storage/... ./internal/admin/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
 ```
 
 Claude Code can run multiple Bash commands in parallel and aggregate results across all shards.

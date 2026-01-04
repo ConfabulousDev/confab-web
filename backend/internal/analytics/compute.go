@@ -1,8 +1,28 @@
 package analytics
 
 import (
+	"context"
+
 	"github.com/shopspring/decimal"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// runAnalyzer executes an analyzer function within a traced span.
+func runAnalyzer[T any](ctx context.Context, name string, fn func() (*T, error)) (*T, error) {
+	_, span := tracer.Start(ctx, "analytics.analyze_"+name,
+		trace.WithAttributes(attribute.String("analyzer.name", name)))
+	defer span.End()
+
+	result, err := fn()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	return result, nil
+}
 
 // ComputeResult contains the computed analytics from JSONL content.
 // This struct aggregates results from all analyzers.
@@ -74,57 +94,96 @@ type ComputeResult struct {
 
 // ComputeFromJSONL computes analytics from JSONL content.
 // It uses the analyzer pattern where each analyzer processes the full file collection.
-func ComputeFromJSONL(content []byte) (*ComputeResult, error) {
+func ComputeFromJSONL(ctx context.Context, content []byte) (*ComputeResult, error) {
 	// Build file collection (with empty agents for now)
 	fc, err := NewFileCollection(content)
 	if err != nil {
 		return nil, err
 	}
 
-	return ComputeFromFileCollection(fc)
+	return ComputeFromFileCollection(ctx, fc)
 }
 
 // ComputeFromFileCollection computes analytics from a FileCollection.
 // This is the main entry point that runs all analyzers.
-func ComputeFromFileCollection(fc *FileCollection) (*ComputeResult, error) {
-	// Run all analyzers
-	tokens, err := (&TokensAnalyzer{}).Analyze(fc)
+func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*ComputeResult, error) {
+	ctx, span := tracer.Start(ctx, "analytics.compute",
+		trace.WithAttributes(
+			attribute.Int("file.count", 1+len(fc.Agents)),
+			attribute.Int64("main.lines", int64(len(fc.Main.Lines))),
+		))
+	defer span.End()
+
+	// Run all analyzers with individual spans
+	tokens, err := runAnalyzer(ctx, "tokens", func() (*TokensResult, error) {
+		return (&TokensAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	session, err := (&SessionAnalyzer{}).Analyze(fc)
+	session, err := runAnalyzer(ctx, "session", func() (*SessionResult, error) {
+		return (&SessionAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	tools, err := (&ToolsAnalyzer{}).Analyze(fc)
+	tools, err := runAnalyzer(ctx, "tools", func() (*ToolsResult, error) {
+		return (&ToolsAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	codeActivity, err := (&CodeActivityAnalyzer{}).Analyze(fc)
+	codeActivity, err := runAnalyzer(ctx, "code_activity", func() (*CodeActivityResult, error) {
+		return (&CodeActivityAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	conversation, err := (&ConversationAnalyzer{}).Analyze(fc)
+	conversation, err := runAnalyzer(ctx, "conversation", func() (*ConversationResult, error) {
+		return (&ConversationAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	agents, err := (&AgentsAnalyzer{}).Analyze(fc)
+	agents, err := runAnalyzer(ctx, "agents", func() (*AgentsResult, error) {
+		return (&AgentsAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	skills, err := (&SkillsAnalyzer{}).Analyze(fc)
+	skills, err := runAnalyzer(ctx, "skills", func() (*SkillsResult, error) {
+		return (&SkillsAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	redactions, err := (&RedactionsAnalyzer{}).Analyze(fc)
+	redactions, err := runAnalyzer(ctx, "redactions", func() (*RedactionsResult, error) {
+		return (&RedactionsAnalyzer{}).Analyze(fc)
+	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 

@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -13,7 +14,7 @@ func TestComputeFromJSONL_TokenStats(t *testing.T) {
 {"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":200,"output_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":50}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
 `
 
-	result, err := ComputeFromJSONL([]byte(jsonl))
+	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestComputeFromJSONL_CompactionStats(t *testing.T) {
 {"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":70000},"logicalParentUuid":"a3","uuid":"c3","timestamp":"2025-01-01T00:02:30Z"}
 `
 
-	result, err := ComputeFromJSONL([]byte(jsonl))
+	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestComputeFromJSONL_CompactionStats(t *testing.T) {
 }
 
 func TestComputeFromJSONL_EmptyContent(t *testing.T) {
-	result, err := ComputeFromJSONL([]byte{})
+	result, err := ComputeFromJSONL(context.Background(), []byte{})
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}
@@ -99,7 +100,7 @@ not valid json
 {"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
 `
 
-	result, err := ComputeFromJSONL([]byte(jsonl))
+	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}

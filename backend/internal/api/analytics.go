@@ -162,7 +162,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Compute analytics from FileCollection
-		computed, err := analytics.ComputeFromFileCollection(fc)
+		computed, err := analytics.ComputeFromFileCollection(storageCtx, fc)
 		if err != nil {
 			log.Error("Failed to compute analytics", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to compute analytics")

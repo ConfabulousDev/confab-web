@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -381,7 +382,7 @@ func TestComputeFromJSONL(t *testing.T) {
 {"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z"}
 `
 
-	result, err := ComputeFromJSONL([]byte(jsonl))
+	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}

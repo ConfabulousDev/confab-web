@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -22,7 +23,7 @@ func TestCodeActivityCollector_RealSession(t *testing.T) {
 		t.Fatalf("Failed to read test fixture: %v", err)
 	}
 
-	result, err := ComputeFromJSONL(content)
+	result, err := ComputeFromJSONL(context.Background(), content)
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestCodeActivityCollector_EmptySession(t *testing.T) {
 	content := []byte(`{"type":"user","message":{"role":"user","content":"hello"}}
 {"type":"assistant","message":{"role":"assistant","content":"hi","usage":{"input_tokens":10,"output_tokens":5}}}`)
 
-	result, err := ComputeFromJSONL(content)
+	result, err := ComputeFromJSONL(context.Background(), content)
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestCodeActivityCollector_Deduplication(t *testing.T) {
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/foo/bar.go","old_string":"a","new_string":"b"}}],"usage":{"input_tokens":10,"output_tokens":5}}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/foo/bar.go","old_string":"c","new_string":"d"}}],"usage":{"input_tokens":10,"output_tokens":5}}}`)
 
-	result, err := ComputeFromJSONL(content)
+	result, err := ComputeFromJSONL(context.Background(), content)
 	if err != nil {
 		t.Fatalf("ComputeFromJSONL failed: %v", err)
 	}
