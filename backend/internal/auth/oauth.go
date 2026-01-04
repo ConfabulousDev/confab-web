@@ -1683,7 +1683,7 @@ func generateDevicePageHTML(prefilledCode string) string {
                    value="%s" autocomplete="off" autofocus>
             <button type="submit">Authorize</button>
         </form>
-        <p class="hint">The code expires in 15 minutes.</p>
+        <p class="hint">The code expires in 5 minutes.</p>
     </div>
 </body>
 </html>`, prefilledCode)
