@@ -1,11 +1,12 @@
 import { useContext } from 'react';
-import { ThemeContext, type ThemeMode, type ResolvedTheme } from '@/contexts/ThemeContext';
+import { ThemeContext, type Theme } from '@/contexts/ThemeContext';
 
 interface UseThemeReturn {
-  mode: ThemeMode;
-  resolvedTheme: ResolvedTheme;
-  setMode: (mode: ThemeMode) => void;
-  toggleMode: () => void;
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
+  /** @deprecated Use theme instead */
+  resolvedTheme: Theme;
 }
 
 export function useTheme(): UseThemeReturn {
@@ -14,18 +15,14 @@ export function useTheme(): UseThemeReturn {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
 
-  const toggleMode = () => {
-    const modes: ThemeMode[] = ['system', 'light', 'dark'];
-    const currentIndex = modes.indexOf(context.mode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    const nextMode = modes[nextIndex];
-    if (nextMode) {
-      context.setMode(nextMode);
-    }
+  const toggleTheme = () => {
+    context.setTheme(context.theme === 'light' ? 'dark' : 'light');
   };
 
   return {
     ...context,
-    toggleMode,
+    toggleTheme,
+    // Keep resolvedTheme for backwards compatibility with ThemedImage
+    resolvedTheme: context.theme,
   };
 }

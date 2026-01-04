@@ -5,10 +5,9 @@
     <script>
       (function() {
         var stored = localStorage.getItem('confab-theme');
-        var mode = (stored === 'light' || stored === 'dark' || stored === 'system') ? stored : 'system';
-        var theme = mode === 'system'
-          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-          : mode;
+        var theme = (stored === 'light' || stored === 'dark')
+          ? stored
+          : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>
