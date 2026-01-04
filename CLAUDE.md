@@ -27,22 +27,25 @@ cd frontend && npm run build && npm run lint && npm test
 
 ### Sharded Backend Tests (Faster)
 
-For faster test runs, shard by package using 5 parallel Bash tool calls:
+For faster test runs, shard by package using 6 parallel Bash tool calls:
 
 ```bash
-# Shard 1: db package - session/sync tests (~160s)
+# Shard 1: db - session/sync tests (~155s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "Session|Sync" ./internal/db/...
 
-# Shard 2: db package - everything else (~160s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "APIKey|Device|OAuth|Share|User|Web" ./internal/db/...
+# Shard 2: db - user/oauth tests (~95s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "User|OAuth" ./internal/db/...
 
-# Shard 3: api package (~130s)
+# Shard 3: db - auth-related tests (~95s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "APIKey|Device|Share|Web" ./internal/db/...
+
+# Shard 4: api package (~130s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...
 
-# Shard 4: auth package (~40s)
+# Shard 5: auth package (~40s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/...
 
-# Shard 5: Everything else (fast)
+# Shard 6: Everything else (fast)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/analytics/... ./internal/storage/... ./internal/admin/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
 ```
 
