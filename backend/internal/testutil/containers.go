@@ -30,17 +30,35 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	t.Helper()
 	ctx := context.Background()
 
-	// Start PostgreSQL container
+	// Start PostgreSQL container with performance optimizations for testing:
+	// - tmpfs mount for data directory (RAM-based storage)
+	// - fsync=off and full_page_writes=off (no durability needed for tests)
+	// - synchronous_commit=off for faster writes
 	t.Log("Starting PostgreSQL container...")
 	postgresContainer, err := postgres.Run(ctx,
 		"postgres:16-alpine",
 		postgres.WithDatabase("confab_test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
+		testcontainers.CustomizeRequest(testcontainers.GenericContainerRequest{
+			ContainerRequest: testcontainers.ContainerRequest{
+				Tmpfs: map[string]string{
+					"/var/lib/postgresql/data": "rw",
+				},
+				Cmd: []string{
+					"-c", "fsync=off",
+					"-c", "full_page_writes=off",
+					"-c", "synchronous_commit=off",
+				},
+			},
+		}),
 		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second)),
+			wait.ForAll(
+				wait.ForLog("database system is ready to accept connections").
+					WithOccurrence(2).
+					WithStartupTimeout(30*time.Second),
+				wait.ForListeningPort("5432/tcp"),
+			)),
 	)
 	if err != nil {
 		t.Fatalf("Failed to start postgres container: %v", err)
