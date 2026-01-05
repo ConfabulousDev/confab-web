@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
 import { sessionsAPI } from '@/services/api';
-import { useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
+import { useAuth, useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
 import type { SessionDetail } from '@/types';
 import { getErrorIcon, getErrorDescription } from '@/utils/sessionErrors';
 import { SessionViewer, type ViewTab } from '@/components/session';
@@ -19,6 +19,7 @@ function SessionDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isAuthenticated } = useAuth();
   const {
     message: successMessage,
     fading: successFading,
@@ -152,6 +153,8 @@ function SessionDetailPage() {
     };
 
     const description = getErrorDescription(errorType);
+    // Show login hint for not_found errors when user is not authenticated
+    const showLoginHint = errorType === 'not_found' && !isAuthenticated;
 
     return (
       <div className={styles.container}>
@@ -159,7 +162,8 @@ function SessionDetailPage() {
           <div className={styles.errorIcon}>{getErrorIcon(errorType)}</div>
           <h2>{error}</h2>
           {description && <p>{description}</p>}
-          {errorType === 'auth_required' && (
+          {showLoginHint && <p>If you have access to this session, try signing in.</p>}
+          {(errorType === 'auth_required' || showLoginHint) && (
             <button className={styles.retryButton} onClick={handleSignIn}>
               Sign in
             </button>
