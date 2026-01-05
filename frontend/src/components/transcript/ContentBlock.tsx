@@ -44,7 +44,31 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
     return content.includes('$ ') || content.match(/^[\w@-]+:/) !== null || content.includes('\n$ ');
   }
 
+  // Try to parse text as JSON and return pretty-printed version if it's an object/array
+  function tryParseAsJson(text: string): string | null {
+    const trimmed = text.trim();
+    // Quick check: must start with { or [
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      // Only pretty-print objects and arrays, not primitives
+      if (typeof parsed === 'object' && parsed !== null) {
+        return JSON.stringify(parsed, null, 2);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   if (isTextBlock(block)) {
+    // Check if text content is JSON - if so, pretty-print it
+    const jsonContent = tryParseAsJson(block.text);
+    if (jsonContent) {
+      return <CodeBlock code={jsonContent} language="json" maxHeight="500px" />;
+    }
     return (
       <div
         className={styles.textBlock}
