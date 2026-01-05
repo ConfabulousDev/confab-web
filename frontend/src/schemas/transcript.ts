@@ -114,6 +114,7 @@ const ThinkingMetadataSchema = z.object({
 const ToolUseResultSchema = z.union([
   z.string(), // Error messages or simple results
   z.record(z.string(), z.unknown()), // Tool-specific structured data
+  z.array(z.unknown()), // Array of content blocks (e.g., MCP tool results)
 ]);
 
 // Todo item from TodoWrite tool
@@ -363,6 +364,9 @@ export function formatValidationErrorsForLog(errors: TranscriptValidationError[]
       }
       lines.push(detail);
     }
+    // Log truncated raw JSON for debugging
+    const truncatedRaw = err.rawJson.length > 500 ? err.rawJson.slice(0, 500) + '...' : err.rawJson;
+    lines.push(`    Raw: ${truncatedRaw}`);
   }
 
   if (errors.length > 10) {

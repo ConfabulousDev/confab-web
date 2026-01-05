@@ -19,6 +19,8 @@ export interface ParsedTranscript {
   agents: AgentNode[];
   /** Validation errors encountered while parsing (empty if all lines valid) */
   validationErrors: TranscriptValidationError[];
+  /** Total number of non-empty lines in the file (for line_offset tracking) */
+  totalLines: number;
   metadata: {
     version: string;
     messageCount: number;
@@ -97,10 +99,12 @@ export function parseJSONL(jsonl: string): TranscriptParseResult {
   };
 }
 
-/** Cache entry includes both messages and errors */
+/** Cache entry includes messages, errors, and total line count */
 interface CacheEntry {
   messages: TranscriptLine[];
   errors: TranscriptValidationError[];
+  /** Total non-empty lines in file (for accurate line_offset tracking) */
+  totalLines: number;
 }
 
 /** In-memory cache for parsed transcripts - keyed by sessionId-fileName */
@@ -140,6 +144,7 @@ async function fetchTranscriptWithErrors(
   const entry: CacheEntry = {
     messages: parseResult.messages,
     errors: parseResult.errors,
+    totalLines: parseResult.totalLines,
   };
 
   // Cache the result
@@ -157,7 +162,7 @@ export async function fetchParsedTranscript(
   skipCache?: boolean
 ): Promise<ParsedTranscript> {
   const t0 = performance.now();
-  const { messages, errors } = await fetchTranscriptWithErrors(sessionId, fileName, { skipCache });
+  const { messages, errors, totalLines } = await fetchTranscriptWithErrors(sessionId, fileName, { skipCache });
   const t1 = performance.now();
   console.log(`  ⏱️ fetchTranscript (network + parse) took ${Math.round(t1 - t0)}ms for ${messages.length} messages`);
 
@@ -171,6 +176,7 @@ export async function fetchParsedTranscript(
     messages,
     agents: [], // Will be populated by agent tree builder
     validationErrors: errors,
+    totalLines,
     metadata: {
       version: messages.find((m) => 'version' in m)?.version || 'unknown',
       messageCount: messages.length,
@@ -207,8 +213,9 @@ export async function fetchNewTranscriptMessages(
   // Parse the new content
   const parseResult = parseJSONL(content);
 
-  // New total is previous count plus successfully parsed new lines
-  const newTotalLineCount = currentLineCount + parseResult.successCount;
+  // New total is previous count plus total lines fetched (not just successful parses)
+  // This ensures line_offset stays in sync with actual file line numbers
+  const newTotalLineCount = currentLineCount + parseResult.totalLines;
 
   return {
     newMessages: parseResult.messages,

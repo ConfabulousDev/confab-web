@@ -93,7 +93,9 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
       // Skip cache on initial load to ensure fresh data when navigating to a session
       const parsed = await fetchParsedTranscript(session.id, transcriptFileName, true);
       setMessages(parsed.messages);
-      lineCountRef.current = parsed.messages.length;
+      // Use totalLines (not messages.length) to track line_offset accurately
+      // This accounts for parse errors and ensures we don't re-fetch lines
+      lineCountRef.current = parsed.totalLines;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load transcript');
       console.error('Failed to load transcript:', e);

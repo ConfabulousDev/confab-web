@@ -86,6 +86,50 @@ ${createSystemMessage(2)}`;
     expect(result.errorCount).toBe(1);
     expect(result.totalLines).toBe(3);
   });
+
+  it('parses user message with tool_result content block', () => {
+    // Real message that was failing to parse
+    const userMessageWithToolResult = JSON.stringify({
+      "parentUuid": "65cfc905-c9f8-4eb2-b37a-3da75eeeab8d",
+      "isSidechain": false,
+      "userType": "external",
+      "cwd": "/Users/jackie/dev/Nooks.in",
+      "sessionId": "75dfb958-2558-46ff-8840-1a4588c13905",
+      "version": "2.0.76",
+      "gitBranch": "dev",
+      "type": "user",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "tool_use_id": "toolu_016wg3ieC28itGiopnDjTN6H",
+            "type": "tool_result",
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"id\":\"test-id\",\"title\":\"test title\"}"
+              }
+            ]
+          }
+        ]
+      },
+      "uuid": "cd731ee8-edba-4689-a3cd-66e02a1cd0e6",
+      "timestamp": "2026-01-05T21:56:57.242Z",
+      "toolUseResult": [
+        {
+          "type": "text",
+          "text": "{\"id\":\"test-id\",\"title\":\"test title\"}"
+        }
+      ]
+    });
+
+    const result = parseJSONL(userMessageWithToolResult);
+
+    expect(result.successCount).toBe(1);
+    expect(result.errorCount).toBe(0);
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]?.type).toBe('user');
+  });
 });
 
 describe('fetchNewTranscriptMessages', () => {
@@ -128,7 +172,7 @@ ${createSystemMessage(2)}`;
     expect(result.newTotalLineCount).toBe(10);
   });
 
-  it('handles parse errors gracefully - only counts successful parses', async () => {
+  it('handles parse errors gracefully - counts all lines for offset tracking', async () => {
     const content = `${createSystemMessage(1)}
 invalid line
 ${createSystemMessage(2)}`;
@@ -137,9 +181,12 @@ ${createSystemMessage(2)}`;
 
     const result = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 0);
 
-    // Only successfully parsed messages count toward the total
+    // Messages array only contains successfully parsed lines
     expect(result.newMessages).toHaveLength(2);
-    expect(result.newTotalLineCount).toBe(2); // Only successful parses
+    // But totalLineCount includes ALL lines (including parse errors)
+    // This ensures line_offset stays in sync with actual file line numbers
+    // and prevents re-fetching lines that failed to parse
+    expect(result.newTotalLineCount).toBe(3); // All 3 lines counted
   });
 
   it('starts from line 0 for initial fetch', async () => {
@@ -166,5 +213,40 @@ ${createSystemMessage(3)}`;
 
     expect(result.newMessages).toHaveLength(3);
     expect(result.newTotalLineCount).toBe(103); // 100 + 3
+  });
+
+  it('prevents duplicate fetching after parse errors (CF-222 fix)', async () => {
+    // Scenario: Initial load has 10 lines, 1 fails to parse
+    // Bug: If we track messages.length (9), next poll uses line_offset=9
+    //      and re-fetches lines 10+, including the error line again
+    // Fix: Track totalLines (10), so next poll uses line_offset=10
+
+    // First fetch: 10 lines, 1 parse error
+    const initialContent = Array.from({ length: 9 }, (_, i) => createSystemMessage(i + 1)).join('\n') +
+      '\ninvalid line that fails to parse';
+
+    vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(initialContent);
+
+    const firstResult = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 0);
+
+    expect(firstResult.newMessages).toHaveLength(9); // 9 valid messages
+    expect(firstResult.newTotalLineCount).toBe(10); // But 10 total lines
+
+    // Second fetch: no new content (empty response when line_offset >= total lines)
+    vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue('');
+
+    // Using the correct totalLineCount from first result
+    const secondResult = await fetchNewTranscriptMessages(
+      'session-123',
+      'transcript.jsonl',
+      firstResult.newTotalLineCount // 10, not 9
+    );
+
+    // Should get no duplicates
+    expect(secondResult.newMessages).toHaveLength(0);
+    expect(secondResult.newTotalLineCount).toBe(10);
+
+    // Verify the API was called with correct offset
+    expect(api.syncFilesAPI.getContent).toHaveBeenLastCalledWith('session-123', 'transcript.jsonl', 10);
   });
 });
