@@ -47,6 +47,18 @@ function PoliciesPage() {
               How we use cookies and similar technologies
             </span>
           </a>
+
+          <a
+            href="https://app.termly.io/policy-viewer/policy.html?policyUUID=7a3b8843-fe1c-43e3-8d02-88cb537a8874"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.link}
+          >
+            <span className={styles.linkTitle}>Disclaimer</span>
+            <span className={styles.linkDescription}>
+              Important notices and limitations of liability
+            </span>
+          </a>
         </div>
       </div>
     </div>
