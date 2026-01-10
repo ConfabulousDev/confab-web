@@ -51,7 +51,7 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
   } else if (isSystemMessage(message)) {
     role = 'system';
     timestamp = message.timestamp;
-    content = [{ type: 'text', text: message.content }];
+    content = message.content ? [{ type: 'text', text: message.content }] : [];
   } else if (isSummaryMessage(message)) {
     role = 'system';
     content = [{ type: 'text', text: `📋 ${message.summary}` }];

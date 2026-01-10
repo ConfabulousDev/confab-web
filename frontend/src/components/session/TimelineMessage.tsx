@@ -124,7 +124,7 @@ function getContentBlocks(message: TranscriptLine): ContentBlock[] {
     case 'assistant':
       return message.message.content;
     case 'system':
-      return [{ type: 'text', text: message.content }];
+      return message.content ? [{ type: 'text', text: message.content }] : [];
     case 'summary':
       return [{ type: 'text', text: message.summary }];
     default:

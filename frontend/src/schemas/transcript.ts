@@ -175,9 +175,12 @@ const SystemMessageSchema = BaseMessageSchema.extend({
   type: z.literal('system'),
   logicalParentUuid: z.string().optional(),
   subtype: z.string(),
-  content: z.string(),
+  content: z.string().optional(), // Not present for some subtypes (e.g., turn_duration)
   isMeta: z.boolean(),
-  level: z.string(), // 'info' | 'warning' | 'error' - use string for forward compat
+  level: z.string().optional(), // 'info' | 'warning' | 'error' - not present for some subtypes
+  // Fields for turn_duration subtype
+  durationMs: z.number().optional(),
+  slug: z.string().optional(),
   compactMetadata: z
     .object({
       trigger: z.string(), // 'auto' | 'manual' - use string for forward compat
