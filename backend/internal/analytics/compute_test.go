@@ -9,10 +9,13 @@ import (
 
 func TestComputeFromJSONL_TokenStats(t *testing.T) {
 	// Sample JSONL with two assistant messages
-	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":20,"cache_read_input_tokens":30}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":200,"output_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":50}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
-`
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 20, 30, []map[string]interface{}{
+			makeTextBlock("Hi"),
+		}) + "\n" +
+		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", 200, 100, 0, 50, []map[string]interface{}{
+			makeTextBlock("Hello"),
+		}) + "\n"
 
 	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {
@@ -41,15 +44,14 @@ func TestComputeFromJSONL_TokenStats(t *testing.T) {
 
 func TestComputeFromJSONL_CompactionStats(t *testing.T) {
 	// Sample JSONL with compaction boundaries
-	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:10Z"}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z"}
-{"type":"user","message":{"role":"user","content":"continue"},"uuid":"u2","timestamp":"2025-01-01T00:01:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":80,"output_tokens":40}},"uuid":"a2","timestamp":"2025-01-01T00:01:10Z"}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":60000},"logicalParentUuid":"a2","uuid":"c2","timestamp":"2025-01-01T00:02:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":90,"output_tokens":45}},"uuid":"a3","timestamp":"2025-01-01T00:02:20Z"}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":70000},"logicalParentUuid":"a3","uuid":"c3","timestamp":"2025-01-01T00:02:30Z"}
-`
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hi")}) + "\n" +
+		makeCompactBoundaryMessageWithParent("c1", "2025-01-01T00:00:15Z", "auto", 50000, "a1") + "\n" +
+		makeUserMessage("u2", "2025-01-01T00:01:00Z", "continue") + "\n" +
+		makeAssistantMessage("a2", "2025-01-01T00:01:10Z", "claude-sonnet-4", 80, 40, []map[string]interface{}{makeTextBlock("Continuing")}) + "\n" +
+		makeCompactBoundaryMessageWithParent("c2", "2025-01-01T00:02:00Z", "manual", 60000, "a2") + "\n" +
+		makeAssistantMessage("a3", "2025-01-01T00:02:20Z", "claude-sonnet-4", 90, 45, []map[string]interface{}{makeTextBlock("More")}) + "\n" +
+		makeCompactBoundaryMessageWithParent("c3", "2025-01-01T00:02:30Z", "auto", 70000, "a3") + "\n"
 
 	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {
@@ -95,10 +97,9 @@ func TestComputeFromJSONL_EmptyContent(t *testing.T) {
 
 func TestComputeFromJSONL_MalformedLines(t *testing.T) {
 	// Should skip malformed lines without error
-	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-not valid json
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
-`
+	jsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hi")}) + "\n" +
+		"not valid json\n" +
+		makeAssistantMessage("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hello")}) + "\n"
 
 	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {

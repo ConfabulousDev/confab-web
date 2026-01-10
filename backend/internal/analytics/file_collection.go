@@ -3,13 +3,16 @@ package analytics
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"time"
 )
 
 // TranscriptFile represents a parsed transcript (main or agent).
 type TranscriptFile struct {
-	Lines   []*TranscriptLine
-	AgentID string // Empty for main transcript, set for agent files
+	Lines            []*TranscriptLine
+	AgentID          string // Empty for main transcript, set for agent files
+	ValidationErrors []LineValidationError
+	TotalLines       int // Total lines processed (including invalid ones)
 }
 
 // FileCollection contains all transcript data for a session.
@@ -93,9 +96,31 @@ func (fc *FileCollection) AgentCount() int {
 	return len(fc.Agents)
 }
 
+// ValidationErrorCount returns the total number of validation errors across all files.
+func (fc *FileCollection) ValidationErrorCount() int {
+	count := len(fc.Main.ValidationErrors)
+	for _, agent := range fc.Agents {
+		count += len(agent.ValidationErrors)
+	}
+	return count
+}
+
+// AllValidationErrors returns all validation errors from all files.
+func (fc *FileCollection) AllValidationErrors() []LineValidationError {
+	var all []LineValidationError
+	all = append(all, fc.Main.ValidationErrors...)
+	for _, agent := range fc.Agents {
+		all = append(all, agent.ValidationErrors...)
+	}
+	return all
+}
+
 // parseTranscriptFile parses raw JSONL content into a TranscriptFile.
+// It validates each line and collects validation errors.
 func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error) {
 	var lines []*TranscriptLine
+	var validationErrors []LineValidationError
+	lineNumber := 0
 
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	// Increase buffer size for large lines (some assistant messages can be huge)
@@ -104,14 +129,52 @@ func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error
 	scanner.Buffer(buf, maxLineSize)
 
 	for scanner.Scan() {
+		lineNumber++
 		lineData := scanner.Bytes()
 		if len(bytes.TrimSpace(lineData)) == 0 {
 			continue
 		}
 
+		// First, parse into a raw map for validation
+		var rawMap map[string]interface{}
+		if err := json.Unmarshal(lineData, &rawMap); err != nil {
+			// JSON parse error - add as validation error
+			validationErrors = append(validationErrors, LineValidationError{
+				Line:    lineNumber,
+				RawJSON: truncateJSON(string(lineData), 200),
+				Errors: []ValidationError{{
+					Path:    "(root)",
+					Message: "invalid JSON: " + err.Error(),
+				}},
+			})
+			continue
+		}
+
+		// Validate the line against schema
+		errors := ValidateLine(rawMap)
+		if len(errors) > 0 {
+			msgType, _ := rawMap["type"].(string)
+			validationErrors = append(validationErrors, LineValidationError{
+				Line:        lineNumber,
+				RawJSON:     truncateJSON(string(lineData), 200),
+				MessageType: msgType,
+				Errors:      errors,
+			})
+			continue
+		}
+
+		// Validation passed - parse into TranscriptLine
 		line, err := ParseLine(lineData)
 		if err != nil {
-			// Skip unparseable lines
+			// This shouldn't happen if validation passed, but handle it
+			validationErrors = append(validationErrors, LineValidationError{
+				Line:    lineNumber,
+				RawJSON: truncateJSON(string(lineData), 200),
+				Errors: []ValidationError{{
+					Path:    "(root)",
+					Message: "parse error after validation: " + err.Error(),
+				}},
+			})
 			continue
 		}
 
@@ -123,8 +186,10 @@ func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error
 	}
 
 	return &TranscriptFile{
-		Lines:   lines,
-		AgentID: agentID,
+		Lines:            lines,
+		AgentID:          agentID,
+		ValidationErrors: validationErrors,
+		TotalLines:       lineNumber,
 	}, nil
 }
 

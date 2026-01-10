@@ -90,6 +90,9 @@ type ComputeResult struct {
 	// Redaction stats (from RedactionsAnalyzer)
 	TotalRedactions int
 	RedactionCounts map[string]int
+
+	// Validation stats (from parsing)
+	ValidationErrorCount int
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
@@ -251,5 +254,8 @@ func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*Comput
 		// Redaction stats
 		TotalRedactions: redactions.TotalRedactions,
 		RedactionCounts: redactions.RedactionCounts,
+
+		// Validation stats
+		ValidationErrorCount: fc.ValidationErrorCount(),
 	}, nil
 }

@@ -169,6 +169,14 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			return
 		}
 
+		// Log validation errors if any
+		if computed.ValidationErrorCount > 0 {
+			log.Warn("Transcript validation errors detected",
+				"session_id", sessionID,
+				"validation_error_count", computed.ValidationErrorCount,
+			)
+		}
+
 		// Convert to Cards and cache
 		cards := computed.ToCards(sessionID, totalLineCount)
 
@@ -177,7 +185,11 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			log.Error("Failed to cache cards", "error", err, "session_id", sessionID)
 		}
 
-		respondJSON(w, http.StatusOK, cards.ToResponse())
+		// Build response with validation error count
+		response := cards.ToResponse()
+		response.ValidationErrorCount = computed.ValidationErrorCount
+
+		respondJSON(w, http.StatusOK, response)
 	}
 }
 

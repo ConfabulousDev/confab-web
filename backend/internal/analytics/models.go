@@ -22,6 +22,9 @@ type AnalyticsResponse struct {
 
 	// New cards-based format
 	Cards map[string]interface{} `json:"cards"`
+
+	// Validation stats (only present on fresh computation, not cached)
+	ValidationErrorCount int `json:"validation_error_count,omitempty"`
 }
 
 // TokenStats contains token usage information (legacy flat format).

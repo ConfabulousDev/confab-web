@@ -61,8 +61,8 @@ func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
 		if line.IsAssistantMessage() {
 			result.AssistantMessages++
 
-			// Track models used
-			if model := line.GetModel(); model != "" {
+			// Track models used (exclude synthetic models)
+			if model := line.GetModel(); model != "" && model != "<synthetic>" {
 				modelsUsed[model] = true
 			}
 
@@ -121,10 +121,10 @@ func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
 		result.DurationMs = &d
 	}
 
-	// Collect models from agent files
+	// Collect models from agent files (exclude synthetic models)
 	for _, agent := range fc.Agents {
 		for _, line := range agent.Lines {
-			if model := line.GetModel(); model != "" {
+			if model := line.GetModel(); model != "" && model != "<synthetic>" {
 				modelsUsed[model] = true
 			}
 		}
