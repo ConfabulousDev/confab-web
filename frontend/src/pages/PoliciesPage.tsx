@@ -59,6 +59,18 @@ function PoliciesPage() {
               Important notices and limitations of liability
             </span>
           </a>
+
+          <a
+            href="https://app.termly.io/policy-viewer/policy.html?policyUUID=2fb5c0b3-3458-48c5-8fcd-4803d17af25d"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.link}
+          >
+            <span className={styles.linkTitle}>Acceptable Use Policy</span>
+            <span className={styles.linkDescription}>
+              Guidelines for appropriate use of our services
+            </span>
+          </a>
         </div>
       </div>
     </div>
