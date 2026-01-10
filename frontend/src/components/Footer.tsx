@@ -10,6 +10,7 @@ function Footer() {
         <a href="https://discord.gg/p6H7MQnQD8" target="_blank" rel="noopener noreferrer">Discord</a>
         <a href={`mailto:${SUPPORT_EMAIL}`}>Help</a>
         <a href="/policies">Policies</a>
+        <a href="#" className="termly-display-preferences">Cookie Settings</a>
       </div>
       <div className={styles.copyright}>
         © {new Date().getFullYear()} Confabulous Software LLC
