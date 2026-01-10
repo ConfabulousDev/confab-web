@@ -74,6 +74,10 @@ function ShareDialogPresentational({
         </div>
 
         <div className={styles.modalBody}>
+          <p className={styles.disclaimer}>
+            Best-effort redaction is applied to sensitive data. A quick review before sharing is recommended.
+          </p>
+
           {createdShareURL ? (
             <div className={styles.successMessage}>
               <h3>✓ Share Created</h3>
