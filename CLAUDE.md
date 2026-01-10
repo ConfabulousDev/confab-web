@@ -4,13 +4,35 @@
 
 Backend API is documented in `backend/API.md`. **Keep this file up to date** when modifying API endpoints, request/response schemas, or authentication.
 
-## Working on Linear Tickets
+## Development Process
 
-When given a Linear ticket to work on, always make a plan first before writing any code. Use the TodoWrite tool to break down the ticket into concrete implementation steps. Once the plan is finalized, update the Linear issue with the plan.
+**Follow this workflow for all implementation tasks:**
 
-## Test Coverage
+### 1. Plan First
 
-New features and bug fixes should come with appropriate test coverage. Write tests before or alongside implementation code.
+Before writing any code, create a clear plan:
+- Use the TodoWrite tool to break down the task into concrete implementation steps
+- Consider edge cases, error handling, and potential impacts on existing code
+- For Linear tickets, update the issue with the plan before starting implementation
+
+### 2. Test Coverage
+
+Every change should include appropriate tests:
+- Write tests before or alongside implementation code (TDD encouraged)
+- Consider both happy paths and error cases
+- Ensure existing tests still pass after changes
+
+### 3. Self-Review Before Presenting
+
+**Before presenting any result to the human, perform a thorough code review:**
+- Re-read all code changes critically, as if reviewing someone else's work
+- Check for bugs, edge cases, error handling, and security issues
+- Verify code follows existing patterns and conventions in the codebase
+- Ensure no debug code, TODOs, or incomplete implementations remain
+- Run all relevant tests and fix any failures
+- Fix any issues found during review before showing the result
+
+This self-review step is mandatory. Do not present work that hasn't been thoroughly reviewed and tested.
 
 ## Running Tests
 
