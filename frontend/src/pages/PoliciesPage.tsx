@@ -8,7 +8,7 @@ function PoliciesPage() {
       <div className={styles.content}>
         <h1 className={styles.title}>Policies</h1>
         <p className={styles.subtitle}>
-          Legal documents and policies for Confab.
+          Legal documents and policies for Confabulous.dev.
         </p>
 
         <div className={styles.links}>
@@ -20,7 +20,7 @@ function PoliciesPage() {
           >
             <span className={styles.linkTitle}>Terms of Service</span>
             <span className={styles.linkDescription}>
-              Terms and conditions for using Confab
+              Terms and conditions for using Confabulous.dev
             </span>
           </a>
 
