@@ -123,23 +123,13 @@ async function fetchTranscriptWithErrors(
 
   // Check cache first
   if (!options.skipCache && transcriptCacheV2.has(cacheKey)) {
-    console.log(`    ⏱️ Using cached transcript`);
     const cached = transcriptCacheV2.get(cacheKey);
     if (cached) return cached;
   }
 
   // Fetch and parse
-  const t0 = performance.now();
   const content = await fetchTranscriptContent(sessionId, fileName);
-  const t1 = performance.now();
-  console.log(
-    `    ⏱️ Network fetch took ${Math.round(t1 - t0)}ms (${Math.round((content.length / 1024 / 1024) * 10) / 10}MB)`
-  );
-
-  const t2 = performance.now();
   const parseResult = parseJSONL(content);
-  const t3 = performance.now();
-  console.log(`    ⏱️ Parsing JSONL took ${Math.round(t3 - t2)}ms (${parseResult.successCount} messages, ${parseResult.errorCount} errors)`);
 
   const entry: CacheEntry = {
     messages: parseResult.messages,
@@ -161,10 +151,7 @@ export async function fetchParsedTranscript(
   fileName: string,
   skipCache?: boolean
 ): Promise<ParsedTranscript> {
-  const t0 = performance.now();
   const { messages, errors, totalLines } = await fetchTranscriptWithErrors(sessionId, fileName, { skipCache });
-  const t1 = performance.now();
-  console.log(`  ⏱️ fetchTranscript (network + parse) took ${Math.round(t1 - t0)}ms for ${messages.length} messages`);
 
   // Extract metadata - filter to messages with timestamp property
   const timestamps = messages
