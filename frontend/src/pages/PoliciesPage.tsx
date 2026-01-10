@@ -35,6 +35,18 @@ function PoliciesPage() {
               How we collect, use, and protect your data
             </span>
           </a>
+
+          <a
+            href="https://app.termly.io/policy-viewer/policy.html?policyUUID=fec4df5c-7eb9-4687-9356-218047726cae"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.link}
+          >
+            <span className={styles.linkTitle}>Cookie Policy</span>
+            <span className={styles.linkDescription}>
+              How we use cookies and similar technologies
+            </span>
+          </a>
         </div>
       </div>
     </div>
