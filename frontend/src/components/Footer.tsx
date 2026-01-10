@@ -2,7 +2,18 @@ import styles from './Footer.module.css';
 
 const SUPPORT_EMAIL = 'help@confabulous.dev';
 
+declare global {
+  interface Window {
+    displayPreferenceModal?: () => void;
+  }
+}
+
 function Footer() {
+  const handleCookieSettings = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.displayPreferenceModal?.();
+  };
+
   return (
     <footer className={styles.footer}>
       <div className={styles.links}>
@@ -10,7 +21,7 @@ function Footer() {
         <a href="https://discord.gg/p6H7MQnQD8" target="_blank" rel="noopener noreferrer">Discord</a>
         <a href={`mailto:${SUPPORT_EMAIL}`}>Help</a>
         <a href="/policies">Policies</a>
-        <a href="#" className="termly-display-preferences">Cookie Settings</a>
+        <a href="#" onClick={handleCookieSettings} className="termly-display-preferences">Cookie Settings</a>
       </div>
       <div className={styles.copyright}>
         © {new Date().getFullYear()} Confabulous Software LLC
