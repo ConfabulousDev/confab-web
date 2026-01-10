@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { SessionDetail, TranscriptLine } from '@/types';
 import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
 import { useVisibility } from '@/hooks/useVisibility';
+import { computeSessionMeta } from '@/utils/sessionMeta';
 import {
   countHierarchicalCategories,
   messageMatchesFilter,
@@ -179,18 +180,11 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     const firstAssistant = messages.find((m) => m.type === 'assistant');
     const model = firstAssistant?.type === 'assistant' ? firstAssistant.message.model : undefined;
 
-    // Compute duration from session timestamps (consistent with listing view)
-    let durationMs: number | undefined;
-    if (session.first_seen && session.last_sync_at) {
-      const start = new Date(session.first_seen).getTime();
-      const end = new Date(session.last_sync_at).getTime();
-      if (end > start) {
-        durationMs = end - start;
-      }
-    }
-
-    // Get session date
-    const sessionDate = session.first_seen ? new Date(session.first_seen) : undefined;
+    // Compute duration and date from message timestamps (matches analytics calculation)
+    const { durationMs, sessionDate } = computeSessionMeta(messages, {
+      firstSeen: session.first_seen,
+      lastSyncAt: session.last_sync_at,
+    });
 
     return { model, durationMs, sessionDate };
   }, [messages, session.first_seen, session.last_sync_at]);
