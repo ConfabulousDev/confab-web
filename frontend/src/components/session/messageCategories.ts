@@ -42,11 +42,11 @@ export interface FilterState {
   'queue-operation': boolean;
 }
 
-// Default filter state (user and assistant visible with all subs, system visible, others hidden)
+// Default filter state (user and assistant visible with all subs, others hidden)
 export const DEFAULT_FILTER_STATE: FilterState = {
   user: { prompt: true, 'tool-result': true, skill: true },
   assistant: { text: true, 'tool-use': true, thinking: true },
-  system: true,
+  system: false,
   'file-history-snapshot': false,
   summary: false,
   'queue-operation': false,
