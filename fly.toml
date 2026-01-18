@@ -47,7 +47,7 @@ primary_region = 'sjc'
   # Note: ANTHROPIC_API_KEY must be set as a Fly secret:
   # fly secrets set ANTHROPIC_API_KEY=sk-ant-xxx
   SMART_RECAP_ENABLED = "true"
-  SMART_RECAP_MODEL = "claude-haiku-4-5-20251101"
+  SMART_RECAP_MODEL = "claude-haiku-4-5-20251001"
   SMART_RECAP_QUOTA_LIMIT = "100"
   SMART_RECAP_STALENESS_MINUTES = "10"
 
