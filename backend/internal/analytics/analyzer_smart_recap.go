@@ -233,8 +233,9 @@ func PrepareStats(cardStats map[string]interface{}) string {
 		sb.WriteString("  <conversation>\n")
 		sb.WriteString(fmt.Sprintf("    <user_turns>%d</user_turns>\n", conv.UserTurns))
 		sb.WriteString(fmt.Sprintf("    <assistant_turns>%d</assistant_turns>\n", conv.AssistantTurns))
-		if conv.AvgUserThinkingMs != nil && *conv.AvgUserThinkingMs > 0 {
-			sb.WriteString(fmt.Sprintf("    <avg_user_response_seconds>%.1f</avg_user_response_seconds>\n", float64(*conv.AvgUserThinkingMs)/1000))
+		// Only include avg user response time if > 5 minutes (indicates real breaks, not normal thinking)
+		if conv.AvgUserThinkingMs != nil && *conv.AvgUserThinkingMs > 300000 {
+			sb.WriteString(fmt.Sprintf("    <avg_user_response_minutes>%.1f</avg_user_response_minutes>\n", float64(*conv.AvgUserThinkingMs)/60000))
 		}
 		if conv.AssistantUtilization != nil {
 			sb.WriteString(fmt.Sprintf("    <assistant_utilization_percent>%.1f</assistant_utilization_percent>\n", *conv.AssistantUtilization*100))
@@ -603,7 +604,7 @@ You are analyzing a Claude Code session. The input contains:
 2. <session_stats> - Computed analytics metrics (if available):
    - Token usage, costs, and cache hit rates
    - Session duration and compaction count
-   - Conversation turn count and user response latencies
+   - Conversation turn count and assistant utilization percentage
    - Code activity (files created/modified, lines added/removed)
    - Tool usage and error rates
    - Agent and skill invocations
@@ -612,7 +613,7 @@ Provide a high-signal analysis. Look for interesting patterns in both the transc
 
 Output ONLY valid JSON with these fields:
 - suggested_session_title: Concise, descriptive title for this session (max 100 chars). Focus on the main task or outcome. Examples: "Add dark mode toggle to settings", "Debug OAuth login redirect loop", "Refactor API validation middleware"
-- recap: Short 2-3 sentence recap of what occurred. If stats show notable patterns (e.g., very long user latencies suggesting distraction, high cache hit rate showing efficiency, many tool errors), mention them briefly.
+- recap: Short 2-3 sentence recap of what occurred. If stats show notable patterns (e.g., high assistant utilization showing good flow, high cache hit rate showing efficiency, many tool errors), mention them briefly.
 - went_well: Up to 3 things that went well (omit or use empty array if none are clearly valid)
 - went_bad: Up to 3 things that did not go well (omit or use empty array if none are clearly valid)
 - human_suggestions: Up to 3 human technique improvements (e.g., "provide more context in initial prompts")
@@ -623,7 +624,7 @@ Guidelines:
 - Keep lists very high signal. Better to omit an item than show something low-confidence.
 - Suggestions should be concise and actionable. Don't prefix with "suggest" - they're already suggestions.
 - Focus on what would actually improve future sessions.
-- Note interesting stat patterns: high cache utilization is good, long user latencies may indicate confusion, high tool error rates suggest issues.
+- Note interesting stat patterns: high assistant utilization and cache hit rates are positive, high tool error rates suggest issues.
 - Output ONLY the JSON object, no additional text.
 
 Example output:
