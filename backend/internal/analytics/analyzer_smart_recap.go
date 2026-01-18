@@ -103,8 +103,9 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 
 	start := time.Now()
 
-	// Create the request with low temperature for consistent output
-	temperature := 0.0
+	// Create the request with low temperature for mostly consistent output
+	// 0.25 allows slight variation on regeneration while staying focused
+	temperature := 0.25
 	resp, err := a.client.CreateMessage(ctx, &anthropic.MessagesRequest{
 		Model:       a.model,
 		MaxTokens:   MaxOutputTokens,

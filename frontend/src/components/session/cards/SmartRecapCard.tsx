@@ -12,6 +12,7 @@ import type {
   SmartRecapQuotaInfo,
 } from '@/schemas/api';
 import type { CardProps } from './types';
+import { formatRelativeTime } from '@/utils/formatting';
 import styles from './SmartRecapCard.module.css';
 import panelStyles from '../SessionSummaryPanel.module.css';
 
@@ -69,8 +70,10 @@ export function SmartRecapCard({
   // Data is available (SmartRecapCardData) - TypeScript now knows it's not generating
   const recapData: SmartRecapCardData = data;
 
-  // Build subtitle showing model, staleness, and quota
+  // Build subtitle showing when generated, model, staleness, and quota
   const subtitleParts: string[] = [];
+  // Show when the recap was generated
+  subtitleParts.push(formatRelativeTime(recapData.computed_at));
   // Show model name (extract just the model part, e.g., "claude-haiku-4-5")
   const modelShort = recapData.model_used.replace(/-\d{8}$/, '');
   subtitleParts.push(modelShort);
