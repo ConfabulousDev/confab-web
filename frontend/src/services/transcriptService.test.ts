@@ -87,6 +87,26 @@ ${createSystemMessage(2)}`;
     expect(result.totalLines).toBe(3);
   });
 
+  it('skips progress messages silently', () => {
+    // Progress messages are streaming updates that shouldn't be included in transcript view
+    const progressMessage = JSON.stringify({
+      type: 'progress',
+      content: { type: 'bash_output', output: 'some streaming output' },
+    });
+
+    const content = `${createSystemMessage(1)}
+${progressMessage}
+${createSystemMessage(2)}`;
+
+    const result = parseJSONL(content);
+
+    // Progress message should be skipped without adding to errors
+    expect(result.successCount).toBe(2);
+    expect(result.errorCount).toBe(0);
+    expect(result.messages).toHaveLength(2);
+    expect(result.totalLines).toBe(3); // All 3 lines counted in totalLines
+  });
+
   it('parses user message with tool_result content block', () => {
     // Real message that was failing to parse
     const userMessageWithToolResult = JSON.stringify({
