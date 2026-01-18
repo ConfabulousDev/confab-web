@@ -42,6 +42,8 @@ export function useAnalyticsPolling(
   const lastFetchedSessionRef = useRef<string | null>(null);
   // Track current session ID to detect stale responses from in-flight requests
   const currentSessionIdRef = useRef(sessionId);
+  // Track if smart recap is generating - skip as_of_line to get fresh data
+  const isGeneratingRef = useRef(false);
 
   // Keep current session ref updated
   useEffect(() => {
@@ -57,9 +59,13 @@ export function useAnalyticsPolling(
     if (lastFetchedSessionRef.current !== sessionId) {
       computedLinesRef.current = 0;
       lastFetchedSessionRef.current = sessionId;
+      isGeneratingRef.current = false;
     }
 
-    const result = await analyticsAPI.get(sessionId, computedLinesRef.current);
+    // Don't pass as_of_line while smart recap is generating
+    // This ensures we get fresh data when generation completes
+    const asOfLine = isGeneratingRef.current ? 0 : computedLinesRef.current;
+    const result = await analyticsAPI.get(sessionId, asOfLine);
 
     // Ignore stale response if session changed during fetch
     // This prevents race conditions when switching sessions quickly
@@ -70,6 +76,10 @@ export function useAnalyticsPolling(
     if (result !== null) {
       // Update stored computed_lines for next poll
       computedLinesRef.current = result.computed_lines;
+
+      // Track generating state for next poll
+      const smartRecap = result.cards?.smart_recap;
+      isGeneratingRef.current = smartRecap != null && 'status' in smartRecap && smartRecap.status === 'generating';
     }
 
     // result is null on 304 (no change)
