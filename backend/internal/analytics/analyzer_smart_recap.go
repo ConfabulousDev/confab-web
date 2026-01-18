@@ -95,28 +95,44 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*
 	return result, nil
 }
 
-// PrepareTranscript converts the file collection into a text format suitable for LLM analysis.
+// PrepareTranscript converts the file collection into an XML format suitable for LLM analysis.
 func PrepareTranscript(fc *FileCollection) string {
 	var sb strings.Builder
 
+	// Build a map of tool_use_id -> tool_name for resolving tool results
+	toolNameMap := make(map[string]string)
 	for _, file := range fc.AllFiles() {
 		for _, line := range file.Lines {
-			formatted := formatLine(line)
-			if formatted != "" {
-				sb.WriteString(formatted)
-				sb.WriteString("\n\n")
+			if line.IsAssistantMessage() {
+				for _, tool := range line.GetToolUses() {
+					if tool.ID != "" {
+						toolNameMap[tool.ID] = tool.Name
+					}
+				}
 			}
 		}
 	}
 
+	sb.WriteString("<transcript>\n")
+	for _, file := range fc.AllFiles() {
+		for _, line := range file.Lines {
+			formatted := formatLine(line, toolNameMap)
+			if formatted != "" {
+				sb.WriteString(formatted)
+				sb.WriteString("\n")
+			}
+		}
+	}
+	sb.WriteString("</transcript>")
+
 	return sb.String()
 }
 
-// formatLine converts a transcript line to a readable format for the LLM.
-func formatLine(line *TranscriptLine) string {
+// formatLine converts a transcript line to XML format for the LLM.
+func formatLine(line *TranscriptLine, toolNameMap map[string]string) string {
 	switch line.Type {
 	case "user":
-		return formatUserLine(line)
+		return formatUserLine(line, toolNameMap)
 	case "assistant":
 		return formatAssistantLine(line)
 	default:
@@ -124,8 +140,8 @@ func formatLine(line *TranscriptLine) string {
 	}
 }
 
-// formatUserLine formats a user message for the LLM.
-func formatUserLine(line *TranscriptLine) string {
+// formatUserLine formats a user message for the LLM in XML format.
+func formatUserLine(line *TranscriptLine, toolNameMap map[string]string) string {
 	if line.IsHumanMessage() {
 		content := getStringContent(line)
 		if content != "" {
@@ -133,36 +149,36 @@ func formatUserLine(line *TranscriptLine) string {
 			if len(content) > 2000 {
 				content = content[:2000] + "... [truncated]"
 			}
-			return fmt.Sprintf("[USER]\n%s", content)
+			return fmt.Sprintf("<user>\n%s\n</user>", content)
 		}
 	}
 
-	// Tool results - just note that results came back
+	// Tool results - note results with tool names
 	if line.IsToolResultMessage() {
-		blocks := getToolResultBlocks(line)
+		blocks := getToolResultBlocks(line, toolNameMap)
 		if len(blocks) > 0 {
 			var results []string
 			for _, block := range blocks {
+				status := "success"
 				if block.isError {
-					results = append(results, fmt.Sprintf("- %s: ERROR", block.toolName))
-				} else {
-					results = append(results, fmt.Sprintf("- %s: success", block.toolName))
+					status = "error"
 				}
+				results = append(results, fmt.Sprintf("  <result tool=\"%s\" status=\"%s\"/>", block.toolName, status))
 			}
-			return fmt.Sprintf("[TOOL RESULTS]\n%s", strings.Join(results, "\n"))
+			return fmt.Sprintf("<tool_results>\n%s\n</tool_results>", strings.Join(results, "\n"))
 		}
 	}
 
 	return ""
 }
 
-// formatAssistantLine formats an assistant message for the LLM.
+// formatAssistantLine formats an assistant message for the LLM in XML format.
 func formatAssistantLine(line *TranscriptLine) string {
 	if !line.IsAssistantMessage() {
 		return ""
 	}
 
-	var parts []string
+	var innerParts []string
 
 	// Get text content
 	textContent := getAssistantTextContent(line)
@@ -171,7 +187,7 @@ func formatAssistantLine(line *TranscriptLine) string {
 		if len(textContent) > 3000 {
 			textContent = textContent[:3000] + "... [truncated]"
 		}
-		parts = append(parts, textContent)
+		innerParts = append(innerParts, textContent)
 	}
 
 	// Get tool uses (just names, not full input)
@@ -181,11 +197,11 @@ func formatAssistantLine(line *TranscriptLine) string {
 		for _, tool := range toolUses {
 			tools = append(tools, tool.Name)
 		}
-		parts = append(parts, fmt.Sprintf("Tools called: %s", strings.Join(tools, ", ")))
+		innerParts = append(innerParts, fmt.Sprintf("<tools_called>%s</tools_called>", strings.Join(tools, ", ")))
 	}
 
-	if len(parts) > 0 {
-		return fmt.Sprintf("[ASSISTANT]\n%s", strings.Join(parts, "\n"))
+	if len(innerParts) > 0 {
+		return fmt.Sprintf("<assistant>\n%s\n</assistant>", strings.Join(innerParts, "\n"))
 	}
 
 	return ""
@@ -242,7 +258,7 @@ type toolResultBlock struct {
 }
 
 // getToolResultBlocks extracts tool result information from a user message.
-func getToolResultBlocks(line *TranscriptLine) []toolResultBlock {
+func getToolResultBlocks(line *TranscriptLine, toolNameMap map[string]string) []toolResultBlock {
 	if line.Message == nil || line.Message.Content == nil {
 		return nil
 	}
@@ -266,11 +282,13 @@ func getToolResultBlocks(line *TranscriptLine) []toolResultBlock {
 		if isErr, ok := blockMap["is_error"].(bool); ok {
 			block.isError = isErr
 		}
-		// Try to get tool name from the original tool_use (if we had it)
-		// For now just mark as "tool"
-		block.toolName = "tool"
-		if name, ok := blockMap["name"].(string); ok {
-			block.toolName = name
+
+		// Resolve tool name from tool_use_id
+		block.toolName = "unknown"
+		if toolUseID, ok := blockMap["tool_use_id"].(string); ok {
+			if name, exists := toolNameMap[toolUseID]; exists {
+				block.toolName = name
+			}
 		}
 		blocks = append(blocks, block)
 	}
@@ -333,7 +351,12 @@ func parseSmartRecapResponse(content string) (*SmartRecapResult, error) {
 
 const smartRecapSystemPrompt = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
 
-You are analyzing a Claude Code session transcript. Provide a high-signal analysis.
+You are analyzing a Claude Code session transcript provided in XML format. The transcript contains:
+- <user> tags for human messages
+- <assistant> tags for Claude's responses (may include <tools_called> listing tool names)
+- <tool_results> tags showing which tools succeeded or failed
+
+Provide a high-signal analysis.
 
 Output ONLY valid JSON with these fields:
 - recap: Short 2-3 sentence recap of what occurred
