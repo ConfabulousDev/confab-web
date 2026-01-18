@@ -31,7 +31,7 @@ export const cardRegistry: CardDefinition[] = [
     title: 'Smart Recap',
     component: SmartRecapCard,
     order: 0,
-    span: 2,
+    span: 3,
     size: 'tall',
   },
   {
