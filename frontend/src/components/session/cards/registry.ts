@@ -5,6 +5,7 @@ import { ToolsCard } from './ToolsCard';
 import { ConversationCard } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
 import { RedactionsCard } from './RedactionsCard';
+import { SmartRecapCard } from './SmartRecapCard';
 import type { CardDefinition } from './types';
 import type {
   ToolsCardData,
@@ -80,6 +81,14 @@ export const cardRegistry: CardDefinition[] = [
     size: 'compact',
     shouldRender: (data: RedactionsCardData | null) =>
       !!data && data.total_redactions > 0,
+  },
+  {
+    key: 'smart_recap',
+    title: 'Smart Recap',
+    component: SmartRecapCard,
+    order: 7,
+    span: 2,
+    size: 'tall',
   },
 ];
 

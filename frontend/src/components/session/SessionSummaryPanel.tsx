@@ -100,11 +100,19 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           const sizeClass = cardDef.size === 'compact' ? styles.sizeCompact
             : cardDef.size === 'tall' ? styles.sizeTall
             : styles.sizeStandard;
+
+          // Build additional props for specific cards
+          const extraProps: Record<string, unknown> = {};
+          if (cardDef.key === 'smart_recap') {
+            extraProps.quota = analytics?.smart_recap_quota;
+          }
+
           return (
             <div key={cardDef.key} className={`${spanClass} ${sizeClass}`.trim()}>
               <CardComponent
                 data={cardData}
                 loading={loading}
+                {...extraProps}
               />
             </div>
           );

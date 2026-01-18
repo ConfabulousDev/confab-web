@@ -2,7 +2,7 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useSmartPolling } from './useSmartPolling';
 import { analyticsAPI } from '@/services/api';
 import type { SessionAnalytics } from '@/schemas/api';
-import type { PollingState } from '@/config/polling';
+import { POLLING_CONFIG, type PollingState } from '@/config/polling';
 
 interface UseAnalyticsPollingReturn {
   /** Current analytics data */
@@ -15,6 +15,8 @@ interface UseAnalyticsPollingReturn {
   loading: boolean;
   /** Last error, if any */
   error: Error | null;
+  /** Whether smart recap is currently being generated (fast polling active) */
+  isSmartRecapGenerating: boolean;
 }
 
 /**
@@ -74,10 +76,29 @@ export function useAnalyticsPolling(
     return result;
   }, [sessionId]);
 
+  // Use faster polling when smart recap is generating
+  const getIntervalOverride = useCallback(
+    (analytics: SessionAnalytics | null): number | null => {
+      const smartRecap = analytics?.cards?.smart_recap;
+      if (smartRecap && 'status' in smartRecap && smartRecap.status === 'generating') {
+        return POLLING_CONFIG.GENERATING_INTERVAL_MS;
+      }
+      return null;
+    },
+    []
+  );
+
   const { data, state, refetch, loading, error } = useSmartPolling(fetchAnalytics, {
     enabled,
     resetKey: sessionId, // Triggers refetch when switching sessions
+    intervalOverride: getIntervalOverride,
   });
+
+  // Check if smart recap is generating for UI feedback
+  const isSmartRecapGenerating =
+    data?.cards?.smart_recap != null &&
+    'status' in data.cards.smart_recap &&
+    data.cards.smart_recap.status === 'generating';
 
   return {
     analytics: data,
@@ -85,5 +106,6 @@ export function useAnalyticsPolling(
     refetch,
     loading,
     error,
+    isSmartRecapGenerating,
   };
 }

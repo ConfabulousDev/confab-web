@@ -15,6 +15,7 @@ const (
 	ConversationCardVersion    = 2 // v2: added total durations and utilization
 	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
 	RedactionsCardVersion      = 2 // v2: filter out "TYPE" placeholder
+	SmartRecapCardVersion      = 1 // v1: initial AI-powered session recap
 )
 
 // =============================================================================
@@ -139,6 +140,32 @@ type RedactionsCardRecord struct {
 	RedactionCounts  map[string]int `json:"redaction_counts"` // Type -> count (e.g., "GITHUB_TOKEN" -> 5)
 }
 
+// SmartRecapCardRecord is the DB record for the AI-generated smart recap card.
+// Unlike other cards, this uses time-based invalidation due to LLM cost.
+type SmartRecapCardRecord struct {
+	SessionID  string    `json:"session_id"`
+	Version    int       `json:"version"`
+	ComputedAt time.Time `json:"computed_at"`
+	UpToLine   int64     `json:"up_to_line"`
+
+	// LLM-generated content
+	Recap                     string   `json:"recap"`
+	WentWell                  []string `json:"went_well"`
+	WentBad                   []string `json:"went_bad"`
+	HumanSuggestions          []string `json:"human_suggestions"`
+	EnvironmentSuggestions    []string `json:"environment_suggestions"`
+	DefaultContextSuggestions []string `json:"default_context_suggestions"`
+
+	// LLM metadata
+	ModelUsed        string `json:"model_used"`
+	InputTokens      int    `json:"input_tokens"`
+	OutputTokens     int    `json:"output_tokens"`
+	GenerationTimeMs *int   `json:"generation_time_ms,omitempty"`
+
+	// Race prevention (optimistic lock)
+	ComputingStartedAt *time.Time `json:"computing_started_at,omitempty"`
+}
+
 // Cards aggregates all card data for a session.
 type Cards struct {
 	Tokens          *TokensCardRecord
@@ -230,6 +257,31 @@ type RedactionsCardData struct {
 	RedactionCounts map[string]int `json:"redaction_counts"` // Type -> count
 }
 
+// SmartRecapCardData is the API response format for the AI-generated smart recap card.
+type SmartRecapCardData struct {
+	Recap                     string   `json:"recap"`
+	WentWell                  []string `json:"went_well"`
+	WentBad                   []string `json:"went_bad"`
+	HumanSuggestions          []string `json:"human_suggestions"`
+	EnvironmentSuggestions    []string `json:"environment_suggestions"`
+	DefaultContextSuggestions []string `json:"default_context_suggestions"`
+	ComputedAt                string   `json:"computed_at"`
+	IsStale                   bool     `json:"is_stale"`
+	ModelUsed                 string   `json:"model_used"`
+}
+
+// SmartRecapGenerating is returned when the smart recap is being generated.
+type SmartRecapGenerating struct {
+	Status string `json:"status"` // "generating"
+}
+
+// SmartRecapQuotaInfo contains quota information for smart recap generation.
+type SmartRecapQuotaInfo struct {
+	Used     int  `json:"used"`
+	Limit    int  `json:"limit"`
+	Exceeded bool `json:"exceeded"`
+}
+
 // =============================================================================
 // Validation helpers
 // =============================================================================
@@ -267,6 +319,36 @@ func (c *AgentsAndSkillsCardRecord) IsValid(currentLineCount int64) bool {
 // IsValid checks if a redactions card record is valid for the current line count.
 func (c *RedactionsCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == RedactionsCardVersion && c.UpToLine == currentLineCount
+}
+
+// IsValid checks if a smart recap card record has valid version.
+// Note: SmartRecap uses time-based staleness, not line-based validation.
+func (c *SmartRecapCardRecord) IsValid() bool {
+	return c != nil && c.Version == SmartRecapCardVersion
+}
+
+// IsStale checks if the smart recap should be regenerated based on staleness threshold.
+// Returns true if the card is outdated (computed long ago with new content since).
+func (c *SmartRecapCardRecord) IsStale(currentLineCount int64, stalenessMinutes int) bool {
+	if c == nil {
+		return true
+	}
+	// If line count hasn't changed, not stale
+	if c.UpToLine == currentLineCount {
+		return false
+	}
+	// If there's new content and enough time has passed, it's stale
+	return time.Since(c.ComputedAt).Minutes() >= float64(stalenessMinutes)
+}
+
+// CanAcquireLock checks if we can acquire the computing lock.
+// Returns true if no lock exists or the lock is stale (older than lockTimeoutSeconds).
+func (c *SmartRecapCardRecord) CanAcquireLock(lockTimeoutSeconds int) bool {
+	if c == nil || c.ComputingStartedAt == nil {
+		return true
+	}
+	// Lock is stale if older than timeout
+	return time.Since(*c.ComputingStartedAt).Seconds() >= float64(lockTimeoutSeconds)
 }
 
 // AllValid checks if all cards are valid for the current line count.

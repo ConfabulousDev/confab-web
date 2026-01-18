@@ -993,3 +993,207 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 
 	return response
 }
+
+// =============================================================================
+// Smart Recap card operations (separate from GetCards/UpsertCards due to
+// time-based invalidation and background generation)
+// =============================================================================
+
+// GetSmartRecapCard retrieves the smart recap card for a session.
+func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*SmartRecapCardRecord, error) {
+	ctx, span := tracer.Start(ctx, "analytics.get_smart_recap_card",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			recap, went_well, went_bad, human_suggestions, environment_suggestions, default_context_suggestions,
+			model_used, input_tokens, output_tokens, generation_time_ms,
+			computing_started_at
+		FROM session_card_smart_recap
+		WHERE session_id = $1
+	`
+
+	var record SmartRecapCardRecord
+	var wentWellJSON, wentBadJSON, humanSuggestionsJSON, envSuggestionsJSON, contextSuggestionsJSON []byte
+
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.Recap,
+		&wentWellJSON,
+		&wentBadJSON,
+		&humanSuggestionsJSON,
+		&envSuggestionsJSON,
+		&contextSuggestionsJSON,
+		&record.ModelUsed,
+		&record.InputTokens,
+		&record.OutputTokens,
+		&record.GenerationTimeMs,
+		&record.ComputingStartedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	// Unmarshal JSONB arrays
+	if err := json.Unmarshal(wentWellJSON, &record.WentWell); err != nil {
+		return nil, fmt.Errorf("parsing went_well: %w", err)
+	}
+	if err := json.Unmarshal(wentBadJSON, &record.WentBad); err != nil {
+		return nil, fmt.Errorf("parsing went_bad: %w", err)
+	}
+	if err := json.Unmarshal(humanSuggestionsJSON, &record.HumanSuggestions); err != nil {
+		return nil, fmt.Errorf("parsing human_suggestions: %w", err)
+	}
+	if err := json.Unmarshal(envSuggestionsJSON, &record.EnvironmentSuggestions); err != nil {
+		return nil, fmt.Errorf("parsing environment_suggestions: %w", err)
+	}
+	if err := json.Unmarshal(contextSuggestionsJSON, &record.DefaultContextSuggestions); err != nil {
+		return nil, fmt.Errorf("parsing default_context_suggestions: %w", err)
+	}
+
+	return &record, nil
+}
+
+// UpsertSmartRecapCard inserts or updates a smart recap card, clearing the computing lock.
+func (s *Store) UpsertSmartRecapCard(ctx context.Context, record *SmartRecapCardRecord) error {
+	ctx, span := tracer.Start(ctx, "analytics.upsert_smart_recap_card",
+		trace.WithAttributes(attribute.String("session.id", record.SessionID)))
+	defer span.End()
+
+	wentWellJSON, err := json.Marshal(record.WentWell)
+	if err != nil {
+		return fmt.Errorf("marshaling went_well: %w", err)
+	}
+	wentBadJSON, err := json.Marshal(record.WentBad)
+	if err != nil {
+		return fmt.Errorf("marshaling went_bad: %w", err)
+	}
+	humanSuggestionsJSON, err := json.Marshal(record.HumanSuggestions)
+	if err != nil {
+		return fmt.Errorf("marshaling human_suggestions: %w", err)
+	}
+	envSuggestionsJSON, err := json.Marshal(record.EnvironmentSuggestions)
+	if err != nil {
+		return fmt.Errorf("marshaling environment_suggestions: %w", err)
+	}
+	contextSuggestionsJSON, err := json.Marshal(record.DefaultContextSuggestions)
+	if err != nil {
+		return fmt.Errorf("marshaling default_context_suggestions: %w", err)
+	}
+
+	query := `
+		INSERT INTO session_card_smart_recap (
+			session_id, version, computed_at, up_to_line,
+			recap, went_well, went_bad, human_suggestions, environment_suggestions, default_context_suggestions,
+			model_used, input_tokens, output_tokens, generation_time_ms,
+			computing_started_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULL)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			recap = EXCLUDED.recap,
+			went_well = EXCLUDED.went_well,
+			went_bad = EXCLUDED.went_bad,
+			human_suggestions = EXCLUDED.human_suggestions,
+			environment_suggestions = EXCLUDED.environment_suggestions,
+			default_context_suggestions = EXCLUDED.default_context_suggestions,
+			model_used = EXCLUDED.model_used,
+			input_tokens = EXCLUDED.input_tokens,
+			output_tokens = EXCLUDED.output_tokens,
+			generation_time_ms = EXCLUDED.generation_time_ms,
+			computing_started_at = NULL
+	`
+
+	_, err = s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.Recap,
+		wentWellJSON,
+		wentBadJSON,
+		humanSuggestionsJSON,
+		envSuggestionsJSON,
+		contextSuggestionsJSON,
+		record.ModelUsed,
+		record.InputTokens,
+		record.OutputTokens,
+		record.GenerationTimeMs,
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// AcquireSmartRecapLock attempts to acquire the computing lock for a smart recap.
+// Returns true if the lock was acquired, false if another process is already computing.
+func (s *Store) AcquireSmartRecapLock(ctx context.Context, sessionID string, lockTimeoutSeconds int) (bool, error) {
+	ctx, span := tracer.Start(ctx, "analytics.acquire_smart_recap_lock",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
+	// Atomically set the lock if it doesn't exist or is stale
+	query := `
+		INSERT INTO session_card_smart_recap (
+			session_id, version, computed_at, up_to_line,
+			recap, went_well, went_bad, human_suggestions, environment_suggestions, default_context_suggestions,
+			model_used, input_tokens, output_tokens,
+			computing_started_at
+		) VALUES ($1, 0, NOW(), 0, '', '[]', '[]', '[]', '[]', '[]', '', 0, 0, NOW())
+		ON CONFLICT (session_id) DO UPDATE SET
+			computing_started_at = NOW()
+		WHERE session_card_smart_recap.computing_started_at IS NULL
+		   OR session_card_smart_recap.computing_started_at < NOW() - INTERVAL '1 second' * $2
+		RETURNING session_id
+	`
+
+	var returnedID string
+	err := s.db.QueryRowContext(ctx, query, sessionID, lockTimeoutSeconds).Scan(&returnedID)
+	if err == sql.ErrNoRows {
+		// Lock not acquired - another process has it
+		span.SetAttributes(attribute.Bool("lock.acquired", false))
+		return false, nil
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return false, err
+	}
+
+	span.SetAttributes(attribute.Bool("lock.acquired", true))
+	return true, nil
+}
+
+// ClearSmartRecapLock clears the computing lock (e.g., on error).
+func (s *Store) ClearSmartRecapLock(ctx context.Context, sessionID string) error {
+	ctx, span := tracer.Start(ctx, "analytics.clear_smart_recap_lock",
+		trace.WithAttributes(attribute.String("session.id", sessionID)))
+	defer span.End()
+
+	query := `
+		UPDATE session_card_smart_recap
+		SET computing_started_at = NULL
+		WHERE session_id = $1
+	`
+
+	_, err := s.db.ExecContext(ctx, query, sessionID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	return err
+}

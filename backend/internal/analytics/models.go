@@ -23,6 +23,9 @@ type AnalyticsResponse struct {
 	// New cards-based format
 	Cards map[string]interface{} `json:"cards"`
 
+	// Smart recap quota information (separate from cards since it's user-level, not session-level)
+	SmartRecapQuota *SmartRecapQuotaInfo `json:"smart_recap_quota,omitempty"`
+
 	// Validation stats (only present on fresh computation, not cached)
 	ValidationErrorCount int `json:"validation_error_count,omitempty"`
 }

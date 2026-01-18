@@ -10,6 +10,8 @@ interface UseSmartPollingOptions<T> {
   enabled?: boolean;
   /** Key that triggers a reset and refetch when it changes */
   resetKey?: string;
+  /** Optional function to override the poll interval based on current data */
+  intervalOverride?: (data: T | null) => number | null;
 }
 
 interface UseSmartPollingReturn<T> {
@@ -40,7 +42,7 @@ export function useSmartPolling<T>(
   fetchFn: () => Promise<T | null>,
   options: UseSmartPollingOptions<T> = {}
 ): UseSmartPollingReturn<T> {
-  const { merge, enabled = true, resetKey } = options;
+  const { merge, enabled = true, resetKey, intervalOverride } = options;
 
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,17 +61,25 @@ export function useSmartPolling<T>(
   // Refs to avoid stale closures in timeout and prevent unnecessary effect triggers
   const fetchFnRef = useRef(fetchFn);
   const mergeRef = useRef(merge);
+  const intervalOverrideRef = useRef(intervalOverride);
   const timeoutRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
   const isVisibleRef = useRef(isVisible);
   const isIdleRef = useRef(isIdle);
   const enabledRef = useRef(enabled);
+  const dataRef = useRef(data);
 
   // Keep refs updated
   useEffect(() => {
     fetchFnRef.current = fetchFn;
     mergeRef.current = merge;
-  }, [fetchFn, merge]);
+    intervalOverrideRef.current = intervalOverride;
+  }, [fetchFn, merge, intervalOverride]);
+
+  // Keep data ref updated
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   // Keep state refs updated (separate effect to avoid unnecessary triggers)
   useEffect(() => {
@@ -129,9 +139,13 @@ export function useSmartPolling<T>(
     // Don't schedule if not visible or disabled
     if (!isVisibleRef.current || !enabledRef.current) return;
 
-    const interval = isIdleRef.current
-      ? POLLING_CONFIG.PASSIVE_INTERVAL_MS
-      : POLLING_CONFIG.ACTIVE_INTERVAL_MS;
+    // Check for interval override (e.g., faster polling when generating)
+    const overrideInterval = intervalOverrideRef.current?.(dataRef.current);
+    const interval =
+      overrideInterval ??
+      (isIdleRef.current
+        ? POLLING_CONFIG.PASSIVE_INTERVAL_MS
+        : POLLING_CONFIG.ACTIVE_INTERVAL_MS);
 
     timeoutRef.current = window.setTimeout(() => {
       doFetch().finally(() => {

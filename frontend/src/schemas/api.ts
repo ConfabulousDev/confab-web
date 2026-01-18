@@ -254,6 +254,35 @@ const RedactionsCardDataSchema = z.object({
   redaction_counts: z.record(z.string(), z.number()), // Type -> count
 });
 
+// Smart Recap card: AI-generated session analysis
+// This can be either the actual data or a "generating" status
+const SmartRecapCardDataSchema = z.object({
+  recap: z.string(),
+  went_well: z.array(z.string()),
+  went_bad: z.array(z.string()),
+  human_suggestions: z.array(z.string()),
+  environment_suggestions: z.array(z.string()),
+  default_context_suggestions: z.array(z.string()),
+  computed_at: z.string(),
+  is_stale: z.boolean(),
+  model_used: z.string(),
+});
+
+// Status returned when smart recap is being generated
+const SmartRecapGeneratingSchema = z.object({
+  status: z.literal('generating'),
+});
+
+// Union type for smart_recap field - can be data or generating status
+const SmartRecapSchema = z.union([SmartRecapCardDataSchema, SmartRecapGeneratingSchema]);
+
+// Quota information for smart recap generation
+const SmartRecapQuotaInfoSchema = z.object({
+  used: z.number(),
+  limit: z.number(),
+  exceeded: z.boolean(),
+});
+
 // Cards map schema - extensible for future cards
 // All fields optional to handle empty analytics (session with no transcript)
 // Note: cost is now part of tokens card, compaction is now part of session card
@@ -265,6 +294,7 @@ const AnalyticsCardsSchema = z.object({
   conversation: ConversationCardDataSchema.optional(),
   agents_and_skills: AgentsAndSkillsCardDataSchema.optional(),
   redactions: RedactionsCardDataSchema.optional(),
+  smart_recap: SmartRecapSchema.optional(),
 });
 
 export const SessionAnalyticsSchema = z.object({
@@ -276,6 +306,8 @@ export const SessionAnalyticsSchema = z.object({
   compaction: CompactionInfoSchema,
   // New cards-based format (optional for empty analytics)
   cards: AnalyticsCardsSchema.optional().nullable(),
+  // Smart recap quota (only present if feature is enabled)
+  smart_recap_quota: SmartRecapQuotaInfoSchema.optional().nullable(),
 });
 
 // ============================================================================
@@ -307,6 +339,10 @@ export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
 export type AgentsAndSkillsCardData = z.infer<typeof AgentsAndSkillsCardDataSchema>;
 export type RedactionsCardData = z.infer<typeof RedactionsCardDataSchema>;
+export type SmartRecapCardData = z.infer<typeof SmartRecapCardDataSchema>;
+export type SmartRecapGenerating = z.infer<typeof SmartRecapGeneratingSchema>;
+export type SmartRecap = z.infer<typeof SmartRecapSchema>;
+export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 

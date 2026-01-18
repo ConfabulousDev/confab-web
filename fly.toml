@@ -43,6 +43,14 @@ primary_region = 'sjc'
   OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
   OTEL_EXPORTER_OTLP_ENDPOINT = "https://api.honeycomb.io"
 
+  # Smart Recap Configuration (AI-powered session analysis)
+  # Note: ANTHROPIC_API_KEY must be set as a Fly secret:
+  # fly secrets set ANTHROPIC_API_KEY=sk-ant-xxx
+  SMART_RECAP_ENABLED = "true"
+  SMART_RECAP_MODEL = "claude-haiku-4-5-20251101"
+  SMART_RECAP_QUOTA_LIMIT = "100"
+  SMART_RECAP_STALENESS_MINUTES = "10"
+
 [http_service]
   internal_port = 8080
   force_https = true

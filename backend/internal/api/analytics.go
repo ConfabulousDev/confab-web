@@ -2,16 +2,67 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/anthropic"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
+
+// Smart recap configuration constants
+const (
+	defaultSmartRecapLockTimeoutSecs = 60
+)
+
+// SmartRecapConfig holds configuration for the smart recap feature.
+type SmartRecapConfig struct {
+	Enabled            bool
+	APIKey             string
+	Model              string
+	QuotaLimit         int
+	StalenessMinutes   int
+	LockTimeoutSeconds int
+}
+
+// loadSmartRecapConfig loads smart recap configuration from environment variables.
+// All env vars are required for the feature to be enabled.
+func loadSmartRecapConfig() SmartRecapConfig {
+	config := SmartRecapConfig{
+		Enabled:            os.Getenv("SMART_RECAP_ENABLED") == "true",
+		APIKey:             os.Getenv("ANTHROPIC_API_KEY"),
+		Model:              os.Getenv("SMART_RECAP_MODEL"),
+		LockTimeoutSeconds: defaultSmartRecapLockTimeoutSecs,
+	}
+
+	// Parse quota limit (required)
+	if quotaStr := os.Getenv("SMART_RECAP_QUOTA_LIMIT"); quotaStr != "" {
+		if quota, err := strconv.Atoi(quotaStr); err == nil && quota > 0 {
+			config.QuotaLimit = quota
+		}
+	}
+
+	// Parse staleness minutes (required)
+	if stalenessStr := os.Getenv("SMART_RECAP_STALENESS_MINUTES"); stalenessStr != "" {
+		if staleness, err := strconv.Atoi(stalenessStr); err == nil && staleness > 0 {
+			config.StalenessMinutes = staleness
+		}
+	}
+
+	// Disable if any required config is missing
+	if config.APIKey == "" || config.Model == "" || config.QuotaLimit == 0 || config.StalenessMinutes == 0 {
+		config.Enabled = false
+	}
+
+	return config
+}
 
 // HandleGetSessionAnalytics returns computed analytics for a session.
 // Uses the same canonical access model as HandleGetSession (CF-132):
@@ -23,6 +74,7 @@ import (
 // Analytics are cached in the database and recomputed when stale.
 func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	analyticsStore := analytics.NewStore(database.Conn())
+	smartRecapConfig := loadSmartRecapConfig()
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -107,7 +159,31 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		if cached.AllValid(totalLineCount) {
 			// Cache hit - return cached data
-			respondJSON(w, http.StatusOK, cached.ToResponse())
+			response := cached.ToResponse()
+
+			// Handle smart recap (if enabled) even for cached responses
+			if smartRecapConfig.Enabled {
+				// Get session owner ID for quota lookup
+				sessionUserID, externalID, err := database.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+				if err == nil {
+					handleSmartRecap(
+						r.Context(),
+						database,
+						analyticsStore,
+						store,
+						smartRecapConfig,
+						sessionID,
+						sessionUserID,
+						externalID,
+						totalLineCount,
+						nil, // transcript not downloaded yet
+						response,
+						log,
+					)
+				}
+			}
+
+			respondJSON(w, http.StatusOK, response)
 			return
 		}
 
@@ -189,8 +265,313 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		response := cards.ToResponse()
 		response.ValidationErrorCount = computed.ValidationErrorCount
 
+		// Handle smart recap (if enabled)
+		if smartRecapConfig.Enabled {
+			handleSmartRecap(
+				r.Context(),
+				database,
+				analyticsStore,
+				store,
+				smartRecapConfig,
+				sessionID,
+				sessionUserID,
+				externalID,
+				totalLineCount,
+				fc,
+				response,
+				log,
+			)
+		}
+
 		respondJSON(w, http.StatusOK, response)
 	}
+}
+
+// handleSmartRecap handles smart recap computation for the analytics response.
+// Any viewer (owner, shared, or public) can trigger generation - quota is charged to session owner.
+// If fc is nil, the transcript will be downloaded in background when generation is needed.
+func handleSmartRecap(
+	ctx context.Context,
+	database *db.DB,
+	analyticsStore *analytics.Store,
+	store *storage.S3Storage,
+	config SmartRecapConfig,
+	sessionID string,
+	sessionUserID int64,
+	externalID string,
+	lineCount int64,
+	fc *analytics.FileCollection, // nil if transcript not yet downloaded
+	response *analytics.AnalyticsResponse,
+	log *slog.Logger,
+) {
+	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
+	defer cancel()
+
+	// Get current smart recap card
+	smartCard, err := analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
+	if err != nil {
+		log.Error("Failed to get smart recap card", "error", err, "session_id", sessionID)
+		return
+	}
+
+	// Get quota info (always include in response if enabled)
+	// Quota is tracked against the session owner, not the viewer
+	// Reset quota if needed (start of new month)
+	_, _ = database.ResetSmartRecapQuotaIfNeeded(dbCtx, sessionUserID)
+
+	quota, err := database.GetOrCreateSmartRecapQuota(dbCtx, sessionUserID)
+	var quotaInfo *analytics.SmartRecapQuotaInfo
+	if err != nil {
+		log.Error("Failed to get smart recap quota", "error", err, "user_id", sessionUserID)
+	} else {
+		quotaInfo = &analytics.SmartRecapQuotaInfo{
+			Used:     quota.ComputeCount,
+			Limit:    config.QuotaLimit,
+			Exceeded: quota.ComputeCount >= config.QuotaLimit,
+		}
+		response.SmartRecapQuota = quotaInfo
+	}
+
+	// Helper to start generation, downloading transcript if needed
+	tryStartGeneration := func() bool {
+		if fc != nil {
+			return startSmartRecapGeneration(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, fc, log)
+		}
+		// Need to download transcript in background
+		go func() {
+			bgCtx := context.Background()
+			downloadedFC := downloadTranscriptForSmartRecap(bgCtx, database, store, sessionID, sessionUserID, externalID, log)
+			if downloadedFC != nil {
+				startSmartRecapGeneration(bgCtx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, downloadedFC, log)
+			}
+		}()
+		return true
+	}
+
+	// If we have a valid cached card, return it
+	if smartCard != nil && smartCard.IsValid() {
+		isStale := smartCard.IsStale(lineCount, config.StalenessMinutes)
+		addSmartRecapToResponse(response, smartCard, isStale)
+
+		// Check if we need to regenerate (stale + quota OK)
+		if isStale && quotaInfo != nil && !quotaInfo.Exceeded {
+			if smartCard.CanAcquireLock(config.LockTimeoutSeconds) {
+				tryStartGeneration()
+			}
+		}
+		return
+	}
+
+	// No valid card exists - any viewer can trigger generation
+	// Quota is charged to session owner
+
+	// Check quota
+	if quotaInfo != nil && quotaInfo.Exceeded {
+		// Quota exceeded - return whatever cached data we have (even if stale)
+		if smartCard != nil {
+			addSmartRecapToResponse(response, smartCard, true)
+		}
+		return
+	}
+
+	// Check if another process is already generating
+	if smartCard != nil && !smartCard.CanAcquireLock(config.LockTimeoutSeconds) {
+		response.Cards["smart_recap"] = analytics.SmartRecapGenerating{Status: "generating"}
+		return
+	}
+
+	// Start generation
+	if tryStartGeneration() {
+		response.Cards["smart_recap"] = analytics.SmartRecapGenerating{Status: "generating"}
+	}
+}
+
+// addSmartRecapToResponse adds the smart recap card data to the response.
+func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analytics.SmartRecapCardRecord, isStale bool) {
+	response.Cards["smart_recap"] = analytics.SmartRecapCardData{
+		Recap:                     card.Recap,
+		WentWell:                  card.WentWell,
+		WentBad:                   card.WentBad,
+		HumanSuggestions:          card.HumanSuggestions,
+		EnvironmentSuggestions:    card.EnvironmentSuggestions,
+		DefaultContextSuggestions: card.DefaultContextSuggestions,
+		ComputedAt:                card.ComputedAt.Format(time.RFC3339),
+		IsStale:                   isStale,
+		ModelUsed:                 card.ModelUsed,
+	}
+}
+
+// startSmartRecapGeneration attempts to acquire the lock and start LLM generation.
+// Returns true if generation was started, false otherwise.
+func startSmartRecapGeneration(
+	ctx context.Context,
+	database *db.DB,
+	analyticsStore *analytics.Store,
+	config SmartRecapConfig,
+	sessionID string,
+	sessionUserID int64,
+	lineCount int64,
+	fc *analytics.FileCollection,
+	log *slog.Logger,
+) bool {
+	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
+	defer cancel()
+
+	// Try to acquire the lock
+	acquired, err := analyticsStore.AcquireSmartRecapLock(dbCtx, sessionID, config.LockTimeoutSeconds)
+	if err != nil {
+		log.Error("Failed to acquire smart recap lock", "error", err, "session_id", sessionID)
+		return false
+	}
+	if !acquired {
+		return false
+	}
+
+	// Start generation in background
+	go generateSmartRecap(context.Background(), database, analyticsStore, config, sessionID, sessionUserID, lineCount, fc, log)
+
+	return true
+}
+
+// generateSmartRecap generates the smart recap using the LLM and saves it.
+func generateSmartRecap(
+	ctx context.Context,
+	database *db.DB,
+	analyticsStore *analytics.Store,
+	config SmartRecapConfig,
+	sessionID string,
+	sessionUserID int64,
+	lineCount int64,
+	fc *analytics.FileCollection,
+	log *slog.Logger,
+) {
+	// Create Anthropic client
+	client := anthropic.NewClient(config.APIKey)
+	analyzer := analytics.NewSmartRecapAnalyzer(client, config.Model)
+
+	// Generate the recap (with timeout)
+	genCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	result, err := analyzer.Analyze(genCtx, fc)
+	if err != nil {
+		log.Error("Failed to generate smart recap", "error", err, "session_id", sessionID)
+		// Clear the lock so another request can try
+		dbCtx, dbCancel := context.WithTimeout(ctx, DatabaseTimeout)
+		defer dbCancel()
+		_ = analyticsStore.ClearSmartRecapLock(dbCtx, sessionID)
+		return
+	}
+
+	// Save the result
+	dbCtx, dbCancel := context.WithTimeout(ctx, DatabaseTimeout)
+	defer dbCancel()
+
+	card := &analytics.SmartRecapCardRecord{
+		SessionID:                 sessionID,
+		Version:                   analytics.SmartRecapCardVersion,
+		ComputedAt:                time.Now().UTC(),
+		UpToLine:                  lineCount,
+		Recap:                     result.Recap,
+		WentWell:                  result.WentWell,
+		WentBad:                   result.WentBad,
+		HumanSuggestions:          result.HumanSuggestions,
+		EnvironmentSuggestions:    result.EnvironmentSuggestions,
+		DefaultContextSuggestions: result.DefaultContextSuggestions,
+		ModelUsed:                 config.Model,
+		InputTokens:               result.InputTokens,
+		OutputTokens:              result.OutputTokens,
+		GenerationTimeMs:          &result.GenerationTimeMs,
+	}
+
+	if err := analyticsStore.UpsertSmartRecapCard(dbCtx, card); err != nil {
+		log.Error("Failed to save smart recap card", "error", err, "session_id", sessionID)
+		return
+	}
+
+	// Increment quota
+	if err := database.IncrementSmartRecapQuota(dbCtx, sessionUserID); err != nil {
+		log.Error("Failed to increment smart recap quota", "error", err, "user_id", sessionUserID)
+	}
+
+	log.Info("Smart recap generated",
+		"session_id", sessionID,
+		"input_tokens", result.InputTokens,
+		"output_tokens", result.OutputTokens,
+		"generation_time_ms", result.GenerationTimeMs,
+	)
+}
+
+// downloadTranscriptForSmartRecap downloads the transcript files and creates a FileCollection.
+func downloadTranscriptForSmartRecap(
+	ctx context.Context,
+	database *db.DB,
+	store *storage.S3Storage,
+	sessionID string,
+	sessionUserID int64,
+	externalID string,
+	log *slog.Logger,
+) *analytics.FileCollection {
+	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
+	defer cancel()
+
+	// Get session files
+	session, err := database.GetSessionDetail(dbCtx, sessionID, sessionUserID)
+	if err != nil {
+		log.Error("Failed to get session for smart recap", "error", err, "session_id", sessionID)
+		return nil
+	}
+
+	// Find transcript and agent files
+	var mainFile *db.SyncFileDetail
+	var agentFiles []db.SyncFileDetail
+	for i := range session.Files {
+		switch session.Files[i].FileType {
+		case "transcript":
+			mainFile = &session.Files[i]
+		case "agent":
+			agentFiles = append(agentFiles, session.Files[i])
+		}
+	}
+
+	if mainFile == nil {
+		return nil
+	}
+
+	storageCtx, storageCancel := context.WithTimeout(ctx, StorageTimeout)
+	defer storageCancel()
+
+	// Download main transcript
+	mainContent, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, mainFile.FileName)
+	if err != nil || mainContent == nil {
+		log.Error("Failed to download transcript for smart recap", "error", err, "session_id", sessionID)
+		return nil
+	}
+
+	// Download agent files
+	agentContents := make(map[string][]byte)
+	for _, af := range agentFiles {
+		agentID := extractAgentID(af.FileName)
+		if agentID == "" {
+			continue
+		}
+		content, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, af.FileName)
+		if err != nil {
+			continue
+		}
+		if content != nil {
+			agentContents[agentID] = content
+		}
+	}
+
+	// Build FileCollection
+	fc, err := analytics.NewFileCollectionWithAgents(mainContent, agentContents)
+	if err != nil {
+		log.Error("Failed to parse transcript for smart recap", "error", err, "session_id", sessionID)
+		return nil
+	}
+
+	return fc
 }
 
 // downloadAndMergeFile downloads and merges all chunks for a file.

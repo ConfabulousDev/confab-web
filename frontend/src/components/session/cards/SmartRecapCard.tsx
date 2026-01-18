@@ -1,0 +1,147 @@
+import { CardWrapper, CardLoading, SectionHeader } from './Card';
+import {
+  SparklesIcon,
+  CheckCircleIcon,
+  AlertCircleIcon,
+  LightbulbIcon,
+} from '@/components/icons';
+import type {
+  SmartRecap,
+  SmartRecapCardData,
+  SmartRecapQuotaInfo,
+} from '@/schemas/api';
+import type { CardProps } from './types';
+import styles from './SmartRecapCard.module.css';
+
+interface SmartRecapCardProps extends CardProps<SmartRecap> {
+  quota?: SmartRecapQuotaInfo | null;
+}
+
+/** Type guard to check if data is in generating state */
+function isGenerating(data: SmartRecap): data is { status: 'generating' } {
+  return 'status' in data && data.status === 'generating';
+}
+
+/**
+ * Displays AI-generated session insights including:
+ * - Recap of what happened
+ * - Things that went well
+ * - Things that didn't go well
+ * - Suggestions for improvement
+ */
+export function SmartRecapCard({
+  data,
+  loading,
+  quota,
+}: SmartRecapCardProps) {
+  // Loading state
+  if (loading && !data) {
+    return (
+      <CardWrapper title="Smart Recap" icon={SparklesIcon}>
+        <CardLoading />
+      </CardWrapper>
+    );
+  }
+
+  // No data
+  if (!data) return null;
+
+  // Generating state
+  if (isGenerating(data)) {
+    return (
+      <CardWrapper title="Smart Recap" icon={SparklesIcon}>
+        <div className={styles.generating}>
+          <div className={styles.spinner} />
+          <span>Generating AI recap...</span>
+        </div>
+      </CardWrapper>
+    );
+  }
+
+  // Data is available (SmartRecapCardData) - TypeScript now knows it's not generating
+  const recapData: SmartRecapCardData = data;
+
+  // Build subtitle showing staleness and quota
+  const subtitleParts: string[] = [];
+  if (recapData.is_stale) {
+    subtitleParts.push('Outdated');
+  }
+  if (quota) {
+    subtitleParts.push(`${quota.used}/${quota.limit} used`);
+  }
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
+
+  return (
+    <CardWrapper title="Smart Recap" icon={SparklesIcon} subtitle={subtitle}>
+      {/* Recap */}
+      <div className={styles.recap}>{recapData.recap}</div>
+
+      {/* What went well */}
+      {recapData.went_well.length > 0 && (
+        <>
+          <SectionHeader label="Went Well" icon={CheckCircleIcon} />
+          <ul className={styles.list}>
+            {recapData.went_well.map((item, i) => (
+              <li key={i} className={styles.listItemSuccess}>
+                <span className={styles.listIcon}>{CheckCircleIcon}</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* What didn't go well */}
+      {recapData.went_bad.length > 0 && (
+        <>
+          <SectionHeader label="Needs Improvement" icon={AlertCircleIcon} />
+          <ul className={styles.list}>
+            {recapData.went_bad.map((item, i) => (
+              <li key={i} className={styles.listItemWarning}>
+                <span className={styles.listIcon}>{AlertCircleIcon}</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* Suggestions */}
+      {(recapData.human_suggestions.length > 0 ||
+        recapData.environment_suggestions.length > 0 ||
+        recapData.default_context_suggestions.length > 0) && (
+        <>
+          <SectionHeader label="Suggestions" icon={LightbulbIcon} />
+          <ul className={styles.list}>
+            {recapData.human_suggestions.map((item, i) => (
+              <li key={`human-${i}`} className={styles.listItem}>
+                <span className={styles.listIcon}>{LightbulbIcon}</span>
+                <span>{item}</span>
+              </li>
+            ))}
+            {recapData.environment_suggestions.map((item, i) => (
+              <li key={`env-${i}`} className={styles.listItem}>
+                <span className={styles.listIcon}>{LightbulbIcon}</span>
+                <span>{item}</span>
+              </li>
+            ))}
+            {recapData.default_context_suggestions.map((item, i) => (
+              <li key={`ctx-${i}`} className={styles.listItem}>
+                <span className={styles.listIcon}>{LightbulbIcon}</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* Footer with model info */}
+      <div className={styles.footer}>
+        <span className={styles.modelUsed}>Powered by {recapData.model_used}</span>
+        {quota?.exceeded && (
+          <span className={styles.quotaWarning}>Monthly limit reached</span>
+        )}
+      </div>
+    </CardWrapper>
+  );
+}
