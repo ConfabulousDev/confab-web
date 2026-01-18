@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
-import { analyticsAPI } from '@/services/api';
+import { analyticsAPI, APIError } from '@/services/api';
 import { RelativeTime } from '@/components/RelativeTime';
 import { MoreVerticalIcon, GitHubIcon } from '@/components/icons';
 import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api';
@@ -66,15 +66,22 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   }, [analytics?.suggested_session_title, onSuggestedTitleChange]);
 
   // Handle Smart Recap regeneration (owner only)
+  // Generation is synchronous - this call blocks until the LLM completes (~60-90s)
   const handleRegenerateSmartRecap = useCallback(async () => {
     if (isRegenerating || initialAnalytics !== undefined) return; // Disabled in Storybook mode
     setIsRegenerating(true);
     try {
+      // Regeneration is synchronous - waits for LLM to complete
       await analyticsAPI.regenerateSmartRecap(sessionId);
-      // Force a fresh fetch (bypass 304 caching) to get the "generating" state and start fast polling
+      // Force a fresh fetch to get the newly generated card
       await forceRefetch();
     } catch (err) {
-      console.error('Failed to regenerate smart recap:', err);
+      // Handle 409 Conflict (generation already in progress)
+      if (err instanceof APIError && err.status === 409) {
+        console.log('Smart recap generation already in progress');
+      } else {
+        console.error('Failed to regenerate smart recap:', err);
+      }
     } finally {
       setIsRegenerating(false);
     }

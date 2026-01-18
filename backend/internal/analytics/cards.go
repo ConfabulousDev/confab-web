@@ -270,11 +270,6 @@ type SmartRecapCardData struct {
 	ModelUsed                 string   `json:"model_used"`
 }
 
-// SmartRecapGenerating is returned when the smart recap is being generated.
-type SmartRecapGenerating struct {
-	Status string `json:"status"` // "generating"
-}
-
 // SmartRecapQuotaInfo contains quota information for smart recap generation.
 type SmartRecapQuotaInfo struct {
 	Used     int  `json:"used"`

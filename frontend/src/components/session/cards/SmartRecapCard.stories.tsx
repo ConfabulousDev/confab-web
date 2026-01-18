@@ -46,16 +46,6 @@ export const Default: Story = {
   },
 };
 
-export const Generating: Story = {
-  args: {
-    data: {
-      status: 'generating',
-    },
-    loading: false,
-    quota: { used: 2, limit: 20, exceeded: false },
-  },
-};
-
 export const Refreshing: Story = {
   args: {
     data: {

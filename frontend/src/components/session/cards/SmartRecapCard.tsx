@@ -1,4 +1,4 @@
-import { CardWrapper, CardLoading, SectionHeader } from './Card';
+import { CardWrapper, SectionHeader } from './Card';
 import {
   SparklesIcon,
   CheckCircleIcon,
@@ -7,7 +7,6 @@ import {
   RefreshIcon,
 } from '@/components/icons';
 import type {
-  SmartRecap,
   SmartRecapCardData,
   SmartRecapQuotaInfo,
 } from '@/schemas/api';
@@ -16,17 +15,12 @@ import { formatRelativeTime } from '@/utils/formatting';
 import styles from './SmartRecapCard.module.css';
 import panelStyles from '../SessionSummaryPanel.module.css';
 
-interface SmartRecapCardProps extends CardProps<SmartRecap> {
+interface SmartRecapCardProps extends CardProps<SmartRecapCardData> {
   quota?: SmartRecapQuotaInfo | null;
   /** Callback to force regeneration (only available to owners) */
   onRefresh?: () => void;
   /** Whether a refresh is in progress */
   isRefreshing?: boolean;
-}
-
-/** Type guard to check if data is in generating state */
-function isGenerating(data: SmartRecap): data is { status: 'generating' } {
-  return 'status' in data && data.status === 'generating';
 }
 
 /**
@@ -43,11 +37,14 @@ export function SmartRecapCard({
   onRefresh,
   isRefreshing,
 }: SmartRecapCardProps) {
-  // Loading state
-  if (loading && !data) {
+  // Loading state (initial load or during refresh)
+  if ((loading && !data) || isRefreshing) {
     return (
       <CardWrapper title="Smart Recap" icon={SparklesIcon}>
-        <CardLoading />
+        <div className={styles.generating}>
+          <div className={styles.spinner} />
+          <span>{isRefreshing ? 'Generating AI recap...' : 'Loading...'}</span>
+        </div>
       </CardWrapper>
     );
   }
@@ -55,20 +52,7 @@ export function SmartRecapCard({
   // No data
   if (!data) return null;
 
-  // Generating state (initial generation or force refresh)
-  if (isGenerating(data) || isRefreshing) {
-    return (
-      <CardWrapper title="Smart Recap" icon={SparklesIcon}>
-        <div className={styles.generating}>
-          <div className={styles.spinner} />
-          <span>Generating AI recap...</span>
-        </div>
-      </CardWrapper>
-    );
-  }
-
-  // Data is available (SmartRecapCardData) - TypeScript now knows it's not generating
-  const recapData: SmartRecapCardData = data;
+  const recapData = data;
 
   // Build subtitle showing when generated, model, staleness, and quota
   const subtitleParts: string[] = [];

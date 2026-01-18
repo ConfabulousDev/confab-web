@@ -257,7 +257,6 @@ const RedactionsCardDataSchema = z.object({
 });
 
 // Smart Recap card: AI-generated session analysis
-// This can be either the actual data or a "generating" status
 const SmartRecapCardDataSchema = z.object({
   recap: z.string(),
   went_well: z.array(z.string()),
@@ -269,14 +268,6 @@ const SmartRecapCardDataSchema = z.object({
   is_stale: z.boolean(),
   model_used: z.string(),
 });
-
-// Status returned when smart recap is being generated
-const SmartRecapGeneratingSchema = z.object({
-  status: z.literal('generating'),
-});
-
-// Union type for smart_recap field - can be data or generating status
-const SmartRecapSchema = z.union([SmartRecapCardDataSchema, SmartRecapGeneratingSchema]);
 
 // Quota information for smart recap generation
 const SmartRecapQuotaInfoSchema = z.object({
@@ -296,7 +287,7 @@ const AnalyticsCardsSchema = z.object({
   conversation: ConversationCardDataSchema.optional(),
   agents_and_skills: AgentsAndSkillsCardDataSchema.optional(),
   redactions: RedactionsCardDataSchema.optional(),
-  smart_recap: SmartRecapSchema.optional(),
+  smart_recap: SmartRecapCardDataSchema.optional(),
 });
 
 export const SessionAnalyticsSchema = z.object({
@@ -344,8 +335,6 @@ export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
 export type AgentsAndSkillsCardData = z.infer<typeof AgentsAndSkillsCardDataSchema>;
 export type RedactionsCardData = z.infer<typeof RedactionsCardDataSchema>;
 export type SmartRecapCardData = z.infer<typeof SmartRecapCardDataSchema>;
-export type SmartRecapGenerating = z.infer<typeof SmartRecapGeneratingSchema>;
-export type SmartRecap = z.infer<typeof SmartRecapSchema>;
 export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
