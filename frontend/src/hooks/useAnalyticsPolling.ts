@@ -11,6 +11,8 @@ interface UseAnalyticsPollingReturn {
   pollingState: PollingState;
   /** Manually trigger a refresh */
   refetch: () => Promise<void>;
+  /** Force a fresh fetch, bypassing 304 caching (use after triggering regeneration) */
+  forceRefetch: () => Promise<void>;
   /** Whether a fetch is in progress */
   loading: boolean;
   /** Last error, if any */
@@ -104,6 +106,14 @@ export function useAnalyticsPolling(
     intervalOverride: getIntervalOverride,
   });
 
+  // Force a fresh fetch by resetting the cache-busting state
+  // Use this after triggering smart recap regeneration to ensure we get the "generating" status
+  const forceRefetch = useCallback(async () => {
+    computedLinesRef.current = 0;
+    isGeneratingRef.current = true;
+    await refetch();
+  }, [refetch]);
+
   // Check if smart recap is generating for UI feedback
   const isSmartRecapGenerating =
     data?.cards?.smart_recap != null &&
@@ -114,6 +124,7 @@ export function useAnalyticsPolling(
     analytics: data,
     pollingState: state,
     refetch,
+    forceRefetch,
     loading,
     error,
     isSmartRecapGenerating,

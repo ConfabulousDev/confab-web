@@ -22,7 +22,7 @@ interface SessionSummaryPanelProps {
 
 function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks, onSuggestedTitleChange }: SessionSummaryPanelProps) {
   // Use polling hook for live updates (disabled in Storybook mode)
-  const { analytics: polledAnalytics, loading, error, refetch } = useAnalyticsPolling(
+  const { analytics: polledAnalytics, loading, error, forceRefetch } = useAnalyticsPolling(
     sessionId,
     initialAnalytics === undefined // Disable polling in Storybook mode
   );
@@ -71,14 +71,14 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
     setIsRegenerating(true);
     try {
       await analyticsAPI.regenerateSmartRecap(sessionId);
-      // Trigger a refetch to get the "generating" state and start polling
-      await refetch();
+      // Force a fresh fetch (bypass 304 caching) to get the "generating" state and start fast polling
+      await forceRefetch();
     } catch (err) {
       console.error('Failed to regenerate smart recap:', err);
     } finally {
       setIsRegenerating(false);
     }
-  }, [sessionId, isRegenerating, initialAnalytics, refetch]);
+  }, [sessionId, isRegenerating, initialAnalytics, forceRefetch]);
 
   // Get cards data from the new cards-based format
   const cards: Partial<AnalyticsCards> = analytics?.cards ?? {};
