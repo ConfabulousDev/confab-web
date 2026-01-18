@@ -254,11 +254,56 @@
   display: block;
 }
 
+.cardHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .cardSubtitle {
   font-weight: var(--font-normal);
   text-transform: none;
   letter-spacing: normal;
   color: var(--color-text-tertiary);
+}
+
+/* Card action button (e.g., refresh) */
+.cardActionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cardActionButton:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.cardActionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cardActionButton.spinning svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .cardContent {

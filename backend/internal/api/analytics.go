@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -545,6 +546,151 @@ func generateSmartRecap(
 		"output_tokens", result.OutputTokens,
 		"generation_time_ms", result.GenerationTimeMs,
 	)
+}
+
+// HandleRegenerateSmartRecap forces regeneration of the smart recap for a session.
+// This endpoint is owner-only and bypasses the staleness check.
+// It still respects quota limits and the generation lock.
+func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
+	analyticsStore := analytics.NewStore(database.Conn())
+	smartRecapConfig := loadSmartRecapConfig()
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.Ctx(r.Context())
+
+		// Feature must be enabled
+		if !smartRecapConfig.Enabled {
+			respondError(w, http.StatusNotFound, "Smart recap not available")
+			return
+		}
+
+		// Get session ID from URL
+		sessionID := chi.URLParam(r, "id")
+		if sessionID == "" {
+			respondError(w, http.StatusBadRequest, "Invalid session ID")
+			return
+		}
+
+		// Get authenticated user (RequireSession middleware ensures this exists)
+		userID, ok := auth.GetUserID(r.Context())
+		if !ok {
+			respondError(w, http.StatusUnauthorized, "Authentication required")
+			return
+		}
+
+		dbCtx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+		defer cancel()
+
+		// Get session and verify ownership
+		sessionUserID, externalID, err := database.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+		if err != nil {
+			log.Error("Failed to get session", "error", err, "session_id", sessionID)
+			respondError(w, http.StatusNotFound, "Session not found")
+			return
+		}
+
+		if sessionUserID != userID {
+			respondError(w, http.StatusForbidden, "Only the session owner can regenerate the recap")
+			return
+		}
+
+		// Get session for line count
+		session, err := database.GetSessionDetail(dbCtx, sessionID, userID)
+		if err != nil {
+			log.Error("Failed to get session detail", "error", err, "session_id", sessionID)
+			respondError(w, http.StatusInternalServerError, "Failed to get session")
+			return
+		}
+
+		// Calculate total line count
+		var totalLineCount int64
+		for _, file := range session.Files {
+			if file.FileType == "transcript" || file.FileType == "agent" {
+				totalLineCount += int64(file.LastSyncedLine)
+			}
+		}
+
+		// Check quota
+		_, _ = database.ResetSmartRecapQuotaIfNeeded(dbCtx, userID)
+		quota, err := database.GetOrCreateSmartRecapQuota(dbCtx, userID)
+		if err != nil {
+			log.Error("Failed to get quota", "error", err, "user_id", userID)
+			respondError(w, http.StatusInternalServerError, "Failed to check quota")
+			return
+		}
+
+		if quota.ComputeCount >= smartRecapConfig.QuotaLimit {
+			respondError(w, http.StatusForbidden, "Monthly recap limit reached")
+			return
+		}
+
+		// Check if generation is already in progress (lock check)
+		smartCard, _ := analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
+		if smartCard != nil && !smartCard.CanAcquireLock(smartRecapConfig.LockTimeoutSeconds) {
+			// Generation already in progress
+			response := &analytics.AnalyticsResponse{
+				Cards: map[string]interface{}{
+					"smart_recap": analytics.SmartRecapGenerating{Status: "generating"},
+				},
+				SmartRecapQuota: &analytics.SmartRecapQuotaInfo{
+					Used:     quota.ComputeCount,
+					Limit:    smartRecapConfig.QuotaLimit,
+					Exceeded: false,
+				},
+			}
+			respondJSON(w, http.StatusOK, response)
+			return
+		}
+
+		// Get cached cards for stats context
+		cached, _ := analyticsStore.GetCards(dbCtx, sessionID)
+		cardStats := cached.ToResponse().Cards
+
+		// Try to acquire lock and start generation
+		acquired, err := analyticsStore.AcquireSmartRecapLock(dbCtx, sessionID, smartRecapConfig.LockTimeoutSeconds)
+		if err != nil || !acquired {
+			// Race condition - someone else got the lock
+			response := &analytics.AnalyticsResponse{
+				Cards: map[string]interface{}{
+					"smart_recap": analytics.SmartRecapGenerating{Status: "generating"},
+				},
+				SmartRecapQuota: &analytics.SmartRecapQuotaInfo{
+					Used:     quota.ComputeCount,
+					Limit:    smartRecapConfig.QuotaLimit,
+					Exceeded: false,
+				},
+			}
+			respondJSON(w, http.StatusOK, response)
+			return
+		}
+
+		// Start generation in background (download transcript if needed)
+		go func() {
+			bgCtx := context.Background()
+			fc := downloadTranscriptForSmartRecap(bgCtx, database, store, sessionID, sessionUserID, externalID, log)
+			if fc != nil {
+				generateSmartRecap(bgCtx, database, analyticsStore, smartRecapConfig, sessionID, sessionUserID, totalLineCount, fc, cardStats, log)
+			} else {
+				// Clear lock if we couldn't download transcript
+				clearCtx, clearCancel := context.WithTimeout(bgCtx, DatabaseTimeout)
+				defer clearCancel()
+				_ = analyticsStore.ClearSmartRecapLock(clearCtx, sessionID)
+			}
+		}()
+
+		// Return generating status
+		response := &analytics.AnalyticsResponse{
+			Cards: map[string]interface{}{
+				"smart_recap": analytics.SmartRecapGenerating{Status: "generating"},
+			},
+			SmartRecapQuota: &analytics.SmartRecapQuotaInfo{
+				Used:     quota.ComputeCount,
+				Limit:    smartRecapConfig.QuotaLimit,
+				Exceeded: false,
+			},
+		}
+		respondJSON(w, http.StatusOK, response)
+	}
 }
 
 // downloadTranscriptForSmartRecap downloads the transcript files and creates a FileCollection.

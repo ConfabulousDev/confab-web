@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
+import { analyticsAPI } from '@/services/api';
 import { RelativeTime } from '@/components/RelativeTime';
 import { MoreVerticalIcon, GitHubIcon } from '@/components/icons';
 import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api';
@@ -19,7 +20,7 @@ interface SessionSummaryPanelProps {
 
 function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks }: SessionSummaryPanelProps) {
   // Use polling hook for live updates (disabled in Storybook mode)
-  const { analytics: polledAnalytics, loading, error } = useAnalyticsPolling(
+  const { analytics: polledAnalytics, loading, error, refetch } = useAnalyticsPolling(
     sessionId,
     initialAnalytics === undefined // Disable polling in Storybook mode
   );
@@ -30,6 +31,9 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   // State for revealing GitHub card - default to true if there are initial links
   const hasInitialLinks = (initialGithubLinks?.length ?? 0) > 0;
   const [showGitHubCard, setShowGitHubCard] = useState(hasInitialLinks);
+
+  // State for Smart Recap regeneration
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Dropdown for actions menu
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
@@ -46,6 +50,21 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       setShowGitHubCard(true);
     }
   }, []);
+
+  // Handle Smart Recap regeneration (owner only)
+  const handleRegenerateSmartRecap = useCallback(async () => {
+    if (isRegenerating || initialAnalytics !== undefined) return; // Disabled in Storybook mode
+    setIsRegenerating(true);
+    try {
+      await analyticsAPI.regenerateSmartRecap(sessionId);
+      // Trigger a refetch to get the "generating" state and start polling
+      await refetch();
+    } catch (err) {
+      console.error('Failed to regenerate smart recap:', err);
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [sessionId, isRegenerating, initialAnalytics, refetch]);
 
   // Get cards data from the new cards-based format
   const cards: Partial<AnalyticsCards> = analytics?.cards ?? {};
@@ -109,6 +128,9 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           if (cardDef.key === 'smart_recap' && isOwner) {
             // Only show quota to session owner (private info)
             extraProps.quota = analytics?.smart_recap_quota;
+            // Provide refresh capability to owners
+            extraProps.onRefresh = handleRegenerateSmartRecap;
+            extraProps.isRefreshing = isRegenerating;
           }
 
           return (

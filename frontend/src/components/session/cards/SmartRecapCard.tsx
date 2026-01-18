@@ -4,6 +4,7 @@ import {
   CheckCircleIcon,
   AlertCircleIcon,
   LightbulbIcon,
+  RefreshIcon,
 } from '@/components/icons';
 import type {
   SmartRecap,
@@ -12,9 +13,14 @@ import type {
 } from '@/schemas/api';
 import type { CardProps } from './types';
 import styles from './SmartRecapCard.module.css';
+import panelStyles from '../SessionSummaryPanel.module.css';
 
 interface SmartRecapCardProps extends CardProps<SmartRecap> {
   quota?: SmartRecapQuotaInfo | null;
+  /** Callback to force regeneration (only available to owners) */
+  onRefresh?: () => void;
+  /** Whether a refresh is in progress */
+  isRefreshing?: boolean;
 }
 
 /** Type guard to check if data is in generating state */
@@ -33,6 +39,8 @@ export function SmartRecapCard({
   data,
   loading,
   quota,
+  onRefresh,
+  isRefreshing,
 }: SmartRecapCardProps) {
   // Loading state
   if (loading && !data) {
@@ -74,8 +82,21 @@ export function SmartRecapCard({
   }
   const subtitle = subtitleParts.join(' · ');
 
+  // Refresh button for owners (disabled if quota exceeded or refreshing)
+  const refreshButton = onRefresh ? (
+    <button
+      className={`${panelStyles.cardActionButton} ${isRefreshing ? panelStyles.spinning : ''}`}
+      onClick={onRefresh}
+      disabled={isRefreshing || quota?.exceeded}
+      title={quota?.exceeded ? 'Monthly limit reached' : 'Regenerate recap'}
+      aria-label="Regenerate recap"
+    >
+      {RefreshIcon}
+    </button>
+  ) : null;
+
   return (
-    <CardWrapper title="Smart Recap" icon={SparklesIcon} subtitle={subtitle}>
+    <CardWrapper title="Smart Recap" icon={SparklesIcon} subtitle={subtitle} action={refreshButton}>
       {/* Recap */}
       <div className={styles.recap}>{recapData.recap}</div>
 

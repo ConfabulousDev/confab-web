@@ -508,4 +508,50 @@ export const analyticsAPI = {
     const data = await response.json();
     return validateResponse(SessionAnalyticsSchema, data, url);
   },
+
+  /**
+   * Force regeneration of the Smart Recap for a session.
+   * Only available to session owners. Bypasses staleness check.
+   *
+   * @param sessionId - The session UUID
+   * @returns SessionAnalytics with the smart_recap in "generating" state
+   */
+  regenerateSmartRecap: async (sessionId: string): Promise<SessionAnalytics> => {
+    const url = `/sessions/${sessionId}/analytics/smart-recap/regenerate`;
+    const fullUrl = `${api['baseURL']}${url}`;
+
+    // Need CSRF token for POST
+    await initCSRF();
+    const csrfToken = getCSRFToken();
+
+    const response = await fetch(fullUrl, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      },
+    });
+
+    // Handle authentication errors
+    if (response.status === 401) {
+      handleAuthFailure();
+      throw new AuthenticationError();
+    }
+
+    // Handle other HTTP errors
+    if (!response.ok) {
+      let errorData: unknown;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = await response.text();
+      }
+      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+    }
+
+    // Parse and validate response
+    const data = await response.json();
+    return validateResponse(SessionAnalyticsSchema, data, url);
+  },
 };

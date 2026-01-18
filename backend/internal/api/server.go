@@ -363,6 +363,12 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Use(auth.RequireSession(s.db))
 			r.Delete("/sessions/{id}/github-links/{linkID}", withMaxBody(MaxBodyXS, HandleDeleteGitHubLink(s.db)))
 		})
+
+		// Smart recap regeneration (owner-only, web session required)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireSession(s.db))
+			r.Post("/sessions/{id}/analytics/smart-recap/regenerate", withMaxBody(MaxBodyXS, HandleRegenerateSmartRecap(s.db, s.storage)))
+		})
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)
