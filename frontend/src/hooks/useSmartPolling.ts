@@ -218,7 +218,11 @@ export function useSmartPolling<T>(
 
   const refetch = useCallback(async () => {
     await doFetch();
-  }, [doFetch]);
+    // Reschedule with potentially new interval (e.g., faster polling when generating)
+    if (isMountedRef.current) {
+      scheduleNext();
+    }
+  }, [doFetch, scheduleNext]);
 
   return { data, state, refetch, loading, error };
 }
