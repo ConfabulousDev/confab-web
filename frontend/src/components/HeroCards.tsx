@@ -5,6 +5,7 @@ import PRLinkingModal from './PRLinkingModal';
 import QuickstartModal from './QuickstartModal';
 import ReviewModal from './ReviewModal';
 import ShareModal from './ShareModal';
+import SmartRecapModal from './SmartRecapModal';
 import styles from './HeroCards.module.css';
 
 interface HeroCard {
@@ -16,6 +17,12 @@ interface HeroCard {
 }
 
 const cards: HeroCard[] = [
+  {
+    id: 'smart-recap',
+    icon: '✨',
+    title: 'Smart Recap',
+    description: 'AI-powered session insights with actionable feedback and suggestions.',
+  },
   {
     id: 'review',
     icon: '📖',
@@ -54,9 +61,10 @@ const cards: HeroCard[] = [
   },
 ];
 
-const CLICKABLE_CARDS = ['quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share'];
+const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share'];
 
 function HeroCards() {
+  const [smartRecapOpen, setSmartRecapOpen] = useState(false);
   const [quickstartOpen, setQuickstartOpen] = useState(false);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -65,7 +73,9 @@ function HeroCards() {
   const [shareOpen, setShareOpen] = useState(false);
 
   const handleCardClick = (cardId: string) => {
-    if (cardId === 'quickstart') {
+    if (cardId === 'smart-recap') {
+      setSmartRecapOpen(true);
+    } else if (cardId === 'quickstart') {
       setQuickstartOpen(true);
     } else if (cardId === 'how-it-works') {
       setHowItWorksOpen(true);
@@ -109,6 +119,10 @@ function HeroCards() {
         })}
       </div>
 
+      <SmartRecapModal
+        isOpen={smartRecapOpen}
+        onClose={() => setSmartRecapOpen(false)}
+      />
       <QuickstartModal
         isOpen={quickstartOpen}
         onClose={() => setQuickstartOpen(false)}
