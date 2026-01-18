@@ -68,9 +68,9 @@ function SessionDetailPage() {
   // Determine if viewer is owner (from backend response, defaults to false for non-owners)
   const isOwner = session?.is_owner ?? false;
 
-  // Dynamic page title based on session (custom_title takes precedence)
+  // Dynamic page title based on session (custom_title > suggested_session_title > summary > first_user_message)
   const pageTitle = session
-    ? session.custom_title || session.summary || session.first_user_message || `Session ${session.external_id.substring(0, 8)}`
+    ? session.custom_title || session.suggested_session_title || session.summary || session.first_user_message || `Session ${session.external_id.substring(0, 8)}`
     : 'Session';
   useDocumentTitle(pageTitle);
 

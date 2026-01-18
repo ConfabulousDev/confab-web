@@ -446,6 +446,111 @@ func TestUpdateSessionCustomTitle_InvalidUUID(t *testing.T) {
 }
 
 // =============================================================================
+// UpdateSessionSuggestedTitle Tests
+// =============================================================================
+
+// TestUpdateSessionSuggestedTitle_SetTitle tests setting a suggested title
+func TestUpdateSessionSuggestedTitle_SetTitle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "suggested@test.com", "Suggested User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "suggested-external-id")
+
+	ctx := context.Background()
+
+	suggestedTitle := "Implement dark mode feature"
+	err := env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, suggestedTitle)
+	if err != nil {
+		t.Fatalf("UpdateSessionSuggestedTitle failed: %v", err)
+	}
+
+	// Verify title was set
+	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	if err != nil {
+		t.Fatalf("GetSessionDetail failed: %v", err)
+	}
+	if detail.SuggestedSessionTitle == nil || *detail.SuggestedSessionTitle != suggestedTitle {
+		t.Errorf("SuggestedSessionTitle = %v, want %s", detail.SuggestedSessionTitle, suggestedTitle)
+	}
+}
+
+// TestUpdateSessionSuggestedTitle_EmptyDoesNotUpdate tests that empty string is a no-op
+func TestUpdateSessionSuggestedTitle_EmptyDoesNotUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "empty@test.com", "Empty User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "empty-external-id")
+
+	ctx := context.Background()
+
+	// Set a title first
+	initialTitle := "Initial Title"
+	err := env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, initialTitle)
+	if err != nil {
+		t.Fatalf("UpdateSessionSuggestedTitle (initial) failed: %v", err)
+	}
+
+	// Calling with empty string should be a no-op
+	err = env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, "")
+	if err != nil {
+		t.Fatalf("UpdateSessionSuggestedTitle (empty) failed: %v", err)
+	}
+
+	// Verify original title is still there
+	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	if err != nil {
+		t.Fatalf("GetSessionDetail failed: %v", err)
+	}
+	if detail.SuggestedSessionTitle == nil || *detail.SuggestedSessionTitle != initialTitle {
+		t.Errorf("SuggestedSessionTitle = %v, want %s (should not have been cleared)", detail.SuggestedSessionTitle, initialTitle)
+	}
+}
+
+// TestUpdateSessionSuggestedTitle_VisibleInSessionList tests that suggested title appears in list query
+func TestUpdateSessionSuggestedTitle_VisibleInSessionList(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "listtest@test.com", "List Test User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "list-external-id")
+
+	ctx := context.Background()
+
+	suggestedTitle := "Debug OAuth login"
+	err := env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, suggestedTitle)
+	if err != nil {
+		t.Fatalf("UpdateSessionSuggestedTitle failed: %v", err)
+	}
+
+	// Verify title appears in session list
+	sessions, err := env.DB.ListUserSessions(ctx, user.ID, db.SessionListViewOwned)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("Expected 1 session, got %d", len(sessions))
+	}
+	if sessions[0].SuggestedSessionTitle == nil || *sessions[0].SuggestedSessionTitle != suggestedTitle {
+		t.Errorf("SuggestedSessionTitle in list = %v, want %s", sessions[0].SuggestedSessionTitle, suggestedTitle)
+	}
+}
+
+// =============================================================================
 // UpdateSessionSummary Tests
 // =============================================================================
 

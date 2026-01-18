@@ -70,6 +70,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 				COALESCE(sf_stats.file_count, 0) as file_count,
 				s.last_message_at,
 				s.custom_title,
+				s.suggested_session_title,
 				s.summary,
 				s.first_user_message,
 				s.session_type,
@@ -127,6 +128,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
 					s.custom_title,
+					s.suggested_session_title,
 					s.summary,
 					s.first_user_message,
 					s.session_type,
@@ -160,6 +162,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
 					s.custom_title,
+					s.suggested_session_title,
 					s.summary,
 					s.first_user_message,
 					s.session_type,
@@ -199,6 +202,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 					COALESCE(sf_stats.file_count, 0) as file_count,
 					s.last_message_at,
 					s.custom_title,
+					s.suggested_session_title,
 					s.summary,
 					s.first_user_message,
 					s.session_type,
@@ -273,6 +277,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 			&session.FileCount,
 			&session.LastSyncTime,
 			&session.CustomTitle,
+			&session.SuggestedSessionTitle,
 			&session.Summary,
 			&session.FirstUserMessage,
 			&session.SessionType,
@@ -393,7 +398,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 	var session SessionDetail
 	var gitInfoBytes []byte
 	sessionQuery := `
-		SELECT id, external_id, custom_title, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at, hostname, username
+		SELECT id, external_id, custom_title, suggested_session_title, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at, hostname, username
 		FROM sessions
 		WHERE id = $1 AND user_id = $2
 	`
@@ -401,6 +406,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		&session.ID,
 		&session.ExternalID,
 		&session.CustomTitle,
+		&session.SuggestedSessionTitle,
 		&session.Summary,
 		&session.FirstUserMessage,
 		&session.FirstSeen,
@@ -648,6 +654,31 @@ func (db *DB) UpdateSessionCustomTitle(ctx context.Context, sessionID string, us
 			return ErrForbidden
 		}
 		return ErrSessionNotFound
+	}
+
+	return nil
+}
+
+// UpdateSessionSuggestedTitle updates the suggested_session_title field for a session.
+// This is called when the Smart Recap LLM generates a title suggestion.
+// Returns nil if suggestedTitle is empty (no update needed).
+func (db *DB) UpdateSessionSuggestedTitle(ctx context.Context, sessionID string, suggestedTitle string) error {
+	ctx, span := tracer.Start(ctx, "db.update_session_suggested_title",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+		))
+	defer span.End()
+
+	if suggestedTitle == "" {
+		return nil // Don't update with empty value
+	}
+
+	query := `UPDATE sessions SET suggested_session_title = $1 WHERE id = $2`
+	_, err := db.conn.ExecContext(ctx, query, suggestedTitle, sessionID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("failed to update suggested session title: %w", err)
 	}
 
 	return nil

@@ -26,6 +26,7 @@ const (
 
 // SmartRecapResult contains the parsed LLM response.
 type SmartRecapResult struct {
+	SuggestedSessionTitle     string   `json:"suggested_session_title"`
 	Recap                     string   `json:"recap"`
 	WentWell                  []string `json:"went_well"`
 	WentBad                   []string `json:"went_bad"`
@@ -544,6 +545,11 @@ func parseSmartRecapResponse(content string) (*SmartRecapResult, error) {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
+	// Truncate suggested_session_title if too long
+	if len(result.SuggestedSessionTitle) > 100 {
+		result.SuggestedSessionTitle = result.SuggestedSessionTitle[:100]
+	}
+
 	// Validate and limit array sizes
 	if len(result.WentWell) > 3 {
 		result.WentWell = result.WentWell[:3]
@@ -604,6 +610,7 @@ You are analyzing a Claude Code session. The input contains:
 Provide a high-signal analysis. Look for interesting patterns in both the transcript AND the stats.
 
 Output ONLY valid JSON with these fields:
+- suggested_session_title: Concise, descriptive title for this session (max 100 chars). Focus on the main task or outcome. Examples: "Add dark mode toggle to settings", "Debug OAuth login redirect loop", "Refactor API validation middleware"
 - recap: Short 2-3 sentence recap of what occurred. If stats show notable patterns (e.g., very long user latencies suggesting distraction, high cache hit rate showing efficiency, many tool errors), mention them briefly.
 - went_well: Up to 3 things that went well (omit or use empty array if none are clearly valid)
 - went_bad: Up to 3 things that did not go well (omit or use empty array if none are clearly valid)
@@ -620,6 +627,7 @@ Guidelines:
 
 Example output:
 {
+  "suggested_session_title": "Implement dark mode toggle feature",
   "recap": "User implemented a dark mode feature with 85% cache hit rate showing efficient context reuse. Tests were added and all passed after minor iteration.",
   "went_well": ["Clear initial requirements", "High cache utilization", "Good iteration on feedback"],
   "went_bad": ["Multiple rounds needed to fix CSS specificity issues"],

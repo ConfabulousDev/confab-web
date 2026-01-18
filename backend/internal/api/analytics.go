@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"os"
@@ -193,6 +194,13 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				}
 			}
 
+			// Include suggested session title if available
+			var suggestedTitle sql.NullString
+			titleQuery := `SELECT suggested_session_title FROM sessions WHERE id = $1`
+			if err := database.Conn().QueryRowContext(dbCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
+				response.SuggestedSessionTitle = &suggestedTitle.String
+			}
+
 			respondJSON(w, http.StatusOK, response)
 			return
 		}
@@ -294,6 +302,13 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				log,
 				isOwner,
 			)
+		}
+
+		// Include suggested session title if available
+		var suggestedTitle sql.NullString
+		titleQuery := `SELECT suggested_session_title FROM sessions WHERE id = $1`
+		if err := database.Conn().QueryRowContext(dbCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
+			response.SuggestedSessionTitle = &suggestedTitle.String
 		}
 
 		respondJSON(w, http.StatusOK, response)
@@ -531,6 +546,14 @@ func generateSmartRecap(
 		span.SetStatus(codes.Error, err.Error())
 		log.Error("Failed to save smart recap card", "error", err, "session_id", sessionID)
 		return
+	}
+
+	// Update session with suggested title
+	if result.SuggestedSessionTitle != "" {
+		if err := database.UpdateSessionSuggestedTitle(dbCtx, sessionID, result.SuggestedSessionTitle); err != nil {
+			// Log but don't fail - the main operation succeeded
+			log.Error("Failed to update suggested title", "error", err, "session_id", sessionID)
+		}
 	}
 
 	// Increment quota

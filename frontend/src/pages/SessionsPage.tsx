@@ -112,7 +112,7 @@ function SessionsPage() {
         }
         // Filter by search query (match against title fields)
         if (lowerQuery) {
-          const title = (s.custom_title || s.summary || s.first_user_message || '').toLowerCase();
+          const title = (s.custom_title || s.suggested_session_title || s.summary || s.first_user_message || '').toLowerCase();
           if (!title.includes(lowerQuery)) return false;
         }
         return true;
@@ -296,8 +296,8 @@ function SessionsPage() {
                         onClick={() => handleRowClick(session)}
                       >
                         <td className={styles.sessionCell}>
-                          <div className={session.custom_title || session.summary || session.first_user_message ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
-                            {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
+                          <div className={session.custom_title || session.suggested_session_title || session.summary || session.first_user_message ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
+                            {session.custom_title || session.suggested_session_title || session.summary || session.first_user_message || 'Untitled'}
                           </div>
                           <div className={styles.chipRow}>
                             <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
 import { analyticsAPI } from '@/services/api';
@@ -16,9 +16,11 @@ interface SessionSummaryPanelProps {
   initialAnalytics?: SessionAnalytics;
   /** For Storybook: pass GitHub links directly instead of fetching from API */
   initialGithubLinks?: GitHubLink[];
+  /** Callback when a suggested title arrives from Smart Recap */
+  onSuggestedTitleChange?: (title: string) => void;
 }
 
-function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks }: SessionSummaryPanelProps) {
+function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks, onSuggestedTitleChange }: SessionSummaryPanelProps) {
   // Use polling hook for live updates (disabled in Storybook mode)
   const { analytics: polledAnalytics, loading, error, refetch } = useAnalyticsPolling(
     sessionId,
@@ -50,6 +52,13 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       setShowGitHubCard(true);
     }
   }, []);
+
+  // Notify parent when suggested title arrives from analytics
+  useEffect(() => {
+    if (analytics?.suggested_session_title && onSuggestedTitleChange) {
+      onSuggestedTitleChange(analytics.suggested_session_title);
+    }
+  }, [analytics?.suggested_session_title, onSuggestedTitleChange]);
 
   // Handle Smart Recap regeneration (owner only)
   const handleRegenerateSmartRecap = useCallback(async () => {

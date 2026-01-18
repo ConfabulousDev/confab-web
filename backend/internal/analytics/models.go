@@ -26,6 +26,9 @@ type AnalyticsResponse struct {
 	// Smart recap quota information (separate from cards since it's user-level, not session-level)
 	SmartRecapQuota *SmartRecapQuotaInfo `json:"smart_recap_quota,omitempty"`
 
+	// Suggested session title from Smart Recap (if generated)
+	SuggestedSessionTitle *string `json:"suggested_session_title,omitempty"`
+
 	// Validation stats (only present on fresh computation, not cached)
 	ValidationErrorCount int `json:"validation_error_count,omitempty"`
 }

@@ -33,6 +33,7 @@ const SessionSchema = z.object({
   file_count: z.number(),
   last_sync_time: z.string().nullable().optional(),
   custom_title: z.string().max(255).nullable().optional(),
+  suggested_session_title: z.string().max(100).nullable().optional(),
   summary: z.string().nullable().optional(),
   first_user_message: z.string().nullable().optional(),
   session_type: z.string(),
@@ -53,6 +54,7 @@ export const SessionDetailSchema = z.object({
   id: z.string(),
   external_id: z.string(),
   custom_title: z.string().max(255).nullable().optional(),
+  suggested_session_title: z.string().max(100).nullable().optional(),
   summary: z.string().nullable().optional(),
   first_user_message: z.string().nullable().optional(),
   first_seen: z.string(),
@@ -308,6 +310,8 @@ export const SessionAnalyticsSchema = z.object({
   cards: AnalyticsCardsSchema.optional().nullable(),
   // Smart recap quota (only present if feature is enabled)
   smart_recap_quota: SmartRecapQuotaInfoSchema.optional().nullable(),
+  // Suggested session title from Smart Recap (if generated)
+  suggested_session_title: z.string().nullable().optional(),
 });
 
 // ============================================================================
