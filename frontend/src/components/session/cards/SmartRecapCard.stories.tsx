@@ -56,6 +56,25 @@ export const Generating: Story = {
   },
 };
 
+export const Refreshing: Story = {
+  args: {
+    data: {
+      recap: 'Old recap content that will be replaced...',
+      went_well: ['Previous item'],
+      went_bad: [],
+      human_suggestions: [],
+      environment_suggestions: [],
+      default_context_suggestions: [],
+      computed_at: '2024-01-15T10:30:00Z',
+      is_stale: true,
+      model_used: 'claude-haiku-4-5-20251101',
+    },
+    loading: false,
+    quota: { used: 3, limit: 20, exceeded: false },
+    isRefreshing: true,
+  },
+};
+
 export const Stale: Story = {
   args: {
     data: {

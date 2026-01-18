@@ -55,8 +55,8 @@ export function SmartRecapCard({
   // No data
   if (!data) return null;
 
-  // Generating state
-  if (isGenerating(data)) {
+  // Generating state (initial generation or force refresh)
+  if (isGenerating(data) || isRefreshing) {
     return (
       <CardWrapper title="Smart Recap" icon={SparklesIcon}>
         <div className={styles.generating}>
@@ -85,12 +85,13 @@ export function SmartRecapCard({
   }
   const subtitle = subtitleParts.join(' · ');
 
-  // Refresh button for owners (disabled if quota exceeded or refreshing)
+  // Refresh button for owners (disabled if quota exceeded)
+  // Note: isRefreshing check not needed here since we return early with generating UI
   const refreshButton = onRefresh ? (
     <button
-      className={`${panelStyles.cardActionButton} ${isRefreshing ? panelStyles.spinning : ''}`}
+      className={panelStyles.cardActionButton}
       onClick={onRefresh}
-      disabled={isRefreshing || quota?.exceeded}
+      disabled={quota?.exceeded}
       title={quota?.exceeded ? 'Monthly limit reached' : 'Regenerate recap'}
       aria-label="Regenerate recap"
     >

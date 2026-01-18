@@ -293,19 +293,6 @@
   cursor: not-allowed;
 }
 
-.cardActionButton.spinning svg {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .cardContent {
   padding: var(--spacing-sm) 0;
 }

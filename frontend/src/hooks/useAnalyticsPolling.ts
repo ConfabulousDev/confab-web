@@ -91,6 +91,11 @@ export function useAnalyticsPolling(
   // Use faster polling when smart recap is generating
   const getIntervalOverride = useCallback(
     (analytics: SessionAnalytics | null): number | null => {
+      // Check ref first - it's set synchronously in forceRefetch before data updates
+      // This ensures fast polling kicks in immediately after triggering regeneration
+      if (isGeneratingRef.current) {
+        return POLLING_CONFIG.GENERATING_INTERVAL_MS;
+      }
       const smartRecap = analytics?.cards?.smart_recap;
       if (smartRecap && 'status' in smartRecap && smartRecap.status === 'generating') {
         return POLLING_CONFIG.GENERATING_INTERVAL_MS;
