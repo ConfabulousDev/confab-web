@@ -62,6 +62,6 @@ describe('getOrderedCards', () => {
     const ordered = getOrderedCards();
     const keys = ordered.map((c) => c.key);
 
-    expect(keys).toEqual(['tokens', 'session', 'conversation', 'code_activity', 'tools', 'agents_and_skills', 'redactions', 'smart_recap']);
+    expect(keys).toEqual(['smart_recap', 'tokens', 'session', 'conversation', 'code_activity', 'tools', 'agents_and_skills', 'redactions']);
   });
 });
