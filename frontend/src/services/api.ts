@@ -471,7 +471,8 @@ export const analyticsAPI = {
    */
   get: async (sessionId: string, asOfLine?: number): Promise<SessionAnalytics | null> => {
     let url = `/sessions/${sessionId}/analytics`;
-    if (asOfLine !== undefined && asOfLine > 0) {
+    const hasCacheBustingParam = asOfLine !== undefined && asOfLine > 0;
+    if (hasCacheBustingParam) {
       url += `?as_of_line=${asOfLine}`;
     }
 
@@ -480,6 +481,9 @@ export const analyticsAPI = {
     const response = await fetch(fullUrl, {
       method: 'GET',
       credentials: 'include',
+      // Bypass browser cache when not using as_of_line param (e.g., during Smart Recap generation)
+      // This ensures we get fresh data instead of a cached "generating" response
+      ...(hasCacheBustingParam ? {} : { cache: 'no-store' as const }),
     });
 
     // Handle 304 Not Modified - no new data
