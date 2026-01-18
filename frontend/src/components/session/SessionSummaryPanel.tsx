@@ -162,6 +162,8 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       </div>
 
       <div className={styles.grid}>
+        {renderAnalyticsCards()}
+
         {/* GitHub Links - visibility controlled by toggle for owners */}
         <GitHubLinksCard
           sessionId={sessionId}
@@ -170,8 +172,6 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           forceShow={showGitHubCard}
           onHasLinksChange={handleHasLinksChange}
         />
-
-        {renderAnalyticsCards()}
       </div>
     </div>
   );
