@@ -206,10 +206,13 @@ func PrepareStats(cardStats map[string]interface{}) string {
 		if tokens.CacheRead > 0 || tokens.CacheCreation > 0 {
 			// Cache hit rate = CacheRead / (CacheRead + Input)
 			// This represents the fraction of input tokens that came from cache
+			// Only note when below 95% - high cache hit rates are normal for Claude Code
 			totalInputTokens := tokens.CacheRead + tokens.Input
 			if totalInputTokens > 0 {
 				cacheHitRate := float64(tokens.CacheRead) / float64(totalInputTokens) * 100
-				sb.WriteString(fmt.Sprintf("    <cache_hit_rate_percent>%.1f</cache_hit_rate_percent>\n", cacheHitRate))
+				if cacheHitRate < 95 {
+					sb.WriteString(fmt.Sprintf("    <cache_hit_rate_percent>%.1f</cache_hit_rate_percent>\n", cacheHitRate))
+				}
 			}
 		}
 		sb.WriteString("  </tokens>\n")
