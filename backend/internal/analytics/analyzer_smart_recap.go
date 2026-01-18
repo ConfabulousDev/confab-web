@@ -130,13 +130,21 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*
 func PrepareTranscript(fc *FileCollection) string {
 	var sb strings.Builder
 
-	// Build a map of tool_use_id -> tool_name for resolving tool results
+	// Build a map of tool_use_id -> tool_name for resolving tool results and skill expansions
+	// For Skill tool uses, we store the skill name (from input.skill) instead of "Skill"
 	toolNameMap := make(map[string]string)
 	for _, file := range fc.AllFiles() {
 		for _, line := range file.Lines {
 			if line.IsAssistantMessage() {
 				for _, tool := range line.GetToolUses() {
 					if tool.ID != "" {
+						// For Skill tools, extract the actual skill name from input
+						if tool.Name == "Skill" {
+							if skillName, ok := tool.Input["skill"].(string); ok && skillName != "" {
+								toolNameMap[tool.ID] = skillName
+								continue
+							}
+						}
 						toolNameMap[tool.ID] = tool.Name
 					}
 				}
@@ -173,6 +181,29 @@ func formatLine(line *TranscriptLine, toolNameMap map[string]string) string {
 
 // formatUserLine formats a user message for the LLM in XML format.
 func formatUserLine(line *TranscriptLine, toolNameMap map[string]string) string {
+	// Check for skill expansion messages first (isMeta: true with sourceToolUseID)
+	if line.IsSkillExpansionMessage() {
+		content := getStringContent(line)
+		if content != "" {
+			// Truncate skill content (can be lengthy)
+			if len(content) > 1500 {
+				content = content[:1500] + "... [truncated]"
+			}
+			// Get skill name from the linked tool_use if available
+			skillName := ""
+			if line.SourceToolUseID != "" {
+				if name, ok := toolNameMap[line.SourceToolUseID]; ok {
+					skillName = name
+				}
+			}
+			if skillName != "" {
+				return fmt.Sprintf("<skill name=\"%s\">\n%s\n</skill>", skillName, content)
+			}
+			return fmt.Sprintf("<skill>\n%s\n</skill>", content)
+		}
+		return ""
+	}
+
 	if line.IsHumanMessage() {
 		content := getStringContent(line)
 		if content != "" {
@@ -210,6 +241,16 @@ func formatAssistantLine(line *TranscriptLine) string {
 	}
 
 	var innerParts []string
+
+	// Get thinking content (shown by default in UI)
+	thinkingContent := getAssistantThinkingContent(line)
+	if thinkingContent != "" {
+		// Truncate thinking (can be very long)
+		if len(thinkingContent) > 2000 {
+			thinkingContent = thinkingContent[:2000] + "... [truncated]"
+		}
+		innerParts = append(innerParts, fmt.Sprintf("<thinking>%s</thinking>", thinkingContent))
+	}
 
 	// Get text content
 	textContent := getAssistantTextContent(line)
@@ -261,26 +302,52 @@ func getAssistantTextContent(line *TranscriptLine) string {
 	}
 
 	// Array content - extract text blocks
-	blocks := line.GetContentBlocks()
+	contentArray, ok := line.Message.Content.([]interface{})
+	if !ok {
+		return ""
+	}
+
 	var texts []string
-	for _, block := range blocks {
-		if block.Type == "text" {
-			// Get text from the raw content
-			if contentArray, ok := line.Message.Content.([]interface{}); ok {
-				for _, item := range contentArray {
-					if blockMap, ok := item.(map[string]interface{}); ok {
-						if blockMap["type"] == "text" {
-							if text, ok := blockMap["text"].(string); ok {
-								texts = append(texts, text)
-							}
-						}
-					}
-				}
+	for _, item := range contentArray {
+		blockMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if blockMap["type"] == "text" {
+			if text, ok := blockMap["text"].(string); ok {
+				texts = append(texts, text)
 			}
 		}
 	}
 
 	return strings.Join(texts, "\n")
+}
+
+// getAssistantThinkingContent extracts thinking content from an assistant message.
+func getAssistantThinkingContent(line *TranscriptLine) string {
+	if line.Message == nil || line.Message.Content == nil {
+		return ""
+	}
+
+	contentArray, ok := line.Message.Content.([]interface{})
+	if !ok {
+		return ""
+	}
+
+	var thoughts []string
+	for _, item := range contentArray {
+		blockMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if blockMap["type"] == "thinking" {
+			if thinking, ok := blockMap["thinking"].(string); ok {
+				thoughts = append(thoughts, thinking)
+			}
+		}
+	}
+
+	return strings.Join(thoughts, "\n")
 }
 
 type toolResultBlock struct {
@@ -383,8 +450,11 @@ func parseSmartRecapResponse(content string) (*SmartRecapResult, error) {
 const smartRecapSystemPrompt = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
 
 You are analyzing a Claude Code session transcript provided in XML format. The transcript contains:
-- <user> tags for human messages
-- <assistant> tags for Claude's responses (may include <tools_called> listing tool names)
+- <user> tags for human messages (prompts from the user)
+- <skill> tags for skill expansions (instructions injected when skills like /commit are invoked)
+- <assistant> tags for Claude's responses, which may include:
+  - <thinking> for Claude's reasoning process
+  - <tools_called> listing tool names used
 - <tool_results> tags showing which tools succeeded or failed
 
 Provide a high-signal analysis.
