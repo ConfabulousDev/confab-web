@@ -76,6 +76,16 @@ export function parseJSONL(jsonl: string): TranscriptParseResult {
   const errors: TranscriptValidationError[] = [];
 
   lines.forEach((line, index) => {
+    // Skip progress messages - they're streaming updates not needed in transcript view
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === 'object' && parsed.type === 'progress') {
+        return; // Skip this line
+      }
+    } catch {
+      // JSON parse error will be caught by parseTranscriptLineWithError below
+    }
+
     const result = parseTranscriptLineWithError(line, index);
 
     if (result.success) {

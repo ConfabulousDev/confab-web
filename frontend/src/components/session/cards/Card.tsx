@@ -4,13 +4,15 @@ interface CardWrapperProps {
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
+  /** Optional action element (e.g., refresh button) shown in header */
+  action?: React.ReactNode;
   children: React.ReactNode;
 }
 
 /**
  * Base wrapper for summary cards. Provides consistent header and styling.
  */
-export function CardWrapper({ title, subtitle, icon, children }: CardWrapperProps) {
+export function CardWrapper({ title, subtitle, icon, action, children }: CardWrapperProps) {
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
@@ -18,7 +20,10 @@ export function CardWrapper({ title, subtitle, icon, children }: CardWrapperProp
           {icon && <span className={styles.cardTitleIcon}>{icon}</span>}
           {title}
         </span>
-        {subtitle && <span className={styles.cardSubtitle}>{subtitle}</span>}
+        <span className={styles.cardHeaderRight}>
+          {subtitle && <span className={styles.cardSubtitle}>{subtitle}</span>}
+          {action}
+        </span>
       </div>
       <div className={styles.cardContent}>{children}</div>
     </div>

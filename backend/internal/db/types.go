@@ -21,16 +21,17 @@ const (
 
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
-	ID               string     `json:"id"`                           // UUID primary key for URL routing
-	ExternalID       string     `json:"external_id"`                  // External system's session ID (e.g., Claude Code's ID)
-	FirstSeen        time.Time  `json:"first_seen"`
-	FileCount        int        `json:"file_count"`                   // Number of sync files
-	LastSyncTime     *time.Time `json:"last_sync_time,omitempty"`     // Last sync timestamp
-	CustomTitle      *string    `json:"custom_title,omitempty"`       // User-set title override
-	Summary          *string    `json:"summary,omitempty"`            // First summary from transcript
-	FirstUserMessage *string    `json:"first_user_message,omitempty"` // First user message
-	SessionType      string     `json:"session_type"`
-	TotalLines       int64      `json:"total_lines"`                  // Sum of last_synced_line across all files
+	ID                    string     `json:"id"`                                // UUID primary key for URL routing
+	ExternalID            string     `json:"external_id"`                       // External system's session ID (e.g., Claude Code's ID)
+	FirstSeen             time.Time  `json:"first_seen"`
+	FileCount             int        `json:"file_count"`                        // Number of sync files
+	LastSyncTime          *time.Time `json:"last_sync_time,omitempty"`          // Last sync timestamp
+	CustomTitle           *string    `json:"custom_title,omitempty"`            // User-set title override
+	SuggestedSessionTitle *string    `json:"suggested_session_title,omitempty"` // AI-suggested title from Smart Recap
+	Summary               *string    `json:"summary,omitempty"`                 // First summary from transcript
+	FirstUserMessage      *string    `json:"first_user_message,omitempty"`      // First user message
+	SessionType           string     `json:"session_type"`
+	TotalLines            int64      `json:"total_lines"`                       // Sum of last_synced_line across all files
 	// TODO: Remove git_repo field and only return git_repo_url, let frontend parse the org/repo
 	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
 	GitRepoURL       *string    `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
@@ -46,12 +47,13 @@ type SessionListItem struct {
 
 // SessionDetail represents detailed session information (sync-based model)
 type SessionDetail struct {
-	ID               string           `json:"id"`                           // UUID primary key for URL routing
-	ExternalID       string           `json:"external_id"`                  // External system's session ID
-	CustomTitle      *string          `json:"custom_title,omitempty"`       // User-set title override
-	Summary          *string          `json:"summary,omitempty"`            // First summary from transcript
-	FirstUserMessage *string          `json:"first_user_message,omitempty"` // First user message
-	FirstSeen        time.Time        `json:"first_seen"`
+	ID                    string           `json:"id"`                                // UUID primary key for URL routing
+	ExternalID            string           `json:"external_id"`                       // External system's session ID
+	CustomTitle           *string          `json:"custom_title,omitempty"`            // User-set title override
+	SuggestedSessionTitle *string          `json:"suggested_session_title,omitempty"` // AI-suggested title from Smart Recap
+	Summary               *string          `json:"summary,omitempty"`                 // First summary from transcript
+	FirstUserMessage      *string          `json:"first_user_message,omitempty"`      // First user message
+	FirstSeen             time.Time        `json:"first_seen"`
 	CWD              *string          `json:"cwd,omitempty"`                // Working directory
 	TranscriptPath   *string          `json:"transcript_path,omitempty"`    // Original transcript path
 	GitInfo          interface{}      `json:"git_info,omitempty"`           // Git metadata

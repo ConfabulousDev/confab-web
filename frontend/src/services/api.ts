@@ -471,7 +471,8 @@ export const analyticsAPI = {
    */
   get: async (sessionId: string, asOfLine?: number): Promise<SessionAnalytics | null> => {
     let url = `/sessions/${sessionId}/analytics`;
-    if (asOfLine !== undefined && asOfLine > 0) {
+    const hasCacheBustingParam = asOfLine !== undefined && asOfLine > 0;
+    if (hasCacheBustingParam) {
       url += `?as_of_line=${asOfLine}`;
     }
 
@@ -480,12 +481,61 @@ export const analyticsAPI = {
     const response = await fetch(fullUrl, {
       method: 'GET',
       credentials: 'include',
+      // Bypass browser cache when not using as_of_line param (e.g., during Smart Recap generation)
+      // This ensures we get fresh data instead of a cached "generating" response
+      ...(hasCacheBustingParam ? {} : { cache: 'no-store' as const }),
     });
 
     // Handle 304 Not Modified - no new data
     if (response.status === 304) {
       return null;
     }
+
+    // Handle authentication errors
+    if (response.status === 401) {
+      handleAuthFailure();
+      throw new AuthenticationError();
+    }
+
+    // Handle other HTTP errors
+    if (!response.ok) {
+      let errorData: unknown;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = await response.text();
+      }
+      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+    }
+
+    // Parse and validate response
+    const data = await response.json();
+    return validateResponse(SessionAnalyticsSchema, data, url);
+  },
+
+  /**
+   * Force regeneration of the Smart Recap for a session.
+   * Only available to session owners. Bypasses staleness check.
+   *
+   * @param sessionId - The session UUID
+   * @returns SessionAnalytics with the smart_recap in "generating" state
+   */
+  regenerateSmartRecap: async (sessionId: string): Promise<SessionAnalytics> => {
+    const url = `/sessions/${sessionId}/analytics/smart-recap/regenerate`;
+    const fullUrl = `${api['baseURL']}${url}`;
+
+    // Need CSRF token for POST
+    await initCSRF();
+    const csrfToken = getCSRFToken();
+
+    const response = await fetch(fullUrl, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      },
+    });
 
     // Handle authentication errors
     if (response.status === 401) {

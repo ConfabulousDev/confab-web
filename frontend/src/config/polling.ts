@@ -9,6 +9,9 @@ export const POLLING_CONFIG = {
   /** Poll interval when tab is visible but user is idle */
   PASSIVE_INTERVAL_MS: 60_000,
 
+  /** Poll interval when waiting for async generation (e.g., smart summary) */
+  GENERATING_INTERVAL_MS: 2_000,
+
   /** Time without activity before switching to passive polling */
   IDLE_THRESHOLD_MS: 60_000,
 

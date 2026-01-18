@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
+import { analyticsAPI } from '@/services/api';
 import { RelativeTime } from '@/components/RelativeTime';
 import { MoreVerticalIcon, GitHubIcon } from '@/components/icons';
 import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api';
@@ -15,11 +16,13 @@ interface SessionSummaryPanelProps {
   initialAnalytics?: SessionAnalytics;
   /** For Storybook: pass GitHub links directly instead of fetching from API */
   initialGithubLinks?: GitHubLink[];
+  /** Callback when a suggested title arrives from Smart Recap */
+  onSuggestedTitleChange?: (title: string) => void;
 }
 
-function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks }: SessionSummaryPanelProps) {
+function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks, onSuggestedTitleChange }: SessionSummaryPanelProps) {
   // Use polling hook for live updates (disabled in Storybook mode)
-  const { analytics: polledAnalytics, loading, error } = useAnalyticsPolling(
+  const { analytics: polledAnalytics, loading, error, forceRefetch } = useAnalyticsPolling(
     sessionId,
     initialAnalytics === undefined // Disable polling in Storybook mode
   );
@@ -30,6 +33,9 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   // State for revealing GitHub card - default to true if there are initial links
   const hasInitialLinks = (initialGithubLinks?.length ?? 0) > 0;
   const [showGitHubCard, setShowGitHubCard] = useState(hasInitialLinks);
+
+  // State for Smart Recap regeneration
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Dropdown for actions menu
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
@@ -46,6 +52,33 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       setShowGitHubCard(true);
     }
   }, []);
+
+  // Track the last notified title to prevent infinite loops
+  const lastNotifiedTitleRef = useRef<string | null>(null);
+
+  // Notify parent when suggested title arrives from analytics (only once per new value)
+  useEffect(() => {
+    const title = analytics?.suggested_session_title;
+    if (title && onSuggestedTitleChange && title !== lastNotifiedTitleRef.current) {
+      lastNotifiedTitleRef.current = title;
+      onSuggestedTitleChange(title);
+    }
+  }, [analytics?.suggested_session_title, onSuggestedTitleChange]);
+
+  // Handle Smart Recap regeneration (owner only)
+  const handleRegenerateSmartRecap = useCallback(async () => {
+    if (isRegenerating || initialAnalytics !== undefined) return; // Disabled in Storybook mode
+    setIsRegenerating(true);
+    try {
+      await analyticsAPI.regenerateSmartRecap(sessionId);
+      // Force a fresh fetch (bypass 304 caching) to get the "generating" state and start fast polling
+      await forceRefetch();
+    } catch (err) {
+      console.error('Failed to regenerate smart recap:', err);
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [sessionId, isRegenerating, initialAnalytics, forceRefetch]);
 
   // Get cards data from the new cards-based format
   const cards: Partial<AnalyticsCards> = analytics?.cards ?? {};
@@ -96,15 +129,30 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
             return null;
           }
 
-          const spanClass = cardDef.span === 2 ? styles.span2 : cardDef.span === 3 ? styles.span3 : '';
+          const spanClass = cardDef.span === 'full' ? styles.spanFull
+            : cardDef.span === 2 ? styles.span2
+            : cardDef.span === 3 ? styles.span3
+            : '';
           const sizeClass = cardDef.size === 'compact' ? styles.sizeCompact
             : cardDef.size === 'tall' ? styles.sizeTall
             : styles.sizeStandard;
+
+          // Build additional props for specific cards
+          const extraProps: Record<string, unknown> = {};
+          if (cardDef.key === 'smart_recap' && isOwner) {
+            // Only show quota to session owner (private info)
+            extraProps.quota = analytics?.smart_recap_quota;
+            // Provide refresh capability to owners
+            extraProps.onRefresh = handleRegenerateSmartRecap;
+            extraProps.isRefreshing = isRegenerating;
+          }
+
           return (
             <div key={cardDef.key} className={`${spanClass} ${sizeClass}`.trim()}>
               <CardComponent
                 data={cardData}
                 loading={loading}
+                {...extraProps}
               />
             </div>
           );
@@ -154,6 +202,8 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       </div>
 
       <div className={styles.grid}>
+        {renderAnalyticsCards()}
+
         {/* GitHub Links - visibility controlled by toggle for owners */}
         <GitHubLinksCard
           sessionId={sessionId}
@@ -162,8 +212,6 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           forceShow={showGitHubCard}
           onHasLinksChange={handleHasLinksChange}
         />
-
-        {renderAnalyticsCards()}
       </div>
     </div>
   );

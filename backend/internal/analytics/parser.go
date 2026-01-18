@@ -19,6 +19,10 @@ type TranscriptLine struct {
 	// For user messages with tool results (e.g., Task/agent completions)
 	ToolUseResult *ToolUseResult `json:"toolUseResult,omitempty"` // Agent result metadata
 
+	// For skill expansion messages (user messages injected by skills)
+	IsMeta          bool   `json:"isMeta,omitempty"`          // True for skill expansion messages
+	SourceToolUseID string `json:"sourceToolUseID,omitempty"` // Links to the Skill tool_use that triggered this
+
 	// For system messages
 	Subtype           string           `json:"subtype,omitempty"`           // e.g., "compact_boundary"
 	CompactMetadata   *CompactMetadata `json:"compactMetadata,omitempty"`   // Compaction info
@@ -229,6 +233,13 @@ func (l *TranscriptLine) IsToolResultMessage() bool {
 	}
 	_, isArray := l.Message.Content.([]interface{})
 	return isArray
+}
+
+// IsSkillExpansionMessage returns true if this is a skill expansion message.
+// Skill expansions are user messages injected when a skill (like /commit) is invoked.
+// They have isMeta: true and sourceToolUseID linking to the Skill tool call.
+func (l *TranscriptLine) IsSkillExpansionMessage() bool {
+	return l.Type == "user" && l.IsMeta && l.SourceToolUseID != ""
 }
 
 // HasTextContent returns true if the message contains text content.

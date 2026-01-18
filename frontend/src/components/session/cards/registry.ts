@@ -5,6 +5,7 @@ import { ToolsCard } from './ToolsCard';
 import { ConversationCard } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
 import { RedactionsCard } from './RedactionsCard';
+import { SmartRecapCard } from './SmartRecapCard';
 import type { CardDefinition } from './types';
 import type {
   ToolsCardData,
@@ -26,38 +27,46 @@ import type {
  */
 export const cardRegistry: CardDefinition[] = [
   {
+    key: 'smart_recap',
+    title: 'Smart Recap',
+    component: SmartRecapCard,
+    order: 0,
+    span: 'full',
+    size: 'tall',
+  },
+  {
     key: 'tokens',
     title: 'Tokens',
     component: TokensCard,
-    order: 0,
+    order: 1,
     size: 'standard',
   },
   {
     key: 'session',
     title: 'Session',
     component: SessionCard,
-    order: 1,
+    order: 2,
     size: 'standard',
   },
   {
     key: 'conversation',
     title: 'Conversation',
     component: ConversationCard,
-    order: 2,
+    order: 3,
     size: 'compact',
   },
   {
     key: 'code_activity',
     title: 'Code Activity',
     component: CodeActivityCard,
-    order: 3,
+    order: 4,
     size: 'standard',
   },
   {
     key: 'tools',
     title: 'Tools',
     component: ToolsCard,
-    order: 4,
+    order: 5,
     span: 2,
     size: 'tall',
     shouldRender: (data: ToolsCardData | null) => !!data && data.total_calls > 0,
@@ -66,7 +75,7 @@ export const cardRegistry: CardDefinition[] = [
     key: 'agents_and_skills',
     title: 'Agents and Skills',
     component: AgentsAndSkillsCard,
-    order: 5,
+    order: 6,
     span: 2,
     size: 'tall',
     shouldRender: (data: AgentsAndSkillsCardData | null) =>
@@ -76,7 +85,7 @@ export const cardRegistry: CardDefinition[] = [
     key: 'redactions',
     title: 'Redactions',
     component: RedactionsCard,
-    order: 6,
+    order: 7,
     size: 'compact',
     shouldRender: (data: RedactionsCardData | null) =>
       !!data && data.total_redactions > 0,

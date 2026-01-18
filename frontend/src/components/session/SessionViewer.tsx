@@ -174,6 +174,16 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     }));
   }, []);
 
+  // Handle suggested title change from analytics
+  const handleSuggestedTitleChange = useCallback((title: string) => {
+    if (onSessionUpdate && session) {
+      onSessionUpdate({
+        ...session,
+        suggested_session_title: title,
+      });
+    }
+  }, [session, onSessionUpdate]);
+
   // Compute session metadata for header
   const sessionMeta = useMemo(() => {
     // Find first assistant message to get model
@@ -194,9 +204,9 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
       <div className={styles.mainContent}>
         <SessionHeader
           sessionId={session.id}
-          title={session.custom_title ?? session.summary ?? session.first_user_message ?? undefined}
+          title={session.custom_title ?? session.suggested_session_title ?? session.summary ?? session.first_user_message ?? undefined}
           hasCustomTitle={!!session.custom_title}
-          autoTitle={session.summary ?? session.first_user_message ?? undefined}
+          autoTitle={session.suggested_session_title ?? session.summary ?? session.first_user_message ?? undefined}
           externalId={session.external_id}
           model={sessionMeta.model}
           durationMs={sessionMeta.durationMs}
@@ -238,6 +248,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
               isOwner={isOwner}
               initialAnalytics={initialAnalytics}
               initialGithubLinks={initialGithubLinks}
+              onSuggestedTitleChange={handleSuggestedTitleChange}
             />
           ) : (
             <div className={styles.timelineContainer}>

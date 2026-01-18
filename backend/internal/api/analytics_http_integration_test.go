@@ -32,10 +32,10 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		// Upload JSONL content with assistant messages
-		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":20,"cache_read_input_tokens":30}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4-20241022","usage":{"input_tokens":200,"output_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":50}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
+		// Upload JSONL content with assistant messages (using full schema-compliant format)
+		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4-20241022","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":20,"cache_read_input_tokens":30}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":"u1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"id":"msg_2","type":"message","model":"claude-sonnet-4-20241022","role":"assistant","content":[{"type":"text","text":"Goodbye!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":200,"output_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":50}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z","parentUuid":"a1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 3, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)
@@ -148,8 +148,8 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		// Create public share
 		testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
-		// Upload JSONL content
-		jsonlContent := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":500,"output_tokens":200}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+		// Upload JSONL content (using full schema-compliant format)
+		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":500,"output_tokens":200}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
@@ -180,8 +180,8 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		// Upload JSONL content
-		jsonlContent := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+		// Upload JSONL content (using full schema-compliant format)
+		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
@@ -221,8 +221,8 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		// Upload initial JSONL content (1 line, 100 input tokens)
-		jsonlContent1 := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+		// Upload initial JSONL content (1 line, 100 input tokens, using full schema-compliant format)
+		jsonlContent1 := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 1, []byte(jsonlContent1))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
@@ -248,9 +248,9 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 			t.Errorf("expected computed_lines 1, got %d", result1.ComputedLines)
 		}
 
-		// Simulate CLI syncing new data: upload new chunk with additional line
-		jsonlContent2 := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":200,"output_tokens":100}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
+		// Simulate CLI syncing new data: upload new chunk with additional line (using full schema-compliant format)
+		jsonlContent2 := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"id":"msg_2","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Goodbye!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":200,"output_tokens":100}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z","parentUuid":"a1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 2, []byte(jsonlContent2))
 		// Update sync_files to reflect new line count (CreateTestSyncFile uses ON CONFLICT DO UPDATE)
@@ -283,11 +283,11 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		// Upload JSONL with compaction boundaries
-		jsonlContent := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:10Z"}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":80,"output_tokens":40}},"uuid":"a2","timestamp":"2025-01-01T00:01:00Z"}
-{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":60000},"logicalParentUuid":"a2","uuid":"c2","timestamp":"2025-01-01T00:02:00Z"}
+		// Upload JSONL with compaction boundaries (using full schema-compliant format)
+		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:10Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":50000},"logicalParentUuid":"a1","uuid":"c1","timestamp":"2025-01-01T00:00:15Z","parentUuid":"a1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0","isMeta":true}
+{"type":"assistant","message":{"id":"msg_2","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Continuing!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":80,"output_tokens":40}},"uuid":"a2","timestamp":"2025-01-01T00:01:00Z","parentUuid":"c1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":60000},"logicalParentUuid":"a2","uuid":"c2","timestamp":"2025-01-01T00:02:00Z","parentUuid":"a2","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0","isMeta":true}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 4, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 4)
@@ -327,10 +327,10 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		// Upload JSONL content (3 lines)
-		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"user","message":{"role":"user","content":"thanks"},"uuid":"u2","timestamp":"2025-01-01T00:00:02Z"}
+		// Upload JSONL content (3 lines, using full schema-compliant format)
+		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":"u1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"user","message":{"role":"user","content":"thanks"},"uuid":"u2","timestamp":"2025-01-01T00:00:02Z","parentUuid":"a1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 3, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)
@@ -355,9 +355,9 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		// Upload JSONL content (2 lines)
-		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
+		// Upload JSONL content (2 lines, using full schema-compliant format)
+		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":"u1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 2, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 2)
@@ -382,10 +382,10 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session")
 
-		// Upload JSONL content (3 lines)
-		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}
-{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":200,"output_tokens":100}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z"}
+		// Upload JSONL content (3 lines, using full schema-compliant format)
+		jsonlContent := `{"type":"user","message":{"role":"user","content":"hello"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":"u1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"id":"msg_2","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Goodbye!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":200,"output_tokens":100}},"uuid":"a2","timestamp":"2025-01-01T00:00:02Z","parentUuid":"a1","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session", "transcript.jsonl", 1, 3, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)

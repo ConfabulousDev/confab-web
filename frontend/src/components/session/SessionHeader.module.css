@@ -29,6 +29,14 @@
   font-weight: var(--font-semibold);
   color: var(--color-text-primary);
   margin: 0;
+  /* Prevent extremely long titles from breaking layout */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  /* Limit to 3 lines with line-clamp */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .copyIdBtn {
