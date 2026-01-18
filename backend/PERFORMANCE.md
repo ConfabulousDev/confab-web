@@ -772,6 +772,108 @@ export LOG_FORMAT=json # json, text
 
 ---
 
+## Memory Profiling (pprof)
+
+Go's built-in profiler for debugging memory issues, goroutine leaks, and CPU bottlenecks.
+
+### Enabling pprof
+
+pprof runs on a separate localhost-only port (6060) and is controlled by an environment variable:
+
+```bash
+# Enable on Fly.io
+fly secrets set ENABLE_PPROF=true -a confab-backend
+
+# Disable when done
+fly secrets unset ENABLE_PPROF -a confab-backend
+```
+
+When enabled, you'll see in logs: `pprof debug server starting addr=127.0.0.1:6060`
+
+### Accessing pprof
+
+Use `fly proxy` to tunnel to the debug port (never exposed to the internet):
+
+```bash
+fly proxy 6060:6060 -a confab-backend
+# Output: Proxying local port 6060 to remote [confab-backend.internal]:6060
+```
+
+### Available Profiles
+
+| Profile | Endpoint | Use case |
+|---------|----------|----------|
+| heap | `/debug/pprof/heap` | Current memory usage |
+| allocs | `/debug/pprof/allocs` | Allocation hotspots |
+| goroutine | `/debug/pprof/goroutine` | Goroutine leaks |
+| profile | `/debug/pprof/profile` | CPU profiling (30s) |
+| trace | `/debug/pprof/trace` | Execution trace |
+| block | `/debug/pprof/block` | Blocking operations |
+| mutex | `/debug/pprof/mutex` | Mutex contention |
+
+### Common Commands
+
+**Quick health check:**
+```bash
+# Goroutine count
+curl -s http://localhost:6060/debug/pprof/goroutine?debug=0 | head -1
+
+# Memory overview
+curl -s http://localhost:6060/debug/pprof/heap?debug=1 | head -30
+```
+
+**Interactive analysis:**
+```bash
+# Heap profile - what's using memory now
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+(pprof) top 15          # Top memory consumers
+(pprof) top 15 -cum     # Include memory from callees
+(pprof) list funcName   # Line-by-line breakdown
+(pprof) web             # Flame graph in browser
+```
+
+**Goroutine analysis:**
+```bash
+go tool pprof http://localhost:6060/debug/pprof/goroutine
+
+(pprof) top 10          # Functions with most goroutines
+(pprof) traces          # Full stack traces
+```
+
+**Visual web UI:**
+```bash
+go tool pprof -http=:9090 http://localhost:6060/debug/pprof/heap
+# Opens browser to http://localhost:9090 with flame graphs
+```
+
+### Comparing Before/After
+
+Useful for finding what grew during a specific operation:
+
+```bash
+# Snapshot before load
+curl -o before.pb.gz http://localhost:6060/debug/pprof/heap
+
+# Trigger the operation (e.g., Smart Recap requests)
+
+# Snapshot after
+curl -o after.pb.gz http://localhost:6060/debug/pprof/heap
+
+# Compare - shows only what increased
+go tool pprof -base=before.pb.gz after.pb.gz
+(pprof) top 10
+```
+
+### Security
+
+- pprof listens only on `127.0.0.1:6060` (localhost)
+- Not exposed to the internet
+- Access requires `fly proxy` (authenticated via Fly CLI)
+- Disable after debugging sessions
+
+---
+
 ## Performance Checklist
 
 ### Pre-Deployment
@@ -816,6 +918,12 @@ hey -n 10000 -c 100 \
 ---
 
 ## Changelog
+
+### 2026-01-18: pprof Debug Server Added
+- Added optional pprof server on localhost:6060
+- Controlled by `ENABLE_PPROF=true` environment variable
+- Access via `fly proxy 6060:6060` for memory/goroutine profiling
+- Useful for debugging OOM issues and goroutine leaks
 
 ### 2025-01-21: Brotli Compression Added
 - Added Brotli encoding (preferred over gzip)

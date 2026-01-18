@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,6 +21,12 @@ import (
 )
 
 func main() {
+	// Start pprof debug server if enabled (for memory/CPU profiling)
+	// Access via: fly proxy 6060:6060 -a confab-backend
+	if os.Getenv("ENABLE_PPROF") == "true" {
+		go startPprofServer()
+	}
+
 	// Initialize OpenTelemetry (sends traces to Honeycomb)
 	// Configured via env vars: OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS
 	otelShutdown, err := otelconfig.ConfigureOpenTelemetry()
@@ -262,5 +269,41 @@ func loadConfig() Config {
 			FromName:         emailFromName,
 			RateLimitPerHour: emailRateLimitPerHour,
 		},
+	}
+}
+
+// startPprofServer starts a pprof debug server on localhost:6060.
+// This server is only accessible locally (127.0.0.1) and is intended
+// for use with `fly proxy 6060:6060` for remote debugging.
+//
+// Available endpoints:
+//   - /debug/pprof/heap      - heap memory profile
+//   - /debug/pprof/goroutine - goroutine stack traces
+//   - /debug/pprof/allocs    - allocation profile
+//   - /debug/pprof/profile   - CPU profile (30s default)
+//   - /debug/pprof/trace     - execution trace
+func startPprofServer() {
+	mux := http.NewServeMux()
+
+	// Register pprof handlers
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	// Register specific profile handlers
+	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
+	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+
+	addr := "127.0.0.1:6060"
+	logger.Info("pprof debug server starting", "addr", addr)
+
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		logger.Warn("pprof server failed", "error", err)
 	}
 }
