@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -52,16 +55,33 @@ func NewSmartRecapAnalyzer(client *anthropic.Client, model string) *SmartRecapAn
 
 // Analyze generates a smart recap for the given transcript.
 func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*SmartRecapResult, error) {
+	ctx, span := tracer.Start(ctx, "analytics.smart_recap.analyze",
+		trace.WithAttributes(attribute.String("llm.model", a.model)))
+	defer span.End()
+
 	// Prepare the transcript for the LLM
 	transcript := PrepareTranscript(fc)
 	if transcript == "" {
-		return nil, fmt.Errorf("no content to analyze")
+		err := fmt.Errorf("no content to analyze")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
 	}
 
+	// Track transcript size
+	transcriptLen := len(transcript)
+	truncated := false
+
 	// Truncate if too long
-	if len(transcript) > MaxTranscriptChars {
+	if transcriptLen > MaxTranscriptChars {
 		transcript = transcript[:MaxTranscriptChars] + "\n\n[Transcript truncated due to length]"
+		truncated = true
 	}
+
+	span.SetAttributes(
+		attribute.Int("transcript.chars", transcriptLen),
+		attribute.Bool("transcript.truncated", truncated),
+	)
 
 	start := time.Now()
 
@@ -77,6 +97,8 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*
 		},
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("LLM request failed: %w", err)
 	}
 
@@ -85,12 +107,21 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*
 	// Parse the response
 	result, err := parseSmartRecapResponse(resp.GetTextContent())
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
 	result.InputTokens = resp.Usage.InputTokens
 	result.OutputTokens = resp.Usage.OutputTokens
 	result.GenerationTimeMs = generationTimeMs
+
+	// Record final metrics
+	span.SetAttributes(
+		attribute.Int("llm.tokens.input", result.InputTokens),
+		attribute.Int("llm.tokens.output", result.OutputTokens),
+		attribute.Int("generation.time_ms", generationTimeMs),
+	)
 
 	return result, nil
 }

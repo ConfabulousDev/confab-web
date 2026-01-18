@@ -15,7 +15,13 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+var analyticsTracer = otel.Tracer("confab/api/analytics")
 
 // Smart recap configuration constants
 const (
@@ -445,6 +451,15 @@ func generateSmartRecap(
 	fc *analytics.FileCollection,
 	log *slog.Logger,
 ) {
+	// Start a new span for the background generation
+	ctx, span := analyticsTracer.Start(ctx, "api.smart_recap.generate",
+		trace.WithAttributes(
+			attribute.String("session.id", sessionID),
+			attribute.Int64("session.line_count", lineCount),
+			attribute.String("llm.model", config.Model),
+		))
+	defer span.End()
+
 	// Create Anthropic client
 	client := anthropic.NewClient(config.APIKey)
 	analyzer := analytics.NewSmartRecapAnalyzer(client, config.Model)
@@ -455,6 +470,8 @@ func generateSmartRecap(
 
 	result, err := analyzer.Analyze(genCtx, fc)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		log.Error("Failed to generate smart recap", "error", err, "session_id", sessionID)
 		// Clear the lock so another request can try
 		dbCtx, dbCancel := context.WithTimeout(ctx, DatabaseTimeout)
@@ -462,6 +479,13 @@ func generateSmartRecap(
 		_ = analyticsStore.ClearSmartRecapLock(dbCtx, sessionID)
 		return
 	}
+
+	// Record token usage on the span
+	span.SetAttributes(
+		attribute.Int("llm.tokens.input", result.InputTokens),
+		attribute.Int("llm.tokens.output", result.OutputTokens),
+		attribute.Int("generation.time_ms", result.GenerationTimeMs),
+	)
 
 	// Save the result
 	dbCtx, dbCancel := context.WithTimeout(ctx, DatabaseTimeout)
@@ -485,12 +509,16 @@ func generateSmartRecap(
 	}
 
 	if err := analyticsStore.UpsertSmartRecapCard(dbCtx, card); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		log.Error("Failed to save smart recap card", "error", err, "session_id", sessionID)
 		return
 	}
 
 	// Increment quota
 	if err := database.IncrementSmartRecapQuota(dbCtx, sessionUserID); err != nil {
+		span.RecordError(err)
+		// Don't set error status for quota increment failure - the main operation succeeded
 		log.Error("Failed to increment smart recap quota", "error", err, "user_id", sessionUserID)
 	}
 
