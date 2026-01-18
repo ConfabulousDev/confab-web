@@ -168,6 +168,10 @@
   grid-column: span 3;
 }
 
+.spanFull {
+  grid-column: 1 / -1;
+}
+
 /* Card height hints for consistent grid alignment */
 .sizeCompact {
   min-height: 120px;

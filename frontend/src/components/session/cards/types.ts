@@ -26,8 +26,8 @@ export interface CardDefinition {
   component: React.ComponentType<CardProps<any>>;
   /** Display order (lower = earlier) */
   order: number;
-  /** Number of grid columns to span (default: 1) */
-  span?: 1 | 2 | 3;
+  /** Number of grid columns to span (default: 1), 'full' spans all columns */
+  span?: 1 | 2 | 3 | 'full';
   /** Height hint for consistent grid alignment (default: 'standard') */
   size?: 'compact' | 'standard' | 'tall';
   /**

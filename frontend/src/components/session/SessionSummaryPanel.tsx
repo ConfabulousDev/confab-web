@@ -96,7 +96,10 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
             return null;
           }
 
-          const spanClass = cardDef.span === 2 ? styles.span2 : cardDef.span === 3 ? styles.span3 : '';
+          const spanClass = cardDef.span === 'full' ? styles.spanFull
+            : cardDef.span === 2 ? styles.span2
+            : cardDef.span === 3 ? styles.span3
+            : '';
           const sizeClass = cardDef.size === 'compact' ? styles.sizeCompact
             : cardDef.size === 'tall' ? styles.sizeTall
             : styles.sizeStandard;
