@@ -61,15 +61,18 @@ export function SmartRecapCard({
   // Data is available (SmartRecapCardData) - TypeScript now knows it's not generating
   const recapData: SmartRecapCardData = data;
 
-  // Build subtitle showing staleness and quota
+  // Build subtitle showing model, staleness, and quota
   const subtitleParts: string[] = [];
+  // Show model name (extract just the model part, e.g., "claude-haiku-4-5")
+  const modelShort = recapData.model_used.replace(/-\d{8}$/, '');
+  subtitleParts.push(modelShort);
   if (recapData.is_stale) {
     subtitleParts.push('Outdated');
   }
   if (quota) {
     subtitleParts.push(`${quota.used}/${quota.limit} used`);
   }
-  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : undefined;
+  const subtitle = subtitleParts.join(' · ');
 
   return (
     <CardWrapper title="Smart Recap" icon={SparklesIcon} subtitle={subtitle}>
@@ -135,13 +138,12 @@ export function SmartRecapCard({
         </>
       )}
 
-      {/* Footer with model info */}
-      <div className={styles.footer}>
-        <span className={styles.modelUsed}>Powered by {recapData.model_used}</span>
-        {quota?.exceeded && (
+      {/* Footer - only show quota warning if exceeded */}
+      {quota?.exceeded && (
+        <div className={styles.footer}>
           <span className={styles.quotaWarning}>Monthly limit reached</span>
-        )}
-      </div>
+        </div>
+      )}
     </CardWrapper>
   );
 }

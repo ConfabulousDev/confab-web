@@ -172,6 +172,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				// Get session owner ID for quota lookup
 				sessionUserID, externalID, err := database.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 				if err == nil {
+					isOwner := result.AccessInfo.AccessType == db.SessionAccessOwner
 					handleSmartRecap(
 						r.Context(),
 						database,
@@ -185,6 +186,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 						nil, // transcript not downloaded yet
 						response,
 						log,
+						isOwner,
 					)
 				}
 			}
@@ -273,6 +275,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		// Handle smart recap (if enabled)
 		if smartRecapConfig.Enabled {
+			isOwner := result.AccessInfo.AccessType == db.SessionAccessOwner
 			handleSmartRecap(
 				r.Context(),
 				database,
@@ -286,6 +289,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				fc,
 				response,
 				log,
+				isOwner,
 			)
 		}
 
@@ -296,6 +300,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 // handleSmartRecap handles smart recap computation for the analytics response.
 // Any viewer (owner, shared, or public) can trigger generation - quota is charged to session owner.
 // If fc is nil, the transcript will be downloaded in background when generation is needed.
+// isOwner controls whether quota info is included in the response (private to owner).
 func handleSmartRecap(
 	ctx context.Context,
 	database *db.DB,
@@ -309,6 +314,7 @@ func handleSmartRecap(
 	fc *analytics.FileCollection, // nil if transcript not yet downloaded
 	response *analytics.AnalyticsResponse,
 	log *slog.Logger,
+	isOwner bool,
 ) {
 	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
@@ -320,7 +326,7 @@ func handleSmartRecap(
 		return
 	}
 
-	// Get quota info (always include in response if enabled)
+	// Get quota info - needed for generation decisions, but only expose to owner
 	// Quota is tracked against the session owner, not the viewer
 	// Reset quota if needed (start of new month)
 	_, _ = database.ResetSmartRecapQuotaIfNeeded(dbCtx, sessionUserID)
@@ -335,7 +341,10 @@ func handleSmartRecap(
 			Limit:    config.QuotaLimit,
 			Exceeded: quota.ComputeCount >= config.QuotaLimit,
 		}
-		response.SmartRecapQuota = quotaInfo
+		// Only include quota in response for session owner (private info)
+		if isOwner {
+			response.SmartRecapQuota = quotaInfo
+		}
 	}
 
 	// Helper to start generation, downloading transcript if needed
