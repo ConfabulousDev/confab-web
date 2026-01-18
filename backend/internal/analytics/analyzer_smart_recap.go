@@ -204,11 +204,12 @@ func PrepareStats(cardStats map[string]interface{}) string {
 			sb.WriteString(fmt.Sprintf("    <cost_usd>%s</cost_usd>\n", tokens.EstimatedUSD))
 		}
 		if tokens.CacheRead > 0 || tokens.CacheCreation > 0 {
-			totalInput := tokens.Input
-			cacheHits := tokens.CacheRead
-			if totalInput > 0 {
-				cacheRate := float64(cacheHits) / float64(totalInput) * 100
-				sb.WriteString(fmt.Sprintf("    <cache_hit_rate_percent>%.1f</cache_hit_rate_percent>\n", cacheRate))
+			// Cache hit rate = CacheRead / (CacheRead + Input)
+			// This represents the fraction of input tokens that came from cache
+			totalInputTokens := tokens.CacheRead + tokens.Input
+			if totalInputTokens > 0 {
+				cacheHitRate := float64(tokens.CacheRead) / float64(totalInputTokens) * 100
+				sb.WriteString(fmt.Sprintf("    <cache_hit_rate_percent>%.1f</cache_hit_rate_percent>\n", cacheHitRate))
 			}
 		}
 		sb.WriteString("  </tokens>\n")
