@@ -53,8 +53,10 @@ func NewSmartRecapAnalyzer(client *anthropic.Client, model string) *SmartRecapAn
 	}
 }
 
-// Analyze generates a smart recap for the given transcript.
-func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*SmartRecapResult, error) {
+// Analyze generates a smart recap for the given transcript and analytics stats.
+// cardStats contains the computed analytics cards (tokens, session, conversation, etc.)
+// which are included in the prompt for additional context.
+func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, cardStats map[string]interface{}) (*SmartRecapResult, error) {
 	ctx, span := tracer.Start(ctx, "analytics.smart_recap.analyze",
 		trace.WithAttributes(attribute.String("llm.model", a.model)))
 	defer span.End()
@@ -68,19 +70,34 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*
 		return nil, err
 	}
 
-	// Track transcript size
-	transcriptLen := len(transcript)
+	// Prepare the stats section
+	statsSection := PrepareStats(cardStats)
+
+	// Combine transcript and stats
+	userContent := transcript
+	if statsSection != "" {
+		userContent = transcript + "\n\n" + statsSection
+	}
+
+	// Track content size
+	contentLen := len(userContent)
 	truncated := false
 
-	// Truncate if too long
-	if transcriptLen > MaxTranscriptChars {
-		transcript = transcript[:MaxTranscriptChars] + "\n\n[Transcript truncated due to length]"
+	// Truncate if too long (prioritize transcript, stats are at the end)
+	if contentLen > MaxTranscriptChars {
+		// Truncate transcript portion, keep stats
+		maxTranscript := MaxTranscriptChars - len(statsSection) - 100 // leave room for truncation message
+		if maxTranscript > 0 && len(transcript) > maxTranscript {
+			transcript = transcript[:maxTranscript] + "\n\n[Transcript truncated due to length]"
+			userContent = transcript + "\n\n" + statsSection
+		}
 		truncated = true
 	}
 
 	span.SetAttributes(
-		attribute.Int("transcript.chars", transcriptLen),
-		attribute.Bool("transcript.truncated", truncated),
+		attribute.Int("content.chars", contentLen),
+		attribute.Bool("content.truncated", truncated),
+		attribute.Bool("stats.included", statsSection != ""),
 	)
 
 	start := time.Now()
@@ -93,7 +110,7 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection) (*
 		Temperature: &temperature,
 		System:      smartRecapSystemPrompt,
 		Messages: []anthropic.Message{
-			{Role: "user", Content: transcript},
+			{Role: "user", Content: userContent},
 		},
 	})
 	if err != nil {
@@ -163,6 +180,123 @@ func PrepareTranscript(fc *FileCollection) string {
 		}
 	}
 	sb.WriteString("</transcript>")
+
+	return sb.String()
+}
+
+// PrepareStats formats the computed analytics cards as XML for the LLM.
+// This provides additional context about session metrics for pattern detection.
+func PrepareStats(cardStats map[string]interface{}) string {
+	if len(cardStats) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("<session_stats>\n")
+
+	// Tokens card
+	if tokens, ok := cardStats["tokens"].(TokensCardData); ok {
+		sb.WriteString("  <tokens>\n")
+		sb.WriteString(fmt.Sprintf("    <input>%d</input>\n", tokens.Input))
+		sb.WriteString(fmt.Sprintf("    <output>%d</output>\n", tokens.Output))
+		if tokens.EstimatedUSD != "" && tokens.EstimatedUSD != "0.00" {
+			sb.WriteString(fmt.Sprintf("    <cost_usd>%s</cost_usd>\n", tokens.EstimatedUSD))
+		}
+		if tokens.CacheRead > 0 || tokens.CacheCreation > 0 {
+			totalInput := tokens.Input
+			cacheHits := tokens.CacheRead
+			if totalInput > 0 {
+				cacheRate := float64(cacheHits) / float64(totalInput) * 100
+				sb.WriteString(fmt.Sprintf("    <cache_hit_rate_percent>%.1f</cache_hit_rate_percent>\n", cacheRate))
+			}
+		}
+		sb.WriteString("  </tokens>\n")
+	}
+
+	// Session card
+	if session, ok := cardStats["session"].(SessionCardData); ok {
+		sb.WriteString("  <session>\n")
+		if session.DurationMs != nil && *session.DurationMs > 0 {
+			sb.WriteString(fmt.Sprintf("    <duration_minutes>%.1f</duration_minutes>\n", float64(*session.DurationMs)/60000))
+		}
+		totalCompactions := session.CompactionAuto + session.CompactionManual
+		if totalCompactions > 0 {
+			sb.WriteString(fmt.Sprintf("    <compactions>%d</compactions>\n", totalCompactions))
+		}
+		sb.WriteString("  </session>\n")
+	}
+
+	// Conversation card
+	if conv, ok := cardStats["conversation"].(ConversationCardData); ok {
+		sb.WriteString("  <conversation>\n")
+		sb.WriteString(fmt.Sprintf("    <user_turns>%d</user_turns>\n", conv.UserTurns))
+		sb.WriteString(fmt.Sprintf("    <assistant_turns>%d</assistant_turns>\n", conv.AssistantTurns))
+		if conv.AvgUserThinkingMs != nil && *conv.AvgUserThinkingMs > 0 {
+			sb.WriteString(fmt.Sprintf("    <avg_user_response_seconds>%.1f</avg_user_response_seconds>\n", float64(*conv.AvgUserThinkingMs)/1000))
+		}
+		if conv.AssistantUtilization != nil {
+			sb.WriteString(fmt.Sprintf("    <assistant_utilization_percent>%.1f</assistant_utilization_percent>\n", *conv.AssistantUtilization*100))
+		}
+		sb.WriteString("  </conversation>\n")
+	}
+
+	// Code Activity card
+	if code, ok := cardStats["code_activity"].(CodeActivityCardData); ok {
+		if code.FilesRead > 0 || code.FilesModified > 0 {
+			sb.WriteString("  <code_activity>\n")
+			if code.FilesRead > 0 {
+				sb.WriteString(fmt.Sprintf("    <files_read>%d</files_read>\n", code.FilesRead))
+			}
+			if code.FilesModified > 0 {
+				sb.WriteString(fmt.Sprintf("    <files_modified>%d</files_modified>\n", code.FilesModified))
+			}
+			if code.LinesAdded > 0 {
+				sb.WriteString(fmt.Sprintf("    <lines_added>%d</lines_added>\n", code.LinesAdded))
+			}
+			if code.LinesRemoved > 0 {
+				sb.WriteString(fmt.Sprintf("    <lines_removed>%d</lines_removed>\n", code.LinesRemoved))
+			}
+			sb.WriteString("  </code_activity>\n")
+		}
+	}
+
+	// Tools card
+	if tools, ok := cardStats["tools"].(ToolsCardData); ok {
+		if tools.TotalCalls > 0 {
+			sb.WriteString("  <tools>\n")
+			sb.WriteString(fmt.Sprintf("    <total_calls>%d</total_calls>\n", tools.TotalCalls))
+			if tools.ErrorCount > 0 {
+				errorRate := float64(tools.ErrorCount) / float64(tools.TotalCalls) * 100
+				sb.WriteString(fmt.Sprintf("    <error_rate_percent>%.1f</error_rate_percent>\n", errorRate))
+			}
+			sb.WriteString("  </tools>\n")
+		}
+	}
+
+	// Agents and Skills card
+	if as, ok := cardStats["agents_and_skills"].(AgentsAndSkillsCardData); ok {
+		if as.AgentInvocations > 0 || as.SkillInvocations > 0 {
+			sb.WriteString("  <agents_and_skills>\n")
+			if as.AgentInvocations > 0 {
+				sb.WriteString(fmt.Sprintf("    <agent_invocations>%d</agent_invocations>\n", as.AgentInvocations))
+			}
+			if as.SkillInvocations > 0 {
+				sb.WriteString(fmt.Sprintf("    <skill_invocations>%d</skill_invocations>\n", as.SkillInvocations))
+			}
+			sb.WriteString("  </agents_and_skills>\n")
+		}
+	}
+
+	// Redactions card
+	if redact, ok := cardStats["redactions"].(RedactionsCardData); ok {
+		if redact.TotalRedactions > 0 {
+			sb.WriteString("  <redactions>\n")
+			sb.WriteString(fmt.Sprintf("    <total>%d</total>\n", redact.TotalRedactions))
+			sb.WriteString("  </redactions>\n")
+		}
+	}
+
+	sb.WriteString("</session_stats>")
 
 	return sb.String()
 }
@@ -449,18 +583,28 @@ func parseSmartRecapResponse(content string) (*SmartRecapResult, error) {
 
 const smartRecapSystemPrompt = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
 
-You are analyzing a Claude Code session transcript provided in XML format. The transcript contains:
-- <user> tags for human messages (prompts from the user)
-- <skill> tags for skill expansions (instructions injected when skills like /commit are invoked)
-- <assistant> tags for Claude's responses, which may include:
-  - <thinking> for Claude's reasoning process
-  - <tools_called> listing tool names used
-- <tool_results> tags showing which tools succeeded or failed
+You are analyzing a Claude Code session. The input contains:
 
-Provide a high-signal analysis.
+1. <transcript> - The conversation in XML format:
+   - <user> tags for human messages (prompts from the user)
+   - <skill> tags for skill expansions (instructions injected when skills like /commit are invoked)
+   - <assistant> tags for Claude's responses, which may include:
+     - <thinking> for Claude's reasoning process
+     - <tools_called> listing tool names used
+   - <tool_results> tags showing which tools succeeded or failed
+
+2. <session_stats> - Computed analytics metrics (if available):
+   - Token usage, costs, and cache hit rates
+   - Session duration and compaction count
+   - Conversation turn count and user response latencies
+   - Code activity (files created/modified, lines added/removed)
+   - Tool usage and error rates
+   - Agent and skill invocations
+
+Provide a high-signal analysis. Look for interesting patterns in both the transcript AND the stats.
 
 Output ONLY valid JSON with these fields:
-- recap: Short 2-3 sentence recap of what occurred
+- recap: Short 2-3 sentence recap of what occurred. If stats show notable patterns (e.g., very long user latencies suggesting distraction, high cache hit rate showing efficiency, many tool errors), mention them briefly.
 - went_well: Up to 3 things that went well (omit or use empty array if none are clearly valid)
 - went_bad: Up to 3 things that did not go well (omit or use empty array if none are clearly valid)
 - human_suggestions: Up to 3 human technique improvements (e.g., "provide more context in initial prompts")
@@ -471,12 +615,13 @@ Guidelines:
 - Keep lists very high signal. Better to omit an item than show something low-confidence.
 - Suggestions should be concise and actionable. Don't prefix with "suggest" - they're already suggestions.
 - Focus on what would actually improve future sessions.
+- Note interesting stat patterns: high cache utilization is good, long user latencies may indicate confusion, high tool error rates suggest issues.
 - Output ONLY the JSON object, no additional text.
 
 Example output:
 {
-  "recap": "User implemented a dark mode feature, iterating on CSS variables and component updates. Tests were added and all passed.",
-  "went_well": ["Clear initial requirements", "Good iteration on feedback"],
+  "recap": "User implemented a dark mode feature with 85% cache hit rate showing efficient context reuse. Tests were added and all passed after minor iteration.",
+  "went_well": ["Clear initial requirements", "High cache utilization", "Good iteration on feedback"],
   "went_bad": ["Multiple rounds needed to fix CSS specificity issues"],
   "human_suggestions": ["Include browser compatibility requirements upfront"],
   "environment_suggestions": [],

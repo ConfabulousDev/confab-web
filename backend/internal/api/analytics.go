@@ -184,6 +184,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 						externalID,
 						totalLineCount,
 						nil, // transcript not downloaded yet
+						response.Cards, // pass cached card stats for LLM context
 						response,
 						log,
 						isOwner,
@@ -287,6 +288,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				externalID,
 				totalLineCount,
 				fc,
+				response.Cards, // pass computed card stats for LLM context
 				response,
 				log,
 				isOwner,
@@ -301,6 +303,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 // Any viewer (owner, shared, or public) can trigger generation - quota is charged to session owner.
 // If fc is nil, the transcript will be downloaded in background when generation is needed.
 // isOwner controls whether quota info is included in the response (private to owner).
+// cardStats contains the computed analytics cards to include in the LLM prompt for context.
 func handleSmartRecap(
 	ctx context.Context,
 	database *db.DB,
@@ -312,6 +315,7 @@ func handleSmartRecap(
 	externalID string,
 	lineCount int64,
 	fc *analytics.FileCollection, // nil if transcript not yet downloaded
+	cardStats map[string]interface{}, // computed card data for LLM context
 	response *analytics.AnalyticsResponse,
 	log *slog.Logger,
 	isOwner bool,
@@ -350,14 +354,14 @@ func handleSmartRecap(
 	// Helper to start generation, downloading transcript if needed
 	tryStartGeneration := func() bool {
 		if fc != nil {
-			return startSmartRecapGeneration(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, fc, log)
+			return startSmartRecapGeneration(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, fc, cardStats, log)
 		}
 		// Need to download transcript in background
 		go func() {
 			bgCtx := context.Background()
 			downloadedFC := downloadTranscriptForSmartRecap(bgCtx, database, store, sessionID, sessionUserID, externalID, log)
 			if downloadedFC != nil {
-				startSmartRecapGeneration(bgCtx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, downloadedFC, log)
+				startSmartRecapGeneration(bgCtx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, downloadedFC, cardStats, log)
 			}
 		}()
 		return true
@@ -418,6 +422,7 @@ func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analyt
 
 // startSmartRecapGeneration attempts to acquire the lock and start LLM generation.
 // Returns true if generation was started, false otherwise.
+// cardStats contains the computed analytics cards to include in the LLM prompt.
 func startSmartRecapGeneration(
 	ctx context.Context,
 	database *db.DB,
@@ -427,6 +432,7 @@ func startSmartRecapGeneration(
 	sessionUserID int64,
 	lineCount int64,
 	fc *analytics.FileCollection,
+	cardStats map[string]interface{},
 	log *slog.Logger,
 ) bool {
 	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
@@ -443,12 +449,13 @@ func startSmartRecapGeneration(
 	}
 
 	// Start generation in background
-	go generateSmartRecap(context.Background(), database, analyticsStore, config, sessionID, sessionUserID, lineCount, fc, log)
+	go generateSmartRecap(context.Background(), database, analyticsStore, config, sessionID, sessionUserID, lineCount, fc, cardStats, log)
 
 	return true
 }
 
 // generateSmartRecap generates the smart recap using the LLM and saves it.
+// cardStats contains the computed analytics cards to include in the LLM prompt.
 func generateSmartRecap(
 	ctx context.Context,
 	database *db.DB,
@@ -458,6 +465,7 @@ func generateSmartRecap(
 	sessionUserID int64,
 	lineCount int64,
 	fc *analytics.FileCollection,
+	cardStats map[string]interface{},
 	log *slog.Logger,
 ) {
 	// Start a new span for the background generation
@@ -477,7 +485,7 @@ func generateSmartRecap(
 	genCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	result, err := analyzer.Analyze(genCtx, fc)
+	result, err := analyzer.Analyze(genCtx, fc, cardStats)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
