@@ -49,51 +49,9 @@ func TestExtractAgentID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractAgentID(tt.fileName)
+			got := ExtractAgentID(tt.fileName)
 			if got != tt.want {
-				t.Errorf("extractAgentID(%q) = %q, want %q", tt.fileName, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestMergeChunks(t *testing.T) {
-	tests := []struct {
-		name   string
-		chunks [][]byte
-		want   string
-	}{
-		{
-			name:   "empty chunks returns nil",
-			chunks: [][]byte{},
-			want:   "",
-		},
-		{
-			name:   "single chunk",
-			chunks: [][]byte{[]byte("hello")},
-			want:   "hello",
-		},
-		{
-			name:   "multiple chunks",
-			chunks: [][]byte{[]byte("hello"), []byte(" "), []byte("world")},
-			want:   "hello world",
-		},
-		{
-			name:   "chunks with newlines",
-			chunks: [][]byte{[]byte("line1\n"), []byte("line2\n")},
-			want:   "line1\nline2\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := mergeChunks(tt.chunks)
-			if err != nil {
-				t.Errorf("mergeChunks() error = %v", err)
-				return
-			}
-			if string(got) != tt.want {
-				t.Errorf("mergeChunks() = %q, want %q", string(got), tt.want)
+				t.Errorf("ExtractAgentID(%q) = %q, want %q", tt.fileName, got, tt.want)
 			}
 		})
 	}

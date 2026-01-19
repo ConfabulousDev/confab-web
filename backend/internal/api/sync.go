@@ -551,268 +551,6 @@ func buildChunkS3Key(userID int64, externalID, fileName string, firstLine, lastL
 		userID, externalID, fileName, firstLine, lastLine)
 }
 
-// parseChunkKey extracts line numbers from a chunk S3 key
-// Returns (firstLine, lastLine, ok)
-func parseChunkKey(key string) (int, int, bool) {
-	// Key format: .../chunk_00000001_00000100.jsonl
-	parts := strings.Split(key, "/")
-	if len(parts) == 0 {
-		return 0, 0, false
-	}
-	filename := parts[len(parts)-1]
-	if !strings.HasPrefix(filename, "chunk_") || !strings.HasSuffix(filename, ".jsonl") {
-		return 0, 0, false
-	}
-
-	// Extract line numbers
-	// chunk_00000001_00000100.jsonl -> 00000001_00000100
-	middle := strings.TrimPrefix(filename, "chunk_")
-	middle = strings.TrimSuffix(middle, ".jsonl")
-
-	var first, last int
-	_, err := fmt.Sscanf(middle, "%08d_%08d", &first, &last)
-	if err != nil {
-		return 0, 0, false
-	}
-
-	return first, last, true
-}
-
-// chunkInfo holds parsed chunk metadata
-type chunkInfo struct {
-	key       string
-	firstLine int
-	lastLine  int
-	data      []byte
-}
-
-// chunkDownloader is an interface for downloading chunks from storage
-type chunkDownloader interface {
-	Download(ctx context.Context, key string) ([]byte, error)
-}
-
-// maxParallelDownloads limits concurrent chunk downloads to avoid overwhelming S3
-const maxParallelDownloads = 10
-
-// chunkResult holds the result of a parallel chunk download
-type chunkResult struct {
-	index    int
-	chunk    chunkInfo
-	err      error
-	duration time.Duration // time taken to download this chunk
-}
-
-// downloadChunks downloads all chunks for the given keys in parallel and returns them as chunkInfo slices.
-// Keys with unparseable names are skipped with a warning log.
-// Downloads are limited to maxParallelDownloads concurrent operations.
-func downloadChunks(ctx context.Context, storage chunkDownloader, chunkKeys []string) ([]chunkInfo, error) {
-	if len(chunkKeys) == 0 {
-		return nil, nil
-	}
-
-	log := logger.Ctx(ctx)
-
-	// Parse all keys first to filter out invalid ones
-	type keyInfo struct {
-		key       string
-		firstLine int
-		lastLine  int
-		index     int // original index for ordering
-	}
-	validKeys := make([]keyInfo, 0, len(chunkKeys))
-	for i, key := range chunkKeys {
-		firstLine, lastLine, ok := parseChunkKey(key)
-		if !ok {
-			log.Warn("Skipping chunk with unparseable key", "key", key)
-			continue
-		}
-		validKeys = append(validKeys, keyInfo{key: key, firstLine: firstLine, lastLine: lastLine, index: i})
-	}
-
-	if len(validKeys) == 0 {
-		return nil, nil
-	}
-
-	// Use a semaphore pattern for bounded parallelism
-	results := make(chan chunkResult, len(validKeys))
-	sem := make(chan struct{}, maxParallelDownloads)
-
-	// Launch download goroutines
-	for i, ki := range validKeys {
-		go func(idx int, ki keyInfo) {
-			sem <- struct{}{}        // acquire semaphore
-			defer func() { <-sem }() // release semaphore
-
-			start := time.Now()
-			data, err := storage.Download(ctx, ki.key)
-			elapsed := time.Since(start)
-
-			if err != nil {
-				log.Error("Failed to download chunk", "error", err, "key", ki.key)
-				results <- chunkResult{index: idx, err: err, duration: elapsed}
-				return
-			}
-
-			results <- chunkResult{
-				index:    idx,
-				duration: elapsed,
-				chunk: chunkInfo{
-					key:       ki.key,
-					firstLine: ki.firstLine,
-					lastLine:  ki.lastLine,
-					data:      data,
-				},
-			}
-		}(i, ki)
-	}
-
-	// Collect results and track timing metrics
-	chunks := make([]chunkInfo, len(validKeys))
-	var firstErr error
-	var maxDuration time.Duration
-	var sumDuration time.Duration
-
-	for range validKeys {
-		result := <-results
-		sumDuration += result.duration
-		if result.duration > maxDuration {
-			maxDuration = result.duration
-		}
-		if result.err != nil {
-			if firstErr == nil {
-				firstErr = result.err
-			}
-			continue
-		}
-		chunks[result.index] = result.chunk
-	}
-
-	// Log parallel download performance metrics
-	// maxDuration = wall-clock time if downloads were fully parallel (limited by slowest)
-	// sumDuration = total time if downloads were sequential
-	// Improvement ratio = sumDuration / maxDuration (higher = better parallelization)
-	if len(validKeys) > 1 {
-		var ratio float64
-		if maxDuration > 0 {
-			ratio = float64(sumDuration) / float64(maxDuration)
-		}
-		log.Info("Parallel chunk download metrics",
-			"chunk_count", len(validKeys),
-			"max_duration_ms", maxDuration.Milliseconds(),
-			"sum_duration_ms", sumDuration.Milliseconds(),
-			"speedup_ratio", fmt.Sprintf("%.2f", ratio))
-	}
-
-	if firstErr != nil {
-		return nil, firstErr
-	}
-
-	return chunks, nil
-}
-
-// MaxMergeLines is the maximum number of lines allowed in a merge operation.
-// This prevents memory exhaustion from corrupted chunk filenames.
-// Normal operation limit: 30,000 chunks × 100 lines = 3M lines.
-// We set 10M as a generous safety margin.
-const MaxMergeLines = 10_000_000
-
-// LargeMergeWarningThreshold is the line count at which we log a warning.
-const LargeMergeWarningThreshold = 1_000_000
-
-// mergeChunks takes downloaded chunks and merges them, handling overlaps.
-// Uses a simple array indexed by line number - each chunk's lines are written
-// to the array, and later chunks overwrite earlier ones for the same line.
-// The final array is then concatenated into the result.
-//
-// If overlapping lines have different content (shouldn't happen normally),
-// a warning is logged since this may indicate data corruption.
-//
-// Returns an error if maxLine exceeds MaxMergeLines to prevent memory exhaustion.
-func mergeChunks(chunks []chunkInfo) ([]byte, error) {
-	if len(chunks) == 0 {
-		return nil, nil
-	}
-	if len(chunks) == 1 {
-		return chunks[0].data, nil
-	}
-
-	// Find max line number
-	maxLine := 0
-	for _, c := range chunks {
-		if c.lastLine > maxLine {
-			maxLine = c.lastLine
-		}
-	}
-
-	// Safety check: prevent memory exhaustion from corrupted data
-	if maxLine > MaxMergeLines {
-		return nil, fmt.Errorf("maxLine %d exceeds safety limit %d", maxLine, MaxMergeLines)
-	}
-
-	// Log warning for unusually large merges
-	if maxLine > LargeMergeWarningThreshold {
-		logger.Warn("Large chunk merge operation",
-			"max_line", maxLine,
-			"chunk_count", len(chunks),
-			"threshold", LargeMergeWarningThreshold)
-	}
-
-	// Build array indexed by line number (0-indexed, so line 1 is at index 0)
-	lines := make([][]byte, maxLine)
-
-	// Populate array from each chunk (last write wins)
-	for _, c := range chunks {
-		chunkLines := splitLines(c.data)
-		for i, line := range chunkLines {
-			lineNum := c.firstLine + i // 1-based line number
-			if lineNum >= 1 && lineNum <= maxLine {
-				idx := lineNum - 1
-				// Check for conflicting content on overlap
-				if lines[idx] != nil && !bytes.Equal(lines[idx], line) {
-					logger.Warn("Chunk overlap with differing content",
-						"line_num", lineNum,
-						"chunk", c.key,
-						"old_len", len(lines[idx]),
-						"new_len", len(line))
-				}
-				lines[idx] = line
-			}
-		}
-	}
-
-	// Build result from array
-	var result []byte
-	for _, line := range lines {
-		if line != nil {
-			result = append(result, line...)
-			result = append(result, '\n')
-		}
-	}
-
-	return result, nil
-}
-
-// splitLines splits data into lines, preserving each line's content without the newline
-func splitLines(data []byte) [][]byte {
-	if len(data) == 0 {
-		return nil
-	}
-
-	var lines [][]byte
-	start := 0
-	for i := 0; i < len(data); i++ {
-		if data[i] == '\n' {
-			lines = append(lines, data[start:i])
-			start = i + 1
-		}
-	}
-	// Handle last line if no trailing newline
-	if start < len(data) {
-		lines = append(lines, data[start:])
-	}
-	return lines
-}
-
 // handleCanonicalSyncFileRead reads and concatenates all chunks for a file via canonical access (CF-132)
 // GET /api/v1/sessions/{id}/sync/file?file_name=...&line_offset=...
 // Supports: owner access, public shares, system shares, recipient shares
@@ -952,7 +690,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	if lineOffset > 0 {
 		var relevantKeys []string
 		for _, key := range chunkKeys {
-			_, lastLine, ok := parseChunkKey(key)
+			_, lastLine, ok := storage.ParseChunkKey(key)
 			if !ok {
 				// Include unparseable keys - they'll be skipped during download
 				relevantKeys = append(relevantKeys, key)
@@ -974,7 +712,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Download chunks and parse their line ranges
-	chunks, err := downloadChunks(storageCtx, s.storage, chunkKeys)
+	chunks, err := s.storage.DownloadChunks(storageCtx, chunkKeys)
 	if err != nil {
 		respondStorageError(w, err, "Failed to download file chunk")
 		return
@@ -987,15 +725,15 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Find the first line number among downloaded chunks (for correct filtering)
-	minFirstLine := chunks[0].firstLine
+	minFirstLine := chunks[0].FirstLine
 	for _, c := range chunks[1:] {
-		if c.firstLine < minFirstLine {
-			minFirstLine = c.firstLine
+		if c.FirstLine < minFirstLine {
+			minFirstLine = c.FirstLine
 		}
 	}
 
 	// Merge chunks, handling any overlaps from partial upload failures
-	merged, err := mergeChunks(chunks)
+	merged, err := storage.MergeChunks(chunks)
 	if err != nil {
 		log.Error("Failed to merge chunks", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to process session data")

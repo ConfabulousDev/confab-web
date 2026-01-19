@@ -15,7 +15,33 @@ Before writing any code, create a clear plan:
 - Consider edge cases, error handling, and potential impacts on existing code
 - For Linear tickets, update the issue with the plan before starting implementation
 
-### 2. Test Coverage
+### 2. Avoid Code Duplication (DRY)
+
+**Before implementing any logic, check if similar logic already exists elsewhere.**
+
+#### Common Duplication Patterns to Avoid
+
+1. **Query logic duplicated in SQL and Go** - If you have staleness/validity checks, they should exist in ONE place. Either SQL calls a shared function, or Go is the single source of truth.
+
+2. **Utility functions copied between packages** - Functions like `extractAgentID`, `mergeChunks`, `parseChunkKey` should live in ONE shared location and be imported everywhere.
+
+3. **Business logic in multiple code paths** - If both "on-demand" and "background worker" paths do the same thing, extract the shared logic to a common function.
+
+#### Where Shared Code Lives
+
+- **Chunk operations** (download, merge, parse keys): `internal/storage/chunks.go`
+- **Analytics computation**: `internal/analytics/` package
+- **Card staleness validation**: `internal/analytics/cards.go` (`IsValid`, `AllValid` methods)
+- **Smart recap generation**: `internal/analytics/smart_recap_generator.go`
+
+#### Before Writing New Code
+
+1. Search for existing implementations: `grep -r "functionName" backend/`
+2. Check if a similar pattern exists in related code paths
+3. If you find duplication, refactor to a shared location FIRST
+4. Add comments noting where the shared logic lives (e.g., "This mirrors AllValid() in cards.go")
+
+### 3. Test Coverage
 
 Every change should include appropriate tests. **Insufficient test coverage is not acceptable.**
 
@@ -75,7 +101,7 @@ If implementing a feature without tests, pause and ask:
 - "Are there edge cases I should test?"
 - "Should this have integration tests for the SQL queries?"
 
-### 3. Self-Review Before Presenting
+### 4. Self-Review Before Presenting
 
 **Before presenting any result to the human, perform a thorough code review:**
 

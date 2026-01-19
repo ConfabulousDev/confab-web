@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -221,7 +220,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		defer storageCancel()
 
 		// Download main transcript
-		mainContent, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, mainFile.FileName)
+		mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, mainFile.FileName)
 		if err != nil {
 			respondStorageError(w, err, "Failed to download transcript")
 			return
@@ -235,11 +234,11 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		// Download agent files
 		agentContents := make(map[string][]byte)
 		for _, af := range agentFiles {
-			agentID := extractAgentID(af.FileName)
+			agentID := analytics.ExtractAgentID(af.FileName)
 			if agentID == "" {
 				continue
 			}
-			content, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, af.FileName)
+			content, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, af.FileName)
 			if err != nil {
 				// Log but continue - graceful degradation
 				log.Warn("Failed to download agent file", "error", err, "file", af.FileName)
@@ -742,7 +741,7 @@ func downloadTranscriptForSmartRecap(
 	defer storageCancel()
 
 	// Download main transcript
-	mainContent, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, mainFile.FileName)
+	mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, mainFile.FileName)
 	if err != nil || mainContent == nil {
 		log.Error("Failed to download transcript for smart recap", "error", err, "session_id", sessionID)
 		return nil
@@ -751,11 +750,11 @@ func downloadTranscriptForSmartRecap(
 	// Download agent files
 	agentContents := make(map[string][]byte)
 	for _, af := range agentFiles {
-		agentID := extractAgentID(af.FileName)
+		agentID := analytics.ExtractAgentID(af.FileName)
 		if agentID == "" {
 			continue
 		}
-		content, err := downloadAndMergeFile(storageCtx, store, sessionUserID, externalID, af.FileName)
+		content, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, af.FileName)
 		if err != nil {
 			continue
 		}
@@ -772,36 +771,4 @@ func downloadTranscriptForSmartRecap(
 	}
 
 	return fc
-}
-
-// downloadAndMergeFile downloads and merges all chunks for a file.
-// Returns nil content if no chunks exist (not an error).
-func downloadAndMergeFile(ctx context.Context, store *storage.S3Storage, userID int64, externalID, fileName string) ([]byte, error) {
-	chunkKeys, err := store.ListChunks(ctx, userID, externalID, fileName)
-	if err != nil {
-		return nil, err
-	}
-	if len(chunkKeys) == 0 {
-		return nil, nil
-	}
-
-	chunks, err := downloadChunks(ctx, store, chunkKeys)
-	if err != nil {
-		return nil, err
-	}
-	if len(chunks) == 0 {
-		return nil, nil
-	}
-
-	return mergeChunks(chunks)
-}
-
-// extractAgentID extracts the agent ID from a filename like "agent-{id}.jsonl".
-// Returns empty string if the filename doesn't match the expected pattern.
-func extractAgentID(fileName string) string {
-	if !strings.HasPrefix(fileName, "agent-") || !strings.HasSuffix(fileName, ".jsonl") {
-		return ""
-	}
-	// Remove "agent-" prefix and ".jsonl" suffix
-	return strings.TrimSuffix(strings.TrimPrefix(fileName, "agent-"), ".jsonl")
 }

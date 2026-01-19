@@ -3,10 +3,9 @@ package analytics
 import (
 	"context"
 	"database/sql"
-	"strings"
+	"fmt"
 	"time"
 
-	"github.com/ConfabulousDev/confab-web/internal/anthropic"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -33,20 +32,61 @@ type PrecomputeConfig struct {
 
 // Precomputer handles background analytics precomputation.
 type Precomputer struct {
-	db             *sql.DB
-	store          *storage.S3Storage
-	analyticsStore *Store
-	config         PrecomputeConfig
+	db                  *sql.DB
+	store               *storage.S3Storage
+	analyticsStore      *Store
+	config              PrecomputeConfig
+	smartRecapGenerator *SmartRecapGenerator
+}
+
+// precomputeDB implements SmartRecapDB using raw SQL queries.
+// This allows the precomputer to use the shared SmartRecapGenerator
+// without depending on the db package.
+type precomputeDB struct {
+	db *sql.DB
+}
+
+func (p *precomputeDB) IncrementSmartRecapQuota(ctx context.Context, userID int64) error {
+	query := `
+		INSERT INTO smart_recap_quota (user_id, compute_count, last_compute_at)
+		VALUES ($1, 1, NOW())
+		ON CONFLICT (user_id) DO UPDATE SET
+			compute_count = smart_recap_quota.compute_count + 1,
+			last_compute_at = NOW()
+	`
+	_, err := p.db.ExecContext(ctx, query, userID)
+	return err
+}
+
+func (p *precomputeDB) UpdateSessionSuggestedTitle(ctx context.Context, sessionID string, title string) error {
+	query := `UPDATE sessions SET suggested_session_title = $1 WHERE id = $2`
+	_, err := p.db.ExecContext(ctx, query, title, sessionID)
+	return err
 }
 
 // NewPrecomputer creates a new Precomputer.
 func NewPrecomputer(db *sql.DB, store *storage.S3Storage, analyticsStore *Store, config PrecomputeConfig) *Precomputer {
-	return &Precomputer{
+	p := &Precomputer{
 		db:             db,
 		store:          store,
 		analyticsStore: analyticsStore,
 		config:         config,
 	}
+
+	// Create the shared smart recap generator if enabled
+	if config.SmartRecapEnabled {
+		p.smartRecapGenerator = NewSmartRecapGenerator(
+			analyticsStore,
+			&precomputeDB{db: db},
+			SmartRecapGeneratorConfig{
+				APIKey:            config.AnthropicAPIKey,
+				Model:             config.SmartRecapModel,
+				GenerationTimeout: 60 * time.Second,
+			},
+		)
+	}
+
+	return p
 }
 
 // FindStaleSessions returns sessions where any card is stale (outdated version or
@@ -75,7 +115,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 		LEFT JOIN session_card_tools tl ON sl.session_id = tl.session_id
 		LEFT JOIN session_card_code_activity ca ON sl.session_id = ca.session_id
 		LEFT JOIN session_card_conversation cv ON sl.session_id = cv.session_id
-		LEFT JOIN session_card_agents_skills as_card ON sl.session_id = as_card.session_id
+		LEFT JOIN session_card_agents_and_skills as_card ON sl.session_id = as_card.session_id
 		LEFT JOIN session_card_redactions rd ON sl.session_id = rd.session_id
 		WHERE s.session_type = 'Claude Code'
 		  AND NOT (
@@ -239,8 +279,8 @@ func (p *Precomputer) downloadTranscript(ctx context.Context, session StaleSessi
 		return nil, nil
 	}
 
-	// Download main transcript
-	mainContent, err := p.downloadAndMergeFile(ctx, session.UserID, session.ExternalID, mainFile.FileName)
+	// Download main transcript using the robust chunk merge from storage package
+	mainContent, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, mainFile.FileName)
 	if err != nil || mainContent == nil {
 		return nil, err
 	}
@@ -248,11 +288,11 @@ func (p *Precomputer) downloadTranscript(ctx context.Context, session StaleSessi
 	// Download agent files
 	agentContents := make(map[string][]byte)
 	for _, af := range agentFiles {
-		agentID := extractAgentID(af.FileName)
+		agentID := ExtractAgentID(af.FileName)
 		if agentID == "" {
 			continue
 		}
-		content, err := p.downloadAndMergeFile(ctx, session.UserID, session.ExternalID, af.FileName)
+		content, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, af.FileName)
 		if err != nil {
 			// Log but continue - graceful degradation
 			continue
@@ -271,51 +311,6 @@ func (p *Precomputer) downloadTranscript(ctx context.Context, session StaleSessi
 	return fc, nil
 }
 
-// downloadAndMergeFile downloads and merges all chunks for a file.
-func (p *Precomputer) downloadAndMergeFile(ctx context.Context, userID int64, externalID, fileName string) ([]byte, error) {
-	chunkKeys, err := p.store.ListChunks(ctx, userID, externalID, fileName)
-	if err != nil {
-		return nil, err
-	}
-	if len(chunkKeys) == 0 {
-		return nil, nil
-	}
-
-	// Download all chunks
-	var chunks [][]byte
-	for _, key := range chunkKeys {
-		data, err := p.store.Download(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		chunks = append(chunks, data)
-	}
-
-	// Merge chunks
-	return mergeChunks(chunks)
-}
-
-// mergeChunks merges multiple byte slices into one.
-func mergeChunks(chunks [][]byte) ([]byte, error) {
-	if len(chunks) == 0 {
-		return nil, nil
-	}
-
-	// Calculate total size
-	totalSize := 0
-	for _, chunk := range chunks {
-		totalSize += len(chunk)
-	}
-
-	// Allocate and copy
-	result := make([]byte, 0, totalSize)
-	for _, chunk := range chunks {
-		result = append(result, chunk...)
-	}
-
-	return result, nil
-}
-
 // precomputeSmartRecap handles smart recap generation with staleness and quota checks.
 // Returns an error if smart recap generation fails. Returns nil if skipped (not stale, quota exceeded, lock held).
 func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSession, fc *FileCollection, cardStats map[string]interface{}) error {
@@ -323,7 +318,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
 	defer span.End()
 
-	// Get current smart recap card
+	// Get current smart recap card to check staleness
 	smartCard, err := p.analyticsStore.GetSmartRecapCard(ctx, session.SessionID)
 	if err != nil {
 		span.RecordError(err)
@@ -339,9 +334,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 	}
 
 	// Check quota for session owner
-	quotaQuery := `
-		SELECT compute_count FROM smart_recap_quota WHERE user_id = $1
-	`
+	quotaQuery := `SELECT compute_count FROM smart_recap_quota WHERE user_id = $1`
 	var computeCount int
 	err = p.db.QueryRowContext(ctx, quotaQuery, session.UserID).Scan(&computeCount)
 	if err != nil && err != sql.ErrNoRows {
@@ -354,88 +347,187 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		return nil
 	}
 
-	// Try to acquire lock
-	acquired, err := p.analyticsStore.AcquireSmartRecapLock(ctx, session.SessionID, p.config.LockTimeoutSeconds)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	if !acquired {
+	// Use the shared generator for the actual generation (handles lock, LLM call, save, quota increment)
+	result := p.smartRecapGenerator.Generate(ctx, GenerateInput{
+		SessionID:      session.SessionID,
+		UserID:         session.UserID,
+		LineCount:      session.TotalLines,
+		FileCollection: fc,
+		CardStats:      cardStats,
+	}, p.config.LockTimeoutSeconds)
+
+	if result.Skipped {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "lock_held"))
 		return nil
 	}
-
-	// Generate smart recap
-	client := anthropic.NewClient(p.config.AnthropicAPIKey)
-	analyzer := NewSmartRecapAnalyzer(client, p.config.SmartRecapModel)
-
-	genCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	result, err := analyzer.Analyze(genCtx, fc, cardStats)
-	cancel()
-
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		// Clear lock on error
-		_ = p.analyticsStore.ClearSmartRecapLock(ctx, session.SessionID)
-		return err
+	if result.Error != nil {
+		span.RecordError(result.Error)
+		span.SetStatus(codes.Error, result.Error.Error())
+		return result.Error
 	}
-
-	// Save result (clears lock via upsert)
-	card := &SmartRecapCardRecord{
-		SessionID:                 session.SessionID,
-		Version:                   SmartRecapCardVersion,
-		ComputedAt:                time.Now().UTC(),
-		UpToLine:                  session.TotalLines,
-		Recap:                     result.Recap,
-		WentWell:                  result.WentWell,
-		WentBad:                   result.WentBad,
-		HumanSuggestions:          result.HumanSuggestions,
-		EnvironmentSuggestions:    result.EnvironmentSuggestions,
-		DefaultContextSuggestions: result.DefaultContextSuggestions,
-		ModelUsed:                 p.config.SmartRecapModel,
-		InputTokens:               result.InputTokens,
-		OutputTokens:              result.OutputTokens,
-		GenerationTimeMs:          &result.GenerationTimeMs,
-	}
-
-	if err := p.analyticsStore.UpsertSmartRecapCard(ctx, card); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		// Clear lock on error
-		_ = p.analyticsStore.ClearSmartRecapLock(ctx, session.SessionID)
-		return err
-	}
-
-	// Update session with suggested title
-	if result.SuggestedSessionTitle != "" {
-		titleQuery := `UPDATE sessions SET suggested_session_title = $1 WHERE id = $2`
-		_, _ = p.db.ExecContext(ctx, titleQuery, result.SuggestedSessionTitle, session.SessionID)
-	}
-
-	// Increment quota
-	quotaIncrementQuery := `
-		INSERT INTO smart_recap_quota (user_id, compute_count, last_compute_at)
-		VALUES ($1, 1, NOW())
-		ON CONFLICT (user_id) DO UPDATE SET
-			compute_count = smart_recap_quota.compute_count + 1,
-			last_compute_at = NOW()
-	`
-	_, _ = p.db.ExecContext(ctx, quotaIncrementQuery, session.UserID)
 
 	span.SetAttributes(
 		attribute.Bool("smart_recap.generated", true),
-		attribute.Int("llm.tokens.input", result.InputTokens),
-		attribute.Int("llm.tokens.output", result.OutputTokens),
+		attribute.Int("llm.tokens.input", result.Card.InputTokens),
+		attribute.Int("llm.tokens.output", result.Card.OutputTokens),
 	)
 	return nil
 }
 
-// extractAgentID extracts the agent ID from a filename like "agent-{id}.jsonl".
-func extractAgentID(fileName string) string {
-	if !strings.HasPrefix(fileName, "agent-") || !strings.HasSuffix(fileName, ".jsonl") {
-		return ""
+// FindStaleSmartRecapSessions returns sessions where smart recap is stale but regular cards are up-to-date.
+// Smart recap is stale if: missing OR wrong version OR (new lines AND time threshold exceeded).
+// This complements FindStaleSessions which finds sessions with stale regular cards.
+func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int) ([]StaleSession, error) {
+	ctx, span := tracer.Start(ctx, "precompute.find_stale_smart_recap_sessions",
+		trace.WithAttributes(attribute.Int("limit", limit)))
+	defer span.End()
+
+	if !p.config.SmartRecapEnabled {
+		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
+		return nil, nil
 	}
-	return strings.TrimSuffix(strings.TrimPrefix(fileName, "agent-"), ".jsonl")
+
+	// Query finds sessions where:
+	// 1. All regular cards are valid (up-to-date)
+	// 2. Smart recap is stale (missing, wrong version, or new lines + time threshold exceeded)
+	//
+	// The staleness interval is passed as a parameter to check computed_at.
+	query := `
+		WITH session_lines AS (
+			SELECT session_id, SUM(last_synced_line) as total_lines
+			FROM sync_files
+			WHERE file_type IN ('transcript', 'agent')
+			GROUP BY session_id
+			HAVING SUM(last_synced_line) > 0
+		)
+		SELECT sl.session_id, s.user_id, s.external_id, sl.total_lines
+		FROM session_lines sl
+		JOIN sessions s ON sl.session_id = s.id
+		LEFT JOIN session_card_tokens tc ON sl.session_id = tc.session_id
+		LEFT JOIN session_card_session sc ON sl.session_id = sc.session_id
+		LEFT JOIN session_card_tools tl ON sl.session_id = tl.session_id
+		LEFT JOIN session_card_code_activity ca ON sl.session_id = ca.session_id
+		LEFT JOIN session_card_conversation cv ON sl.session_id = cv.session_id
+		LEFT JOIN session_card_agents_and_skills as_card ON sl.session_id = as_card.session_id
+		LEFT JOIN session_card_redactions rd ON sl.session_id = rd.session_id
+		LEFT JOIN session_card_smart_recap sr ON sl.session_id = sr.session_id
+		WHERE s.session_type = 'Claude Code'
+		  -- All regular cards must be valid
+		  AND (
+			tc.session_id IS NOT NULL AND tc.version = $1 AND tc.up_to_line = sl.total_lines
+			AND sc.session_id IS NOT NULL AND sc.version = $2 AND sc.up_to_line = sl.total_lines
+			AND tl.session_id IS NOT NULL AND tl.version = $3 AND tl.up_to_line = sl.total_lines
+			AND ca.session_id IS NOT NULL AND ca.version = $4 AND ca.up_to_line = sl.total_lines
+			AND cv.session_id IS NOT NULL AND cv.version = $5 AND cv.up_to_line = sl.total_lines
+			AND as_card.session_id IS NOT NULL AND as_card.version = $6 AND as_card.up_to_line = sl.total_lines
+			AND rd.session_id IS NOT NULL AND rd.version = $7 AND rd.up_to_line = sl.total_lines
+		  )
+		  -- Smart recap must be stale
+		  AND NOT (
+			sr.session_id IS NOT NULL
+			AND sr.version = $8
+			AND (
+				sr.up_to_line >= sl.total_lines  -- No new lines
+				OR sr.computed_at > NOW() - $9::interval  -- New lines but within time threshold
+			)
+		  )
+		ORDER BY s.last_sync_at DESC NULLS LAST
+		LIMIT $10
+	`
+
+	// Convert staleness minutes to interval string
+	stalenessInterval := fmt.Sprintf("%d minutes", p.config.StalenessMinutes)
+
+	rows, err := p.db.QueryContext(ctx, query,
+		TokensCardVersion,
+		SessionCardVersion,
+		ToolsCardVersion,
+		CodeActivityCardVersion,
+		ConversationCardVersion,
+		AgentsAndSkillsCardVersion,
+		RedactionsCardVersion,
+		SmartRecapCardVersion,
+		stalenessInterval,
+		limit,
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []StaleSession
+	for rows.Next() {
+		var s StaleSession
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &s.TotalLines); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		sessions = append(sessions, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	span.SetAttributes(attribute.Int("sessions.found", len(sessions)))
+	return sessions, nil
+}
+
+// PrecomputeSmartRecapOnly computes only the smart recap for a session.
+// Use this when regular cards are already up-to-date but smart recap is stale.
+// It downloads the transcript, fetches existing card stats from DB, and generates smart recap.
+func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session StaleSession) error {
+	ctx, span := tracer.Start(ctx, "precompute.smart_recap_only",
+		trace.WithAttributes(
+			attribute.String("session.id", session.SessionID),
+			attribute.Int64("session.user_id", session.UserID),
+			attribute.Int64("session.total_lines", session.TotalLines),
+		))
+	defer span.End()
+
+	if !p.config.SmartRecapEnabled {
+		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
+		return nil
+	}
+
+	// Download transcript (needed for smart recap generation)
+	fc, err := p.downloadTranscript(ctx, session)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if fc == nil {
+		span.SetAttributes(attribute.Bool("session.empty", true))
+		return nil
+	}
+
+	// Fetch existing card stats from DB (regular cards are already up-to-date)
+	cards, err := p.analyticsStore.GetCards(ctx, session.SessionID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	// Convert to card stats map for smart recap
+	var cardStats map[string]interface{}
+	if cards != nil {
+		cardStats = cards.ToResponse().Cards
+	}
+
+	// Generate smart recap (handles staleness check, quota, lock, etc.)
+	if err := p.precomputeSmartRecap(ctx, session, fc, cardStats); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	span.SetAttributes(attribute.Bool("session.computed", true))
+	return nil
 }

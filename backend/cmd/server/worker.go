@@ -136,14 +136,17 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 // runOnce executes a single precomputation cycle.
+// It processes two buckets:
+// 1. Sessions with stale regular cards (computes all cards including smart recap if stale)
+// 2. Sessions with only stale smart recap (computes only smart recap)
 func (w *Worker) runOnce(ctx context.Context) {
 	ctx, span := workerTracer.Start(ctx, "worker.run_once")
 	defer span.End()
 
 	logger.Info("starting precomputation cycle")
 
-	// Find stale sessions
-	sessions, err := w.precomputer.FindStaleSessions(ctx, w.config.MaxSessions)
+	// Bucket 1: Find sessions with stale regular cards
+	regularSessions, err := w.precomputer.FindStaleSessions(ctx, w.config.MaxSessions)
 	if err != nil {
 		logger.Error("failed to find stale sessions", "error", err)
 		span.RecordError(err)
@@ -151,19 +154,46 @@ func (w *Worker) runOnce(ctx context.Context) {
 		return
 	}
 
-	if len(sessions) == 0 {
-		logger.Info("no stale sessions found")
-		span.SetAttributes(attribute.Int("sessions.found", 0))
+	// Bucket 2: Find sessions with only stale smart recap (regular cards up-to-date)
+	smartRecapSessions, err := w.precomputer.FindStaleSmartRecapSessions(ctx, w.config.MaxSessions)
+	if err != nil {
+		logger.Error("failed to find stale smart recap sessions", "error", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 
-	logger.Info("found stale sessions", "count", len(sessions))
-	span.SetAttributes(attribute.Int("sessions.found", len(sessions)))
+	totalFound := len(regularSessions) + len(smartRecapSessions)
+	if totalFound == 0 {
+		logger.Info("no stale sessions found")
+		span.SetAttributes(
+			attribute.Int("sessions.regular.found", 0),
+			attribute.Int("sessions.smart_recap.found", 0),
+		)
+		return
+	}
+
+	logger.Info("found stale sessions",
+		"regular_cards", len(regularSessions),
+		"smart_recap_only", len(smartRecapSessions),
+	)
+	span.SetAttributes(
+		attribute.Int("sessions.regular.found", len(regularSessions)),
+		attribute.Int("sessions.smart_recap.found", len(smartRecapSessions)),
+	)
 
 	// In dry-run mode, just log what would be processed and return
 	if w.config.DryRun {
-		for _, session := range sessions {
-			logger.Info("[DRY-RUN] would precompute session",
+		for _, session := range regularSessions {
+			logger.Info("[DRY-RUN] would precompute session (regular cards)",
+				"session_id", session.SessionID,
+				"user_id", session.UserID,
+				"external_id", session.ExternalID,
+				"total_lines", session.TotalLines,
+			)
+		}
+		for _, session := range smartRecapSessions {
+			logger.Info("[DRY-RUN] would precompute session (smart recap only)",
 				"session_id", session.SessionID,
 				"user_id", session.UserID,
 				"external_id", session.ExternalID,
@@ -171,19 +201,39 @@ func (w *Worker) runOnce(ctx context.Context) {
 			)
 		}
 		logger.Info("[DRY-RUN] precomputation cycle complete",
-			"would_process", len(sessions),
+			"would_process_regular", len(regularSessions),
+			"would_process_smart_recap", len(smartRecapSessions),
 		)
 		span.SetAttributes(
 			attribute.Bool("dry_run", true),
-			attribute.Int("sessions.would_process", len(sessions)),
+			attribute.Int("sessions.regular.would_process", len(regularSessions)),
+			attribute.Int("sessions.smart_recap.would_process", len(smartRecapSessions)),
 		)
 		return
 	}
 
-	// Process sessions sequentially with steady pacing
-	processed := 0
-	errors := 0
+	// Process Bucket 1: Sessions with stale regular cards
+	regularProcessed, regularErrors := w.processRegularSessions(ctx, regularSessions)
 
+	// Process Bucket 2: Sessions with only stale smart recap
+	smartRecapProcessed, smartRecapErrors := w.processSmartRecapSessions(ctx, smartRecapSessions)
+
+	logger.Info("precomputation cycle complete",
+		"regular_processed", regularProcessed,
+		"regular_errors", regularErrors,
+		"smart_recap_processed", smartRecapProcessed,
+		"smart_recap_errors", smartRecapErrors,
+	)
+	span.SetAttributes(
+		attribute.Int("sessions.regular.processed", regularProcessed),
+		attribute.Int("sessions.regular.errors", regularErrors),
+		attribute.Int("sessions.smart_recap.processed", smartRecapProcessed),
+		attribute.Int("sessions.smart_recap.errors", smartRecapErrors),
+	)
+}
+
+// processRegularSessions processes sessions with stale regular cards.
+func (w *Worker) processRegularSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
 	for i, session := range sessions {
 		select {
 		case <-ctx.Done():
@@ -221,15 +271,49 @@ func (w *Worker) runOnce(ctx context.Context) {
 			}
 		}
 	}
+	return
+}
 
-	logger.Info("precomputation cycle complete",
-		"processed", processed,
-		"errors", errors,
-	)
-	span.SetAttributes(
-		attribute.Int("sessions.processed", processed),
-		attribute.Int("sessions.errors", errors),
-	)
+// processSmartRecapSessions processes sessions with only stale smart recap.
+func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
+	for i, session := range sessions {
+		select {
+		case <-ctx.Done():
+			logger.Info("stopping processing due to shutdown")
+			return
+		default:
+		}
+
+		err := w.precomputer.PrecomputeSmartRecapOnly(ctx, session)
+		if err != nil {
+			logger.Error("failed to precompute smart recap",
+				"session_id", session.SessionID,
+				"user_id", session.UserID,
+				"external_id", session.ExternalID,
+				"total_lines", session.TotalLines,
+				"error", err,
+			)
+			errors++
+		} else {
+			logger.Info("precomputed smart recap",
+				"session_id", session.SessionID,
+				"user_id", session.UserID,
+				"external_id", session.ExternalID,
+				"total_lines", session.TotalLines,
+			)
+			processed++
+		}
+
+		// Brief delay between sessions for steady pacing (skip after last)
+		if i < len(sessions)-1 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+		}
+	}
+	return
 }
 
 // loadWorkerConfig loads worker configuration from environment variables.
