@@ -56,7 +56,7 @@ primary_region = 'sjc'
   SMART_RECAP_QUOTA_LIMIT = "500"
 
   # Worker Configuration (background analytics precompute)
-  WORKER_POLL_INTERVAL = "30m"
+  WORKER_POLL_INTERVAL = "3m"
   WORKER_MAX_SESSIONS = "20"  # Required: max sessions per iteration
   WORKER_DRY_RUN = "false"
 
