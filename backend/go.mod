@@ -3,6 +3,7 @@ module github.com/ConfabulousDev/confab-web
 go 1.25.4
 
 require (
+	filippo.io/csrf v0.2.1
 	github.com/andybalholm/brotli v1.2.0
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2

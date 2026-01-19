@@ -346,7 +346,7 @@ func TestUpdateSessionTitle_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusForbidden)
 	})
 
-	t.Run("returns 403 CSRF error without session cookie", func(t *testing.T) {
+	t.Run("returns 401 without session cookie", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
@@ -362,9 +362,9 @@ func TestUpdateSessionTitle_HTTP_Integration(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// CSRF middleware runs before auth middleware, so unauthenticated
-		// state-changing requests get CSRF error, not auth error
-		testutil.RequireStatus(t, resp, http.StatusForbidden)
+		// filippo.io/csrf uses Fetch metadata headers for CSRF validation,
+		// so browser-like requests pass CSRF and fail at auth middleware
+		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
 	})
 }
 

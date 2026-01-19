@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/gorilla/csrf"
+	csrf "filippo.io/csrf/gorilla"
 	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/clientip"
@@ -198,11 +198,16 @@ func (s *Server) SetupRoutes() http.Handler {
 		csrf.TrustedOrigins(trustedOrigins),                               // Trust the frontend origin(s)
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log := logger.Ctx(r.Context())
+			// Truncate CSRF token to avoid exposing full token in logs
+			csrfToken := r.Header.Get("X-CSRF-Token")
+			if len(csrfToken) > 8 {
+				csrfToken = csrfToken[:8] + "..."
+			}
 			log.Warn("CSRF validation failed",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"remote_addr", r.RemoteAddr,
-				"csrf_token", r.Header.Get("X-CSRF-Token"),
+				"csrf_token_prefix", csrfToken,
 				"origin", r.Header.Get("Origin"),
 				"referer", r.Header.Get("Referer"),
 			)

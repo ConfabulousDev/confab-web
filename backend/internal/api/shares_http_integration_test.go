@@ -235,7 +235,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 403 CSRF error for unauthenticated request", func(t *testing.T) {
+	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test")
@@ -255,8 +255,9 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// CSRF validation happens before auth, so we get 403 instead of 401
-		testutil.RequireStatus(t, resp, http.StatusForbidden)
+		// filippo.io/csrf uses Fetch metadata headers for CSRF validation,
+		// so browser-like requests pass CSRF and fail at auth middleware
+		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
 	})
 }
 

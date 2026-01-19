@@ -139,7 +139,7 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 403 CSRF error for unauthenticated request", func(t *testing.T) {
+	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
 		env.CleanDB(t)
 
 		ts := setupKeysTestServer(t, env)
@@ -155,8 +155,9 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// CSRF validation happens before auth, so we get 403 instead of 401
-		testutil.RequireStatus(t, resp, http.StatusForbidden)
+		// filippo.io/csrf uses Fetch metadata headers for CSRF validation,
+		// so browser-like requests pass CSRF and fail at auth middleware
+		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
 	})
 }
 
@@ -409,7 +410,7 @@ func TestDeleteAPIKey_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
-	t.Run("returns 403 CSRF error for unauthenticated request", func(t *testing.T) {
+	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
 		env.CleanDB(t)
 
 		ts := setupKeysTestServer(t, env)
@@ -421,7 +422,8 @@ func TestDeleteAPIKey_HTTP_Integration(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// CSRF validation happens before auth, so we get 403 instead of 401
-		testutil.RequireStatus(t, resp, http.StatusForbidden)
+		// filippo.io/csrf uses Fetch metadata headers for CSRF validation,
+		// so browser-like requests pass CSRF and fail at auth middleware
+		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
 	})
 }

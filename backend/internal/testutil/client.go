@@ -166,6 +166,9 @@ func (c *TestClient) RequestWithHeaders(method, path string, body interface{}, h
 
 	// Set Origin header for CSRF validation (must match trusted origins)
 	req.Header.Set("Origin", "http://localhost:3000")
+	// Set Sec-Fetch-Site header for the new filippo.io/csrf library
+	// This header is required for browser-like CSRF validation
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 
 	// Set Content-Type for requests with body
 	if body != nil {
