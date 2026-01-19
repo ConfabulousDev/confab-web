@@ -625,6 +625,7 @@ Output ONLY valid JSON with these fields:
 - default_context_suggestions: Up to 3 CLAUDE.md/system context improvements
 
 Guidelines:
+- The session may still be in progress. Do not penalize workflows that appear incomplete or in-progress. Focus on what has happened so far rather than judging whether tasks were "finished."
 - Keep lists very high signal. Better to omit an item than show something low-confidence.
 - Suggestions should be concise and actionable. Don't prefix with "suggest" - they're already suggestions.
 - Focus on what would actually improve future sessions.
