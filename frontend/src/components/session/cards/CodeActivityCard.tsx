@@ -1,4 +1,4 @@
-import { CardWrapper, CardLoading, StatRow, SectionHeader } from './Card';
+import { CardWrapper, CardLoading, CardError, StatRow, SectionHeader } from './Card';
 import { CodeIcon, SearchIcon, FileIcon } from '@/components/icons';
 import type { CodeActivityCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -74,7 +74,11 @@ const MinusIcon = (
   </svg>
 );
 
-export function CodeActivityCard({ data, loading }: CardProps<CodeActivityCardData>) {
+export function CodeActivityCard({ data, loading, error }: CardProps<CodeActivityCardData>) {
+  if (error && !data) {
+    return <CardError title="Code Activity" error={error} icon={CodeIcon} />;
+  }
+
   if (loading && !data) {
     return (
       <CardWrapper title="Code Activity" icon={CodeIcon}>

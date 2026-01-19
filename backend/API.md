@@ -779,6 +779,27 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.redactions` | object\|null | Redaction metrics (null/omitted if no redactions) |
 | `cards.redactions.total_redactions` | int | Total count of [REDACTED:TYPE] markers found |
 | `cards.redactions.redaction_counts` | object | Map of redaction type to occurrence count |
+| `card_errors` | object\|null | Map of card key to error message for failed computations (graceful degradation) |
+
+**Graceful Degradation:**
+
+If individual card computations fail, the API returns partial results. Successfully computed cards are included in `cards`, while failed cards have their errors reported in `card_errors`. This allows the frontend to display available data while showing error states for failed cards.
+
+Example with partial failure:
+```json
+{
+  "computed_at": "2024-01-15T10:30:00Z",
+  "computed_lines": 150,
+  "cards": {
+    "tokens": { "input": 125000, ... },
+    "session": { "duration_ms": 3600000, ... }
+  },
+  "card_errors": {
+    "tools": "unexpected end of JSON input",
+    "code_activity": "context deadline exceeded"
+  }
+}
+```
 
 **Notes:**
 - Analytics are cached in the database and recomputed when new data is synced

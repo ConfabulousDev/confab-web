@@ -31,6 +31,10 @@ type AnalyticsResponse struct {
 
 	// Validation stats (only present on fresh computation, not cached)
 	ValidationErrorCount int `json:"validation_error_count,omitempty"`
+
+	// Per-card computation errors (graceful degradation)
+	// Maps card key (e.g., "tokens", "session") to error message
+	CardErrors map[string]string `json:"card_errors,omitempty"`
 }
 
 // TokenStats contains token usage information (legacy flat format).

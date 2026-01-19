@@ -1,4 +1,4 @@
-import { CardWrapper, StatRow, CardLoading } from './Card';
+import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { UsersIcon, ZapIcon } from '@/components/icons';
 import type { AgentsAndSkillsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -101,7 +101,11 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   );
 }
 
-export function AgentsAndSkillsCard({ data, loading }: CardProps<AgentsAndSkillsCardData>) {
+export function AgentsAndSkillsCard({ data, loading, error }: CardProps<AgentsAndSkillsCardData>) {
+  if (error && !data) {
+    return <CardError title="Agents and Skills" error={error} icon={UsersIcon} />;
+  }
+
   if (loading && !data) {
     return (
       <CardWrapper title="Agents and Skills" icon={UsersIcon}>

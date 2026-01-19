@@ -25,22 +25,37 @@ Every change should include appropriate tests:
 ### 3. Self-Review Before Presenting
 
 **Before presenting any result to the human, perform a thorough code review:**
-- Re-read all code changes critically, as if reviewing someone else's work
-- Check for bugs, edge cases, error handling, and security issues
-- Verify code follows existing patterns and conventions in the codebase
-- Ensure no debug code, TODOs, or incomplete implementations remain
-- Run all relevant tests and fix any failures
-- Fix any issues found during review before showing the result
 
-This self-review step is mandatory. Do not present work that hasn't been thoroughly reviewed and tested.
+1. **Re-read all modified files directly** - Use the Read tool to review each changed file. Do not rely solely on memory or tests passing. Actually read the code again with fresh eyes.
+
+2. **Review critically, as if reviewing someone else's work:**
+   - Check for bugs, edge cases, and error handling gaps
+   - Look for logic errors and off-by-one mistakes
+   - Verify interactions between modified components work correctly
+   - Check that conditional logic handles all cases (especially error/null states)
+
+3. **Verify code quality:**
+   - Follows existing patterns and conventions in the codebase
+   - No debug code, TODOs, or incomplete implementations remain
+   - No security vulnerabilities introduced
+
+4. **Run all relevant tests and fix any failures**
+
+5. **Fix any issues found during review before showing the result**
+
+This self-review step is mandatory. Tests passing is necessary but not sufficient - bugs can exist in untested code paths. Direct code review catches issues that tests miss.
 
 ## Running Tests
 
+**IMPORTANT:** Always run full backend tests (including integration tests) as the final verification step before presenting work. The `-short` flag is only for quick iteration during development - it does NOT provide adequate test coverage.
+
 ```bash
-# Backend (requires Orbstack/Docker for integration tests)
+# Backend - FULL TESTS (required for final verification)
+# Requires Orbstack/Docker for integration tests
 cd backend && DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./...
 
-# Backend unit tests only (skip integration tests)
+# Backend - UNIT TESTS ONLY (quick iteration during development ONLY)
+# NOT sufficient as final verification - use full tests before presenting work
 cd backend && go test -short ./...
 
 # Frontend

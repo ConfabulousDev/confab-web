@@ -1,4 +1,4 @@
-import { CardWrapper, SectionHeader } from './Card';
+import { CardWrapper, SectionHeader, CardError } from './Card';
 import {
   SparklesIcon,
   CheckCircleIcon,
@@ -33,10 +33,16 @@ interface SmartRecapCardProps extends CardProps<SmartRecapCardData> {
 export function SmartRecapCard({
   data,
   loading,
+  error,
   quota,
   onRefresh,
   isRefreshing,
 }: SmartRecapCardProps) {
+  // Error state (graceful degradation)
+  if (error && !data) {
+    return <CardError title="Smart Recap" error={error} icon={SparklesIcon} />;
+  }
+
   // Loading state (initial load or during refresh)
   if ((loading && !data) || isRefreshing) {
     return (

@@ -1,4 +1,4 @@
-import { CardWrapper, StatRow, CardLoading } from './Card';
+import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { ShieldIcon } from '@/components/icons';
 import type { RedactionsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -7,7 +7,11 @@ import type { CardProps } from './types';
  * Displays counts of redacted secrets by type.
  * Hidden entirely if no redactions were found.
  */
-export function RedactionsCard({ data, loading }: CardProps<RedactionsCardData>) {
+export function RedactionsCard({ data, loading, error }: CardProps<RedactionsCardData>) {
+  if (error && !data) {
+    return <CardError title="Redactions" error={error} icon={ShieldIcon} />;
+  }
+
   if (loading && !data) {
     return (
       <CardWrapper title="Redactions" icon={ShieldIcon}>

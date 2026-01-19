@@ -175,6 +175,9 @@ type Cards struct {
 	Conversation    *ConversationCardRecord
 	AgentsAndSkills *AgentsAndSkillsCardRecord
 	Redactions      *RedactionsCardRecord
+
+	// Per-card computation errors (graceful degradation)
+	CardErrors map[string]string
 }
 
 // =============================================================================

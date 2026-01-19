@@ -1,4 +1,4 @@
-import { CardWrapper, StatRow, CardLoading } from './Card';
+import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { formatResponseTime } from '@/utils/compactionStats';
 import {
   TerminalIcon,
@@ -124,7 +124,11 @@ function formatModelName(model: string): string {
   return model;
 }
 
-export function SessionCard({ data, loading }: CardProps<SessionCardData>) {
+export function SessionCard({ data, loading, error }: CardProps<SessionCardData>) {
+  if (error && !data) {
+    return <CardError title="Session" error={error} icon={TerminalIcon} />;
+  }
+
   if (loading && !data) {
     return (
       <CardWrapper title="Session" icon={TerminalIcon}>

@@ -90,6 +90,9 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   // Get cards data from the new cards-based format
   const cards: Partial<AnalyticsCards> = analytics?.cards ?? {};
 
+  // Get per-card errors for graceful degradation
+  const cardErrors: Record<string, string> = analytics?.card_errors ?? {};
+
   // Get ordered cards from registry
   const orderedCards = getOrderedCards();
 
@@ -130,9 +133,11 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
         {orderedCards.map((cardDef) => {
           const CardComponent = cardDef.component;
           const cardData = cards[cardDef.key] ?? null;
+          const cardError = cardErrors[cardDef.key];
 
           // Skip rendering wrapper if card wouldn't render (avoids empty grid cells)
-          if (cardDef.shouldRender && !loading && !cardDef.shouldRender(cardData)) {
+          // But always render if there's an error (to show the error state)
+          if (!cardError && cardDef.shouldRender && !loading && !cardDef.shouldRender(cardData)) {
             return null;
           }
 
@@ -159,6 +164,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
               <CardComponent
                 data={cardData}
                 loading={loading}
+                error={cardError}
                 {...extraProps}
               />
             </div>

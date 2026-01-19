@@ -299,6 +299,9 @@ export const SessionAnalyticsSchema = z.object({
   compaction: CompactionInfoSchema,
   // New cards-based format (optional for empty analytics)
   cards: AnalyticsCardsSchema.optional().nullable(),
+  // Per-card computation errors (graceful degradation)
+  // Maps card key (e.g., "tokens", "session") to error message
+  card_errors: z.record(z.string(), z.string()).optional().nullable(),
   // Smart recap quota (only present if feature is enabled)
   smart_recap_quota: SmartRecapQuotaInfoSchema.optional().nullable(),
   // Suggested session title from Smart Recap (if generated)

@@ -60,6 +60,24 @@ export function CardLoading() {
   return <div className={styles.loading}>Loading...</div>;
 }
 
+interface CardErrorProps {
+  title: string;
+  error: string;
+  icon?: React.ReactNode;
+}
+
+/**
+ * Error state for a card that failed to compute.
+ * Shows the card header with an error message in the content area.
+ */
+export function CardError({ title, error, icon }: CardErrorProps) {
+  return (
+    <CardWrapper title={title} icon={icon}>
+      <div className={styles.cardError}>Failed to compute: {error}</div>
+    </CardWrapper>
+  );
+}
+
 interface SectionHeaderProps {
   label: string;
   icon?: React.ReactNode;

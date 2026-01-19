@@ -1,4 +1,4 @@
-import { CardWrapper, StatRow, CardLoading } from './Card';
+import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { formatTokenCount, formatCost } from '@/utils/tokenStats';
 import {
   TokenIcon,
@@ -20,7 +20,11 @@ const TOOLTIPS = {
   cost: 'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
 };
 
-export function TokensCard({ data, loading }: CardProps<TokensCardData>) {
+export function TokensCard({ data, loading, error }: CardProps<TokensCardData>) {
+  if (error && !data) {
+    return <CardError title="Tokens" error={error} icon={TokenIcon} />;
+  }
+
   if (loading && !data) {
     return (
       <CardWrapper title="Tokens" icon={TokenIcon}>

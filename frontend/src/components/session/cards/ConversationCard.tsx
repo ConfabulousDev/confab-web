@@ -1,4 +1,4 @@
-import { CardWrapper, StatRow, CardLoading } from './Card';
+import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import {
   ConversationIcon,
   RefreshIcon,
@@ -47,7 +47,11 @@ function formatDuration(ms: number): string {
   return `${ms}ms`;
 }
 
-export function ConversationCard({ data, loading }: CardProps<ConversationCardData>) {
+export function ConversationCard({ data, loading, error }: CardProps<ConversationCardData>) {
+  if (error && !data) {
+    return <CardError title="Conversation" error={error} icon={ConversationIcon} />;
+  }
+
   if (loading && !data) {
     return (
       <CardWrapper title="Conversation" icon={ConversationIcon}>

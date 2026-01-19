@@ -786,11 +786,17 @@ func (s *Store) upsertRedactionsCard(ctx context.Context, record *RedactionsCard
 // =============================================================================
 
 // ToCards converts a ComputeResult to Cards for storage.
+// Cards with computation errors are left nil, and errors are propagated via CardErrors.
 func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 	now := time.Now().UTC()
 
-	return &Cards{
-		Tokens: &TokensCardRecord{
+	cards := &Cards{
+		CardErrors: r.CardErrors,
+	}
+
+	// Only create card records for cards that computed successfully
+	if _, hasErr := r.CardErrors["tokens"]; !hasErr {
+		cards.Tokens = &TokensCardRecord{
 			SessionID:           sessionID,
 			Version:             TokensCardVersion,
 			ComputedAt:          now,
@@ -800,8 +806,11 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			CacheCreationTokens: r.CacheCreationTokens,
 			CacheReadTokens:     r.CacheReadTokens,
 			EstimatedCostUSD:    r.EstimatedCostUSD,
-		},
-		Session: &SessionCardRecord{
+		}
+	}
+
+	if _, hasErr := r.CardErrors["session"]; !hasErr {
+		cards.Session = &SessionCardRecord{
 			SessionID:  sessionID,
 			Version:    SessionCardVersion,
 			ComputedAt: now,
@@ -823,8 +832,11 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			CompactionAuto:      r.CompactionAuto,
 			CompactionManual:    r.CompactionManual,
 			CompactionAvgTimeMs: r.CompactionAvgTimeMs,
-		},
-		Tools: &ToolsCardRecord{
+		}
+	}
+
+	if _, hasErr := r.CardErrors["tools"]; !hasErr {
+		cards.Tools = &ToolsCardRecord{
 			SessionID:  sessionID,
 			Version:    ToolsCardVersion,
 			ComputedAt: now,
@@ -832,8 +844,11 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			TotalCalls: r.TotalToolCalls,
 			ToolStats:  r.ToolStats,
 			ErrorCount: r.ToolErrorCount,
-		},
-		CodeActivity: &CodeActivityCardRecord{
+		}
+	}
+
+	if _, hasErr := r.CardErrors["code_activity"]; !hasErr {
+		cards.CodeActivity = &CodeActivityCardRecord{
 			SessionID:         sessionID,
 			Version:           CodeActivityCardVersion,
 			ComputedAt:        now,
@@ -844,8 +859,11 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			LinesRemoved:      r.LinesRemoved,
 			SearchCount:       r.SearchCount,
 			LanguageBreakdown: r.LanguageBreakdown,
-		},
-		Conversation: &ConversationCardRecord{
+		}
+	}
+
+	if _, hasErr := r.CardErrors["conversation"]; !hasErr {
+		cards.Conversation = &ConversationCardRecord{
 			SessionID:                sessionID,
 			Version:                  ConversationCardVersion,
 			ComputedAt:               now,
@@ -857,8 +875,11 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			TotalAssistantDurationMs: r.TotalAssistantDurationMs,
 			TotalUserDurationMs:      r.TotalUserDurationMs,
 			AssistantUtilization:     r.AssistantUtilization,
-		},
-		AgentsAndSkills: &AgentsAndSkillsCardRecord{
+		}
+	}
+
+	if _, hasErr := r.CardErrors["agents_and_skills"]; !hasErr {
+		cards.AgentsAndSkills = &AgentsAndSkillsCardRecord{
 			SessionID:        sessionID,
 			Version:          AgentsAndSkillsCardVersion,
 			ComputedAt:       now,
@@ -867,16 +888,21 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			SkillInvocations: r.TotalSkillInvocations,
 			AgentStats:       r.AgentStats,
 			SkillStats:       r.SkillStats,
-		},
-		Redactions: &RedactionsCardRecord{
+		}
+	}
+
+	if _, hasErr := r.CardErrors["redactions"]; !hasErr {
+		cards.Redactions = &RedactionsCardRecord{
 			SessionID:       sessionID,
 			Version:         RedactionsCardVersion,
 			ComputedAt:      now,
 			UpToLine:        lineCount,
 			TotalRedactions: r.TotalRedactions,
 			RedactionCounts: r.RedactionCounts,
-		},
+		}
 	}
+
+	return cards
 }
 
 // ToResponse converts Cards to an AnalyticsResponse for the API.
@@ -885,10 +911,33 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		Cards: make(map[string]interface{}),
 	}
 
-	if c.Tokens != nil {
+	// Get ComputedAt and ComputedLines from the first available card
+	// (tokens preferred, but fallback to others if tokens failed)
+	switch {
+	case c.Tokens != nil:
 		response.ComputedAt = c.Tokens.ComputedAt
 		response.ComputedLines = c.Tokens.UpToLine
+	case c.Session != nil:
+		response.ComputedAt = c.Session.ComputedAt
+		response.ComputedLines = c.Session.UpToLine
+	case c.Tools != nil:
+		response.ComputedAt = c.Tools.ComputedAt
+		response.ComputedLines = c.Tools.UpToLine
+	case c.CodeActivity != nil:
+		response.ComputedAt = c.CodeActivity.ComputedAt
+		response.ComputedLines = c.CodeActivity.UpToLine
+	case c.Conversation != nil:
+		response.ComputedAt = c.Conversation.ComputedAt
+		response.ComputedLines = c.Conversation.UpToLine
+	case c.AgentsAndSkills != nil:
+		response.ComputedAt = c.AgentsAndSkills.ComputedAt
+		response.ComputedLines = c.AgentsAndSkills.UpToLine
+	case c.Redactions != nil:
+		response.ComputedAt = c.Redactions.ComputedAt
+		response.ComputedLines = c.Redactions.UpToLine
+	}
 
+	if c.Tokens != nil {
 		// Legacy flat format (deprecated)
 		response.Tokens = TokenStats{
 			Input:         c.Tokens.InputTokens,
@@ -989,6 +1038,11 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			TotalRedactions: c.Redactions.TotalRedactions,
 			RedactionCounts: c.Redactions.RedactionCounts,
 		}
+	}
+
+	// Include per-card errors if any (graceful degradation)
+	if len(c.CardErrors) > 0 {
+		response.CardErrors = c.CardErrors
 	}
 
 	return response

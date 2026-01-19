@@ -9,6 +9,8 @@ export interface CardProps<T> {
   data: T | null;
   /** Whether data is currently being fetched */
   loading: boolean;
+  /** Error message if computation failed for this card (graceful degradation) */
+  error?: string;
 }
 
 /**
