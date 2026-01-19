@@ -228,6 +228,7 @@ func (db *DB) ListUserSmartRecapStats(ctx context.Context) ([]UserSmartRecapStat
 
 // SmartRecapTotals contains aggregate totals for smart recap usage.
 type SmartRecapTotals struct {
+	TotalNonEmptySessions      int
 	TotalSessionsWithCache     int
 	TotalComputationsThisMonth int
 	TotalUsersWithActivity     int
@@ -239,6 +240,22 @@ func (db *DB) GetSmartRecapTotals(ctx context.Context) (*SmartRecapTotals, error
 	defer span.End()
 
 	totals := &SmartRecapTotals{}
+
+	// Count non-empty sessions (sessions with transcript/agent data)
+	nonEmptyQuery := `
+		SELECT COUNT(*) FROM (
+			SELECT session_id
+			FROM sync_files
+			WHERE file_type IN ('transcript', 'agent')
+			GROUP BY session_id
+			HAVING SUM(last_synced_line) > 0
+		) AS non_empty
+	`
+	if err := db.conn.QueryRowContext(ctx, nonEmptyQuery).Scan(&totals.TotalNonEmptySessions); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("failed to count non-empty sessions: %w", err)
+	}
 
 	// Count total sessions with cache
 	cacheQuery := `SELECT COUNT(*) FROM session_card_smart_recap`
@@ -269,6 +286,7 @@ func (db *DB) GetSmartRecapTotals(ctx context.Context) (*SmartRecapTotals, error
 	}
 
 	span.SetAttributes(
+		attribute.Int("totals.non_empty_sessions", totals.TotalNonEmptySessions),
 		attribute.Int("totals.sessions_with_cache", totals.TotalSessionsWithCache),
 		attribute.Int("totals.computations_this_month", totals.TotalComputationsThisMonth),
 		attribute.Int("totals.users_with_activity", totals.TotalUsersWithActivity),

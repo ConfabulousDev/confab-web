@@ -347,6 +347,10 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
                 <div class="value">` + fmt.Sprintf("%d", totalSessions) + `</div>
             </div>
             <div class="stat-card">
+                <div class="label">Non-Empty Sessions</div>
+                <div class="value">` + fmt.Sprintf("%d", recapTotals.TotalNonEmptySessions) + `</div>
+            </div>
+            <div class="stat-card">
                 <div class="label">Sessions with Recap Cache</div>
                 <div class="value">` + fmt.Sprintf("%d", recapTotals.TotalSessionsWithCache) + `</div>
             </div>
