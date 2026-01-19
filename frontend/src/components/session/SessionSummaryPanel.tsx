@@ -110,7 +110,13 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       return (
         <div className={styles.card}>
           <div className={styles.cardContent}>
-            <div className={styles.loading}>Loading analytics...</div>
+            <div className={styles.loading}>
+              <div className={styles.loadingSpinner} />
+              <div className={styles.loadingTitle}>Loading analytics...</div>
+              <div className={styles.loadingSubtitle}>
+                First load includes generating Smart Recap with AI
+              </div>
+            </div>
           </div>
         </div>
       );
