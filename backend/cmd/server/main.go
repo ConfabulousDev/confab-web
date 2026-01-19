@@ -21,6 +21,12 @@ import (
 )
 
 func main() {
+	// Check for worker mode
+	if len(os.Args) > 1 && os.Args[1] == "worker" {
+		runWorker()
+		return
+	}
+
 	// Start pprof debug server if enabled (for memory/CPU profiling)
 	// Access via: fly proxy 6060:6060 -a confab-backend
 	if os.Getenv("ENABLE_PPROF") == "true" {

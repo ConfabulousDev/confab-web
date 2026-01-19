@@ -317,3 +317,34 @@ func UploadTestChunk(t *testing.T, env *TestEnvironment, userID int64, externalI
 		t.Fatalf("failed to upload test chunk: %v", err)
 	}
 }
+
+// UploadTestTranscript uploads transcript bytes to S3 as a single chunk
+func UploadTestTranscript(t *testing.T, env *TestEnvironment, userID int64, externalID, fileName string, data []byte) {
+	t.Helper()
+
+	// Count lines in data
+	lineCount := 1
+	for _, b := range data {
+		if b == '\n' {
+			lineCount++
+		}
+	}
+	// Adjust for trailing newline
+	if len(data) > 0 && data[len(data)-1] == '\n' {
+		lineCount--
+	}
+
+	_, err := env.Storage.UploadChunk(env.Ctx, userID, externalID, fileName, 1, lineCount, data)
+	if err != nil {
+		t.Fatalf("failed to upload test transcript: %v", err)
+	}
+}
+
+// MinimalTranscript returns a minimal valid JSONL transcript for testing
+func MinimalTranscript() []byte {
+	// Minimal transcript with 3 lines: init, user message, assistant response
+	return []byte(`{"type":"init","timestamp":"2024-01-01T00:00:00Z","session_id":"test","model":"claude-sonnet-4-20250514"}
+{"type":"human","timestamp":"2024-01-01T00:00:01Z","message":{"role":"user","content":"Hello"}}
+{"type":"assistant","timestamp":"2024-01-01T00:00:02Z","message":{"role":"assistant","content":"Hi there!"},"usage":{"input_tokens":10,"output_tokens":5}}
+`)
+}

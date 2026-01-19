@@ -66,6 +66,11 @@ func Warn(msg string, args ...any) {
 	log.Warn(msg, args...)
 }
 
+// Error logs an error message with structured fields
+func Error(msg string, args ...any) {
+	log.Error(msg, args...)
+}
+
 // Fatal logs an error message and exits with status 1
 func Fatal(msg string, args ...any) {
 	log.Error(msg, args...)

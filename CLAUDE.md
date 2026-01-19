@@ -17,10 +17,63 @@ Before writing any code, create a clear plan:
 
 ### 2. Test Coverage
 
-Every change should include appropriate tests:
-- Write tests before or alongside implementation code (TDD encouraged)
-- Consider both happy paths and error cases
-- Ensure existing tests still pass after changes
+Every change should include appropriate tests. **Insufficient test coverage is not acceptable.**
+
+#### What to Test
+
+1. **Unit tests** for pure logic and helper functions:
+   - Data transformation functions
+   - Validation logic
+   - Parsing/formatting utilities
+   - Business rule calculations
+
+2. **Integration tests** for database operations:
+   - SQL queries (especially complex ones with JOINs, CTEs, aggregations)
+   - CRUD operations and edge cases
+   - Constraint violations and error handling
+   - Use `testutil.SetupTestEnvironment(t)` for containerized Postgres/MinIO
+
+3. **API tests** for HTTP handlers:
+   - Success paths with valid input
+   - Error responses for invalid input
+   - Authentication/authorization checks
+   - Edge cases (empty results, pagination bounds)
+
+#### Test Coverage Checklist
+
+Before presenting work, verify you have tests for:
+
+- [ ] **Happy path**: Does the feature work correctly with valid input?
+- [ ] **Edge cases**: Empty inputs, boundary values, nil/null handling
+- [ ] **Error cases**: Invalid input, missing data, permission denied
+- [ ] **SQL queries**: If you wrote SQL, test it with real data (integration test)
+- [ ] **Configuration**: If you added config options, test parsing and validation
+
+#### Test Patterns in This Codebase
+
+```go
+// Unit test (runs with -short)
+func TestHelperFunction(t *testing.T) {
+    // Test pure logic
+}
+
+// Integration test (requires Docker, skipped with -short)
+func TestDatabaseOperation(t *testing.T) {
+    if testing.Short() {
+        t.Skip("skipping integration test")
+    }
+    env := testutil.SetupTestEnvironment(t)
+    env.CleanDB(t)
+    // Test with real database
+}
+```
+
+#### When to Ask About Test Coverage
+
+If implementing a feature without tests, pause and ask:
+- "What test cases would give us confidence this works?"
+- "Are there edge cases I should test?"
+- "Should this have integration tests for the SQL queries?"
 
 ### 3. Self-Review Before Presenting
 
