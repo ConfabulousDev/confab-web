@@ -393,6 +393,7 @@ Authentication is optional - the endpoint extracts user from session cookie if p
   "hostname": "macbook.local",
   "username": "developer",
   "is_owner": true,
+  "shared_by_email": null,
   "files": [
     {
       "file_name": "transcript.jsonl",
@@ -409,6 +410,7 @@ Authentication is optional - the endpoint extracts user from session cookie if p
 | `is_owner` | bool | `true` if the viewer is the session owner |
 | `hostname` | string\|null | Machine hostname (owner-only, null for shared access) |
 | `username` | string\|null | OS username (owner-only, null for shared access) |
+| `shared_by_email` | string\|null | Email of session owner (non-owner access only, null for owners) |
 
 **Errors:**
 - `403` - Session owner is deactivated

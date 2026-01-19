@@ -917,3 +917,140 @@ func TestGetSessionAccessType_AuthMayHelp_ExpiredShare(t *testing.T) {
 		t.Error("expected AuthMayHelp = false for session with only expired shares")
 	}
 }
+
+// =============================================================================
+// SharedByEmail Tests (CF-xxx: Show Owner Email for Shared Sessions)
+// =============================================================================
+
+// TestGetSessionDetailWithAccess_OwnerNoSharedByEmail tests that owner access does NOT include SharedByEmail
+func TestGetSessionDetailWithAccess_OwnerNoSharedByEmail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	ctx := context.Background()
+
+	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}
+	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo)
+	if err != nil {
+		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
+	}
+
+	if session.SharedByEmail != nil {
+		t.Errorf("expected SharedByEmail = nil for owner access, got %q", *session.SharedByEmail)
+	}
+	if session.IsOwner == nil || !*session.IsOwner {
+		t.Error("expected IsOwner = true for owner access")
+	}
+}
+
+// TestGetSessionDetailWithAccess_PublicShareHasSharedByEmail tests that public share access includes SharedByEmail
+func TestGetSessionDetailWithAccess_PublicShareHasSharedByEmail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create public share
+	shareID := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+
+	ctx := context.Background()
+
+	// Unauthenticated access via public share
+	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
+	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, nil, accessInfo)
+	if err != nil {
+		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
+	}
+
+	if session.SharedByEmail == nil {
+		t.Fatal("expected SharedByEmail to be set for public share access")
+	}
+	if *session.SharedByEmail != "owner@example.com" {
+		t.Errorf("expected SharedByEmail = %q, got %q", "owner@example.com", *session.SharedByEmail)
+	}
+	if session.IsOwner == nil || *session.IsOwner {
+		t.Error("expected IsOwner = false for public share access")
+	}
+}
+
+// TestGetSessionDetailWithAccess_SystemShareHasSharedByEmail tests that system share access includes SharedByEmail
+func TestGetSessionDetailWithAccess_SystemShareHasSharedByEmail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create system share
+	shareID := testutil.CreateTestSystemShare(t, env, sessionID, nil)
+
+	ctx := context.Background()
+
+	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessSystem, ShareID: &shareID}
+	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	if err != nil {
+		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
+	}
+
+	if session.SharedByEmail == nil {
+		t.Fatal("expected SharedByEmail to be set for system share access")
+	}
+	if *session.SharedByEmail != "owner@example.com" {
+		t.Errorf("expected SharedByEmail = %q, got %q", "owner@example.com", *session.SharedByEmail)
+	}
+	if session.IsOwner == nil || *session.IsOwner {
+		t.Error("expected IsOwner = false for system share access")
+	}
+}
+
+// TestGetSessionDetailWithAccess_RecipientShareHasSharedByEmail tests that recipient share access includes SharedByEmail
+func TestGetSessionDetailWithAccess_RecipientShareHasSharedByEmail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Create private share with recipient
+	shareID := testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
+
+	ctx := context.Background()
+
+	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessRecipient, ShareID: &shareID}
+	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &recipient.ID, accessInfo)
+	if err != nil {
+		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
+	}
+
+	if session.SharedByEmail == nil {
+		t.Fatal("expected SharedByEmail to be set for recipient share access")
+	}
+	if *session.SharedByEmail != "owner@example.com" {
+		t.Errorf("expected SharedByEmail = %q, got %q", "owner@example.com", *session.SharedByEmail)
+	}
+	if session.IsOwner == nil || *session.IsOwner {
+		t.Error("expected IsOwner = false for recipient share access")
+	}
+}

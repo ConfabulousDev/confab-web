@@ -62,6 +62,7 @@ type SessionDetail struct {
 	Hostname         *string          `json:"hostname,omitempty"`           // Client machine hostname (owner-only)
 	Username         *string          `json:"username,omitempty"`           // OS username (owner-only)
 	IsOwner          *bool            `json:"is_owner,omitempty"`           // True if viewer is session owner (shared sessions only)
+	SharedByEmail    *string          `json:"shared_by_email,omitempty"`    // Email of session owner (non-owner access only)
 }
 
 // SyncFileDetail represents a synced file

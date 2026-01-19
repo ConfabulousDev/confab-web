@@ -126,9 +126,10 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	var gitInfoBytes []byte
 	var ownerStatus models.UserStatus
 	var hostname, username *string
+	var ownerEmail string
 
 	sessionQuery := `
-		SELECT s.id, s.external_id, s.custom_title, s.suggested_session_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.status
+		SELECT s.id, s.external_id, s.custom_title, s.suggested_session_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.status, u.email
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.id = $1
@@ -148,6 +149,7 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 		&hostname,
 		&username,
 		&ownerStatus,
+		&ownerEmail,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -170,6 +172,9 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	if accessInfo.AccessType == SessionAccessOwner {
 		session.Hostname = hostname
 		session.Username = username
+	} else {
+		// Include owner email for non-owner access
+		session.SharedByEmail = &ownerEmail
 	}
 
 	// Set IsOwner flag

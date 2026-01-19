@@ -104,6 +104,7 @@ interface SessionHeaderProps {
   onSessionUpdate?: (session: SessionDetail) => void;
   isOwner?: boolean;
   isShared?: boolean;
+  sharedByEmail?: string | null; // Email of session owner (for non-owner access)
   // Filter props - optional, only shown on transcript tab
   // Currently drilled from SessionViewer -> SessionHeader -> FilterDropdown
   categoryCounts?: HierarchicalCounts;
@@ -128,6 +129,7 @@ function SessionHeader({
   onSessionUpdate,
   isOwner = true,
   isShared = false,
+  sharedByEmail,
   categoryCounts,
   filterState,
   onToggleCategory,
@@ -314,7 +316,7 @@ function SessionHeader({
           ) : (
             <div className={styles.sharedIndicator}>
               {ShareIcon}
-              <span>Shared Session</span>
+              <span>{sharedByEmail ? `Shared by ${sharedByEmail}` : 'Shared Session'}</span>
             </div>
           )
         ) : isOwner && (

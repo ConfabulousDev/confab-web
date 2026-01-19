@@ -346,6 +346,11 @@ function SessionsPage() {
                               </Chip>
                             )}
                           </div>
+                          {session.shared_by_email && (
+                            <div className={styles.sharedByLine}>
+                              Shared by {session.shared_by_email}
+                            </div>
+                          )}
                         </td>
                         <td className={styles.timestamp}>
                           <span className={styles.activityContent}>

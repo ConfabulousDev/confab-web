@@ -143,6 +143,12 @@
   gap: 4px;
 }
 
+.sharedByLine {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
 .untitled {
   color: var(--color-text-muted);
 }

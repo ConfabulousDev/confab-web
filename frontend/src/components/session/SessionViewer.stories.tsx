@@ -284,7 +284,7 @@ export const Default: Story = {
 
 /**
  * Shared session view (non-owner).
- * Share and Delete buttons are hidden.
+ * Share and Delete buttons are hidden, shows "Shared by" email.
  */
 export const SharedSession: Story = {
   args: {
@@ -293,6 +293,7 @@ export const SharedSession: Story = {
       is_owner: false,
       hostname: null,
       username: null,
+      shared_by_email: 'alice@example.com',
     },
     isOwner: false,
     isShared: true,

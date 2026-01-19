@@ -20,6 +20,7 @@ interface MockSession {
   github_prs?: string[] | null;
   hostname: string | null;
   username: string | null;
+  shared_by_email?: string | null;
 }
 
 // Mock session data representing different scenarios
@@ -178,6 +179,11 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                       </Chip>
                     )}
                   </div>
+                  {session.shared_by_email && (
+                    <div className={styles.sharedByLine}>
+                      Shared by {session.shared_by_email}
+                    </div>
+                  )}
                 </td>
                 <td className={styles.timestamp}>
                   <span className={styles.activityContent}>
@@ -264,9 +270,59 @@ export const Empty: Story = {
   ),
 };
 
+// Sessions shared with the current user (from other people)
+const mockSharedSessions: MockSession[] = [
+  {
+    id: 'shared-1',
+    external_id: 'shared-abc12345',
+    custom_title: null,
+    summary: 'API endpoint refactoring for v2',
+    first_user_message: null,
+    first_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2h ago
+    last_sync_time: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30m ago
+    git_repo: 'ConfabulousDev/confab-web',
+    git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
+    git_branch: 'feature/api-v2',
+    hostname: null, // Hidden for shared sessions
+    username: null,
+    shared_by_email: 'alice@example.com',
+  },
+  {
+    id: 'shared-2',
+    external_id: 'shared-def67890',
+    custom_title: 'Database migration planning',
+    summary: null,
+    first_user_message: null,
+    first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1d ago
+    last_sync_time: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), // 12h ago
+    git_repo: 'company/backend',
+    git_repo_url: 'https://github.com/company/backend',
+    git_branch: 'main',
+    hostname: null,
+    username: null,
+    shared_by_email: 'bob@company.com',
+  },
+  {
+    id: 'shared-3',
+    external_id: 'shared-ghi11223',
+    custom_title: null,
+    summary: 'Frontend performance optimization',
+    first_user_message: null,
+    first_seen: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3d ago
+    last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2d ago
+    git_repo: 'ConfabulousDev/confab-web',
+    git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
+    git_branch: 'perf/lazy-loading',
+    github_prs: ['156'],
+    hostname: null,
+    username: null,
+    shared_by_email: 'carol@example.org',
+  },
+];
+
 export const SharedWithMe: Story = {
   args: {
-    sessions: mockSessions,
+    sessions: mockSharedSessions,
     showSharedWithMe: true,
   },
 };

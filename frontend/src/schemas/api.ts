@@ -66,6 +66,7 @@ export const SessionDetailSchema = z.object({
   hostname: z.string().nullable().optional(), // Client machine hostname (owner-only, null for shared)
   username: z.string().nullable().optional(), // OS username (owner-only, null for shared)
   is_owner: z.boolean().optional(), // True if viewer is session owner (shared sessions only)
+  shared_by_email: z.string().nullable().optional(), // Email of session owner (non-owner access only)
 });
 
 const SessionShareSchema = z.object({

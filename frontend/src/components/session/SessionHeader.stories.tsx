@@ -135,6 +135,25 @@ export const SharedSession: Story = {
     gitInfo: { repo_url: 'https://github.com/user/project', branch: 'feature/dark-mode' },
     isOwner: false,
     isShared: true,
+    sharedByEmail: 'alice@example.com',
+  },
+};
+
+// Shared session without email (legacy shares or edge case)
+export const SharedSessionWithoutEmail: Story = {
+  args: {
+    sessionId: 'session-456-legacy',
+    title: 'Legacy Shared Session',
+    hasCustomTitle: false,
+    autoTitle: 'Legacy Shared Session',
+    externalId: 'legacy789abc',
+    model: 'claude-sonnet-4-20250514',
+    durationMs: 1200000, // 20 min
+    sessionDate: new Date('2025-12-04T09:00:00'),
+    gitInfo: { repo_url: 'https://github.com/user/project', branch: 'main' },
+    isOwner: false,
+    isShared: true,
+    sharedByEmail: null, // Falls back to "Shared Session"
   },
 };
 

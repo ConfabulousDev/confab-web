@@ -226,6 +226,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           onSessionUpdate={onSessionUpdate}
           isOwner={isOwner}
           isShared={isShared}
+          sharedByEmail={session.shared_by_email}
           categoryCounts={activeTab === 'transcript' ? categoryCounts : undefined}
           filterState={activeTab === 'transcript' ? filterState : undefined}
           onToggleCategory={activeTab === 'transcript' ? toggleCategory : undefined}
