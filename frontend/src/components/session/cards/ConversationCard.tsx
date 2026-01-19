@@ -64,10 +64,10 @@ export function ConversationCard({ data, loading, error }: CardProps<Conversatio
 
   return (
     <CardWrapper title="Conversation" icon={ConversationIcon}>
-      {data.assistant_utilization != null && (
+      {data.assistant_utilization_pct != null && (
         <StatRow
           label="Claude utilization"
-          value={`${data.assistant_utilization.toFixed(0)}%`}
+          value={`${data.assistant_utilization_pct.toFixed(0)}%`}
           icon={ZapIcon}
           tooltip={TOOLTIPS.claudeUtilization}
           valueClassName={styles.utilization}

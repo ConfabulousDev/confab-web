@@ -241,8 +241,8 @@ func PrepareStats(cardStats map[string]interface{}) string {
 		if conv.AvgUserThinkingMs != nil && *conv.AvgUserThinkingMs > 300000 {
 			sb.WriteString(fmt.Sprintf("    <avg_user_response_minutes>%.1f</avg_user_response_minutes>\n", float64(*conv.AvgUserThinkingMs)/60000))
 		}
-		if conv.AssistantUtilization != nil {
-			sb.WriteString(fmt.Sprintf("    <assistant_utilization_percent>%.1f</assistant_utilization_percent>\n", *conv.AssistantUtilization*100))
+		if conv.AssistantUtilizationPct != nil {
+			sb.WriteString(fmt.Sprintf("    <assistant_utilization_percent>%.1f</assistant_utilization_percent>\n", *conv.AssistantUtilizationPct))
 		}
 		sb.WriteString("  </conversation>\n")
 	}

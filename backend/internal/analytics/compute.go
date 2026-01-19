@@ -76,8 +76,8 @@ type ComputeResult struct {
 	AvgAssistantTurnMs       *int64
 	AvgUserThinkingMs        *int64
 	TotalAssistantDurationMs *int64
-	TotalUserDurationMs      *int64
-	AssistantUtilization     *float64
+	TotalUserDurationMs     *int64
+	AssistantUtilizationPct *float64
 
 	// Agent stats (from AgentsAnalyzer)
 	TotalAgentInvocations int
@@ -244,7 +244,7 @@ func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*Comput
 		result.AvgUserThinkingMs = conversation.AvgUserThinkingMs
 		result.TotalAssistantDurationMs = conversation.TotalAssistantDurationMs
 		result.TotalUserDurationMs = conversation.TotalUserDurationMs
-		result.AssistantUtilization = conversation.AssistantUtilization
+		result.AssistantUtilizationPct = conversation.AssistantUtilizationPct
 	}
 
 	// Agent stats

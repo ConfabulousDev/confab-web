@@ -571,7 +571,7 @@ func (s *Store) getConversationCard(ctx context.Context, sessionID string) (*Con
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
 			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms,
-			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization
+			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization_pct
 		FROM session_card_conversation
 		WHERE session_id = $1
 	`
@@ -588,7 +588,7 @@ func (s *Store) getConversationCard(ctx context.Context, sessionID string) (*Con
 		&record.AvgUserThinkingMs,
 		&record.TotalAssistantDurationMs,
 		&record.TotalUserDurationMs,
-		&record.AssistantUtilization,
+		&record.AssistantUtilizationPct,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -605,7 +605,7 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 		INSERT INTO session_card_conversation (
 			session_id, version, computed_at, up_to_line,
 			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms,
-			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization
+			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization_pct
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
@@ -617,7 +617,7 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 			avg_user_thinking_ms = EXCLUDED.avg_user_thinking_ms,
 			total_assistant_duration_ms = EXCLUDED.total_assistant_duration_ms,
 			total_user_duration_ms = EXCLUDED.total_user_duration_ms,
-			assistant_utilization = EXCLUDED.assistant_utilization
+			assistant_utilization_pct = EXCLUDED.assistant_utilization_pct
 	`
 
 	_, err := s.db.ExecContext(ctx, query,
@@ -631,7 +631,7 @@ func (s *Store) upsertConversationCard(ctx context.Context, record *Conversation
 		record.AvgUserThinkingMs,
 		record.TotalAssistantDurationMs,
 		record.TotalUserDurationMs,
-		record.AssistantUtilization,
+		record.AssistantUtilizationPct,
 	)
 	return err
 }
@@ -874,7 +874,7 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			AvgUserThinkingMs:        r.AvgUserThinkingMs,
 			TotalAssistantDurationMs: r.TotalAssistantDurationMs,
 			TotalUserDurationMs:      r.TotalUserDurationMs,
-			AssistantUtilization:     r.AssistantUtilization,
+			AssistantUtilizationPct:  r.AssistantUtilizationPct,
 		}
 	}
 
@@ -1019,7 +1019,7 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			AvgUserThinkingMs:        c.Conversation.AvgUserThinkingMs,
 			TotalAssistantDurationMs: c.Conversation.TotalAssistantDurationMs,
 			TotalUserDurationMs:      c.Conversation.TotalUserDurationMs,
-			AssistantUtilization:     c.Conversation.AssistantUtilization,
+			AssistantUtilizationPct:  c.Conversation.AssistantUtilizationPct,
 		}
 	}
 

@@ -66,7 +66,7 @@ func TestCardsAllValid(t *testing.T) {
 				AvgUserThinkingMs:        nil,
 				TotalAssistantDurationMs: nil,
 				TotalUserDurationMs:      nil,
-				AssistantUtilization:     nil,
+				AssistantUtilizationPct:  nil,
 			},
 			AgentsAndSkills: &AgentsAndSkillsCardRecord{
 				SessionID:        "test-session",

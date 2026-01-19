@@ -539,7 +539,7 @@ func insertAllCards(t *testing.T, env *testutil.TestEnvironment, sessionID strin
 		INSERT INTO session_card_conversation (
 			session_id, version, computed_at, up_to_line,
 			user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms,
-			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization
+			total_assistant_duration_ms, total_user_duration_ms, assistant_utilization_pct
 		) VALUES ($1, $2, $3, $4, 0, 0, 0, 0, 0, 0, 0)
 	`, sessionID, analytics.ConversationCardVersion, now, upToLine)
 	if err != nil {

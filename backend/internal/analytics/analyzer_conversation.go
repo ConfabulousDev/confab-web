@@ -17,7 +17,7 @@ type ConversationResult struct {
 	TotalUserDurationMs      *int64
 
 	// Utilization percentage (assistant time / total time * 100)
-	AssistantUtilization *float64
+	AssistantUtilizationPct *float64
 }
 
 // ConversationAnalyzer extracts conversation metrics from transcripts.
@@ -134,7 +134,7 @@ func (a *ConversationAnalyzer) Analyze(fc *FileCollection) (*ConversationResult,
 		totalTime := float64(*result.TotalAssistantDurationMs + *result.TotalUserDurationMs)
 		if totalTime > 0 {
 			utilization := float64(*result.TotalAssistantDurationMs) / totalTime * 100
-			result.AssistantUtilization = &utilization
+			result.AssistantUtilizationPct = &utilization
 		}
 	}
 

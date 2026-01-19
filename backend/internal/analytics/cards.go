@@ -103,7 +103,7 @@ type ConversationCardRecord struct {
 	AvgUserThinkingMs        *int64    `json:"avg_user_thinking_ms,omitempty"`       // Average user thinking time
 	TotalAssistantDurationMs *int64    `json:"total_assistant_duration_ms,omitempty"` // Total assistant turn duration
 	TotalUserDurationMs      *int64    `json:"total_user_duration_ms,omitempty"`      // Total user thinking time
-	AssistantUtilization     *float64  `json:"assistant_utilization,omitempty"`       // % of time Claude was working
+	AssistantUtilizationPct  *float64  `json:"assistant_utilization_pct,omitempty"`   // % of time Claude was working (0-100)
 }
 
 // AgentStats holds success and error counts for a single agent type.
@@ -243,7 +243,7 @@ type ConversationCardData struct {
 	AvgUserThinkingMs        *int64   `json:"avg_user_thinking_ms,omitempty"`
 	TotalAssistantDurationMs *int64   `json:"total_assistant_duration_ms,omitempty"`
 	TotalUserDurationMs      *int64   `json:"total_user_duration_ms,omitempty"`
-	AssistantUtilization     *float64 `json:"assistant_utilization,omitempty"`
+	AssistantUtilizationPct  *float64 `json:"assistant_utilization_pct,omitempty"`
 }
 
 // AgentsAndSkillsCardData is the API response format for the combined agents and skills card.
