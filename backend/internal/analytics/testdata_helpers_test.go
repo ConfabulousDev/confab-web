@@ -84,17 +84,6 @@ func makeAssistantMessageFull(uuid, timestamp, model string, inputTokens, output
 	return string(b)
 }
 
-// makeSystemMessage creates a valid system message JSON.
-func makeSystemMessage(uuid, timestamp, subtype, content string) string {
-	m := makeBaseFields(uuid, timestamp)
-	m["type"] = "system"
-	m["subtype"] = subtype
-	m["content"] = content
-	m["isMeta"] = true
-	b, _ := json.Marshal(m)
-	return string(b)
-}
-
 // makeCompactBoundaryMessage creates a valid compact_boundary system message.
 func makeCompactBoundaryMessage(uuid, timestamp, trigger string, preTokens int64) string {
 	m := makeBaseFields(uuid, timestamp)
@@ -119,17 +108,6 @@ func makeCompactBoundaryMessageWithParent(uuid, timestamp, trigger string, preTo
 	m["compactMetadata"] = map[string]interface{}{
 		"trigger":   trigger,
 		"preTokens": float64(preTokens),
-	}
-	b, _ := json.Marshal(m)
-	return string(b)
-}
-
-// makeSummaryMessage creates a valid summary message JSON.
-func makeSummaryMessage(summary, leafUuid string) string {
-	m := map[string]interface{}{
-		"type":     "summary",
-		"summary":  summary,
-		"leafUuid": leafUuid,
 	}
 	b, _ := json.Marshal(m)
 	return string(b)

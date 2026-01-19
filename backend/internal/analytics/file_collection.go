@@ -105,16 +105,6 @@ func (fc *FileCollection) ValidationErrorCount() int {
 	return count
 }
 
-// AllValidationErrors returns all validation errors from all files.
-func (fc *FileCollection) AllValidationErrors() []LineValidationError {
-	var all []LineValidationError
-	all = append(all, fc.Main.ValidationErrors...)
-	for _, agent := range fc.Agents {
-		all = append(all, agent.ValidationErrors...)
-	}
-	return all
-}
-
 // parseTranscriptFile parses raw JSONL content into a TranscriptFile.
 // It validates each line and collects validation errors.
 func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error) {
