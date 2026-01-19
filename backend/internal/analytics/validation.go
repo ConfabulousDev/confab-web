@@ -307,14 +307,16 @@ func validateSystemMessage(raw map[string]interface{}) []ValidationError {
 		})
 	}
 
-	// isMeta is required
-	if _, ok := raw["isMeta"].(bool); !ok {
-		errors = append(errors, ValidationError{
-			Path:     "isMeta",
-			Message:  "required field missing or invalid type",
-			Expected: "boolean",
-			Received: typeOf(raw["isMeta"]),
-		})
+	// isMeta is optional (not present for api_error subtype)
+	if v, exists := raw["isMeta"]; exists {
+		if _, ok := v.(bool); !ok {
+			errors = append(errors, ValidationError{
+				Path:     "isMeta",
+				Message:  "invalid type",
+				Expected: "boolean",
+				Received: typeOf(v),
+			})
+		}
 	}
 
 	// content is optional (not present for turn_duration subtype)

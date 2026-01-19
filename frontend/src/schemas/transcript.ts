@@ -176,7 +176,7 @@ const SystemMessageSchema = BaseMessageSchema.extend({
   logicalParentUuid: z.string().optional(),
   subtype: z.string(),
   content: z.string().optional(), // Not present for some subtypes (e.g., turn_duration)
-  isMeta: z.boolean(),
+  isMeta: z.boolean().optional(), // Optional - not present for api_error subtype
   level: z.string().optional(), // 'info' | 'warning' | 'error' - not present for some subtypes
   // Fields for turn_duration subtype
   durationMs: z.number().optional(),
@@ -187,7 +187,9 @@ const SystemMessageSchema = BaseMessageSchema.extend({
       preTokens: z.number(),
     })
     .optional(),
-});
+  // api_error subtype has additional fields: cause, error, retryInMs, retryAttempt, maxRetries
+  // Use passthrough to preserve them
+}).passthrough();
 
 const SummaryMessageSchema = z.object({
   type: z.literal('summary'),
