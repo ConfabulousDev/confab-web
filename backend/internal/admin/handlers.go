@@ -57,6 +57,28 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get smart recap stats per user
+	recapStats, err := h.DB.ListUserSmartRecapStats(ctx)
+	if err != nil {
+		log.Error("Failed to list smart recap stats", "error", err)
+		http.Error(w, "Failed to load smart recap stats", http.StatusInternalServerError)
+		return
+	}
+
+	// Build a map for quick lookup by user ID
+	recapStatsByUser := make(map[int64]db.UserSmartRecapStats)
+	for _, stat := range recapStats {
+		recapStatsByUser[stat.UserID] = stat
+	}
+
+	// Get totals for summary display
+	recapTotals, err := h.DB.GetSmartRecapTotals(ctx)
+	if err != nil {
+		log.Error("Failed to get smart recap totals", "error", err)
+		http.Error(w, "Failed to load smart recap totals", http.StatusInternalServerError)
+		return
+	}
+
 	// Get CSRF token for forms
 	csrfToken := csrf.Token(r)
 
@@ -89,6 +111,9 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			lastLoggedIn = user.LastLoggedIn.Format("Jan 2, 2006 15:04")
 		}
 
+		// Get recap stats for this user (default to 0 if not found)
+		recapStat := recapStatsByUser[user.ID]
+
 		deleteAction := fmt.Sprintf("%s/users/%d/delete", AdminPathPrefix, user.ID)
 
 		userRows += fmt.Sprintf(`
@@ -97,6 +122,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 				<td>%s</td>
 				<td>%s</td>
 				<td><span class="%s">%s</span></td>
+				<td>%d</td>
+				<td>%d</td>
 				<td>%d</td>
 				<td>%s</td>
 				<td>%s</td>
@@ -115,6 +142,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			statusClass,
 			statusText,
 			user.SessionCount,
+			recapStat.SessionsWithCache,
+			recapStat.ComputationsThisMonth,
 			lastAPIKeyUsed,
 			lastLoggedIn,
 			user.CreatedAt.Format("Jan 2, 2006"),
@@ -123,6 +152,15 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			html.EscapeString(user.Email),
 			csrfToken,
 		)
+	}
+
+	// Get current month name for display
+	currentMonth := time.Now().Format("January 2006")
+
+	// Calculate total sessions across all users
+	var totalSessions int
+	for _, user := range users {
+		totalSessions += user.SessionCount
 	}
 
 	// Build flash message HTML
@@ -271,6 +309,31 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
             color: #666;
             margin-bottom: 1rem;
         }
+        .stats-summary {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: #fff;
+            border-radius: 6px;
+            padding: 1rem 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            min-width: 180px;
+        }
+        .stat-card .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+        .stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
     </style>
 </head>
 <body>
@@ -278,6 +341,20 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
         <h1>User Management</h1>
         <p class="subtitle">Manage user accounts - deactivate, reactivate, or permanently delete users</p>
         ` + flashHTML + `
+        <div class="stats-summary">
+            <div class="stat-card">
+                <div class="label">Total Sessions</div>
+                <div class="value">` + fmt.Sprintf("%d", totalSessions) + `</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Sessions with Recap Cache</div>
+                <div class="value">` + fmt.Sprintf("%d", recapTotals.TotalSessionsWithCache) + `</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Recaps This Month (` + currentMonth + `)</div>
+                <div class="value">` + fmt.Sprintf("%d", recapTotals.TotalComputationsThisMonth) + `</div>
+            </div>
+        </div>
         <p class="user-count">` + fmt.Sprintf("%d users", len(users)) + `</p>
         <table>
             <thead>
@@ -287,6 +364,8 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
                     <th>Name</th>
                     <th>Status</th>
                     <th>Sessions</th>
+                    <th>Recap Cache</th>
+                    <th>Recaps This Month</th>
                     <th>Last API Key Used</th>
                     <th>Last Logged In</th>
                     <th>Created</th>

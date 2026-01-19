@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -473,5 +474,293 @@ func TestSmartRecapQuota_ResetClearsExceededState(t *testing.T) {
 	exceeded := quota.ComputeCount >= quotaLimit
 	if exceeded {
 		t.Error("expected quota to NOT be exceeded after reset")
+	}
+}
+
+func TestListUserSmartRecapStats_Empty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+
+	// Create a user but no sessions with cache or quota activity
+	testutil.CreateTestUser(t, env, "noactivity@test.com", "NoActivity User")
+
+	stats, err := env.DB.ListUserSmartRecapStats(ctx)
+	if err != nil {
+		t.Fatalf("ListUserSmartRecapStats failed: %v", err)
+	}
+
+	if len(stats) != 0 {
+		t.Errorf("expected 0 users with recap activity, got %d", len(stats))
+	}
+}
+
+func TestListUserSmartRecapStats_WithCacheAndQuota(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Create two users
+	user1 := testutil.CreateTestUser(t, env, "user1@test.com", "User One")
+	user2 := testutil.CreateTestUser(t, env, "user2@test.com", "User Two")
+
+	// Create sessions for user1
+	session1ID := testutil.CreateTestSession(t, env, user1.ID, "session-1")
+	session2ID := testutil.CreateTestSession(t, env, user1.ID, "session-2")
+
+	// Create session for user2
+	session3ID := testutil.CreateTestSession(t, env, user2.ID, "session-3")
+
+	// Add smart recap cache entries
+	now := time.Now()
+	for _, sessionID := range []string{session1ID, session2ID, session3ID} {
+		err := store.UpsertSmartRecapCard(ctx, &analytics.SmartRecapCardRecord{
+			SessionID:                 sessionID,
+			Version:                   1,
+			ComputedAt:                now,
+			UpToLine:                  100,
+			Recap:                     "Test recap",
+			WentWell:                  []string{},
+			WentBad:                   []string{},
+			HumanSuggestions:          []string{},
+			EnvironmentSuggestions:    []string{},
+			DefaultContextSuggestions: []string{},
+			ModelUsed:                 "test-model",
+			InputTokens:               100,
+			OutputTokens:              50,
+		})
+		if err != nil {
+			t.Fatalf("UpsertSmartRecapCard failed: %v", err)
+		}
+	}
+
+	// Add quota for user1 with 5 computations
+	_, err := env.DB.GetOrCreateSmartRecapQuota(ctx, user1.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateSmartRecapQuota failed: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := env.DB.IncrementSmartRecapQuota(ctx, user1.ID); err != nil {
+			t.Fatalf("IncrementSmartRecapQuota failed: %v", err)
+		}
+	}
+
+	// Add quota for user2 with 3 computations
+	_, err = env.DB.GetOrCreateSmartRecapQuota(ctx, user2.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateSmartRecapQuota failed: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := env.DB.IncrementSmartRecapQuota(ctx, user2.ID); err != nil {
+			t.Fatalf("IncrementSmartRecapQuota failed: %v", err)
+		}
+	}
+
+	// Query stats
+	stats, err := env.DB.ListUserSmartRecapStats(ctx)
+	if err != nil {
+		t.Fatalf("ListUserSmartRecapStats failed: %v", err)
+	}
+
+	if len(stats) != 2 {
+		t.Fatalf("expected 2 users with recap activity, got %d", len(stats))
+	}
+
+	// Results should be ordered by computations DESC, so user1 (5) should be first
+	if stats[0].UserID != user1.ID {
+		t.Errorf("expected user1 to be first (most computations), got user %d", stats[0].UserID)
+	}
+	if stats[0].SessionsWithCache != 2 {
+		t.Errorf("user1 SessionsWithCache = %d, want 2", stats[0].SessionsWithCache)
+	}
+	if stats[0].ComputationsThisMonth != 5 {
+		t.Errorf("user1 ComputationsThisMonth = %d, want 5", stats[0].ComputationsThisMonth)
+	}
+	if stats[0].Email != "user1@test.com" {
+		t.Errorf("user1 Email = %s, want user1@test.com", stats[0].Email)
+	}
+
+	if stats[1].UserID != user2.ID {
+		t.Errorf("expected user2 to be second, got user %d", stats[1].UserID)
+	}
+	if stats[1].SessionsWithCache != 1 {
+		t.Errorf("user2 SessionsWithCache = %d, want 1", stats[1].SessionsWithCache)
+	}
+	if stats[1].ComputationsThisMonth != 3 {
+		t.Errorf("user2 ComputationsThisMonth = %d, want 3", stats[1].ComputationsThisMonth)
+	}
+}
+
+func TestListUserSmartRecapStats_CacheOnlyNoQuota(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Create user with session cache but no quota activity
+	user := testutil.CreateTestUser(t, env, "cacheonly@test.com", "CacheOnly User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "session-cache-only")
+
+	// Add smart recap cache entry
+	err := store.UpsertSmartRecapCard(ctx, &analytics.SmartRecapCardRecord{
+		SessionID:                 sessionID,
+		Version:                   1,
+		ComputedAt:                time.Now(),
+		UpToLine:                  100,
+		Recap:                     "Test recap",
+		WentWell:                  []string{},
+		WentBad:                   []string{},
+		HumanSuggestions:          []string{},
+		EnvironmentSuggestions:    []string{},
+		DefaultContextSuggestions: []string{},
+		ModelUsed:                 "test-model",
+		InputTokens:               100,
+		OutputTokens:              50,
+	})
+	if err != nil {
+		t.Fatalf("UpsertSmartRecapCard failed: %v", err)
+	}
+
+	// Query stats - user should appear due to cache entry
+	stats, err := env.DB.ListUserSmartRecapStats(ctx)
+	if err != nil {
+		t.Fatalf("ListUserSmartRecapStats failed: %v", err)
+	}
+
+	if len(stats) != 1 {
+		t.Fatalf("expected 1 user with recap activity, got %d", len(stats))
+	}
+
+	if stats[0].SessionsWithCache != 1 {
+		t.Errorf("SessionsWithCache = %d, want 1", stats[0].SessionsWithCache)
+	}
+	if stats[0].ComputationsThisMonth != 0 {
+		t.Errorf("ComputationsThisMonth = %d, want 0", stats[0].ComputationsThisMonth)
+	}
+	if stats[0].LastComputeAt != nil {
+		t.Error("LastComputeAt should be nil for user without quota activity")
+	}
+}
+
+func TestGetSmartRecapTotals_Empty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+
+	totals, err := env.DB.GetSmartRecapTotals(ctx)
+	if err != nil {
+		t.Fatalf("GetSmartRecapTotals failed: %v", err)
+	}
+
+	if totals.TotalSessionsWithCache != 0 {
+		t.Errorf("TotalSessionsWithCache = %d, want 0", totals.TotalSessionsWithCache)
+	}
+	if totals.TotalComputationsThisMonth != 0 {
+		t.Errorf("TotalComputationsThisMonth = %d, want 0", totals.TotalComputationsThisMonth)
+	}
+	if totals.TotalUsersWithActivity != 0 {
+		t.Errorf("TotalUsersWithActivity = %d, want 0", totals.TotalUsersWithActivity)
+	}
+}
+
+func TestGetSmartRecapTotals_WithData(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Create two users
+	user1 := testutil.CreateTestUser(t, env, "totals1@test.com", "Totals One")
+	user2 := testutil.CreateTestUser(t, env, "totals2@test.com", "Totals Two")
+
+	// Create 3 sessions total
+	session1ID := testutil.CreateTestSession(t, env, user1.ID, "session-t1")
+	session2ID := testutil.CreateTestSession(t, env, user1.ID, "session-t2")
+	session3ID := testutil.CreateTestSession(t, env, user2.ID, "session-t3")
+
+	// Add smart recap cache entries for all
+	now := time.Now()
+	for _, sessionID := range []string{session1ID, session2ID, session3ID} {
+		err := store.UpsertSmartRecapCard(ctx, &analytics.SmartRecapCardRecord{
+			SessionID:                 sessionID,
+			Version:                   1,
+			ComputedAt:                now,
+			UpToLine:                  100,
+			Recap:                     "Test recap",
+			WentWell:                  []string{},
+			WentBad:                   []string{},
+			HumanSuggestions:          []string{},
+			EnvironmentSuggestions:    []string{},
+			DefaultContextSuggestions: []string{},
+			ModelUsed:                 "test-model",
+			InputTokens:               100,
+			OutputTokens:              50,
+		})
+		if err != nil {
+			t.Fatalf("UpsertSmartRecapCard failed: %v", err)
+		}
+	}
+
+	// Add quota: user1 = 5 computations, user2 = 3 computations
+	_, err := env.DB.GetOrCreateSmartRecapQuota(ctx, user1.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateSmartRecapQuota failed: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := env.DB.IncrementSmartRecapQuota(ctx, user1.ID); err != nil {
+			t.Fatalf("IncrementSmartRecapQuota failed: %v", err)
+		}
+	}
+
+	_, err = env.DB.GetOrCreateSmartRecapQuota(ctx, user2.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateSmartRecapQuota failed: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := env.DB.IncrementSmartRecapQuota(ctx, user2.ID); err != nil {
+			t.Fatalf("IncrementSmartRecapQuota failed: %v", err)
+		}
+	}
+
+	// Query totals
+	totals, err := env.DB.GetSmartRecapTotals(ctx)
+	if err != nil {
+		t.Fatalf("GetSmartRecapTotals failed: %v", err)
+	}
+
+	if totals.TotalSessionsWithCache != 3 {
+		t.Errorf("TotalSessionsWithCache = %d, want 3", totals.TotalSessionsWithCache)
+	}
+	if totals.TotalComputationsThisMonth != 8 {
+		t.Errorf("TotalComputationsThisMonth = %d, want 8 (5+3)", totals.TotalComputationsThisMonth)
+	}
+	if totals.TotalUsersWithActivity != 2 {
+		t.Errorf("TotalUsersWithActivity = %d, want 2", totals.TotalUsersWithActivity)
 	}
 }
