@@ -195,11 +195,14 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			}
 
 			// Include suggested session title if available
+			// Use a fresh context since dbCtx may have timed out during Smart Recap generation
+			titleCtx, titleCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 			var suggestedTitle sql.NullString
 			titleQuery := `SELECT suggested_session_title FROM sessions WHERE id = $1`
-			if err := database.Conn().QueryRowContext(dbCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
+			if err := database.Conn().QueryRowContext(titleCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
 				response.SuggestedSessionTitle = &suggestedTitle.String
 			}
+			titleCancel()
 
 			respondJSON(w, http.StatusOK, response)
 			return
@@ -305,11 +308,14 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Include suggested session title if available
+		// Use a fresh context since dbCtx may have timed out during Smart Recap generation
+		titleCtx, titleCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		var suggestedTitle sql.NullString
 		titleQuery := `SELECT suggested_session_title FROM sessions WHERE id = $1`
-		if err := database.Conn().QueryRowContext(dbCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
+		if err := database.Conn().QueryRowContext(titleCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
 			response.SuggestedSessionTitle = &suggestedTitle.String
 		}
+		titleCancel()
 
 		respondJSON(w, http.StatusOK, response)
 	}

@@ -174,13 +174,22 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     }));
   }, []);
 
+  // Track the last successfully applied suggested title to avoid duplicate updates
+  const lastAppliedSuggestedTitleRef = useRef<string | null>(null);
+
   // Handle suggested title change from analytics
   const handleSuggestedTitleChange = useCallback((title: string) => {
+    // Skip if we already applied this title
+    if (title === lastAppliedSuggestedTitleRef.current) {
+      return;
+    }
+
     if (onSessionUpdate && session) {
       onSessionUpdate({
         ...session,
         suggested_session_title: title,
       });
+      lastAppliedSuggestedTitleRef.current = title;
     }
   }, [session, onSessionUpdate]);
 

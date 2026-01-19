@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
 import { analyticsAPI, APIError } from '@/services/api';
@@ -53,14 +53,10 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
     }
   }, []);
 
-  // Track the last notified title to prevent infinite loops
-  const lastNotifiedTitleRef = useRef<string | null>(null);
-
-  // Notify parent when suggested title arrives from analytics (only once per new value)
+  // Notify parent when suggested title arrives from analytics
   useEffect(() => {
     const title = analytics?.suggested_session_title;
-    if (title && onSuggestedTitleChange && title !== lastNotifiedTitleRef.current) {
-      lastNotifiedTitleRef.current = title;
+    if (title && onSuggestedTitleChange) {
       onSuggestedTitleChange(title);
     }
   }, [analytics?.suggested_session_title, onSuggestedTitleChange]);
