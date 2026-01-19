@@ -35,7 +35,6 @@ type SmartRecapConfig struct {
 	APIKey             string
 	Model              string
 	QuotaLimit         int
-	StalenessMinutes   int
 	LockTimeoutSeconds int
 }
 
@@ -56,15 +55,8 @@ func loadSmartRecapConfig() SmartRecapConfig {
 		}
 	}
 
-	// Parse staleness minutes (required)
-	if stalenessStr := os.Getenv("SMART_RECAP_STALENESS_MINUTES"); stalenessStr != "" {
-		if staleness, err := strconv.Atoi(stalenessStr); err == nil && staleness > 0 {
-			config.StalenessMinutes = staleness
-		}
-	}
-
 	// Disable if any required config is missing
-	if config.APIKey == "" || config.Model == "" || config.QuotaLimit == 0 || config.StalenessMinutes == 0 {
+	if config.APIKey == "" || config.Model == "" || config.QuotaLimit == 0 {
 		config.Enabled = false
 	}
 
@@ -370,8 +362,8 @@ func attachOrGenerateSmartRecap(
 		}
 	}
 
-	// If we have a valid cached card, return it (no staleness check, no regeneration)
-	if smartCard != nil && smartCard.IsValid() {
+	// If we have a cached card with valid version, return it (no regeneration, worker handles updates)
+	if smartCard.HasValidVersion() {
 		addSmartRecapToResponse(response, smartCard)
 		return
 	}

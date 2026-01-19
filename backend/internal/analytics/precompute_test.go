@@ -70,7 +70,6 @@ func TestPrecomputeConfig_Validation(t *testing.T) {
 				AnthropicAPIKey:    "test-key",
 				SmartRecapModel:    "claude-haiku-4-5-20251001",
 				SmartRecapQuota:    100,
-				StalenessMinutes:   10,
 				LockTimeoutSeconds: 60,
 			},
 			valid: true,
@@ -89,7 +88,6 @@ func TestPrecomputeConfig_Validation(t *testing.T) {
 				AnthropicAPIKey:   "",
 				SmartRecapModel:   "claude-haiku-4-5-20251001",
 				SmartRecapQuota:   100,
-				StalenessMinutes:  10,
 			},
 			valid: false,
 		},
@@ -102,8 +100,7 @@ func TestPrecomputeConfig_Validation(t *testing.T) {
 			isValid := tt.config.SmartRecapEnabled == false || (
 				tt.config.AnthropicAPIKey != "" &&
 				tt.config.SmartRecapModel != "" &&
-				tt.config.SmartRecapQuota > 0 &&
-				tt.config.StalenessMinutes > 0)
+				tt.config.SmartRecapQuota > 0)
 
 			if isValid != tt.valid {
 				t.Errorf("config validation = %v, want %v", isValid, tt.valid)

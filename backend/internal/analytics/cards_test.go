@@ -5,78 +5,99 @@ import (
 	"time"
 )
 
-func TestSmartRecapCardRecord_IsStale(t *testing.T) {
+func TestSmartRecapCardRecord_HasValidVersion(t *testing.T) {
 	tests := []struct {
-		name             string
-		card             *SmartRecapCardRecord
-		currentLineCount int64
-		stalenessMinutes int
-		want             bool
+		name string
+		card *SmartRecapCardRecord
+		want bool
 	}{
 		{
-			name:             "nil card is stale",
-			card:             nil,
-			currentLineCount: 100,
-			stalenessMinutes: 10,
-			want:             true,
+			name: "nil card has no valid version",
+			card: nil,
+			want: false,
 		},
 		{
-			name: "same line count is never stale",
+			name: "card with correct version",
 			card: &SmartRecapCardRecord{
-				UpToLine:   100,
-				ComputedAt: time.Now().Add(-1 * time.Hour), // computed 1 hour ago
+				Version: SmartRecapCardVersion,
 			},
-			currentLineCount: 100,
-			stalenessMinutes: 10,
-			want:             false,
+			want: true,
 		},
 		{
-			name: "same line count is never stale even if computed long ago",
+			name: "card with wrong version",
 			card: &SmartRecapCardRecord{
-				UpToLine:   100,
-				ComputedAt: time.Now().Add(-24 * time.Hour), // computed 24 hours ago
+				Version: SmartRecapCardVersion - 1,
 			},
-			currentLineCount: 100,
-			stalenessMinutes: 10,
-			want:             false,
-		},
-		{
-			name: "new lines but not enough time passed is not stale",
-			card: &SmartRecapCardRecord{
-				UpToLine:   100,
-				ComputedAt: time.Now().Add(-5 * time.Minute), // computed 5 minutes ago
-			},
-			currentLineCount: 150,
-			stalenessMinutes: 10,
-			want:             false,
-		},
-		{
-			name: "new lines and enough time passed is stale",
-			card: &SmartRecapCardRecord{
-				UpToLine:   100,
-				ComputedAt: time.Now().Add(-15 * time.Minute), // computed 15 minutes ago
-			},
-			currentLineCount: 150,
-			stalenessMinutes: 10,
-			want:             true,
-		},
-		{
-			name: "new lines at exactly staleness threshold is stale",
-			card: &SmartRecapCardRecord{
-				UpToLine:   100,
-				ComputedAt: time.Now().Add(-10 * time.Minute), // computed exactly 10 minutes ago
-			},
-			currentLineCount: 150,
-			stalenessMinutes: 10,
-			want:             true,
+			want: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.card.IsStale(tt.currentLineCount, tt.stalenessMinutes)
+			got := tt.card.HasValidVersion()
 			if got != tt.want {
-				t.Errorf("IsStale() = %v, want %v", got, tt.want)
+				t.Errorf("HasValidVersion() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSmartRecapCardRecord_IsUpToDate(t *testing.T) {
+	tests := []struct {
+		name             string
+		card             *SmartRecapCardRecord
+		currentLineCount int64
+		want             bool
+	}{
+		{
+			name:             "nil card is not up-to-date",
+			card:             nil,
+			currentLineCount: 100,
+			want:             false,
+		},
+		{
+			name: "card with matching line count is up-to-date",
+			card: &SmartRecapCardRecord{
+				Version:  SmartRecapCardVersion,
+				UpToLine: 100,
+			},
+			currentLineCount: 100,
+			want:             true,
+		},
+		{
+			name: "card with higher line count is up-to-date",
+			card: &SmartRecapCardRecord{
+				Version:  SmartRecapCardVersion,
+				UpToLine: 150,
+			},
+			currentLineCount: 100,
+			want:             true,
+		},
+		{
+			name: "card with lower line count is not up-to-date (has new lines)",
+			card: &SmartRecapCardRecord{
+				Version:  SmartRecapCardVersion,
+				UpToLine: 50,
+			},
+			currentLineCount: 100,
+			want:             false,
+		},
+		{
+			name: "wrong version is not up-to-date",
+			card: &SmartRecapCardRecord{
+				Version:  SmartRecapCardVersion - 1,
+				UpToLine: 100,
+			},
+			currentLineCount: 100,
+			want:             false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.card.IsUpToDate(tt.currentLineCount)
+			if got != tt.want {
+				t.Errorf("IsUpToDate() = %v, want %v", got, tt.want)
 			}
 		})
 	}

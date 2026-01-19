@@ -29,41 +29,38 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 	os.Setenv("ANTHROPIC_API_KEY", "test-api-key-not-used")
 	os.Setenv("SMART_RECAP_MODEL", "claude-haiku-4-5-20251101")
 	os.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
-	os.Setenv("SMART_RECAP_STALENESS_MINUTES", "10")
 	defer func() {
 		os.Unsetenv("SMART_RECAP_ENABLED")
 		os.Unsetenv("ANTHROPIC_API_KEY")
 		os.Unsetenv("SMART_RECAP_MODEL")
 		os.Unsetenv("SMART_RECAP_QUOTA_LIMIT")
-		os.Unsetenv("SMART_RECAP_STALENESS_MINUTES")
 	}()
 
 	env := testutil.SetupTestEnvironment(t)
 
-	t.Run("returns cached smart recap without regeneration even when stale", func(t *testing.T) {
+	t.Run("returns cached smart recap without regeneration even when outdated", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "stale@test.com", "Stale Test User")
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-stale")
 
-		// Upload JSONL content (100 lines to make the card "stale")
+		// Upload JSONL content (1 line to make the card outdated)
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
 		testutil.UploadTestChunk(t, env, user.ID, "test-session-stale", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
-		// Pre-populate a "stale" smart recap card:
-		// - ComputedAt: 30 minutes ago (older than staleness threshold of 10 minutes)
+		// Pre-populate an "outdated" smart recap card:
 		// - UpToLine: 0 (different from current line count of 1)
-		// This combination makes the card "stale" by the old logic
+		// This makes the card outdated (has new lines)
 		store := analytics.NewStore(env.DB.Conn())
 		staleCard := &analytics.SmartRecapCardRecord{
 			SessionID:                 sessionID,
 			Version:                   analytics.SmartRecapCardVersion,
-			ComputedAt:                time.Now().UTC().Add(-30 * time.Minute), // 30 min ago (stale)
-			UpToLine:                  0,                                       // Different from current (stale)
-			Recap:                     "This is a STALE cached recap that should be returned as-is",
+			ComputedAt:                time.Now().UTC().Add(-30 * time.Minute),
+			UpToLine:                  0, // Different from current line count of 1 (outdated)
+			Recap:                     "This is an OUTDATED cached recap that should be returned as-is",
 			WentWell:                  []string{"Cached item 1"},
 			WentBad:                   []string{"Cached bad item"},
 			HumanSuggestions:          []string{},
@@ -106,10 +103,10 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 			t.Fatal("expected smart_recap card in response")
 		}
 
-		// Verify the STALE cached content was returned (not regenerated)
+		// Verify the OUTDATED cached content was returned (not regenerated)
 		recap, _ := smartRecap["recap"].(string)
 		if recap != staleCard.Recap {
-			t.Errorf("expected stale recap %q, got %q", staleCard.Recap, recap)
+			t.Errorf("expected outdated recap %q, got %q", staleCard.Recap, recap)
 		}
 
 		// Verify is_stale field is NOT present in the response
@@ -363,13 +360,11 @@ func TestSmartRecap_CacheHitVsMissPath(t *testing.T) {
 	os.Setenv("ANTHROPIC_API_KEY", "test-api-key-not-used")
 	os.Setenv("SMART_RECAP_MODEL", "claude-haiku-4-5-20251101")
 	os.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
-	os.Setenv("SMART_RECAP_STALENESS_MINUTES", "10")
 	defer func() {
 		os.Unsetenv("SMART_RECAP_ENABLED")
 		os.Unsetenv("ANTHROPIC_API_KEY")
 		os.Unsetenv("SMART_RECAP_MODEL")
 		os.Unsetenv("SMART_RECAP_QUOTA_LIMIT")
-		os.Unsetenv("SMART_RECAP_STALENESS_MINUTES")
 	}()
 
 	env := testutil.SetupTestEnvironment(t)

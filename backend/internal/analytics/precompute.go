@@ -3,7 +3,6 @@ package analytics
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -26,7 +25,6 @@ type PrecomputeConfig struct {
 	AnthropicAPIKey    string
 	SmartRecapModel    string
 	SmartRecapQuota    int
-	StalenessMinutes   int
 	LockTimeoutSeconds int
 }
 
@@ -311,14 +309,14 @@ func (p *Precomputer) downloadTranscript(ctx context.Context, session StaleSessi
 	return fc, nil
 }
 
-// precomputeSmartRecap handles smart recap generation with staleness and quota checks.
-// Returns an error if smart recap generation fails. Returns nil if skipped (not stale, quota exceeded, lock held).
+// precomputeSmartRecap handles smart recap generation with line count and quota checks.
+// Returns an error if smart recap generation fails. Returns nil if skipped (up-to-date, quota exceeded, lock held).
 func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSession, fc *FileCollection, cardStats map[string]interface{}) error {
 	ctx, span := tracer.Start(ctx, "precompute.smart_recap",
 		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
 	defer span.End()
 
-	// Get current smart recap card to check staleness
+	// Get current smart recap card to check if up-to-date
 	smartCard, err := p.analyticsStore.GetSmartRecapCard(ctx, session.SessionID)
 	if err != nil {
 		span.RecordError(err)
@@ -326,10 +324,9 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		return err
 	}
 
-	// Check if we need to regenerate
-	// Only regenerate if: (1) no valid card OR (2) stale (new lines + time threshold)
-	if smartCard != nil && smartCard.IsValid() && !smartCard.IsStale(session.TotalLines, p.config.StalenessMinutes) {
-		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "not_stale"))
+	// Check if we need to regenerate - skip if card is up-to-date
+	if smartCard.IsUpToDate(session.TotalLines) {
+		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "up_to_date"))
 		return nil
 	}
 
@@ -375,7 +372,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 }
 
 // FindStaleSmartRecapSessions returns sessions where smart recap is stale but regular cards are up-to-date.
-// Smart recap is stale if: missing OR wrong version OR (new lines AND time threshold exceeded).
+// Smart recap is stale if: missing OR wrong version OR has new lines (up_to_line < total_lines).
 // This complements FindStaleSessions which finds sessions with stale regular cards.
 func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int) ([]StaleSession, error) {
 	ctx, span := tracer.Start(ctx, "precompute.find_stale_smart_recap_sessions",
@@ -389,9 +386,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 
 	// Query finds sessions where:
 	// 1. All regular cards are valid (up-to-date)
-	// 2. Smart recap is stale (missing, wrong version, or new lines + time threshold exceeded)
-	//
-	// The staleness interval is passed as a parameter to check computed_at.
+	// 2. Smart recap is stale (missing, wrong version, or has new lines)
 	query := `
 		WITH session_lines AS (
 			SELECT session_id, SUM(last_synced_line) as total_lines
@@ -422,21 +417,15 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			AND as_card.session_id IS NOT NULL AND as_card.version = $6 AND as_card.up_to_line = sl.total_lines
 			AND rd.session_id IS NOT NULL AND rd.version = $7 AND rd.up_to_line = sl.total_lines
 		  )
-		  -- Smart recap must be stale
+		  -- Smart recap must be stale (missing, wrong version, or has new lines)
 		  AND NOT (
 			sr.session_id IS NOT NULL
 			AND sr.version = $8
-			AND (
-				sr.up_to_line >= sl.total_lines  -- No new lines
-				OR sr.computed_at > NOW() - $9::interval  -- New lines but within time threshold
-			)
+			AND sr.up_to_line >= sl.total_lines
 		  )
 		ORDER BY s.last_sync_at DESC NULLS LAST
-		LIMIT $10
+		LIMIT $9
 	`
-
-	// Convert staleness minutes to interval string
-	stalenessInterval := fmt.Sprintf("%d minutes", p.config.StalenessMinutes)
 
 	rows, err := p.db.QueryContext(ctx, query,
 		TokensCardVersion,
@@ -447,7 +436,6 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 		AgentsAndSkillsCardVersion,
 		RedactionsCardVersion,
 		SmartRecapCardVersion,
-		stalenessInterval,
 		limit,
 	)
 	if err != nil {

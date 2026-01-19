@@ -54,7 +54,6 @@ primary_region = 'sjc'
   SMART_RECAP_ENABLED = "true"
   SMART_RECAP_MODEL = "claude-haiku-4-5-20251001"
   SMART_RECAP_QUOTA_LIMIT = "500"
-  SMART_RECAP_STALENESS_MINUTES = "15"
 
   # Worker Configuration (background analytics precompute)
   WORKER_POLL_INTERVAL = "30m"

@@ -395,15 +395,8 @@ func loadPrecomputeConfig() analytics.PrecomputeConfig {
 		}
 	}
 
-	// Parse staleness minutes
-	if stalenessStr := os.Getenv("SMART_RECAP_STALENESS_MINUTES"); stalenessStr != "" {
-		if staleness, err := strconv.Atoi(stalenessStr); err == nil && staleness > 0 {
-			config.StalenessMinutes = staleness
-		}
-	}
-
 	// Disable if required config is missing
-	if config.AnthropicAPIKey == "" || config.SmartRecapModel == "" || config.SmartRecapQuota == 0 || config.StalenessMinutes == 0 {
+	if config.AnthropicAPIKey == "" || config.SmartRecapModel == "" || config.SmartRecapQuota == 0 {
 		config.SmartRecapEnabled = false
 	}
 

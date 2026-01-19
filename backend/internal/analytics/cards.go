@@ -318,24 +318,16 @@ func (c *RedactionsCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == RedactionsCardVersion && c.UpToLine == currentLineCount
 }
 
-// IsValid checks if a smart recap card record has valid version.
-// Note: SmartRecap uses time-based staleness, not line-based validation.
-func (c *SmartRecapCardRecord) IsValid() bool {
+// HasValidVersion checks if a smart recap card record exists with the correct version.
+// Used by API handlers to determine if a cached card can be returned.
+func (c *SmartRecapCardRecord) HasValidVersion() bool {
 	return c != nil && c.Version == SmartRecapCardVersion
 }
 
-// IsStale checks if the smart recap should be regenerated based on staleness threshold.
-// Returns true if the card is outdated (computed long ago with new content since).
-func (c *SmartRecapCardRecord) IsStale(currentLineCount int64, stalenessMinutes int) bool {
-	if c == nil {
-		return true
-	}
-	// If line count hasn't changed, not stale
-	if c.UpToLine == currentLineCount {
-		return false
-	}
-	// If there's new content and enough time has passed, it's stale
-	return time.Since(c.ComputedAt).Minutes() >= float64(stalenessMinutes)
+// IsUpToDate checks if a smart recap card is up-to-date with the current line count.
+// Used by precomputer to determine if regeneration is needed.
+func (c *SmartRecapCardRecord) IsUpToDate(currentLineCount int64) bool {
+	return c != nil && c.Version == SmartRecapCardVersion && c.UpToLine >= currentLineCount
 }
 
 // CanAcquireLock checks if we can acquire the computing lock.

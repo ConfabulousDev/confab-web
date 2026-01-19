@@ -634,7 +634,6 @@ func TestFindStaleSmartRecapSessions_RegularCardsStale_NotFound(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10,
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
@@ -676,7 +675,6 @@ func TestFindStaleSmartRecapSessions_AllFresh_NotFound(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10,
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
@@ -715,7 +713,6 @@ func TestFindStaleSmartRecapSessions_SmartRecapMissing_Found(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10,
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
@@ -760,7 +757,6 @@ func TestFindStaleSmartRecapSessions_SmartRecapOutdatedVersion_Found(t *testing.
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10,
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
@@ -778,7 +774,7 @@ func TestFindStaleSmartRecapSessions_SmartRecapOutdatedVersion_Found(t *testing.
 	}
 }
 
-func TestFindStaleSmartRecapSessions_NewLinesWithinThreshold_NotFound(t *testing.T) {
+func TestFindStaleSmartRecapSessions_NewLines_Found(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -787,8 +783,8 @@ func TestFindStaleSmartRecapSessions_NewLinesWithinThreshold_NotFound(t *testing
 	env.CleanDB(t)
 
 	// Create a user and session
-	user := testutil.CreateTestUser(t, env, "newlinesrecent@test.com", "NewLinesRecent User")
-	sessionID := testutil.CreateTestSession(t, env, user.ID, "newlinesrecent-external-id")
+	user := testutil.CreateTestUser(t, env, "newlines@test.com", "NewLines User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "newlines-external-id")
 
 	// Add transcript sync file with 150 lines (50 new lines)
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 150)
@@ -796,70 +792,26 @@ func TestFindStaleSmartRecapSessions_NewLinesWithinThreshold_NotFound(t *testing
 	// Insert all up-to-date regular cards
 	insertAllCards(t, env, sessionID, 150)
 
-	// Insert smart recap at 100 lines but computed recently (within threshold)
+	// Insert smart recap at 100 lines (has new lines since up_to_line < total_lines)
 	insertSmartRecapCard(t, env, sessionID, analytics.SmartRecapCardVersion, 100, time.Now().UTC())
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10, // 10 minute threshold
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
 		LockTimeoutSeconds: 60,
 	})
 
-	// Should NOT find - has new lines but computed recently (within threshold)
-	sessions, err := precomputer.FindStaleSmartRecapSessions(context.Background(), 100)
-	if err != nil {
-		t.Fatalf("FindStaleSmartRecapSessions failed: %v", err)
-	}
-
-	if len(sessions) != 0 {
-		t.Errorf("expected 0 sessions (new lines but within time threshold), got %d", len(sessions))
-	}
-}
-
-func TestFindStaleSmartRecapSessions_NewLinesPastThreshold_Found(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	env := testutil.SetupTestEnvironment(t)
-	env.CleanDB(t)
-
-	// Create a user and session
-	user := testutil.CreateTestUser(t, env, "newlinesold@test.com", "NewLinesOld User")
-	sessionID := testutil.CreateTestSession(t, env, user.ID, "newlinesold-external-id")
-
-	// Add transcript sync file with 150 lines (50 new lines)
-	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 150)
-
-	// Insert all up-to-date regular cards
-	insertAllCards(t, env, sessionID, 150)
-
-	// Insert smart recap at 100 lines, computed 20 minutes ago (past 10 min threshold)
-	pastThreshold := time.Now().UTC().Add(-20 * time.Minute)
-	insertSmartRecapCard(t, env, sessionID, analytics.SmartRecapCardVersion, 100, pastThreshold)
-
-	analyticsStore := analytics.NewStore(env.DB.Conn())
-	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
-		SmartRecapEnabled:  true,
-		StalenessMinutes:   10, // 10 minute threshold
-		AnthropicAPIKey:    "test-key",
-		SmartRecapModel:    "test-model",
-		SmartRecapQuota:    100,
-		LockTimeoutSeconds: 60,
-	})
-
-	// Should find - has new lines AND computed time exceeded threshold
+	// Should find - has new lines (up_to_line 100 < total_lines 150)
 	sessions, err := precomputer.FindStaleSmartRecapSessions(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("FindStaleSmartRecapSessions failed: %v", err)
 	}
 
 	if len(sessions) != 1 {
-		t.Fatalf("expected 1 session (new lines past time threshold), got %d", len(sessions))
+		t.Fatalf("expected 1 session (has new lines), got %d", len(sessions))
 	}
 	if sessions[0].TotalLines != 150 {
 		t.Errorf("total lines = %d, want 150", sessions[0].TotalLines)
@@ -892,7 +844,6 @@ func TestTwoBucketDiscovery_BothStale_FoundByQuery1Only(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10,
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
@@ -940,7 +891,6 @@ func TestTwoBucketDiscovery_OnlySmartRecapStale_FoundByQuery2Only(t *testing.T) 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10,
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
@@ -989,7 +939,6 @@ func TestTwoBucketDiscovery_AllFresh_FoundByNeither(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:  true,
-		StalenessMinutes:   10,
 		AnthropicAPIKey:    "test-key",
 		SmartRecapModel:    "test-model",
 		SmartRecapQuota:    100,
