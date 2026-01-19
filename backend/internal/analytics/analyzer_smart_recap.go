@@ -622,7 +622,7 @@ Output ONLY valid JSON with these fields:
 - went_bad: Up to 3 things that did not go well (omit or use empty array if none are clearly valid)
 - human_suggestions: Up to 3 human technique improvements (e.g., "provide more context in initial prompts")
 - environment_suggestions: Up to 3 environment improvements (e.g., "speed up test suite")
-- default_context_suggestions: Up to 3 CLAUDE.md/system context improvements
+- default_context_suggestions: Up to 3 CLAUDE.md/system context improvements. These should be high-level general practices (e.g., "always run tests before committing"), NOT task-specific details (e.g., "when implementing OAuth, use PKCE flow")
 
 Guidelines:
 - The session may still be in progress. Do not penalize workflows that appear incomplete or in-progress. Focus on what has happened so far rather than judging whether tasks were "finished."
@@ -640,5 +640,5 @@ Example output:
   "went_bad": ["Multiple rounds needed to fix CSS specificity issues"],
   "human_suggestions": ["Include browser compatibility requirements upfront"],
   "environment_suggestions": [],
-  "default_context_suggestions": ["Add project's CSS architecture patterns to CLAUDE.md"]
+  "default_context_suggestions": ["Document preferred testing patterns in CLAUDE.md"]
 }`
