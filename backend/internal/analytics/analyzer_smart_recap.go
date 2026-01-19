@@ -114,6 +114,10 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 		System:      smartRecapSystemPrompt,
 		Messages: []anthropic.Message{
 			{Role: "user", Content: userContent},
+			// Prefill assistant response with "{" to force JSON output.
+			// This prevents the model from role-playing as Claude Code when
+			// analyzing transcripts that contain tool calls.
+			{Role: "assistant", Content: "{"},
 		},
 	})
 	if err != nil {
@@ -124,8 +128,9 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 
 	generationTimeMs := int(time.Since(start).Milliseconds())
 
-	// Parse the response
-	llmContent := resp.GetTextContent()
+	// Parse the response - prepend "{" since we used prefill and the API
+	// returns only the continuation after the prefilled content
+	llmContent := "{" + resp.GetTextContent()
 	result, err := parseSmartRecapResponse(llmContent)
 	if err != nil {
 		// Log the raw LLM response for debugging parse failures
