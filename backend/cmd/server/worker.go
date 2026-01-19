@@ -136,9 +136,9 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 // runOnce executes a single precomputation cycle.
-// It processes two buckets:
-// 1. Sessions with stale regular cards (computes all cards including smart recap if stale)
-// 2. Sessions with only stale smart recap (computes only smart recap)
+// It processes two independent buckets:
+// 1. Sessions with stale regular cards (computes regular cards only)
+// 2. Sessions with stale smart recap but fresh regular cards (computes smart recap only)
 func (w *Worker) runOnce(ctx context.Context) {
 	ctx, span := workerTracer.Start(ctx, "worker.run_once")
 	defer span.End()
@@ -242,7 +242,7 @@ func (w *Worker) processRegularSessions(ctx context.Context, sessions []analytic
 		default:
 		}
 
-		err := w.precomputer.PrecomputeSession(ctx, session)
+		err := w.precomputer.PrecomputeRegularCards(ctx, session)
 		if err != nil {
 			logger.Error("failed to precompute session",
 				"session_id", session.SessionID,
@@ -382,10 +382,12 @@ func loadS3Config() storage.S3Config {
 // loadPrecomputeConfig loads smart recap configuration from environment variables.
 func loadPrecomputeConfig() analytics.PrecomputeConfig {
 	config := analytics.PrecomputeConfig{
-		SmartRecapEnabled:  os.Getenv("SMART_RECAP_ENABLED") == "true",
-		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
-		SmartRecapModel:    os.Getenv("SMART_RECAP_MODEL"),
-		LockTimeoutSeconds: 60,
+		SmartRecapEnabled:      os.Getenv("SMART_RECAP_ENABLED") == "true",
+		AnthropicAPIKey:        os.Getenv("ANTHROPIC_API_KEY"),
+		SmartRecapModel:        os.Getenv("SMART_RECAP_MODEL"),
+		LockTimeoutSeconds:     60,
+		RegularCardsThresholds: analytics.DefaultRegularCardsThresholds(),
+		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
 	}
 
 	// Parse quota limit
@@ -395,10 +397,70 @@ func loadPrecomputeConfig() analytics.PrecomputeConfig {
 		}
 	}
 
+	// Parse regular cards staleness thresholds
+	config.RegularCardsThresholds = loadStalenessThresholds(
+		"WORKER_REGULAR",
+		analytics.DefaultRegularCardsThresholds(),
+	)
+
+	// Parse smart recap staleness thresholds
+	config.SmartRecapThresholds = loadStalenessThresholds(
+		"WORKER_RECAP",
+		analytics.DefaultSmartRecapThresholds(),
+	)
+
 	// Disable if required config is missing
 	if config.AnthropicAPIKey == "" || config.SmartRecapModel == "" || config.SmartRecapQuota == 0 {
 		config.SmartRecapEnabled = false
 	}
 
 	return config
+}
+
+// loadStalenessThresholds loads staleness thresholds from environment variables with a prefix.
+// For example, with prefix "WORKER_REGULAR", it reads:
+// - WORKER_REGULAR_THRESHOLD_PCT (e.g., "0.20")
+// - WORKER_REGULAR_BASE_MIN_LINES (e.g., "5")
+// - WORKER_REGULAR_BASE_MIN_TIME (e.g., "3m")
+// - WORKER_REGULAR_MIN_INITIAL_LINES (e.g., "10")
+// - WORKER_REGULAR_MIN_SESSION_AGE (e.g., "10m")
+func loadStalenessThresholds(prefix string, defaults analytics.StalenessThresholds) analytics.StalenessThresholds {
+	th := defaults
+
+	// Parse threshold percentage (e.g., "0.20" for 20%)
+	if pctStr := os.Getenv(prefix + "_THRESHOLD_PCT"); pctStr != "" {
+		if pct, err := strconv.ParseFloat(pctStr, 64); err == nil && pct >= 0 && pct <= 1 {
+			th.ThresholdPct = pct
+		}
+	}
+
+	// Parse base minimum lines
+	if linesStr := os.Getenv(prefix + "_BASE_MIN_LINES"); linesStr != "" {
+		if lines, err := strconv.ParseInt(linesStr, 10, 64); err == nil && lines >= 0 {
+			th.BaseMinLines = lines
+		}
+	}
+
+	// Parse base minimum time (duration string like "3m", "15m")
+	if timeStr := os.Getenv(prefix + "_BASE_MIN_TIME"); timeStr != "" {
+		if dur, err := time.ParseDuration(timeStr); err == nil && dur >= 0 {
+			th.BaseMinTime = dur
+		}
+	}
+
+	// Parse minimum initial lines
+	if linesStr := os.Getenv(prefix + "_MIN_INITIAL_LINES"); linesStr != "" {
+		if lines, err := strconv.ParseInt(linesStr, 10, 64); err == nil && lines >= 0 {
+			th.MinInitialLines = lines
+		}
+	}
+
+	// Parse minimum session age (duration string like "10m")
+	if ageStr := os.Getenv(prefix + "_MIN_SESSION_AGE"); ageStr != "" {
+		if dur, err := time.ParseDuration(ageStr); err == nil && dur >= 0 {
+			th.MinSessionAge = dur
+		}
+	}
+
+	return th
 }
