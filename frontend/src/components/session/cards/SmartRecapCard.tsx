@@ -55,8 +55,26 @@ export function SmartRecapCard({
     );
   }
 
-  // No data
-  if (!data) return null;
+  // No data - but show placeholder if quota exceeded
+  if (!data) {
+    if (quota?.exceeded) {
+      return (
+        <CardWrapper
+          title="Smart Recap"
+          icon={SparklesIcon}
+          subtitle={`${quota.used}/${quota.limit} used`}
+        >
+          <div className={styles.quotaPlaceholder}>
+            <p className={styles.quotaPlaceholderTitle}>Monthly limit reached</p>
+            <p className={styles.quotaPlaceholderText}>
+              Recaps will be available next month.
+            </p>
+          </div>
+        </CardWrapper>
+      );
+    }
+    return null;
+  }
 
   const recapData = data;
 

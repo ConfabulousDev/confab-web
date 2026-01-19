@@ -93,3 +93,21 @@
 .quotaWarning {
   color: var(--color-error-text);
 }
+
+.quotaPlaceholder {
+  padding: var(--spacing-lg) var(--spacing-md);
+  text-align: center;
+}
+
+.quotaPlaceholderTitle {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--color-error-text);
+}
+
+.quotaPlaceholderText {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+}

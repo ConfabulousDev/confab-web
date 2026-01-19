@@ -3,6 +3,7 @@ import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
 import { analyticsAPI, APIError } from '@/services/api';
 import { RelativeTime } from '@/components/RelativeTime';
+import Alert from '@/components/Alert';
 import { MoreVerticalIcon, GitHubIcon } from '@/components/icons';
 import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api';
 import { getOrderedCards } from './cards';
@@ -36,6 +37,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
 
   // State for Smart Recap regeneration
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   // Dropdown for actions menu
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
@@ -66,17 +68,27 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
   const handleRegenerateSmartRecap = useCallback(async () => {
     if (isRegenerating || initialAnalytics !== undefined) return; // Disabled in Storybook mode
     setIsRegenerating(true);
+    setRegenerateError(null); // Clear any previous error
     try {
       // Regeneration is synchronous - waits for LLM to complete
       await analyticsAPI.regenerateSmartRecap(sessionId);
       // Force a fresh fetch to get the newly generated card
       await forceRefetch();
     } catch (err) {
-      // Handle 409 Conflict (generation already in progress)
-      if (err instanceof APIError && err.status === 409) {
-        console.log('Smart recap generation already in progress');
+      if (err instanceof APIError) {
+        if (err.status === 409) {
+          // Generation already in progress - not an error to show user
+          console.log('Smart recap generation already in progress');
+        } else if (err.status === 403) {
+          // Quota exceeded
+          setRegenerateError('Monthly recap limit reached. Try again next month.');
+        } else {
+          console.error('Failed to regenerate smart recap:', err);
+          setRegenerateError('Failed to regenerate recap. Please try again.');
+        }
       } else {
         console.error('Failed to regenerate smart recap:', err);
+        setRegenerateError('Failed to regenerate recap. Please try again.');
       }
     } finally {
       setIsRegenerating(false);
@@ -209,6 +221,12 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           )}
         </div>
       </div>
+
+      {regenerateError && (
+        <Alert variant="error" onClose={() => setRegenerateError(null)}>
+          {regenerateError}
+        </Alert>
+      )}
 
       <div className={styles.grid}>
         {renderAnalyticsCards()}
