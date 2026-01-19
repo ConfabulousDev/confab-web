@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -124,8 +125,16 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 	generationTimeMs := int(time.Since(start).Milliseconds())
 
 	// Parse the response
-	result, err := parseSmartRecapResponse(resp.GetTextContent())
+	llmContent := resp.GetTextContent()
+	result, err := parseSmartRecapResponse(llmContent)
 	if err != nil {
+		// Log the raw LLM response for debugging parse failures
+		slog.Error("smart recap parse failed",
+			"error", err,
+			"model", a.model,
+			"response_length", len(llmContent),
+			"raw_response", llmContent,
+		)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
