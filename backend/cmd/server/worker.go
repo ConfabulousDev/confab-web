@@ -23,8 +23,6 @@ var workerTracer = otel.Tracer("confab/worker")
 // WorkerConfig holds configuration for the analytics precompute worker.
 type WorkerConfig struct {
 	PollInterval time.Duration
-	BatchSize    int
-	BatchDelay   time.Duration
 	MaxSessions  int  // Maximum sessions to query per cycle
 	DryRun       bool // If true, log what would be done without actually precomputing
 }
@@ -53,8 +51,6 @@ func runWorker() {
 	workerConfig := loadWorkerConfig()
 	logger.Info("worker configuration loaded",
 		"poll_interval", workerConfig.PollInterval,
-		"batch_size", workerConfig.BatchSize,
-		"batch_delay", workerConfig.BatchDelay,
 		"max_sessions", workerConfig.MaxSessions,
 		"dry_run", workerConfig.DryRun,
 	)
@@ -184,61 +180,44 @@ func (w *Worker) runOnce(ctx context.Context) {
 		return
 	}
 
-	// Process in batches
+	// Process sessions sequentially with steady pacing
 	processed := 0
 	errors := 0
 
-	for i := 0; i < len(sessions); i += w.config.BatchSize {
-		// Check for shutdown
+	for i, session := range sessions {
 		select {
 		case <-ctx.Done():
-			logger.Info("stopping batch processing due to shutdown")
+			logger.Info("stopping processing due to shutdown")
 			return
 		default:
 		}
 
-		// Get batch
-		end := i + w.config.BatchSize
-		if end > len(sessions) {
-			end = len(sessions)
+		err := w.precomputer.PrecomputeSession(ctx, session)
+		if err != nil {
+			logger.Error("failed to precompute session",
+				"session_id", session.SessionID,
+				"user_id", session.UserID,
+				"external_id", session.ExternalID,
+				"total_lines", session.TotalLines,
+				"error", err,
+			)
+			errors++
+		} else {
+			logger.Info("precomputed session",
+				"session_id", session.SessionID,
+				"user_id", session.UserID,
+				"external_id", session.ExternalID,
+				"total_lines", session.TotalLines,
+			)
+			processed++
 		}
-		batch := sessions[i:end]
 
-		// Process each session in the batch
-		for _, session := range batch {
+		// Brief delay between sessions for steady pacing (skip after last)
+		if i < len(sessions)-1 {
 			select {
 			case <-ctx.Done():
 				return
-			default:
-			}
-
-			err := w.precomputer.PrecomputeSession(ctx, session)
-			if err != nil {
-				logger.Error("failed to precompute session",
-					"session_id", session.SessionID,
-					"user_id", session.UserID,
-					"external_id", session.ExternalID,
-					"total_lines", session.TotalLines,
-					"error", err,
-				)
-				errors++
-			} else {
-				logger.Info("precomputed session",
-					"session_id", session.SessionID,
-					"user_id", session.UserID,
-					"external_id", session.ExternalID,
-					"total_lines", session.TotalLines,
-				)
-				processed++
-			}
-		}
-
-		// Delay between batches (unless this is the last batch)
-		if end < len(sessions) {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(w.config.BatchDelay):
+			case <-time.After(500 * time.Millisecond):
 			}
 		}
 	}
@@ -257,26 +236,12 @@ func (w *Worker) runOnce(ctx context.Context) {
 func loadWorkerConfig() WorkerConfig {
 	config := WorkerConfig{
 		PollInterval: 30 * time.Minute, // Default: 30 minutes
-		BatchSize:    10,               // Default: 10 sessions per batch
-		BatchDelay:   5 * time.Second,  // Default: 5s between batches
 		DryRun:       false,            // Default: actually precompute
 	}
 
 	if interval := os.Getenv("WORKER_POLL_INTERVAL"); interval != "" {
 		if parsed, err := time.ParseDuration(interval); err == nil && parsed > 0 {
 			config.PollInterval = parsed
-		}
-	}
-
-	if batchSize := os.Getenv("WORKER_BATCH_SIZE"); batchSize != "" {
-		if parsed, err := strconv.Atoi(batchSize); err == nil && parsed > 0 {
-			config.BatchSize = parsed
-		}
-	}
-
-	if delay := os.Getenv("WORKER_BATCH_DELAY"); delay != "" {
-		if parsed, err := time.ParseDuration(delay); err == nil && parsed >= 0 {
-			config.BatchDelay = parsed
 		}
 	}
 

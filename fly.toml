@@ -54,13 +54,11 @@ primary_region = 'sjc'
   SMART_RECAP_ENABLED = "true"
   SMART_RECAP_MODEL = "claude-haiku-4-5-20251001"
   SMART_RECAP_QUOTA_LIMIT = "500"
-  SMART_RECAP_STALENESS_MINUTES = "10"
+  SMART_RECAP_STALENESS_MINUTES = "15"
 
   # Worker Configuration (background analytics precompute)
   WORKER_POLL_INTERVAL = "30m"
-  WORKER_BATCH_SIZE = "10"
-  WORKER_BATCH_DELAY = "5s"
-  WORKER_MAX_SESSIONS = "5"  # Required: max sessions per iteration
+  WORKER_MAX_SESSIONS = "20"  # Required: max sessions per iteration
   WORKER_DRY_RUN = "false"
 
 [http_service]

@@ -56,11 +56,9 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 		trace.WithAttributes(attribute.Int("limit", limit)))
 	defer span.End()
 
-	// Query finds sessions where:
-	// 1. No tokens card exists (never computed)
-	// 2. Tokens card version is outdated
-	// 3. Tokens card up_to_line doesn't match current total lines
-	// We use the tokens card as a proxy since all cards are computed together.
+	// Query finds sessions where ANY card is stale (missing, wrong version, or wrong line count).
+	// This mirrors Cards.AllValid() in cards.go which checks all 7 cards independently.
+	// A card is valid if: exists AND version matches AND up_to_line matches total lines.
 	query := `
 		WITH session_lines AS (
 			SELECT session_id, SUM(last_synced_line) as total_lines
@@ -72,16 +70,38 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 		SELECT sl.session_id, s.user_id, s.external_id, sl.total_lines
 		FROM session_lines sl
 		JOIN sessions s ON sl.session_id = s.id
-		LEFT JOIN session_card_tokens t ON sl.session_id = t.session_id
+		LEFT JOIN session_card_tokens tc ON sl.session_id = tc.session_id
+		LEFT JOIN session_card_session sc ON sl.session_id = sc.session_id
+		LEFT JOIN session_card_tools tl ON sl.session_id = tl.session_id
+		LEFT JOIN session_card_code_activity ca ON sl.session_id = ca.session_id
+		LEFT JOIN session_card_conversation cv ON sl.session_id = cv.session_id
+		LEFT JOIN session_card_agents_skills as_card ON sl.session_id = as_card.session_id
+		LEFT JOIN session_card_redactions rd ON sl.session_id = rd.session_id
 		WHERE s.session_type = 'Claude Code'
-		  AND (t.session_id IS NULL
-			   OR t.version < $1
-			   OR t.up_to_line < sl.total_lines)
+		  AND NOT (
+			-- All cards must be valid (exist with correct version and line count)
+			tc.session_id IS NOT NULL AND tc.version = $1 AND tc.up_to_line = sl.total_lines
+			AND sc.session_id IS NOT NULL AND sc.version = $2 AND sc.up_to_line = sl.total_lines
+			AND tl.session_id IS NOT NULL AND tl.version = $3 AND tl.up_to_line = sl.total_lines
+			AND ca.session_id IS NOT NULL AND ca.version = $4 AND ca.up_to_line = sl.total_lines
+			AND cv.session_id IS NOT NULL AND cv.version = $5 AND cv.up_to_line = sl.total_lines
+			AND as_card.session_id IS NOT NULL AND as_card.version = $6 AND as_card.up_to_line = sl.total_lines
+			AND rd.session_id IS NOT NULL AND rd.version = $7 AND rd.up_to_line = sl.total_lines
+		  )
 		ORDER BY s.last_sync_at DESC NULLS LAST
-		LIMIT $2
+		LIMIT $8
 	`
 
-	rows, err := p.db.QueryContext(ctx, query, TokensCardVersion, limit)
+	rows, err := p.db.QueryContext(ctx, query,
+		TokensCardVersion,
+		SessionCardVersion,
+		ToolsCardVersion,
+		CodeActivityCardVersion,
+		ConversationCardVersion,
+		AgentsAndSkillsCardVersion,
+		RedactionsCardVersion,
+		limit,
+	)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
