@@ -319,6 +319,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 // If fc is nil, the transcript will be downloaded synchronously when generation is needed.
 // isOwner controls whether quota info is included in the response (private to owner).
 // cardStats contains the computed analytics cards to include in the LLM prompt for context.
+// If smart recap generation fails, an error is added to response.CardErrors for graceful degradation.
 func attachOrGenerateSmartRecap(
 	ctx context.Context,
 	database *db.DB,
@@ -335,6 +336,14 @@ func attachOrGenerateSmartRecap(
 	log *slog.Logger,
 	isOwner bool,
 ) {
+	// Helper to add smart recap error to response for graceful degradation
+	addCardError := func(errMsg string) {
+		if response.CardErrors == nil {
+			response.CardErrors = make(map[string]string)
+		}
+		response.CardErrors["smart_recap"] = errMsg
+	}
+
 	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
 
@@ -342,6 +351,7 @@ func attachOrGenerateSmartRecap(
 	smartCard, err := analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
 	if err != nil {
 		log.Error("Failed to get smart recap card", "error", err, "session_id", sessionID)
+		addCardError("Failed to load smart recap")
 		return
 	}
 
@@ -390,13 +400,18 @@ func attachOrGenerateSmartRecap(
 	if transcriptFC == nil {
 		transcriptFC = downloadTranscriptForSmartRecap(ctx, database, store, sessionID, sessionUserID, externalID, log)
 		if transcriptFC == nil {
+			addCardError("Failed to download transcript for smart recap")
 			return
 		}
 	}
 
 	// Generate synchronously (first-time generation)
-	if newCard := generateSmartRecapSync(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, transcriptFC, cardStats, log); newCard != nil {
+	newCard := generateSmartRecapSync(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, transcriptFC, cardStats, log)
+	if newCard != nil {
 		addSmartRecapToResponse(response, newCard)
+	} else {
+		// Generation failed - add error for graceful degradation
+		addCardError("Failed to generate smart recap")
 	}
 }
 

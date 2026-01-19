@@ -350,6 +350,89 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 	})
 }
 
+// TestSmartRecap_ErrorPropagation verifies that smart recap errors are propagated
+// to the card_errors field for graceful frontend degradation.
+func TestSmartRecap_ErrorPropagation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Set up smart recap config (with fake API key - generation will fail)
+	os.Setenv("SMART_RECAP_ENABLED", "true")
+	os.Setenv("ANTHROPIC_API_KEY", "invalid-api-key-that-will-fail")
+	os.Setenv("SMART_RECAP_MODEL", "claude-haiku-4-5-20251101")
+	os.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
+	defer func() {
+		os.Unsetenv("SMART_RECAP_ENABLED")
+		os.Unsetenv("ANTHROPIC_API_KEY")
+		os.Unsetenv("SMART_RECAP_MODEL")
+		os.Unsetenv("SMART_RECAP_QUOTA_LIMIT")
+	}()
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("returns card_errors when smart recap generation fails", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "errtest@test.com", "Error Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-error")
+
+		// Upload JSONL content (required to trigger smart recap generation attempt)
+		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session-error", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+		// Note: We do NOT insert a cached smart recap card, so generation will be attempted
+		// The generation will fail because the API key is invalid
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		// Make request to analytics endpoint
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Request should succeed (analytics endpoint returns partial results)
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var rawResult map[string]interface{}
+		testutil.ParseJSON(t, resp, &rawResult)
+
+		// Other cards should still be present
+		cards, ok := rawResult["cards"].(map[string]interface{})
+		if !ok {
+			t.Fatal("expected cards map in response")
+		}
+		if _, hasTokens := cards["tokens"]; !hasTokens {
+			t.Error("expected tokens card to still be present")
+		}
+
+		// smart_recap should NOT be in cards (generation failed)
+		if _, hasSmartRecap := cards["smart_recap"]; hasSmartRecap {
+			t.Error("smart_recap should NOT be in cards when generation failed")
+		}
+
+		// card_errors should contain smart_recap error
+		cardErrors, hasErrors := rawResult["card_errors"].(map[string]interface{})
+		if !hasErrors {
+			t.Fatal("expected card_errors in response when smart recap fails")
+		}
+		smartRecapError, hasSmartRecapError := cardErrors["smart_recap"].(string)
+		if !hasSmartRecapError {
+			t.Fatal("expected smart_recap key in card_errors")
+		}
+		if smartRecapError == "" {
+			t.Error("smart_recap error message should not be empty")
+		}
+		t.Logf("Smart recap error message: %s", smartRecapError)
+	})
+}
+
 func TestSmartRecap_CacheHitVsMissPath(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
