@@ -60,16 +60,13 @@ export function SmartRecapCard({
 
   const recapData = data;
 
-  // Build subtitle showing when generated, model, staleness, and quota
+  // Build subtitle showing when generated, model, and quota
   const subtitleParts: string[] = [];
   // Show when the recap was generated
   subtitleParts.push(formatRelativeTime(recapData.computed_at));
   // Show model name (extract just the model part, e.g., "claude-haiku-4-5")
   const modelShort = recapData.model_used.replace(/-\d{8}$/, '');
   subtitleParts.push(modelShort);
-  if (recapData.is_stale) {
-    subtitleParts.push('Outdated');
-  }
   if (quota) {
     subtitleParts.push(`${quota.used}/${quota.limit} used`);
   }

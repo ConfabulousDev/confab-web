@@ -174,7 +174,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				sessionUserID, externalID, err := database.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 				if err == nil {
 					isOwner := result.AccessInfo.AccessType == db.SessionAccessOwner
-					handleSmartRecap(
+					attachOrGenerateSmartRecap(
 						r.Context(),
 						database,
 						analyticsStore,
@@ -288,7 +288,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		// Handle smart recap (if enabled)
 		if smartRecapConfig.Enabled {
 			isOwner := result.AccessInfo.AccessType == db.SessionAccessOwner
-			handleSmartRecap(
+			attachOrGenerateSmartRecap(
 				r.Context(),
 				database,
 				analyticsStore,
@@ -320,13 +320,14 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 	}
 }
 
-// handleSmartRecap handles smart recap computation for the analytics response.
-// Any viewer (owner, shared, or public) can trigger generation - quota is charged to session owner.
-// Generation is synchronous - the request blocks until the LLM completes (~60-90s for initial generation).
+// attachOrGenerateSmartRecap adds smart recap to the analytics response.
+// - If a cached smart recap exists: return it (regardless of staleness)
+// - If no smart recap exists: generate synchronously (first-time only)
+// Staleness-based regeneration is handled by background worker and manual regenerate endpoint.
 // If fc is nil, the transcript will be downloaded synchronously when generation is needed.
 // isOwner controls whether quota info is included in the response (private to owner).
 // cardStats contains the computed analytics cards to include in the LLM prompt for context.
-func handleSmartRecap(
+func attachOrGenerateSmartRecap(
 	ctx context.Context,
 	database *db.DB,
 	analyticsStore *analytics.Store,
@@ -358,80 +359,57 @@ func handleSmartRecap(
 	_, _ = database.ResetSmartRecapQuotaIfNeeded(dbCtx, sessionUserID)
 
 	quota, err := database.GetOrCreateSmartRecapQuota(dbCtx, sessionUserID)
-	var quotaInfo *analytics.SmartRecapQuotaInfo
 	if err != nil {
 		log.Error("Failed to get smart recap quota", "error", err, "user_id", sessionUserID)
-	} else {
-		quotaInfo = &analytics.SmartRecapQuotaInfo{
+	} else if isOwner {
+		// Only include quota in response for session owner (private info)
+		response.SmartRecapQuota = &analytics.SmartRecapQuotaInfo{
 			Used:     quota.ComputeCount,
 			Limit:    config.QuotaLimit,
 			Exceeded: quota.ComputeCount >= config.QuotaLimit,
 		}
-		// Only include quota in response for session owner (private info)
-		if isOwner {
-			response.SmartRecapQuota = quotaInfo
-		}
 	}
 
-	// Helper to generate synchronously, downloading transcript if needed
-	// Returns the generated card or nil if generation failed/skipped
-	generateSync := func() *analytics.SmartRecapCardRecord {
-		// Download transcript if not already available
-		transcriptFC := fc
-		if transcriptFC == nil {
-			transcriptFC = downloadTranscriptForSmartRecap(ctx, database, store, sessionID, sessionUserID, externalID, log)
-			if transcriptFC == nil {
-				return nil
-			}
-		}
-		return generateSmartRecapSync(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, transcriptFC, cardStats, log)
-	}
-
-	// If we have a valid cached card, return it
+	// If we have a valid cached card, return it (no staleness check, no regeneration)
 	if smartCard != nil && smartCard.IsValid() {
-		isStale := smartCard.IsStale(lineCount, config.StalenessMinutes)
-
-		// Check if we should regenerate (stale + quota OK + can acquire lock)
-		if isStale && quotaInfo != nil && !quotaInfo.Exceeded && smartCard.CanAcquireLock(config.LockTimeoutSeconds) {
-			// Try to generate synchronously
-			if newCard := generateSync(); newCard != nil {
-				addSmartRecapToResponse(response, newCard, false)
-				return
-			}
-			// Generation failed, fall through to return cached stale data
-		}
-
-		addSmartRecapToResponse(response, smartCard, isStale)
+		addSmartRecapToResponse(response, smartCard)
 		return
 	}
 
-	// No valid card exists - any viewer can trigger generation
-	// Quota is charged to session owner
+	// No valid card exists - generate first-time if quota allows
 
 	// Check quota
-	if quotaInfo != nil && quotaInfo.Exceeded {
-		// Quota exceeded - return whatever cached data we have (even if stale)
+	if quota != nil && quota.ComputeCount >= config.QuotaLimit {
+		// Quota exceeded - return whatever cached data we have (even if invalid version)
 		if smartCard != nil {
-			addSmartRecapToResponse(response, smartCard, true)
+			addSmartRecapToResponse(response, smartCard)
 		}
 		return
 	}
 
 	// Check if another process is already generating (lock held)
 	if smartCard != nil && !smartCard.CanAcquireLock(config.LockTimeoutSeconds) {
-		// Lock held by another request - return stale data if available, otherwise nothing
-		// (graceful degradation - don't fail, just skip smart recap)
+		// Lock held by another request - graceful degradation, skip smart recap
 		return
 	}
 
-	// Generate synchronously
-	if newCard := generateSync(); newCard != nil {
-		addSmartRecapToResponse(response, newCard, false)
+	// Download transcript if not already available
+	transcriptFC := fc
+	if transcriptFC == nil {
+		transcriptFC = downloadTranscriptForSmartRecap(ctx, database, store, sessionID, sessionUserID, externalID, log)
+		if transcriptFC == nil {
+			return
+		}
+	}
+
+	// Generate synchronously (first-time generation)
+	if newCard := generateSmartRecapSync(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, transcriptFC, cardStats, log); newCard != nil {
+		addSmartRecapToResponse(response, newCard)
 	}
 }
 
 // addSmartRecapToResponse adds the smart recap card data to the response.
-func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analytics.SmartRecapCardRecord, isStale bool) {
+func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analytics.SmartRecapCardRecord) {
 	response.Cards["smart_recap"] = analytics.SmartRecapCardData{
 		Recap:                     card.Recap,
 		WentWell:                  card.WentWell,
@@ -440,7 +418,6 @@ func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analyt
 		EnvironmentSuggestions:    card.EnvironmentSuggestions,
 		DefaultContextSuggestions: card.DefaultContextSuggestions,
 		ComputedAt:                card.ComputedAt.Format(time.RFC3339),
-		IsStale:                   isStale,
 		ModelUsed:                 card.ModelUsed,
 	}
 }
@@ -687,7 +664,6 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 					EnvironmentSuggestions:    newCard.EnvironmentSuggestions,
 					DefaultContextSuggestions: newCard.DefaultContextSuggestions,
 					ComputedAt:                newCard.ComputedAt.Format(time.RFC3339),
-					IsStale:                   false,
 					ModelUsed:                 newCard.ModelUsed,
 				},
 			},

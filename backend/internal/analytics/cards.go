@@ -269,7 +269,6 @@ type SmartRecapCardData struct {
 	EnvironmentSuggestions    []string `json:"environment_suggestions"`
 	DefaultContextSuggestions []string `json:"default_context_suggestions"`
 	ComputedAt                string   `json:"computed_at"`
-	IsStale                   bool     `json:"is_stale"`
 	ModelUsed                 string   `json:"model_used"`
 }
 

@@ -38,7 +38,6 @@ export const Default: Story = {
         'Document preferred error handling approach',
       ],
       computed_at: '2024-01-15T10:30:00Z',
-      is_stale: false,
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,
@@ -56,31 +55,11 @@ export const Refreshing: Story = {
       environment_suggestions: [],
       default_context_suggestions: [],
       computed_at: '2024-01-15T10:30:00Z',
-      is_stale: true,
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,
     quota: { used: 3, limit: 20, exceeded: false },
     isRefreshing: true,
-  },
-};
-
-export const Stale: Story = {
-  args: {
-    data: {
-      recap:
-        'This is an older recap that may not reflect the latest changes in the session.',
-      went_well: ['Initial setup was smooth'],
-      went_bad: ['Some edge cases were missed'],
-      human_suggestions: [],
-      environment_suggestions: [],
-      default_context_suggestions: [],
-      computed_at: '2024-01-14T08:00:00Z',
-      is_stale: true,
-      model_used: 'claude-haiku-4-5-20251101',
-    },
-    loading: false,
-    quota: { used: 15, limit: 20, exceeded: false },
   },
 };
 
@@ -94,7 +73,6 @@ export const QuotaExceeded: Story = {
       environment_suggestions: [],
       default_context_suggestions: [],
       computed_at: '2024-01-10T14:00:00Z',
-      is_stale: true,
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,
@@ -112,7 +90,6 @@ export const MinimalData: Story = {
       environment_suggestions: [],
       default_context_suggestions: [],
       computed_at: '2024-01-15T10:30:00Z',
-      is_stale: false,
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,
@@ -151,7 +128,6 @@ export const AllSuggestions: Story = {
         'Include performance targets and benchmarks',
       ],
       computed_at: '2024-01-15T10:30:00Z',
-      is_stale: false,
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,
@@ -177,7 +153,6 @@ export const NoQuotaInfo: Story = {
       environment_suggestions: [],
       default_context_suggestions: [],
       computed_at: '2024-01-15T10:30:00Z',
-      is_stale: false,
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,

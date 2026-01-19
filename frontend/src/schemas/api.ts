@@ -265,7 +265,6 @@ const SmartRecapCardDataSchema = z.object({
   environment_suggestions: z.array(z.string()),
   default_context_suggestions: z.array(z.string()),
   computed_at: z.string(),
-  is_stale: z.boolean(),
   model_used: z.string(),
 });
 
