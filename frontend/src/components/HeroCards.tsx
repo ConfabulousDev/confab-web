@@ -2,6 +2,7 @@ import { useState } from 'react';
 import AnalysisModal from './AnalysisModal';
 import HowItWorksModal from './HowItWorksModal';
 import PRLinkingModal from './PRLinkingModal';
+import PrivacyModal from './PrivacyModal';
 import QuickstartModal from './QuickstartModal';
 import ReviewModal from './ReviewModal';
 import ShareModal from './ShareModal';
@@ -48,6 +49,12 @@ const cards: HeroCard[] = [
     description: 'Track token usage, costs, and productivity metrics across all your sessions.',
   },
   {
+    id: 'privacy',
+    icon: '🔒',
+    title: 'Privacy & Security',
+    description: 'Your data is encrypted and private by default, only accessible to you.',
+  },
+  {
     id: 'how-it-works',
     icon: '⚙️',
     title: 'How it works',
@@ -61,7 +68,7 @@ const cards: HeroCard[] = [
   },
 ];
 
-const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share'];
+const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share', 'privacy'];
 
 function HeroCards() {
   const [smartRecapOpen, setSmartRecapOpen] = useState(false);
@@ -71,6 +78,7 @@ function HeroCards() {
   const [prLinkingOpen, setPrLinkingOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   const handleCardClick = (cardId: string) => {
     if (cardId === 'smart-recap') {
@@ -87,6 +95,8 @@ function HeroCards() {
       setReviewOpen(true);
     } else if (cardId === 'share') {
       setShareOpen(true);
+    } else if (cardId === 'privacy') {
+      setPrivacyOpen(true);
     }
   };
 
@@ -146,6 +156,10 @@ function HeroCards() {
       <ShareModal
         isOpen={shareOpen}
         onClose={() => setShareOpen(false)}
+      />
+      <PrivacyModal
+        isOpen={privacyOpen}
+        onClose={() => setPrivacyOpen(false)}
       />
     </div>
   );
