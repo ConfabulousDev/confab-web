@@ -309,6 +309,78 @@ export const SessionAnalyticsSchema = z.object({
 });
 
 // ============================================================================
+// Trends Schemas
+// ============================================================================
+
+const DateRangeSchema = z.object({
+  start_date: z.string(), // YYYY-MM-DD
+  end_date: z.string(),   // YYYY-MM-DD
+});
+
+const TrendsOverviewCardSchema = z.object({
+  session_count: z.number(),
+  total_duration_ms: z.number(),
+  avg_duration_ms: z.number().nullable().optional(),
+  days_covered: z.number(),
+  total_assistant_duration_ms: z.number(),
+  assistant_utilization_pct: z.number().nullable().optional(),
+});
+
+const DailyCostPointSchema = z.object({
+  date: z.string(),     // YYYY-MM-DD
+  cost_usd: z.string(), // Decimal as string
+});
+
+const TrendsTokensCardSchema = z.object({
+  total_input_tokens: z.number(),
+  total_output_tokens: z.number(),
+  total_cache_creation_tokens: z.number(),
+  total_cache_read_tokens: z.number(),
+  total_cost_usd: z.string(),
+  daily_costs: z.array(DailyCostPointSchema),
+});
+
+const DailySessionCountSchema = z.object({
+  date: z.string(),         // YYYY-MM-DD
+  session_count: z.number(),
+});
+
+const TrendsActivityCardSchema = z.object({
+  total_files_read: z.number(),
+  total_files_modified: z.number(),
+  total_lines_added: z.number(),
+  total_lines_removed: z.number(),
+  daily_session_counts: z.array(DailySessionCountSchema),
+});
+
+const TrendsToolStatsSchema = z.object({
+  success: z.number(),
+  errors: z.number(),
+});
+
+const TrendsToolsCardSchema = z.object({
+  total_calls: z.number(),
+  total_errors: z.number(),
+  tool_stats: z.record(z.string(), TrendsToolStatsSchema),
+});
+
+const TrendsCardsSchema = z.object({
+  overview: TrendsOverviewCardSchema.nullable(),
+  tokens: TrendsTokensCardSchema.nullable(),
+  activity: TrendsActivityCardSchema.nullable(),
+  tools: TrendsToolsCardSchema.nullable(),
+});
+
+export const TrendsResponseSchema = z.object({
+  computed_at: z.string(),
+  date_range: DateRangeSchema,
+  session_count: z.number(),
+  repos_included: z.array(z.string()),
+  include_no_repo: z.boolean(),
+  cards: TrendsCardsSchema,
+});
+
+// ============================================================================
 // Array Response Schemas
 // ============================================================================
 
@@ -341,6 +413,13 @@ export type SmartRecapCardData = z.infer<typeof SmartRecapCardDataSchema>;
 export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
+export type TrendsResponse = z.infer<typeof TrendsResponseSchema>;
+export type TrendsOverviewCard = z.infer<typeof TrendsOverviewCardSchema>;
+export type TrendsTokensCard = z.infer<typeof TrendsTokensCardSchema>;
+export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
+export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
+export type DailyCostPoint = z.infer<typeof DailyCostPointSchema>;
+export type DailySessionCount = z.infer<typeof DailySessionCountSchema>;
 
 // ============================================================================
 // Validation Functions

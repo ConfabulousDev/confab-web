@@ -9,3 +9,4 @@ export { useLoadSession } from './useLoadSession';
 export { useSessionFilters } from './useSessionFilters';
 export { useDropdown } from './useDropdown';
 export { useVisibility } from './useVisibility';
+export { useTrends } from './useTrends';

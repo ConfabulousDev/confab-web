@@ -635,6 +635,110 @@ Requires session ownership (web session auth only, no API key).
 
 ---
 
+### Trends (Aggregated Analytics)
+
+#### Get Trends
+```
+GET /api/v1/trends?start_date=<date>&end_date=<date>&repos=<repos>&include_no_repo=<bool>
+```
+
+Returns aggregated analytics across multiple sessions for the authenticated user.
+
+**Query Parameters:**
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| start_date | string | No | 7 days ago | Start of date range (YYYY-MM-DD) |
+| end_date | string | No | today | End of date range (YYYY-MM-DD) |
+| repos | string | No | all | Comma-separated repo names to filter |
+| include_no_repo | boolean | No | true | Include sessions without a git repo |
+
+**Constraints:**
+- Maximum date range: 90 days
+- Date format: YYYY-MM-DD
+
+**Response:**
+```json
+{
+  "computed_at": "2024-01-15T10:30:00Z",
+  "date_range": {
+    "start_date": "2024-01-08",
+    "end_date": "2024-01-15"
+  },
+  "session_count": 42,
+  "repos_included": ["org/repo1"],
+  "include_no_repo": true,
+  "cards": {
+    "overview": {
+      "session_count": 42,
+      "total_duration_ms": 86400000,
+      "avg_duration_ms": 2057142,
+      "days_covered": 7
+    },
+    "tokens": {
+      "total_input_tokens": 5000000,
+      "total_output_tokens": 2000000,
+      "total_cache_creation_tokens": 100000,
+      "total_cache_read_tokens": 500000,
+      "total_cost_usd": "125.50",
+      "daily_costs": [
+        {"date": "2024-01-08", "cost_usd": "15.20"},
+        {"date": "2024-01-09", "cost_usd": "18.50"}
+      ]
+    },
+    "activity": {
+      "total_files_read": 500,
+      "total_files_modified": 150,
+      "total_lines_added": 5000,
+      "total_lines_removed": 2000,
+      "daily_session_counts": [
+        {"date": "2024-01-08", "session_count": 5},
+        {"date": "2024-01-09", "session_count": 8}
+      ]
+    },
+    "tools": {
+      "total_calls": 2500,
+      "total_errors": 50,
+      "tool_stats": {
+        "Read": {"success": 800, "errors": 5},
+        "Write": {"success": 400, "errors": 10},
+        "Bash": {"success": 600, "errors": 30}
+      }
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `computed_at` | string | ISO timestamp when trends were computed |
+| `date_range.start_date` | string | Start date (inclusive) |
+| `date_range.end_date` | string | End date (inclusive) |
+| `session_count` | int | Total sessions in the date range |
+| `repos_included` | string[] | Repos that were included in the filter |
+| `include_no_repo` | bool | Whether sessions without repos were included |
+| `cards.overview.session_count` | int | Total session count |
+| `cards.overview.total_duration_ms` | int | Sum of all session durations |
+| `cards.overview.avg_duration_ms` | int\|null | Average session duration |
+| `cards.overview.days_covered` | int | Number of unique days with sessions |
+| `cards.tokens.total_input_tokens` | int | Sum of input tokens across all sessions |
+| `cards.tokens.total_output_tokens` | int | Sum of output tokens across all sessions |
+| `cards.tokens.total_cost_usd` | string | Total estimated cost (decimal as string) |
+| `cards.tokens.daily_costs` | array | Cost per day for charting |
+| `cards.activity.total_files_read` | int | Sum of files read across all sessions |
+| `cards.activity.total_files_modified` | int | Sum of files modified |
+| `cards.activity.total_lines_added` | int | Sum of lines added |
+| `cards.activity.total_lines_removed` | int | Sum of lines removed |
+| `cards.activity.daily_session_counts` | array | Sessions per day for charting |
+| `cards.tools.total_calls` | int | Sum of tool calls across all sessions |
+| `cards.tools.total_errors` | int | Sum of tool errors |
+| `cards.tools.tool_stats` | object | Per-tool success/error breakdown |
+
+**Errors:**
+- `400` - Invalid date format or range exceeds 90 days
+- `401` - Authentication required
+
+---
+
 ### Session Analytics
 
 #### Get Session Analytics

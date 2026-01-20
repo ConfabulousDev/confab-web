@@ -109,6 +109,33 @@ func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, externa
 	return sessionID
 }
 
+// CreateTestSessionWithGitInfo creates a session with git_info in the database for testing
+func CreateTestSessionWithGitInfo(t *testing.T, env *TestEnvironment, userID int64, externalID, repoURL string) string {
+	t.Helper()
+
+	sessionID := uuid.New().String()
+
+	gitInfo := map[string]interface{}{
+		"repo_url": repoURL,
+	}
+	gitInfoJSON, err := json.Marshal(gitInfo)
+	if err != nil {
+		t.Fatalf("failed to marshal git_info: %v", err)
+	}
+
+	query := `
+		INSERT INTO sessions (id, user_id, external_id, first_seen, git_info)
+		VALUES ($1, $2, $3, NOW(), $4)
+	`
+
+	_, err = env.DB.Exec(env.Ctx, query, sessionID, userID, externalID, gitInfoJSON)
+	if err != nil {
+		t.Fatalf("failed to create test session with git info: %v", err)
+	}
+
+	return sessionID
+}
+
 // CreateTestSyncFile creates a sync_file in the database for testing
 func CreateTestSyncFile(t *testing.T, env *TestEnvironment, sessionID string, fileName, fileType string, lastSyncedLine int) {
 	t.Helper()

@@ -317,7 +317,9 @@ func (s *Server) SetupRoutes() http.Handler {
 				})
 			}))
 			r.Get("/me", withMaxBody(MaxBodyXS, s.handleGetMe))
-			// Legacy weekly usage endpoint removed
+
+			// Trends - aggregated analytics across sessions
+			r.Get("/trends", withMaxBody(MaxBodyXS, HandleGetTrends(s.db)))
 
 			// API key management
 			r.Post("/keys", withMaxBody(MaxBodyM, HandleCreateAPIKey(s.db)))

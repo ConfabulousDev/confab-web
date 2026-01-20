@@ -14,6 +14,7 @@ import {
   GitHubLinkSchema,
   GitHubLinksResponseSchema,
   SessionAnalyticsSchema,
+  TrendsResponseSchema,
   validateResponse,
   type Session,
   type SessionDetail,
@@ -25,6 +26,7 @@ import {
   type GitHubLink,
   type GitHubLinksResponse,
   type SessionAnalytics,
+  type TrendsResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
@@ -557,5 +559,62 @@ export const analyticsAPI = {
     // Parse and validate response
     const data = await response.json();
     return validateResponse(SessionAnalyticsSchema, data, url);
+  },
+};
+
+export interface TrendsParams {
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string;   // YYYY-MM-DD
+  repos?: string[];
+  includeNoRepo?: boolean;
+}
+
+export const trendsAPI = {
+  /**
+   * Get aggregated analytics trends across multiple sessions.
+   *
+   * @param params - Optional filter parameters
+   * @returns TrendsResponse with aggregated card data
+   */
+  get: async (params: TrendsParams = {}): Promise<TrendsResponse> => {
+    const searchParams = new URLSearchParams();
+    if (params.startDate) searchParams.set('start_date', params.startDate);
+    if (params.endDate) searchParams.set('end_date', params.endDate);
+    if (params.repos && params.repos.length > 0) {
+      searchParams.set('repos', params.repos.join(','));
+    }
+    if (params.includeNoRepo !== undefined) {
+      searchParams.set('include_no_repo', String(params.includeNoRepo));
+    }
+
+    const queryString = searchParams.toString();
+    const url = `/trends${queryString ? `?${queryString}` : ''}`;
+    const fullUrl = `${api['baseURL']}${url}`;
+
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    // Handle authentication errors
+    if (response.status === 401) {
+      handleAuthFailure();
+      throw new AuthenticationError();
+    }
+
+    // Handle other HTTP errors
+    if (!response.ok) {
+      let errorData: unknown;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = await response.text();
+      }
+      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+    }
+
+    // Parse and validate response
+    const data = await response.json();
+    return validateResponse(TrendsResponseSchema, data, url);
   },
 };
