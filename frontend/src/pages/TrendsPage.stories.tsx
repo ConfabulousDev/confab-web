@@ -6,6 +6,7 @@ import {
   TrendsTokensCard,
   TrendsActivityCard,
   TrendsToolsCard,
+  TrendsUtilizationCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
 import type { TrendsResponse } from '@/schemas/api';
@@ -69,6 +70,7 @@ function TrendsPagePresentational({
               <TrendsTokensCard data={data.cards.tokens} />
               <TrendsActivityCard data={data.cards.activity} />
               <TrendsToolsCard data={data.cards.tools} />
+              <TrendsUtilizationCard data={data.cards.utilization} />
             </div>
           )}
         </div>
@@ -107,6 +109,16 @@ const mockDailySessionCounts = [
   { date: '2024-01-12', session_count: 6 },
   { date: '2024-01-13', session_count: 2 },
   { date: '2024-01-14', session_count: 10 },
+];
+
+const mockDailyUtilization = [
+  { date: '2024-01-08', utilization_pct: 45.2 },
+  { date: '2024-01-09', utilization_pct: 52.8 },
+  { date: '2024-01-10', utilization_pct: 38.5 },
+  { date: '2024-01-11', utilization_pct: 61.3 },
+  { date: '2024-01-12', utilization_pct: 55.0 },
+  { date: '2024-01-13', utilization_pct: 42.1 },
+  { date: '2024-01-14', utilization_pct: 48.7 },
 ];
 
 const defaultMockData: TrendsResponse = {
@@ -150,6 +162,9 @@ const defaultMockData: TrendsResponse = {
         Grep: { success: 200, errors: 2 },
         Glob: { success: 150, errors: 0 },
       },
+    },
+    utilization: {
+      daily_utilization: mockDailyUtilization,
     },
   },
 };
@@ -223,6 +238,17 @@ export const HighUsage: Story = {
             WebFetch: { success: 200, errors: 5 },
           },
         },
+        utilization: {
+          daily_utilization: [
+            { date: '2024-01-08', utilization_pct: 55.2 },
+            { date: '2024-01-09', utilization_pct: 62.8 },
+            { date: '2024-01-10', utilization_pct: 48.5 },
+            { date: '2024-01-11', utilization_pct: 71.3 },
+            { date: '2024-01-12', utilization_pct: 65.0 },
+            { date: '2024-01-13', utilization_pct: 52.1 },
+            { date: '2024-01-14', utilization_pct: 58.7 },
+          ],
+        },
       },
     },
     repos: ['org/repo-web', 'org/repo-api', 'org/repo-cli'],
@@ -275,6 +301,9 @@ export const SingleSession: Story = {
             Bash: { success: 15, errors: 0 },
           },
         },
+        utilization: {
+          daily_utilization: [{ date: '2024-01-14', utilization_pct: 75.0 }],
+        },
       },
     },
     repos: ['org/repo-web'],
@@ -324,6 +353,7 @@ export const EmptyState: Story = {
         tokens: null,
         activity: null,
         tools: null,
+        utilization: null,
       },
     },
     repos: [],

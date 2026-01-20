@@ -47,7 +47,7 @@ export function TrendsOverviewCard({ data }: TrendsOverviewCardProps) {
         icon={CalendarIcon}
       />
       <StatRow
-        label="Assistant Time"
+        label="Total Assistant Time"
         value={assistantDuration}
         icon={RobotIcon}
       />

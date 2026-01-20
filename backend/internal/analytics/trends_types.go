@@ -38,10 +38,11 @@ type DateRange struct {
 
 // TrendsCards holds all the trend card data.
 type TrendsCards struct {
-	Overview *TrendsOverviewCard `json:"overview"`
-	Tokens   *TrendsTokensCard   `json:"tokens"`
-	Activity *TrendsActivityCard `json:"activity"`
-	Tools    *TrendsToolsCard    `json:"tools"`
+	Overview    *TrendsOverviewCard    `json:"overview"`
+	Tokens      *TrendsTokensCard      `json:"tokens"`
+	Activity    *TrendsActivityCard    `json:"activity"`
+	Tools       *TrendsToolsCard       `json:"tools"`
+	Utilization *TrendsUtilizationCard `json:"utilization"`
 }
 
 // =============================================================================
@@ -91,9 +92,20 @@ type DailySessionCount struct {
 
 // TrendsToolsCard provides tool usage summary.
 type TrendsToolsCard struct {
-	TotalCalls int                        `json:"total_calls"`
-	TotalErrors int                       `json:"total_errors"`
-	ToolStats  map[string]*ToolStats      `json:"tool_stats"` // Per-tool breakdown
+	TotalCalls  int                   `json:"total_calls"`
+	TotalErrors int                   `json:"total_errors"`
+	ToolStats   map[string]*ToolStats `json:"tool_stats"` // Per-tool breakdown
+}
+
+// TrendsUtilizationCard provides daily assistant utilization breakdown.
+type TrendsUtilizationCard struct {
+	DailyUtilization []DailyUtilizationPoint `json:"daily_utilization"`
+}
+
+// DailyUtilizationPoint represents a single day's utilization for charting.
+type DailyUtilizationPoint struct {
+	Date           string   `json:"date"`            // YYYY-MM-DD
+	UtilizationPct *float64 `json:"utilization_pct"` // nil if no sessions that day
 }
 
 // =============================================================================

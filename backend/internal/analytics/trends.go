@@ -56,13 +56,14 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 
 	// Run all card aggregations in parallel
 	runAgg("overview_activity", func() error {
-		overview, activity, count, err := s.aggregateOverviewAndActivity(ctx, userID, req)
+		overview, activity, utilization, count, err := s.aggregateOverviewAndActivity(ctx, userID, req)
 		if err != nil {
 			return err
 		}
 		mu.Lock()
 		response.Cards.Overview = overview
 		response.Cards.Activity = activity
+		response.Cards.Utilization = utilization
 		response.SessionCount = count
 		mu.Unlock()
 		return nil
@@ -103,9 +104,9 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	return response, nil
 }
 
-// aggregateOverviewAndActivity computes the overview and activity cards.
+// aggregateOverviewAndActivity computes the overview, activity, and utilization cards.
 // These are combined because they share the same session and code_activity queries.
-func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, req TrendsRequest) (*TrendsOverviewCard, *TrendsActivityCard, int, error) {
+func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, req TrendsRequest) (*TrendsOverviewCard, *TrendsActivityCard, *TrendsUtilizationCard, int, error) {
 	// Query sessions and their code activity data
 	// Uses generate_series to ensure all dates in range are returned (with zeros for missing days)
 	query := `
@@ -163,7 +164,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 		req.IncludeNoRepo,
 	)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	defer rows.Close()
 
@@ -187,7 +188,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 			&d.AssistantDurationMs,
 		)
 		if err != nil {
-			return nil, nil, 0, err
+			return nil, nil, nil, 0, err
 		}
 		d.Date = sessionDate.Format("2006-01-02")
 		dailyData = append(dailyData, d)
@@ -202,17 +203,25 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
-	// Build daily session counts for chart and count days with activity
+	// Build daily session counts and utilization for charts, count days with activity
 	dailyCounts := make([]DailySessionCount, len(dailyData))
+	dailyUtilization := make([]DailyUtilizationPoint, len(dailyData))
 	daysWithActivity := 0
 	for i, d := range dailyData {
 		dailyCounts[i] = DailySessionCount{
 			Date:         d.Date,
 			SessionCount: d.SessionCount,
 		}
+		// Calculate daily utilization: only if there's duration data for that day
+		point := DailyUtilizationPoint{Date: d.Date}
+		if d.DurationMs > 0 {
+			util := float64(d.AssistantDurationMs) / float64(d.DurationMs) * 100
+			point.UtilizationPct = &util
+		}
+		dailyUtilization[i] = point
 		if d.SessionCount > 0 {
 			daysWithActivity++
 		}
@@ -242,7 +251,11 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 		DailySessionCounts: dailyCounts,
 	}
 
-	return overview, activity, totalSessions, nil
+	utilizationCard := &TrendsUtilizationCard{
+		DailyUtilization: dailyUtilization,
+	}
+
+	return overview, activity, utilizationCard, totalSessions, nil
 }
 
 // aggregateTokens computes the tokens card with daily cost breakdown.

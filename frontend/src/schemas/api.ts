@@ -364,11 +364,21 @@ const TrendsToolsCardSchema = z.object({
   tool_stats: z.record(z.string(), TrendsToolStatsSchema),
 });
 
+const DailyUtilizationPointSchema = z.object({
+  date: z.string(),
+  utilization_pct: z.number().nullable(),
+});
+
+const TrendsUtilizationCardSchema = z.object({
+  daily_utilization: z.array(DailyUtilizationPointSchema),
+});
+
 const TrendsCardsSchema = z.object({
   overview: TrendsOverviewCardSchema.nullable(),
   tokens: TrendsTokensCardSchema.nullable(),
   activity: TrendsActivityCardSchema.nullable(),
   tools: TrendsToolsCardSchema.nullable(),
+  utilization: TrendsUtilizationCardSchema.nullable(),
 });
 
 export const TrendsResponseSchema = z.object({
@@ -418,8 +428,10 @@ export type TrendsOverviewCard = z.infer<typeof TrendsOverviewCardSchema>;
 export type TrendsTokensCard = z.infer<typeof TrendsTokensCardSchema>;
 export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
+export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
 export type DailyCostPoint = z.infer<typeof DailyCostPointSchema>;
 export type DailySessionCount = z.infer<typeof DailySessionCountSchema>;
+export type DailyUtilizationPoint = z.infer<typeof DailyUtilizationPointSchema>;
 
 // ============================================================================
 // Validation Functions
