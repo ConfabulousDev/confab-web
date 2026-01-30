@@ -16,6 +16,16 @@ export default defineConfig({
       '@/utils': path.resolve(__dirname, './src/utils'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Keep recharts in its own chunk to avoid circular dependency warnings
+          recharts: ['recharts'],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       '/api': {
