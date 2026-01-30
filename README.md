@@ -33,19 +33,17 @@ The app runs at `http://localhost:8080`
 ### Step 2: Install and Configure CLI
 
 ```bash
-# Install the Confab CLI
-git clone https://github.com/ConfabulousDev/confab.git
-cd confab
-./install.sh
+# Install the CLI
+curl -fsSL http://localhost:8080/install | bash
 
-# Configure CLI to use your local backend
+# Configure to use your local backend
 confab setup --backend-url http://localhost:8080
 ```
 
-The setup command will:
-1. Open a browser to authenticate with your local backend
-2. Create an API key for the CLI
-3. Install the Claude Code hook to capture sessions
+This will:
+1. Download and install the Confab CLI
+2. Open a browser to authenticate with your local backend
+3. Create an API key and install the Claude Code hook
 
 ### Step 3: Verify Setup
 
