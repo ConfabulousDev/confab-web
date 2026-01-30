@@ -76,6 +76,7 @@ func main() {
 			config.EmailConfig.APIKey,
 			config.EmailConfig.FromAddress,
 			config.EmailConfig.FromName,
+			os.Getenv("FRONTEND_URL"),
 		)
 		emailService = email.NewRateLimitedService(resendService, config.EmailConfig.RateLimitPerHour)
 		logger.Info("email service configured", "provider", "resend", "rate_limit_per_hour", config.EmailConfig.RateLimitPerHour)

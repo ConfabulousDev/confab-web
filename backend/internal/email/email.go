@@ -136,15 +136,17 @@ type ResendService struct {
 	apiKey      string
 	fromAddress string
 	fromName    string
+	frontendURL string // Base URL for building links (e.g., unsubscribe)
 	httpClient  *http.Client
 }
 
 // NewResendService creates a new Resend email service
-func NewResendService(apiKey, fromAddress, fromName string) *ResendService {
+func NewResendService(apiKey, fromAddress, fromName, frontendURL string) *ResendService {
 	return &ResendService{
 		apiKey:      apiKey,
 		fromAddress: fromAddress,
 		fromName:    fromName,
+		frontendURL: frontendURL,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -164,12 +166,12 @@ type resendRequest struct {
 func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInvitationParams) error {
 	subject := fmt.Sprintf("%s shared a Claude Code session transcript with you", params.SharerName)
 
-	htmlBody, err := renderHTMLTemplate(params)
+	htmlBody, err := renderHTMLTemplate(params, s.frontendURL)
 	if err != nil {
 		return fmt.Errorf("failed to render HTML template: %w", err)
 	}
 
-	textBody := renderTextTemplate(params)
+	textBody := renderTextTemplate(params, s.frontendURL)
 
 	reqBody := resendRequest{
 		From:    fmt.Sprintf("%s <%s>", s.fromName, s.fromAddress),
@@ -208,17 +210,18 @@ func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInv
 }
 
 // renderHTMLTemplate renders the HTML email template
-func renderHTMLTemplate(params ShareInvitationParams) (string, error) {
+func renderHTMLTemplate(params ShareInvitationParams, frontendURL string) (string, error) {
 	tmpl, err := template.New("share_invitation").Parse(htmlTemplate)
 	if err != nil {
 		return "", err
 	}
 
 	data := templateData{
-		SharerName:   params.SharerName,
-		SharerEmail:  params.SharerEmail,
-		SessionTitle: params.SessionTitle,
-		ShareURL:     params.ShareURL,
+		SharerName:     params.SharerName,
+		SharerEmail:    params.SharerEmail,
+		SessionTitle:   params.SessionTitle,
+		ShareURL:       params.ShareURL,
+		UnsubscribeURL: frontendURL + "/unsubscribe",
 	}
 
 	if params.ExpiresAt != nil {
@@ -235,7 +238,7 @@ func renderHTMLTemplate(params ShareInvitationParams) (string, error) {
 }
 
 // renderTextTemplate renders the plain text email template
-func renderTextTemplate(params ShareInvitationParams) string {
+func renderTextTemplate(params ShareInvitationParams, frontendURL string) string {
 	title := params.SessionTitle
 	if title == "" {
 		title = "Untitled Session"
@@ -252,20 +255,21 @@ View it here: %s
 		text += fmt.Sprintf("\nThis link expires on %s.\n", params.ExpiresAt.Format("January 2, 2006"))
 	}
 
-	text += `
+	text += fmt.Sprintf(`
 ---
-Unsubscribe: https://confabulous.dev/unsubscribe
-`
+Unsubscribe: %s/unsubscribe
+`, frontendURL)
 
 	return text
 }
 
 type templateData struct {
-	SharerName   string
-	SharerEmail  string
-	SessionTitle string
-	ShareURL     string
-	ExpiresAt    *string
+	SharerName     string
+	SharerEmail    string
+	SessionTitle   string
+	ShareURL       string
+	ExpiresAt      *string
+	UnsubscribeURL string
 }
 
 const htmlTemplate = `<!DOCTYPE html>
@@ -330,7 +334,7 @@ const htmlTemplate = `<!DOCTYPE html>
                     <tr>
                         <td style="padding: 16px 24px; border-top: 1px solid #e5e5e5; background-color: #fafafa;">
                             <p style="margin: 0; font-size: 12px; color: #999999;">
-                                <a href="https://confabulous.dev/unsubscribe" style="color: #999999; text-decoration: underline;">Unsubscribe</a>
+                                <a href="{{.UnsubscribeURL}}" style="color: #999999; text-decoration: underline;">Unsubscribe</a>
                             </p>
                         </td>
                     </tr>

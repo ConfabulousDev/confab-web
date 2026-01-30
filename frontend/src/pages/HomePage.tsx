@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { SUPPORT_EMAIL } from '@/config';
 import Alert from '@/components/Alert';
 import HeroCards from '@/components/HeroCards';
 import styles from './HomePage.module.css';
-
-const SUPPORT_EMAIL = 'help@confabulous.dev';
 
 interface AuthError {
   type: string;

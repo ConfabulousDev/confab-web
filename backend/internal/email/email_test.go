@@ -217,6 +217,8 @@ func TestMockService(t *testing.T) {
 }
 
 func TestRenderTextTemplate(t *testing.T) {
+	frontendURL := "https://example.com"
+
 	t.Run("renders basic template", func(t *testing.T) {
 		params := ShareInvitationParams{
 			ToEmail:      "test@example.com",
@@ -226,7 +228,7 @@ func TestRenderTextTemplate(t *testing.T) {
 			ShareURL:     "https://example.com/share/abc123",
 		}
 
-		result := renderTextTemplate(params)
+		result := renderTextTemplate(params, frontendURL)
 
 		if !contains(result, "Alice") {
 			t.Error("expected sharer name in template")
@@ -239,6 +241,9 @@ func TestRenderTextTemplate(t *testing.T) {
 		}
 		if !contains(result, "https://example.com/share/abc123") {
 			t.Error("expected share URL in template")
+		}
+		if !contains(result, "https://example.com/unsubscribe") {
+			t.Error("expected unsubscribe URL in template")
 		}
 	})
 
@@ -253,7 +258,7 @@ func TestRenderTextTemplate(t *testing.T) {
 			ExpiresAt:    &expires,
 		}
 
-		result := renderTextTemplate(params)
+		result := renderTextTemplate(params, frontendURL)
 
 		if !contains(result, "December 25, 2025") {
 			t.Error("expected expiration date in template")
@@ -269,7 +274,7 @@ func TestRenderTextTemplate(t *testing.T) {
 			ShareURL:     "https://example.com",
 		}
 
-		result := renderTextTemplate(params)
+		result := renderTextTemplate(params, frontendURL)
 
 		if !contains(result, "Untitled Session") {
 			t.Error("expected 'Untitled Session' when title is empty")
@@ -278,6 +283,8 @@ func TestRenderTextTemplate(t *testing.T) {
 }
 
 func TestRenderHTMLTemplate(t *testing.T) {
+	frontendURL := "https://example.com"
+
 	t.Run("renders valid HTML", func(t *testing.T) {
 		params := ShareInvitationParams{
 			ToEmail:      "test@example.com",
@@ -287,7 +294,7 @@ func TestRenderHTMLTemplate(t *testing.T) {
 			ShareURL:     "https://example.com/share/abc123",
 		}
 
-		result, err := renderHTMLTemplate(params)
+		result, err := renderHTMLTemplate(params, frontendURL)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -304,6 +311,9 @@ func TestRenderHTMLTemplate(t *testing.T) {
 		if !contains(result, "https://example.com/share/abc123") {
 			t.Error("expected share URL in HTML template")
 		}
+		if !contains(result, "https://example.com/unsubscribe") {
+			t.Error("expected unsubscribe URL in HTML template")
+		}
 	})
 
 	t.Run("includes expiration when set", func(t *testing.T) {
@@ -317,7 +327,7 @@ func TestRenderHTMLTemplate(t *testing.T) {
 			ExpiresAt:    &expires,
 		}
 
-		result, err := renderHTMLTemplate(params)
+		result, err := renderHTMLTemplate(params, frontendURL)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

@@ -38,6 +38,9 @@ primary_region = 'sjc'
   EMAIL_FROM_ADDRESS = "noreply@share.confabulous.dev"  # Update this to match your verified Resend domain
   EMAIL_RATE_LIMIT_PER_HOUR = "100"
 
+  # Support email shown in UI for help requests and account deletion
+  SUPPORT_EMAIL = "help@confabulous.dev"
+
   # Admin Configuration
   SUPER_ADMIN_EMAILS = "jackie.tung@gmail.com"
 

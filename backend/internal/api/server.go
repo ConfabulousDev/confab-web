@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -76,6 +77,7 @@ type Server struct {
 	oauthConfig       auth.OAuthConfig
 	emailService      *email.RateLimitedService // Email service for share invitations (may be nil)
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
+	supportEmail      string                    // Support contact email address
 	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -84,12 +86,17 @@ type Server struct {
 
 // NewServer creates a new API server
 func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuthConfig, emailService *email.RateLimitedService) *Server {
+	supportEmail := os.Getenv("SUPPORT_EMAIL")
+	if supportEmail == "" {
+		supportEmail = "support@example.com"
+	}
 	return &Server{
 		db:           database,
 		storage:      store,
 		oauthConfig:  oauthConfig,
 		emailService: emailService,
 		frontendURL:  os.Getenv("FRONTEND_URL"),
+		supportEmail: supportEmail,
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -415,7 +422,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteAccountHelp serves a help page explaining how to request account deletion
 func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request) {
-	html := `<!DOCTYPE html>
+	html := fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -441,7 +448,7 @@ func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request)
             border: 1px solid #e5e5e5;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             max-width: 600px;
-            width: 100%;
+            width: 100%%;
         }
         h1 {
             margin: 0 0 0.5rem 0;
@@ -514,7 +521,7 @@ func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request)
 
         <h2>How to Request Account Deletion</h2>
         <p>To delete your account and all associated data, please send an email to:</p>
-        <p><a href="mailto:support@confabulous.dev?subject=Account%20Deletion%20Request" class="email-link">support@confabulous.dev</a></p>
+        <p><a href="mailto:%s?subject=Account%%20Deletion%%20Request" class="email-link">%s</a></p>
         <p>Include the email address associated with your Confab account in your request.</p>
 
         <h2>What Will Be Deleted</h2>
@@ -537,7 +544,7 @@ func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request)
         <a href="/" class="back-link">&larr; Back to Confab</a>
     </div>
 </body>
-</html>`
+</html>`, s.supportEmail, s.supportEmail)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))

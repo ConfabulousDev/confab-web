@@ -1,6 +1,5 @@
+import { SUPPORT_EMAIL } from '@/config';
 import styles from './Footer.module.css';
-
-const SUPPORT_EMAIL = 'help@confabulous.dev';
 
 declare global {
   interface Window {
