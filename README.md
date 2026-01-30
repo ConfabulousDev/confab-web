@@ -65,6 +65,20 @@ Configuration is set in `docker-compose.yml`. Key settings:
 
 See `backend/.env.example` for all available options including OAuth, email, and smart recap.
 
+### Admin Panel
+
+Super admins can access the admin panel at `/admin/users` to:
+- **View all users** with session counts and storage usage
+- **Create new users** (when password authentication is enabled)
+- **Activate/deactivate users**
+- **Delete users** and all their data
+
+To grant admin access, add the user's email to `SUPER_ADMIN_EMAILS` in `docker-compose.yml`:
+
+```yaml
+SUPER_ADMIN_EMAILS: admin@local.dev,another-admin@example.com
+```
+
 ## Architecture
 
 ```
