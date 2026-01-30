@@ -227,16 +227,28 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Get("/", withMaxBody(MaxBodyXS, s.handleRoot))
 	}
 
-	// OAuth routes (public) - Apply stricter auth rate limiting
-	// Login selector (choose provider)
-	r.Get("/auth/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLoginSelector())))
-	// GitHub
-	r.Get("/auth/github/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig))))
-	r.Get("/auth/github/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubCallback(s.oauthConfig, s.db))))
-	// Google
-	r.Get("/auth/google/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleLogin(s.oauthConfig))))
-	r.Get("/auth/google/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleCallback(s.oauthConfig, s.db))))
-	// Logout
+	// Auth routes (public) - Apply stricter auth rate limiting
+	// Login selector (shows password form and/or OAuth buttons based on config)
+	r.Get("/auth/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLoginSelector(s.oauthConfig))))
+
+	// Password authentication (if enabled)
+	if s.oauthConfig.PasswordEnabled {
+		r.Post("/auth/password/login", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandlePasswordLogin(s.db))))
+	}
+
+	// GitHub OAuth (if enabled)
+	if s.oauthConfig.GitHubEnabled {
+		r.Get("/auth/github/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubLogin(s.oauthConfig))))
+		r.Get("/auth/github/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGitHubCallback(s.oauthConfig, s.db))))
+	}
+
+	// Google OAuth (if enabled)
+	if s.oauthConfig.GoogleEnabled {
+		r.Get("/auth/google/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleLogin(s.oauthConfig))))
+		r.Get("/auth/google/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleCallback(s.oauthConfig, s.db))))
+	}
+
+	// Logout (always available)
 	r.Get("/auth/logout", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db))))
 
 	// CLI authorize (requires web session) - Apply auth rate limiting
@@ -254,7 +266,7 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// Admin routes (require web session + super admin)
 	// Obfuscated path to reduce exposure
-	adminHandlers := admin.NewHandlers(s.db, s.storage)
+	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled)
 	r.Route("/admin-8b5492d3-a268-4a1b-8b3b-f1dfd34f249b", func(r chi.Router) {
 		r.Use(csrfMiddleware)
 		r.Use(auth.RequireSession(s.db))
@@ -264,6 +276,12 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Post("/users/{id}/deactivate", withMaxBody(MaxBodyXS, adminHandlers.HandleDeactivateUser))
 		r.Post("/users/{id}/activate", withMaxBody(MaxBodyXS, adminHandlers.HandleActivateUser))
 		r.Post("/users/{id}/delete", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteUser))
+
+		// User creation (only available if password auth is enabled)
+		if s.oauthConfig.PasswordEnabled {
+			r.Get("/users/new", withMaxBody(MaxBodyXS, adminHandlers.HandleCreateUserPage))
+			r.Post("/users/create", withMaxBody(MaxBodyS, adminHandlers.HandleCreateUser))
+		}
 
 		// System share admin page
 		r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleSystemSharePage))

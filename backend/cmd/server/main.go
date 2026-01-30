@@ -55,20 +55,33 @@ func main() {
 	}
 	defer database.Close()
 
+	// Bootstrap admin user if password auth is enabled and no users exist
+	if config.OAuthConfig.PasswordEnabled {
+		ctx := context.Background()
+		if err := auth.BootstrapAdmin(ctx, database); err != nil {
+			logger.Fatal("failed to bootstrap admin user", "error", err)
+		}
+	}
+
 	// Initialize S3/MinIO storage
 	store, err := storage.NewS3Storage(config.S3Config)
 	if err != nil {
 		logger.Fatal("failed to initialize storage", "error", err)
 	}
 
-	// Initialize email service
-	resendService := email.NewResendService(
-		config.EmailConfig.APIKey,
-		config.EmailConfig.FromAddress,
-		config.EmailConfig.FromName,
-	)
-	emailService := email.NewRateLimitedService(resendService, config.EmailConfig.RateLimitPerHour)
-	logger.Info("email service configured", "provider", "resend", "rate_limit_per_hour", config.EmailConfig.RateLimitPerHour)
+	// Initialize email service (optional)
+	var emailService *email.RateLimitedService
+	if config.EmailConfig.Enabled {
+		resendService := email.NewResendService(
+			config.EmailConfig.APIKey,
+			config.EmailConfig.FromAddress,
+			config.EmailConfig.FromName,
+		)
+		emailService = email.NewRateLimitedService(resendService, config.EmailConfig.RateLimitPerHour)
+		logger.Info("email service configured", "provider", "resend", "rate_limit_per_hour", config.EmailConfig.RateLimitPerHour)
+	} else {
+		logger.Info("email service disabled (RESEND_API_KEY or EMAIL_FROM_ADDRESS not set)")
+	}
 
 	// Create API server
 	server := api.NewServer(database, store, config.OAuthConfig, emailService)
@@ -122,6 +135,7 @@ type Config struct {
 }
 
 type EmailConfig struct {
+	Enabled          bool
 	APIKey           string
 	FromAddress      string
 	FromName         string
@@ -149,36 +163,45 @@ func loadConfig() Config {
 		}
 	}
 
-	// Validate required OAuth configuration
+	// Authentication configuration
+	// At least one auth method must be enabled: password, GitHub OAuth, or Google OAuth
+	var oauthConfig auth.OAuthConfig
+
+	// Password authentication (optional)
+	passwordEnabled := os.Getenv("AUTH_PASSWORD_ENABLED") == "true"
+	oauthConfig.PasswordEnabled = passwordEnabled
+	if passwordEnabled {
+		logger.Info("password authentication enabled")
+	}
+
+	// GitHub OAuth (optional)
 	githubClientID := os.Getenv("GITHUB_CLIENT_ID")
-	if githubClientID == "" {
-		logger.Fatal("missing required env var", "var", "GITHUB_CLIENT_ID")
-	}
-
 	githubClientSecret := os.Getenv("GITHUB_CLIENT_SECRET")
-	if githubClientSecret == "" {
-		logger.Fatal("missing required env var", "var", "GITHUB_CLIENT_SECRET")
-	}
-
 	githubRedirectURL := os.Getenv("GITHUB_REDIRECT_URL")
-	if githubRedirectURL == "" {
-		logger.Fatal("missing required env var", "var", "GITHUB_REDIRECT_URL")
+	if githubClientID != "" && githubClientSecret != "" && githubRedirectURL != "" {
+		oauthConfig.GitHubEnabled = true
+		oauthConfig.GitHubClientID = githubClientID
+		oauthConfig.GitHubClientSecret = githubClientSecret
+		oauthConfig.GitHubRedirectURL = githubRedirectURL
+		logger.Info("GitHub OAuth enabled")
 	}
 
-	// Google OAuth configuration
+	// Google OAuth (optional)
 	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
-	if googleClientID == "" {
-		logger.Fatal("missing required env var", "var", "GOOGLE_CLIENT_ID")
-	}
-
 	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
-	if googleClientSecret == "" {
-		logger.Fatal("missing required env var", "var", "GOOGLE_CLIENT_SECRET")
+	googleRedirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
+	if googleClientID != "" && googleClientSecret != "" && googleRedirectURL != "" {
+		oauthConfig.GoogleEnabled = true
+		oauthConfig.GoogleClientID = googleClientID
+		oauthConfig.GoogleClientSecret = googleClientSecret
+		oauthConfig.GoogleRedirectURL = googleRedirectURL
+		logger.Info("Google OAuth enabled")
 	}
 
-	googleRedirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
-	if googleRedirectURL == "" {
-		logger.Fatal("missing required env var", "var", "GOOGLE_REDIRECT_URL")
+	// Require at least one authentication method
+	if !passwordEnabled && !oauthConfig.GitHubEnabled && !oauthConfig.GoogleEnabled {
+		logger.Fatal("no authentication method configured",
+			"hint", "set AUTH_PASSWORD_ENABLED=true, or configure GitHub OAuth (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL), or configure Google OAuth")
 	}
 
 	// Validate required security configuration
@@ -228,17 +251,9 @@ func loadConfig() Config {
 		logger.Fatal("missing required env var", "var", "ALLOWED_ORIGINS", "hint", "comma-separated list of allowed origins")
 	}
 
-	// Validate required email configuration
+	// Email configuration (optional)
 	resendAPIKey := os.Getenv("RESEND_API_KEY")
-	if resendAPIKey == "" {
-		logger.Fatal("missing required env var", "var", "RESEND_API_KEY")
-	}
-
 	emailFromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
-	if emailFromAddress == "" {
-		logger.Fatal("missing required env var", "var", "EMAIL_FROM_ADDRESS")
-	}
-
 	emailFromName := os.Getenv("EMAIL_FROM_NAME")
 	if emailFromName == "" {
 		emailFromName = "Confab"
@@ -248,6 +263,9 @@ func loadConfig() Config {
 	if rateLimit := os.Getenv("EMAIL_RATE_LIMIT_PER_HOUR"); rateLimit != "" {
 		fmt.Sscanf(rateLimit, "%d", &emailRateLimitPerHour)
 	}
+
+	// Email is enabled only if both API key and from address are set
+	emailEnabled := resendAPIKey != "" && emailFromAddress != ""
 
 	return Config{
 		Port:         port,
@@ -261,15 +279,9 @@ func loadConfig() Config {
 			BucketName:      bucketName,
 			UseSSL:          os.Getenv("S3_USE_SSL") != "false", // Default true
 		},
-		OAuthConfig: auth.OAuthConfig{
-			GitHubClientID:     githubClientID,
-			GitHubClientSecret: githubClientSecret,
-			GitHubRedirectURL:  githubRedirectURL,
-			GoogleClientID:     googleClientID,
-			GoogleClientSecret: googleClientSecret,
-			GoogleRedirectURL:  googleRedirectURL,
-		},
+		OAuthConfig: oauthConfig,
 		EmailConfig: EmailConfig{
+			Enabled:          emailEnabled,
 			APIKey:           resendAPIKey,
 			FromAddress:      emailFromAddress,
 			FromName:         emailFromName,

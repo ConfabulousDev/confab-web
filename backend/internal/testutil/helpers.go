@@ -375,3 +375,25 @@ func MinimalTranscript() []byte {
 {"type":"assistant","timestamp":"2024-01-01T00:00:02Z","message":{"role":"assistant","content":"Hi there!"},"usage":{"input_tokens":10,"output_tokens":5}}
 `)
 }
+
+// TestGitHubUser creates an OAuthUserInfo for a GitHub user for testing
+func TestGitHubUser(suffix string) models.OAuthUserInfo {
+	return models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "github-" + suffix,
+		Email:      suffix + "@github-test.com",
+		Name:       "Test User " + suffix,
+		AvatarURL:  "https://github.com/avatar/" + suffix + ".png",
+	}
+}
+
+// TestGoogleUser creates an OAuthUserInfo for a Google user for testing
+func TestGoogleUser(suffix string) models.OAuthUserInfo {
+	return models.OAuthUserInfo{
+		Provider:   models.ProviderGoogle,
+		ProviderID: "google-" + suffix,
+		Email:      suffix + "@google-test.com",
+		Name:       "Test User " + suffix,
+		AvatarURL:  "https://google.com/avatar/" + suffix + ".png",
+	}
+}

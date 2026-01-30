@@ -7,14 +7,18 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/csrf"
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 const (
@@ -28,15 +32,17 @@ const (
 
 // Handlers holds dependencies for admin handlers
 type Handlers struct {
-	DB      *db.DB
-	Storage *storage.S3Storage
+	DB                  *db.DB
+	Storage             *storage.S3Storage
+	PasswordAuthEnabled bool
 }
 
 // NewHandlers creates admin handlers with dependencies
-func NewHandlers(database *db.DB, store *storage.S3Storage) *Handlers {
+func NewHandlers(database *db.DB, store *storage.S3Storage, passwordAuthEnabled bool) *Handlers {
 	return &Handlers{
-		DB:      database,
-		Storage: store,
+		DB:                  database,
+		Storage:             store,
+		PasswordAuthEnabled: passwordAuthEnabled,
 	}
 }
 
@@ -170,6 +176,12 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	if errorMsg != "" {
 		flashHTML = fmt.Sprintf(`<div class="flash flash-error">%s</div>`, html.EscapeString(errorMsg))
+	}
+
+	// Build "New User" button if password auth is enabled
+	var newUserButtonHTML string
+	if h.PasswordAuthEnabled {
+		newUserButtonHTML = fmt.Sprintf(`<a href="%s/users/new" class="btn btn-primary">New User</a>`, AdminPathPrefix)
 	}
 
 	htmlPage := `<!DOCTYPE html>
@@ -334,12 +346,26 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
             font-weight: 600;
             color: #1a1a1a;
         }
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+        .header-row h1 {
+            margin-bottom: 0.5rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>User Management</h1>
-        <p class="subtitle">Manage user accounts - deactivate, reactivate, or permanently delete users</p>
+        <div class="header-row">
+            <div>
+                <h1>User Management</h1>
+                <p class="subtitle">Manage user accounts - deactivate, reactivate, or permanently delete users</p>
+            </div>
+            ` + newUserButtonHTML + `
+        </div>
         ` + flashHTML + `
         <div class="stats-summary">
             <div class="stat-card">
@@ -795,4 +821,239 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 	redirectURL := fmt.Sprintf("%s/system-shares?message=System+share+created&share_url=%s",
 		AdminPathPrefix, url.QueryEscape(shareURL))
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+// HandleCreateUserPage renders the user creation page
+func (h *Handlers) HandleCreateUserPage(w http.ResponseWriter, r *http.Request) {
+	csrfToken := csrf.Token(r)
+
+	// Check for flash messages
+	message := r.URL.Query().Get("message")
+	errorMsg := r.URL.Query().Get("error")
+
+	var flashHTML string
+	if message != "" {
+		flashHTML = fmt.Sprintf(`<div class="flash flash-success">%s</div>`, html.EscapeString(message))
+	}
+	if errorMsg != "" {
+		flashHTML = fmt.Sprintf(`<div class="flash flash-error">%s</div>`, html.EscapeString(errorMsg))
+	}
+
+	htmlPage := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Create User</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 2rem;
+            background: #fafafa;
+            color: #1a1a1a;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        .subtitle {
+            color: #666;
+            margin: 0 0 1.5rem 0;
+            font-size: 0.875rem;
+        }
+        .flash {
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+        .flash-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .flash-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .card {
+            background: #fff;
+            border-radius: 6px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 1.5rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        input[type="text"], input[type="email"], input[type="password"] {
+            width: 100%%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+        input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.1);
+        }
+        .help-text {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .checkbox-group input {
+            width: auto;
+        }
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            background: #fff;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: #fff;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+            border-color: #0056b3;
+        }
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="%s/users" class="nav-link">← Back to User Management</a>
+        <h1>Create User</h1>
+        <p class="subtitle">Create a new user with password authentication</p>
+        %s
+        <div class="card">
+            <form method="POST" action="%s/users/create">
+                <input type="hidden" name="gorilla.csrf.Token" value="%s">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required minlength="8">
+                    <p class="help-text">Minimum 8 characters</p>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="is_admin" name="is_admin" value="true">
+                        <label for="is_admin" style="margin-bottom: 0;">Admin privileges</label>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create User</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>`,
+		AdminPathPrefix,
+		flashHTML,
+		AdminPathPrefix,
+		csrfToken,
+	)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(htmlPage))
+}
+
+// HandleCreateUser creates a new user with password authentication
+func (h *Handlers) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
+	log := logger.Ctx(r.Context())
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Invalid+form+data", http.StatusSeeOther)
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
+	password := r.FormValue("password")
+	isAdmin := r.FormValue("is_admin") == "true"
+
+	// Validate email
+	if !validation.IsValidEmail(email) {
+		http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Invalid+email+address", http.StatusSeeOther)
+		return
+	}
+
+	// Validate password
+	if len(password) < 8 {
+		http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Password+must+be+at+least+8+characters", http.StatusSeeOther)
+		return
+	}
+	if len(password) > 1024 {
+		http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Password+too+long", http.StatusSeeOther)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	// Hash password
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		log.Error("Failed to hash password", "error", err)
+		http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Failed+to+create+user", http.StatusSeeOther)
+		return
+	}
+
+	// Create user
+	user, err := h.DB.CreatePasswordUser(ctx, email, string(passwordHash), isAdmin)
+	if err != nil {
+		log.Error("Failed to create user", "error", err, "email", email)
+		if strings.Contains(err.Error(), "already exists") {
+			http.Redirect(w, r, AdminPathPrefix+"/users/new?error=User+with+this+email+already+exists", http.StatusSeeOther)
+		} else {
+			http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Failed+to+create+user", http.StatusSeeOther)
+		}
+		return
+	}
+
+	// Audit log
+	AuditLogFromRequest(r, h.DB, ActionUserCreate, map[string]interface{}{
+		"created_user_id":    user.ID,
+		"created_user_email": email,
+		"is_admin":           isAdmin,
+	})
+
+	http.Redirect(w, r, fmt.Sprintf("%s/users?message=User+%s+created", AdminPathPrefix, url.QueryEscape(email)), http.StatusSeeOther)
 }

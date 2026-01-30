@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: confab
+      POSTGRES_PASSWORD: confab
+      POSTGRES_DB: confab
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U confab"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb minio/confab --ignore-existing;
+      exit 0;
+      "
+
+  migrate:
+    image: migrate/migrate:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/internal/db/migrations:/migrations:ro
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://confab:confab@postgres:5432/confab?sslmode=disable",
+      "up"
+    ]
+
+  app:
+    build: .
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-setup:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
+      S3_ENDPOINT: minio:9000
+      S3_USE_SSL: "false"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      BUCKET_NAME: confab
+      FRONTEND_URL: http://localhost:8080
+      ALLOWED_ORIGINS: http://localhost:8080
+      CSRF_SECRET_KEY: local-dev-csrf-secret-key-minimum-32-characters
+      AUTH_PASSWORD_ENABLED: "true"
+      ADMIN_BOOTSTRAP_EMAIL: admin@local.dev
+      ADMIN_BOOTSTRAP_PASSWORD: localdevpassword
+      SUPER_ADMIN_EMAILS: admin@local.dev
+      INSECURE_DEV_MODE: "true"
+      # Email disabled (not set)
+      # Smart recap disabled (ANTHROPIC_API_KEY not set)
+
+  worker:
+    build: .
+    command: ["./confab", "worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-setup:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
+      S3_ENDPOINT: minio:9000
+      S3_USE_SSL: "false"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      BUCKET_NAME: confab
+      WORKER_POLL_INTERVAL: 1m
+      WORKER_MAX_SESSIONS: "10"
+      # Smart recap disabled (ANTHROPIC_API_KEY not set)
+
+volumes:
+  postgres_data:
+  minio_data:

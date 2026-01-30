@@ -13,6 +13,7 @@ import (
 type AdminAction string
 
 const (
+	ActionUserCreate        AdminAction = "user.create"
 	ActionUserDeactivate    AdminAction = "user.deactivate"
 	ActionUserActivate      AdminAction = "user.activate"
 	ActionUserDelete        AdminAction = "user.delete"

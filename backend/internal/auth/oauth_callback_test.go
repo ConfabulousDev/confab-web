@@ -636,8 +636,14 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 
 // TestHandleLoginSelector_EmailDisplay tests email display in login selector
 func TestHandleLoginSelector_EmailDisplay(t *testing.T) {
+	// Config with OAuth providers enabled for testing
+	config := OAuthConfig{
+		GitHubEnabled: true,
+		GoogleEnabled: true,
+	}
+
 	t.Run("valid email appears in page", func(t *testing.T) {
-		handler := HandleLoginSelector()
+		handler := HandleLoginSelector(config)
 
 		req := httptest.NewRequest("GET", "/auth/login?email=test@example.com", nil)
 		rec := httptest.NewRecorder()
@@ -654,7 +660,7 @@ func TestHandleLoginSelector_EmailDisplay(t *testing.T) {
 	})
 
 	t.Run("invalid email is not displayed", func(t *testing.T) {
-		handler := HandleLoginSelector()
+		handler := HandleLoginSelector(config)
 
 		req := httptest.NewRequest("GET", "/auth/login?email=<script>alert(1)</script>", nil)
 		rec := httptest.NewRecorder()
@@ -672,7 +678,7 @@ func TestHandleLoginSelector_EmailDisplay(t *testing.T) {
 	})
 
 	t.Run("email is passed to OAuth links", func(t *testing.T) {
-		handler := HandleLoginSelector()
+		handler := HandleLoginSelector(config)
 
 		req := httptest.NewRequest("GET", "/auth/login?email=user@example.com&redirect=/sessions/123", nil)
 		rec := httptest.NewRecorder()

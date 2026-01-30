@@ -87,9 +87,9 @@ const SessionShareSchema = z.object({
 // ============================================================================
 
 export const UserSchema = z.object({
-  name: z.string(),
+  name: z.string().optional(),
   email: z.string(),
-  avatar_url: z.string(),
+  avatar_url: z.string().optional(),
 });
 
 // ============================================================================

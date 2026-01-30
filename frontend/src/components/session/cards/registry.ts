@@ -11,6 +11,7 @@ import type {
   ToolsCardData,
   AgentsAndSkillsCardData,
   RedactionsCardData,
+  SmartRecapCardData,
 } from '@/schemas/api';
 
 /**
@@ -33,6 +34,8 @@ export const cardRegistry: CardDefinition[] = [
     order: 0,
     span: 'full',
     size: 'tall',
+    // Only render if there's recap data (no data when AI feature is disabled)
+    shouldRender: (data: SmartRecapCardData | null) => !!data,
   },
   {
     key: 'tokens',
