@@ -257,34 +257,21 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate field lengths
-	// TODO(2026-Q2): Remove grace logic for user 9 - truncate instead of reject
-	if userID == 9 {
-		req.FileName = validation.TruncateSyncFileName(req.FileName)
-		if req.Metadata != nil {
-			if req.Metadata.Summary != nil {
-				*req.Metadata.Summary = validation.TruncateSummary(*req.Metadata.Summary)
-			}
-			if req.Metadata.FirstUserMessage != nil {
-				*req.Metadata.FirstUserMessage = validation.TruncateFirstUserMessage(*req.Metadata.FirstUserMessage)
+	if err := validation.ValidateSyncFileName(req.FileName); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Metadata != nil {
+		if req.Metadata.Summary != nil {
+			if err := validation.ValidateSummary(*req.Metadata.Summary); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
 			}
 		}
-	} else {
-		if err := validation.ValidateSyncFileName(req.FileName); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if req.Metadata != nil {
-			if req.Metadata.Summary != nil {
-				if err := validation.ValidateSummary(*req.Metadata.Summary); err != nil {
-					respondError(w, http.StatusBadRequest, err.Error())
-					return
-				}
-			}
-			if req.Metadata.FirstUserMessage != nil {
-				if err := validation.ValidateFirstUserMessage(*req.Metadata.FirstUserMessage); err != nil {
-					respondError(w, http.StatusBadRequest, err.Error())
-					return
-				}
+		if req.Metadata.FirstUserMessage != nil {
+			if err := validation.ValidateFirstUserMessage(*req.Metadata.FirstUserMessage); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
 			}
 		}
 	}

@@ -54,22 +54,6 @@ func withMaxBody(limit int64, h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// withMaxBodyGraced wraps a handler with a request body size limit,
-// with a higher limit for a specific graced user.
-// TODO(2026-Q2): Remove this temporary grace logic once user 9 is migrated.
-func withMaxBodyGraced(normalLimit, gracedLimit, gracedUserID int64, h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		limit := normalLimit
-		if userID, ok := auth.GetUserID(r.Context()); ok && userID == gracedUserID {
-			limit = gracedLimit
-		}
-		if limit > 0 {
-			r.Body = http.MaxBytesReader(w, r.Body, limit)
-		}
-		h(w, r)
-	}
-}
-
 // Server holds dependencies for API handlers
 type Server struct {
 	db                *db.DB
@@ -318,8 +302,7 @@ func (s *Server) SetupRoutes() http.Handler {
 
 				// Incremental sync endpoints (for daemon-based uploads)
 				r.Post("/sync/init", withMaxBody(MaxBodyM, s.handleSyncInit))
-				// TODO(2026-Q2): Replace withMaxBodyGraced with withMaxBody once user 9 is migrated
-				r.Post("/sync/chunk", withMaxBodyGraced(MaxBodyXL, 0, 9, s.handleSyncChunk))
+				r.Post("/sync/chunk", withMaxBody(MaxBodyXL, s.handleSyncChunk))
 				r.Post("/sync/event", withMaxBody(MaxBodyM, s.handleSyncEvent))
 			})
 
