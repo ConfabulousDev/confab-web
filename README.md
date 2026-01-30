@@ -1,4 +1,4 @@
-# Confab
+# Confabulous.dev
 
 Archive and search your Claude Code sessions in the cloud.
 
