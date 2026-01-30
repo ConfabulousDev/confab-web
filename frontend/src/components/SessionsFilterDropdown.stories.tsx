@@ -3,14 +3,14 @@ import { useState } from 'react';
 import SessionsFilterDropdown from './SessionsFilterDropdown';
 
 // Sample data for stories
-const sampleRepos = ['confab-web', 'confab-cli', 'my-app'];
+const sampleRepos = ['confab-web', 'confab', 'my-app'];
 const sampleBranches = ['main', 'feature/auth', 'fix/bug-123', 'develop'];
 const sampleHostnames = ['macbook-pro', 'desktop-linux', 'work-laptop'];
 const samplePRs = ['142', '138', '125', '119'];
 
 const sampleRepoCounts: Record<string, number> = {
   'confab-web': 45,
-  'confab-cli': 23,
+  'confab': 23,
   'my-app': 12,
 };
 

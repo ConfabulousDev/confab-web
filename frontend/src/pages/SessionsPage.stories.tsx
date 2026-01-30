@@ -105,8 +105,8 @@ const mockSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 45 * 60 * 1000).toISOString(), // Started 2d 45m ago
     last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2d ago (duration: 45m)
-    git_repo: 'ConfabulousDev/confab-cli',
-    git_repo_url: 'https://github.com/ConfabulousDev/confab-cli',
+    git_repo: 'ConfabulousDev/confab',
+    git_repo_url: 'https://github.com/ConfabulousDev/confab',
     git_branch: 'develop',
     hostname: null,
     username: null,

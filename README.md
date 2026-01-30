@@ -6,7 +6,7 @@ Archive and search your Claude Code sessions in the cloud.
 - **[backend/](backend/)** - Cloud backend service (PostgreSQL + MinIO)
 - **[frontend/](frontend/)** - React web dashboard
 
-**See also:** [confab-cli](https://github.com/ConfabulousDev/confab-cli) - Command-line tool for capturing and uploading sessions
+**See also:** [confab](https://github.com/ConfabulousDev/confab) - Command-line tool for capturing and uploading sessions
 
 ## Running Locally
 
@@ -34,8 +34,8 @@ The app runs at `http://localhost:8080`
 
 ```bash
 # Install the Confab CLI
-git clone https://github.com/ConfabulousDev/confab-cli.git
-cd confab-cli
+git clone https://github.com/ConfabulousDev/confab.git
+cd confab
 ./install.sh
 
 # Configure CLI to use your local backend
@@ -134,7 +134,7 @@ confab-web/
 └── docs/                  # Additional documentation
 ```
 
-See also: [confab-cli](https://github.com/ConfabulousDev/confab-cli) (separate repo)
+See also: [confab](https://github.com/ConfabulousDev/confab) (separate repo)
 
 ## Development
 

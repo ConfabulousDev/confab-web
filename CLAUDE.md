@@ -167,7 +167,7 @@ DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./intern
 
 Claude Code can run multiple Bash commands in parallel and aggregate results across all shards.
 
-Note: CLI is in a separate repo: https://github.com/ConfabulousDev/confab-cli
+Note: CLI is in a separate repo: https://github.com/ConfabulousDev/confab
 
 ## Frontend Development
 
