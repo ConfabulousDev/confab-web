@@ -25,9 +25,9 @@ const (
 	// DatabaseTimeout is the maximum duration for database operations
 	DatabaseTimeout = 5 * time.Second
 
-	// AdminPathPrefix is the obfuscated admin route prefix
+	// AdminPathPrefix is the admin route prefix
 	// This must match the route in server.go
-	AdminPathPrefix = "/admin-8b5492d3-a268-4a1b-8b3b-f1dfd34f249b"
+	AdminPathPrefix = "/admin"
 )
 
 // Handlers holds dependencies for admin handlers

@@ -955,11 +955,18 @@ When `email` is provided:
 
 ## Admin Endpoints (Super Admin Only)
 
-Admin functionality is accessed via HTML pages at an obfuscated path. Requires web session authentication and super admin privileges (configured via `SUPER_ADMIN_EMAILS` environment variable).
+Admin functionality is accessed via HTML pages at `/admin`. Requires web session authentication and super admin privileges (configured via `SUPER_ADMIN_EMAILS` environment variable).
 
-Features:
-- **User Management**: View, activate, deactivate, and delete users
-- **System Shares**: Create shares accessible to all authenticated users
+| Endpoint | Description |
+|----------|-------------|
+| `GET /admin/users` | List all users |
+| `POST /admin/users/{id}/deactivate` | Deactivate user |
+| `POST /admin/users/{id}/activate` | Activate user |
+| `POST /admin/users/{id}/delete` | Delete user permanently |
+| `GET /admin/users/new` | Create user form (password auth only) |
+| `POST /admin/users/create` | Create user (password auth only) |
+| `GET /admin/system-shares` | System shares form |
+| `POST /admin/system-shares` | Create system share |
 
 All admin actions are audit logged with admin identity and action details.
 
