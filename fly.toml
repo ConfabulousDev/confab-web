@@ -42,7 +42,7 @@ primary_region = 'sjc'
   SUPPORT_EMAIL = "help@confabulous.dev"
 
   # Admin Configuration
-  SUPER_ADMIN_EMAILS = "jackie.tung@gmail.com"
+  SUPER_ADMIN_EMAILS = "swe@confabulous.dev"
 
   # OpenTelemetry / Honeycomb Tracing
   # Note: OTEL_EXPORTER_OTLP_HEADERS must be set as a Fly secret:
