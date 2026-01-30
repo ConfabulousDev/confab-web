@@ -10,18 +10,11 @@ Archive and search your Claude Code sessions in the cloud.
 
 ## Running Locally
 
-This guide walks you through running the full Confab stack on your local machine.
-
 ### Prerequisites
 
-- **Docker & Docker Compose** - For PostgreSQL and MinIO
-- **Go 1.21+** - For the backend
-- **Node.js 18+** - For the frontend
-- **Confab CLI** - For capturing sessions
+- **Docker & Docker Compose**
 
-### Step 1: Start Backend Services
-
-**Option A: Docker Compose (easiest)**
+### Step 1: Start the Stack
 
 ```bash
 # Start everything (PostgreSQL, MinIO, backend, worker)
@@ -31,49 +24,13 @@ docker-compose up -d
 docker-compose logs -f app
 ```
 
-The backend runs at `http://localhost:8080`
+The app runs at `http://localhost:8080`
 
 **Default credentials:**
 - Email: `admin@local.dev`
 - Password: `localdevpassword`
 
-**Option B: Run backend locally (for development)**
-
-```bash
-# Copy environment template
-cp backend/.env.example backend/.env
-
-# Start only databases
-docker-compose up -d postgres minio minio-setup migrate
-
-# Start the backend server
-cd backend
-go run cmd/server/main.go
-```
-
-**Default credentials** (from `backend/.env`):
-- Email: `admin@example.com`
-- Password: `change-me-immediately`
-
-### Step 2: Start Frontend
-
-If using Docker Compose Option A, the frontend is served from the backend at `http://localhost:8080`.
-
-For frontend development with hot-reload:
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-The frontend dev server runs at `http://localhost:5173`
-
-### Step 3: Install and Configure CLI
+### Step 2: Install and Configure CLI
 
 ```bash
 # Install the Confab CLI
@@ -90,25 +47,23 @@ The setup command will:
 2. Create an API key for the CLI
 3. Install the Claude Code hook to capture sessions
 
-### Step 4: Verify Setup
+### Step 3: Verify Setup
 
-1. **Log in to the frontend** at http://localhost:8080 (or http://localhost:5173 if running frontend separately) using the admin credentials
+1. **Log in** at http://localhost:8080 using the admin credentials
 2. **Start a Claude Code session** - it will be automatically captured
-3. **View your session** in the frontend dashboard
+3. **View your session** in the dashboard
 
 ### Configuration
 
-The backend is configured via environment variables in `backend/.env`:
+Configuration is set in `docker-compose.yml`. Key settings:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AUTH_PASSWORD_ENABLED` | `true` | Enable username/password authentication |
-| `ADMIN_BOOTSTRAP_EMAIL` | `admin@example.com` | Initial admin email |
-| `ADMIN_BOOTSTRAP_PASSWORD` | `change-me-immediately` | Initial admin password |
-| `FRONTEND_URL` | `http://localhost:5173` | Frontend URL for redirects |
-| `ALLOWED_ORIGINS` | `http://localhost:5173` | CORS allowed origins |
+| `ADMIN_BOOTSTRAP_EMAIL` | `admin@local.dev` | Initial admin email |
+| `ADMIN_BOOTSTRAP_PASSWORD` | `localdevpassword` | Initial admin password |
+| `FRONTEND_URL` | `http://localhost:8080` | Frontend URL for redirects |
 
-See `backend/.env.example` for all available options including OAuth, email, and more.
+See `backend/.env.example` for all available options including OAuth, email, and smart recap.
 
 ## Architecture
 
@@ -159,7 +114,8 @@ See `backend/.env.example` for all available options including OAuth, email, and
 ## Project Structure
 
 ```
-confab/
+confab-web/
+├── docker-compose.yml     # Local development stack
 ├── backend/               # Backend service (Go)
 │   ├── cmd/server/       # Server entry point
 │   ├── internal/         # Internal packages
@@ -168,8 +124,6 @@ confab/
 │   │   ├── db/          # PostgreSQL layer
 │   │   ├── storage/     # MinIO/S3 client
 │   │   └── testutil/    # Test infrastructure
-│   ├── migrations/       # Database migrations
-│   ├── docker-compose.yml
 │   └── README.md
 │
 ├── frontend/              # React web dashboard
@@ -184,24 +138,18 @@ See also: [confab-cli](https://github.com/ConfabulousDev/confab-cli) (separate r
 
 ## Development
 
-### Backend
+For local development with hot-reload:
 
 ```bash
-cd backend
-docker-compose up -d      # Start databases
-go run cmd/server/main.go # Start server
-go test ./...             # Run tests
-```
+# Start databases only
+docker-compose up -d postgres minio minio-setup migrate
 
-### Frontend
+# Backend (requires Go 1.21+)
+cp backend/.env.example backend/.env
+cd backend && go run cmd/server/main.go
 
-```bash
-cd frontend
-npm install       # Install dependencies
-npm run dev       # Start dev server
-npm run build     # Build for production
-npm run lint      # Run linter
-npm test          # Run tests
+# Frontend (requires Node.js 18+)
+cd frontend && npm install && npm run dev
 ```
 
 ### Running Tests
