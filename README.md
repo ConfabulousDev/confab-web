@@ -138,12 +138,10 @@ confab-web/
 │   │   └── testutil/    # Test infrastructure
 │   └── README.md
 │
-├── frontend/              # React web dashboard
-│   ├── src/pages/        # Pages and routes
-│   ├── src/services/     # API client
-│   └── README.md
-│
-└── docs/                  # Additional documentation
+└── frontend/              # React web dashboard
+    ├── src/pages/        # Pages and routes
+    ├── src/services/     # API client
+    └── README.md
 ```
 
 See also: [confab](https://github.com/ConfabulousDev/confab) (separate repo)
