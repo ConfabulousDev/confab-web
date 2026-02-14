@@ -123,7 +123,7 @@ function SessionDetailPage() {
   if (emailMismatch && mismatchExpected && mismatchActual) {
     const handleLogoutAndRetry = () => {
       const currentPath = window.location.pathname + window.location.search.replace(/[&?]email_mismatch=1.*/, '');
-      const loginUrl = `/auth/login?redirect=${encodeURIComponent(currentPath)}&email=${encodeURIComponent(mismatchExpected)}`;
+      const loginUrl = `/login?redirect=${encodeURIComponent(currentPath)}&email=${encodeURIComponent(mismatchExpected)}`;
       window.location.href = `/auth/logout?redirect=${encodeURIComponent(loginUrl)}`;
     };
 
@@ -149,7 +149,7 @@ function SessionDetailPage() {
     // For auth_required, show login prompt with redirect back to this page
     const handleSignIn = () => {
       const currentPath = window.location.pathname + window.location.search;
-      window.location.href = `/auth/login?redirect=${encodeURIComponent(currentPath)}`;
+      window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
     };
 
     const description = getErrorDescription(errorType);

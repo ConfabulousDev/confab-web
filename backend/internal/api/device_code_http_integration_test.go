@@ -503,8 +503,8 @@ func TestDeviceVerify_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusTemporaryRedirect)
 
 		location := resp.Header.Get("Location")
-		if !strings.Contains(location, "/auth/login") {
-			t.Errorf("expected redirect to /auth/login, got %s", location)
+		if !strings.Contains(location, "/login") {
+			t.Errorf("expected redirect to /login, got %s", location)
 		}
 	})
 
@@ -533,8 +533,8 @@ func TestDeviceVerify_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusTemporaryRedirect)
 
 		location := resp.Header.Get("Location")
-		if !strings.Contains(location, "/auth/login") {
-			t.Errorf("expected redirect to /auth/login, got %s", location)
+		if !strings.Contains(location, "/login") {
+			t.Errorf("expected redirect to /login, got %s", location)
 		}
 	})
 }

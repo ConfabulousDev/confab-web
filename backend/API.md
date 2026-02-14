@@ -920,7 +920,6 @@ These endpoints handle OAuth authentication flow:
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /auth/login` | Login provider selector page |
 | `GET /auth/github/login` | Initiate GitHub OAuth |
 | `GET /auth/github/callback` | GitHub OAuth callback |
 | `GET /auth/google/login` | Initiate Google OAuth |
@@ -971,6 +970,53 @@ Admin functionality is accessed via HTML pages at `/admin`. Requires web session
 | `POST /admin/system-shares` | Create system share |
 
 All admin actions are audit logged with admin identity and action details.
+
+---
+
+## Public API Endpoints (No Auth)
+
+### Auth Config
+```
+GET /api/v1/auth/config
+```
+
+Returns the list of enabled authentication providers. No authentication required.
+
+**Response:**
+```json
+{
+  "providers": [
+    {
+      "name": "password",
+      "display_name": "Password",
+      "login_url": "/auth/password/login"
+    },
+    {
+      "name": "github",
+      "display_name": "GitHub",
+      "login_url": "/auth/github/login"
+    },
+    {
+      "name": "google",
+      "display_name": "Google",
+      "login_url": "/auth/google/login"
+    },
+    {
+      "name": "oidc",
+      "display_name": "Okta",
+      "login_url": "/auth/oidc/login"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `providers[].name` | string | Provider identifier: `"password"`, `"github"`, `"google"`, or `"oidc"` |
+| `providers[].display_name` | string | Human-readable name for the provider (e.g., `"GitHub"`, `"Okta"`) |
+| `providers[].login_url` | string | Path to initiate login with this provider |
+
+Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.
 
 ---
 

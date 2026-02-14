@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ProtectedRouteProps {
@@ -16,18 +15,15 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { loading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      const intendedPath = location.pathname + location.search;
-      const loginUrl = `/auth/login?redirect=${encodeURIComponent(intendedPath)}`;
-      window.location.href = loginUrl;
-    }
-  }, [loading, isAuthenticated, location.pathname, location.search]);
-
-  // Show nothing while loading or redirecting
-  if (loading || !isAuthenticated) {
+  // Show nothing while loading
+  if (loading) {
     return null;
+  }
+
+  // Redirect to login if not authenticated (SPA navigation)
+  if (!isAuthenticated) {
+    const intendedPath = location.pathname + location.search;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(intendedPath)}`} replace />;
   }
 
   return <>{children}</>;

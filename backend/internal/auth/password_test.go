@@ -260,8 +260,8 @@ func TestHandlePasswordLogin(t *testing.T) {
 
 		handler.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusTemporaryRedirect {
-			t.Errorf("expected redirect status 307, got %d", rec.Code)
+		if rec.Code != http.StatusSeeOther {
+			t.Errorf("expected redirect status 303, got %d", rec.Code)
 		}
 
 		// Check for session cookie
@@ -301,7 +301,7 @@ func TestHandlePasswordLogin(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		// Should succeed because email is normalized
-		if rec.Code != http.StatusTemporaryRedirect {
+		if rec.Code != http.StatusSeeOther {
 			t.Errorf("expected successful login with uppercase email, got status %d", rec.Code)
 		}
 	})

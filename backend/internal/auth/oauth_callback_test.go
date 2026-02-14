@@ -326,7 +326,7 @@ func TestHandleCLIAuthorize_RedirectsWithoutSession(t *testing.T) {
 	t.Run("documents expected behavior", func(t *testing.T) {
 		// When no session cookie:
 		// 1. Sets cli_redirect cookie with return URL
-		// 2. Redirects to /auth/login
+		// 2. Redirects to /login
 		// This is verified in integration tests with real DB
 	})
 }
@@ -572,15 +572,15 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 
 		handler := HandleLogout(nil)
 
-		req := httptest.NewRequest("GET", "/auth/logout?redirect=/auth/login", nil)
+		req := httptest.NewRequest("GET", "/auth/logout?redirect=/auth/github/login", nil)
 		rec := httptest.NewRecorder()
 
 		handler.ServeHTTP(rec, req)
 
 		location := rec.Header().Get("Location")
-		// /auth paths should redirect directly
-		if location != "/auth/login" {
-			t.Errorf("location = %q, want '/auth/login'", location)
+		// /auth paths should redirect directly (no frontend URL prefix)
+		if location != "/auth/github/login" {
+			t.Errorf("location = %q, want '/auth/github/login'", location)
 		}
 	})
 
@@ -634,64 +634,6 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 	})
 }
 
-// TestHandleLoginSelector_EmailDisplay tests email display in login selector
-func TestHandleLoginSelector_EmailDisplay(t *testing.T) {
-	// Config with OAuth providers enabled for testing
-	config := OAuthConfig{
-		GitHubEnabled: true,
-		GoogleEnabled: true,
-	}
-
-	t.Run("valid email appears in page", func(t *testing.T) {
-		handler := HandleLoginSelector(config)
-
-		req := httptest.NewRequest("GET", "/auth/login?email=test@example.com", nil)
-		rec := httptest.NewRecorder()
-
-		handler.ServeHTTP(rec, req)
-
-		body := rec.Body.String()
-		if !containsSubstring(body, "test@example.com") {
-			t.Error("page should display the expected email")
-		}
-		if !containsSubstring(body, "to view this shared session") {
-			t.Error("page should show shared session context")
-		}
-	})
-
-	t.Run("invalid email is not displayed", func(t *testing.T) {
-		handler := HandleLoginSelector(config)
-
-		req := httptest.NewRequest("GET", "/auth/login?email=<script>alert(1)</script>", nil)
-		rec := httptest.NewRecorder()
-
-		handler.ServeHTTP(rec, req)
-
-		body := rec.Body.String()
-		// Should fall back to default message, not display invalid email
-		if containsSubstring(body, "<script>") {
-			t.Error("XSS attempt should be blocked")
-		}
-		if !containsSubstring(body, "Choose your authentication method") {
-			t.Error("should show default message for invalid email")
-		}
-	})
-
-	t.Run("email is passed to OAuth links", func(t *testing.T) {
-		handler := HandleLoginSelector(config)
-
-		req := httptest.NewRequest("GET", "/auth/login?email=user@example.com&redirect=/sessions/123", nil)
-		rec := httptest.NewRecorder()
-
-		handler.ServeHTTP(rec, req)
-
-		body := rec.Body.String()
-		// OAuth links should include email param
-		if !containsSubstring(body, "email=user%40example.com") {
-			t.Error("OAuth links should include email parameter")
-		}
-	})
-}
 
 // Helper functions
 

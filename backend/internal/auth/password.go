@@ -146,7 +146,7 @@ func HandlePasswordLogin(database *db.DB) http.HandlerFunc {
 
 // redirectWithError redirects back to login page with an error message
 func redirectWithError(w http.ResponseWriter, r *http.Request, message string) {
-	loginURL := "/auth/login?error=" + url.QueryEscape(message)
+	loginURL := "/login?error=" + url.QueryEscape(message)
 
 	// Preserve redirect parameter if present
 	if redirect := r.FormValue("redirect"); redirect != "" {

@@ -219,9 +219,6 @@ func (s *Server) SetupRoutes() http.Handler {
 	}
 
 	// Auth routes (public) - Apply stricter auth rate limiting
-	// Login selector (shows password form and/or OAuth buttons based on config)
-	r.Get("/auth/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLoginSelector(s.oauthConfig))))
-
 	// Password authentication (if enabled)
 	if s.oauthConfig.PasswordEnabled {
 		r.Post("/auth/password/login", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandlePasswordLogin(s.db))))
@@ -290,6 +287,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Validate Content-Type for POST/PUT/PATCH requests
 		r.Use(validateContentType)
+
+		// Public auth config endpoint (no auth required)
+		r.Get("/auth/config", withMaxBody(MaxBodyXS, s.handleAuthConfig))
 
 		// Protected routes require API key authentication (for CLI)
 		// No CSRF protection for API key routes (CLI doesn't use cookies)

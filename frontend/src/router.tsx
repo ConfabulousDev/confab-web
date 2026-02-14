@@ -12,6 +12,7 @@ const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const TrendsPage = lazy(() => import('@/pages/TrendsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const PoliciesPage = lazy(() => import('@/pages/PoliciesPage'));
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
 
 /** Redirect old /sessions/:id/shared/:token URLs to canonical /sessions/:id (CF-132) */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -58,6 +59,7 @@ export const router = createBrowserRouter([
       { path: 'shares', element: page(<ShareLinksPage />, true) },
       { path: 'terms', element: <RedirectToTerms /> },
       { path: 'privacy', element: <RedirectToPrivacy /> },
+      { path: 'login', element: page(<LoginPage />) },
       { path: 'policies', element: page(<PoliciesPage />) },
       { path: '*', element: page(<NotFoundPage />) },
     ],

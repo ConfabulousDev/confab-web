@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import ThemeToggle from './ThemeToggle';
 import styles from './Header.module.css';
@@ -30,8 +30,9 @@ function Header() {
     window.location.href = '/auth/logout';
   };
 
+  const navigate = useNavigate();
   const handleLogin = () => {
-    window.location.href = '/auth/login';
+    navigate('/login');
   };
 
   if (!isAuthenticated) {

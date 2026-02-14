@@ -205,6 +205,8 @@ cd frontend && npm run storybook        # Run locally to preview
 
 Stories live alongside components (e.g., `Component.stories.tsx` next to `Component.tsx`).
 
+**All new or modified frontend components must have corresponding Storybook stories.** This ensures visual regression coverage is maintained alongside unit tests. When reviewing PRs, verify that stories exist for any new UI components or significant visual changes.
+
 ## Adding Analytics Cards
 
 When adding new analytics cards to the session summary panel, **use the `/add-session-card` skill**. This provides a step-by-step playbook covering:

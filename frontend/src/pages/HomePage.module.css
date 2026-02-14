@@ -10,10 +10,6 @@
   margin: 0 auto;
 }
 
-.errorAlert {
-  margin-bottom: var(--spacing-xl);
-}
-
 .hero {
   text-align: center;
   margin-bottom: var(--spacing-3xl);
