@@ -40,7 +40,10 @@ ARG VERSION
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -installsuffix cgo \
     -ldflags "-X main.version=${VERSION}" -o confab ./cmd/server
 
-# Stage 3: Final Runtime Image
+# Stage 3: Migrate CLI
+FROM migrate/migrate:v4.19.1 AS migrate-cli
+
+# Stage 4: Final Runtime Image
 FROM alpine:latest
 
 # Install ca-certificates for HTTPS
@@ -56,6 +59,12 @@ COPY --from=backend-builder /app/backend/confab ./
 
 # Copy frontend static files from builder
 COPY --from=frontend-builder /app/frontend/dist ./static
+
+# Copy migrate CLI and migration files
+COPY --from=migrate-cli /migrate /usr/local/bin/migrate
+COPY backend/internal/db/migrations/*.sql /app/migrations/
+COPY migrate_db.sh /app/migrate_db.sh
+RUN chmod +x /app/migrate_db.sh
 
 # Set environment variable for static files
 ENV STATIC_FILES_DIR=/app/static

@@ -1,0 +1,44 @@
+name: Docker Build Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker-smoke-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: confab-test:latest
+
+      - name: Smoke test - server binary
+        run: docker run --rm confab-test:latest test -x ./confab
+
+      - name: Smoke test - migrate binary
+        run: docker run --rm confab-test:latest migrate -help
+
+      - name: Smoke test - migrate wrapper
+        run: |
+          docker run --rm confab-test:latest sh -c '
+            # Should fail with missing DATABASE_URL
+            if ./migrate_db.sh 2>&1; then
+              echo "Expected migrate_db.sh to fail without DATABASE_URL"
+              exit 1
+            fi
+          '
+
+      - name: Smoke test - migration files present
+        run: docker run --rm confab-test:latest ls /app/migrations/

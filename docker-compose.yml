@@ -45,17 +45,13 @@ services:
       "
 
   migrate:
-    image: migrate/migrate:latest
+    build: .
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend/internal/db/migrations:/migrations:ro
-    command: [
-      "-path", "/migrations",
-      "-database", "postgres://confab:confab@postgres:5432/confab?sslmode=disable",
-      "up"
-    ]
+    command: ["./migrate_db.sh"]
+    environment:
+      DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
 
   app:
     build: .
