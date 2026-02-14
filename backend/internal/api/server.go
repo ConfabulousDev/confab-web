@@ -62,6 +62,7 @@ type Server struct {
 	emailService      *email.RateLimitedService // Email service for share invitations (may be nil)
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
 	supportEmail      string                    // Support contact email address
+	version           string                    // Application version (set via ldflags at build time)
 	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -69,7 +70,7 @@ type Server struct {
 }
 
 // NewServer creates a new API server
-func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuthConfig, emailService *email.RateLimitedService) *Server {
+func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuthConfig, emailService *email.RateLimitedService, version string) *Server {
 	supportEmail := os.Getenv("SUPPORT_EMAIL")
 	if supportEmail == "" {
 		supportEmail = "support@example.com"
@@ -81,6 +82,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		emailService: emailService,
 		frontendURL:  os.Getenv("FRONTEND_URL"),
 		supportEmail: supportEmail,
+		version:      version,
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -403,9 +405,11 @@ func (s *Server) SetupRoutes() http.Handler {
 
 // handleHealth returns server health status
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{
-		"status": "ok",
-	})
+	resp := map[string]string{"status": "ok"}
+	if s.version != "" {
+		resp["version"] = s.version
+	}
+	respondJSON(w, http.StatusOK, resp)
 }
 
 // handleDeleteAccountHelp serves a help page explaining how to request account deletion

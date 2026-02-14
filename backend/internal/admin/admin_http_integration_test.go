@@ -39,7 +39,7 @@ func setupAdminTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil
 		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
 	}
 
-	apiServer := api.NewServer(env.DB, env.Storage, oauthConfig, nil)
+	apiServer := api.NewServer(env.DB, env.Storage, oauthConfig, nil, "")
 	handler := apiServer.SetupRoutes()
 
 	return testutil.StartTestServer(t, env, handler)

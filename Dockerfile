@@ -35,7 +35,10 @@ RUN go mod download
 COPY backend/ ./
 
 # Build binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o confab ./cmd/server
+ARG TARGETARCH
+ARG VERSION
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -installsuffix cgo \
+    -ldflags "-X main.version=${VERSION}" -o confab ./cmd/server
 
 # Stage 3: Final Runtime Image
 FROM alpine:latest

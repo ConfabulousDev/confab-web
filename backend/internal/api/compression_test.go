@@ -25,7 +25,7 @@ func TestCompressionMiddleware(t *testing.T) {
 	mockStorage := &storage.S3Storage{}
 	mockOAuth := auth.OAuthConfig{}
 
-	server := NewServer(mockDB, mockStorage, mockOAuth, nil)
+	server := NewServer(mockDB, mockStorage, mockOAuth, nil, "")
 	handler := server.SetupRoutes()
 
 	t.Run("compresses JSON responses when client accepts gzip", func(t *testing.T) {
@@ -155,7 +155,7 @@ func TestCompressionSavings(t *testing.T) {
 	mockStorage := &storage.S3Storage{}
 	mockOAuth := auth.OAuthConfig{}
 
-	server := NewServer(mockDB, mockStorage, mockOAuth, nil)
+	server := NewServer(mockDB, mockStorage, mockOAuth, nil, "")
 	handler := server.SetupRoutes()
 
 	// Get uncompressed response
@@ -209,7 +209,7 @@ func TestBrotliCompression(t *testing.T) {
 	mockStorage := &storage.S3Storage{}
 	mockOAuth := auth.OAuthConfig{}
 
-	server := NewServer(mockDB, mockStorage, mockOAuth, nil)
+	server := NewServer(mockDB, mockStorage, mockOAuth, nil, "")
 	handler := server.SetupRoutes()
 
 	t.Run("compresses with Brotli when client accepts br", func(t *testing.T) {

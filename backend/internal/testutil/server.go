@@ -26,7 +26,7 @@ type TestServer struct {
 // Usage:
 //
 //	env := testutil.SetupTestEnvironment(t)
-//	apiServer := api.NewServer(env.DB, env.Storage, oauthConfig, nil)
+//	apiServer := api.NewServer(env.DB, env.Storage, oauthConfig, nil, "")
 //	ts := testutil.StartTestServer(t, env, apiServer.SetupRoutes())
 func StartTestServer(t *testing.T, env *TestEnvironment, handler http.Handler) *TestServer {
 	t.Helper()

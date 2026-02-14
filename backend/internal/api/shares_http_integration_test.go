@@ -35,7 +35,7 @@ func setupSharesTestServer(t *testing.T, env *testutil.TestEnvironment) *testuti
 		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
 	}
 
-	apiServer := NewServer(env.DB, env.Storage, oauthConfig, nil)
+	apiServer := NewServer(env.DB, env.Storage, oauthConfig, nil, "")
 	handler := apiServer.SetupRoutes()
 
 	return testutil.StartTestServer(t, env, handler)

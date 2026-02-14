@@ -20,6 +20,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+var version string
+
 func main() {
 	// Check for worker mode
 	if len(os.Args) > 1 && os.Args[1] == "worker" {
@@ -85,7 +87,7 @@ func main() {
 	}
 
 	// Create API server
-	server := api.NewServer(database, store, config.OAuthConfig, emailService)
+	server := api.NewServer(database, store, config.OAuthConfig, emailService, version)
 	router := server.SetupRoutes()
 
 	// Wrap router with OpenTelemetry HTTP instrumentation
@@ -103,7 +105,7 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		logger.Info("starting server", "port", config.Port)
+		logger.Info("starting server", "port", config.Port, "version", version)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("server failed", "error", err)
 		}
