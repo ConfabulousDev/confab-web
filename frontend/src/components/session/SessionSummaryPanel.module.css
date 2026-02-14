@@ -345,6 +345,10 @@
   color: #16a34a;
 }
 
+.statValue.costWarning {
+  color: var(--color-warning-text);
+}
+
 /* Section header within a card */
 .sectionHeader {
   display: flex;

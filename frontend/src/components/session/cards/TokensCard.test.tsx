@@ -46,4 +46,13 @@ describe('TokensCard', () => {
     expect(screen.getByText('110.0k')).toBeInTheDocument();
     expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
   });
+
+  it('shows warning tooltip when cost is zero', () => {
+    const zeroCostData = { ...mockData, estimated_usd: '0.00' };
+    render(<TokensCard data={zeroCostData} loading={false} />);
+
+    expect(screen.getByText('$0.00')).toBeInTheDocument();
+    const costRow = screen.getByText('Estimated cost').closest('div');
+    expect(costRow).toHaveAttribute('title', 'Cost unavailable — session may use models not yet in the pricing table');
+  });
 });

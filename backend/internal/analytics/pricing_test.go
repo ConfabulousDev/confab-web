@@ -11,6 +11,7 @@ func TestGetModelFamily(t *testing.T) {
 		input    string
 		expected string
 	}{
+		{"claude-opus-4-6-20260201", "opus-4-6"},
 		{"claude-opus-4-5-20251101", "opus-4-5"},
 		{"claude-sonnet-4-20241022", "sonnet-4"},
 		{"claude-haiku-3-5-20241022", "haiku-3-5"},
@@ -35,10 +36,11 @@ func TestGetPricing(t *testing.T) {
 		model         string
 		expectedInput float64
 	}{
+		{"claude-opus-4-6-20260201", 5},
 		{"claude-opus-4-5-20251101", 5},
 		{"claude-sonnet-4-20241022", 3},
 		{"claude-haiku-3-5-20241022", 0.80},
-		{"unknown-model", 3}, // default is Sonnet 4 pricing
+		{"unknown-model", 0}, // unknown models return zero pricing
 	}
 
 	for _, tt := range tests {

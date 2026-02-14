@@ -36,6 +36,7 @@ export function TokensCard({ data, loading, error }: CardProps<TokensCardData>) 
   if (!data) return null;
 
   const cost = parseFloat(data.estimated_usd);
+  const isZeroCost = cost === 0;
 
   return (
     <CardWrapper title="Tokens" icon={TokenIcon}>
@@ -43,8 +44,8 @@ export function TokensCard({ data, loading, error }: CardProps<TokensCardData>) 
         label="Estimated cost"
         value={formatCost(cost)}
         icon={DollarIcon}
-        tooltip={TOOLTIPS.cost}
-        valueClassName={styles.cost}
+        tooltip={isZeroCost ? 'Cost unavailable — session may use models not yet in the pricing table' : TOOLTIPS.cost}
+        valueClassName={isZeroCost ? styles.costWarning : styles.cost}
       />
       <StatRow
         label="Input"

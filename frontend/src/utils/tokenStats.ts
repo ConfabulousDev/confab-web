@@ -17,6 +17,8 @@ interface ModelPricing {
 }
 
 const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Opus 4.6
+  'opus-4-6': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
   // Opus 4.5
   'opus-4-5': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
   // Opus 4.1 and 4
@@ -36,8 +38,8 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   'haiku-3': { input: 0.25, output: 1.25, cacheWrite: 0.30, cacheRead: 0.03 },
 };
 
-// Default pricing if model not found (use Sonnet 4 as reasonable default)
-const DEFAULT_PRICING: ModelPricing = { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 };
+// Zero pricing for unknown models — cost will be underreported rather than silently wrong.
+const ZERO_PRICING: ModelPricing = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
 
 /**
  * Extract model family from full model name
@@ -48,7 +50,8 @@ function getModelFamily(modelName: string): string {
   const name = modelName.replace(/^claude-/, '');
 
   // Match patterns like "opus-4-5", "sonnet-4", "haiku-3-5"
-  const match = name.match(/^(opus|sonnet|haiku)-(\d+(?:-\d+)?)/);
+  // Minor version is a single digit; date suffixes (e.g., 20250514) are excluded via lookahead
+  const match = name.match(/^(opus|sonnet|haiku)-(\d(?:-\d)?)(?!\d)/);
   if (match) {
     return `${match[1]}-${match[2]}`;
   }
@@ -61,7 +64,12 @@ function getModelFamily(modelName: string): string {
  */
 function getPricing(modelName: string): ModelPricing {
   const family = getModelFamily(modelName);
-  return MODEL_PRICING[family] ?? DEFAULT_PRICING;
+  const pricing = MODEL_PRICING[family];
+  if (!pricing) {
+    console.warn(`Unknown model for pricing: ${modelName} (family: ${family})`);
+    return ZERO_PRICING;
+  }
+  return pricing;
 }
 
 /**
@@ -123,6 +131,9 @@ export function calculateEstimatedCost(messages: TranscriptLine[]): number {
  * Examples: 0.50 -> "$0.50", 4.23 -> "$4.23", 0.05 -> "$0.05"
  */
 export function formatCost(cost: number): string {
+  if (cost === 0) {
+    return '$0.00';
+  }
   if (cost < 0.01) {
     return '<$0.01';
   }

@@ -91,6 +91,22 @@ export const SingleDay: Story = {
   },
 };
 
+export const ZeroCost: Story = {
+  args: {
+    data: {
+      total_input_tokens: 100000,
+      total_output_tokens: 50000,
+      total_cache_creation_tokens: 10000,
+      total_cache_read_tokens: 20000,
+      total_cost_usd: '0.00',
+      daily_costs: [
+        { date: '2024-01-08', cost_usd: '0.00' },
+        { date: '2024-01-09', cost_usd: '0.00' },
+      ],
+    },
+  },
+};
+
 export const NullData: Story = {
   args: {
     data: null,

@@ -91,7 +91,14 @@ export function TrendsTokensCard({ data }: TrendsTokensCardProps) {
     >
       <StatRow
         label="Total Cost"
-        value={<span style={{ color: '#22c55e', fontWeight: 600 }}>{formatCost(data.total_cost_usd)}</span>}
+        value={
+          <span style={{
+            color: parseFloat(data.total_cost_usd) === 0 ? 'var(--color-warning-text)' : '#22c55e',
+            fontWeight: 600,
+          }}>
+            {formatCost(data.total_cost_usd)}
+          </span>
+        }
       />
       <StatRow
         label="Total Tokens"

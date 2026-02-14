@@ -218,14 +218,13 @@ describe('calculateEstimatedCost', () => {
     expect(cost).toBeCloseTo(1.20, 4);
   });
 
-  it('should use default pricing for unknown models', () => {
-    // Default is Sonnet 4 pricing
+  it('should use zero pricing for unknown models', () => {
     const messages: TranscriptLine[] = [
       createAssistantMessage(1_000_000, 0, 0, 0, 'claude-unknown-model'),
     ];
     const cost = calculateEstimatedCost(messages);
-    // input: 1M * $3/M (sonnet-4 default) = $3
-    expect(cost).toBeCloseTo(3, 4);
+    // Unknown models contribute $0 rather than silently defaulting
+    expect(cost).toBe(0);
   });
 });
 
@@ -237,8 +236,11 @@ describe('formatCost', () => {
     expect(formatCost(123.45)).toBe('$123.45');
   });
 
-  it('should show <$0.01 for very small costs', () => {
-    expect(formatCost(0)).toBe('<$0.01');
+  it('should show $0.00 for exactly zero cost', () => {
+    expect(formatCost(0)).toBe('$0.00');
+  });
+
+  it('should show <$0.01 for very small non-zero costs', () => {
     expect(formatCost(0.001)).toBe('<$0.01');
     expect(formatCost(0.009)).toBe('<$0.01');
   });

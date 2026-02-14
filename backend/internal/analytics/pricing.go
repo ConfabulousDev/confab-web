@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"log/slog"
 	"strings"
 
 	"github.com/shopspring/decimal"
@@ -18,6 +19,13 @@ type ModelPricing struct {
 // modelPricingTable contains pricing for all model families.
 // Source: https://www.anthropic.com/pricing
 var modelPricingTable = map[string]ModelPricing{
+	// Opus 4.6
+	"opus-4-6": {
+		Input:      decimal.NewFromFloat(5),
+		Output:     decimal.NewFromFloat(25),
+		CacheWrite: decimal.NewFromFloat(6.25),
+		CacheRead:  decimal.NewFromFloat(0.50),
+	},
 	// Opus 4.5
 	"opus-4-5": {
 		Input:      decimal.NewFromFloat(5),
@@ -87,13 +95,9 @@ var modelPricingTable = map[string]ModelPricing{
 	},
 }
 
-// defaultPricing is used when model is not found (Sonnet 4 as reasonable default).
-var defaultPricing = ModelPricing{
-	Input:      decimal.NewFromFloat(3),
-	Output:     decimal.NewFromFloat(15),
-	CacheWrite: decimal.NewFromFloat(3.75),
-	CacheRead:  decimal.NewFromFloat(0.30),
-}
+// zeroPricing is used when model is not found. Returns $0 cost rather than
+// silently defaulting to a specific model's pricing.
+var zeroPricing = ModelPricing{}
 
 // getModelFamily extracts model family from full model name.
 // e.g., "claude-opus-4-5-20251101" -> "opus-4-5"
@@ -129,12 +133,14 @@ func getModelFamily(modelName string) string {
 }
 
 // GetPricing returns pricing for a model.
+// Returns zero pricing for unknown models and logs a warning.
 func GetPricing(modelName string) ModelPricing {
 	family := getModelFamily(modelName)
 	if pricing, ok := modelPricingTable[family]; ok {
 		return pricing
 	}
-	return defaultPricing
+	slog.Warn("unknown model for pricing", "model", modelName, "family", family)
+	return zeroPricing
 }
 
 // oneMillion is used for price calculation (pricing is per million tokens).
