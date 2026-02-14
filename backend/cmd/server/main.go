@@ -199,10 +199,28 @@ func loadConfig() Config {
 		logger.Info("Google OAuth enabled")
 	}
 
+	// Generic OIDC (optional) — works with Okta, Auth0, Azure AD, Keycloak, etc.
+	oidcIssuerURL := os.Getenv("OIDC_ISSUER_URL")
+	oidcClientID := os.Getenv("OIDC_CLIENT_ID")
+	oidcClientSecret := os.Getenv("OIDC_CLIENT_SECRET")
+	oidcRedirectURL := os.Getenv("OIDC_REDIRECT_URL")
+	if oidcIssuerURL != "" && oidcClientID != "" && oidcClientSecret != "" && oidcRedirectURL != "" {
+		oauthConfig.OIDCEnabled = true
+		oauthConfig.OIDCIssuerURL = oidcIssuerURL
+		oauthConfig.OIDCClientID = oidcClientID
+		oauthConfig.OIDCClientSecret = oidcClientSecret
+		oauthConfig.OIDCRedirectURL = oidcRedirectURL
+		oauthConfig.OIDCDisplayName = os.Getenv("OIDC_DISPLAY_NAME")
+		if oauthConfig.OIDCDisplayName == "" {
+			oauthConfig.OIDCDisplayName = "SSO"
+		}
+		logger.Info("OIDC enabled (discovery deferred)", "issuer", oidcIssuerURL, "display_name", oauthConfig.OIDCDisplayName)
+	}
+
 	// Require at least one authentication method
-	if !passwordEnabled && !oauthConfig.GitHubEnabled && !oauthConfig.GoogleEnabled {
+	if !passwordEnabled && !oauthConfig.GitHubEnabled && !oauthConfig.GoogleEnabled && !oauthConfig.OIDCEnabled {
 		logger.Fatal("no authentication method configured",
-			"hint", "set AUTH_PASSWORD_ENABLED=true, or configure GitHub OAuth (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL), or configure Google OAuth")
+			"hint", "set AUTH_PASSWORD_ENABLED=true, or configure GitHub OAuth (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL), or configure Google OAuth, or configure OIDC (OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL)")
 	}
 
 	// Validate required security configuration

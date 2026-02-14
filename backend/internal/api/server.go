@@ -239,6 +239,12 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Get("/auth/google/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleCallback(s.oauthConfig, s.db))))
 	}
 
+	// Generic OIDC (if enabled) — pointer required for lazy discovery mutex
+	if s.oauthConfig.OIDCEnabled {
+		r.Get("/auth/oidc/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleOIDCLogin(&s.oauthConfig))))
+		r.Get("/auth/oidc/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleOIDCCallback(&s.oauthConfig, s.db))))
+	}
+
 	// Logout (always available)
 	r.Get("/auth/logout", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db))))
 

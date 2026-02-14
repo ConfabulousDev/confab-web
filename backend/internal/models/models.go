@@ -35,6 +35,7 @@ type OAuthProvider string
 const (
 	ProviderGitHub OAuthProvider = "github"
 	ProviderGoogle OAuthProvider = "google"
+	ProviderOIDC   OAuthProvider = "oidc"
 )
 
 // UserIdentity represents an OAuth identity linked to a user

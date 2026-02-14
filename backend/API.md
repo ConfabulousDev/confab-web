@@ -925,6 +925,8 @@ These endpoints handle OAuth authentication flow:
 | `GET /auth/github/callback` | GitHub OAuth callback |
 | `GET /auth/google/login` | Initiate Google OAuth |
 | `GET /auth/google/callback` | Google OAuth callback |
+| `GET /auth/oidc/login` | Initiate generic OIDC OAuth (Okta, Auth0, Azure AD, Keycloak, etc.) |
+| `GET /auth/oidc/callback` | Generic OIDC OAuth callback |
 | `GET /auth/logout` | Logout (clears session) |
 
 ### OAuth Login Parameters
