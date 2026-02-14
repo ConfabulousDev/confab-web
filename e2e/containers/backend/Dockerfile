@@ -22,9 +22,14 @@ FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates tzdata curl
 
+# Create non-root user
+RUN adduser -D -h /app appuser
+
 WORKDIR /app
 
 COPY --from=builder /app/confab ./
+
+USER appuser
 
 EXPOSE 8080
 

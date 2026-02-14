@@ -43,6 +43,9 @@ FROM alpine:latest
 # Install ca-certificates for HTTPS
 RUN apk --no-cache add ca-certificates tzdata
 
+# Create non-root user
+RUN adduser -D -h /app appuser
+
 WORKDIR /app
 
 # Copy backend binary from builder
@@ -53,6 +56,8 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 
 # Set environment variable for static files
 ENV STATIC_FILES_DIR=/app/static
+
+USER appuser
 
 # Expose port
 EXPOSE 8080
