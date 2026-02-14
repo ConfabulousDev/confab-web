@@ -1156,3 +1156,208 @@ func TestListUserSessions_GitHubPRsSharedView(t *testing.T) {
 		t.Errorf("expected PR '999', got '%s'", sharedSession.GitHubPRs[0])
 	}
 }
+
+// =============================================================================
+// ShareAllSessions ListUserSessions Tests
+// =============================================================================
+
+// TestListUserSessions_ShareAllSessions_SharedView tests that all non-owned sessions
+// appear in the shared view when ShareAllSessions is enabled.
+func TestListUserSessions_ShareAllSessions_SharedView(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Enable ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	viewer := testutil.CreateTestUser(t, env, "viewer@test.com", "Viewer")
+
+	// Create sessions by owner (no shares needed)
+	testutil.CreateTestSession(t, env, owner.ID, "owner-session-1")
+	testutil.CreateTestSession(t, env, owner.ID, "owner-session-2")
+
+	// Create viewer's own session
+	testutil.CreateTestSession(t, env, viewer.ID, "viewer-session")
+
+	ctx := context.Background()
+
+	sessions, err := env.DB.ListUserSessions(ctx, viewer.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	// Should see: 1 owned + 2 system-shared (all of owner's sessions)
+	if len(sessions) != 3 {
+		t.Fatalf("expected 3 sessions (1 owned + 2 shared), got %d", len(sessions))
+	}
+
+	var ownedCount, sharedCount int
+	for _, s := range sessions {
+		if s.IsOwner {
+			ownedCount++
+		} else {
+			sharedCount++
+			if s.AccessType != "system_share" {
+				t.Errorf("expected access_type = system_share, got %s", s.AccessType)
+			}
+			if s.SharedByEmail == nil || *s.SharedByEmail != "owner@test.com" {
+				t.Errorf("expected SharedByEmail = owner@test.com, got %v", s.SharedByEmail)
+			}
+			// Privacy: hostname/username should be nil
+			if s.Hostname != nil {
+				t.Errorf("expected Hostname = nil for shared session, got %v", s.Hostname)
+			}
+			if s.Username != nil {
+				t.Errorf("expected Username = nil for shared session, got %v", s.Username)
+			}
+		}
+	}
+	if ownedCount != 1 {
+		t.Errorf("expected 1 owned session, got %d", ownedCount)
+	}
+	if sharedCount != 2 {
+		t.Errorf("expected 2 shared sessions, got %d", sharedCount)
+	}
+}
+
+// TestListUserSessions_ShareAllSessions_OwnedView tests that owned view is unchanged
+// when ShareAllSessions is enabled.
+func TestListUserSessions_ShareAllSessions_OwnedView(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Enable ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	otherUser := testutil.CreateTestUser(t, env, "other@test.com", "Other")
+
+	// Create sessions
+	testutil.CreateTestSession(t, env, owner.ID, "owner-session")
+	testutil.CreateTestSession(t, env, otherUser.ID, "other-session")
+
+	ctx := context.Background()
+
+	// Owned view should only show owner's sessions
+	sessions, err := env.DB.ListUserSessions(ctx, owner.ID, db.SessionListViewOwned)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Errorf("expected 1 owned session, got %d", len(sessions))
+	}
+	if len(sessions) > 0 && !sessions[0].IsOwner {
+		t.Error("owned view should only return owned sessions")
+	}
+}
+
+// TestListUserSessions_ShareAllSessions_PrivateShareTakesPrecedence tests that
+// private shares still take priority over system_share in deduplication.
+func TestListUserSessions_ShareAllSessions_PrivateShareTakesPrecedence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Enable ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@test.com", "Recipient")
+
+	// Create owner's session and share it privately with recipient
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "shared-session")
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@test.com"})
+
+	ctx := context.Background()
+
+	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("ListUserSessions failed: %v", err)
+	}
+
+	// Find the shared session (not owned)
+	var sharedSession *db.SessionListItem
+	for i := range sessions {
+		if !sessions[i].IsOwner {
+			sharedSession = &sessions[i]
+			break
+		}
+	}
+
+	if sharedSession == nil {
+		t.Fatal("expected to find shared session")
+	}
+
+	// Private share should take precedence over system_share
+	if sharedSession.AccessType != "private_share" {
+		t.Errorf("expected access_type = private_share (takes precedence), got %s", sharedSession.AccessType)
+	}
+}
+
+// =============================================================================
+// ShareAllSessions GetSessionsLastModified Tests
+// =============================================================================
+
+// TestGetSessionsLastModified_ShareAllSessions tests that GetSessionsLastModified
+// includes all non-owned sessions when ShareAllSessions is enabled.
+func TestGetSessionsLastModified_ShareAllSessions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Enable ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	viewer := testutil.CreateTestUser(t, env, "viewer@test.com", "Viewer")
+
+	ctx := context.Background()
+
+	// Initially no sessions
+	lastModified1, err := env.DB.GetSessionsLastModified(ctx, viewer.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("GetSessionsLastModified failed: %v", err)
+	}
+
+	// Create owner's session (no shares)
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "no-share-session")
+
+	knownTime := time.Date(2024, 8, 1, 12, 0, 0, 0, time.UTC)
+	_, err = env.DB.Exec(ctx, "UPDATE sessions SET last_sync_at = $1 WHERE id = $2", knownTime, sessionID)
+	if err != nil {
+		t.Fatalf("failed to update session: %v", err)
+	}
+
+	// With ShareAllSessions, viewer should see this session's timestamp
+	lastModified2, err := env.DB.GetSessionsLastModified(ctx, viewer.ID, db.SessionListViewSharedWithMe)
+	if err != nil {
+		t.Fatalf("GetSessionsLastModified failed: %v", err)
+	}
+
+	if !lastModified2.After(lastModified1) {
+		t.Errorf("lastModified did not increase: before=%v, after=%v", lastModified1, lastModified2)
+	}
+	if !lastModified2.Equal(knownTime) {
+		t.Errorf("lastModified = %v, want %v", lastModified2, knownTime)
+	}
+}

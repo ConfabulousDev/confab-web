@@ -47,6 +47,12 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 		return &SessionAccessInfo{AccessType: SessionAccessOwner}, nil
 	}
 
+	// ShareAllSessions: any authenticated user gets system-level access (no share rows needed)
+	if db.ShareAllSessions && viewerUserID != nil {
+		span.SetAttributes(attribute.String("access.type", "system"))
+		return &SessionAccessInfo{AccessType: SessionAccessSystem}, nil
+	}
+
 	// Combined query checks all share types in one round-trip.
 	// Priority: recipient (1) > system (2) > public (3)
 	// Also computes auth_may_help: true if unauthenticated and non-public shares exist

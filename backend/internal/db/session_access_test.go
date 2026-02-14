@@ -1054,3 +1054,129 @@ func TestGetSessionDetailWithAccess_RecipientShareHasSharedByEmail(t *testing.T)
 		t.Error("expected IsOwner = false for recipient share access")
 	}
 }
+
+// =============================================================================
+// ShareAllSessions Tests (on-prem mode)
+// =============================================================================
+
+// TestGetSessionAccessType_ShareAllSessions_Authenticated tests that any authenticated
+// user gets system access when ShareAllSessions is enabled.
+func TestGetSessionAccessType_ShareAllSessions_Authenticated(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Enable ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+	// No shares created
+
+	ctx := context.Background()
+
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessSystem {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessSystem, accessInfo.AccessType)
+	}
+	// ShareAllSessions should not return a ShareID (no rows to track)
+	if accessInfo.ShareID != nil {
+		t.Errorf("expected ShareID = nil for ShareAllSessions, got %v", accessInfo.ShareID)
+	}
+}
+
+// TestGetSessionAccessType_ShareAllSessions_Unauthenticated tests that unauthenticated
+// users still get no access when ShareAllSessions is enabled.
+func TestGetSessionAccessType_ShareAllSessions_Unauthenticated(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Enable ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	ctx := context.Background()
+
+	// Unauthenticated (nil viewerUserID) should still get no access
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessNone {
+		t.Errorf("expected AccessType = %s, got %s", db.SessionAccessNone, accessInfo.AccessType)
+	}
+}
+
+// TestGetSessionAccessType_ShareAllSessions_OwnerStillOwner tests that session owners
+// still get owner access (not downgraded to system) when ShareAllSessions is enabled.
+func TestGetSessionAccessType_ShareAllSessions_OwnerStillOwner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Enable ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	ctx := context.Background()
+
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &owner.ID)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessOwner {
+		t.Errorf("expected AccessType = %s (owner takes precedence), got %s", db.SessionAccessOwner, accessInfo.AccessType)
+	}
+}
+
+// TestGetSessionAccessType_ShareAllSessions_Disabled tests that default behavior
+// is unchanged when ShareAllSessions is false.
+func TestGetSessionAccessType_ShareAllSessions_Disabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// ShareAllSessions is false by default
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+	// No shares created
+
+	ctx := context.Background()
+
+	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	if err != nil {
+		t.Fatalf("GetSessionAccessType failed: %v", err)
+	}
+
+	if accessInfo.AccessType != db.SessionAccessNone {
+		t.Errorf("expected AccessType = %s (no shares, flag disabled), got %s", db.SessionAccessNone, accessInfo.AccessType)
+	}
+}

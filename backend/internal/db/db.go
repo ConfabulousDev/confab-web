@@ -15,6 +15,10 @@ var tracer = otel.Tracer("confab/db")
 // DB wraps a PostgreSQL database connection
 type DB struct {
 	conn *sql.DB
+
+	// ShareAllSessions makes all sessions visible to all authenticated users
+	// as system shares (no database rows needed). For on-prem deployments.
+	ShareAllSessions bool
 }
 
 // Connect establishes a connection to PostgreSQL

@@ -103,7 +103,168 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 		`
 	case SessionListViewSharedWithMe:
 		// Shared sessions (private shares + system shares), includes owned for deduplication
-		query = `
+		query = db.buildSharedWithMeQuery()
+	default:
+		err := fmt.Errorf("invalid session list view: %s", view)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	rows, err := db.conn.QueryContext(ctx, query, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("failed to query sessions: %w", err)
+	}
+	defer rows.Close()
+
+	sessions := make([]SessionListItem, 0)
+	for rows.Next() {
+		var session SessionListItem
+		var gitRepoURL *string           // Full URL from git_info JSONB
+		var githubPRs pq.StringArray     // GitHub PR refs as PostgreSQL text array
+		var githubCommits pq.StringArray // GitHub commit SHAs as PostgreSQL text array
+		if err := rows.Scan(
+			&session.ID,
+			&session.ExternalID,
+			&session.FirstSeen,
+			&session.FileCount,
+			&session.LastSyncTime,
+			&session.CustomTitle,
+			&session.SuggestedSessionTitle,
+			&session.Summary,
+			&session.FirstUserMessage,
+			&session.SessionType,
+			&session.TotalLines,
+			&gitRepoURL,
+			&session.GitBranch,
+			&githubPRs,
+			&githubCommits,
+			&session.IsOwner,
+			&session.AccessType,
+			&session.SharedByEmail,
+			&session.Hostname,
+			&session.Username,
+		); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+
+		// Extract org/repo from full git URL (e.g., "https://github.com/org/repo.git" -> "org/repo")
+		if gitRepoURL != nil && *gitRepoURL != "" {
+			session.GitRepo = extractRepoName(*gitRepoURL)
+			session.GitRepoURL = gitRepoURL
+		}
+
+		// Convert pq.StringArray to []string (only if non-empty)
+		if len(githubPRs) > 0 {
+			session.GitHubPRs = []string(githubPRs)
+		}
+		if len(githubCommits) > 0 {
+			session.GitHubCommits = []string(githubCommits)
+		}
+
+		sessions = append(sessions, session)
+	}
+
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("error iterating sessions: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
+	return sessions, nil
+}
+
+// buildSharedWithMeQuery returns the SQL for the SharedWithMe view.
+// When ShareAllSessions is enabled, the system_shared_sessions CTE selects ALL
+// non-owned sessions instead of requiring session_share_system rows.
+func (db *DB) buildSharedWithMeQuery() string {
+	systemSharedCTE := `
+			-- System-wide shares (visible to all authenticated users)
+			-- NOTE: hostname/username are NULL for privacy - only visible to session owner
+			system_shared_sessions AS (
+				SELECT DISTINCT ON (s.id)
+					s.id,
+					s.external_id,
+					s.first_seen,
+					COALESCE(sf_stats.file_count, 0) as file_count,
+					s.last_message_at,
+					s.custom_title,
+					s.suggested_session_title,
+					s.summary,
+					s.first_user_message,
+					s.session_type,
+					COALESCE(sf_stats.total_lines, 0) as total_lines,
+					s.git_info->>'repo_url' as git_repo_url,
+					s.git_info->>'branch' as git_branch,
+					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
+					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
+					false as is_owner,
+					'system_share' as access_type,
+					u.email as shared_by_email,
+					NULL::text as hostname,
+					NULL::text as username
+				FROM sessions s
+				JOIN session_shares sh ON s.id = sh.session_id
+				JOIN session_share_system sss ON sh.id = sss.share_id
+				JOIN users u ON s.user_id = u.id
+				LEFT JOIN (
+					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+					FROM sync_files
+					GROUP BY session_id
+				) sf_stats ON s.id = sf_stats.session_id
+				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
+				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
+				  AND s.user_id != $1  -- Don't duplicate owned sessions
+				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
+			)`
+
+	if db.ShareAllSessions {
+		// When ShareAllSessions is enabled, ALL non-owned sessions are visible
+		// as system shares — no session_share rows needed.
+		systemSharedCTE = `
+			system_shared_sessions AS (
+				SELECT DISTINCT ON (s.id)
+					s.id,
+					s.external_id,
+					s.first_seen,
+					COALESCE(sf_stats.file_count, 0) as file_count,
+					s.last_message_at,
+					s.custom_title,
+					s.suggested_session_title,
+					s.summary,
+					s.first_user_message,
+					s.session_type,
+					COALESCE(sf_stats.total_lines, 0) as total_lines,
+					s.git_info->>'repo_url' as git_repo_url,
+					s.git_info->>'branch' as git_branch,
+					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
+					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
+					false as is_owner,
+					'system_share' as access_type,
+					u.email as shared_by_email,
+					NULL::text as hostname,
+					NULL::text as username
+				FROM sessions s
+				JOIN users u ON s.user_id = u.id
+				LEFT JOIN (
+					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+					FROM sync_files
+					GROUP BY session_id
+				) sf_stats ON s.id = sf_stats.session_id
+				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
+				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+				WHERE s.user_id != $1
+				ORDER BY s.id
+			)`
+	}
+
+	return `
 			WITH
 			-- GitHub PRs for each session (pre-aggregated to avoid correlated subquery in DISTINCT ON)
 			github_pr_refs AS (
@@ -191,46 +352,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
 				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
-			),
-			-- System-wide shares (visible to all authenticated users)
-			-- NOTE: hostname/username are NULL for privacy - only visible to session owner
-			system_shared_sessions AS (
-				SELECT DISTINCT ON (s.id)
-					s.id,
-					s.external_id,
-					s.first_seen,
-					COALESCE(sf_stats.file_count, 0) as file_count,
-					s.last_message_at,
-					s.custom_title,
-					s.suggested_session_title,
-					s.summary,
-					s.first_user_message,
-					s.session_type,
-					COALESCE(sf_stats.total_lines, 0) as total_lines,
-					s.git_info->>'repo_url' as git_repo_url,
-					s.git_info->>'branch' as git_branch,
-					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
-					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
-					false as is_owner,
-					'system_share' as access_type,
-					u.email as shared_by_email,
-					NULL::text as hostname,
-					NULL::text as username
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_system sss ON sh.id = sss.share_id
-				JOIN users u ON s.user_id = u.id
-				LEFT JOIN (
-					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-					FROM sync_files
-					GROUP BY session_id
-				) sf_stats ON s.id = sf_stats.session_id
-				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
-				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				  AND s.user_id != $1  -- Don't duplicate owned sessions
-				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
-			)
+			),` + systemSharedCTE + `
 			-- Dedupe: prefer owner > private_share > system_share, then sort by time
 			SELECT * FROM (
 				SELECT DISTINCT ON (id) * FROM (
@@ -249,79 +371,6 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionLi
 			) deduped
 			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
-	default:
-		err := fmt.Errorf("invalid session list view: %s", view)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
-	}
-
-	rows, err := db.conn.QueryContext(ctx, query, userID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("failed to query sessions: %w", err)
-	}
-	defer rows.Close()
-
-	sessions := make([]SessionListItem, 0)
-	for rows.Next() {
-		var session SessionListItem
-		var gitRepoURL *string           // Full URL from git_info JSONB
-		var githubPRs pq.StringArray     // GitHub PR refs as PostgreSQL text array
-		var githubCommits pq.StringArray // GitHub commit SHAs as PostgreSQL text array
-		if err := rows.Scan(
-			&session.ID,
-			&session.ExternalID,
-			&session.FirstSeen,
-			&session.FileCount,
-			&session.LastSyncTime,
-			&session.CustomTitle,
-			&session.SuggestedSessionTitle,
-			&session.Summary,
-			&session.FirstUserMessage,
-			&session.SessionType,
-			&session.TotalLines,
-			&gitRepoURL,
-			&session.GitBranch,
-			&githubPRs,
-			&githubCommits,
-			&session.IsOwner,
-			&session.AccessType,
-			&session.SharedByEmail,
-			&session.Hostname,
-			&session.Username,
-		); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return nil, fmt.Errorf("failed to scan session: %w", err)
-		}
-
-		// Extract org/repo from full git URL (e.g., "https://github.com/org/repo.git" -> "org/repo")
-		if gitRepoURL != nil && *gitRepoURL != "" {
-			session.GitRepo = extractRepoName(*gitRepoURL)
-			session.GitRepoURL = gitRepoURL
-		}
-
-		// Convert pq.StringArray to []string (only if non-empty)
-		if len(githubPRs) > 0 {
-			session.GitHubPRs = []string(githubPRs)
-		}
-		if len(githubCommits) > 0 {
-			session.GitHubCommits = []string(githubCommits)
-		}
-
-		sessions = append(sessions, session)
-	}
-
-	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("error iterating sessions: %w", err)
-	}
-
-	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
-	return sessions, nil
 }
 
 // GetSessionsLastModified returns the most recent last_sync_at timestamp for polling ETag.
@@ -345,27 +394,36 @@ func (db *DB) GetSessionsLastModified(ctx context.Context, userID int64, view Se
 			WHERE user_id = $1
 		`
 	case SessionListViewSharedWithMe:
-		query = `
-			SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
-			FROM (
-				-- Private shares
-				SELECT s.last_sync_at
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_recipients sr ON sh.id = sr.share_id
-				WHERE sr.user_id = $1
-				  AND s.user_id != $1
-				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				UNION ALL
-				-- System shares
-				SELECT s.last_sync_at
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_system sss ON sh.id = sss.share_id
-				WHERE s.user_id != $1
-				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-			) combined
-		`
+		if db.ShareAllSessions {
+			// All non-owned sessions are visible — no share rows needed
+			query = `
+				SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
+				FROM sessions
+				WHERE user_id != $1
+			`
+		} else {
+			query = `
+				SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
+				FROM (
+					-- Private shares
+					SELECT s.last_sync_at
+					FROM sessions s
+					JOIN session_shares sh ON s.id = sh.session_id
+					JOIN session_share_recipients sr ON sh.id = sr.share_id
+					WHERE sr.user_id = $1
+					  AND s.user_id != $1
+					  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+					UNION ALL
+					-- System shares
+					SELECT s.last_sync_at
+					FROM sessions s
+					JOIN session_shares sh ON s.id = sh.session_id
+					JOIN session_share_system sss ON sh.id = sss.share_id
+					WHERE s.user_id != $1
+					  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+				) combined
+			`
+		}
 	default:
 		err := fmt.Errorf("invalid session list view: %s", view)
 		span.RecordError(err)

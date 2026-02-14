@@ -59,6 +59,12 @@ func main() {
 	}
 	defer database.Close()
 
+	// Enable share-all-sessions mode for on-prem deployments
+	if os.Getenv("SHARE_ALL_SESSIONS") == "true" {
+		database.ShareAllSessions = true
+		logger.Info("share-all-sessions mode enabled: all sessions visible to authenticated users")
+	}
+
 	// Bootstrap admin user if password auth is enabled and no users exist
 	if config.OAuthConfig.PasswordEnabled {
 		ctx := context.Background()
