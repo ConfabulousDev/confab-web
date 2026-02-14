@@ -12,6 +12,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -113,8 +114,9 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 }
 
 // RequireAPIKey returns an HTTP middleware that requires API key authentication.
+// If allowedDomains is non-empty, the user's email domain must match.
 // Use TryAPIKeyAuth for optional authentication.
-func RequireAPIKey(database *db.DB) func(http.Handler) http.Handler {
+func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -143,6 +145,12 @@ func RequireAPIKey(database *db.DB) func(http.Handler) http.Handler {
 			// Check if user is inactive
 			if userStatus == models.UserStatusInactive {
 				http.Error(w, "Account deactivated", http.StatusForbidden)
+				return
+			}
+
+			// Check email domain restriction
+			if !validation.IsAllowedEmailDomain(userEmail, allowedDomains) {
+				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}
 

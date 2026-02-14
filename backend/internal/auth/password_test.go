@@ -163,7 +163,7 @@ func TestHandlePasswordLogin(t *testing.T) {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
 
-	handler := auth.HandlePasswordLogin(env.DB)
+	handler := auth.HandlePasswordLogin(env.DB, nil)
 
 	t.Run("rejects invalid email format", func(t *testing.T) {
 		form := url.Values{}
@@ -325,7 +325,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
 
-		err := auth.BootstrapAdmin(ctx, env.DB)
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err != nil {
 			t.Fatalf("BootstrapAdmin failed: %v", err)
 		}
@@ -378,7 +378,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
 
-		err = auth.BootstrapAdmin(ctx, env.DB)
+		err = auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err != nil {
 			t.Fatalf("BootstrapAdmin should not fail when users exist: %v", err)
 		}
@@ -400,7 +400,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		os.Setenv("ADMIN_BOOTSTRAP_PASSWORD", "adminpassword123")
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
 
-		err := auth.BootstrapAdmin(ctx, env.DB)
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err == nil {
 			t.Error("BootstrapAdmin should fail with missing email")
 		}
@@ -416,7 +416,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
 
-		err := auth.BootstrapAdmin(ctx, env.DB)
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err == nil {
 			t.Error("BootstrapAdmin should fail with missing password")
 		}
@@ -433,7 +433,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
 
-		err := auth.BootstrapAdmin(ctx, env.DB)
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err == nil {
 			t.Error("BootstrapAdmin should fail with invalid email")
 		}
@@ -450,7 +450,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
 
-		err := auth.BootstrapAdmin(ctx, env.DB)
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err == nil {
 			t.Error("BootstrapAdmin should fail with short password")
 		}
@@ -467,7 +467,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
 		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
 
-		err := auth.BootstrapAdmin(ctx, env.DB)
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err != nil {
 			t.Fatalf("BootstrapAdmin failed: %v", err)
 		}

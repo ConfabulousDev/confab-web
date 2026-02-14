@@ -7,6 +7,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/email"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 	"github.com/honeycombio/otel-config-go/otelconfig"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -60,7 +62,7 @@ func main() {
 	// Bootstrap admin user if password auth is enabled and no users exist
 	if config.OAuthConfig.PasswordEnabled {
 		ctx := context.Background()
-		if err := auth.BootstrapAdmin(ctx, database); err != nil {
+		if err := auth.BootstrapAdmin(ctx, database, config.OAuthConfig.AllowedEmailDomains); err != nil {
 			logger.Fatal("failed to bootstrap admin user", "error", err)
 		}
 	}
@@ -217,6 +219,22 @@ func loadConfig() Config {
 			oauthConfig.OIDCDisplayName = "SSO"
 		}
 		logger.Info("OIDC enabled (discovery deferred)", "issuer", oidcIssuerURL, "display_name", oauthConfig.OIDCDisplayName)
+	}
+
+	// Parse allowed email domains (optional, for on-prem deployments)
+	if allowedDomainsEnv := os.Getenv("ALLOWED_EMAIL_DOMAINS"); allowedDomainsEnv != "" {
+		var domains []string
+		for _, d := range strings.Split(allowedDomainsEnv, ",") {
+			d = strings.ToLower(strings.TrimSpace(d))
+			if d != "" {
+				domains = append(domains, d)
+			}
+		}
+		if err := validation.ValidateDomainList(domains); err != nil {
+			logger.Fatal("invalid ALLOWED_EMAIL_DOMAINS", "error", err)
+		}
+		oauthConfig.AllowedEmailDomains = domains
+		logger.Info("email domain restrictions configured", "allowed_domains", domains)
 	}
 
 	// Require at least one authentication method

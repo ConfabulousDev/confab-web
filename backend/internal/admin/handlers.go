@@ -35,14 +35,16 @@ type Handlers struct {
 	DB                  *db.DB
 	Storage             *storage.S3Storage
 	PasswordAuthEnabled bool
+	AllowedEmailDomains []string
 }
 
 // NewHandlers creates admin handlers with dependencies
-func NewHandlers(database *db.DB, store *storage.S3Storage, passwordAuthEnabled bool) *Handlers {
+func NewHandlers(database *db.DB, store *storage.S3Storage, passwordAuthEnabled bool, allowedDomains []string) *Handlers {
 	return &Handlers{
 		DB:                  database,
 		Storage:             store,
 		PasswordAuthEnabled: passwordAuthEnabled,
+		AllowedEmailDomains: allowedDomains,
 	}
 }
 
@@ -1012,6 +1014,12 @@ func (h *Handlers) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	// Validate email
 	if !validation.IsValidEmail(email) {
 		http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Invalid+email+address", http.StatusSeeOther)
+		return
+	}
+
+	// Check email domain restriction
+	if !validation.IsAllowedEmailDomain(email, h.AllowedEmailDomains) {
+		http.Redirect(w, r, AdminPathPrefix+"/users/new?error=Email+domain+not+permitted", http.StatusSeeOther)
 		return
 	}
 

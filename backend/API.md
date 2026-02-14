@@ -1041,7 +1041,7 @@ All errors return JSON:
 Common HTTP status codes:
 - `400` - Bad request (validation error)
 - `401` - Unauthorized (missing/invalid auth)
-- `403` - Forbidden (CSRF failure, insufficient permissions)
+- `403` - Forbidden (CSRF failure, insufficient permissions, email domain not permitted)
 - `404` - Not found
 - `409` - Conflict (e.g., API key limit reached)
 - `410` - Gone (e.g., share expired)
@@ -1060,6 +1060,28 @@ Common HTTP status codes:
 | Validation | 0.5 req/sec | 10 |
 
 Upload rate limiting is per-user (not per-IP) to support backfill scenarios.
+
+---
+
+## Email Domain Restrictions
+
+When `ALLOWED_EMAIL_DOMAINS` is set (comma-separated list of domains), only users with matching email domains can access the instance. This applies to all authentication methods.
+
+| Auth Path | Rejection Response |
+|-----------|--------------------|
+| OAuth callbacks (GitHub, Google, OIDC) | Redirect to `/login?error=access_denied&error_description=Your email domain is not permitted...` |
+| Password login | Redirect to `/login?error=Your email domain is not permitted...` |
+| API key requests | `403 Forbidden` with body `"Email domain not permitted"` |
+| Session-authenticated requests | `403 Forbidden` with body `"Email domain not permitted"` |
+| Device code token exchange | `403 Forbidden` with JSON `{"error": "access_denied"}` |
+| Admin user creation | Redirect with error `"Email domain not permitted"` |
+
+**Behavior:**
+- Empty/unset `ALLOWED_EMAIL_DOMAINS` = no restriction (all domains allowed, backwards compatible)
+- Strict domain match: `company.com` matches `@company.com` but NOT `@eng.company.com`
+- Case-insensitive comparison
+- Invalid domain entries cause fatal startup error
+- `/api/v1/auth/config` does NOT expose domain restrictions
 
 ---
 

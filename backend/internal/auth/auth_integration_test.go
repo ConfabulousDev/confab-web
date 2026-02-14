@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -692,7 +693,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 
 		// Create handler wrapped with middleware
 		var capturedUserID int64
-		handler := auth.RequireAPIKey(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireAPIKey(env.DB, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID, ok := auth.GetUserID(r.Context())
 			if !ok {
 				t.Error("expected user ID in context")
@@ -719,7 +720,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
 
-		handler := auth.RequireAPIKey(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireAPIKey(env.DB, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Error("handler should not be called for invalid key")
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -761,7 +762,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 			t.Fatalf("SetUserStatus failed: %v", err)
 		}
 
-		handler := auth.RequireAPIKey(env.DB)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireAPIKey(env.DB, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Error("handler should not be called for inactive user")
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -777,6 +778,241 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 		}
 		if body := rec.Body.String(); body != "Account deactivated\n" {
 			t.Errorf("body = %q, want %q", body, "Account deactivated\n")
+		}
+	})
+}
+
+// TestEmailDomainRestriction_APIKey tests domain restrictions on API key middleware
+func TestEmailDomainRestriction_APIKey(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	t.Run("API key with matching domain succeeds", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		user := testutil.CreateTestUser(t, env, "user@company.com", "Company User")
+		rawKey, keyHash, err := auth.GenerateAPIKey()
+		if err != nil {
+			t.Fatalf("GenerateAPIKey failed: %v", err)
+		}
+		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		if err != nil {
+			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
+		}
+
+		handler := auth.RequireAPIKey(env.DB, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		req.Header.Set("Authorization", "Bearer "+rawKey)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+	})
+
+	t.Run("API key with non-matching domain returns 403", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		user := testutil.CreateTestUser(t, env, "user@other.com", "Other User")
+		rawKey, keyHash, err := auth.GenerateAPIKey()
+		if err != nil {
+			t.Fatalf("GenerateAPIKey failed: %v", err)
+		}
+		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		if err != nil {
+			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
+		}
+
+		handler := auth.RequireAPIKey(env.DB, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("handler should not be called for non-matching domain")
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		req.Header.Set("Authorization", "Bearer "+rawKey)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+		}
+		if body := rec.Body.String(); body != "Email domain not permitted\n" {
+			t.Errorf("body = %q, want %q", body, "Email domain not permitted\n")
+		}
+	})
+
+	t.Run("empty allowed domains permits all", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		user := testutil.CreateTestUser(t, env, "user@anything.com", "Any User")
+		rawKey, keyHash, err := auth.GenerateAPIKey()
+		if err != nil {
+			t.Fatalf("GenerateAPIKey failed: %v", err)
+		}
+		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		if err != nil {
+			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
+		}
+
+		handler := auth.RequireAPIKey(env.DB, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		req.Header.Set("Authorization", "Bearer "+rawKey)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
+}
+
+// TestEmailDomainRestriction_Session tests domain restrictions on session middleware
+func TestEmailDomainRestriction_Session(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	t.Run("session with non-matching domain returns 403", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		user := testutil.CreateTestUser(t, env, "user@other.com", "Other User")
+
+		sessionID := "test-session-domain-check"
+		expiresAt := time.Now().Add(24 * time.Hour)
+		testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
+
+		handler := auth.RequireSession(env.DB, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("handler should not be called for non-matching domain")
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: sessionID})
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+		}
+		if body := rec.Body.String(); body != "Email domain not permitted\n" {
+			t.Errorf("body = %q, want %q", body, "Email domain not permitted\n")
+		}
+	})
+
+	t.Run("session with matching domain succeeds", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		user := testutil.CreateTestUser(t, env, "user@company.com", "Company User")
+
+		sessionID := "test-session-domain-ok"
+		expiresAt := time.Now().Add(24 * time.Hour)
+		testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
+
+		handler := auth.RequireSession(env.DB, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: sessionID})
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
+}
+
+// TestEmailDomainRestriction_Bootstrap tests domain restrictions on admin bootstrap
+func TestEmailDomainRestriction_Bootstrap(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	t.Run("bootstrap fails when domain not in allowed list", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		os.Setenv("ADMIN_BOOTSTRAP_EMAIL", "admin@other.com")
+		os.Setenv("ADMIN_BOOTSTRAP_PASSWORD", "adminpassword123")
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
+
+		err := auth.BootstrapAdmin(ctx, env.DB, []string{"company.com"})
+		if err == nil {
+			t.Error("BootstrapAdmin should fail when email domain not in allowed list")
+		}
+		if err != nil && !strings.Contains(err.Error(), "not in ALLOWED_EMAIL_DOMAINS") {
+			t.Errorf("expected domain mismatch error, got: %v", err)
+		}
+	})
+
+	t.Run("bootstrap succeeds when domain matches", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		os.Setenv("ADMIN_BOOTSTRAP_EMAIL", "admin@company.com")
+		os.Setenv("ADMIN_BOOTSTRAP_PASSWORD", "adminpassword123")
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
+
+		err := auth.BootstrapAdmin(ctx, env.DB, []string{"company.com"})
+		if err != nil {
+			t.Fatalf("BootstrapAdmin should succeed when domain matches: %v", err)
+		}
+
+		// Verify user was created
+		user, err := env.DB.GetUserByEmail(ctx, "admin@company.com")
+		if err != nil {
+			t.Fatalf("GetUserByEmail failed: %v", err)
+		}
+		if user.Email != "admin@company.com" {
+			t.Errorf("expected email admin@company.com, got %s", user.Email)
+		}
+	})
+
+	t.Run("bootstrap succeeds when no domain restrictions", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+
+		ctx := context.Background()
+
+		os.Setenv("ADMIN_BOOTSTRAP_EMAIL", "admin@anything.com")
+		os.Setenv("ADMIN_BOOTSTRAP_PASSWORD", "adminpassword123")
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
+
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
+		if err != nil {
+			t.Fatalf("BootstrapAdmin should succeed with no domain restrictions: %v", err)
 		}
 	})
 }

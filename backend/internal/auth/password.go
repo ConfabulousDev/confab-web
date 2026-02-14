@@ -43,7 +43,7 @@ func CheckPassword(hash, password string) bool {
 }
 
 // HandlePasswordLogin handles POST /auth/password/login
-func HandlePasswordLogin(database *db.DB) http.HandlerFunc {
+func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		log := logger.Ctx(ctx)
@@ -64,6 +64,13 @@ func HandlePasswordLogin(database *db.DB) http.HandlerFunc {
 		}
 		if password == "" {
 			redirectWithError(w, r, "Password is required")
+			return
+		}
+
+		// Check email domain restriction
+		if !validation.IsAllowedEmailDomain(email, allowedDomains) {
+			log.Warn("Email domain not permitted", "email", email, "provider", "password")
+			redirectWithError(w, r, "Your email domain is not permitted. Contact your administrator.")
 			return
 		}
 
@@ -158,7 +165,7 @@ func redirectWithError(w http.ResponseWriter, r *http.Request, message string) {
 
 // BootstrapAdmin creates the initial admin user from environment variables
 // Only runs if no users exist in the database
-func BootstrapAdmin(ctx context.Context, database *db.DB) error {
+func BootstrapAdmin(ctx context.Context, database *db.DB, allowedDomains []string) error {
 	log := logger.Ctx(ctx)
 
 	// Check if any users exist
@@ -184,6 +191,16 @@ func BootstrapAdmin(ctx context.Context, database *db.DB) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !validation.IsValidEmail(email) {
 		return fmt.Errorf("ADMIN_BOOTSTRAP_EMAIL is not a valid email address")
+	}
+
+	// Check email domain restriction
+	if !validation.IsAllowedEmailDomain(email, allowedDomains) {
+		parts := strings.SplitN(email, "@", 2)
+		domain := ""
+		if len(parts) == 2 {
+			domain = parts[1]
+		}
+		return fmt.Errorf("ADMIN_BOOTSTRAP_EMAIL domain %q is not in ALLOWED_EMAIL_DOMAINS", domain)
 	}
 
 	// Validate password (minimum 8 characters)

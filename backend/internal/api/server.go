@@ -223,7 +223,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Auth routes (public) - Apply stricter auth rate limiting
 	// Password authentication (if enabled)
 	if s.oauthConfig.PasswordEnabled {
-		r.Post("/auth/password/login", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandlePasswordLogin(s.db))))
+		r.Post("/auth/password/login", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandlePasswordLogin(s.db, s.oauthConfig.AllowedEmailDomains))))
 	}
 
 	// GitHub OAuth (if enabled)
@@ -256,15 +256,15 @@ func (s *Server) SetupRoutes() http.Handler {
 		backendURL = "http://localhost:8080" // Default for local dev
 	}
 	r.Post("/auth/device/code", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceCode(s.db, backendURL))))
-	r.Post("/auth/device/token", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db))))
+	r.Post("/auth/device/token", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db, s.oauthConfig.AllowedEmailDomains))))
 	r.Get("/auth/device", withMaxBody(MaxBodyXS, auth.HandleDevicePage(s.db)))
 	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db))))
 
 	// Admin routes (require web session + super admin)
-	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled)
+	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled, s.oauthConfig.AllowedEmailDomains)
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(csrfMiddleware)
-		r.Use(auth.RequireSession(s.db))
+		r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
 		r.Use(admin.Middleware(s.db))
 
 		r.Get("/users", withMaxBody(MaxBodyXS, adminHandlers.HandleListUsers))
@@ -296,7 +296,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// Protected routes require API key authentication (for CLI)
 		// No CSRF protection for API key routes (CLI doesn't use cookies)
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireAPIKey(s.db))
+			r.Use(auth.RequireAPIKey(s.db, s.oauthConfig.AllowedEmailDomains))
 
 			// API key validation endpoint with rate limiting to prevent abuse
 			r.Get("/auth/validate", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.validationLimiter, s.handleValidateAPIKey)))
@@ -322,7 +322,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// CSRF protection applied here to prevent forged requests
 		r.Group(func(r chi.Router) {
 			r.Use(csrfMiddleware)
-			r.Use(auth.RequireSession(s.db))
+			r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
 
 			// CSRF token endpoint - must be inside CSRF middleware to set cookie
 			r.Get("/csrf-token", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
@@ -360,7 +360,7 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// Session lookup by external_id - requires auth (session cookie OR API key)
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireSessionOrAPIKey(s.db))
+			r.Use(auth.RequireSessionOrAPIKey(s.db, s.oauthConfig.AllowedEmailDomains))
 			r.Get("/sessions/by-external-id/{external_id}", withMaxBody(MaxBodyXS, HandleLookupSessionByExternalID(s.db)))
 			// GitHub links - create (CLI or web)
 			r.Post("/sessions/{id}/github-links", withMaxBody(MaxBodyM, HandleCreateGitHubLink(s.db)))
@@ -369,7 +369,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// Canonical session access (CF-132) - supports optional authentication
 		// Works for: owner access, public shares, system shares, recipient shares
 		r.Group(func(r chi.Router) {
-			r.Use(auth.OptionalAuth(s.db))
+			r.Use(auth.OptionalAuth(s.db, s.oauthConfig.AllowedEmailDomains))
 			r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
 			// Canonical shared sync file access endpoint (CF-132)
 			// Uses same session access logic as /sessions/{id}
@@ -382,13 +382,13 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// GitHub links - delete (owner-only, web session required)
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireSession(s.db))
+			r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
 			r.Delete("/sessions/{id}/github-links/{linkID}", withMaxBody(MaxBodyXS, HandleDeleteGitHubLink(s.db)))
 		})
 
 		// Smart recap regeneration (owner-only, web session required)
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireSession(s.db))
+			r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
 			r.Post("/sessions/{id}/analytics/smart-recap/regenerate", withMaxBody(MaxBodyXS, HandleRegenerateSmartRecap(s.db, s.storage)))
 		})
 	})

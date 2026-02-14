@@ -78,6 +78,9 @@ type OAuthConfig struct {
 	OIDCIssuerURL    string // raw issuer URL for lazy discovery
 	OIDCDisplayName  string // button text, default "SSO"
 
+	// Email domain restrictions (optional, for on-prem deployments)
+	AllowedEmailDomains []string
+
 	oidcEndpoints *OIDCEndpoints // lazily populated, cached on success only
 	oidcMu        sync.Mutex     // protects lazy discovery
 }
@@ -222,6 +225,17 @@ func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			"login", user.Login,
 			"email", user.Email,
 			"name", user.Name)
+
+		// Check email domain restriction
+		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
+			log.Warn("Email domain not permitted", "email", user.Email, "provider", "github")
+			frontendURL := os.Getenv("FRONTEND_URL")
+			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Your email domain is not permitted. Contact your administrator."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
 
 		// Check user cap
 		allowed, err := CanUserLogin(ctx, database, user.Email)
@@ -420,13 +434,20 @@ func TrySessionAuth(r *http.Request, database *db.DB) *sessionAuthResult {
 }
 
 // RequireSession returns an HTTP middleware that requires session cookie authentication.
+// If allowedDomains is non-empty, the user's email domain must match.
 // Use TrySessionAuth for optional authentication.
-func RequireSession(database *db.DB) func(http.Handler) http.Handler {
+func RequireSession(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authResult := TrySessionAuth(r, database)
 			if authResult == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			// Check email domain restriction
+			if !validation.IsAllowedEmailDomain(authResult.userEmail, allowedDomains) {
+				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}
 
@@ -449,7 +470,8 @@ func RequireSession(database *db.DB) func(http.Handler) http.Handler {
 
 // RequireSessionOrAPIKey returns an HTTP middleware that requires either
 // session cookie or API key authentication. Tries session first, then API key.
-func RequireSessionOrAPIKey(database *db.DB) func(http.Handler) http.Handler {
+// If allowedDomains is non-empty, the user's email domain must match.
+func RequireSessionOrAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var userID int64
@@ -468,6 +490,12 @@ func RequireSessionOrAPIKey(database *db.DB) func(http.Handler) http.Handler {
 				authAPIKey = true
 			} else {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			// Check email domain restriction
+			if !validation.IsAllowedEmailDomain(userEmail, allowedDomains) {
+				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}
 
@@ -491,12 +519,17 @@ func RequireSessionOrAPIKey(database *db.DB) func(http.Handler) http.Handler {
 // OptionalAuth returns an HTTP middleware that attempts authentication but doesn't require it.
 // If authentication succeeds (via session cookie or API key), the user ID is set in context.
 // If authentication fails, the request continues without a user ID.
+// If allowedDomains is non-empty and a user is authenticated, their email domain must match or they get 403.
 // Use auth.GetUserID(ctx) to check if a user is authenticated.
-func OptionalAuth(database *db.DB) func(http.Handler) http.Handler {
+func OptionalAuth(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Try API key first, then session cookie
 			if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
+				if !validation.IsAllowedEmailDomain(apiKeyAuth.userEmail, allowedDomains) {
+					http.Error(w, "Email domain not permitted", http.StatusForbidden)
+					return
+				}
 				setLogUserID(w, apiKeyAuth.userID)
 				log := logger.Ctx(r.Context()).With("user_id", apiKeyAuth.userID)
 				ctx := logger.WithLogger(r.Context(), log)
@@ -507,6 +540,10 @@ func OptionalAuth(database *db.DB) func(http.Handler) http.Handler {
 			}
 
 			if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
+				if !validation.IsAllowedEmailDomain(sessionAuth.userEmail, allowedDomains) {
+					http.Error(w, "Email domain not permitted", http.StatusForbidden)
+					return
+				}
 				setLogUserID(w, sessionAuth.userID)
 				log := logger.Ctx(r.Context()).With("user_id", sessionAuth.userID)
 				ctx := logger.WithLogger(r.Context(), log)
@@ -782,6 +819,16 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 			"google_id", user.ID,
 			"email", user.Email,
 			"name", user.Name)
+
+		// Check email domain restriction
+		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
+			log.Warn("Email domain not permitted", "email", user.Email, "provider", "google")
+			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Your email domain is not permitted. Contact your administrator."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
 
 		// Check user cap
 		allowed, err := CanUserLogin(ctx, database, user.Email)
@@ -1242,6 +1289,16 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 			"sub", user.Sub,
 			"email", user.Email,
 			"name", user.Name)
+
+		// Check email domain restriction
+		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
+			log.Warn("Email domain not permitted", "email", user.Email, "provider", "oidc")
+			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
+				frontendURL,
+				url.QueryEscape("Your email domain is not permitted. Contact your administrator."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+			return
+		}
 
 		// Check user cap
 		allowed, err := CanUserLogin(ctx, database, user.Email)
@@ -1711,7 +1768,7 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 
 // HandleDeviceToken exchanges a device code for an API key
 // POST /auth/device/token
-func HandleDeviceToken(database *db.DB) http.HandlerFunc {
+func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1762,6 +1819,26 @@ func HandleDeviceToken(database *db.DB) http.HandlerFunc {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "authorization_pending"})
 			return
+		}
+
+		// Check email domain restriction on the authorized user
+		if len(allowedDomains) > 0 {
+			user, err := database.GetUserByID(ctx, *dc.UserID)
+			if err != nil {
+				log.Error("Failed to get user for domain check", "error", err, "user_id", *dc.UserID)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+				return
+			}
+			if !validation.IsAllowedEmailDomain(user.Email, allowedDomains) {
+				log.Warn("Email domain not permitted in device flow", "email", user.Email, "user_id", *dc.UserID)
+				database.DeleteDeviceCode(ctx, req.DeviceCode)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "access_denied"})
+				return
+			}
 		}
 
 		// Authorized! Generate API key
