@@ -117,9 +117,40 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
 }
 
 /**
+ * Check if a message has any displayable content.
+ * Messages with only whitespace text (e.g. interrupted assistant responses
+ * with content: [{type: "text", text: "\n\n"}]) render as empty cards.
+ */
+function hasDisplayableContent(message: TranscriptLine): boolean {
+  if (isAssistantMessage(message)) {
+    const content = message.message.content;
+    if (content.length === 0) return false;
+    // Has displayable content if any block is non-text (tool_use, thinking)
+    // or is a text block with non-whitespace content
+    return content.some((block) => {
+      if (block.type === 'text') return block.text.trim().length > 0;
+      return true;
+    });
+  }
+  if (isUserMessage(message)) {
+    const content = message.message.content;
+    if (typeof content === 'string') return content.trim().length > 0;
+    if (content.length === 0) return false;
+    return content.some((block) => {
+      if (block.type === 'text') return block.text.trim().length > 0;
+      return true;
+    });
+  }
+  return true;
+}
+
+/**
  * Check if a message matches the current filter state
  */
 export function messageMatchesFilter(message: TranscriptLine, filterState: FilterState): boolean {
+  // Skip messages with no displayable content (e.g. interrupted empty responses)
+  if (!hasDisplayableContent(message)) return false;
+
   if (isUserMessage(message)) {
     const subcategory = categorizeUserMessage(message);
     return filterState.user[subcategory];
