@@ -397,6 +397,20 @@ func loadPrecomputeConfig() analytics.PrecomputeConfig {
 		}
 	}
 
+	// Parse max output tokens
+	if tokStr := os.Getenv("SMART_RECAP_MAX_OUTPUT_TOKENS"); tokStr != "" {
+		if tok, err := strconv.Atoi(tokStr); err == nil && tok > 0 {
+			config.MaxOutputTokens = tok
+		}
+	}
+
+	// Parse max transcript tokens
+	if tokStr := os.Getenv("SMART_RECAP_MAX_TRANSCRIPT_TOKENS"); tokStr != "" {
+		if tok, err := strconv.Atoi(tokStr); err == nil && tok > 0 {
+			config.MaxTranscriptTokens = tok
+		}
+	}
+
 	// Parse regular cards staleness thresholds
 	config.RegularCardsThresholds = loadStalenessThresholds(
 		"WORKER_REGULAR",

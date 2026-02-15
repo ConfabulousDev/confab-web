@@ -15,14 +15,11 @@ import (
 )
 
 const (
-	// MaxOutputTokens is the maximum number of output tokens for the recap.
-	MaxOutputTokens = 1400
+	// DefaultMaxOutputTokens is the default maximum number of output tokens for the recap.
+	DefaultMaxOutputTokens = 1000
 
-	// MaxTranscriptTokens is the approximate maximum input size (characters / 4 as rough estimate).
-	MaxTranscriptTokens = 100000
-
-	// MaxTranscriptChars is the max characters to send (rough approximation of tokens).
-	MaxTranscriptChars = MaxTranscriptTokens * 4
+	// DefaultMaxTranscriptTokens is the default approximate maximum input size (characters / 4 as rough estimate).
+	DefaultMaxTranscriptTokens = 50000
 )
 
 // SmartRecapResult contains the parsed LLM response.
@@ -43,15 +40,33 @@ type SmartRecapResult struct {
 
 // SmartRecapAnalyzer generates AI-powered session recaps using Claude Haiku.
 type SmartRecapAnalyzer struct {
-	client *anthropic.Client
-	model  string
+	client             *anthropic.Client
+	model              string
+	maxOutputTokens    int
+	maxTranscriptChars int
+}
+
+// SmartRecapAnalyzerConfig holds tunable parameters for the analyzer.
+type SmartRecapAnalyzerConfig struct {
+	MaxOutputTokens    int // 0 means use DefaultMaxOutputTokens
+	MaxTranscriptTokens int // 0 means use DefaultMaxTranscriptTokens
 }
 
 // NewSmartRecapAnalyzer creates a new analyzer with the given Anthropic client.
-func NewSmartRecapAnalyzer(client *anthropic.Client, model string) *SmartRecapAnalyzer {
+func NewSmartRecapAnalyzer(client *anthropic.Client, model string, cfg SmartRecapAnalyzerConfig) *SmartRecapAnalyzer {
+	maxOutput := cfg.MaxOutputTokens
+	if maxOutput <= 0 {
+		maxOutput = DefaultMaxOutputTokens
+	}
+	maxTranscriptTokens := cfg.MaxTranscriptTokens
+	if maxTranscriptTokens <= 0 {
+		maxTranscriptTokens = DefaultMaxTranscriptTokens
+	}
 	return &SmartRecapAnalyzer{
-		client: client,
-		model:  model,
+		client:             client,
+		model:              model,
+		maxOutputTokens:    maxOutput,
+		maxTranscriptChars: maxTranscriptTokens * 4,
 	}
 }
 
@@ -86,9 +101,9 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 	truncated := false
 
 	// Truncate if too long (prioritize transcript, stats are at the end)
-	if contentLen > MaxTranscriptChars {
+	if contentLen > a.maxTranscriptChars {
 		// Truncate transcript portion, keep stats
-		maxTranscript := MaxTranscriptChars - len(statsSection) - 100 // leave room for truncation message
+		maxTranscript := a.maxTranscriptChars - len(statsSection) - 100 // leave room for truncation message
 		if maxTranscript > 0 && len(transcript) > maxTranscript {
 			transcript = transcript[:maxTranscript] + "\n\n[Transcript truncated due to length]"
 			userContent = transcript + "\n\n" + statsSection
@@ -109,7 +124,7 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 	temperature := 0.25
 	resp, err := a.client.CreateMessage(ctx, &anthropic.MessagesRequest{
 		Model:       a.model,
-		MaxTokens:   MaxOutputTokens,
+		MaxTokens:   a.maxOutputTokens,
 		Temperature: &temperature,
 		System:      smartRecapSystemPrompt,
 		Messages: []anthropic.Message{

@@ -50,9 +50,9 @@ func DefaultRegularCardsThresholds() StalenessThresholds {
 func DefaultSmartRecapThresholds() StalenessThresholds {
 	return StalenessThresholds{
 		ThresholdPct:    0.20, // 20%
-		BaseMinLines:    50,
-		BaseMinTime:     15 * time.Minute,
-		MinInitialLines: 10,
+		BaseMinLines:    150,
+		BaseMinTime:     30 * time.Minute,
+		MinInitialLines: 25,
 		MinSessionAge:   10 * time.Minute,
 	}
 }
@@ -64,6 +64,10 @@ type PrecomputeConfig struct {
 	SmartRecapModel    string
 	SmartRecapQuota    int
 	LockTimeoutSeconds int
+
+	// LLM token limits (0 means use defaults)
+	MaxOutputTokens     int
+	MaxTranscriptTokens int
 
 	// Staleness thresholds for each bucket
 	RegularCardsThresholds StalenessThresholds
@@ -136,9 +140,11 @@ func NewPrecomputer(db *sql.DB, store *storage.S3Storage, analyticsStore *Store,
 			analyticsStore,
 			&precomputeDB{db: db},
 			SmartRecapGeneratorConfig{
-				APIKey:            config.AnthropicAPIKey,
-				Model:             config.SmartRecapModel,
-				GenerationTimeout: 60 * time.Second,
+				APIKey:              config.AnthropicAPIKey,
+				Model:               config.SmartRecapModel,
+				GenerationTimeout:   60 * time.Second,
+				MaxOutputTokens:     config.MaxOutputTokens,
+				MaxTranscriptTokens: config.MaxTranscriptTokens,
 			},
 		)
 	}

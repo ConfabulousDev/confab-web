@@ -804,16 +804,15 @@ func TestFindStaleSmartRecapSessions_NewLines_Found(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "newlines@test.com", "NewLines User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "newlines-external-id")
 
-	// Add transcript sync file with 150 lines (50 new lines)
-	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 150)
+	// Add transcript sync file with 1000 lines (200 new lines since recap at 800)
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1000)
 
 	// Insert all up-to-date regular cards
-	insertAllCards(t, env, sessionID, 150)
+	insertAllCards(t, env, sessionID, 1000)
 
-	// Insert smart recap at 100 lines (has new lines since up_to_line < total_lines)
-	// Line gap = 50, threshold = max(50, 100*0.20) = 50 - borderline
-	// Let's make it 125 lines to ensure 25% gap which is > 20%
-	insertSmartRecapCard(t, env, sessionID, analytics.SmartRecapCardVersion, 100, time.Now().UTC())
+	// Insert smart recap at 800 lines (gap = 200, threshold = max(150, 800*0.20=160) = 160)
+	// Gap 200 > 160, so should be stale
+	insertSmartRecapCard(t, env, sessionID, analytics.SmartRecapCardVersion, 800, time.Now().UTC())
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
@@ -826,7 +825,7 @@ func TestFindStaleSmartRecapSessions_NewLines_Found(t *testing.T) {
 		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
 	})
 
-	// Should find - has new lines (up_to_line 100 < total_lines 150)
+	// Should find - has new lines (up_to_line 800 < total_lines 1000, gap 200 > threshold 160)
 	sessions, err := precomputer.FindStaleSmartRecapSessions(context.Background(), 100)
 	if err != nil {
 		t.Fatalf("FindStaleSmartRecapSessions failed: %v", err)
@@ -835,8 +834,8 @@ func TestFindStaleSmartRecapSessions_NewLines_Found(t *testing.T) {
 	if len(sessions) != 1 {
 		t.Fatalf("expected 1 session (has new lines), got %d", len(sessions))
 	}
-	if sessions[0].TotalLines != 150 {
-		t.Errorf("total lines = %d, want 150", sessions[0].TotalLines)
+	if sessions[0].TotalLines != 1000 {
+		t.Errorf("total lines = %d, want 1000", sessions[0].TotalLines)
 	}
 }
 

@@ -21,9 +21,11 @@ type SmartRecapDB interface {
 
 // SmartRecapGeneratorConfig holds configuration for the smart recap generator.
 type SmartRecapGeneratorConfig struct {
-	APIKey           string
-	Model            string
-	GenerationTimeout time.Duration
+	APIKey              string
+	Model               string
+	GenerationTimeout   time.Duration
+	MaxOutputTokens     int // 0 means use DefaultMaxOutputTokens
+	MaxTranscriptTokens int // 0 means use DefaultMaxTranscriptTokens
 }
 
 // SmartRecapGenerator handles the full smart recap generation flow.
@@ -90,7 +92,10 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 
 	// Create the analyzer and generate
 	client := anthropic.NewClient(g.config.APIKey)
-	analyzer := NewSmartRecapAnalyzer(client, g.config.Model)
+	analyzer := NewSmartRecapAnalyzer(client, g.config.Model, SmartRecapAnalyzerConfig{
+		MaxOutputTokens:    g.config.MaxOutputTokens,
+		MaxTranscriptTokens: g.config.MaxTranscriptTokens,
+	})
 
 	genCtx, genCancel := context.WithTimeout(ctx, g.config.GenerationTimeout)
 	result, err := analyzer.Analyze(genCtx, input.FileCollection, input.CardStats)

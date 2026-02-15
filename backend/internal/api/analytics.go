@@ -31,11 +31,13 @@ const (
 
 // SmartRecapConfig holds configuration for the smart recap feature.
 type SmartRecapConfig struct {
-	Enabled            bool
-	APIKey             string
-	Model              string
-	QuotaLimit         int
-	LockTimeoutSeconds int
+	Enabled             bool
+	APIKey              string
+	Model               string
+	QuotaLimit          int
+	LockTimeoutSeconds  int
+	MaxOutputTokens     int // 0 means use DefaultMaxOutputTokens
+	MaxTranscriptTokens int // 0 means use DefaultMaxTranscriptTokens
 }
 
 // loadSmartRecapConfig loads smart recap configuration from environment variables.
@@ -52,6 +54,20 @@ func loadSmartRecapConfig() SmartRecapConfig {
 	if quotaStr := os.Getenv("SMART_RECAP_QUOTA_LIMIT"); quotaStr != "" {
 		if quota, err := strconv.Atoi(quotaStr); err == nil && quota > 0 {
 			config.QuotaLimit = quota
+		}
+	}
+
+	// Parse max output tokens
+	if tokStr := os.Getenv("SMART_RECAP_MAX_OUTPUT_TOKENS"); tokStr != "" {
+		if tok, err := strconv.Atoi(tokStr); err == nil && tok > 0 {
+			config.MaxOutputTokens = tok
+		}
+	}
+
+	// Parse max transcript tokens
+	if tokStr := os.Getenv("SMART_RECAP_MAX_TRANSCRIPT_TOKENS"); tokStr != "" {
+		if tok, err := strconv.Atoi(tokStr); err == nil && tok > 0 {
+			config.MaxTranscriptTokens = tok
 		}
 	}
 
@@ -469,7 +485,10 @@ func generateSmartRecapSync(
 
 	// Create Anthropic client
 	client := anthropic.NewClient(config.APIKey)
-	analyzer := analytics.NewSmartRecapAnalyzer(client, config.Model)
+	analyzer := analytics.NewSmartRecapAnalyzer(client, config.Model, analytics.SmartRecapAnalyzerConfig{
+		MaxOutputTokens:    config.MaxOutputTokens,
+		MaxTranscriptTokens: config.MaxTranscriptTokens,
+	})
 
 	// Generate the recap (with timeout)
 	genCtx, genCancel := context.WithTimeout(ctx, 30*time.Second)
