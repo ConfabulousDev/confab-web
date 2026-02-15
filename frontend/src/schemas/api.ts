@@ -373,12 +373,30 @@ const TrendsUtilizationCardSchema = z.object({
   daily_utilization: z.array(DailyUtilizationPointSchema),
 });
 
+const TrendsAgentStatsSchema = z.object({
+  success: z.number(),
+  errors: z.number(),
+});
+
+const TrendsSkillStatsSchema = z.object({
+  success: z.number(),
+  errors: z.number(),
+});
+
+const TrendsAgentsAndSkillsCardSchema = z.object({
+  total_agent_invocations: z.number(),
+  total_skill_invocations: z.number(),
+  agent_stats: z.record(z.string(), TrendsAgentStatsSchema),
+  skill_stats: z.record(z.string(), TrendsSkillStatsSchema),
+});
+
 const TrendsCardsSchema = z.object({
   overview: TrendsOverviewCardSchema.nullable(),
   tokens: TrendsTokensCardSchema.nullable(),
   activity: TrendsActivityCardSchema.nullable(),
   tools: TrendsToolsCardSchema.nullable(),
   utilization: TrendsUtilizationCardSchema.nullable(),
+  agents_and_skills: TrendsAgentsAndSkillsCardSchema.nullable(),
 });
 
 export const TrendsResponseSchema = z.object({
@@ -429,6 +447,7 @@ export type TrendsTokensCard = z.infer<typeof TrendsTokensCardSchema>;
 export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
+export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
 export type DailyCostPoint = z.infer<typeof DailyCostPointSchema>;
 export type DailySessionCount = z.infer<typeof DailySessionCountSchema>;
 export type DailyUtilizationPoint = z.infer<typeof DailyUtilizationPointSchema>;

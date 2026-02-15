@@ -10,6 +10,7 @@ import {
   TrendsActivityCard,
   TrendsToolsCard,
   TrendsUtilizationCard,
+  TrendsAgentsAndSkillsCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
 import styles from './TrendsPage.module.css';
@@ -222,6 +223,7 @@ function TrendsPage() {
               <TrendsActivityCard data={data.cards.activity} />
               <TrendsToolsCard data={data.cards.tools} />
               <TrendsUtilizationCard data={data.cards.utilization} />
+              <TrendsAgentsAndSkillsCard data={data.cards.agents_and_skills} />
             </div>
           )}
         </div>

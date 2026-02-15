@@ -41,7 +41,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	errChan := make(chan error, 4)
+	errChan := make(chan error, 5)
 
 	// Helper to run aggregation in parallel
 	runAgg := func(name string, fn func() error) {
@@ -87,6 +87,17 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		}
 		mu.Lock()
 		response.Cards.Tools = tools
+		mu.Unlock()
+		return nil
+	})
+
+	runAgg("agents_and_skills", func() error {
+		agentsAndSkills, err := s.aggregateAgentsAndSkills(ctx, userID, req)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		response.Cards.AgentsAndSkills = agentsAndSkills
 		mu.Unlock()
 		return nil
 	})
@@ -439,5 +450,99 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 		TotalCalls:  totalCalls,
 		TotalErrors: totalErrors,
 		ToolStats:   aggregatedStats,
+	}, nil
+}
+
+// aggregateAgentsAndSkills computes the agents and skills card with per-name breakdown.
+func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req TrendsRequest) (*TrendsAgentsAndSkillsCard, error) {
+	query := `
+		WITH filtered_sessions AS (
+			SELECT
+				s.id
+			FROM sessions s
+			WHERE s.user_id = $1
+				AND s.first_seen >= $2
+				AND s.first_seen < $3
+				AND (
+					COALESCE(s.git_info->>'repo_url', '') = ANY($4::text[])
+					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
+				)
+		)
+		SELECT
+			a.agent_invocations,
+			a.skill_invocations,
+			a.agent_stats,
+			a.skill_stats
+		FROM filtered_sessions fs
+		INNER JOIN session_card_agents_and_skills a ON fs.id = a.session_id
+	`
+
+	rows, err := s.db.QueryContext(ctx, query,
+		userID,
+		req.StartDate,
+		req.EndDate,
+		pq.Array(req.Repos),
+		req.IncludeNoRepo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	totalAgentInvocations := 0
+	totalSkillInvocations := 0
+	aggregatedAgentStats := make(map[string]*AgentStats)
+	aggregatedSkillStats := make(map[string]*SkillStats)
+
+	for rows.Next() {
+		var agentInvocations, skillInvocations int
+		var agentStatsJSON, skillStatsJSON []byte
+
+		err := rows.Scan(&agentInvocations, &skillInvocations, &agentStatsJSON, &skillStatsJSON)
+		if err != nil {
+			return nil, err
+		}
+
+		totalAgentInvocations += agentInvocations
+		totalSkillInvocations += skillInvocations
+
+		// Parse and aggregate agent stats
+		if len(agentStatsJSON) > 0 {
+			var agentStats map[string]*AgentStats
+			if err := json.Unmarshal(agentStatsJSON, &agentStats); err == nil {
+				for name, stats := range agentStats {
+					if aggregatedAgentStats[name] == nil {
+						aggregatedAgentStats[name] = &AgentStats{}
+					}
+					aggregatedAgentStats[name].Success += stats.Success
+					aggregatedAgentStats[name].Errors += stats.Errors
+				}
+			}
+		}
+
+		// Parse and aggregate skill stats
+		if len(skillStatsJSON) > 0 {
+			var skillStats map[string]*SkillStats
+			if err := json.Unmarshal(skillStatsJSON, &skillStats); err == nil {
+				for name, stats := range skillStats {
+					if aggregatedSkillStats[name] == nil {
+						aggregatedSkillStats[name] = &SkillStats{}
+					}
+					aggregatedSkillStats[name].Success += stats.Success
+					aggregatedSkillStats[name].Errors += stats.Errors
+				}
+			}
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &TrendsAgentsAndSkillsCard{
+		TotalAgentInvocations: totalAgentInvocations,
+		TotalSkillInvocations: totalSkillInvocations,
+		AgentStats:            aggregatedAgentStats,
+		SkillStats:            aggregatedSkillStats,
 	}, nil
 }

@@ -4,3 +4,4 @@ export { TrendsTokensCard } from './TrendsTokensCard';
 export { TrendsActivityCard } from './TrendsActivityCard';
 export { TrendsToolsCard } from './TrendsToolsCard';
 export { TrendsUtilizationCard } from './TrendsUtilizationCard';
+export { TrendsAgentsAndSkillsCard } from './TrendsAgentsAndSkillsCard';

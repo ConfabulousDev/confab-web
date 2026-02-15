@@ -706,6 +706,18 @@ Returns aggregated analytics across multiple sessions for the authenticated user
         "Write": {"success": 400, "errors": 10},
         "Bash": {"success": 600, "errors": 30}
       }
+    },
+    "agents_and_skills": {
+      "total_agent_invocations": 45,
+      "total_skill_invocations": 20,
+      "agent_stats": {
+        "Explore": {"success": 20, "errors": 1},
+        "Plan": {"success": 12, "errors": 0}
+      },
+      "skill_stats": {
+        "commit": {"success": 10, "errors": 1},
+        "review-pr": {"success": 5, "errors": 0}
+      }
     }
   }
 }
@@ -735,6 +747,10 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | `cards.tools.total_calls` | int | Sum of tool calls across all sessions |
 | `cards.tools.total_errors` | int | Sum of tool errors |
 | `cards.tools.tool_stats` | object | Per-tool success/error breakdown |
+| `cards.agents_and_skills.total_agent_invocations` | int | Sum of agent invocations across all sessions |
+| `cards.agents_and_skills.total_skill_invocations` | int | Sum of skill invocations across all sessions |
+| `cards.agents_and_skills.agent_stats` | object | Per-agent-type success/error breakdown |
+| `cards.agents_and_skills.skill_stats` | object | Per-skill success/error breakdown |
 
 **Errors:**
 - `400` - Invalid date format or range exceeds 90 days

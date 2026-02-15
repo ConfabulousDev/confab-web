@@ -41,8 +41,9 @@ type TrendsCards struct {
 	Overview    *TrendsOverviewCard    `json:"overview"`
 	Tokens      *TrendsTokensCard      `json:"tokens"`
 	Activity    *TrendsActivityCard    `json:"activity"`
-	Tools       *TrendsToolsCard       `json:"tools"`
-	Utilization *TrendsUtilizationCard `json:"utilization"`
+	Tools           *TrendsToolsCard           `json:"tools"`
+	Utilization     *TrendsUtilizationCard     `json:"utilization"`
+	AgentsAndSkills *TrendsAgentsAndSkillsCard `json:"agents_and_skills"`
 }
 
 // =============================================================================
@@ -106,6 +107,14 @@ type TrendsUtilizationCard struct {
 type DailyUtilizationPoint struct {
 	Date           string   `json:"date"`            // YYYY-MM-DD
 	UtilizationPct *float64 `json:"utilization_pct"` // nil if no sessions that day
+}
+
+// TrendsAgentsAndSkillsCard provides agent and skill usage summary across sessions.
+type TrendsAgentsAndSkillsCard struct {
+	TotalAgentInvocations int                    `json:"total_agent_invocations"`
+	TotalSkillInvocations int                    `json:"total_skill_invocations"`
+	AgentStats            map[string]*AgentStats `json:"agent_stats"`
+	SkillStats            map[string]*SkillStats `json:"skill_stats"`
 }
 
 // =============================================================================

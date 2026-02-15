@@ -59,6 +59,12 @@ func TestGetTrends_EmptyResults(t *testing.T) {
 	if response.Cards.Tools == nil {
 		t.Error("expected Tools card to be non-nil")
 	}
+
+	if response.Cards.AgentsAndSkills == nil {
+		t.Error("expected AgentsAndSkills card to be non-nil")
+	} else if response.Cards.AgentsAndSkills.TotalAgentInvocations != 0 {
+		t.Errorf("AgentsAndSkills.TotalAgentInvocations = %d, want 0", response.Cards.AgentsAndSkills.TotalAgentInvocations)
+	}
 }
 
 func TestGetTrends_WithSessions(t *testing.T) {
@@ -148,6 +154,27 @@ func TestGetTrends_WithSessions(t *testing.T) {
 		t.Fatalf("UpsertCards (tools) failed: %v", err)
 	}
 
+	// Insert agents and skills card for session 1
+	agentsCard1 := &analytics.AgentsAndSkillsCardRecord{
+		SessionID:        sessionID1,
+		Version:          analytics.AgentsAndSkillsCardVersion,
+		ComputedAt:       time.Now().UTC(),
+		UpToLine:         100,
+		AgentInvocations: 5,
+		SkillInvocations: 3,
+		AgentStats: map[string]*analytics.AgentStats{
+			"Explore": {Success: 3, Errors: 0},
+			"Plan":    {Success: 2, Errors: 0},
+		},
+		SkillStats: map[string]*analytics.SkillStats{
+			"commit": {Success: 2, Errors: 1},
+		},
+	}
+	err = store.UpsertCards(ctx, &analytics.Cards{AgentsAndSkills: agentsCard1})
+	if err != nil {
+		t.Fatalf("UpsertCards (agents session 1) failed: %v", err)
+	}
+
 	// Get trends
 	now := time.Now().UTC()
 	req := analytics.TrendsRequest{
@@ -191,6 +218,27 @@ func TestGetTrends_WithSessions(t *testing.T) {
 	}
 	if response.Cards.Tools.TotalErrors != 2 {
 		t.Errorf("TotalErrors = %d, want 2", response.Cards.Tools.TotalErrors)
+	}
+
+	// Check agents and skills aggregation
+	if response.Cards.AgentsAndSkills == nil {
+		t.Fatal("expected AgentsAndSkills card to be non-nil")
+	}
+	if response.Cards.AgentsAndSkills.TotalAgentInvocations != 5 {
+		t.Errorf("TotalAgentInvocations = %d, want 5", response.Cards.AgentsAndSkills.TotalAgentInvocations)
+	}
+	if response.Cards.AgentsAndSkills.TotalSkillInvocations != 3 {
+		t.Errorf("TotalSkillInvocations = %d, want 3", response.Cards.AgentsAndSkills.TotalSkillInvocations)
+	}
+	if explore, ok := response.Cards.AgentsAndSkills.AgentStats["Explore"]; !ok {
+		t.Error("expected AgentStats to contain 'Explore'")
+	} else if explore.Success != 3 {
+		t.Errorf("Explore.Success = %d, want 3", explore.Success)
+	}
+	if commit, ok := response.Cards.AgentsAndSkills.SkillStats["commit"]; !ok {
+		t.Error("expected SkillStats to contain 'commit'")
+	} else if commit.Errors != 1 {
+		t.Errorf("commit.Errors = %d, want 1", commit.Errors)
 	}
 }
 
@@ -549,5 +597,190 @@ func TestGetTrends_DifferentUsers(t *testing.T) {
 	}
 	if response2.SessionCount != 0 {
 		t.Errorf("User 2 SessionCount = %d, want 0", response2.SessionCount)
+	}
+}
+
+func TestGetTrends_AgentsAndSkillsAggregation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-agents@test.com", "Trends Agents User")
+	ctx := context.Background()
+
+	sessionID1 := testutil.CreateTestSession(t, env, user.ID, "test-session-agents-1")
+	sessionID2 := testutil.CreateTestSession(t, env, user.ID, "test-session-agents-2")
+	sessionID3 := testutil.CreateTestSession(t, env, user.ID, "test-session-agents-3")
+
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Session 1: agents and skills
+	err := store.UpsertCards(ctx, &analytics.Cards{
+		AgentsAndSkills: &analytics.AgentsAndSkillsCardRecord{
+			SessionID:        sessionID1,
+			Version:          analytics.AgentsAndSkillsCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         100,
+			AgentInvocations: 5,
+			SkillInvocations: 3,
+			AgentStats: map[string]*analytics.AgentStats{
+				"Explore": {Success: 3, Errors: 1},
+				"Plan":    {Success: 1, Errors: 0},
+			},
+			SkillStats: map[string]*analytics.SkillStats{
+				"commit":    {Success: 2, Errors: 0},
+				"review-pr": {Success: 1, Errors: 0},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards (session 1) failed: %v", err)
+	}
+
+	// Session 2: same agent names should merge
+	err = store.UpsertCards(ctx, &analytics.Cards{
+		AgentsAndSkills: &analytics.AgentsAndSkillsCardRecord{
+			SessionID:        sessionID2,
+			Version:          analytics.AgentsAndSkillsCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         50,
+			AgentInvocations: 8,
+			SkillInvocations: 2,
+			AgentStats: map[string]*analytics.AgentStats{
+				"Explore": {Success: 5, Errors: 0},
+				"Bash":    {Success: 3, Errors: 0},
+			},
+			SkillStats: map[string]*analytics.SkillStats{
+				"commit": {Success: 1, Errors: 1},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards (session 2) failed: %v", err)
+	}
+
+	// Session 3: no agents and skills card (should not affect totals)
+	_ = sessionID3
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartDate:     now.Add(-7 * 24 * time.Hour),
+		EndDate:       now.Add(24 * time.Hour),
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+
+	response, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends failed: %v", err)
+	}
+
+	if response.Cards.AgentsAndSkills == nil {
+		t.Fatal("expected AgentsAndSkills card to be non-nil")
+	}
+
+	card := response.Cards.AgentsAndSkills
+
+	// Check totals: 5+8 = 13 agents, 3+2 = 5 skills
+	if card.TotalAgentInvocations != 13 {
+		t.Errorf("TotalAgentInvocations = %d, want 13", card.TotalAgentInvocations)
+	}
+	if card.TotalSkillInvocations != 5 {
+		t.Errorf("TotalSkillInvocations = %d, want 5", card.TotalSkillInvocations)
+	}
+
+	// Check agent stats merging: Explore = (3+1) + (5+0) = 8 success, 1 error
+	if explore, ok := card.AgentStats["Explore"]; !ok {
+		t.Error("expected AgentStats to contain 'Explore'")
+	} else {
+		if explore.Success != 8 {
+			t.Errorf("Explore.Success = %d, want 8", explore.Success)
+		}
+		if explore.Errors != 1 {
+			t.Errorf("Explore.Errors = %d, want 1", explore.Errors)
+		}
+	}
+
+	// Check Plan only from session 1
+	if plan, ok := card.AgentStats["Plan"]; !ok {
+		t.Error("expected AgentStats to contain 'Plan'")
+	} else if plan.Success != 1 {
+		t.Errorf("Plan.Success = %d, want 1", plan.Success)
+	}
+
+	// Check Bash only from session 2
+	if bash, ok := card.AgentStats["Bash"]; !ok {
+		t.Error("expected AgentStats to contain 'Bash'")
+	} else if bash.Success != 3 {
+		t.Errorf("Bash.Success = %d, want 3", bash.Success)
+	}
+
+	// Check skill stats merging: commit = (2+0) + (1+1) = 3 success, 1 error
+	if commit, ok := card.SkillStats["commit"]; !ok {
+		t.Error("expected SkillStats to contain 'commit'")
+	} else {
+		if commit.Success != 3 {
+			t.Errorf("commit.Success = %d, want 3", commit.Success)
+		}
+		if commit.Errors != 1 {
+			t.Errorf("commit.Errors = %d, want 1", commit.Errors)
+		}
+	}
+
+	// Check review-pr only from session 1
+	if reviewPR, ok := card.SkillStats["review-pr"]; !ok {
+		t.Error("expected SkillStats to contain 'review-pr'")
+	} else if reviewPR.Success != 1 {
+		t.Errorf("review-pr.Success = %d, want 1", reviewPR.Success)
+	}
+}
+
+func TestGetTrends_AgentsAndSkillsEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-agents-empty@test.com", "Trends Agents Empty User")
+	ctx := context.Background()
+
+	// Create a session with no agents_and_skills card
+	_ = testutil.CreateTestSession(t, env, user.ID, "test-session-no-agents")
+
+	store := analytics.NewStore(env.DB.Conn())
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartDate:     now.Add(-7 * 24 * time.Hour),
+		EndDate:       now.Add(24 * time.Hour),
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+
+	response, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends failed: %v", err)
+	}
+
+	// AgentsAndSkills should be non-nil but with zero totals and empty maps
+	if response.Cards.AgentsAndSkills == nil {
+		t.Fatal("expected AgentsAndSkills card to be non-nil")
+	}
+	if response.Cards.AgentsAndSkills.TotalAgentInvocations != 0 {
+		t.Errorf("TotalAgentInvocations = %d, want 0", response.Cards.AgentsAndSkills.TotalAgentInvocations)
+	}
+	if response.Cards.AgentsAndSkills.TotalSkillInvocations != 0 {
+		t.Errorf("TotalSkillInvocations = %d, want 0", response.Cards.AgentsAndSkills.TotalSkillInvocations)
+	}
+	if len(response.Cards.AgentsAndSkills.AgentStats) != 0 {
+		t.Errorf("AgentStats length = %d, want 0", len(response.Cards.AgentsAndSkills.AgentStats))
+	}
+	if len(response.Cards.AgentsAndSkills.SkillStats) != 0 {
+		t.Errorf("SkillStats length = %d, want 0", len(response.Cards.AgentsAndSkills.SkillStats))
 	}
 }

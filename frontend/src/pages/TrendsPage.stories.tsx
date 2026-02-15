@@ -7,6 +7,7 @@ import {
   TrendsActivityCard,
   TrendsToolsCard,
   TrendsUtilizationCard,
+  TrendsAgentsAndSkillsCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
 import type { TrendsResponse } from '@/schemas/api';
@@ -71,6 +72,7 @@ function TrendsPagePresentational({
               <TrendsActivityCard data={data.cards.activity} />
               <TrendsToolsCard data={data.cards.tools} />
               <TrendsUtilizationCard data={data.cards.utilization} />
+              <TrendsAgentsAndSkillsCard data={data.cards.agents_and_skills} />
             </div>
           )}
         </div>
@@ -166,6 +168,20 @@ const defaultMockData: TrendsResponse = {
     utilization: {
       daily_utilization: mockDailyUtilization,
     },
+    agents_and_skills: {
+      total_agent_invocations: 45,
+      total_skill_invocations: 20,
+      agent_stats: {
+        Explore: { success: 20, errors: 1 },
+        Plan: { success: 12, errors: 0 },
+        Bash: { success: 8, errors: 2 },
+      },
+      skill_stats: {
+        commit: { success: 10, errors: 1 },
+        'review-pr': { success: 5, errors: 0 },
+        'frontend-design': { success: 4, errors: 0 },
+      },
+    },
   },
 };
 
@@ -249,6 +265,7 @@ export const HighUsage: Story = {
             { date: '2024-01-14', utilization_pct: 58.7 },
           ],
         },
+        agents_and_skills: null,
       },
     },
     repos: ['org/repo-web', 'org/repo-api', 'org/repo-cli'],
@@ -304,6 +321,7 @@ export const SingleSession: Story = {
         utilization: {
           daily_utilization: [{ date: '2024-01-14', utilization_pct: 75.0 }],
         },
+        agents_and_skills: null,
       },
     },
     repos: ['org/repo-web'],
@@ -354,6 +372,7 @@ export const EmptyState: Story = {
         activity: null,
         tools: null,
         utilization: null,
+        agents_and_skills: null,
       },
     },
     repos: [],
