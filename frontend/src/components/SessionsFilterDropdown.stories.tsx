@@ -47,14 +47,15 @@ function SessionsFilterDropdownInteractive({
   repos = sampleRepos,
   branches = sampleBranches,
   hostnames = sampleHostnames,
-  owners = [],
+  owners = sampleOwners,
   prs = samplePRs,
   repoCounts = sampleRepoCounts,
   branchCounts = sampleBranchCounts,
   hostnameCounts = sampleHostnameCounts,
-  ownerCounts = {},
+  ownerCounts = sampleOwnerCounts,
   prCounts = samplePRCounts,
   totalCount = 80,
+  currentUserEmail = 'alice@example.com',
   initialRepo = null,
   initialBranch = null,
   initialHostname = null,
@@ -74,6 +75,7 @@ function SessionsFilterDropdownInteractive({
   ownerCounts?: Record<string, number>;
   prCounts?: Record<string, number>;
   totalCount?: number;
+  currentUserEmail?: string | null;
   initialRepo?: string | null;
   initialBranch?: string | null;
   initialHostname?: string | null;
@@ -134,6 +136,7 @@ function SessionsFilterDropdownInteractive({
       prCounts={prCounts}
       totalCount={totalCount}
       searchQuery={searchQuery}
+      currentUserEmail={currentUserEmail}
       onRepoClick={handleRepoClick}
       onBranchClick={handleBranchClick}
       onHostnameClick={handleHostnameClick}
@@ -253,24 +256,35 @@ export const NoHostnames: Story = {
   },
 };
 
-export const SharedWithMeView: Story = {
+export const WithOwnerSelected: Story = {
   args: {
-    hostnames: [],
-    hostnameCounts: {},
-    owners: sampleOwners,
-    ownerCounts: sampleOwnerCounts,
-    totalCount: 45,
+    initialOwner: 'alice@example.com',
   },
 };
 
-export const WithOwnerSelected: Story = {
+export const ManyOwners: Story = {
   args: {
-    hostnames: [],
-    hostnameCounts: {},
-    owners: sampleOwners,
-    ownerCounts: sampleOwnerCounts,
-    initialOwner: 'alice@example.com',
-    totalCount: 45,
+    owners: [
+      'alice@example.com',
+      'bob@company.org',
+      'carol@dev.io',
+      'dave@startup.co',
+      'eve@bigcorp.com',
+      'frank@freelance.dev',
+      'grace@university.edu',
+      'heidi@agency.io',
+    ],
+    ownerCounts: {
+      'alice@example.com': 22,
+      'bob@company.org': 15,
+      'carol@dev.io': 8,
+      'dave@startup.co': 12,
+      'eve@bigcorp.com': 6,
+      'frank@freelance.dev': 3,
+      'grace@university.edu': 9,
+      'heidi@agency.io': 4,
+    },
+    totalCount: 79,
   },
 };
 

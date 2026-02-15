@@ -118,10 +118,9 @@ interface SessionListTableProps {
   sessions: MockSession[];
   sortColumn?: string;
   sortDirection?: 'asc' | 'desc';
-  showSharedWithMe?: boolean;
 }
 
-function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirection = 'desc', showSharedWithMe = false }: SessionListTableProps) {
+function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirection = 'desc' }: SessionListTableProps) {
   return (
     <div className={styles.card}>
       <div className={styles.sessionsTable}>
@@ -146,7 +145,7 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
           </thead>
           <tbody>
             {sessions.map((session) => (
-              <tr key={session.id} className={styles.clickableRow}>
+              <tr key={session.id} className={`${styles.clickableRow} ${session.shared_by_email ? styles.sharedRow : ''}`}>
                 <td className={styles.sessionCell}>
                   <div className={session.custom_title || session.summary || session.first_user_message ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
                     {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
@@ -173,7 +172,7 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                         #{pr}
                       </Chip>
                     ))}
-                    {!showSharedWithMe && session.hostname && (
+                    {session.hostname && (
                       <Chip icon={ComputerIcon} variant="green">
                         {session.hostname}
                       </Chip>
@@ -320,9 +319,8 @@ const mockSharedSessions: MockSession[] = [
   },
 ];
 
-export const SharedWithMe: Story = {
+export const WithSharedSessions: Story = {
   args: {
-    sessions: mockSharedSessions,
-    showSharedWithMe: true,
+    sessions: [...mockSessions.slice(0, 2), ...mockSharedSessions],
   },
 };

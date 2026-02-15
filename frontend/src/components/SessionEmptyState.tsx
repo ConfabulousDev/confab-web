@@ -1,22 +1,6 @@
 import styles from './SessionEmptyState.module.css';
 
-type SessionEmptyStateVariant = 'no-shared' | 'no-matches';
-
-interface SessionEmptyStateProps {
-  variant: SessionEmptyStateVariant;
-}
-
-function SessionEmptyState({ variant }: SessionEmptyStateProps) {
-  if (variant === 'no-shared') {
-    return (
-      <div className={styles.container}>
-        <div className={styles.icon}>📨</div>
-        <p className={styles.message}>No sessions have been shared with you yet.</p>
-      </div>
-    );
-  }
-
-  // variant === 'no-matches'
+function SessionEmptyState() {
   return (
     <div className={styles.container}>
       <div className={styles.icon}>🔍</div>

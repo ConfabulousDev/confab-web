@@ -103,7 +103,7 @@ func TestHostnameUsernamePrivacy_SessionList(t *testing.T) {
 	}
 
 	t.Run("Viewer does NOT see hostname/username for shared sessions (private share)", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), viewer.ID)
 		req = req.WithContext(reqCtx)
 
@@ -167,7 +167,7 @@ func TestHostnameUsernamePrivacy_SessionListSystemShare(t *testing.T) {
 	}
 
 	t.Run("Viewer does NOT see hostname/username for system shared sessions", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), viewer.ID)
 		req = req.WithContext(reqCtx)
 

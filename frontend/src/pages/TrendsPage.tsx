@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle, useTrends } from '@/hooks';
-import { useSessionsPolling } from '@/hooks/useSessionsPolling';
+import { useSessionsFetch } from '@/hooks/useSessionsFetch';
 import PageHeader from '@/components/PageHeader';
 import TrendsFilters, { type TrendsFiltersValue, type DateRange } from '@/components/trends/TrendsFilters';
 import {
@@ -115,7 +115,7 @@ function TrendsPage() {
   }, []); // Only run once on mount
 
   // Get sessions for repo list
-  const { sessions } = useSessionsPolling('owned', true);
+  const { sessions } = useSessionsFetch();
 
   // Derive unique repos from sessions
   const repos = useMemo(() => {

@@ -21,6 +21,7 @@ interface SessionsFilterDropdownProps {
   prCounts: Record<string, number>;
   totalCount: number;
   searchQuery: string;
+  currentUserEmail: string | null;
   onRepoClick: (repo: string | null) => void;
   onBranchClick: (branch: string | null) => void;
   onHostnameClick: (hostname: string | null) => void;
@@ -49,6 +50,7 @@ function SessionsFilterDropdown({
   prCounts,
   totalCount,
   searchQuery,
+  currentUserEmail,
   onRepoClick,
   onBranchClick,
   onHostnameClick,
@@ -60,7 +62,7 @@ function SessionsFilterDropdown({
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
   // Check if any filters are active
-  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null || selectedHostname !== null || (owners.length > 0 && selectedOwner !== null) || selectedPR !== null || commitSearch !== '' || searchQuery !== '';
+  const hasActiveFilters = selectedRepo !== null || selectedBranch !== null || selectedHostname !== null || selectedOwner !== null || selectedPR !== null || commitSearch !== '' || searchQuery !== '';
 
   // Get visible branches (only show branches with sessions when a repo is selected)
   const visibleBranches = selectedRepo
@@ -103,21 +105,48 @@ function SessionsFilterDropdown({
 
             {/* All Sessions option */}
             <button
-              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname && !(owners.length > 0 && selectedOwner) && !selectedPR && !commitSearch ? styles.selected : ''}`}
+              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname && !selectedOwner && !selectedPR && !commitSearch && !searchQuery ? styles.selected : ''}`}
               onClick={() => {
                 onRepoClick(null);
                 onHostnameClick(null);
                 onOwnerClick(null);
                 onPRClick(null);
                 onCommitSearchChange('');
+                onSearchChange('');
               }}
             >
-              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname && !(owners.length > 0 && selectedOwner) && !selectedPR && !commitSearch ? styles.checked : ''}`}>
+              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname && !selectedOwner && !selectedPR && !commitSearch && !searchQuery ? styles.checked : ''}`}>
                 {CheckIcon}
               </span>
               <span className={styles.filterLabel}>All Sessions</span>
               <span className={styles.filterCount}>{totalCount}</span>
             </button>
+
+            {/* Owner section */}
+            {owners.length > 0 && (
+              <>
+                <div className={styles.sectionDivider} />
+                <div className={styles.sectionLabel}>Owner</div>
+                <div className={styles.scrollableSection}>
+                  {owners.map((owner) => (
+                    <button
+                      key={owner.toLowerCase()}
+                      className={`${styles.filterItem} ${selectedOwner?.toLowerCase() === owner.toLowerCase() ? styles.selected : ''}`}
+                      onClick={() => onOwnerClick(selectedOwner?.toLowerCase() === owner.toLowerCase() ? null : owner)}
+                    >
+                      <span className={`${styles.checkbox} ${selectedOwner?.toLowerCase() === owner.toLowerCase() ? styles.checked : ''}`}>
+                        {CheckIcon}
+                      </span>
+                      <span className={styles.iconWrapper}>{UserIcon}</span>
+                      <span className={styles.filterLabel}>
+                        {currentUserEmail && owner.toLowerCase() === currentUserEmail.toLowerCase() ? `${owner} (you)` : owner}
+                      </span>
+                      <span className={styles.filterCount}>{ownerCounts[owner.toLowerCase()] || 0}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* Repos section */}
             {repos.length > 0 && (
@@ -226,27 +255,6 @@ function SessionsFilterDropdown({
               </>
             )}
 
-            {/* Owner section */}
-            {owners.length > 0 && (
-              <>
-                <div className={styles.sectionDivider} />
-                <div className={styles.sectionLabel}>Owner</div>
-                {owners.map((owner) => (
-                  <button
-                    key={owner.toLowerCase()}
-                    className={`${styles.filterItem} ${selectedOwner?.toLowerCase() === owner.toLowerCase() ? styles.selected : ''}`}
-                    onClick={() => onOwnerClick(selectedOwner?.toLowerCase() === owner.toLowerCase() ? null : owner)}
-                  >
-                    <span className={`${styles.checkbox} ${selectedOwner?.toLowerCase() === owner.toLowerCase() ? styles.checked : ''}`}>
-                      {CheckIcon}
-                    </span>
-                    <span className={styles.iconWrapper}>{UserIcon}</span>
-                    <span className={styles.filterLabel}>{owner}</span>
-                    <span className={styles.filterCount}>{ownerCounts[owner.toLowerCase()] || 0}</span>
-                  </button>
-                ))}
-              </>
-            )}
           </div>
         </div>
       )}

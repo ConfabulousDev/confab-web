@@ -5,7 +5,6 @@ import type { SortDirection } from '@/utils';
 type SortColumn = 'summary' | 'external_id' | 'last_sync_time';
 
 interface SessionFilters {
-  showSharedWithMe: boolean;
   selectedRepo: string | null;
   selectedBranch: string | null;
   selectedHostname: string | null;
@@ -19,7 +18,6 @@ interface SessionFilters {
 }
 
 interface SessionFiltersActions {
-  setShowSharedWithMe: (value: boolean) => void;
   setSelectedBranch: (value: string | null) => void;
   setSelectedPR: (value: string | null) => void;
   setSelectedCommit: (value: string | null) => void;
@@ -34,7 +32,6 @@ interface SessionFiltersActions {
 }
 
 const PARAM_KEYS = {
-  shared: 'shared',
   repo: 'repo',
   branch: 'branch',
   hostname: 'hostname',
@@ -64,7 +61,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
   const [showEmptySessions, setShowEmptySessions] = useState(false);
 
   const filters = useMemo<SessionFilters>(() => {
-    const sharedParam = searchParams.get(PARAM_KEYS.shared);
     const repoParam = searchParams.get(PARAM_KEYS.repo);
     const branchParam = searchParams.get(PARAM_KEYS.branch);
     const hostnameParam = searchParams.get(PARAM_KEYS.hostname);
@@ -76,7 +72,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     const dirParam = searchParams.get(PARAM_KEYS.dir);
 
     return {
-      showSharedWithMe: sharedParam === '1',
       selectedRepo: repoParam,
       selectedBranch: branchParam,
       selectedHostname: hostnameParam,
@@ -108,23 +103,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
       );
     },
     [setSearchParams]
-  );
-
-  const setShowSharedWithMe = useCallback(
-    (value: boolean) => {
-      updateParams({
-        [PARAM_KEYS.shared]: value ? '1' : null,
-        // Reset all filters when switching tabs
-        [PARAM_KEYS.repo]: null,
-        [PARAM_KEYS.branch]: null,
-        [PARAM_KEYS.hostname]: null,
-        [PARAM_KEYS.owner]: null,
-        [PARAM_KEYS.pr]: null,
-        [PARAM_KEYS.commit]: null,
-        [PARAM_KEYS.q]: null,
-      });
-    },
-    [updateParams]
   );
 
   const setSelectedBranch = useCallback(
@@ -224,7 +202,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
 
   return {
     ...filters,
-    setShowSharedWithMe,
     setSelectedBranch,
     setSelectedPR,
     setSelectedCommit,

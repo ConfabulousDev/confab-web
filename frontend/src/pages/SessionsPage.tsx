@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSessionsPolling, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
+import { useSessionsFetch, useAuth, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { formatDuration, sortData } from '@/utils';
 import PageHeader from '@/components/PageHeader';
@@ -12,7 +12,7 @@ import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon, RefreshIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
 // Strip .git suffix from repo URLs for clean GitHub links
@@ -23,8 +23,6 @@ function SessionsPage() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const {
-    showSharedWithMe,
-    setShowSharedWithMe,
     selectedRepo,
     selectedBranch,
     setSelectedBranch,
@@ -51,16 +49,21 @@ function SessionsPage() {
     toggleShowEmptySessions();
   }, [toggleShowEmptySessions]);
   useKeyboardShortcut('mod+shift+e', handleToggleEmptySessions);
-  const { sessions, loading, error } = useSessionsPolling(showSharedWithMe ? 'shared' : 'owned');
+  const { sessions, loading, error, refetch } = useSessionsFetch();
+  const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
+
+  // Helper to derive owner email for a session
+  const getOwnerEmail = useCallback((s: typeof sessions[0]) => {
+    return s.is_owner ? (user?.email ?? '') : (s.shared_by_email ?? '');
+  }, [user?.email]);
 
   // Helper to check if a session passes the base filters (excluding repo/branch)
   const passesBaseFilters = useCallback((s: typeof sessions[0]) => {
     if (s.total_lines <= 0) return false;
     if (!showEmptySessions && !s.summary && !s.first_user_message) return false;
-    if (showSharedWithMe ? s.is_owner : !s.is_owner) return false;
     return true;
-  }, [showSharedWithMe, showEmptySessions]);
+  }, [showEmptySessions]);
 
   // Get unique repos, branches, hostnames, owners, and PRs for filtering
   const { repos, branches, hostnames, owners, prs } = useMemo(() => {
@@ -69,26 +72,35 @@ function SessionsPage() {
     const hostnameSet = new Set<string>();
     const ownerMap = new Map<string, string>();
     const prSet = new Set<string>();
+    const currentUserEmail = user?.email?.toLowerCase() ?? '';
 
     sessions.forEach((s) => {
       if (!passesBaseFilters(s)) return;
       if (s.git_repo) repoSet.add(s.git_repo);
       if (s.git_branch) branchSet.add(s.git_branch);
       if (s.hostname) hostnameSet.add(s.hostname);
-      if (s.shared_by_email) {
-        const key = s.shared_by_email.toLowerCase();
-        if (!ownerMap.has(key)) ownerMap.set(key, s.shared_by_email);
+      const ownerEmail = getOwnerEmail(s);
+      if (ownerEmail) {
+        const key = ownerEmail.toLowerCase();
+        if (!ownerMap.has(key)) ownerMap.set(key, ownerEmail);
       }
       s.github_prs?.forEach((pr) => prSet.add(pr));
     });
+
+    // Sort owners: current user first, then alphabetically
+    const sortedOwners = Array.from(ownerMap.entries())
+      .sort(([a], [b]) => {
+        if (a === currentUserEmail) return -1;
+        if (b === currentUserEmail) return 1;
+        return a.localeCompare(b);
+      })
+      .map(([, display]) => display);
 
     return {
       repos: Array.from(repoSet).sort(),
       branches: Array.from(branchSet).sort(),
       hostnames: Array.from(hostnameSet).sort(),
-      owners: Array.from(ownerMap.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([, display]) => display),
+      owners: sortedOwners,
       // Sort PRs numerically descending (newest first), with fallback for non-numeric values
       prs: Array.from(prSet).sort((a, b) => {
         const numA = Number(a);
@@ -99,7 +111,7 @@ function SessionsPage() {
         return numB - numA;
       }),
     };
-  }, [sessions, passesBaseFilters]);
+  }, [sessions, passesBaseFilters, getOwnerEmail, user?.email]);
 
   // Sorted and filtered sessions
   const sortedSessions = useMemo(() => {
@@ -113,8 +125,6 @@ function SessionsPage() {
         if (s.total_lines <= 0) return false;
         // Filter out empty sessions (no title) unless showEmptySessions is enabled
         if (!showEmptySessions && !s.summary && !s.first_user_message) return false;
-        // Show only owned or only shared based on toggle
-        if (showSharedWithMe ? s.is_owner : !s.is_owner) return false;
         // Filter by selected repo
         if (selectedRepo && s.git_repo !== selectedRepo) return false;
         // Filter by selected branch
@@ -122,7 +132,7 @@ function SessionsPage() {
         // Filter by selected hostname
         if (selectedHostname && s.hostname !== selectedHostname) return false;
         // Filter by selected owner
-        if (selectedOwner && s.shared_by_email?.toLowerCase() !== selectedOwner.toLowerCase()) return false;
+        if (selectedOwner && getOwnerEmail(s).toLowerCase() !== selectedOwner.toLowerCase()) return false;
         // Filter by selected PR
         if (selectedPR && !s.github_prs?.includes(selectedPR)) return false;
         // Filter by commit search (prefix match)
@@ -139,7 +149,7 @@ function SessionsPage() {
         return true;
       },
     });
-  }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch, selectedHostname, selectedOwner, selectedPR, selectedCommit, searchQuery, showEmptySessions]);
+  }, [sessions, sortColumn, sortDirection, selectedRepo, selectedBranch, selectedHostname, selectedOwner, selectedPR, selectedCommit, searchQuery, showEmptySessions, getOwnerEmail]);
 
   // Count sessions per repo/branch
   const repoCounts = useMemo(() => {
@@ -183,7 +193,7 @@ function SessionsPage() {
     const counts: Record<string, number> = {};
     sessions.forEach((s) => {
       if (passesBaseFilters(s)) {
-        const owner = s.shared_by_email || '';
+        const owner = getOwnerEmail(s);
         if (owner) {
           const key = owner.toLowerCase();
           counts[key] = (counts[key] || 0) + 1;
@@ -191,7 +201,7 @@ function SessionsPage() {
       }
     });
     return counts;
-  }, [sessions, passesBaseFilters]);
+  }, [sessions, passesBaseFilters, getOwnerEmail]);
 
   const prCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -222,55 +232,51 @@ function SessionsPage() {
       <div className={styles.mainContent}>
         <PageHeader
           leftContent={
-            <>
-              <div className={styles.tabs}>
-                <button
-                  className={`${styles.tab} ${!showSharedWithMe ? styles.active : ''}`}
-                  onClick={() => setShowSharedWithMe(false)}
-                >
-                  Mine
-                </button>
-                <button
-                  className={`${styles.tab} ${showSharedWithMe ? styles.active : ''}`}
-                  onClick={() => setShowSharedWithMe(true)}
-                >
-                  Shared with me
-                </button>
-              </div>
-              <span className={styles.sessionCount}>
-                  {sortedSessions.length} session{sortedSessions.length !== 1 ? 's' : ''}
-                  {showEmptySessions && <span className={styles.devIndicator}> (showing empty)</span>}
-                </span>
-            </>
+            <span className={styles.sessionCount}>
+              {sortedSessions.length} session{sortedSessions.length !== 1 ? 's' : ''}
+              {showEmptySessions && <span className={styles.devIndicator}> (showing empty)</span>}
+            </span>
           }
           actions={
-            <SessionsFilterDropdown
-              repos={repos}
-              branches={branches}
-              hostnames={showSharedWithMe ? [] : hostnames}
-              owners={showSharedWithMe ? owners : []}
-              prs={prs}
-              selectedRepo={selectedRepo}
-              selectedBranch={selectedBranch}
-              selectedHostname={selectedHostname}
-              selectedOwner={selectedOwner}
-              selectedPR={selectedPR}
-              commitSearch={selectedCommit || ''}
-              repoCounts={repoCounts}
-              branchCounts={branchCounts}
-              hostnameCounts={hostnameCounts}
-              ownerCounts={ownerCounts}
-              prCounts={prCounts}
-              totalCount={totalCount}
-              searchQuery={searchQuery}
-              onRepoClick={handleRepoClick}
-              onBranchClick={(branch) => setSelectedBranch(branch)}
-              onHostnameClick={handleHostnameClick}
-              onOwnerClick={handleOwnerClick}
-              onPRClick={(pr) => setSelectedPR(pr)}
-              onCommitSearchChange={(commit) => setSelectedCommit(commit || null)}
-              onSearchChange={setSearchQuery}
-            />
+            <div className={styles.headerActions}>
+              <button
+                className={styles.refreshBtn}
+                onClick={() => refetch()}
+                title="Refresh sessions"
+                aria-label="Refresh sessions"
+                disabled={loading}
+              >
+                {RefreshIcon}
+              </button>
+              <SessionsFilterDropdown
+                repos={repos}
+                branches={branches}
+                hostnames={hostnames}
+                owners={owners}
+                prs={prs}
+                selectedRepo={selectedRepo}
+                selectedBranch={selectedBranch}
+                selectedHostname={selectedHostname}
+                selectedOwner={selectedOwner}
+                selectedPR={selectedPR}
+                commitSearch={selectedCommit || ''}
+                repoCounts={repoCounts}
+                branchCounts={branchCounts}
+                hostnameCounts={hostnameCounts}
+                ownerCounts={ownerCounts}
+                prCounts={prCounts}
+                totalCount={totalCount}
+                searchQuery={searchQuery}
+                currentUserEmail={user?.email ?? null}
+                onRepoClick={handleRepoClick}
+                onBranchClick={(branch) => setSelectedBranch(branch)}
+                onHostnameClick={handleHostnameClick}
+                onOwnerClick={handleOwnerClick}
+                onPRClick={(pr) => setSelectedPR(pr)}
+                onCommitSearchChange={(commit) => setSelectedCommit(commit || null)}
+                onSearchChange={setSearchQuery}
+              />
+            </div>
           }
         />
 
@@ -292,9 +298,9 @@ function SessionsPage() {
               <p className={styles.loading}>Loading sessions...</p>
             ) : sortedSessions.length === 0 ? (
               selectedRepo || selectedBranch || selectedHostname || selectedOwner || selectedPR || selectedCommit || searchQuery ? (
-                <SessionEmptyState variant="no-matches" />
-              ) : showSharedWithMe ? (
-                <SessionEmptyState variant="no-shared" />
+                <SessionEmptyState />
+              ) : sessions.some(s => s.is_owner) ? (
+                <SessionEmptyState />
               ) : (
                 <Quickstart />
               )
@@ -323,7 +329,7 @@ function SessionsPage() {
                     {sortedSessions.map((session) => (
                       <tr
                         key={session.id}
-                        className={styles.clickableRow}
+                        className={`${styles.clickableRow} ${!session.is_owner ? styles.sharedRow : ''}`}
                         onClick={() => handleRowClick(session)}
                       >
                         <td className={styles.sessionCell}>
@@ -371,7 +377,7 @@ function SessionsPage() {
                                 {session.github_commits[0].slice(0, 7)}
                               </Chip>
                             )}
-                            {!showSharedWithMe && session.hostname && (
+                            {session.hostname && (
                               <Chip icon={ComputerIcon} variant="green" copyValue={session.hostname}>
                                 {session.hostname}
                               </Chip>

@@ -98,6 +98,12 @@
   border-color: var(--color-selected-border);
 }
 
+/* Scrollable section for long lists */
+.scrollableSection {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 /* Section divider and label */
 .sectionDivider {
   height: 1px;

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -13,11 +12,8 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
-// HandleListSessions lists all sessions for the authenticated user
-// Query parameters:
-//   - view: "owned" (default) or "shared" to select which sessions to list
-//
-// Supports conditional requests via ETag/If-None-Match for efficient polling.
+// HandleListSessions lists all sessions visible to the authenticated user.
+// Returns owned sessions and shared sessions (private + system shares) with deduplication.
 func HandleListSessions(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -29,43 +25,14 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Parse view parameter
-		var view db.SessionListView
-		switch r.URL.Query().Get("view") {
-		case "shared":
-			view = db.SessionListViewSharedWithMe
-		case "owned", "":
-			view = db.SessionListViewOwned
-		default:
-			respondError(w, http.StatusBadRequest, "Invalid view parameter, must be 'owned' or 'shared'")
-			return
-		}
-
 		// Create context with timeout for database operation
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Get last modified timestamp for ETag
-		lastModified, err := database.GetSessionsLastModified(ctx, userID, view)
-		if err != nil {
-			log.Error("Failed to get sessions last modified", "error", err)
-			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
-			return
-		}
-
-		// Generate ETag from last modified timestamp
-		etag := fmt.Sprintf(`"%d"`, lastModified.UnixNano())
-
-		// Check If-None-Match header for conditional request
-		if r.Header.Get("If-None-Match") == etag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-
 		// Get sessions from database
-		sessions, err := database.ListUserSessions(ctx, userID, view)
+		sessions, err := database.ListUserSessions(ctx, userID)
 		if err != nil {
-			log.Error("Failed to list sessions", "error", err, "view", view)
+			log.Error("Failed to list sessions", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}
@@ -75,7 +42,6 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			sessions = make([]db.SessionListItem, 0)
 		}
 
-		w.Header().Set("ETag", etag)
 		respondJSON(w, http.StatusOK, sessions)
 	}
 }

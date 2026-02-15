@@ -13,7 +13,7 @@ function HomePage() {
   // Redirect logged-in users to sessions
   useEffect(() => {
     if (!loading && user) {
-      navigate('/sessions', { replace: true });
+      navigate(user.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions', { replace: true });
     }
   }, [loading, user, navigate]);
 

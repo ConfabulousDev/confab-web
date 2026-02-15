@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/lib/pq"
 	"go.opentelemetry.io/otel/attribute"
@@ -43,73 +42,21 @@ func extractRepoName(repoURL string) *string {
 	return &repoURL
 }
 
-// ListUserSessions returns sessions for a user based on the specified view.
+// ListUserSessions returns all sessions visible to a user (owned + shared) with deduplication.
 // Uses sync_files table for file counts and sync state.
 //
-// NOTE: The SharedWithMe query is intentionally complex (6 CTEs, ~140 lines). While this
+// NOTE: The unified query is intentionally complex (6 CTEs, ~140 lines). While this
 // could be simplified with a database view, keeping the SQL inline in Go code provides
 // better tooling (IDE support, refactoring, grep, version control diffs) and makes the
 // query logic explicit and self-contained. The duplication across CTEs is acceptable.
-func (db *DB) ListUserSessions(ctx context.Context, userID int64, view SessionListView) ([]SessionListItem, error) {
+func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionListItem, error) {
 	ctx, span := tracer.Start(ctx, "db.list_user_sessions",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
-			attribute.String("session.view", string(view)),
 		))
 	defer span.End()
 
-	var query string
-	switch view {
-	case SessionListViewOwned:
-		// Only owned sessions - using sync_files for file counts
-		query = `
-			SELECT
-				s.id,
-				s.external_id,
-				s.first_seen,
-				COALESCE(sf_stats.file_count, 0) as file_count,
-				s.last_message_at,
-				s.custom_title,
-				s.suggested_session_title,
-				s.summary,
-				s.first_user_message,
-				s.session_type,
-				COALESCE(sf_stats.total_lines, 0) as total_lines,
-				s.git_info->>'repo_url' as git_repo_url,
-				s.git_info->>'branch' as git_branch,
-				COALESCE((
-					SELECT array_agg(ref ORDER BY created_at)
-					FROM session_github_links
-					WHERE session_id = s.id AND link_type = 'pull_request'
-				), ARRAY[]::text[]) as github_prs,
-				COALESCE((
-					SELECT array_agg(ref ORDER BY created_at DESC)
-					FROM session_github_links
-					WHERE session_id = s.id AND link_type = 'commit'
-				), ARRAY[]::text[]) as github_commits,
-				true as is_owner,
-				'owner' as access_type,
-				NULL::text as shared_by_email,
-				s.hostname,
-				s.username
-			FROM sessions s
-			LEFT JOIN (
-				SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-				FROM sync_files
-				GROUP BY session_id
-			) sf_stats ON s.id = sf_stats.session_id
-			WHERE s.user_id = $1
-			ORDER BY COALESCE(s.last_message_at, s.first_seen) DESC
-		`
-	case SessionListViewSharedWithMe:
-		// Shared sessions (private shares + system shares), includes owned for deduplication
-		query = db.buildSharedWithMeQuery()
-	default:
-		err := fmt.Errorf("invalid session list view: %s", view)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
-	}
+	query := db.buildSharedWithMeQuery()
 
 	rows, err := db.conn.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -371,75 +318,6 @@ func (db *DB) buildSharedWithMeQuery() string {
 			) deduped
 			ORDER BY COALESCE(last_message_at, first_seen) DESC
 		`
-}
-
-// GetSessionsLastModified returns the most recent last_sync_at timestamp for polling ETag.
-//
-// TODO: If this becomes a bottleneck at scale, consider maintaining a separate
-// user_sessions_metadata table with a denormalized last_sync_at column, updated on each sync.
-func (db *DB) GetSessionsLastModified(ctx context.Context, userID int64, view SessionListView) (time.Time, error) {
-	ctx, span := tracer.Start(ctx, "db.get_sessions_last_modified",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("session.view", string(view)),
-		))
-	defer span.End()
-
-	var query string
-	switch view {
-	case SessionListViewOwned:
-		query = `
-			SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
-			FROM sessions
-			WHERE user_id = $1
-		`
-	case SessionListViewSharedWithMe:
-		if db.ShareAllSessions {
-			// All non-owned sessions are visible — no share rows needed
-			query = `
-				SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
-				FROM sessions
-				WHERE user_id != $1
-			`
-		} else {
-			query = `
-				SELECT COALESCE(MAX(last_sync_at), '1970-01-01'::timestamp)
-				FROM (
-					-- Private shares
-					SELECT s.last_sync_at
-					FROM sessions s
-					JOIN session_shares sh ON s.id = sh.session_id
-					JOIN session_share_recipients sr ON sh.id = sr.share_id
-					WHERE sr.user_id = $1
-					  AND s.user_id != $1
-					  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-					UNION ALL
-					-- System shares
-					SELECT s.last_sync_at
-					FROM sessions s
-					JOIN session_shares sh ON s.id = sh.session_id
-					JOIN session_share_system sss ON sh.id = sss.share_id
-					WHERE s.user_id != $1
-					  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				) combined
-			`
-		}
-	default:
-		err := fmt.Errorf("invalid session list view: %s", view)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return time.Time{}, err
-	}
-
-	var lastModified time.Time
-	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&lastModified)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return time.Time{}, fmt.Errorf("failed to get sessions last modified: %w", err)
-	}
-
-	return lastModified, nil
 }
 
 // GetSessionDetail returns detailed information about a session by its UUID primary key

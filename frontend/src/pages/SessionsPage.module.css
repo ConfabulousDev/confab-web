@@ -23,35 +23,6 @@
   overflow-y: auto;
 }
 
-/* Tabs styling */
-.tabs {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.tab {
-  padding: var(--spacing-xs) var(--spacing-md);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  font-size: var(--font-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.tab:hover {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-dark);
-}
-
-.tab.active {
-  background: var(--color-bg-secondary);
-  border-color: var(--color-border-dark);
-  color: var(--color-text-primary);
-  font-weight: var(--font-medium);
-}
-
 .sessionCount {
   font-size: var(--font-sm);
   color: var(--color-text-muted);
@@ -60,6 +31,42 @@
 .devIndicator {
   color: var(--color-warning);
   font-style: italic;
+}
+
+/* Header actions (refresh + filter buttons) */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.refreshBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.refreshBtn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refreshBtn svg {
+  display: block;
 }
 
 /* Card container */
@@ -122,6 +129,14 @@
 
 .clickableRow:hover {
   background: var(--color-bg-hover);
+}
+
+.sharedRow {
+  background-color: color-mix(in srgb, var(--color-accent) 5%, transparent);
+}
+
+.sharedRow:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg-hover));
 }
 
 .sessionCell {

@@ -275,70 +275,6 @@ class APIClient {
     return validateResponse(schema, response, endpoint);
   }
 
-  /**
-   * Make a conditional GET request with ETag support.
-   * Returns { data, etag } on success, or { data: null, etag } on 304 Not Modified.
-   * @param endpoint - API endpoint
-   * @param schema - Zod schema to validate response
-   * @param currentEtag - Current ETag value (from previous request)
-   */
-  async getConditional<T>(
-    endpoint: string,
-    schema: z.ZodType<T>,
-    currentEtag: string | null
-  ): Promise<{ data: T | null; etag: string | null }> {
-    const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
-
-    const headers: HeadersInit = {};
-    if (currentEtag) {
-      headers['If-None-Match'] = currentEtag;
-    }
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        credentials: 'include',
-      });
-
-      // Handle 304 Not Modified
-      if (response.status === 304) {
-        return { data: null, etag: currentEtag };
-      }
-
-      // Handle authentication errors
-      if (response.status === 401) {
-        handleAuthFailure();
-        throw new AuthenticationError();
-      }
-
-      // Handle other HTTP errors
-      if (!response.ok) {
-        let errorData: unknown;
-        try {
-          errorData = await response.json();
-        } catch {
-          errorData = await response.text();
-        }
-        throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
-      }
-
-      // Parse and validate response
-      const data = await response.json();
-      const validated = validateResponse(schema, data, endpoint);
-      const etag = response.headers.get('ETag');
-
-      return { data: validated, etag };
-    } catch (error) {
-      if (error instanceof APIError || error instanceof AuthenticationError) {
-        throw error;
-      }
-      if (error instanceof TypeError) {
-        throw new NetworkError('Network request failed. Please check your connection.');
-      }
-      throw error;
-    }
-  }
 }
 
 // Singleton instance
@@ -346,21 +282,10 @@ const api = new APIClient();
 
 // Export validated API methods for common endpoints
 // All responses are validated with Zod schemas at runtime
-export type SessionListView = 'owned' | 'shared';
 
 export const sessionsAPI = {
-  list: (view: SessionListView = 'owned'): Promise<Session[]> =>
-    api.getValidated(`/sessions?view=${view}`, SessionListSchema),
-
-  /**
-   * List sessions with ETag support for efficient polling.
-   * Returns null data if content hasn't changed (304 response).
-   */
-  listWithETag: (
-    view: SessionListView = 'owned',
-    currentEtag: string | null = null
-  ): Promise<{ data: Session[] | null; etag: string | null }> =>
-    api.getConditional(`/sessions?view=${view}`, SessionListSchema, currentEtag),
+  list: (): Promise<Session[]> =>
+    api.getValidated('/sessions', SessionListSchema),
 
   get: (sessionId: string): Promise<SessionDetail> =>
     api.getValidated(`/sessions/${sessionId}`, SessionDetailSchema),

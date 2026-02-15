@@ -14,25 +14,9 @@ const meta: Meta<typeof SessionEmptyState> = {
       </div>
     ),
   ],
-  argTypes: {
-    variant: {
-      control: 'select',
-      options: ['no-shared', 'no-matches'],
-    },
-  },
 };
 
 export default meta;
 type Story = StoryObj<typeof SessionEmptyState>;
 
-export const NoShared: Story = {
-  args: {
-    variant: 'no-shared',
-  },
-};
-
-export const NoMatches: Story = {
-  args: {
-    variant: 'no-matches',
-  },
-};
+export const Default: Story = {};

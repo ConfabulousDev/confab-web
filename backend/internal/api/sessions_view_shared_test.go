@@ -38,8 +38,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 	sessionB1 := "session-b1"
 	sessionB1PK := testutil.CreateTestSession(t, env, userB.ID, sessionB1)
 
-	t.Run("User B sees only their own session by default", func(t *testing.T) {
-		// Test with view=owned (default)
+	t.Run("User B sees only their own session before shares are created", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), userB.ID)
 		req = req.WithContext(reqCtx)
@@ -87,8 +86,8 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		t.Fatalf("Failed to create recipient: %v", err)
 	}
 
-	t.Run("User B sees private share when view=shared", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+	t.Run("User B sees private share in unified sessions list", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), userB.ID)
 		req = req.WithContext(reqCtx)
 
@@ -161,7 +160,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 		}
 
 		// User A should NOT see the expired share from userB
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), userA.ID)
 		req = req.WithContext(reqCtx)
 
@@ -185,7 +184,7 @@ func TestListSessionsWithSharedSessions(t *testing.T) {
 
 	t.Run("User does not see duplicates if they own a session with a share", func(t *testing.T) {
 		// User A should only see their 2 sessions once each, not duplicated
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), userA.ID)
 		req = req.WithContext(reqCtx)
 
@@ -238,7 +237,7 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 	}
 
 	t.Run("System share appears in shared sessions list", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), regularUser.ID)
 		req = req.WithContext(reqCtx)
 
@@ -291,29 +290,8 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 		}
 	})
 
-	t.Run("System share does not appear with view=owned", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
-		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), regularUser.ID)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler := api.HandleListSessions(env.DB)
-		handler.ServeHTTP(rr, req)
-
-		var sessions []db.SessionListItem
-		json.Unmarshal(rr.Body.Bytes(), &sessions)
-
-		// Should only see owned session
-		if len(sessions) != 1 {
-			t.Fatalf("Expected 1 session (owned only), got %d", len(sessions))
-		}
-		if sessions[0].ExternalID != userSession {
-			t.Errorf("Expected owned session %s, got %s", userSession, sessions[0].ExternalID)
-		}
-	})
-
 	t.Run("Owner does not see duplicate from system share", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), admin.ID)
 		req = req.WithContext(reqCtx)
 
@@ -356,7 +334,7 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 		}
 
 		// regularUser now has access via both system share AND private share
-		req, _ := http.NewRequest("GET", "/api/v1/sessions?view=shared", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), regularUser.ID)
 		req = req.WithContext(reqCtx)
 

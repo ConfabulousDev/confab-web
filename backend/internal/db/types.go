@@ -11,14 +11,6 @@ const MaxAPIKeysPerUser = 500
 // MaxCustomTitleLength is the maximum length of a custom session title
 const MaxCustomTitleLength = 255
 
-// SessionListView specifies which sessions to query
-type SessionListView string
-
-const (
-	SessionListViewOwned        SessionListView = "owned"
-	SessionListViewSharedWithMe SessionListView = "shared-with-me"
-)
-
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
 	ID                    string     `json:"id"`                                // UUID primary key for URL routing

@@ -310,18 +310,10 @@ X-CSRF-Token: <token>
 
 #### List Sessions
 ```
-GET /api/v1/sessions?view=owned
-GET /api/v1/sessions?view=shared
+GET /api/v1/sessions
 ```
 
-| Query Param | Type | Default | Description |
-|-------------|------|---------|-------------|
-| `view` | string | `owned` | Which sessions to list: `owned` or `shared` |
-
-Supports conditional requests for efficient polling:
-- **Request header:** `If-None-Match: "<etag>"`
-- **Response header:** `ETag: "<timestamp>"`
-- Returns `304 Not Modified` if content unchanged
+Returns all sessions visible to the user (owned + shared) with deduplication. Owned sessions show full details including hostname/username; shared sessions show `null` for those privacy-sensitive fields.
 
 **Response:**
 ```json
