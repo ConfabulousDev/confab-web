@@ -57,7 +57,7 @@ function Header() {
 
       <nav className={styles.nav}>
         <Link to={user?.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions'} className={styles.navLink}>Sessions</Link>
-        <Link to="/trends" className={styles.navLink}>Trends</Link>
+        <Link to="/trends" className={styles.navLink}>Personal Trends</Link>
       </nav>
 
       <div className={styles.actions}>

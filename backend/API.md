@@ -310,10 +310,10 @@ X-CSRF-Token: <token>
 
 #### List Sessions
 ```
-GET /api/v1/sessions?repo=<repos>&branch=<branches>&owner=<owners>&pr=<prs>&q=<search>&page=<n>
+GET /api/v1/sessions?repo=<repos>&branch=<branches>&owner=<owners>&pr=<prs>&q=<search>&cursor=<cursor>
 ```
 
-Returns paginated sessions visible to the user (owned + shared) with server-side filtering and faceted filter counts.
+Returns cursor-paginated sessions visible to the user (owned + shared) with server-side filtering and pre-materialized filter options.
 
 **Query Parameters:**
 | Parameter | Type | Required | Default | Description |
@@ -323,7 +323,7 @@ Returns paginated sessions visible to the user (owned + shared) with server-side
 | `owner` | string | No | all | Comma-separated owner emails |
 | `pr` | string | No | all | Comma-separated PR numbers |
 | `q` | string | No | none | Search query (matches title, summary, first message, commit SHA) |
-| `page` | int | No | 1 | Page number (1-indexed, must be >= 1) |
+| `cursor` | string | No | none | Opaque cursor for pagination (from `next_cursor` of previous response) |
 
 **Response:**
 ```json
@@ -350,39 +350,26 @@ Returns paginated sessions visible to the user (owned + shared) with server-side
       "shared_by_email": null
     }
   ],
-  "total": 142,
-  "page": 1,
+  "has_more": true,
+  "next_cursor": "MjAyNS0wMS0xNVQxMTozMDowMFp8dXVpZA",
   "page_size": 50,
   "filter_options": {
-    "repos": [
-      { "value": "org/repo1", "count": 80 },
-      { "value": "org/repo2", "count": 62 }
-    ],
-    "branches": [
-      { "value": "main", "count": 100 },
-      { "value": "feature-x", "count": 42 }
-    ],
-    "owners": [
-      { "value": "alice@example.com", "count": 90 },
-      { "value": "bob@example.com", "count": 52 }
-    ],
-    "total": 142
+    "repos": ["org/repo1", "org/repo2"],
+    "branches": ["main", "feature-x"],
+    "owners": ["alice@example.com", "bob@example.com"]
   }
 }
 ```
 
 **Notes:**
-- **Breaking change**: Response is now an object (was previously a bare array).
 - `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
 - `github_prs` contains linked PR refs (ordered by creation time ascending).
 - `github_commits` contains linked commit SHAs (ordered by creation time descending, so latest is first).
 - **Page size** is fixed at 50 sessions per page.
+- **Cursor pagination**: Pass `next_cursor` from the response as `cursor` param to get the next page. When `has_more` is false, there are no more results. `next_cursor` is only present when `has_more` is true.
 - **Visibility filter**: Only sessions with `total_lines > 0` and at least one of `summary` or `first_user_message` are included.
-- **Faceted counts** use an exclude-own-dimension pattern: when filtering by `repo=X`, `filter_options.repos` shows counts for ALL repos (not just X), allowing the UI to display available options. Other dimensions (branches, owners) reflect the repo=X filter.
+- **Filter options** are pre-materialized from lookup tables and the users table. They show all possible values (not affected by active filters). Repos and branches come from append-only lookup tables populated during sync; owners come from all users.
 - **Multiple values** within a filter dimension use OR logic (e.g., `repo=a,b` matches either). Across dimensions, filters use AND logic.
-
-**Errors:**
-- `400` - Invalid page parameter (must be a positive integer)
 
 #### Get Session Detail (Canonical Access)
 ```
@@ -665,7 +652,7 @@ Requires session ownership (web session auth only, no API key).
 
 ---
 
-### Trends (Aggregated Analytics)
+### Personal Trends (Aggregated Analytics)
 
 #### Get Trends
 ```

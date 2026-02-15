@@ -39,7 +39,7 @@ function TrendsPagePresentational({
     <div className={styles.pageWrapper}>
       <div className={styles.mainContent}>
         <PageHeader
-          leftContent={<h1 className={styles.title}>Trends</h1>}
+          leftContent={<h1 className={styles.title}>Personal Trends</h1>}
           actions={
             <TrendsFilters
               repos={repos}

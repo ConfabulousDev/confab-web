@@ -101,7 +101,7 @@ function serializeFiltersToURL(filters: TrendsFiltersValue): URLSearchParams {
 }
 
 function TrendsPage() {
-  useDocumentTitle('Trends');
+  useDocumentTitle('Personal Trends');
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse initial filters from URL or use defaults
@@ -118,7 +118,7 @@ function TrendsPage() {
   const [repos, setRepos] = useState<string[]>([]);
   useEffect(() => {
     sessionsAPI.list().then((result) => {
-      setRepos(result.filter_options.repos.map((r) => r.value).sort());
+      setRepos(result.filter_options.repos.sort());
     }).catch(() => {
       // Silently fail - repos dropdown will just be empty
     });
@@ -188,7 +188,7 @@ function TrendsPage() {
     <div className={styles.pageWrapper}>
       <div className={styles.mainContent}>
         <PageHeader
-          leftContent={<h1 className={styles.title}>Trends</h1>}
+          leftContent={<h1 className={styles.title}>Personal Trends</h1>}
           actions={
             <TrendsFilters
               repos={repos}
