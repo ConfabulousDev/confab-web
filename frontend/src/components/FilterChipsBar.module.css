@@ -117,8 +117,9 @@
 .dimensionDropdown {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  right: 0;
   min-width: 240px;
+  max-width: min(400px, 90vw);
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
