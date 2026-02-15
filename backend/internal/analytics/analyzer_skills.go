@@ -59,5 +59,19 @@ func (a *SkillsAnalyzer) Analyze(fc *FileCollection) (*SkillsResult, error) {
 		}
 	}
 
+	// Second pass: detect command-expansion skill invocations
+	// These are user messages with <command-name>/skillname</command-name> in content
+	for _, line := range fc.Main.Lines {
+		skillName := line.GetCommandExpansionSkillName()
+		if skillName == "" {
+			continue
+		}
+		if result.SkillStats[skillName] == nil {
+			result.SkillStats[skillName] = &SkillStats{}
+		}
+		result.TotalInvocations++
+		result.SkillStats[skillName].Success++ // Command expansions are always success
+	}
+
 	return result, nil
 }

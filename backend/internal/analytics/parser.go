@@ -3,6 +3,7 @@ package analytics
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -240,6 +241,35 @@ func (l *TranscriptLine) IsToolResultMessage() bool {
 // They have isMeta: true and sourceToolUseID linking to the Skill tool call.
 func (l *TranscriptLine) IsSkillExpansionMessage() bool {
 	return l.Type == "user" && l.IsMeta && l.SourceToolUseID != ""
+}
+
+// IsCommandExpansionMessage returns true if this is a command-expansion skill invocation.
+// These are user messages where the content string contains <command-name>/skillname</command-name>.
+func (l *TranscriptLine) IsCommandExpansionMessage() bool {
+	if l.Type != "user" || l.Message == nil {
+		return false
+	}
+	content, ok := l.Message.Content.(string)
+	if !ok {
+		return false
+	}
+	return strings.Contains(content, "<command-name>")
+}
+
+// GetCommandExpansionSkillName extracts the skill name from a command-expansion message.
+// Returns empty string if not a command-expansion message.
+func (l *TranscriptLine) GetCommandExpansionSkillName() string {
+	if !l.IsCommandExpansionMessage() {
+		return ""
+	}
+	content := l.Message.Content.(string)
+	start := strings.Index(content, "<command-name>")
+	end := strings.Index(content, "</command-name>")
+	if start == -1 || end == -1 || end <= start {
+		return ""
+	}
+	name := content[start+len("<command-name>") : end]
+	return strings.TrimPrefix(name, "/")
 }
 
 // HasTextContent returns true if the message contains text content.

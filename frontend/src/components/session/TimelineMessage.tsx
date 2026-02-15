@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
-import { isTextBlock, isFileHistorySnapshot } from '@/types';
+import { isTextBlock, isFileHistorySnapshot, isUserMessage } from '@/types';
+import { isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/schemas/transcript';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
 import styles from './TimelineMessage.module.css';
@@ -117,7 +118,11 @@ function getContentBlocks(message: TranscriptLine): ContentBlock[] {
     case 'user': {
       const content = message.message.content;
       if (typeof content === 'string') {
-        return [{ type: 'text', text: content }];
+        // Strip command-expansion XML tags for clean display
+        const text = isUserMessage(message) && isCommandExpansionMessage(message)
+          ? stripCommandExpansionTags(content)
+          : content;
+        return [{ type: 'text', text }];
       }
       return content;
     }
@@ -209,6 +214,11 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected }: 
   // Get agent ID for sub-agent messages
   const agentId = message.type === 'assistant' ? message.agentId : undefined;
 
+  // Get skill name for command-expansion messages
+  const skillName = isUserMessage(message) && isCommandExpansionMessage(message)
+    ? getCommandExpansionSkillName(message)
+    : null;
+
   // Check if this is from a different role than the previous message
   const previousRole = previousMessage ? getRoleLabel(previousMessage) : null;
   const isDifferentRole = previousRole !== roleLabel;
@@ -227,6 +237,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected }: 
         <div className={styles.headerLeft}>
           <span className={styles.role}>{roleLabel}</span>
           {agentId && <span className={styles.agentBadge}>{agentId}</span>}
+          {skillName && <span className={styles.skillBadge}>/{skillName}</span>}
           {timestamp && <span className={styles.timestamp}>{formatTimestamp(timestamp)}</span>}
         </div>
         <div className={styles.headerRight}>

@@ -39,4 +39,7 @@ export {
   hasThinking,
   usesTools,
   isToolResultMessage,
+  isCommandExpansionMessage,
+  getCommandExpansionSkillName,
+  stripCommandExpansionTags,
 } from '@/schemas/transcript';

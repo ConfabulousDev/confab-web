@@ -509,3 +509,34 @@ export function isSkillExpansionMessage(message: UserMessage): boolean {
   return message.isMeta === true && message.sourceToolUseID !== undefined;
 }
 
+/**
+ * Check if user message is a command-expansion skill invocation.
+ * These have string content containing <command-name>/skillname</command-name>.
+ */
+export function isCommandExpansionMessage(message: UserMessage): boolean {
+  const content = message.message.content;
+  return typeof content === 'string' && content.includes('<command-name>');
+}
+
+/**
+ * Extract skill name from a command-expansion message.
+ * Returns null if not a command-expansion message.
+ */
+export function getCommandExpansionSkillName(message: UserMessage): string | null {
+  const content = message.message.content;
+  if (typeof content !== 'string') return null;
+  const match = content.match(/<command-name>\/?(.+?)<\/command-name>/);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Strip command-expansion XML tags from message content for clean display.
+ * Removes <command-message>...</command-message> and <command-name>...</command-name> tags.
+ */
+export function stripCommandExpansionTags(content: string): string {
+  return content
+    .replace(/<command-message>[\s\S]*?<\/command-message>/g, '')
+    .replace(/<command-name>[\s\S]*?<\/command-name>/g, '')
+    .trim();
+}
+

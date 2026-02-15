@@ -122,6 +122,16 @@
   white-space: nowrap;
 }
 
+/* Skill badge for command-expansion messages */
+.skillBadge {
+  font-size: var(--font-xs);
+  padding: 1px var(--spacing-xs);
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: var(--radius-sm);
+  color: var(--color-selected);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
 /* Timestamp */
 .timestamp {
   font-size: var(--font-xs);
