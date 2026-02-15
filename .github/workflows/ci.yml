@@ -61,7 +61,26 @@ jobs:
 
   backend-integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: db-session-sync
+            run: go test -timeout 15m -run "Session|Sync" ./internal/db/...
+          - shard: db-user-oauth
+            run: go test -timeout 15m -run "User|OAuth|Password|SmartRecap" ./internal/db/...
+          - shard: db-auth
+            run: go test -timeout 15m -run "APIKey|Device|Share|Web" ./internal/db/...
+          - shard: api
+            run: go test -timeout 15m ./internal/api/...
+          - shard: auth
+            run: go test -timeout 15m ./internal/auth/...
+          - shard: other
+            run: go test -timeout 15m ./internal/analytics/... ./internal/storage/... ./internal/admin/... ./internal/anthropic/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
+
+    name: backend-integration (${{ matrix.shard }})
 
     steps:
       - name: Checkout
@@ -74,7 +93,7 @@ jobs:
 
       - name: Integration tests
         working-directory: backend
-        run: go test -timeout 30m ./...
+        run: ${{ matrix.run }}
 
   docker-smoke-test:
     runs-on: ubuntu-latest
