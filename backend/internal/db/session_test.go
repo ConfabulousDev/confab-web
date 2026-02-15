@@ -1782,6 +1782,334 @@ func TestListUserSessionsPaginated_NonShareAll_WithPrivateShare(t *testing.T) {
 	}
 }
 
+// TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped is a comprehensive suite
+// verifying that filter options only contain values from sessions visible to the requesting user.
+func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	// Isolation: filter options must not leak repos/branches/owners from other users' sessions.
+	t.Run("Isolation", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		alice := testutil.CreateTestUser(t, env, "alice@scoped.com", "Alice")
+		bob := testutil.CreateTestUser(t, env, "bob@scoped.com", "Bob")
+
+		testutil.CreateTestSessionFull(t, env, alice.ID, "alice-iso-1", testutil.TestSessionFullOpts{
+			Summary: "Alice work",
+			RepoURL: "https://github.com/org/repo-a.git",
+			Branch:  "main",
+		})
+		testutil.CreateTestSessionFull(t, env, bob.ID, "bob-iso-1", testutil.TestSessionFullOpts{
+			Summary: "Bob work",
+			RepoURL: "https://github.com/org/repo-b.git",
+			Branch:  "develop",
+		})
+
+		ctx := context.Background()
+
+		// Alice should only see her own values
+		result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 1 || result.FilterOptions.Repos[0] != "org/repo-a" {
+			t.Errorf("Expected repos=[org/repo-a], got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Branches) != 1 || result.FilterOptions.Branches[0] != "main" {
+			t.Errorf("Expected branches=[main], got %v", result.FilterOptions.Branches)
+		}
+		if len(result.FilterOptions.Owners) != 1 || result.FilterOptions.Owners[0] != "alice@scoped.com" {
+			t.Errorf("Expected owners=[alice@scoped.com], got %v", result.FilterOptions.Owners)
+		}
+
+		// Bob should only see his own values
+		result, err = env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query for Bob failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 1 || result.FilterOptions.Repos[0] != "org/repo-b" {
+			t.Errorf("Expected repos=[org/repo-b], got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Branches) != 1 || result.FilterOptions.Branches[0] != "develop" {
+			t.Errorf("Expected branches=[develop], got %v", result.FilterOptions.Branches)
+		}
+		if len(result.FilterOptions.Owners) != 1 || result.FilterOptions.Owners[0] != "bob@scoped.com" {
+			t.Errorf("Expected owners=[bob@scoped.com], got %v", result.FilterOptions.Owners)
+		}
+	})
+
+	// PrivateShare: when a session is privately shared, the recipient should see
+	// the shared session's repos/branches/owners in their filter options.
+	t.Run("PrivateShare", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		alice := testutil.CreateTestUser(t, env, "alice@ps.com", "Alice")
+		bob := testutil.CreateTestUser(t, env, "bob@ps.com", "Bob")
+
+		aliceSessionID := testutil.CreateTestSessionFull(t, env, alice.ID, "alice-ps-1", testutil.TestSessionFullOpts{
+			Summary: "Alice work",
+			RepoURL: "https://github.com/org/repo-a.git",
+			Branch:  "main",
+		})
+		testutil.CreateTestSessionFull(t, env, bob.ID, "bob-ps-1", testutil.TestSessionFullOpts{
+			Summary: "Bob work",
+			RepoURL: "https://github.com/org/repo-b.git",
+			Branch:  "develop",
+		})
+
+		// Share Alice's session with Bob
+		testutil.CreateTestShare(t, env, aliceSessionID, false, nil, []string{"bob@ps.com"})
+
+		ctx := context.Background()
+
+		// Bob should now see both repos, branches, and owners
+		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 2 {
+			t.Errorf("Expected 2 repos, got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Branches) != 2 {
+			t.Errorf("Expected 2 branches, got %v", result.FilterOptions.Branches)
+		}
+		if len(result.FilterOptions.Owners) != 2 {
+			t.Errorf("Expected 2 owners, got %v", result.FilterOptions.Owners)
+		}
+
+		// Alice should still only see her own (she has no shares inbound)
+		result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query for Alice failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 1 {
+			t.Errorf("Expected 1 repo for Alice, got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Owners) != 1 {
+			t.Errorf("Expected 1 owner for Alice, got %v", result.FilterOptions.Owners)
+		}
+	})
+
+	// SystemShare: system-shared sessions should appear in all users' filter options.
+	t.Run("SystemShare", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		alice := testutil.CreateTestUser(t, env, "alice@sys.com", "Alice")
+		bob := testutil.CreateTestUser(t, env, "bob@sys.com", "Bob")
+
+		// Alice creates a session; it gets system-shared
+		aliceSessionID := testutil.CreateTestSessionFull(t, env, alice.ID, "alice-sys-1", testutil.TestSessionFullOpts{
+			Summary: "Alice system-shared",
+			RepoURL: "https://github.com/org/shared-repo.git",
+			Branch:  "feature",
+		})
+		testutil.CreateTestSystemShare(t, env, aliceSessionID, nil)
+
+		// Bob has his own session
+		testutil.CreateTestSessionFull(t, env, bob.ID, "bob-sys-1", testutil.TestSessionFullOpts{
+			Summary: "Bob work",
+			RepoURL: "https://github.com/org/bob-repo.git",
+			Branch:  "main",
+		})
+
+		ctx := context.Background()
+
+		// Bob should see both his own repo AND the system-shared repo
+		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 2 {
+			t.Errorf("Expected 2 repos (own + system-shared), got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Branches) != 2 {
+			t.Errorf("Expected 2 branches, got %v", result.FilterOptions.Branches)
+		}
+		// Owners: bob + alice (system-shared session owned by alice)
+		if len(result.FilterOptions.Owners) != 2 {
+			t.Errorf("Expected 2 owners, got %v", result.FilterOptions.Owners)
+		}
+
+		// Alice sees her own + system-shared (which she owns, so still 1 repo)
+		result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query for Alice failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 1 {
+			t.Errorf("Expected 1 repo for Alice (she owns the system-shared one), got %v", result.FilterOptions.Repos)
+		}
+	})
+
+	// ExpiredSharesExcluded: expired private and system shares must NOT leak filter options.
+	t.Run("ExpiredSharesExcluded", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		alice := testutil.CreateTestUser(t, env, "alice@exp.com", "Alice")
+		bob := testutil.CreateTestUser(t, env, "bob@exp.com", "Bob")
+
+		aliceSessionID := testutil.CreateTestSessionFull(t, env, alice.ID, "alice-exp-1", testutil.TestSessionFullOpts{
+			Summary: "Alice secret work",
+			RepoURL: "https://github.com/org/secret-repo.git",
+			Branch:  "secret-branch",
+		})
+		testutil.CreateTestSessionFull(t, env, bob.ID, "bob-exp-1", testutil.TestSessionFullOpts{
+			Summary: "Bob work",
+			RepoURL: "https://github.com/org/bob-repo.git",
+			Branch:  "main",
+		})
+
+		// Create an expired private share
+		expired := time.Now().Add(-1 * time.Hour)
+		testutil.CreateTestShare(t, env, aliceSessionID, false, &expired, []string{"bob@exp.com"})
+
+		ctx := context.Background()
+
+		// Bob should NOT see Alice's repo (share is expired)
+		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 1 || result.FilterOptions.Repos[0] != "org/bob-repo" {
+			t.Errorf("Expected repos=[org/bob-repo] only (expired share excluded), got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Owners) != 1 || result.FilterOptions.Owners[0] != "bob@exp.com" {
+			t.Errorf("Expected owners=[bob@exp.com] only, got %v", result.FilterOptions.Owners)
+		}
+	})
+
+	// ExpiredSystemShareExcluded: expired system shares must NOT leak filter options.
+	t.Run("ExpiredSystemShareExcluded", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		alice := testutil.CreateTestUser(t, env, "alice@expsys.com", "Alice")
+		bob := testutil.CreateTestUser(t, env, "bob@expsys.com", "Bob")
+
+		aliceSessionID := testutil.CreateTestSessionFull(t, env, alice.ID, "alice-expsys-1", testutil.TestSessionFullOpts{
+			Summary: "Alice system work",
+			RepoURL: "https://github.com/org/sys-repo.git",
+			Branch:  "sys-branch",
+		})
+		testutil.CreateTestSessionFull(t, env, bob.ID, "bob-expsys-1", testutil.TestSessionFullOpts{
+			Summary: "Bob work",
+			RepoURL: "https://github.com/org/bob-repo.git",
+			Branch:  "main",
+		})
+
+		// Create an expired system share
+		expired := time.Now().Add(-1 * time.Hour)
+		testutil.CreateTestSystemShare(t, env, aliceSessionID, &expired)
+
+		ctx := context.Background()
+
+		// Bob should NOT see Alice's repo (system share is expired)
+		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 1 || result.FilterOptions.Repos[0] != "org/bob-repo" {
+			t.Errorf("Expected repos=[org/bob-repo] only (expired system share excluded), got %v", result.FilterOptions.Repos)
+		}
+	})
+
+	// NoGitInfo: sessions without git_info shouldn't cause errors or phantom values.
+	t.Run("NoGitInfo", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "user@nogit.com", "User")
+
+		// Session with no repo/branch
+		testutil.CreateTestSessionFull(t, env, user.ID, "nogit-1", testutil.TestSessionFullOpts{
+			Summary: "No git info session",
+		})
+		// Session with repo only (no branch)
+		testutil.CreateTestSessionFull(t, env, user.ID, "nogit-2", testutil.TestSessionFullOpts{
+			Summary: "Repo only",
+			RepoURL: "https://github.com/org/some-repo.git",
+		})
+
+		ctx := context.Background()
+
+		result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		// Repos: 1 (only the session with a repo_url)
+		if len(result.FilterOptions.Repos) != 1 || result.FilterOptions.Repos[0] != "org/some-repo" {
+			t.Errorf("Expected repos=[org/some-repo], got %v", result.FilterOptions.Repos)
+		}
+		// Branches: 0 (no session has a branch)
+		if len(result.FilterOptions.Branches) != 0 {
+			t.Errorf("Expected branches=[], got %v", result.FilterOptions.Branches)
+		}
+		// Owners: 1 (the user themselves)
+		if len(result.FilterOptions.Owners) != 1 {
+			t.Errorf("Expected 1 owner, got %v", result.FilterOptions.Owners)
+		}
+	})
+
+	// NoSessions: a user with zero sessions should get empty filter options without errors.
+	t.Run("NoSessions", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "empty@nosessions.com", "Empty User")
+
+		ctx := context.Background()
+
+		result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 0 {
+			t.Errorf("Expected repos=[], got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Branches) != 0 {
+			t.Errorf("Expected branches=[], got %v", result.FilterOptions.Branches)
+		}
+		if len(result.FilterOptions.Owners) != 0 {
+			t.Errorf("Expected owners=[], got %v", result.FilterOptions.Owners)
+		}
+	})
+
+	// Deduplication: shared sessions that are also owned shouldn't produce duplicates.
+	t.Run("Deduplication", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		env.CleanDB(t)
+
+		alice := testutil.CreateTestUser(t, env, "alice@dedup.com", "Alice")
+
+		// Alice creates a session and it gets system-shared back to everyone
+		aliceSessionID := testutil.CreateTestSessionFull(t, env, alice.ID, "alice-dedup-1", testutil.TestSessionFullOpts{
+			Summary: "Alice dedup",
+			RepoURL: "https://github.com/org/dedup-repo.git",
+			Branch:  "main",
+		})
+		testutil.CreateTestSystemShare(t, env, aliceSessionID, nil)
+
+		ctx := context.Background()
+
+		// Alice owns the session AND it's system-shared — should still see repo only once
+		result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		if err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if len(result.FilterOptions.Repos) != 1 {
+			t.Errorf("Expected 1 repo (deduped), got %v", result.FilterOptions.Repos)
+		}
+		if len(result.FilterOptions.Owners) != 1 {
+			t.Errorf("Expected 1 owner (deduped), got %v", result.FilterOptions.Owners)
+		}
+	})
+}
+
 // TestListUserSessionsPaginated_NonShareAll_WithFilters tests filtering in non-share-all mode
 func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 	if testing.Short() {

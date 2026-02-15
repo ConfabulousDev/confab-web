@@ -361,8 +361,10 @@ func (db *DB) ListUserSessionsPaginated(ctx context.Context, userID int64, param
 		params.PageSize = DefaultPageSize
 	}
 
-	// Query 1: Pre-materialized filter options (O(distinct values), not O(sessions))
-	filterOptions, err := db.queryFilterOptions(ctx)
+	// Query 1: Filter options
+	// Share-all mode: read from global lookup tables (O(distinct values))
+	// Non-share-all mode: derive from user's visible sessions (O(V), but V is small)
+	filterOptions, err := db.queryFilterOptions(ctx, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -391,9 +393,20 @@ func (db *DB) ListUserSessionsPaginated(ctx context.Context, userID int64, param
 	}, nil
 }
 
-// queryFilterOptions reads pre-materialized filter values from lookup tables.
-// Returns repos from session_repos, branches from session_branches, owners from users table.
-func (db *DB) queryFilterOptions(ctx context.Context) (SessionFilterOptions, error) {
+// queryFilterOptions returns the distinct repo, branch, and owner values available
+// to the given user.
+//
+// Share-all mode: reads from global lookup tables (O(distinct values)).
+// Non-share-all mode: derives from the user's visible sessions (O(V), V is small).
+func (db *DB) queryFilterOptions(ctx context.Context, userID int64) (SessionFilterOptions, error) {
+	if db.ShareAllSessions {
+		return db.queryFilterOptionsGlobal(ctx)
+	}
+	return db.queryFilterOptionsScoped(ctx, userID)
+}
+
+// queryFilterOptionsGlobal reads pre-materialized filter values from global lookup tables.
+func (db *DB) queryFilterOptionsGlobal(ctx context.Context) (SessionFilterOptions, error) {
 	opts := SessionFilterOptions{
 		Repos:    make([]string, 0),
 		Branches: make([]string, 0),
@@ -449,6 +462,82 @@ func (db *DB) queryFilterOptions(ctx context.Context) (SessionFilterOptions, err
 	}
 	if err := rows.Err(); err != nil {
 		return opts, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return opts, nil
+}
+
+// queryFilterOptionsScoped derives filter options from only the sessions visible
+// to the given user (owned + privately shared + system shared).
+func (db *DB) queryFilterOptionsScoped(ctx context.Context, userID int64) (SessionFilterOptions, error) {
+	opts := SessionFilterOptions{
+		Repos:    make([]string, 0),
+		Branches: make([]string, 0),
+		Owners:   make([]string, 0),
+	}
+
+	query := `
+		WITH visible AS (
+			-- Owned sessions
+			SELECT id, user_id, git_info FROM sessions WHERE user_id = $1
+			UNION
+			-- Privately shared with me
+			SELECT s.id, s.user_id, s.git_info FROM sessions s
+			JOIN session_shares sh ON s.id = sh.session_id
+			JOIN session_share_recipients ssr ON sh.id = ssr.share_id
+			WHERE ssr.user_id = $1
+			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+			UNION
+			-- System shared
+			SELECT s.id, s.user_id, s.git_info FROM sessions s
+			JOIN session_shares sh ON s.id = sh.session_id
+			JOIN session_share_system sss ON sh.id = sss.share_id
+			WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
+			  AND s.user_id != $1
+		)
+		SELECT
+			COALESCE(r.repos, ARRAY[]::text[]) as repos,
+			COALESCE(b.branches, ARRAY[]::text[]) as branches,
+			COALESCE(o.owners, ARRAY[]::text[]) as owners
+		FROM
+			(SELECT array_agg(DISTINCT repo ORDER BY repo) as repos
+			 FROM (
+				SELECT regexp_replace(regexp_replace(v.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') as repo
+				FROM visible v
+				WHERE v.git_info->>'repo_url' IS NOT NULL
+			 ) r2
+			) r,
+			(SELECT array_agg(DISTINCT branch ORDER BY branch) as branches
+			 FROM (
+				SELECT v.git_info->>'branch' as branch
+				FROM visible v
+				WHERE v.git_info->>'branch' IS NOT NULL
+			 ) b2
+			) b,
+			(SELECT array_agg(DISTINCT LOWER(u.email) ORDER BY LOWER(u.email)) as owners
+			 FROM visible v
+			 JOIN users u ON v.user_id = u.id
+			) o
+	`
+
+	var repos, branches, owners []string
+	err := db.conn.QueryRowContext(ctx, query, userID).Scan(
+		pq.Array(&repos),
+		pq.Array(&branches),
+		pq.Array(&owners),
+	)
+	if err != nil {
+		return opts, fmt.Errorf("failed to query scoped filter options: %w", err)
+	}
+
+	if repos != nil {
+		opts.Repos = repos
+	}
+	if branches != nil {
+		opts.Branches = branches
+	}
+	if owners != nil {
+		opts.Owners = owners
 	}
 
 	return opts, nil
