@@ -86,6 +86,23 @@ type precomputeDB struct {
 	db *sql.DB
 }
 
+// ResetQuotaIfNewMonth resets a user's smart recap quota if a new calendar month
+// has started. This is the precompute-path equivalent of db.ResetSmartRecapQuotaIfNeeded.
+// It uses an atomic UPDATE with a WHERE clause (no read-then-write race).
+func ResetQuotaIfNewMonth(ctx context.Context, conn *sql.DB, userID int64) error {
+	query := `
+		UPDATE smart_recap_quota
+		SET compute_count = 0, quota_reset_at = NOW()
+		WHERE user_id = $1
+		AND (
+			(quota_reset_at IS NOT NULL AND DATE_TRUNC('month', quota_reset_at) < DATE_TRUNC('month', NOW()))
+			OR (quota_reset_at IS NULL AND last_compute_at IS NOT NULL AND DATE_TRUNC('month', last_compute_at) < DATE_TRUNC('month', NOW()))
+		)
+	`
+	_, err := conn.ExecContext(ctx, query, userID)
+	return err
+}
+
 func (p *precomputeDB) IncrementSmartRecapQuota(ctx context.Context, userID int64) error {
 	query := `
 		INSERT INTO smart_recap_quota (user_id, compute_count, last_compute_at)
@@ -448,6 +465,13 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 	if smartCard.IsUpToDate(session.TotalLines) {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "up_to_date"))
 		return nil
+	}
+
+	// Reset quota if a new month has started (lazy reset, mirrors db.ResetSmartRecapQuotaIfNeeded)
+	if err := ResetQuotaIfNewMonth(ctx, p.db, session.UserID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// Check quota for session owner
