@@ -61,7 +61,7 @@ Configuration is set in `docker-compose.yml`. Key settings:
 | `ADMIN_BOOTSTRAP_PASSWORD` | `localdevpassword` | Initial admin password |
 | `FRONTEND_URL` | `http://localhost:8080` | Frontend URL for redirects |
 
-See `backend/.env.example` for all available options including OAuth, email, and smart recap.
+See [`backend/.env.example`](backend/.env.example) for all available environment variables including OAuth, email, smart recap, worker, and deployment options.
 
 ### Admin Panel
 
