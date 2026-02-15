@@ -32,7 +32,6 @@ describe('useSessionFilters', () => {
       expect(result.current.repos).toEqual([]);
       expect(result.current.branches).toEqual([]);
       expect(result.current.owners).toEqual([]);
-      expect(result.current.prs).toEqual([]);
       expect(result.current.query).toBe('');
       expect(result.current.page).toBe(1);
     });
@@ -53,12 +52,6 @@ describe('useSessionFilters', () => {
       setParams({ owner: 'alice@co.com,bob@co.com' });
       const { result } = renderHook(() => useSessionFilters());
       expect(result.current.owners).toEqual(['alice@co.com', 'bob@co.com']);
-    });
-
-    it('parses comma-separated PR values from URL', () => {
-      setParams({ pr: '123,456' });
-      const { result } = renderHook(() => useSessionFilters());
-      expect(result.current.prs).toEqual(['123', '456']);
     });
 
     it('parses query from URL', () => {
@@ -155,56 +148,6 @@ describe('useSessionFilters', () => {
     });
   });
 
-  describe('addPR / removePR', () => {
-    it('adds a PR number', () => {
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.addPR('123'));
-
-      expect(currentParams.get('pr')).toBe('123');
-    });
-
-    it('does not add duplicate PR', () => {
-      setParams({ pr: '123' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.addPR('123'));
-
-      // Should not have been called since PR already exists
-      expect(mockSetSearchParams).not.toHaveBeenCalled();
-    });
-
-    it('adds second PR to existing', () => {
-      setParams({ pr: '123' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.addPR('456'));
-
-      expect(currentParams.get('pr')).toBe('123,456');
-    });
-
-    it('removes a PR number', () => {
-      setParams({ pr: '123,456' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.removePR('123'));
-
-      expect(currentParams.get('pr')).toBe('456');
-    });
-
-    it('clears pr param when last PR is removed', () => {
-      setParams({ pr: '123' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.removePR('123'));
-
-      expect(currentParams.has('pr')).toBe(false);
-    });
-
-    it('resets page when adding PR', () => {
-      setParams({ page: '2' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.addPR('123'));
-
-      expect(currentParams.has('page')).toBe(false);
-    });
-  });
-
   describe('setQuery', () => {
     it('sets query param', () => {
       const { result } = renderHook(() => useSessionFilters());
@@ -259,7 +202,7 @@ describe('useSessionFilters', () => {
 
   describe('clearAll', () => {
     it('clears all params', () => {
-      setParams({ repo: 'confab-web', branch: 'main', owner: 'alice@co.com', pr: '123', q: 'test', page: '2' });
+      setParams({ repo: 'confab-web', branch: 'main', owner: 'alice@co.com', q: 'test', page: '2' });
       const { result } = renderHook(() => useSessionFilters());
       act(() => result.current.clearAll());
 
@@ -289,11 +232,5 @@ describe('useSessionFilters', () => {
       expect(currentParams.has('page')).toBe(false);
     });
 
-    it('removePR resets page', () => {
-      setParams({ page: '5', pr: '123' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.removePR('123'));
-      expect(currentParams.has('page')).toBe(false);
-    });
   });
 });

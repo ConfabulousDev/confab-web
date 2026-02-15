@@ -20,7 +20,6 @@ function buildParams(filters: SessionFilters): Record<string, string> {
   if (filters.repos.length > 0) params.repo = filters.repos.join(',');
   if (filters.branches.length > 0) params.branch = filters.branches.join(',');
   if (filters.owners.length > 0) params.owner = filters.owners.join(',');
-  if (filters.prs.length > 0) params.pr = filters.prs.join(',');
   if (filters.query) params.q = filters.query;
   if (filters.page > 1) params.page = String(filters.page);
   return params;
@@ -72,7 +71,6 @@ export function useSessionsFetch(filters: SessionFilters): UseSessionsFetchRetur
     repos: filters.repos,
     branches: filters.branches,
     owners: filters.owners,
-    prs: filters.prs,
     page: filters.page,
   });
 

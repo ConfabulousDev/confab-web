@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDropdown } from '@/hooks';
-import { SearchIcon, RepoIcon, BranchIcon, UserIcon, PRIcon, CheckIcon } from './icons';
+import { SearchIcon, RepoIcon, BranchIcon, UserIcon, CheckIcon } from './icons';
 import type { SessionFilterOptions } from '@/schemas/api';
 import styles from './FilterChipsBar.module.css';
 
@@ -9,7 +9,6 @@ interface FilterChipsBarProps {
     repos: string[];
     branches: string[];
     owners: string[];
-    prs: string[];
     query: string;
   };
   filterOptions: SessionFilterOptions | null;
@@ -17,8 +16,6 @@ interface FilterChipsBarProps {
   onToggleRepo: (value: string) => void;
   onToggleBranch: (value: string) => void;
   onToggleOwner: (value: string) => void;
-  onAddPR: (value: string) => void;
-  onRemovePR: (value: string) => void;
   onQueryChange: (value: string) => void;
   onClearAll: () => void;
 }
@@ -108,49 +105,6 @@ function DimensionDropdown({ label, icon, options, selected, currentUserEmail, o
   );
 }
 
-function PRDropdown({ prs, onAdd }: { prs: string[]; onAdd: (value: string) => void }) {
-  const { isOpen, toggle, setIsOpen, containerRef } = useDropdown<HTMLDivElement>();
-  const [input, setInput] = useState('');
-
-  const handleSubmit = () => {
-    const trimmed = input.trim().replace(/^#/, '');
-    if (trimmed && !prs.includes(trimmed)) {
-      onAdd(trimmed);
-      setInput('');
-      setIsOpen(false);
-    }
-  };
-
-  return (
-    <div className={styles.dimensionContainer} ref={containerRef}>
-      <button
-        className={`${styles.dimensionBtn} ${prs.length > 0 ? styles.dimensionActive : ''}`}
-        onClick={toggle}
-        aria-expanded={isOpen}
-      >
-        <span className={styles.dimensionIcon}>{PRIcon}</span>
-        PR
-        {prs.length > 0 && <span className={styles.dimensionBadge}>{prs.length}</span>}
-      </button>
-      {isOpen && (
-        <div className={styles.dimensionDropdown}>
-          <div className={styles.dimensionSearch}>
-            <input
-              type="text"
-              placeholder="PR number (e.g., 123)"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-              className={styles.dimensionSearchInput}
-              autoFocus
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function FilterChipsBar({
   filters,
   filterOptions,
@@ -158,8 +112,6 @@ function FilterChipsBar({
   onToggleRepo,
   onToggleBranch,
   onToggleOwner,
-  onAddPR,
-  onRemovePR,
   onQueryChange,
   onClearAll,
 }: FilterChipsBarProps) {
@@ -167,7 +119,6 @@ function FilterChipsBar({
     filters.repos.length > 0 ||
     filters.branches.length > 0 ||
     filters.owners.length > 0 ||
-    filters.prs.length > 0 ||
     filters.query !== '';
 
   return (
@@ -212,7 +163,6 @@ function FilterChipsBar({
               onToggle={onToggleOwner}
             />
           )}
-          <PRDropdown prs={filters.prs} onAdd={onAddPR} />
         </div>
       </div>
 
@@ -231,11 +181,6 @@ function FilterChipsBar({
           {filters.owners.map((owner) => (
             <button key={`owner:${owner}`} className={styles.chip} onClick={() => onToggleOwner(owner)}>
               <span className={styles.chipDimension}>owner:</span> {owner} <span className={styles.chipRemove}>&times;</span>
-            </button>
-          ))}
-          {filters.prs.map((pr) => (
-            <button key={`pr:${pr}`} className={styles.chip} onClick={() => onRemovePR(pr)}>
-              <span className={styles.chipDimension}>pr:</span> #{pr} <span className={styles.chipRemove}>&times;</span>
             </button>
           ))}
           <button className={styles.clearBtn} onClick={onClearAll}>

@@ -17,7 +17,6 @@ const defaultFilters: SessionFilters = {
   repos: [],
   branches: [],
   owners: [],
-  prs: [],
   query: '',
   page: 1,
 };
@@ -101,7 +100,6 @@ describe('useSessionsFetch', () => {
       repos: ['confab-web'],
       branches: ['main'],
       owners: [],
-      prs: ['123'],
       query: '',
       page: 2,
     };
@@ -115,7 +113,6 @@ describe('useSessionsFetch', () => {
     expect(sessionsAPI.list).toHaveBeenCalledWith({
       repo: 'confab-web',
       branch: 'main',
-      pr: '123',
       page: '2',
     });
   });

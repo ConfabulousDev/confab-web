@@ -28,18 +28,18 @@ function SessionsPage() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const {
-    repos, branches, owners, prs, query, page,
-    toggleRepo, toggleBranch, toggleOwner, addPR, removePR,
+    repos, branches, owners, query, page,
+    toggleRepo, toggleBranch, toggleOwner,
     setQuery, setPage, clearAll,
   } = useSessionFilters();
 
   const { sessions, total, pageSize, filterOptions, loading, error, refetch } = useSessionsFetch({
-    repos, branches, owners, prs, query, page,
+    repos, branches, owners, query, page,
   });
   const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
-  const hasActiveFilters = repos.length > 0 || branches.length > 0 || owners.length > 0 || prs.length > 0 || query !== '';
+  const hasActiveFilters = repos.length > 0 || branches.length > 0 || owners.length > 0 || query !== '';
 
   const handleRowClick = (sessionId: string) => {
     navigate(`/sessions/${sessionId}`);
@@ -69,14 +69,12 @@ function SessionsPage() {
           </div>
 
           <FilterChipsBar
-            filters={{ repos, branches, owners, prs, query }}
+            filters={{ repos, branches, owners, query }}
             filterOptions={filterOptions}
             currentUserEmail={user?.email ?? null}
             onToggleRepo={toggleRepo}
             onToggleBranch={toggleBranch}
             onToggleOwner={toggleOwner}
-            onAddPR={addPR}
-            onRemovePR={removePR}
             onQueryChange={setQuery}
             onClearAll={clearAll}
           />

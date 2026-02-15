@@ -5,7 +5,6 @@ export interface SessionFilters {
   repos: string[];
   branches: string[];
   owners: string[];
-  prs: string[];
   query: string;
   page: number;
 }
@@ -14,8 +13,6 @@ export interface SessionFiltersActions {
   toggleRepo: (value: string) => void;
   toggleBranch: (value: string) => void;
   toggleOwner: (value: string) => void;
-  addPR: (value: string) => void;
-  removePR: (value: string) => void;
   setQuery: (value: string) => void;
   setPage: (page: number) => void;
   clearAll: () => void;
@@ -38,7 +35,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
       repos: parseCommaSeparated(searchParams.get('repo')),
       branches: parseCommaSeparated(searchParams.get('branch')),
       owners: parseCommaSeparated(searchParams.get('owner')),
-      prs: parseCommaSeparated(searchParams.get('pr')),
       query: searchParams.get('q') || '',
       page: Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1),
     };
@@ -100,24 +96,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [searchParams, updateParams]
   );
 
-  const addPR = useCallback(
-    (value: string) => {
-      const current = parseCommaSeparated(searchParams.get('pr'));
-      if (current.includes(value)) return;
-      updateParams({ pr: joinOrEmpty([...current, value]) });
-    },
-    [searchParams, updateParams]
-  );
-
-  const removePR = useCallback(
-    (value: string) => {
-      const current = parseCommaSeparated(searchParams.get('pr'));
-      const next = current.filter((v) => v !== value);
-      updateParams({ pr: joinOrEmpty(next) });
-    },
-    [searchParams, updateParams]
-  );
-
   const setQuery = useCallback(
     (value: string) => {
       updateParams({ q: value || null });
@@ -141,8 +119,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     toggleRepo,
     toggleBranch,
     toggleOwner,
-    addPR,
-    removePR,
     setQuery,
     setPage,
     clearAll,
