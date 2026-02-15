@@ -204,13 +204,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 			// Include suggested session title if available
 			// Use a fresh context since dbCtx may have timed out during Smart Recap generation
-			titleCtx, titleCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-			var suggestedTitle sql.NullString
-			titleQuery := `SELECT suggested_session_title FROM sessions WHERE id = $1`
-			if err := database.Conn().QueryRowContext(titleCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
-				response.SuggestedSessionTitle = &suggestedTitle.String
-			}
-			titleCancel()
+			attachSuggestedTitle(r.Context(), database, sessionID, response)
 
 			respondJSON(w, http.StatusOK, response)
 			return
@@ -317,13 +311,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		// Include suggested session title if available
 		// Use a fresh context since dbCtx may have timed out during Smart Recap generation
-		titleCtx, titleCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-		var suggestedTitle sql.NullString
-		titleQuery := `SELECT suggested_session_title FROM sessions WHERE id = $1`
-		if err := database.Conn().QueryRowContext(titleCtx, titleQuery, sessionID).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
-			response.SuggestedSessionTitle = &suggestedTitle.String
-		}
-		titleCancel()
+		attachSuggestedTitle(r.Context(), database, sessionID, response)
 
 		respondJSON(w, http.StatusOK, response)
 	}
@@ -427,6 +415,18 @@ func attachOrGenerateSmartRecap(
 	} else {
 		// Generation failed - add error for graceful degradation
 		addCardError("Failed to generate smart recap")
+	}
+}
+
+// attachSuggestedTitle fetches and attaches the suggested session title to the response.
+func attachSuggestedTitle(ctx context.Context, database *db.DB, sessionID string, response *analytics.AnalyticsResponse) {
+	titleCtx, titleCancel := context.WithTimeout(ctx, DatabaseTimeout)
+	defer titleCancel()
+	var suggestedTitle sql.NullString
+	if err := database.Conn().QueryRowContext(titleCtx,
+		`SELECT suggested_session_title FROM sessions WHERE id = $1`, sessionID,
+	).Scan(&suggestedTitle); err == nil && suggestedTitle.Valid {
+		response.SuggestedSessionTitle = &suggestedTitle.String
 	}
 }
 
@@ -755,12 +755,10 @@ func downloadTranscriptForSmartRecap(
 			continue
 		}
 		content, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, af.FileName)
-		if err != nil {
+		if err != nil || content == nil {
 			continue
 		}
-		if content != nil {
-			agentContents[agentID] = content
-		}
+		agentContents[agentID] = content
 	}
 
 	// Build FileCollection

@@ -174,14 +174,7 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 		totalSessions += user.SessionCount
 	}
 
-	// Build flash message HTML
-	var flashHTML string
-	if message != "" {
-		flashHTML = fmt.Sprintf(`<div class="flash flash-success">%s</div>`, html.EscapeString(message))
-	}
-	if errorMsg != "" {
-		flashHTML = fmt.Sprintf(`<div class="flash flash-error">%s</div>`, html.EscapeString(errorMsg))
-	}
+	flashHTML := buildFlashHTML(message, errorMsg)
 
 	// Build "New User" button if password auth is enabled
 	var newUserButtonHTML string
@@ -572,6 +565,18 @@ func parseUserID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(idStr, 10, 64)
 }
 
+// buildFlashHTML returns HTML for a success or error flash message.
+// If both are provided, error takes precedence.
+func buildFlashHTML(message, errorMsg string) string {
+	if errorMsg != "" {
+		return fmt.Sprintf(`<div class="flash flash-error">%s</div>`, html.EscapeString(errorMsg))
+	}
+	if message != "" {
+		return fmt.Sprintf(`<div class="flash flash-success">%s</div>`, html.EscapeString(message))
+	}
+	return ""
+}
+
 // HandleSystemSharePage renders the system share creation page
 func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request) {
 	csrfToken := csrf.Token(r)
@@ -581,13 +586,7 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 	errorMsg := r.URL.Query().Get("error")
 	shareURL := r.URL.Query().Get("share_url")
 
-	var flashHTML string
-	if message != "" {
-		flashHTML = fmt.Sprintf(`<div class="flash flash-success">%s</div>`, html.EscapeString(message))
-	}
-	if errorMsg != "" {
-		flashHTML = fmt.Sprintf(`<div class="flash flash-error">%s</div>`, html.EscapeString(errorMsg))
-	}
+	flashHTML := buildFlashHTML(message, errorMsg)
 
 	var shareResultHTML string
 	if shareURL != "" {
@@ -847,13 +846,7 @@ func (h *Handlers) HandleCreateUserPage(w http.ResponseWriter, r *http.Request) 
 	message := r.URL.Query().Get("message")
 	errorMsg := r.URL.Query().Get("error")
 
-	var flashHTML string
-	if message != "" {
-		flashHTML = fmt.Sprintf(`<div class="flash flash-success">%s</div>`, html.EscapeString(message))
-	}
-	if errorMsg != "" {
-		flashHTML = fmt.Sprintf(`<div class="flash flash-error">%s</div>`, html.EscapeString(errorMsg))
-	}
+	flashHTML := buildFlashHTML(message, errorMsg)
 
 	htmlPage := fmt.Sprintf(`<!DOCTYPE html>
 <html>

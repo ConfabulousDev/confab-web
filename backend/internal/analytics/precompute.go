@@ -393,13 +393,10 @@ func (p *Precomputer) downloadTranscript(ctx context.Context, session StaleSessi
 			continue
 		}
 		content, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, af.FileName)
-		if err != nil {
-			// Log but continue - graceful degradation
+		if err != nil || content == nil {
 			continue
 		}
-		if content != nil {
-			agentContents[agentID] = content
-		}
+		agentContents[agentID] = content
 	}
 
 	// Build FileCollection

@@ -21,11 +21,6 @@ func CurrentMonth() string {
 	return time.Now().UTC().Format("2006-01")
 }
 
-// MonthAt returns the month string for a given time in "YYYY-MM" format (UTC).
-func MonthAt(t time.Time) string {
-	return t.UTC().Format("2006-01")
-}
-
 // GetOrCreate retrieves or creates a quota record for a user, atomically resetting
 // the count if the stored month is stale. Uses the current UTC month.
 func GetOrCreate(ctx context.Context, conn *sql.DB, userID int64) (*Quota, error) {

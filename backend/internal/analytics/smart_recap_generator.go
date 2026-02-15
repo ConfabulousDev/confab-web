@@ -91,8 +91,8 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 	})
 
 	genCtx, genCancel := context.WithTimeout(ctx, g.config.GenerationTimeout)
+	defer genCancel()
 	result, err := analyzer.Analyze(genCtx, input.FileCollection, input.CardStats)
-	genCancel()
 
 	if err != nil {
 		span.RecordError(err)
