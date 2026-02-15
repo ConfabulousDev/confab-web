@@ -105,7 +105,7 @@ function SessionsFilterDropdown({
 
             {/* All Sessions option */}
             <button
-              className={`${styles.filterItem} ${!selectedRepo && !selectedHostname && !selectedOwner && !selectedPR && !commitSearch && !searchQuery ? styles.selected : ''}`}
+              className={`${styles.filterItem} ${!hasActiveFilters ? styles.selected : ''}`}
               onClick={() => {
                 onRepoClick(null);
                 onHostnameClick(null);
@@ -115,7 +115,7 @@ function SessionsFilterDropdown({
                 onSearchChange('');
               }}
             >
-              <span className={`${styles.checkbox} ${!selectedRepo && !selectedHostname && !selectedOwner && !selectedPR && !commitSearch && !searchQuery ? styles.checked : ''}`}>
+              <span className={`${styles.checkbox} ${!hasActiveFilters ? styles.checked : ''}`}>
                 {CheckIcon}
               </span>
               <span className={styles.filterLabel}>All Sessions</span>

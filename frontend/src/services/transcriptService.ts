@@ -4,7 +4,7 @@ import {
   type TranscriptLine,
   type TranscriptValidationError,
   type TranscriptParseResult,
-  parseTranscriptLineWithError,
+  validateParsedTranscriptLine,
   formatValidationErrorsForLog,
 } from '@/schemas/transcript';
 import { syncFilesAPI } from './api';
@@ -76,17 +76,28 @@ export function parseJSONL(jsonl: string): TranscriptParseResult {
   const errors: TranscriptValidationError[] = [];
 
   lines.forEach((line, index) => {
-    // Skip progress messages - they're streaming updates not needed in transcript view
+    // Parse JSON once and reuse the parsed object for validation
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(line);
-      if (parsed && typeof parsed === 'object' && parsed.type === 'progress') {
-        return; // Skip this line
-      }
-    } catch {
-      // JSON parse error will be caught by parseTranscriptLineWithError below
+      parsed = JSON.parse(line);
+    } catch (e) {
+      errors.push({
+        line: index + 1,
+        rawJson: line.length > 200 ? line.slice(0, 200) + '...' : line,
+        errors: [{
+          path: '(root)',
+          message: `Invalid JSON: ${e instanceof Error ? e.message : 'parse error'}`,
+        }],
+      });
+      return;
     }
 
-    const result = parseTranscriptLineWithError(line, index);
+    // Skip progress messages - they're streaming updates not needed in transcript view
+    if (parsed !== null && typeof parsed === 'object' && 'type' in parsed && parsed.type === 'progress') {
+      return;
+    }
+
+    const result = validateParsedTranscriptLine(parsed, line, index);
 
     if (result.success) {
       messages.push(result.data);

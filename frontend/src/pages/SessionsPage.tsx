@@ -16,7 +16,14 @@ import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, C
 import styles from './SessionsPage.module.css';
 
 // Strip .git suffix from repo URLs for clean GitHub links
-const cleanRepoUrl = (url: string) => url.replace(/\.git$/, '');
+function cleanRepoUrl(url: string): string {
+  return url.replace(/\.git$/, '');
+}
+
+// Derive display title from session fields with fallback chain
+function getSessionTitle(session: { custom_title?: string | null; suggested_session_title?: string | null; summary?: string | null; first_user_message?: string | null }): string | null {
+  return session.custom_title || session.suggested_session_title || session.summary || session.first_user_message || null;
+}
 
 function SessionsPage() {
   useDocumentTitle('Sessions');
@@ -45,10 +52,7 @@ function SessionsPage() {
   } = useSessionFilters();
 
   // Hidden keyboard shortcut to toggle showing empty sessions (for dev/debugging)
-  const handleToggleEmptySessions = useCallback(() => {
-    toggleShowEmptySessions();
-  }, [toggleShowEmptySessions]);
-  useKeyboardShortcut('mod+shift+e', handleToggleEmptySessions);
+  useKeyboardShortcut('mod+shift+e', toggleShowEmptySessions);
   const { sessions, loading, error, refetch } = useSessionsFetch();
   const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
@@ -121,10 +125,7 @@ function SessionsPage() {
       sortBy: sortColumn,
       direction: sortDirection,
       filter: (s) => {
-        // Filter out sessions with no transcript data
-        if (s.total_lines <= 0) return false;
-        // Filter out empty sessions (no title) unless showEmptySessions is enabled
-        if (!showEmptySessions && !s.summary && !s.first_user_message) return false;
+        if (!passesBaseFilters(s)) return false;
         // Filter by selected repo
         if (selectedRepo && s.git_repo !== selectedRepo) return false;
         // Filter by selected branch
@@ -143,84 +144,60 @@ function SessionsPage() {
         }
         // Filter by search query (match against title fields)
         if (lowerQuery) {
-          const title = (s.custom_title || s.suggested_session_title || s.summary || s.first_user_message || '').toLowerCase();
+          const title = (getSessionTitle(s) || '').toLowerCase();
           if (!title.includes(lowerQuery)) return false;
         }
         return true;
       },
     });
-  }, [sessions, sortColumn, sortDirection, selectedRepo, selectedBranch, selectedHostname, selectedOwner, selectedPR, selectedCommit, searchQuery, showEmptySessions, getOwnerEmail]);
+  }, [sessions, sortColumn, sortDirection, selectedRepo, selectedBranch, selectedHostname, selectedOwner, selectedPR, selectedCommit, searchQuery, passesBaseFilters, getOwnerEmail]);
 
-  // Count sessions per repo/branch
-  const repoCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      if (passesBaseFilters(s)) {
-        const repo = s.git_repo || '';
-        counts[repo] = (counts[repo] || 0) + 1;
+  // Count sessions per filter dimension in a single pass
+  const { repoCounts, branchCounts, hostnameCounts, ownerCounts, prCounts, totalCount } = useMemo(() => {
+    const repo: Record<string, number> = {};
+    const branch: Record<string, number> = {};
+    const hostname: Record<string, number> = {};
+    const owner: Record<string, number> = {};
+    const pr: Record<string, number> = {};
+    let total = 0;
+
+    for (const s of sessions) {
+      if (!passesBaseFilters(s)) continue;
+      total++;
+
+      const repoName = s.git_repo || '';
+      repo[repoName] = (repo[repoName] || 0) + 1;
+
+      if (s.hostname) {
+        hostname[s.hostname] = (hostname[s.hostname] || 0) + 1;
       }
-    });
-    return counts;
-  }, [sessions, passesBaseFilters]);
 
-  const branchCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      if (passesBaseFilters(s)) {
-        if (!selectedRepo || s.git_repo === selectedRepo) {
-          const branch = s.git_branch || '';
-          counts[branch] = (counts[branch] || 0) + 1;
-        }
+      const ownerEmail = getOwnerEmail(s);
+      if (ownerEmail) {
+        const key = ownerEmail.toLowerCase();
+        owner[key] = (owner[key] || 0) + 1;
       }
-    });
-    return counts;
-  }, [sessions, passesBaseFilters, selectedRepo]);
 
-  const hostnameCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      if (passesBaseFilters(s)) {
-        const hostname = s.hostname || '';
-        if (hostname) {
-          counts[hostname] = (counts[hostname] || 0) + 1;
-        }
+      // Branch and PR counts are scoped to the selected repo
+      if (!selectedRepo || s.git_repo === selectedRepo) {
+        const branchName = s.git_branch || '';
+        branch[branchName] = (branch[branchName] || 0) + 1;
+
+        s.github_prs?.forEach((p) => {
+          pr[p] = (pr[p] || 0) + 1;
+        });
       }
-    });
-    return counts;
-  }, [sessions, passesBaseFilters]);
+    }
 
-  const ownerCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      if (passesBaseFilters(s)) {
-        const owner = getOwnerEmail(s);
-        if (owner) {
-          const key = owner.toLowerCase();
-          counts[key] = (counts[key] || 0) + 1;
-        }
-      }
-    });
-    return counts;
-  }, [sessions, passesBaseFilters, getOwnerEmail]);
-
-  const prCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      if (passesBaseFilters(s)) {
-        // Only count PRs for sessions in the selected repo (if one is selected)
-        if (!selectedRepo || s.git_repo === selectedRepo) {
-          s.github_prs?.forEach((pr) => {
-            counts[pr] = (counts[pr] || 0) + 1;
-          });
-        }
-      }
-    });
-    return counts;
-  }, [sessions, passesBaseFilters, selectedRepo]);
-
-  const totalCount = useMemo(() => {
-    return sessions.filter(passesBaseFilters).length;
-  }, [sessions, passesBaseFilters]);
+    return {
+      repoCounts: repo,
+      branchCounts: branch,
+      hostnameCounts: hostname,
+      ownerCounts: owner,
+      prCounts: pr,
+      totalCount: total,
+    };
+  }, [sessions, passesBaseFilters, getOwnerEmail, selectedRepo]);
 
   const handleRowClick = (session: typeof sessions[0]) => {
     // CF-132: Use canonical URL for all session types
@@ -333,8 +310,8 @@ function SessionsPage() {
                         onClick={() => handleRowClick(session)}
                       >
                         <td className={styles.sessionCell}>
-                          <div className={session.custom_title || session.suggested_session_title || session.summary || session.first_user_message ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
-                            {session.custom_title || session.suggested_session_title || session.summary || session.first_user_message || 'Untitled'}
+                          <div className={getSessionTitle(session) ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
+                            {getSessionTitle(session) || 'Untitled'}
                           </div>
                           <div className={styles.chipRow}>
                             <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>

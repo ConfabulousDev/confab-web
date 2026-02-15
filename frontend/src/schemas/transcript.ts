@@ -320,18 +320,20 @@ function extractDetailedErrors(
 }
 
 /**
- * Format a Zod error into a human-readable structure
+ * Format a Zod error into a human-readable structure.
+ * Accepts the parsed object directly to avoid redundant JSON.parse calls.
  */
-function formatZodError(error: z.ZodError, rawJson: string, lineIndex: number): TranscriptValidationError {
-  // Try to extract type from raw JSON for context
+function formatZodError(
+  error: z.ZodError,
+  rawJson: string,
+  lineIndex: number,
+  parsed?: unknown
+): TranscriptValidationError {
+  // Extract message type from parsed object (or fall back to parsing raw JSON)
   let messageType: string | undefined;
-  try {
-    const parsed = JSON.parse(rawJson);
-    if (typeof parsed === 'object' && parsed !== null && 'type' in parsed) {
-      messageType = String(parsed.type);
-    }
-  } catch {
-    // Ignore - raw JSON may not be valid
+  const obj = parsed ?? safeJsonParse(rawJson);
+  if (obj !== null && typeof obj === 'object' && 'type' in obj) {
+    messageType = String(obj.type);
   }
 
   // Extract detailed errors, handling union types specially
@@ -351,6 +353,15 @@ function formatZodError(error: z.ZodError, rawJson: string, lineIndex: number): 
     messageType,
     errors: finalErrors,
   };
+}
+
+/** Safe JSON.parse that returns null on failure */
+function safeJsonParse(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -382,13 +393,37 @@ export function formatValidationErrorsForLog(errors: TranscriptValidationError[]
   return lines.join('\n');
 }
 
+type TranscriptLineResult =
+  | { success: true; data: TranscriptLine }
+  | { success: false; error: TranscriptValidationError };
+
 /**
- * Parse transcript line with structured error for UI display
+ * Validate a pre-parsed object against the TranscriptLine schema.
+ * Use this when JSON has already been parsed to avoid double-parsing.
+ */
+export function validateParsedTranscriptLine(
+  parsed: unknown,
+  rawLine: string,
+  lineIndex: number
+): TranscriptLineResult {
+  const result = TranscriptLineSchema.safeParse(parsed);
+  if (result.success) {
+    return { success: true, data: result.data };
+  }
+
+  return {
+    success: false,
+    error: formatZodError(result.error, rawLine, lineIndex, parsed),
+  };
+}
+
+/**
+ * Parse transcript line from raw JSON string with structured error for UI display
  */
 export function parseTranscriptLineWithError(
   rawLine: string,
   lineIndex: number
-): { success: true; data: TranscriptLine } | { success: false; error: TranscriptValidationError } {
+): TranscriptLineResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawLine);
@@ -406,15 +441,7 @@ export function parseTranscriptLineWithError(
     };
   }
 
-  const result = TranscriptLineSchema.safeParse(parsed);
-  if (result.success) {
-    return { success: true, data: result.data };
-  }
-
-  return {
-    success: false,
-    error: formatZodError(result.error, rawLine, lineIndex),
-  };
+  return validateParsedTranscriptLine(parsed, rawLine, lineIndex);
 }
 
 // ============================================================================
