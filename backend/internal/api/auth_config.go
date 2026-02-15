@@ -10,6 +10,7 @@ type providerInfo struct {
 
 type authConfigFeatures struct {
 	SharesEnabled bool `json:"shares_enabled"`
+	FooterEnabled bool `json:"footer_enabled"`
 }
 
 type authConfigResponse struct {
@@ -62,6 +63,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 		Providers: providers,
 		Features: authConfigFeatures{
 			SharesEnabled: !s.sharesDisabled,
+			FooterEnabled: !s.footerDisabled,
 		},
 	})
 }

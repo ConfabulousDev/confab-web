@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initCSRF } from '@/services/csrf';
 import { AppConfigProvider } from '@/contexts/AppConfigContext';
+import { useAppConfig } from '@/hooks/useAppConfig';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -21,6 +22,20 @@ const queryClient = new QueryClient({
   },
 });
 
+function AppLayout() {
+  const { footerEnabled } = useAppConfig();
+
+  return (
+    <div className="app-container">
+      <Header />
+      <main>
+        <Outlet />
+      </main>
+      {footerEnabled && <Footer />}
+    </div>
+  );
+}
+
 function App() {
   useEffect(() => {
     // Initialize CSRF token on app load
@@ -33,13 +48,7 @@ function App() {
         <AppConfigProvider>
           <QueryClientProvider client={queryClient}>
             <KeyboardShortcutProvider>
-              <div className="app-container">
-                <Header />
-                <main>
-                  <Outlet />
-                </main>
-                <Footer />
-              </div>
+              <AppLayout />
             </KeyboardShortcutProvider>
           </QueryClientProvider>
         </AppConfigProvider>

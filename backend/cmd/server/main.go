@@ -60,14 +60,17 @@ func main() {
 	defer database.Close()
 
 	// Enable share-all-sessions mode for on-prem deployments
-	if os.Getenv("SHARE_ALL_SESSIONS") == "true" {
+	if os.Getenv("SHARE_ALL_SESSIONS_TO_AUTHENTICATED") == "true" {
 		database.ShareAllSessions = true
 		logger.Info("share-all-sessions mode enabled: all sessions visible to authenticated users")
 	}
 
 	// Disable share creation for on-prem deployments
-	if os.Getenv("DISABLE_SHARES") == "true" {
-		logger.Info("share creation disabled: DISABLE_SHARES=true")
+	if os.Getenv("DISABLE_SHARE_CREATION") == "true" {
+		logger.Info("share creation disabled: DISABLE_SHARE_CREATION=true")
+	}
+	if os.Getenv("DISABLE_FOOTER") == "true" {
+		logger.Info("frontend footer disabled: DISABLE_FOOTER=true")
 	}
 
 	// Bootstrap admin user if password auth is enabled and no users exist

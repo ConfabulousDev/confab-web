@@ -603,7 +603,7 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 
 	var formContentHTML string
 	if h.SharesDisabled {
-		formContentHTML = `<p style="color: #856404; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.75rem 1rem; font-size: 0.875rem;">Share creation is disabled by the administrator (DISABLE_SHARES=true).</p>`
+		formContentHTML = `<p style="color: #856404; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.75rem 1rem; font-size: 0.875rem;">Share creation is disabled by the administrator (DISABLE_SHARE_CREATION=true).</p>`
 	} else {
 		formContentHTML = fmt.Sprintf(`
 			<form method="POST" action="%s/system-shares">

@@ -2,10 +2,12 @@ import { createContext, useEffect, useState, type ReactNode } from 'react';
 
 export interface AppConfig {
   sharesEnabled: boolean;
+  footerEnabled: boolean;
 }
 
 const defaultAppConfig: AppConfig = {
   sharesEnabled: true,
+  footerEnabled: true,
 };
 
 const AppConfigContext = createContext<AppConfig>(defaultAppConfig);
@@ -26,6 +28,7 @@ export function AppConfigProvider({ children }: AppConfigProviderProps) {
       .then((data) => {
         setConfig({
           sharesEnabled: data.features?.shares_enabled ?? true,
+          footerEnabled: data.features?.footer_enabled ?? true,
         });
       })
       .catch(() => {

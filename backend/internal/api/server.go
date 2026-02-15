@@ -63,7 +63,8 @@ type Server struct {
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
 	supportEmail      string                    // Support contact email address
 	version           string                    // Application version (set via ldflags at build time)
-	sharesDisabled    bool                      // When true, share creation is disabled (DISABLE_SHARES=true)
+	sharesDisabled    bool                      // When true, share creation is disabled (DISABLE_SHARE_CREATION=true)
+	footerDisabled    bool                      // When true, frontend footer is hidden (DISABLE_FOOTER=true)
 	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -84,7 +85,8 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		frontendURL:    os.Getenv("FRONTEND_URL"),
 		supportEmail:   supportEmail,
 		version:        version,
-		sharesDisabled: os.Getenv("DISABLE_SHARES") == "true",
+		sharesDisabled: os.Getenv("DISABLE_SHARE_CREATION") == "true",
+		footerDisabled: os.Getenv("DISABLE_FOOTER") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
