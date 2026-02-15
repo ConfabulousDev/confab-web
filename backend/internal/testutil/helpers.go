@@ -387,13 +387,3 @@ func TestGitHubUser(suffix string) models.OAuthUserInfo {
 	}
 }
 
-// TestGoogleUser creates an OAuthUserInfo for a Google user for testing
-func TestGoogleUser(suffix string) models.OAuthUserInfo {
-	return models.OAuthUserInfo{
-		Provider:   models.ProviderGoogle,
-		ProviderID: "google-" + suffix,
-		Email:      suffix + "@google-test.com",
-		Name:       "Test User " + suffix,
-		AvatarURL:  "https://google.com/avatar/" + suffix + ".png",
-	}
-}

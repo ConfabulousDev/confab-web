@@ -23,7 +23,7 @@ func TestCompressionMiddleware(t *testing.T) {
 	// We don't need real DB/storage for this test, just the middleware chain
 	mockDB := &db.DB{} // nil is fine for this test
 	mockStorage := &storage.S3Storage{}
-	mockOAuth := auth.OAuthConfig{}
+	mockOAuth := &auth.OAuthConfig{}
 
 	server := NewServer(mockDB, mockStorage, mockOAuth, nil, "")
 	handler := server.SetupRoutes()
@@ -153,7 +153,7 @@ func TestCompressionMiddleware(t *testing.T) {
 func TestCompressionSavings(t *testing.T) {
 	mockDB := &db.DB{}
 	mockStorage := &storage.S3Storage{}
-	mockOAuth := auth.OAuthConfig{}
+	mockOAuth := &auth.OAuthConfig{}
 
 	server := NewServer(mockDB, mockStorage, mockOAuth, nil, "")
 	handler := server.SetupRoutes()
@@ -207,7 +207,7 @@ func TestCompressionSavings(t *testing.T) {
 func TestBrotliCompression(t *testing.T) {
 	mockDB := &db.DB{}
 	mockStorage := &storage.S3Storage{}
-	mockOAuth := auth.OAuthConfig{}
+	mockOAuth := &auth.OAuthConfig{}
 
 	server := NewServer(mockDB, mockStorage, mockOAuth, nil, "")
 	handler := server.SetupRoutes()

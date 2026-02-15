@@ -149,7 +149,7 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	S3Config     storage.S3Config
-	OAuthConfig  auth.OAuthConfig
+	OAuthConfig  *auth.OAuthConfig
 	EmailConfig  EmailConfig
 }
 
@@ -332,7 +332,7 @@ func loadConfig() Config {
 			BucketName:      bucketName,
 			UseSSL:          os.Getenv("S3_USE_SSL") != "false", // Default true
 		},
-		OAuthConfig: oauthConfig,
+		OAuthConfig: &oauthConfig,
 		EmailConfig: EmailConfig{
 			Enabled:          emailEnabled,
 			APIKey:           resendAPIKey,

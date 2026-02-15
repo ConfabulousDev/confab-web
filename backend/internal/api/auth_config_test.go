@@ -13,7 +13,7 @@ import (
 func TestHandleAuthConfig(t *testing.T) {
 	t.Run("no providers enabled", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{},
+			oauthConfig: &auth.OAuthConfig{},
 		}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
 		rr := httptest.NewRecorder()
@@ -41,7 +41,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("all providers enabled", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{
+			oauthConfig: &auth.OAuthConfig{
 				PasswordEnabled: true,
 				GitHubEnabled:   true,
 				GoogleEnabled:   true,
@@ -92,7 +92,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("github only", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{
+			oauthConfig: &auth.OAuthConfig{
 				GitHubEnabled: true,
 			},
 		}
@@ -115,7 +115,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("OIDC defaults display name to SSO", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{
+			oauthConfig: &auth.OAuthConfig{
 				OIDCEnabled: true,
 				// OIDCDisplayName left empty
 			},
@@ -139,7 +139,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("password and google", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{
+			oauthConfig: &auth.OAuthConfig{
 				PasswordEnabled: true,
 				GoogleEnabled:   true,
 			},
@@ -166,7 +166,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("response has correct content type", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{
+			oauthConfig: &auth.OAuthConfig{
 				GitHubEnabled: true,
 			},
 		}
@@ -187,7 +187,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("features shares_enabled defaults to true", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{
+			oauthConfig: &auth.OAuthConfig{
 				GitHubEnabled: true,
 			},
 		}
@@ -207,7 +207,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("features footer_enabled defaults to true", func(t *testing.T) {
 		s := &Server{
-			oauthConfig: auth.OAuthConfig{},
+			oauthConfig: &auth.OAuthConfig{},
 		}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
 		rr := httptest.NewRecorder()
@@ -225,7 +225,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("features footer_enabled false when footer disabled", func(t *testing.T) {
 		s := &Server{
-			oauthConfig:    auth.OAuthConfig{},
+			oauthConfig:    &auth.OAuthConfig{},
 			footerDisabled: true,
 		}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
@@ -244,7 +244,7 @@ func TestHandleAuthConfig(t *testing.T) {
 
 	t.Run("features shares_enabled false when shares disabled", func(t *testing.T) {
 		s := &Server{
-			oauthConfig:    auth.OAuthConfig{},
+			oauthConfig:    &auth.OAuthConfig{},
 			sharesDisabled: true,
 		}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)

@@ -46,7 +46,7 @@ func TestHandleGitHubCallback_CSRFValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := HandleGitHubCallback(config, nil) // nil db - we won't reach it
+			handler := HandleGitHubCallback(&config, nil) // nil db - we won't reach it
 
 			req := httptest.NewRequest("GET", "/auth/github/callback?state="+tt.stateQuery+"&code=test_code", nil)
 			if tt.stateCookie != "" {
@@ -79,7 +79,7 @@ func TestHandleGitHubCallback_MissingCode(t *testing.T) {
 		GitHubRedirectURL:  "http://localhost:8080/auth/github/callback",
 	}
 
-	handler := HandleGitHubCallback(config, nil)
+	handler := HandleGitHubCallback(&config, nil)
 
 	req := httptest.NewRequest("GET", "/auth/github/callback?state=valid_state", nil)
 	req.AddCookie(&http.Cookie{
@@ -130,7 +130,7 @@ func TestHandleGoogleCallback_CSRFValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := HandleGoogleCallback(config, nil)
+			handler := HandleGoogleCallback(&config, nil)
 
 			req := httptest.NewRequest("GET", "/auth/google/callback?state="+tt.stateQuery+"&code=test_code", nil)
 			if tt.stateCookie != "" {
@@ -158,7 +158,7 @@ func TestHandleGoogleCallback_MissingCode(t *testing.T) {
 		GoogleRedirectURL:  "http://localhost:8080/auth/google/callback",
 	}
 
-	handler := HandleGoogleCallback(config, nil)
+	handler := HandleGoogleCallback(&config, nil)
 
 	req := httptest.NewRequest("GET", "/auth/google/callback?state=valid_state", nil)
 	req.AddCookie(&http.Cookie{
@@ -187,7 +187,7 @@ func TestHandleGitHubLogin_StateGeneration(t *testing.T) {
 		GitHubRedirectURL:  "http://localhost:8080/auth/github/callback",
 	}
 
-	handler := HandleGitHubLogin(config)
+	handler := HandleGitHubLogin(&config)
 
 	req := httptest.NewRequest("GET", "/auth/github/login", nil)
 	rec := httptest.NewRecorder()
@@ -248,7 +248,7 @@ func TestHandleGitHubLogin_PreservesRedirect(t *testing.T) {
 		GitHubRedirectURL:  "http://localhost:8080/auth/github/callback",
 	}
 
-	handler := HandleGitHubLogin(config)
+	handler := HandleGitHubLogin(&config)
 
 	req := httptest.NewRequest("GET", "/auth/github/login?redirect=/dashboard", nil)
 	rec := httptest.NewRecorder()
@@ -282,7 +282,7 @@ func TestHandleGoogleLogin_StateGeneration(t *testing.T) {
 		GoogleRedirectURL:  "http://localhost:8080/auth/google/callback",
 	}
 
-	handler := HandleGoogleLogin(config)
+	handler := HandleGoogleLogin(&config)
 
 	req := httptest.NewRequest("GET", "/auth/google/login", nil)
 	rec := httptest.NewRecorder()
@@ -452,7 +452,7 @@ func TestHandleGitHubLogin_EmailHint(t *testing.T) {
 	}
 
 	t.Run("valid email sets cookie and login hint", func(t *testing.T) {
-		handler := HandleGitHubLogin(config)
+		handler := HandleGitHubLogin(&config)
 
 		req := httptest.NewRequest("GET", "/auth/github/login?email=alice@example.com", nil)
 		rec := httptest.NewRecorder()
@@ -485,7 +485,7 @@ func TestHandleGitHubLogin_EmailHint(t *testing.T) {
 	})
 
 	t.Run("invalid email does not set cookie or hint", func(t *testing.T) {
-		handler := HandleGitHubLogin(config)
+		handler := HandleGitHubLogin(&config)
 
 		req := httptest.NewRequest("GET", "/auth/github/login?email=not-an-email", nil)
 		rec := httptest.NewRecorder()
@@ -508,7 +508,7 @@ func TestHandleGitHubLogin_EmailHint(t *testing.T) {
 	})
 
 	t.Run("empty email does not set cookie", func(t *testing.T) {
-		handler := HandleGitHubLogin(config)
+		handler := HandleGitHubLogin(&config)
 
 		req := httptest.NewRequest("GET", "/auth/github/login?email=", nil)
 		rec := httptest.NewRecorder()
@@ -533,7 +533,7 @@ func TestHandleGoogleLogin_EmailHint(t *testing.T) {
 	}
 
 	t.Run("valid email adds login_hint", func(t *testing.T) {
-		handler := HandleGoogleLogin(config)
+		handler := HandleGoogleLogin(&config)
 
 		req := httptest.NewRequest("GET", "/auth/google/login?email=bob@example.com", nil)
 		rec := httptest.NewRecorder()
@@ -548,7 +548,7 @@ func TestHandleGoogleLogin_EmailHint(t *testing.T) {
 	})
 
 	t.Run("invalid email does not add login_hint", func(t *testing.T) {
-		handler := HandleGoogleLogin(config)
+		handler := HandleGoogleLogin(&config)
 
 		req := httptest.NewRequest("GET", "/auth/google/login?email=garbage", nil)
 		rec := httptest.NewRecorder()

@@ -58,7 +58,7 @@ func withMaxBody(limit int64, h http.HandlerFunc) http.HandlerFunc {
 type Server struct {
 	db                *db.DB
 	storage           *storage.S3Storage
-	oauthConfig       auth.OAuthConfig
+	oauthConfig       *auth.OAuthConfig
 	emailService      *email.RateLimitedService // Email service for share invitations (may be nil)
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
 	supportEmail      string                    // Support contact email address
@@ -72,7 +72,7 @@ type Server struct {
 }
 
 // NewServer creates a new API server
-func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuthConfig, emailService *email.RateLimitedService, version string) *Server {
+func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAuthConfig, emailService *email.RateLimitedService, version string) *Server {
 	supportEmail := os.Getenv("SUPPORT_EMAIL")
 	if supportEmail == "" {
 		supportEmail = "support@example.com"
@@ -188,11 +188,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	// This is important because CLI uses API keys, not sessions
 	csrfMiddleware := csrf.Protect(
 		[]byte(csrfSecretKey),
-		csrf.Secure(os.Getenv("INSECURE_DEV_MODE") != "true"), // Secure by default (HTTPS-only, set INSECURE_DEV_MODE=true to disable)
-		csrf.SameSite(csrf.SameSiteLaxMode),                   // Lax mode for OAuth compatibility
-		csrf.Path("/"),
-		csrf.MaxAge(int((auth.SessionDuration + 24*time.Hour).Seconds())), // Session duration + 1 day buffer
-		csrf.TrustedOrigins(trustedOrigins),                               // Trust the frontend origin(s)
+		csrf.TrustedOrigins(trustedOrigins), // Trust the frontend origin(s)
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log := logger.Ctx(r.Context())
 			// Truncate CSRF token to avoid exposing full token in logs
@@ -242,10 +238,10 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Get("/auth/google/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleGoogleCallback(s.oauthConfig, s.db))))
 	}
 
-	// Generic OIDC (if enabled) — pointer required for lazy discovery mutex
+	// Generic OIDC (if enabled)
 	if s.oauthConfig.OIDCEnabled {
-		r.Get("/auth/oidc/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleOIDCLogin(&s.oauthConfig))))
-		r.Get("/auth/oidc/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleOIDCCallback(&s.oauthConfig, s.db))))
+		r.Get("/auth/oidc/login", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleOIDCLogin(s.oauthConfig))))
+		r.Get("/auth/oidc/callback", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleOIDCCallback(s.oauthConfig, s.db))))
 	}
 
 	// Logout (always available)

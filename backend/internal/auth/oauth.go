@@ -102,7 +102,7 @@ type GitHubEmail struct {
 }
 
 // HandleGitHubLogin initiates GitHub OAuth flow
-func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
+func HandleGitHubLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Generate random state for CSRF protection
 		state, err := generateRandomString(32)
@@ -173,7 +173,7 @@ func HandleGitHubLogin(config OAuthConfig) http.HandlerFunc {
 // NOTE: This handler shares similar logic with HandleGoogleCallback. The duplication
 // is intentional and acceptable - the handlers are kept separate for clarity, easier
 // debugging, and to allow provider-specific customization without complex abstractions.
-func HandleGitHubCallback(config OAuthConfig, database *db.DB) http.HandlerFunc {
+func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -560,7 +560,7 @@ func OptionalAuth(database *db.DB, allowedDomains []string) func(http.Handler) h
 }
 
 // exchangeGitHubCode exchanges authorization code for access token
-func exchangeGitHubCode(code string, config OAuthConfig) (string, error) {
+func exchangeGitHubCode(code string, config *OAuthConfig) (string, error) {
 	data := map[string]string{
 		"client_id":     config.GitHubClientID,
 		"client_secret": config.GitHubClientSecret,
@@ -689,7 +689,7 @@ type GoogleUser struct {
 }
 
 // HandleGoogleLogin initiates Google OAuth flow
-func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
+func HandleGoogleLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Generate random state for CSRF protection
 		state, err := generateRandomString(32)
@@ -760,7 +760,7 @@ func HandleGoogleLogin(config OAuthConfig) http.HandlerFunc {
 // NOTE: This handler shares similar logic with HandleGitHubCallback. The duplication
 // is intentional and acceptable - the handlers are kept separate for clarity, easier
 // debugging, and to allow provider-specific customization without complex abstractions.
-func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc {
+func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -949,7 +949,7 @@ func HandleGoogleCallback(config OAuthConfig, database *db.DB) http.HandlerFunc 
 }
 
 // exchangeGoogleCode exchanges authorization code for access token
-func exchangeGoogleCode(code string, config OAuthConfig) (string, error) {
+func exchangeGoogleCode(code string, config *OAuthConfig) (string, error) {
 	data := url.Values{
 		"client_id":     {config.GoogleClientID},
 		"client_secret": {config.GoogleClientSecret},
