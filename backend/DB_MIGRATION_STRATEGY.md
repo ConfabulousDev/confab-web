@@ -372,18 +372,25 @@ ALTER TABLE users DROP COLUMN name;
 
 ### Deployment Workflow
 
+The `migrate_db.sh` script supports a dedicated `MIGRATE_DATABASE_URL` for running
+migrations with an elevated/admin DB user. If unset, it falls back to `DATABASE_URL`.
+
 ```bash
+# Using the migration script (preferred — handles MIGRATE_DATABASE_URL fallback)
+./migrate_db.sh
+
+# Or manually:
 # 1. Check current version
-migrate -database "$DATABASE_URL" -path migrations version
+migrate -database "$MIGRATE_DATABASE_URL" -path migrations version
 
 # 2. Apply migrations
-migrate -database "$DATABASE_URL" -path migrations up
+migrate -database "$MIGRATE_DATABASE_URL" -path migrations up
 
 # 3. Verify migration success
-psql $DATABASE_URL -c "SELECT * FROM schema_migrations"
+psql "$MIGRATE_DATABASE_URL" -c "SELECT * FROM schema_migrations"
 
 # 4. Rollback if needed (emergency only)
-migrate -database "$DATABASE_URL" -path migrations down 1
+migrate -database "$MIGRATE_DATABASE_URL" -path migrations down 1
 ```
 
 ## Next Steps

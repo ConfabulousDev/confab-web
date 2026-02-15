@@ -52,6 +52,8 @@ services:
     command: ["./migrate_db.sh"]
     environment:
       DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
+      # Optional: use a separate admin user for migrations
+      # MIGRATE_DATABASE_URL: postgres://admin:pass@postgres:5432/confab?sslmode=disable
 
   app:
     build: .

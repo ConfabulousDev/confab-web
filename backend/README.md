@@ -58,6 +58,7 @@ The server will start on `http://localhost:8080`
 |----------|---------|-------------|
 | `PORT` | `8080` | Server port |
 | `DATABASE_URL` | `postgres://confab:confab@localhost:5432/confab?sslmode=disable` | PostgreSQL connection string |
+| `MIGRATE_DATABASE_URL` | *(falls back to `DATABASE_URL`)* | Connection string for migrations (e.g., an admin DB user) |
 | `S3_ENDPOINT` | `localhost:9000` | MinIO/S3 endpoint |
 | `AWS_ACCESS_KEY_ID` | `minioadmin` | S3 access key |
 | `AWS_SECRET_ACCESS_KEY` | `minioadmin` | S3 secret key |
