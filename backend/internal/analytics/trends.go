@@ -133,7 +133,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 				AND s.first_seen >= $2
 				AND s.first_seen < $3
 				AND (
-					COALESCE(s.git_info->>'repo_url', '') = ANY($4::text[])
+					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 		),
@@ -285,7 +285,7 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 				AND s.first_seen >= $2
 				AND s.first_seen < $3
 				AND (
-					COALESCE(s.git_info->>'repo_url', '') = ANY($4::text[])
+					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 		),
@@ -387,7 +387,7 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 				AND s.first_seen >= $2
 				AND s.first_seen < $3
 				AND (
-					COALESCE(s.git_info->>'repo_url', '') = ANY($4::text[])
+					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 		)
@@ -464,7 +464,7 @@ func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req 
 				AND s.first_seen >= $2
 				AND s.first_seen < $3
 				AND (
-					COALESCE(s.git_info->>'repo_url', '') = ANY($4::text[])
+					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 		)

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle, useTrends } from '@/hooks';
-import { useSessionsFetch } from '@/hooks/useSessionsFetch';
+import { sessionsAPI } from '@/services/api';
 import PageHeader from '@/components/PageHeader';
 import TrendsFilters, { type TrendsFiltersValue, type DateRange } from '@/components/trends/TrendsFilters';
 import {
@@ -114,17 +114,15 @@ function TrendsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
-  // Get sessions for repo list
-  const { sessions } = useSessionsFetch();
-
-  // Derive unique repos from sessions
-  const repos = useMemo(() => {
-    const repoSet = new Set<string>();
-    sessions.forEach((s) => {
-      if (s.git_repo_url) repoSet.add(s.git_repo_url);
+  // Get repos from sessions list API (uses filter_options which covers ALL visible sessions, not just page 1)
+  const [repos, setRepos] = useState<string[]>([]);
+  useEffect(() => {
+    sessionsAPI.list().then((result) => {
+      setRepos(result.filter_options.repos.map((r) => r.value).sort());
+    }).catch(() => {
+      // Silently fail - repos dropdown will just be empty
     });
-    return Array.from(repoSet).sort();
-  }, [sessions]);
+  }, []);
 
   // Filter state
   const [filters, setFilters] = useState<TrendsFiltersValue>(initialFilters);

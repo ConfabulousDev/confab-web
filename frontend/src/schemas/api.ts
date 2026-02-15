@@ -46,8 +46,23 @@ const SessionSchema = z.object({
   is_owner: z.boolean(),
   access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),
   shared_by_email: z.string().nullable().optional(),
-  hostname: z.string().nullable().optional(), // Client machine hostname (owner-only, null for shared)
-  username: z.string().nullable().optional(), // OS username (owner-only, null for shared)
+});
+
+const FilterOptionSchema = z.object({ value: z.string(), count: z.number() });
+
+const SessionFilterOptionsSchema = z.object({
+  repos: z.array(FilterOptionSchema),
+  branches: z.array(FilterOptionSchema),
+  owners: z.array(FilterOptionSchema),
+  total: z.number(),
+});
+
+export const SessionListResponseSchema = z.object({
+  sessions: z.array(SessionSchema),
+  total: z.number(),
+  page: z.number(),
+  page_size: z.number(),
+  filter_options: SessionFilterOptionsSchema,
 });
 
 export const SessionDetailSchema = z.object({
@@ -412,7 +427,6 @@ export const TrendsResponseSchema = z.object({
 // Array Response Schemas
 // ============================================================================
 
-export const SessionListSchema = z.array(SessionSchema);
 export const SessionShareListSchema = z.array(SessionShareSchema);
 export const APIKeyListSchema = z.array(APIKeySchema);
 
@@ -448,6 +462,9 @@ export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
 export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
+export type FilterOption = z.infer<typeof FilterOptionSchema>;
+export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
+export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 
 // ============================================================================
 // Validation Functions

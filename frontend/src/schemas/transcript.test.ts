@@ -7,7 +7,7 @@ import {
 } from './transcript';
 
 // Helper to create a minimal UserMessage with string content
-function makeUserMessage(content: string | Array<{ type: string }>): UserMessage {
+function makeUserMessage(content: UserMessage['message']['content']): UserMessage {
   return {
     type: 'user',
     uuid: 'test-uuid',
@@ -18,7 +18,7 @@ function makeUserMessage(content: string | Array<{ type: string }>): UserMessage
     cwd: '/test',
     sessionId: 'test-session',
     version: '1.0.0',
-    message: { role: 'user', content: content as UserMessage['message']['content'] },
+    message: { role: 'user', content },
   };
 }
 
@@ -36,7 +36,7 @@ describe('isCommandExpansionMessage', () => {
   });
 
   it('returns false for tool result messages', () => {
-    const msg = makeUserMessage([{ type: 'tool_result' }]);
+    const msg = makeUserMessage([{ type: 'tool_result', tool_use_id: 'test', content: 'ok' }]);
     expect(isCommandExpansionMessage(msg)).toBe(false);
   });
 
@@ -68,7 +68,7 @@ describe('getCommandExpansionSkillName', () => {
   });
 
   it('returns null for array content', () => {
-    const msg = makeUserMessage([{ type: 'tool_result' }]);
+    const msg = makeUserMessage([{ type: 'tool_result', tool_use_id: 'test', content: 'ok' }]);
     expect(getCommandExpansionSkillName(msg)).toBeNull();
   });
 

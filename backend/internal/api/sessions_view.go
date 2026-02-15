@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
@@ -12,8 +14,27 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
+// parseCommaSeparated splits a comma-separated query parameter into trimmed non-empty values.
+func parseCommaSeparated(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
 // HandleListSessions lists all sessions visible to the authenticated user.
-// Returns owned sessions and shared sessions (private + system shares) with deduplication.
+// Supports server-side filtering, pagination, and returns faceted filter counts.
 func HandleListSessions(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -25,24 +46,44 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// Parse filter query parameters
+		params := db.SessionListParams{
+			Repos:    parseCommaSeparated(r.URL.Query().Get("repo")),
+			Branches: parseCommaSeparated(r.URL.Query().Get("branch")),
+			Owners:   parseCommaSeparated(r.URL.Query().Get("owner")),
+			PRs:      parseCommaSeparated(r.URL.Query().Get("pr")),
+			PageSize: db.DefaultPageSize,
+			Page:     1,
+		}
+
+		// Parse search query
+		if q := r.URL.Query().Get("q"); q != "" {
+			params.Query = &q
+		}
+
+		// Parse page (1-indexed)
+		if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+			page, err := strconv.Atoi(pageStr)
+			if err != nil || page < 1 {
+				respondError(w, http.StatusBadRequest, "Invalid page parameter: must be a positive integer")
+				return
+			}
+			params.Page = page
+		}
+
 		// Create context with timeout for database operation
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Get sessions from database
-		sessions, err := database.ListUserSessions(ctx, userID)
+		// Get paginated sessions with faceted counts
+		result, err := database.ListUserSessionsPaginated(ctx, userID, params)
 		if err != nil {
 			log.Error("Failed to list sessions", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
 			return
 		}
 
-		// Ensure non-nil slice for JSON encoding
-		if sessions == nil {
-			sessions = make([]db.SessionListItem, 0)
-		}
-
-		respondJSON(w, http.StatusOK, sessions)
+		respondJSON(w, http.StatusOK, result)
 	}
 }
 

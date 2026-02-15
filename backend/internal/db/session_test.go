@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1034,13 +1035,6 @@ func TestListUserSessions_ShareAllSessions_SharedView(t *testing.T) {
 			if s.SharedByEmail == nil || *s.SharedByEmail != "owner@test.com" {
 				t.Errorf("expected SharedByEmail = owner@test.com, got %v", s.SharedByEmail)
 			}
-			// Privacy: hostname/username should be nil
-			if s.Hostname != nil {
-				t.Errorf("expected Hostname = nil for shared session, got %v", s.Hostname)
-			}
-			if s.Username != nil {
-				t.Errorf("expected Username = nil for shared session, got %v", s.Username)
-			}
 		}
 	}
 	if ownedCount != 1 {
@@ -1095,5 +1089,576 @@ func TestListUserSessions_ShareAllSessions_PrivateShareTakesPrecedence(t *testin
 	// Private share should take precedence over system_share
 	if sharedSession.AccessType != "private_share" {
 		t.Errorf("expected access_type = private_share (takes precedence), got %s", sharedSession.AccessType)
+	}
+}
+
+// =============================================================================
+// ListUserSessionsPaginated Tests
+// =============================================================================
+
+// TestListUserSessionsPaginated_NoFilters tests basic pagination without filters
+func TestListUserSessionsPaginated_NoFilters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "paginate@test.com", "Paginate User")
+
+	// Create 60 visible sessions
+	for i := 0; i < 60; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("session-%03d", i), testutil.TestSessionFullOpts{
+			Summary: fmt.Sprintf("Session %d summary", i),
+		})
+	}
+
+	ctx := context.Background()
+
+	// Page 1: should get 50 sessions
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 1, PageSize: 50})
+	if err != nil {
+		t.Fatalf("Page 1 failed: %v", err)
+	}
+	if len(result.Sessions) != 50 {
+		t.Errorf("Page 1: expected 50 sessions, got %d", len(result.Sessions))
+	}
+	if result.Total != 60 {
+		t.Errorf("Page 1: expected total=60, got %d", result.Total)
+	}
+	if result.Page != 1 {
+		t.Errorf("Page 1: expected page=1, got %d", result.Page)
+	}
+	if result.PageSize != 50 {
+		t.Errorf("Page 1: expected page_size=50, got %d", result.PageSize)
+	}
+
+	// Page 2: should get 10 sessions
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 2, PageSize: 50})
+	if err != nil {
+		t.Fatalf("Page 2 failed: %v", err)
+	}
+	if len(result.Sessions) != 10 {
+		t.Errorf("Page 2: expected 10 sessions, got %d", len(result.Sessions))
+	}
+	if result.Total != 60 {
+		t.Errorf("Page 2: expected total=60, got %d", result.Total)
+	}
+}
+
+// TestListUserSessionsPaginated_RepoFilter tests filtering by repository
+func TestListUserSessionsPaginated_RepoFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "repofilter@test.com", "Repo Filter User")
+
+	// Create sessions in 3 repos
+	for i := 0; i < 5; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("repo-a-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/repo-a.git",
+			Summary: "Repo A session",
+		})
+	}
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("repo-b-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "git@github.com:org/repo-b.git",
+			Summary: "Repo B session",
+		})
+	}
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("repo-c-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/repo-c",
+			Summary: "Repo C session",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Filter by repo-a
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Repos: []string{"org/repo-a"},
+		Page:  1,
+	})
+	if err != nil {
+		t.Fatalf("Repo filter failed: %v", err)
+	}
+	if len(result.Sessions) != 5 {
+		t.Errorf("Expected 5 sessions for repo-a, got %d", len(result.Sessions))
+	}
+	if result.Total != 5 {
+		t.Errorf("Expected total=5, got %d", result.Total)
+	}
+
+	// Filter options should show all repos in repo_counts (faceted: exclude own dimension)
+	if len(result.FilterOptions.Repos) != 3 {
+		t.Errorf("Expected 3 repos in filter options, got %d", len(result.FilterOptions.Repos))
+	}
+}
+
+// TestListUserSessionsPaginated_BranchFilter tests filtering by branch
+func TestListUserSessionsPaginated_BranchFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "branchfilter@test.com", "Branch Filter User")
+
+	// Create sessions on different branches
+	for i := 0; i < 4; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("main-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/repo.git",
+			Branch:  "main",
+			Summary: "Main branch session",
+		})
+	}
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("feature-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/repo.git",
+			Branch:  "feature/new-thing",
+			Summary: "Feature branch session",
+		})
+	}
+
+	ctx := context.Background()
+
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Branches: []string{"main"},
+		Page:     1,
+	})
+	if err != nil {
+		t.Fatalf("Branch filter failed: %v", err)
+	}
+	if len(result.Sessions) != 4 {
+		t.Errorf("Expected 4 sessions on main, got %d", len(result.Sessions))
+	}
+	if result.Total != 4 {
+		t.Errorf("Expected total=4, got %d", result.Total)
+	}
+}
+
+// TestListUserSessionsPaginated_OwnerFilter tests filtering by session owner email
+func TestListUserSessionsPaginated_OwnerFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	alice := testutil.CreateTestUser(t, env, "alice@test.com", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@test.com", "Bob")
+
+	// Alice creates 3 sessions
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestSessionFull(t, env, alice.ID, fmt.Sprintf("alice-session-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Alice session",
+		})
+	}
+	// Bob creates 2 sessions
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, bob.ID, fmt.Sprintf("bob-session-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Bob session",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Alice views sessions, filter by Alice only (her own)
+	result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
+		Owners: []string{"alice@test.com"},
+		Page:   1,
+	})
+	if err != nil {
+		t.Fatalf("Owner filter failed: %v", err)
+	}
+	if len(result.Sessions) != 3 {
+		t.Errorf("Expected 3 sessions for alice, got %d", len(result.Sessions))
+	}
+	for _, s := range result.Sessions {
+		if !s.IsOwner {
+			t.Error("Expected all sessions to be owned by alice")
+		}
+	}
+
+	// Alice views sessions, filter by Bob
+	result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
+		Owners: []string{"bob@test.com"},
+		Page:   1,
+	})
+	if err != nil {
+		t.Fatalf("Owner filter for bob failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 sessions for bob, got %d", len(result.Sessions))
+	}
+	for _, s := range result.Sessions {
+		if s.IsOwner {
+			t.Error("Expected all sessions to be shared (bob's)")
+		}
+	}
+}
+
+// TestListUserSessionsPaginated_PRFilter tests filtering by PR number
+func TestListUserSessionsPaginated_PRFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "prfilter@test.com", "PR Filter User")
+
+	// Create sessions: some with PRs, some without
+	s1 := testutil.CreateTestSessionFull(t, env, user.ID, "pr-session-1", testutil.TestSessionFullOpts{
+		Summary: "Session with PR 123",
+	})
+	testutil.CreateTestGitHubLink(t, env, s1, "pull_request", "123")
+
+	s2 := testutil.CreateTestSessionFull(t, env, user.ID, "pr-session-2", testutil.TestSessionFullOpts{
+		Summary: "Session with PR 456",
+	})
+	testutil.CreateTestGitHubLink(t, env, s2, "pull_request", "456")
+
+	testutil.CreateTestSessionFull(t, env, user.ID, "no-pr-session", testutil.TestSessionFullOpts{
+		Summary: "Session without PR",
+	})
+
+	ctx := context.Background()
+
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		PRs:  []string{"123"},
+		Page: 1,
+	})
+	if err != nil {
+		t.Fatalf("PR filter failed: %v", err)
+	}
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session with PR 123, got %d", len(result.Sessions))
+	}
+	if result.Total != 1 {
+		t.Errorf("Expected total=1, got %d", result.Total)
+	}
+}
+
+// TestListUserSessionsPaginated_QuerySearch tests search across titles and commit SHA
+func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "querysearch@test.com", "Query Search User")
+
+	// Create sessions with different titles/content
+	testutil.CreateTestSessionFull(t, env, user.ID, "search-session-1", testutil.TestSessionFullOpts{
+		Summary: "Implementing authentication flow",
+	})
+	testutil.CreateTestSessionFull(t, env, user.ID, "search-session-2", testutil.TestSessionFullOpts{
+		Summary:          "Fixing database connection pool",
+		FirstUserMessage: "Help me fix the auth system",
+	})
+	s3 := testutil.CreateTestSessionFull(t, env, user.ID, "search-session-3", testutil.TestSessionFullOpts{
+		Summary: "Unrelated work",
+	})
+	testutil.CreateTestGitHubLink(t, env, s3, "commit", "abc123def")
+
+	ctx := context.Background()
+
+	// Search for "auth" - should match session 1 (summary) and session 2 (first_user_message)
+	q := "auth"
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Query: &q,
+		Page:  1,
+	})
+	if err != nil {
+		t.Fatalf("Query search failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 sessions matching 'auth', got %d", len(result.Sessions))
+	}
+
+	// Search for commit SHA prefix
+	q2 := "abc123"
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Query: &q2,
+		Page:  1,
+	})
+	if err != nil {
+		t.Fatalf("Commit SHA search failed: %v", err)
+	}
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session matching commit SHA 'abc123', got %d", len(result.Sessions))
+	}
+}
+
+// TestListUserSessionsPaginated_MultipleFilters tests combining repo + branch + owner filters
+func TestListUserSessionsPaginated_MultipleFilters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	alice := testutil.CreateTestUser(t, env, "alice@multi.com", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@multi.com", "Bob")
+
+	// Alice: repo-a/main (2 sessions), repo-a/feature (1 session)
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, alice.ID, fmt.Sprintf("alice-main-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/repo-a.git",
+			Branch:  "main",
+			Summary: "Alice main session",
+		})
+	}
+	testutil.CreateTestSessionFull(t, env, alice.ID, "alice-feature", testutil.TestSessionFullOpts{
+		RepoURL: "https://github.com/org/repo-a.git",
+		Branch:  "feature/x",
+		Summary: "Alice feature session",
+	})
+
+	// Bob: repo-a/main (1 session)
+	testutil.CreateTestSessionFull(t, env, bob.ID, "bob-main", testutil.TestSessionFullOpts{
+		RepoURL: "https://github.com/org/repo-a.git",
+		Branch:  "main",
+		Summary: "Bob main session",
+	})
+
+	ctx := context.Background()
+
+	// Alice filters: repo-a + main + alice → should get 2
+	result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
+		Repos:    []string{"org/repo-a"},
+		Branches: []string{"main"},
+		Owners:   []string{"alice@multi.com"},
+		Page:     1,
+	})
+	if err != nil {
+		t.Fatalf("Multiple filters failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 sessions (alice+repo-a+main), got %d", len(result.Sessions))
+	}
+	if result.Total != 2 {
+		t.Errorf("Expected total=2, got %d", result.Total)
+	}
+}
+
+// TestListUserSessionsPaginated_FacetedCounts tests the exclude-own-dimension pattern
+func TestListUserSessionsPaginated_FacetedCounts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "facets@test.com", "Facets User")
+
+	// Create sessions across repos and branches
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("fa-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/frontend.git",
+			Branch:  "main",
+			Summary: "Frontend main session",
+		})
+	}
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("fb-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/backend.git",
+			Branch:  "main",
+			Summary: "Backend main session",
+		})
+	}
+	testutil.CreateTestSessionFull(t, env, user.ID, "fc-0", testutil.TestSessionFullOpts{
+		RepoURL: "https://github.com/org/backend.git",
+		Branch:  "develop",
+		Summary: "Backend develop session",
+	})
+
+	ctx := context.Background()
+
+	// Filter by repo=frontend → repo_counts should show ALL repos (exclude-own-dimension)
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Repos: []string{"org/frontend"},
+		Page:  1,
+	})
+	if err != nil {
+		t.Fatalf("Faceted counts failed: %v", err)
+	}
+	if result.Total != 3 {
+		t.Errorf("Expected total=3 (frontend only), got %d", result.Total)
+	}
+	// Repo counts should show all repos since repo is excluded from repo_counts
+	if len(result.FilterOptions.Repos) != 2 {
+		t.Errorf("Expected 2 repos in filter_options.repos, got %d: %+v", len(result.FilterOptions.Repos), result.FilterOptions.Repos)
+	}
+	// Branch counts should be filtered by repo=frontend, so only "main" should appear
+	if len(result.FilterOptions.Branches) != 1 {
+		t.Errorf("Expected 1 branch (main from frontend), got %d: %+v", len(result.FilterOptions.Branches), result.FilterOptions.Branches)
+	}
+}
+
+// TestListUserSessionsPaginated_EmptySessionsExcluded tests that sessions without content are excluded
+func TestListUserSessionsPaginated_EmptySessionsExcluded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "empty@test.com", "Empty Session User")
+
+	// Create a visible session (has content + sync lines)
+	testutil.CreateTestSessionFull(t, env, user.ID, "visible-session", testutil.TestSessionFullOpts{
+		Summary: "This session has content",
+	})
+
+	// Create a session with no summary and no first_user_message (invisible)
+	noContentID := testutil.CreateTestSession(t, env, user.ID, "no-content-session")
+	testutil.CreateTestSyncFile(t, env, noContentID, "transcript.jsonl", "transcript", 100)
+
+	// Create a session with summary but no sync files (total_lines = 0, invisible)
+	testutil.CreateTestSessionFull(t, env, user.ID, "no-lines-session", testutil.TestSessionFullOpts{
+		Summary:   "Has summary but no lines",
+		SyncLines: -1,
+	})
+
+	ctx := context.Background()
+
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 1})
+	if err != nil {
+		t.Fatalf("Empty sessions test failed: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("Expected total=1 (only visible session), got %d", result.Total)
+	}
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session, got %d", len(result.Sessions))
+	}
+}
+
+// TestListUserSessionsPaginated_PageBeyondResults tests requesting a page beyond available results
+func TestListUserSessionsPaginated_PageBeyondResults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "beyond@test.com", "Beyond Page User")
+
+	// Create 5 sessions
+	for i := 0; i < 5; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("beyond-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Session content",
+		})
+	}
+
+	ctx := context.Background()
+
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 999, PageSize: 50})
+	if err != nil {
+		t.Fatalf("Page beyond results failed: %v", err)
+	}
+	if len(result.Sessions) != 0 {
+		t.Errorf("Expected 0 sessions on page 999, got %d", len(result.Sessions))
+	}
+	if result.Total != 5 {
+		t.Errorf("Expected total=5, got %d", result.Total)
+	}
+}
+
+// TestListUserSessionsPaginated_MultiSelect tests multi-select within a filter dimension (OR logic)
+func TestListUserSessionsPaginated_MultiSelect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "multiselect@test.com", "Multi Select User")
+
+	// 3 repos
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ms-a-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/alpha.git",
+			Summary: "Alpha session",
+		})
+	}
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ms-b-%d", i), testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/beta.git",
+			Summary: "Beta session",
+		})
+	}
+	testutil.CreateTestSessionFull(t, env, user.ID, "ms-c-0", testutil.TestSessionFullOpts{
+		RepoURL: "https://github.com/org/gamma.git",
+		Summary: "Gamma session",
+	})
+
+	ctx := context.Background()
+
+	// Multi-select: filter by alpha AND beta repos (OR within dimension)
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Repos: []string{"org/alpha", "org/beta"},
+		Page:  1,
+	})
+	if err != nil {
+		t.Fatalf("Multi-select filter failed: %v", err)
+	}
+	if len(result.Sessions) != 5 {
+		t.Errorf("Expected 5 sessions (3 alpha + 2 beta), got %d", len(result.Sessions))
+	}
+	if result.Total != 5 {
+		t.Errorf("Expected total=5, got %d", result.Total)
 	}
 }

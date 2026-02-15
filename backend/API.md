@@ -310,44 +310,79 @@ X-CSRF-Token: <token>
 
 #### List Sessions
 ```
-GET /api/v1/sessions
+GET /api/v1/sessions?repo=<repos>&branch=<branches>&owner=<owners>&pr=<prs>&q=<search>&page=<n>
 ```
 
-Returns all sessions visible to the user (owned + shared) with deduplication. Owned sessions show full details including hostname/username; shared sessions show `null` for those privacy-sensitive fields.
+Returns paginated sessions visible to the user (owned + shared) with server-side filtering and faceted filter counts.
+
+**Query Parameters:**
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `repo` | string | No | all | Comma-separated repo names (e.g., `org/repo1,org/repo2`) |
+| `branch` | string | No | all | Comma-separated branch names |
+| `owner` | string | No | all | Comma-separated owner emails |
+| `pr` | string | No | all | Comma-separated PR numbers |
+| `q` | string | No | none | Search query (matches title, summary, first message, commit SHA) |
+| `page` | int | No | 1 | Page number (1-indexed, must be >= 1) |
 
 **Response:**
 ```json
-[
-  {
-    "id": "uuid",
-    "external_id": "session-uuid",
-    "custom_title": "My Custom Title",
-    "summary": "Session summary",
-    "first_user_message": "First message",
-    "first_seen": "2024-01-15T10:00:00Z",
-    "last_sync_time": "2024-01-15T11:30:00Z",
-    "session_type": "Claude Code",
-    "file_count": 2,
-    "total_lines": 1500,
-    "git_repo": "org/repo",
-    "git_repo_url": "https://github.com/org/repo",
-    "git_branch": "main",
-    "github_prs": ["123", "456"],
-    "github_commits": ["abc1234", "def5678"],
-    "is_owner": true,
-    "access_type": "owner",
-    "shared_by_email": null,
-    "hostname": "macbook.local",
-    "username": "developer"
+{
+  "sessions": [
+    {
+      "id": "uuid",
+      "external_id": "session-uuid",
+      "custom_title": "My Custom Title",
+      "summary": "Session summary",
+      "first_user_message": "First message",
+      "first_seen": "2024-01-15T10:00:00Z",
+      "last_sync_time": "2024-01-15T11:30:00Z",
+      "session_type": "Claude Code",
+      "file_count": 2,
+      "total_lines": 1500,
+      "git_repo": "org/repo",
+      "git_repo_url": "https://github.com/org/repo",
+      "git_branch": "main",
+      "github_prs": ["123", "456"],
+      "github_commits": ["abc1234", "def5678"],
+      "is_owner": true,
+      "access_type": "owner",
+      "shared_by_email": null
+    }
+  ],
+  "total": 142,
+  "page": 1,
+  "page_size": 50,
+  "filter_options": {
+    "repos": [
+      { "value": "org/repo1", "count": 80 },
+      { "value": "org/repo2", "count": 62 }
+    ],
+    "branches": [
+      { "value": "main", "count": 100 },
+      { "value": "feature-x", "count": 42 }
+    ],
+    "owners": [
+      { "value": "alice@example.com", "count": 90 },
+      { "value": "bob@example.com", "count": 52 }
+    ],
+    "total": 142
   }
-]
+}
 ```
 
 **Notes:**
+- **Breaking change**: Response is now an object (was previously a bare array).
 - `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
-- `hostname` and `username` are **owner-only fields** for privacy. They are returned as `null` for shared sessions (`is_owner: false`).
 - `github_prs` contains linked PR refs (ordered by creation time ascending).
 - `github_commits` contains linked commit SHAs (ordered by creation time descending, so latest is first).
+- **Page size** is fixed at 50 sessions per page.
+- **Visibility filter**: Only sessions with `total_lines > 0` and at least one of `summary` or `first_user_message` are included.
+- **Faceted counts** use an exclude-own-dimension pattern: when filtering by `repo=X`, `filter_options.repos` shows counts for ALL repos (not just X), allowing the UI to display available options. Other dimensions (branches, owners) reflect the repo=X filter.
+- **Multiple values** within a filter dimension use OR logic (e.g., `repo=a,b` matches either). Across dimensions, filters use AND logic.
+
+**Errors:**
+- `400` - Invalid page parameter (must be a positive integer)
 
 #### Get Session Detail (Canonical Access)
 ```

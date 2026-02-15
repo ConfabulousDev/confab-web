@@ -30,178 +30,9 @@ func createSessionWithHostnameUsername(t *testing.T, env *testutil.TestEnvironme
 	return sessionID
 }
 
-// TestHostnameUsernamePrivacy_SessionList tests that hostname/username are only visible to owners in the list API
-func TestHostnameUsernamePrivacy_SessionList(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	env := testutil.SetupTestEnvironment(t)
-	defer env.Cleanup(t)
-
-	ctx := context.Background()
-
-	// Create two users
-	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
-
-	// Owner creates a session with hostname and username
-	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "test-session", "owners-macbook.local", "owneruser")
-
-	t.Run("Owner sees hostname and username in their own sessions", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
-		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), owner.ID)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler := api.HandleListSessions(env.DB)
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code != http.StatusOK {
-			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
-		}
-
-		var sessions []db.SessionListItem
-		if err := json.Unmarshal(rr.Body.Bytes(), &sessions); err != nil {
-			t.Fatalf("Failed to parse response: %v", err)
-		}
-
-		if len(sessions) != 1 {
-			t.Fatalf("Expected 1 session, got %d", len(sessions))
-		}
-
-		session := sessions[0]
-		if session.Hostname == nil {
-			t.Error("Expected hostname to be set for owner, got nil")
-		} else if *session.Hostname != "owners-macbook.local" {
-			t.Errorf("Expected hostname 'owners-macbook.local', got '%s'", *session.Hostname)
-		}
-
-		if session.Username == nil {
-			t.Error("Expected username to be set for owner, got nil")
-		} else if *session.Username != "owneruser" {
-			t.Errorf("Expected username 'owneruser', got '%s'", *session.Username)
-		}
-	})
-
-	// Create a private share for viewer
-	var shareID int64
-	err := env.DB.QueryRow(ctx,
-		`INSERT INTO session_shares (session_id)
-		 VALUES ($1) RETURNING id`,
-		sessionID).Scan(&shareID)
-	if err != nil {
-		t.Fatalf("Failed to create share: %v", err)
-	}
-
-	// Add viewer as a recipient
-	_, err = env.DB.Exec(ctx,
-		`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)`,
-		shareID, viewer.Email, viewer.ID)
-	if err != nil {
-		t.Fatalf("Failed to create recipient: %v", err)
-	}
-
-	t.Run("Viewer does NOT see hostname/username for shared sessions (private share)", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
-		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), viewer.ID)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler := api.HandleListSessions(env.DB)
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code != http.StatusOK {
-			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
-		}
-
-		var sessions []db.SessionListItem
-		if err := json.Unmarshal(rr.Body.Bytes(), &sessions); err != nil {
-			t.Fatalf("Failed to parse response: %v", err)
-		}
-
-		if len(sessions) != 1 {
-			t.Fatalf("Expected 1 shared session, got %d", len(sessions))
-		}
-
-		session := sessions[0]
-		if session.Hostname != nil {
-			t.Errorf("Expected hostname to be nil for shared session, got '%s'", *session.Hostname)
-		}
-		if session.Username != nil {
-			t.Errorf("Expected username to be nil for shared session, got '%s'", *session.Username)
-		}
-
-		// Verify it's actually a shared session
-		if session.IsOwner {
-			t.Error("Expected IsOwner=false for shared session")
-		}
-		if session.AccessType != "private_share" {
-			t.Errorf("Expected AccessType=private_share, got %s", session.AccessType)
-		}
-	})
-}
-
-// TestHostnameUsernamePrivacy_SessionListSystemShare tests hostname/username visibility for system shares
-func TestHostnameUsernamePrivacy_SessionListSystemShare(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	env := testutil.SetupTestEnvironment(t)
-	defer env.Cleanup(t)
-
-	ctx := context.Background()
-
-	// Create two users
-	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
-
-	// Owner creates a session with hostname and username
-	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "system-shared-session", "server.internal", "admin")
-
-	// Create a system share
-	_, err := env.DB.CreateSystemShare(ctx, sessionID, nil)
-	if err != nil {
-		t.Fatalf("Failed to create system share: %v", err)
-	}
-
-	t.Run("Viewer does NOT see hostname/username for system shared sessions", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
-		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), viewer.ID)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler := api.HandleListSessions(env.DB)
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code != http.StatusOK {
-			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
-		}
-
-		var sessions []db.SessionListItem
-		if err := json.Unmarshal(rr.Body.Bytes(), &sessions); err != nil {
-			t.Fatalf("Failed to parse response: %v", err)
-		}
-
-		if len(sessions) != 1 {
-			t.Fatalf("Expected 1 system shared session, got %d", len(sessions))
-		}
-
-		session := sessions[0]
-		if session.Hostname != nil {
-			t.Errorf("Expected hostname to be nil for system share, got '%s'", *session.Hostname)
-		}
-		if session.Username != nil {
-			t.Errorf("Expected username to be nil for system share, got '%s'", *session.Username)
-		}
-
-		// Verify it's a system share
-		if session.AccessType != "system_share" {
-			t.Errorf("Expected AccessType=system_share, got %s", session.AccessType)
-		}
-	})
-}
+// NOTE: hostname/username are no longer included in the session list API response (SessionListItem).
+// They are only available in the session detail API (SessionDetail). The list-API privacy tests
+// have been removed since there's nothing to test — the fields don't exist in the list response.
 
 // TestHostnameUsernamePrivacy_SessionDetail tests that hostname/username are visible in the owner detail endpoint
 func TestHostnameUsernamePrivacy_SessionDetail(t *testing.T) {
@@ -290,7 +121,6 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 	}
 
 	t.Run("Canonical session endpoint does NOT expose hostname/username for shared access", func(t *testing.T) {
-		// Use canonical endpoint (CF-132) instead of old /shared/{token} endpoint
 		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 
 		// Add URL parameters
@@ -357,7 +187,6 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 	}
 
 	t.Run("Private shared session via canonical endpoint does NOT expose hostname/username", func(t *testing.T) {
-		// Use canonical endpoint (CF-132) instead of old /shared/{token} endpoint
 		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 
 		// Add URL parameters
@@ -365,7 +194,6 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 		rctx.URLParams.Add("id", sessionID)
 
 		// Set up context with route params and authenticated user
-		// (simulates OptionalAuth middleware setting user ID)
 		reqCtx := context.WithValue(ctx, chi.RouteCtxKey, rctx)
 		reqCtx = auth.SetUserIDForTest(reqCtx, viewer.ID)
 		req = req.WithContext(reqCtx)

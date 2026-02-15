@@ -33,8 +33,41 @@ type SessionListItem struct {
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
-	Hostname         *string    `json:"hostname,omitempty"`           // Client machine hostname (owner-only, null for shared sessions)
-	Username         *string    `json:"username,omitempty"`           // OS username (owner-only, null for shared sessions)
+}
+
+// SessionListParams contains filtering and pagination parameters for listing sessions
+type SessionListParams struct {
+	Repos    []string // org/repo values (multi-select, OR within dimension)
+	Branches []string // branch names (multi-select)
+	Owners   []string // email addresses (multi-select)
+	PRs      []string // PR number strings (multi-select)
+	Query    *string  // search across titles + commit SHA prefix
+
+	Page     int // 1-indexed, default 1
+	PageSize int // fixed 50
+}
+
+// SessionListResult is the paginated response for listing sessions
+type SessionListResult struct {
+	Sessions      []SessionListItem    `json:"sessions"`
+	Total         int                  `json:"total"`
+	Page          int                  `json:"page"`
+	PageSize      int                  `json:"page_size"`
+	FilterOptions SessionFilterOptions `json:"filter_options"`
+}
+
+// SessionFilterOptions contains faceted filter counts for the session list UI
+type SessionFilterOptions struct {
+	Repos    []FilterOption `json:"repos"`
+	Branches []FilterOption `json:"branches"`
+	Owners   []FilterOption `json:"owners"`
+	Total    int            `json:"total"` // total sessions matching base visibility (for "All Sessions" count)
+}
+
+// FilterOption represents a single filter value with its count
+type FilterOption struct {
+	Value string `json:"value"`
+	Count int    `json:"count"`
 }
 
 // SessionDetail represents detailed session information (sync-based model)

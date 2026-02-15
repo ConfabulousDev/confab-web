@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, GitHubIcon, DurationIcon, PRIcon, ClaudeCodeIcon } from '@/components/icons';
-import SortableHeader from '@/components/SortableHeader';
+import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, ClaudeCodeIcon } from '@/components/icons';
 import { formatRelativeTime, formatDuration } from '@/utils';
 import styles from './SessionsPage.module.css';
 
@@ -18,8 +17,6 @@ interface MockSession {
   git_repo_url: string | null;
   git_branch: string | null;
   github_prs?: string[] | null;
-  hostname: string | null;
-  username: string | null;
   shared_by_email?: string | null;
 }
 
@@ -31,14 +28,12 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Recently we started ingesting hostname and username in sync/init API. I want to start displaying this in the session list.',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // Started 5m ago
-    last_sync_time: new Date(Date.now() - 18 * 1000).toISOString(), // 18s ago (duration: ~5m)
+    first_seen: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 18 * 1000).toISOString(),
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
     github_prs: ['142'],
-    hostname: 'macbook-pro.local',
-    username: 'sarah',
   },
   {
     id: '2',
@@ -46,13 +41,11 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'check the latest pending changes in the api md files. See if you understand what changed.',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // Started 25h ago
-    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago (duration: 2h)
+    first_seen: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
-    hostname: 'dev-server-01',
-    username: 'sarah',
   },
   {
     id: '3',
@@ -60,13 +53,11 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Backend API metadata nesting & client telemetry',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Started 24h ago
-    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago (duration: 1h)
+    first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
     git_repo: 'internal/confab',
-    git_repo_url: 'https://gitlab.company.com/internal/confab', // Non-GitHub example
+    git_repo_url: 'https://gitlab.company.com/internal/confab',
     git_branch: 'main',
-    hostname: 'workstation',
-    username: 'mike',
   },
   {
     id: '4',
@@ -74,13 +65,11 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Sync API Metadata Nesting Implementation',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(), // Started 26h ago
-    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(), // 23h ago (duration: 3h)
+    first_seen: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
-    hostname: 'macbook-pro.local',
-    username: 'sarah',
   },
   {
     id: '5',
@@ -88,14 +77,12 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Refactor onboarding UI into reusable Quickstart',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // Started 2d ago
-    last_sync_time: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1d ago (duration: 1d)
+    first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/quickstart',
     github_prs: ['118', '119'],
-    hostname: 'ubuntu-desktop',
-    username: 'alex',
   },
   {
     id: '6',
@@ -103,44 +90,28 @@ const mockSessions: MockSession[] = [
     custom_title: null,
     summary: 'Add authentication middleware',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 45 * 60 * 1000).toISOString(), // Started 2d 45m ago
-    last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2d ago (duration: 45m)
+    first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 45 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     git_repo: 'ConfabulousDev/confab',
     git_repo_url: 'https://github.com/ConfabulousDev/confab',
     git_branch: 'develop',
-    hostname: null,
-    username: null,
   },
 ];
 
 // Presentational component for the session list table
 interface SessionListTableProps {
   sessions: MockSession[];
-  sortColumn?: string;
-  sortDirection?: 'asc' | 'desc';
 }
 
-function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirection = 'desc' }: SessionListTableProps) {
+function SessionListTable({ sessions }: SessionListTableProps) {
   return (
     <div className={styles.card}>
       <div className={styles.sessionsTable}>
         <table>
           <thead>
             <tr>
-              <SortableHeader
-                column="summary"
-                label="Session"
-                currentColumn={sortColumn}
-                direction={sortDirection}
-                onSort={() => {}}
-              />
-              <SortableHeader
-                column="last_sync_time"
-                label="Activity"
-                currentColumn={sortColumn}
-                direction={sortDirection}
-                onSort={() => {}}
-              />
+              <th>Session</th>
+              <th>Activity</th>
             </tr>
           </thead>
           <tbody>
@@ -172,11 +143,6 @@ function SessionListTable({ sessions, sortColumn = 'last_sync_time', sortDirecti
                         #{pr}
                       </Chip>
                     ))}
-                    {session.hostname && (
-                      <Chip icon={ComputerIcon} variant="green">
-                        {session.hostname}
-                      </Chip>
-                    )}
                   </div>
                   {session.shared_by_email && (
                     <div className={styles.sharedByLine}>
@@ -234,21 +200,13 @@ export const WithMixedData: Story = {
         custom_title: 'Custom titled session',
         summary: 'This has a custom title set by the user',
         first_user_message: null,
-        first_seen: new Date(Date.now() - 35 * 60 * 1000).toISOString(), // Started 35m ago
-        last_sync_time: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5m ago (duration: 30m)
+        first_seen: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+        last_sync_time: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
         git_repo: 'company/another-repo',
         git_repo_url: 'https://github.com/company/another-repo',
         git_branch: 'main',
-        hostname: 'server.internal.company.com',
-        username: 'deploy',
       },
     ],
-  },
-};
-
-export const NoSystemInfo: Story = {
-  args: {
-    sessions: mockSessions.map(s => ({ ...s, hostname: null, username: null })),
   },
 };
 
@@ -277,13 +235,11 @@ const mockSharedSessions: MockSession[] = [
     custom_title: null,
     summary: 'API endpoint refactoring for v2',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2h ago
-    last_sync_time: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30m ago
+    first_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/api-v2',
-    hostname: null, // Hidden for shared sessions
-    username: null,
     shared_by_email: 'alice@example.com',
   },
   {
@@ -292,13 +248,11 @@ const mockSharedSessions: MockSession[] = [
     custom_title: 'Database migration planning',
     summary: null,
     first_user_message: null,
-    first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1d ago
-    last_sync_time: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), // 12h ago
+    first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
     git_repo: 'company/backend',
     git_repo_url: 'https://github.com/company/backend',
     git_branch: 'main',
-    hostname: null,
-    username: null,
     shared_by_email: 'bob@company.com',
   },
   {
@@ -307,14 +261,12 @@ const mockSharedSessions: MockSession[] = [
     custom_title: null,
     summary: 'Frontend performance optimization',
     first_user_message: null,
-    first_seen: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3d ago
-    last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2d ago
+    first_seen: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'perf/lazy-loading',
     github_prs: ['156'],
-    hostname: null,
-    username: null,
     shared_by_email: 'carol@example.org',
   },
 ];

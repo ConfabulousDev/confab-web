@@ -28,12 +28,12 @@
   color: var(--color-text-muted);
 }
 
-.devIndicator {
-  color: var(--color-warning);
+.loadingIndicator {
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
-/* Header actions (refresh + filter buttons) */
+/* Header actions (refresh button) */
 .headerActions {
   display: flex;
   align-items: center;
@@ -88,6 +88,12 @@
 /* Table styles */
 .sessionsTable {
   overflow-x: auto;
+  transition: opacity var(--transition-fast);
+}
+
+.tableLoading {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .sessionsTable table {

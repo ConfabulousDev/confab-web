@@ -12,7 +12,7 @@ import (
 type TrendsRequest struct {
 	StartDate     time.Time // Start of date range
 	EndDate       time.Time // End of date range (exclusive)
-	Repos         []string  // Filter by these repo names (explicit list required)
+	Repos         []string  // Filter by extracted repo names (e.g., "org/repo", not full URL)
 	IncludeNoRepo bool      // Include sessions without a git repo
 }
 

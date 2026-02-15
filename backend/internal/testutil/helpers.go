@@ -387,3 +387,62 @@ func TestGitHubUser(suffix string) models.OAuthUserInfo {
 	}
 }
 
+// TestSessionFullOpts contains options for creating a fully-populated test session.
+type TestSessionFullOpts struct {
+	RepoURL          string // e.g., "https://github.com/org/repo.git"
+	Branch           string // e.g., "main"
+	Summary          string // session summary text
+	FirstUserMessage string // first user message text
+	SyncLines        int    // total_lines for the sync file (default 100, use -1 to skip creating sync file)
+}
+
+// CreateTestSessionFull creates a session with git info, summary, first_user_message,
+// and a sync file with total_lines > 0 (making it "visible" for server-side filtering).
+// Returns the session UUID primary key.
+func CreateTestSessionFull(t *testing.T, env *TestEnvironment, userID int64, externalID string, opts TestSessionFullOpts) string {
+	t.Helper()
+
+	sessionID := uuid.New().String()
+
+	gitInfo := map[string]interface{}{}
+	if opts.RepoURL != "" {
+		gitInfo["repo_url"] = opts.RepoURL
+	}
+	if opts.Branch != "" {
+		gitInfo["branch"] = opts.Branch
+	}
+	gitInfoJSON, err := json.Marshal(gitInfo)
+	if err != nil {
+		t.Fatalf("failed to marshal git_info: %v", err)
+	}
+
+	var summary, firstMsg *string
+	if opts.Summary != "" {
+		summary = &opts.Summary
+	}
+	if opts.FirstUserMessage != "" {
+		firstMsg = &opts.FirstUserMessage
+	}
+
+	query := `
+		INSERT INTO sessions (id, user_id, external_id, first_seen, git_info, summary, first_user_message, last_message_at)
+		VALUES ($1, $2, $3, NOW(), $4, $5, $6, NOW())
+	`
+	_, err = env.DB.Exec(env.Ctx, query, sessionID, userID, externalID, gitInfoJSON, summary, firstMsg)
+	if err != nil {
+		t.Fatalf("failed to create test session: %v", err)
+	}
+
+	// Add a sync file to make total_lines > 0 (required for visibility)
+	// SyncLines: 0 → default 100 lines, SyncLines: -1 → skip (invisible session)
+	syncLines := opts.SyncLines
+	if syncLines == 0 {
+		syncLines = 100
+	}
+	if syncLines > 0 {
+		CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", syncLines)
+	}
+
+	return sessionID
+}
+

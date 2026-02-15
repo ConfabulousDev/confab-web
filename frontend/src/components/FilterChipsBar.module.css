@@ -1,0 +1,282 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) 0;
+}
+
+/* Top row: search + dimension buttons */
+.controlsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+/* Search input */
+.searchWrapper {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--spacing-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 6px 8px 6px 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-fast);
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--color-selected-border);
+}
+
+/* Dimension buttons row */
+.dimensionButtons {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+/* Individual dimension button + dropdown */
+.dimensionContainer {
+  position: relative;
+}
+
+.dimensionBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.dimensionBtn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
+.dimensionActive {
+  background: var(--color-selected-bg);
+  border-color: var(--color-selected-border);
+  color: var(--color-selected);
+}
+
+.dimensionIcon {
+  display: flex;
+  align-items: center;
+}
+
+.dimensionIcon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dimensionBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--color-selected);
+  color: white;
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+}
+
+/* Dimension dropdown */
+.dimensionDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 240px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+}
+
+.dimensionSearch {
+  padding: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dimensionSearchInput {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.dimensionSearchInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.dimensionSearchInput:focus {
+  outline: none;
+  border-color: var(--color-selected-border);
+}
+
+.dimensionList {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: var(--spacing-xs);
+}
+
+.dimensionItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 5px var(--spacing-sm);
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background var(--transition-fast);
+}
+
+.dimensionItem:hover {
+  background: var(--color-bg-hover);
+}
+
+.dimensionItemSelected {
+  background: var(--color-bg-secondary);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--color-border-dark);
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.checkbox.checked {
+  background: var(--color-selected);
+  border-color: var(--color-selected-border);
+}
+
+.checkbox.checked svg {
+  display: block;
+}
+
+.checkbox svg {
+  display: none;
+  color: white;
+}
+
+.dimensionLabel {
+  flex: 1;
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dimensionCount {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.dimensionEmpty {
+  padding: var(--spacing-sm);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+
+/* Active filter chips row */
+.chipsRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chip:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
+.chipDimension {
+  color: var(--color-text-muted);
+}
+
+.chipRemove {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.clearBtn {
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color var(--transition-fast);
+}
+
+.clearBtn:hover {
+  color: var(--color-text-primary);
+}

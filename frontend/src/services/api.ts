@@ -5,7 +5,7 @@ import { getCSRFToken, initCSRF, clearCSRFToken, updateCSRFTokenFromResponse } f
 import { shouldSkip401Redirect } from '@/utils/sessionErrors';
 import {
   SessionDetailSchema,
-  SessionListSchema,
+  SessionListResponseSchema,
   SessionShareListSchema,
   APIKeyListSchema,
   CreateAPIKeyResponseSchema,
@@ -16,7 +16,6 @@ import {
   SessionAnalyticsSchema,
   TrendsResponseSchema,
   validateResponse,
-  type Session,
   type SessionDetail,
   type SessionShare,
   type APIKey,
@@ -26,6 +25,7 @@ import {
   type GitHubLink,
   type GitHubLinksResponse,
   type SessionAnalytics,
+  type SessionListResponse,
   type TrendsResponse,
 } from '@/schemas/api';
 
@@ -284,8 +284,10 @@ const api = new APIClient();
 // All responses are validated with Zod schemas at runtime
 
 export const sessionsAPI = {
-  list: (): Promise<Session[]> =>
-    api.getValidated('/sessions', SessionListSchema),
+  list: (params?: Record<string, string>): Promise<SessionListResponse> => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return api.getValidated(`/sessions${query}`, SessionListResponseSchema);
+  },
 
   get: (sessionId: string): Promise<SessionDetail> =>
     api.getValidated(`/sessions/${sessionId}`, SessionDetailSchema),

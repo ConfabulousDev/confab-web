@@ -1,92 +1,51 @@
 import { useSearchParams } from 'react-router-dom';
-import { useCallback, useMemo, useState } from 'react';
-import type { SortDirection } from '@/utils';
+import { useCallback, useMemo } from 'react';
 
-type SortColumn = 'summary' | 'external_id' | 'last_sync_time';
-
-interface SessionFilters {
-  selectedRepo: string | null;
-  selectedBranch: string | null;
-  selectedHostname: string | null;
-  selectedOwner: string | null;
-  selectedPR: string | null;
-  selectedCommit: string | null;
-  searchQuery: string;
-  sortColumn: SortColumn;
-  sortDirection: SortDirection;
-  showEmptySessions: boolean;
+export interface SessionFilters {
+  repos: string[];
+  branches: string[];
+  owners: string[];
+  prs: string[];
+  query: string;
+  page: number;
 }
 
-interface SessionFiltersActions {
-  setSelectedBranch: (value: string | null) => void;
-  setSelectedPR: (value: string | null) => void;
-  setSelectedCommit: (value: string | null) => void;
-  setSearchQuery: (value: string) => void;
-  setSortColumn: (value: SortColumn) => void;
-  setSortDirection: (value: SortDirection) => void;
-  handleSort: (column: SortColumn) => void;
-  handleRepoClick: (repo: string | null) => void;
-  handleHostnameClick: (hostname: string | null) => void;
-  handleOwnerClick: (owner: string | null) => void;
-  toggleShowEmptySessions: () => void;
+export interface SessionFiltersActions {
+  toggleRepo: (value: string) => void;
+  toggleBranch: (value: string) => void;
+  toggleOwner: (value: string) => void;
+  addPR: (value: string) => void;
+  removePR: (value: string) => void;
+  setQuery: (value: string) => void;
+  setPage: (page: number) => void;
+  clearAll: () => void;
 }
 
-const PARAM_KEYS = {
-  repo: 'repo',
-  branch: 'branch',
-  hostname: 'hostname',
-  owner: 'owner',
-  pr: 'pr',
-  commit: 'commit',
-  q: 'q',
-  sort: 'sort',
-  dir: 'dir',
-} as const;
-
-const DEFAULT_SORT_COLUMN: SortColumn = 'last_sync_time';
-const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
-
-function isValidSortColumn(value: string | null): value is SortColumn {
-  return value === 'summary' || value === 'external_id' || value === 'last_sync_time';
+function parseCommaSeparated(value: string | null): string[] {
+  if (!value) return [];
+  return value.split(',').filter(Boolean);
 }
 
-function isValidSortDirection(value: string | null): value is SortDirection {
-  return value === 'asc' || value === 'desc';
+function joinOrEmpty(values: string[]): string | null {
+  return values.length > 0 ? values.join(',') : null;
 }
 
 export function useSessionFilters(): SessionFilters & SessionFiltersActions {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Not persisted to URL - hidden dev feature
-  const [showEmptySessions, setShowEmptySessions] = useState(false);
-
   const filters = useMemo<SessionFilters>(() => {
-    const repoParam = searchParams.get(PARAM_KEYS.repo);
-    const branchParam = searchParams.get(PARAM_KEYS.branch);
-    const hostnameParam = searchParams.get(PARAM_KEYS.hostname);
-    const ownerParam = searchParams.get(PARAM_KEYS.owner);
-    const prParam = searchParams.get(PARAM_KEYS.pr);
-    const commitParam = searchParams.get(PARAM_KEYS.commit);
-    const queryParam = searchParams.get(PARAM_KEYS.q);
-    const sortParam = searchParams.get(PARAM_KEYS.sort);
-    const dirParam = searchParams.get(PARAM_KEYS.dir);
-
     return {
-      selectedRepo: repoParam,
-      selectedBranch: branchParam,
-      selectedHostname: hostnameParam,
-      selectedOwner: ownerParam,
-      selectedPR: prParam,
-      selectedCommit: commitParam,
-      searchQuery: queryParam || '',
-      sortColumn: isValidSortColumn(sortParam) ? sortParam : DEFAULT_SORT_COLUMN,
-      sortDirection: isValidSortDirection(dirParam) ? dirParam : DEFAULT_SORT_DIRECTION,
-      showEmptySessions,
+      repos: parseCommaSeparated(searchParams.get('repo')),
+      branches: parseCommaSeparated(searchParams.get('branch')),
+      owners: parseCommaSeparated(searchParams.get('owner')),
+      prs: parseCommaSeparated(searchParams.get('pr')),
+      query: searchParams.get('q') || '',
+      page: Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1),
     };
-  }, [searchParams, showEmptySessions]);
+  }, [searchParams]);
 
   const updateParams = useCallback(
-    (updates: Partial<Record<keyof typeof PARAM_KEYS, string | null>>) => {
+    (updates: Record<string, string | null>, resetPage = true) => {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -97,6 +56,9 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
               next.set(key, value);
             }
           }
+          if (resetPage) {
+            next.delete('page');
+          }
           return next;
         },
         { replace: true }
@@ -105,113 +67,84 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [setSearchParams]
   );
 
-  const setSelectedBranch = useCallback(
-    (value: string | null) => {
-      updateParams({ [PARAM_KEYS.branch]: value });
-    },
-    [updateParams]
-  );
-
-  const setSelectedPR = useCallback(
-    (value: string | null) => {
-      updateParams({ [PARAM_KEYS.pr]: value });
-    },
-    [updateParams]
-  );
-
-  const setSelectedCommit = useCallback(
-    (value: string | null) => {
-      updateParams({ [PARAM_KEYS.commit]: value });
-    },
-    [updateParams]
-  );
-
-  const setSearchQuery = useCallback(
+  const toggleRepo = useCallback(
     (value: string) => {
-      updateParams({ [PARAM_KEYS.q]: value || null });
+      const current = parseCommaSeparated(searchParams.get('repo'));
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      updateParams({ repo: joinOrEmpty(next) });
+    },
+    [searchParams, updateParams]
+  );
+
+  const toggleBranch = useCallback(
+    (value: string) => {
+      const current = parseCommaSeparated(searchParams.get('branch'));
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      updateParams({ branch: joinOrEmpty(next) });
+    },
+    [searchParams, updateParams]
+  );
+
+  const toggleOwner = useCallback(
+    (value: string) => {
+      const current = parseCommaSeparated(searchParams.get('owner'));
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      updateParams({ owner: joinOrEmpty(next) });
+    },
+    [searchParams, updateParams]
+  );
+
+  const addPR = useCallback(
+    (value: string) => {
+      const current = parseCommaSeparated(searchParams.get('pr'));
+      if (current.includes(value)) return;
+      updateParams({ pr: joinOrEmpty([...current, value]) });
+    },
+    [searchParams, updateParams]
+  );
+
+  const removePR = useCallback(
+    (value: string) => {
+      const current = parseCommaSeparated(searchParams.get('pr'));
+      const next = current.filter((v) => v !== value);
+      updateParams({ pr: joinOrEmpty(next) });
+    },
+    [searchParams, updateParams]
+  );
+
+  const setQuery = useCallback(
+    (value: string) => {
+      updateParams({ q: value || null });
     },
     [updateParams]
   );
 
-  const setSortColumn = useCallback(
-    (value: SortColumn) => {
-      updateParams({
-        [PARAM_KEYS.sort]: value === DEFAULT_SORT_COLUMN ? null : value,
-      });
+  const setPage = useCallback(
+    (page: number) => {
+      updateParams({ page: page > 1 ? String(page) : null }, false);
     },
     [updateParams]
   );
 
-  const setSortDirection = useCallback(
-    (value: SortDirection) => {
-      updateParams({
-        [PARAM_KEYS.dir]: value === DEFAULT_SORT_DIRECTION ? null : value,
-      });
-    },
-    [updateParams]
-  );
-
-  const handleSort = useCallback(
-    (column: SortColumn) => {
-      if (filters.sortColumn === column) {
-        const newDir = filters.sortDirection === 'asc' ? 'desc' : 'asc';
-        updateParams({
-          [PARAM_KEYS.dir]: newDir === DEFAULT_SORT_DIRECTION ? null : newDir,
-        });
-      } else {
-        const defaultDir = column === 'last_sync_time' ? 'desc' : 'asc';
-        updateParams({
-          [PARAM_KEYS.sort]: column === DEFAULT_SORT_COLUMN ? null : column,
-          [PARAM_KEYS.dir]: defaultDir === DEFAULT_SORT_DIRECTION ? null : defaultDir,
-        });
-      }
-    },
-    [filters.sortColumn, filters.sortDirection, updateParams]
-  );
-
-  const handleRepoClick = useCallback(
-    (repo: string | null) => {
-      updateParams({
-        [PARAM_KEYS.repo]: repo,
-        // Reset repo-scoped filters when repo changes
-        [PARAM_KEYS.branch]: null,
-        [PARAM_KEYS.pr]: null,
-        [PARAM_KEYS.commit]: null,
-      });
-    },
-    [updateParams]
-  );
-
-  const handleHostnameClick = useCallback(
-    (hostname: string | null) => {
-      updateParams({ [PARAM_KEYS.hostname]: hostname });
-    },
-    [updateParams]
-  );
-
-  const handleOwnerClick = useCallback(
-    (owner: string | null) => {
-      updateParams({ [PARAM_KEYS.owner]: owner });
-    },
-    [updateParams]
-  );
-
-  const toggleShowEmptySessions = useCallback(() => {
-    setShowEmptySessions((prev) => !prev);
-  }, []);
+  const clearAll = useCallback(() => {
+    setSearchParams({}, { replace: true });
+  }, [setSearchParams]);
 
   return {
     ...filters,
-    setSelectedBranch,
-    setSelectedPR,
-    setSelectedCommit,
-    setSearchQuery,
-    setSortColumn,
-    setSortDirection,
-    handleSort,
-    handleRepoClick,
-    handleHostnameClick,
-    handleOwnerClick,
-    toggleShowEmptySessions,
+    toggleRepo,
+    toggleBranch,
+    toggleOwner,
+    addPR,
+    removePR,
+    setQuery,
+    setPage,
+    clearAll,
   };
 }

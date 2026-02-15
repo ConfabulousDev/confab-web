@@ -254,7 +254,7 @@ func TestGetTrends_RepoFilter(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session with git info
-	sessionID := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "test-session-repo", "https://github.com/org/repo1")
+	sessionID := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "test-session-repo", "org/repo1")
 
 	store := analytics.NewStore(env.DB.Conn())
 
@@ -279,7 +279,7 @@ func TestGetTrends_RepoFilter(t *testing.T) {
 	req := analytics.TrendsRequest{
 		StartDate:     now.Add(-7 * 24 * time.Hour),
 		EndDate:       now.Add(24 * time.Hour),
-		Repos:         []string{"https://github.com/org/repo1"},
+		Repos:         []string{"org/repo1"},
 		IncludeNoRepo: false,
 	}
 
@@ -296,7 +296,7 @@ func TestGetTrends_RepoFilter(t *testing.T) {
 	req2 := analytics.TrendsRequest{
 		StartDate:     now.Add(-7 * 24 * time.Hour),
 		EndDate:       now.Add(24 * time.Hour),
-		Repos:         []string{"https://github.com/org/other-repo"},
+		Repos:         []string{"org/other-repo"},
 		IncludeNoRepo: false,
 	}
 
@@ -376,9 +376,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 	ctx := context.Background()
 
 	// Create session WITH repo (repo1)
-	sessionWithRepo1 := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "session-with-repo1", "https://github.com/org/repo1")
+	sessionWithRepo1 := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "session-with-repo1", "org/repo1")
 	// Create session WITH different repo (repo2)
-	sessionWithRepo2 := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "session-with-repo2", "https://github.com/org/repo2")
+	sessionWithRepo2 := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "session-with-repo2", "org/repo2")
 	// Create session WITHOUT repo
 	sessionNoRepo := testutil.CreateTestSession(t, env, user.ID, "session-no-repo")
 
@@ -407,7 +407,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartDate:     now.Add(-7 * 24 * time.Hour),
 			EndDate:       now.Add(24 * time.Hour),
-			Repos:         []string{"https://github.com/org/repo1", "https://github.com/org/repo2"},
+			Repos:         []string{"org/repo1", "org/repo2"},
 			IncludeNoRepo: true,
 		}
 		response, err := store.GetTrends(ctx, user.ID, req)
@@ -427,7 +427,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartDate:     now.Add(-7 * 24 * time.Hour),
 			EndDate:       now.Add(24 * time.Hour),
-			Repos:         []string{"https://github.com/org/repo1", "https://github.com/org/repo2"},
+			Repos:         []string{"org/repo1", "org/repo2"},
 			IncludeNoRepo: false,
 		}
 		response, err := store.GetTrends(ctx, user.ID, req)
@@ -483,7 +483,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartDate:     now.Add(-7 * 24 * time.Hour),
 			EndDate:       now.Add(24 * time.Hour),
-			Repos:         []string{"https://github.com/org/repo1"},
+			Repos:         []string{"org/repo1"},
 			IncludeNoRepo: true,
 		}
 		response, err := store.GetTrends(ctx, user.ID, req)
@@ -503,7 +503,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartDate:     now.Add(-7 * 24 * time.Hour),
 			EndDate:       now.Add(24 * time.Hour),
-			Repos:         []string{"https://github.com/org/repo1"},
+			Repos:         []string{"org/repo1"},
 			IncludeNoRepo: false,
 		}
 		response, err := store.GetTrends(ctx, user.ID, req)
@@ -523,7 +523,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartDate:     now.Add(-7 * 24 * time.Hour),
 			EndDate:       now.Add(24 * time.Hour),
-			Repos:         []string{"https://github.com/org/repo1", "https://github.com/org/repo2"},
+			Repos:         []string{"org/repo1", "org/repo2"},
 			IncludeNoRepo: false,
 		}
 		response, err := store.GetTrends(ctx, user.ID, req)
@@ -543,7 +543,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartDate:     now.Add(-7 * 24 * time.Hour),
 			EndDate:       now.Add(24 * time.Hour),
-			Repos:         []string{"https://github.com/org/nonexistent"},
+			Repos:         []string{"org/nonexistent"},
 			IncludeNoRepo: false,
 		}
 		response, err := store.GetTrends(ctx, user.ID, req)

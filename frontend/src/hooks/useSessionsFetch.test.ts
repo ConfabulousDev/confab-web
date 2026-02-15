@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useSessionsFetch } from './useSessionsFetch';
-import type { Session } from '@/types';
+import type { SessionFilters } from './useSessionFilters';
+import type { SessionListResponse } from '@/schemas/api';
 
 // Mock the API
 vi.mock('@/services/api', () => ({
@@ -12,77 +13,118 @@ vi.mock('@/services/api', () => ({
 
 import { sessionsAPI } from '@/services/api';
 
-const mockSessions: Session[] = [
-  {
-    id: '1',
-    external_id: 'ext-1',
-    first_seen: '2025-01-01T10:00:00Z',
-    file_count: 2,
-    last_sync_time: '2025-01-01T12:00:00Z',
-    summary: 'Test session 1',
-    first_user_message: 'Hello',
-    session_type: 'cli',
-    total_lines: 100,
-    git_repo: 'https://github.com/test/repo',
-    git_branch: 'main',
-    is_owner: true,
-    access_type: 'owner',
-    shared_by_email: null,
+const defaultFilters: SessionFilters = {
+  repos: [],
+  branches: [],
+  owners: [],
+  prs: [],
+  query: '',
+  page: 1,
+};
+
+const mockResponse: SessionListResponse = {
+  sessions: [
+    {
+      id: '1',
+      external_id: 'ext-1',
+      first_seen: '2025-01-01T10:00:00Z',
+      file_count: 2,
+      last_sync_time: '2025-01-01T12:00:00Z',
+      summary: 'Test session 1',
+      first_user_message: 'Hello',
+      session_type: 'cli',
+      total_lines: 100,
+      git_repo: 'test/repo',
+      git_branch: 'main',
+      is_owner: true,
+      access_type: 'owner',
+      shared_by_email: null,
+    },
+  ],
+  total: 1,
+  page: 1,
+  page_size: 50,
+  filter_options: {
+    repos: [{ value: 'test/repo', count: 1 }],
+    branches: [{ value: 'main', count: 1 }],
+    owners: [{ value: 'user@test.com', count: 1 }],
+    total: 1,
   },
-];
+};
+
+const emptyResponse: SessionListResponse = {
+  sessions: [],
+  total: 0,
+  page: 1,
+  page_size: 50,
+  filter_options: { repos: [], branches: [], owners: [], total: 0 },
+};
 
 describe('useSessionsFetch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(sessionsAPI.list).mockResolvedValue(mockSessions);
+    vi.mocked(sessionsAPI.list).mockResolvedValue(mockResponse);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('fetches sessions on mount', async () => {
-    const { result } = renderHook(() => useSessionsFetch());
-
-    // Initially loading
-    expect(result.current.loading).toBe(true);
-    expect(result.current.sessions).toEqual([]);
+  it('fetches sessions on mount with default filters', async () => {
+    const { result } = renderHook(() => useSessionsFetch(defaultFilters));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.sessions).toEqual(mockSessions);
-    expect(result.current.error).toBeNull();
+    expect(result.current.sessions).toEqual(mockResponse.sessions);
+    expect(result.current.total).toBe(1);
+    expect(result.current.filterOptions).toEqual(mockResponse.filter_options);
     expect(sessionsAPI.list).toHaveBeenCalledTimes(1);
   });
 
-  it('returns empty array when no data', async () => {
-    vi.mocked(sessionsAPI.list).mockResolvedValue([]);
+  it('returns empty results', async () => {
+    vi.mocked(sessionsAPI.list).mockResolvedValue(emptyResponse);
 
-    const { result } = renderHook(() => useSessionsFetch());
+    const { result } = renderHook(() => useSessionsFetch(defaultFilters));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
 
     expect(result.current.sessions).toEqual([]);
+    expect(result.current.total).toBe(0);
   });
 
-  it('does not fetch when enabled=false', async () => {
-    const { result } = renderHook(() => useSessionsFetch(false));
+  it('passes filter params to API', async () => {
+    const filters: SessionFilters = {
+      repos: ['confab-web'],
+      branches: ['main'],
+      owners: [],
+      prs: ['123'],
+      query: '',
+      page: 2,
+    };
 
-    // Should not start loading
-    expect(result.current.loading).toBe(false);
-    expect(result.current.sessions).toEqual([]);
-    expect(sessionsAPI.list).not.toHaveBeenCalled();
+    const { result } = renderHook(() => useSessionsFetch(filters));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(sessionsAPI.list).toHaveBeenCalledWith({
+      repo: 'confab-web',
+      branch: 'main',
+      pr: '123',
+      page: '2',
+    });
   });
 
   it('handles fetch errors', async () => {
     const error = new Error('Network error');
     vi.mocked(sessionsAPI.list).mockRejectedValue(error);
 
-    const { result } = renderHook(() => useSessionsFetch());
+    const { result } = renderHook(() => useSessionsFetch(defaultFilters));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -93,7 +135,7 @@ describe('useSessionsFetch', () => {
   });
 
   it('refetch fetches sessions again', async () => {
-    const { result } = renderHook(() => useSessionsFetch());
+    const { result } = renderHook(() => useSessionsFetch(defaultFilters));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -101,34 +143,29 @@ describe('useSessionsFetch', () => {
 
     expect(sessionsAPI.list).toHaveBeenCalledTimes(1);
 
-    // Trigger refetch with updated data
-    vi.mocked(sessionsAPI.list).mockResolvedValue([...mockSessions, ...mockSessions]);
-
     await act(async () => {
       await result.current.refetch();
     });
 
     expect(sessionsAPI.list).toHaveBeenCalledTimes(2);
-    expect(result.current.sessions).toHaveLength(2);
   });
 
   it('clears error on successful refetch', async () => {
     vi.mocked(sessionsAPI.list).mockRejectedValueOnce(new Error('fail'));
 
-    const { result } = renderHook(() => useSessionsFetch());
+    const { result } = renderHook(() => useSessionsFetch(defaultFilters));
 
     await waitFor(() => {
       expect(result.current.error).not.toBeNull();
     });
 
-    // Refetch succeeds
-    vi.mocked(sessionsAPI.list).mockResolvedValue(mockSessions);
+    vi.mocked(sessionsAPI.list).mockResolvedValue(mockResponse);
 
     await act(async () => {
       await result.current.refetch();
     });
 
     expect(result.current.error).toBeNull();
-    expect(result.current.sessions).toEqual(mockSessions);
+    expect(result.current.sessions).toEqual(mockResponse.sessions);
   });
 });

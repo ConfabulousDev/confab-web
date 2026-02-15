@@ -34,10 +34,10 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 
-		// Create test sessions
-		testutil.CreateTestSession(t, env, user.ID, "session-1")
-		testutil.CreateTestSession(t, env, user.ID, "session-2")
-		testutil.CreateTestSession(t, env, user.ID, "session-3")
+		// Create test sessions with content (required for visibility in paginated endpoint)
+		testutil.CreateTestSessionFull(t, env, user.ID, "session-1", testutil.TestSessionFullOpts{Summary: "s1"})
+		testutil.CreateTestSessionFull(t, env, user.ID, "session-2", testutil.TestSessionFullOpts{Summary: "s2"})
+		testutil.CreateTestSessionFull(t, env, user.ID, "session-3", testutil.TestSessionFullOpts{Summary: "s3"})
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
@@ -50,15 +50,15 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var sessions []db.SessionListItem
-		testutil.ParseJSON(t, resp, &sessions)
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
 
-		if len(sessions) != 3 {
-			t.Errorf("expected 3 sessions, got %d", len(sessions))
+		if len(result.Sessions) != 3 {
+			t.Errorf("expected 3 sessions, got %d", len(result.Sessions))
 		}
 	})
 
-	t.Run("returns empty array when user has no sessions", func(t *testing.T) {
+	t.Run("returns empty sessions when user has no sessions", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
@@ -75,11 +75,11 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var sessions []db.SessionListItem
-		testutil.ParseJSON(t, resp, &sessions)
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
 
-		if len(sessions) != 0 {
-			t.Errorf("expected 0 sessions, got %d", len(sessions))
+		if len(result.Sessions) != 0 {
+			t.Errorf("expected 0 sessions, got %d", len(result.Sessions))
 		}
 	})
 
@@ -105,9 +105,9 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		user2 := testutil.CreateTestUser(t, env, "user2@example.com", "User 2")
 		session1 := testutil.CreateTestWebSessionWithToken(t, env, user1.ID)
 
-		// Create sessions for both users
-		testutil.CreateTestSession(t, env, user1.ID, "user1-session")
-		testutil.CreateTestSession(t, env, user2.ID, "user2-session")
+		// Create sessions for both users (with content for visibility)
+		testutil.CreateTestSessionFull(t, env, user1.ID, "user1-session", testutil.TestSessionFullOpts{Summary: "u1"})
+		testutil.CreateTestSessionFull(t, env, user2.ID, "user2-session", testutil.TestSessionFullOpts{Summary: "u2"})
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(session1)
@@ -120,15 +120,15 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var sessions []db.SessionListItem
-		testutil.ParseJSON(t, resp, &sessions)
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
 
 		// User1 should only see their own session
-		if len(sessions) != 1 {
-			t.Errorf("expected 1 session for user1, got %d", len(sessions))
+		if len(result.Sessions) != 1 {
+			t.Errorf("expected 1 session for user1, got %d", len(result.Sessions))
 		}
-		if len(sessions) > 0 && sessions[0].ExternalID != "user1-session" {
-			t.Errorf("expected 'user1-session', got %s", sessions[0].ExternalID)
+		if len(result.Sessions) > 0 && result.Sessions[0].ExternalID != "user1-session" {
+			t.Errorf("expected 'user1-session', got %s", result.Sessions[0].ExternalID)
 		}
 	})
 }
