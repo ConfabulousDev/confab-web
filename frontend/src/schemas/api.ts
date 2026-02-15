@@ -448,9 +448,6 @@ export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
 export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
-export type DailyCostPoint = z.infer<typeof DailyCostPointSchema>;
-export type DailySessionCount = z.infer<typeof DailySessionCountSchema>;
-export type DailyUtilizationPoint = z.infer<typeof DailyUtilizationPointSchema>;
 
 // ============================================================================
 // Validation Functions
