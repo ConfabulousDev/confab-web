@@ -6,7 +6,6 @@ export interface SessionFilters {
   branches: string[];
   owners: string[];
   query: string;
-  page: number;
 }
 
 export interface SessionFiltersActions {
@@ -14,7 +13,6 @@ export interface SessionFiltersActions {
   toggleBranch: (value: string) => void;
   toggleOwner: (value: string) => void;
   setQuery: (value: string) => void;
-  setPage: (page: number) => void;
   clearAll: () => void;
 }
 
@@ -36,12 +34,11 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
       branches: parseCommaSeparated(searchParams.get('branch')),
       owners: parseCommaSeparated(searchParams.get('owner')),
       query: searchParams.get('q') || '',
-      page: Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1),
     };
   }, [searchParams]);
 
   const updateParams = useCallback(
-    (updates: Record<string, string | null>, resetPage = true) => {
+    (updates: Record<string, string | null>) => {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -51,9 +48,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
             } else {
               next.set(key, value);
             }
-          }
-          if (resetPage) {
-            next.delete('page');
           }
           return next;
         },
@@ -103,13 +97,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [updateParams]
   );
 
-  const setPage = useCallback(
-    (page: number) => {
-      updateParams({ page: page > 1 ? String(page) : null }, false);
-    },
-    [updateParams]
-  );
-
   const clearAll = useCallback(() => {
     setSearchParams({}, { replace: true });
   }, [setSearchParams]);
@@ -120,7 +107,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     toggleBranch,
     toggleOwner,
     setQuery,
-    setPage,
     clearAll,
   };
 }

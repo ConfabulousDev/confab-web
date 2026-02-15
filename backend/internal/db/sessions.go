@@ -3,10 +3,11 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
+	"time"
 
 	"github.com/lib/pq"
 	"go.opentelemetry.io/otel/attribute"
@@ -348,33 +349,28 @@ func (db *DB) buildSharedWithMeQuery() string {
 		`
 }
 
-// ListUserSessionsPaginated returns filtered, paginated sessions with faceted counts.
-// Executes two sequential queries: faceted counts (warms cache), then paginated results.
+// ListUserSessionsPaginated returns filtered, cursor-paginated sessions with pre-materialized filter options.
 func (db *DB) ListUserSessionsPaginated(ctx context.Context, userID int64, params SessionListParams) (*SessionListResult, error) {
 	ctx, span := tracer.Start(ctx, "db.list_user_sessions_paginated",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
-			attribute.Int("page", params.Page),
 		))
 	defer span.End()
 
 	if params.PageSize == 0 {
 		params.PageSize = DefaultPageSize
 	}
-	if params.Page < 1 {
-		params.Page = 1
-	}
 
-	// Query 1: Faceted counts (also warms Postgres buffer cache for Query 2)
-	filterOptions, total, err := db.queryFacetedCounts(ctx, userID, params)
+	// Query 1: Pre-materialized filter options (O(distinct values), not O(sessions))
+	filterOptions, err := db.queryFilterOptions(ctx)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	// Query 2: Paginated results with filter pushdown
-	sessions, err := db.queryPaginatedSessions(ctx, userID, params)
+	// Query 2: Cursor-paginated results with filter pushdown
+	sessions, hasMore, nextCursor, err := db.queryPaginatedSessions(ctx, userID, params)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -383,153 +379,102 @@ func (db *DB) ListUserSessionsPaginated(ctx context.Context, userID int64, param
 
 	span.SetAttributes(
 		attribute.Int("sessions.count", len(sessions)),
-		attribute.Int("sessions.total", total),
+		attribute.Bool("sessions.has_more", hasMore),
 	)
 
 	return &SessionListResult{
 		Sessions:      sessions,
-		Total:         total,
-		Page:          params.Page,
+		HasMore:       hasMore,
+		NextCursor:    nextCursor,
 		PageSize:      params.PageSize,
 		FilterOptions: filterOptions,
 	}, nil
 }
 
-// buildFacetFilterFragments builds WHERE clause fragments for each filter dimension.
-// Used by queryFacetedCounts to compose exclude-own-dimension faceted count queries.
-// Returns fragments keyed by dimension name plus a combined "all" fragment.
-func buildFacetFilterFragments(pb *paramBuilder, params SessionListParams) (repo, branch, owner, pr, query string) {
-	if len(params.Repos) > 0 {
-		p := pb.addArray(params.Repos)
-		repo = " AND extracted_repo = ANY(" + p + ")"
+// queryFilterOptions reads pre-materialized filter values from lookup tables.
+// Returns repos from session_repos, branches from session_branches, owners from users table.
+func (db *DB) queryFilterOptions(ctx context.Context) (SessionFilterOptions, error) {
+	opts := SessionFilterOptions{
+		Repos:    make([]string, 0),
+		Branches: make([]string, 0),
+		Owners:   make([]string, 0),
 	}
-	if len(params.Branches) > 0 {
-		p := pb.addArray(params.Branches)
-		branch = " AND git_branch = ANY(" + p + ")"
-	}
-	if len(params.Owners) > 0 {
-		p := pb.addArray(lowercaseSlice(params.Owners))
-		owner = " AND LOWER(owner_email) = ANY(" + p + ")"
-	}
-	if len(params.PRs) > 0 {
-		p := pb.addArray(params.PRs)
-		pr = " AND EXISTS (SELECT 1 FROM session_github_links sgl WHERE sgl.session_id = visible.id AND sgl.link_type = 'pull_request' AND sgl.ref = ANY(" + p + "))"
-	}
-	if params.Query != nil && *params.Query != "" {
-		p := pb.add(*params.Query)
-		query = " AND (custom_title ILIKE '%'||" + p + "||'%'" +
-			" OR suggested_session_title ILIKE '%'||" + p + "||'%'" +
-			" OR summary ILIKE '%'||" + p + "||'%'" +
-			" OR first_user_message ILIKE '%'||" + p + "||'%'" +
-			" OR EXISTS (SELECT 1 FROM session_github_links sgl WHERE sgl.session_id = visible.id AND sgl.link_type = 'commit' AND LOWER(sgl.ref) LIKE LOWER(" + p + ")||'%'))"
-	}
-	return
-}
 
-// queryFacetedCounts runs Query 1: faceted counts with the exclude-own-dimension pattern.
-// Wraps buildSharedWithMeQuery as a base CTE, adds visibility filter, and computes
-// faceted counts for repo, branch, owner dimensions plus a total count.
-func (db *DB) queryFacetedCounts(ctx context.Context, userID int64, params SessionListParams) (SessionFilterOptions, int, error) {
-	pb := newParamBuilder(userID)
-	baseSQL := db.buildSharedWithMeQuery()
-
-	repoFrag, branchFrag, ownerFrag, prFrag, queryFrag := buildFacetFilterFragments(pb, params)
-
-	q := "WITH base AS (" + baseSQL + ")," +
-		// visible: base + visibility filter + computed columns
-		"\nvisible AS (" +
-		"\n  SELECT *," +
-		"\n    regexp_replace(regexp_replace(git_repo_url, '\\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\\1') as extracted_repo," +
-		"\n    CASE WHEN is_owner THEN (SELECT email FROM users WHERE id = $1) ELSE shared_by_email END as owner_email" +
-		"\n  FROM base" +
-		"\n  WHERE COALESCE(total_lines, 0) > 0" +
-		"\n    AND (summary IS NOT NULL OR first_user_message IS NOT NULL)" +
-		"\n)," +
-		// repo_counts: exclude repo filter
-		"\nrepo_counts AS (" +
-		"\n  SELECT extracted_repo as value, COUNT(*) as count FROM visible" +
-		"\n  WHERE 1=1" + branchFrag + ownerFrag + prFrag + queryFrag +
-		"\n  GROUP BY extracted_repo" +
-		"\n)," +
-		// branch_counts: exclude branch filter
-		"\nbranch_counts AS (" +
-		"\n  SELECT git_branch as value, COUNT(*) as count FROM visible" +
-		"\n  WHERE 1=1" + repoFrag + ownerFrag + prFrag + queryFrag +
-		"\n  GROUP BY git_branch" +
-		"\n)," +
-		// owner_counts: exclude owner filter
-		"\nowner_counts AS (" +
-		"\n  SELECT LOWER(owner_email) as value, COUNT(*) as count FROM visible" +
-		"\n  WHERE 1=1" + repoFrag + branchFrag + prFrag + queryFrag +
-		"\n  GROUP BY LOWER(owner_email)" +
-		"\n)," +
-		// total_count: all filters applied
-		"\ntotal_count AS (" +
-		"\n  SELECT COUNT(*) as count FROM visible" +
-		"\n  WHERE 1=1" + repoFrag + branchFrag + ownerFrag + prFrag + queryFrag +
-		"\n)" +
-		"\nSELECT 'repo' as dimension, value, count FROM repo_counts WHERE value IS NOT NULL" +
-		"\nUNION ALL SELECT 'branch', value, count FROM branch_counts WHERE value IS NOT NULL" +
-		"\nUNION ALL SELECT 'owner', value, count FROM owner_counts WHERE value IS NOT NULL" +
-		"\nUNION ALL SELECT 'total', '', count FROM total_count"
-
-	rows, err := db.conn.QueryContext(ctx, q, pb.args...)
+	// Repos from lookup table
+	rows, err := db.conn.QueryContext(ctx, "SELECT repo_name FROM session_repos ORDER BY repo_name")
 	if err != nil {
-		return SessionFilterOptions{}, 0, fmt.Errorf("failed to query faceted counts: %w", err)
+		return opts, fmt.Errorf("failed to query session_repos: %w", err)
 	}
 	defer rows.Close()
-
-	opts := SessionFilterOptions{
-		Repos:    make([]FilterOption, 0),
-		Branches: make([]FilterOption, 0),
-		Owners:   make([]FilterOption, 0),
-	}
-	var total int
-
 	for rows.Next() {
-		var dimension, value string
-		var count int
-		if err := rows.Scan(&dimension, &value, &count); err != nil {
-			return SessionFilterOptions{}, 0, fmt.Errorf("failed to scan faceted count: %w", err)
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return opts, fmt.Errorf("failed to scan repo: %w", err)
 		}
-		switch dimension {
-		case "repo":
-			opts.Repos = append(opts.Repos, FilterOption{Value: value, Count: count})
-		case "branch":
-			opts.Branches = append(opts.Branches, FilterOption{Value: value, Count: count})
-		case "owner":
-			opts.Owners = append(opts.Owners, FilterOption{Value: value, Count: count})
-		case "total":
-			total = count
-		}
+		opts.Repos = append(opts.Repos, name)
 	}
 	if err := rows.Err(); err != nil {
-		return SessionFilterOptions{}, 0, fmt.Errorf("error iterating faceted counts: %w", err)
+		return opts, fmt.Errorf("error iterating repos: %w", err)
 	}
 
-	opts.Total = total
+	// Branches from lookup table
+	rows, err = db.conn.QueryContext(ctx, "SELECT branch_name FROM session_branches ORDER BY branch_name")
+	if err != nil {
+		return opts, fmt.Errorf("failed to query session_branches: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return opts, fmt.Errorf("failed to scan branch: %w", err)
+		}
+		opts.Branches = append(opts.Branches, name)
+	}
+	if err := rows.Err(); err != nil {
+		return opts, fmt.Errorf("error iterating branches: %w", err)
+	}
 
-	// Sort options by count descending, then value ascending for stability
-	sort.Slice(opts.Repos, func(i, j int) bool {
-		if opts.Repos[i].Count != opts.Repos[j].Count {
-			return opts.Repos[i].Count > opts.Repos[j].Count
+	// Owners: all users (simple, O(users))
+	rows, err = db.conn.QueryContext(ctx, "SELECT LOWER(email) FROM users ORDER BY email")
+	if err != nil {
+		return opts, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return opts, fmt.Errorf("failed to scan user email: %w", err)
 		}
-		return opts.Repos[i].Value < opts.Repos[j].Value
-	})
-	sort.Slice(opts.Branches, func(i, j int) bool {
-		if opts.Branches[i].Count != opts.Branches[j].Count {
-			return opts.Branches[i].Count > opts.Branches[j].Count
-		}
-		return opts.Branches[i].Value < opts.Branches[j].Value
-	})
-	sort.Slice(opts.Owners, func(i, j int) bool {
-		if opts.Owners[i].Count != opts.Owners[j].Count {
-			return opts.Owners[i].Count > opts.Owners[j].Count
-		}
-		return opts.Owners[i].Value < opts.Owners[j].Value
-	})
+		opts.Owners = append(opts.Owners, email)
+	}
+	if err := rows.Err(); err != nil {
+		return opts, fmt.Errorf("error iterating users: %w", err)
+	}
 
-	return opts, total, nil
+	return opts, nil
+}
+
+// encodeCursor encodes a (time, id) pair into an opaque base64 cursor string.
+func encodeCursor(t time.Time, id string) string {
+	raw := t.Format(time.RFC3339Nano) + "|" + id
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+// decodeCursor decodes an opaque cursor string back into (time, id).
+func decodeCursor(cursor string) (time.Time, string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("invalid cursor encoding: %w", err)
+	}
+	parts := strings.SplitN(string(raw), "|", 2)
+	if len(parts) != 2 {
+		return time.Time{}, "", fmt.Errorf("invalid cursor format")
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("invalid cursor time: %w", err)
+	}
+	return t, parts[1], nil
 }
 
 // buildPushdownFilters builds WHERE clause fragments for the pushdown query (Query 2).
@@ -568,75 +513,36 @@ func buildPushdownFilters(pb *paramBuilder, params SessionListParams) (commonFil
 	return
 }
 
-// buildFilteredSessionsQuery builds the filtered+paginated session list query (Query 2).
-// Similar structure to buildSharedWithMeQuery but with filter predicates pushed into each sub-CTE.
-func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams) (string, []interface{}) {
-	pb := newParamBuilder(userID)
-	commonFilters, ownedOwnerFilter, sharedOwnerFilter := buildPushdownFilters(pb, params)
-	limitP := pb.add(params.PageSize)
-	offsetP := pb.add((params.Page - 1) * params.PageSize)
+// Column list shared across session list query builders (minus the last 3 CTE-specific columns).
+const sessionSelectCols = `
+				s.id,
+				s.external_id,
+				s.first_seen,
+				COALESCE(sf_stats.file_count, 0) as file_count,
+				s.last_message_at,
+				s.custom_title,
+				s.suggested_session_title,
+				s.summary,
+				s.first_user_message,
+				s.session_type,
+				COALESCE(sf_stats.total_lines, 0) as total_lines,
+				s.git_info->>'repo_url' as git_repo_url,
+				s.git_info->>'branch' as git_branch,
+				COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
+				COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits`
 
-	// Column list shared across all 3 CTEs (minus the last 3 CTE-specific columns)
-	const selectCols = `
-					s.id,
-					s.external_id,
-					s.first_seen,
-					COALESCE(sf_stats.file_count, 0) as file_count,
-					s.last_message_at,
-					s.custom_title,
-					s.suggested_session_title,
-					s.summary,
-					s.first_user_message,
-					s.session_type,
-					COALESCE(sf_stats.total_lines, 0) as total_lines,
-					s.git_info->>'repo_url' as git_repo_url,
-					s.git_info->>'branch' as git_branch,
-					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
-					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits`
+// JOIN clause shared across session list query builders.
+const sessionStatsJoins = `
+			LEFT JOIN (
+				SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
+				FROM sync_files
+				GROUP BY session_id
+			) sf_stats ON s.id = sf_stats.session_id
+			LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
+			LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id`
 
-	// JOIN clause shared across all 3 CTEs
-	const statsJoins = `
-				LEFT JOIN (
-					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-					FROM sync_files
-					GROUP BY session_id
-				) sf_stats ON s.id = sf_stats.session_id
-				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id`
-
-	// Build system_shared_sessions CTE (varies by ShareAllSessions config)
-	var systemSharedCTE string
-	if db.ShareAllSessions {
-		systemSharedCTE = `
-			system_shared_sessions AS (
-				SELECT DISTINCT ON (s.id)` + selectCols + `,
-					false as is_owner,
-					'system_share' as access_type,
-					u.email as shared_by_email
-				FROM sessions s
-				JOIN users u ON s.user_id = u.id` + statsJoins + `
-				WHERE s.user_id != $1` + commonFilters + sharedOwnerFilter + `
-				ORDER BY s.id
-			)`
-	} else {
-		systemSharedCTE = `
-			system_shared_sessions AS (
-				SELECT DISTINCT ON (s.id)` + selectCols + `,
-					false as is_owner,
-					'system_share' as access_type,
-					u.email as shared_by_email
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_system sss ON sh.id = sss.share_id
-				JOIN users u ON s.user_id = u.id` + statsJoins + `
-				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				  AND s.user_id != $1` + commonFilters + sharedOwnerFilter + `
-				ORDER BY s.id, sh.created_at DESC
-			)`
-	}
-
-	query := `
-		WITH
+// GitHub link CTE definitions shared across session list query builders.
+const githubRefCTEs = `
 		github_pr_refs AS (
 			SELECT session_id, array_agg(ref ORDER BY created_at) as prs
 			FROM session_github_links
@@ -648,24 +554,93 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 			FROM session_github_links
 			WHERE link_type = 'commit'
 			GROUP BY session_id
-		),
+		)`
+
+// buildShareAllQuery builds a flat session list query for share-all mode.
+// Skips the UNION ALL + dedup since all sessions are visible to all users.
+// Returns the same 18-column output as buildFilteredSessionsQuery.
+func (db *DB) buildShareAllQuery(userID int64, params SessionListParams) (string, []interface{}) {
+	pb := newParamBuilder(userID)
+	commonFilters, _, sharedOwnerFilter := buildPushdownFilters(pb, params)
+	limitP := pb.add(params.PageSize + 1) // N+1 trick
+
+	query := `
+		WITH` + githubRefCTEs + `
+		SELECT` + sessionSelectCols + `,
+				(s.user_id = $1) as is_owner,
+				CASE WHEN s.user_id = $1 THEN 'owner' ELSE 'system_share' END as access_type,
+				CASE WHEN s.user_id = $1 THEN NULL ELSE u.email END as shared_by_email
+			FROM sessions s
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			WHERE 1=1` + commonFilters + sharedOwnerFilter
+
+	// Add cursor WHERE clause if cursor is provided
+	if params.Cursor != "" {
+		cursorTime, cursorID, err := decodeCursor(params.Cursor)
+		if err == nil {
+			cursorTimeP := pb.add(cursorTime)
+			cursorIDP := pb.add(cursorID)
+			query += `
+				AND (COALESCE(s.last_message_at, s.first_seen), s.id) < (` + cursorTimeP + `, ` + cursorIDP + `)`
+		}
+	}
+
+	query += `
+			ORDER BY COALESCE(s.last_message_at, s.first_seen) DESC, s.id DESC
+			LIMIT ` + limitP
+
+	return query, pb.args
+}
+
+// buildFilteredSessionsQuery builds the filtered+cursor-paginated session list query.
+// In share-all mode, delegates to buildShareAllQuery (flat scan, no UNION ALL).
+// Otherwise, uses a UNION ALL of owned + shared + system CTEs with dedup.
+// Fetches pageSize+1 rows (N+1 trick) for has_more detection.
+func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams) (string, []interface{}) {
+	// Fast path: share-all mode skips UNION ALL + dedup entirely
+	if db.ShareAllSessions {
+		return db.buildShareAllQuery(userID, params)
+	}
+
+	pb := newParamBuilder(userID)
+	commonFilters, ownedOwnerFilter, sharedOwnerFilter := buildPushdownFilters(pb, params)
+	limitP := pb.add(params.PageSize + 1) // N+1 trick
+
+	// Build system_shared_sessions CTE (requires session_share_system rows)
+	systemSharedCTE := `
+			system_shared_sessions AS (
+				SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
+					false as is_owner,
+					'system_share' as access_type,
+					u.email as shared_by_email
+				FROM sessions s
+				JOIN session_shares sh ON s.id = sh.session_id
+				JOIN session_share_system sss ON sh.id = sss.share_id
+				JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
+				  AND s.user_id != $1` + commonFilters + sharedOwnerFilter + `
+				ORDER BY s.id, sh.created_at DESC
+			)`
+
+	query := `
+		WITH` + githubRefCTEs + `,
 		owned_sessions AS (
-			SELECT` + selectCols + `,
+			SELECT` + sessionSelectCols + `,
 				true as is_owner,
 				'owner' as access_type,
 				NULL::text as shared_by_email
-			FROM sessions s` + statsJoins + `
+			FROM sessions s` + sessionStatsJoins + `
 			WHERE s.user_id = $1` + commonFilters + ownedOwnerFilter + `
 		),
 		shared_sessions AS (
-			SELECT DISTINCT ON (s.id)` + selectCols + `,
+			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
 				false as is_owner,
 				'private_share' as access_type,
 				u.email as shared_by_email
 			FROM sessions s
 			JOIN session_shares sh ON s.id = sh.session_id
 			JOIN session_share_recipients sr ON sh.id = sr.share_id
-			JOIN users u ON s.user_id = u.id` + statsJoins + `
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
 			WHERE sr.user_id = $1
 			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 			  AND s.user_id != $1` + commonFilters + sharedOwnerFilter + `
@@ -685,20 +660,35 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 				WHEN 'system_share' THEN 3
 				ELSE 4
 			END
-		) deduped
-		ORDER BY COALESCE(last_message_at, first_seen) DESC
-		LIMIT ` + limitP + ` OFFSET ` + offsetP
+		) deduped`
+
+	// Add cursor WHERE clause if cursor is provided
+	if params.Cursor != "" {
+		cursorTime, cursorID, err := decodeCursor(params.Cursor)
+		if err == nil {
+			cursorTimeP := pb.add(cursorTime)
+			cursorIDP := pb.add(cursorID)
+			query += `
+		WHERE (COALESCE(last_message_at, first_seen), id) < (` + cursorTimeP + `, ` + cursorIDP + `)`
+		}
+	}
+
+	query += `
+		ORDER BY COALESCE(last_message_at, first_seen) DESC, id DESC
+		LIMIT ` + limitP
 
 	return query, pb.args
 }
 
-// queryPaginatedSessions runs Query 2: filtered paginated results with filter pushdown.
-func (db *DB) queryPaginatedSessions(ctx context.Context, userID int64, params SessionListParams) ([]SessionListItem, error) {
+// queryPaginatedSessions runs the filtered cursor-paginated query.
+// Uses the N+1 trick: fetches pageSize+1 rows, trims to pageSize, and sets hasMore.
+// Returns (sessions, hasMore, nextCursor, error).
+func (db *DB) queryPaginatedSessions(ctx context.Context, userID int64, params SessionListParams) ([]SessionListItem, bool, string, error) {
 	query, args := db.buildFilteredSessionsQuery(userID, params)
 
 	rows, err := db.conn.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query paginated sessions: %w", err)
+		return nil, false, "", fmt.Errorf("failed to query paginated sessions: %w", err)
 	}
 	defer rows.Close()
 
@@ -728,7 +718,7 @@ func (db *DB) queryPaginatedSessions(ctx context.Context, userID int64, params S
 			&session.AccessType,
 			&session.SharedByEmail,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan session: %w", err)
+			return nil, false, "", fmt.Errorf("failed to scan session: %w", err)
 		}
 
 		if gitRepoURL != nil && *gitRepoURL != "" {
@@ -745,10 +735,28 @@ func (db *DB) queryPaginatedSessions(ctx context.Context, userID int64, params S
 		sessions = append(sessions, session)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating sessions: %w", err)
+		return nil, false, "", fmt.Errorf("error iterating sessions: %w", err)
 	}
 
-	return sessions, nil
+	// N+1 trick: if we got more than pageSize rows, there are more results
+	hasMore := len(sessions) > params.PageSize
+	if hasMore {
+		sessions = sessions[:params.PageSize]
+	}
+
+	// Build cursor from the last returned row
+	var nextCursor string
+	if hasMore && len(sessions) > 0 {
+		last := sessions[len(sessions)-1]
+		// Use LastSyncTime (which maps to last_message_at) with FirstSeen as fallback
+		cursorTime := last.FirstSeen
+		if last.LastSyncTime != nil {
+			cursorTime = *last.LastSyncTime
+		}
+		nextCursor = encodeCursor(cursorTime, last.ID)
+	}
+
+	return sessions, hasMore, nextCursor, nil
 }
 
 // GetSessionDetail returns detailed information about a session by its UUID primary key

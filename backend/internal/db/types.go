@@ -43,31 +43,24 @@ type SessionListParams struct {
 	PRs      []string // PR number strings (multi-select)
 	Query    *string  // search across titles + commit SHA prefix
 
-	Page     int // 1-indexed, default 1
-	PageSize int // fixed 50
+	Cursor   string // opaque cursor for keyset pagination (empty = first page)
+	PageSize int    // fixed 50
 }
 
 // SessionListResult is the paginated response for listing sessions
 type SessionListResult struct {
 	Sessions      []SessionListItem    `json:"sessions"`
-	Total         int                  `json:"total"`
-	Page          int                  `json:"page"`
+	HasMore       bool                 `json:"has_more"`
+	NextCursor    string               `json:"next_cursor,omitempty"`
 	PageSize      int                  `json:"page_size"`
 	FilterOptions SessionFilterOptions `json:"filter_options"`
 }
 
-// SessionFilterOptions contains faceted filter counts for the session list UI
+// SessionFilterOptions contains pre-materialized filter dropdown values
 type SessionFilterOptions struct {
-	Repos    []FilterOption `json:"repos"`
-	Branches []FilterOption `json:"branches"`
-	Owners   []FilterOption `json:"owners"`
-	Total    int            `json:"total"` // total sessions matching base visibility (for "All Sessions" count)
-}
-
-// FilterOption represents a single filter value with its count
-type FilterOption struct {
-	Value string `json:"value"`
-	Count int    `json:"count"`
+	Repos    []string `json:"repos"`
+	Branches []string `json:"branches"`
+	Owners   []string `json:"owners"`
 }
 
 // SessionDetail represents detailed session information (sync-based model)

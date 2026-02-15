@@ -15,69 +15,42 @@ type Story = StoryObj<typeof Pagination>;
 
 export const FirstPage: Story = {
   args: {
-    page: 1,
-    pageSize: 50,
-    total: 234,
-    onPageChange: () => {},
+    hasMore: true,
+    canGoPrev: false,
+    onNext: () => {},
+    onPrev: () => {},
   },
 };
 
 export const MiddlePage: Story = {
   args: {
-    page: 3,
-    pageSize: 50,
-    total: 234,
-    onPageChange: () => {},
+    hasMore: true,
+    canGoPrev: true,
+    onNext: () => {},
+    onPrev: () => {},
   },
 };
 
 export const LastPage: Story = {
   args: {
-    page: 5,
-    pageSize: 50,
-    total: 234,
-    onPageChange: () => {},
-  },
-};
-
-export const ManyPages: Story = {
-  args: {
-    page: 8,
-    pageSize: 50,
-    total: 1200,
-    onPageChange: () => {},
-  },
-};
-
-export const LastOfManyPages: Story = {
-  args: {
-    page: 24,
-    pageSize: 50,
-    total: 1200,
-    onPageChange: () => {},
-  },
-};
-
-export const FewPages: Story = {
-  args: {
-    page: 2,
-    pageSize: 50,
-    total: 120,
-    onPageChange: () => {},
+    hasMore: false,
+    canGoPrev: true,
+    onNext: () => {},
+    onPrev: () => {},
   },
 };
 
 export const SinglePage: Story = {
   args: {
-    page: 1,
-    pageSize: 50,
-    total: 30,
-    onPageChange: () => {},
+    hasMore: false,
+    canGoPrev: false,
+    onNext: () => {},
+    onPrev: () => {},
   },
   parameters: {
     docs: {
       description: {
-        story: 'When total fits in one page, the pagination component is not rendered.',
+        story: 'When there is only one page, the pagination component is not rendered.',
       },
     },
   },

@@ -28,13 +28,13 @@ function SessionsPage() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const {
-    repos, branches, owners, query, page,
+    repos, branches, owners, query,
     toggleRepo, toggleBranch, toggleOwner,
-    setQuery, setPage, clearAll,
+    setQuery, clearAll,
   } = useSessionFilters();
 
-  const { sessions, total, pageSize, filterOptions, loading, error, refetch } = useSessionsFetch({
-    repos, branches, owners, query, page,
+  const { sessions, hasMore, filterOptions, loading, error, refetch, goNext, goPrev, canGoPrev } = useSessionsFetch({
+    repos, branches, owners, query,
   });
   const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
@@ -54,7 +54,7 @@ function SessionsPage() {
               {loading && sessions.length > 0 ? (
                 <span className={styles.loadingIndicator}>Updating...</span>
               ) : (
-                `${total.toLocaleString()} session${total !== 1 ? 's' : ''}`
+                'Sessions'
               )}
             </span>
             <button
@@ -80,10 +80,10 @@ function SessionsPage() {
           />
 
           <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
+            hasMore={hasMore}
+            canGoPrev={canGoPrev}
+            onNext={goNext}
+            onPrev={goPrev}
           />
         </header>
 

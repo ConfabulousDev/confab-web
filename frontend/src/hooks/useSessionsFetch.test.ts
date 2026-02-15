@@ -18,7 +18,6 @@ const defaultFilters: SessionFilters = {
   branches: [],
   owners: [],
   query: '',
-  page: 1,
 };
 
 const mockResponse: SessionListResponse = {
@@ -40,23 +39,22 @@ const mockResponse: SessionListResponse = {
       shared_by_email: null,
     },
   ],
-  total: 1,
-  page: 1,
+  has_more: false,
+  next_cursor: '',
   page_size: 50,
   filter_options: {
-    repos: [{ value: 'test/repo', count: 1 }],
-    branches: [{ value: 'main', count: 1 }],
-    owners: [{ value: 'user@test.com', count: 1 }],
-    total: 1,
+    repos: ['test/repo'],
+    branches: ['main'],
+    owners: ['user@test.com'],
   },
 };
 
 const emptyResponse: SessionListResponse = {
   sessions: [],
-  total: 0,
-  page: 1,
+  has_more: false,
+  next_cursor: '',
   page_size: 50,
-  filter_options: { repos: [], branches: [], owners: [], total: 0 },
+  filter_options: { repos: [], branches: [], owners: [] },
 };
 
 describe('useSessionsFetch', () => {
@@ -77,7 +75,7 @@ describe('useSessionsFetch', () => {
     });
 
     expect(result.current.sessions).toEqual(mockResponse.sessions);
-    expect(result.current.total).toBe(1);
+    expect(result.current.hasMore).toBe(false);
     expect(result.current.filterOptions).toEqual(mockResponse.filter_options);
     expect(sessionsAPI.list).toHaveBeenCalledTimes(1);
   });
@@ -92,7 +90,7 @@ describe('useSessionsFetch', () => {
     });
 
     expect(result.current.sessions).toEqual([]);
-    expect(result.current.total).toBe(0);
+    expect(result.current.hasMore).toBe(false);
   });
 
   it('passes filter params to API', async () => {
@@ -101,7 +99,6 @@ describe('useSessionsFetch', () => {
       branches: ['main'],
       owners: [],
       query: '',
-      page: 2,
     };
 
     const { result } = renderHook(() => useSessionsFetch(filters));
@@ -113,7 +110,6 @@ describe('useSessionsFetch', () => {
     expect(sessionsAPI.list).toHaveBeenCalledWith({
       repo: 'confab-web',
       branch: 'main',
-      page: '2',
     });
   });
 
@@ -164,5 +160,17 @@ describe('useSessionsFetch', () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.sessions).toEqual(mockResponse.sessions);
+  });
+
+  it('exposes cursor navigation state', async () => {
+    const { result } = renderHook(() => useSessionsFetch(defaultFilters));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // On first page with no more results
+    expect(result.current.hasMore).toBe(false);
+    expect(result.current.canGoPrev).toBe(false);
   });
 });

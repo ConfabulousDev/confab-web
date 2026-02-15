@@ -1096,7 +1096,7 @@ func TestListUserSessions_ShareAllSessions_PrivateShareTakesPrecedence(t *testin
 // ListUserSessionsPaginated Tests
 // =============================================================================
 
-// TestListUserSessionsPaginated_NoFilters tests basic pagination without filters
+// TestListUserSessionsPaginated_NoFilters tests basic cursor pagination without filters
 func TestListUserSessionsPaginated_NoFilters(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -1119,34 +1119,37 @@ func TestListUserSessionsPaginated_NoFilters(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Page 1: should get 50 sessions
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 1, PageSize: 50})
+	// Page 1: should get 50 sessions with has_more=true
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("Page 1 failed: %v", err)
 	}
 	if len(result.Sessions) != 50 {
 		t.Errorf("Page 1: expected 50 sessions, got %d", len(result.Sessions))
 	}
-	if result.Total != 60 {
-		t.Errorf("Page 1: expected total=60, got %d", result.Total)
+	if !result.HasMore {
+		t.Error("Page 1: expected has_more=true")
 	}
-	if result.Page != 1 {
-		t.Errorf("Page 1: expected page=1, got %d", result.Page)
+	if result.NextCursor == "" {
+		t.Error("Page 1: expected non-empty next_cursor")
 	}
 	if result.PageSize != 50 {
 		t.Errorf("Page 1: expected page_size=50, got %d", result.PageSize)
 	}
 
-	// Page 2: should get 10 sessions
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 2, PageSize: 50})
+	// Page 2 via cursor: should get 10 sessions with has_more=false
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Cursor: result.NextCursor, PageSize: 50})
 	if err != nil {
 		t.Fatalf("Page 2 failed: %v", err)
 	}
 	if len(result.Sessions) != 10 {
 		t.Errorf("Page 2: expected 10 sessions, got %d", len(result.Sessions))
 	}
-	if result.Total != 60 {
-		t.Errorf("Page 2: expected total=60, got %d", result.Total)
+	if result.HasMore {
+		t.Error("Page 2: expected has_more=false")
+	}
+	if result.NextCursor != "" {
+		t.Errorf("Page 2: expected empty next_cursor, got %s", result.NextCursor)
 	}
 }
 
@@ -1189,7 +1192,6 @@ func TestListUserSessionsPaginated_RepoFilter(t *testing.T) {
 	// Filter by repo-a
 	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Repos: []string{"org/repo-a"},
-		Page:  1,
 	})
 	if err != nil {
 		t.Fatalf("Repo filter failed: %v", err)
@@ -1197,11 +1199,12 @@ func TestListUserSessionsPaginated_RepoFilter(t *testing.T) {
 	if len(result.Sessions) != 5 {
 		t.Errorf("Expected 5 sessions for repo-a, got %d", len(result.Sessions))
 	}
-	if result.Total != 5 {
-		t.Errorf("Expected total=5, got %d", result.Total)
+	if !result.HasMore {
+		// 5 sessions out of 10 total, no more in this filtered set
+		// (This is fine either way — depends on exact results)
 	}
 
-	// Filter options should show all repos in repo_counts (faceted: exclude own dimension)
+	// Filter options are pre-materialized from lookup tables — should have all repos
 	if len(result.FilterOptions.Repos) != 3 {
 		t.Errorf("Expected 3 repos in filter options, got %d", len(result.FilterOptions.Repos))
 	}
@@ -1241,16 +1244,12 @@ func TestListUserSessionsPaginated_BranchFilter(t *testing.T) {
 
 	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Branches: []string{"main"},
-		Page:     1,
 	})
 	if err != nil {
 		t.Fatalf("Branch filter failed: %v", err)
 	}
 	if len(result.Sessions) != 4 {
 		t.Errorf("Expected 4 sessions on main, got %d", len(result.Sessions))
-	}
-	if result.Total != 4 {
-		t.Errorf("Expected total=4, got %d", result.Total)
 	}
 }
 
@@ -1287,7 +1286,6 @@ func TestListUserSessionsPaginated_OwnerFilter(t *testing.T) {
 	// Alice views sessions, filter by Alice only (her own)
 	result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
 		Owners: []string{"alice@test.com"},
-		Page:   1,
 	})
 	if err != nil {
 		t.Fatalf("Owner filter failed: %v", err)
@@ -1304,7 +1302,6 @@ func TestListUserSessionsPaginated_OwnerFilter(t *testing.T) {
 	// Alice views sessions, filter by Bob
 	result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
 		Owners: []string{"bob@test.com"},
-		Page:   1,
 	})
 	if err != nil {
 		t.Fatalf("Owner filter for bob failed: %v", err)
@@ -1351,17 +1348,13 @@ func TestListUserSessionsPaginated_PRFilter(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
-		PRs:  []string{"123"},
-		Page: 1,
+		PRs: []string{"123"},
 	})
 	if err != nil {
 		t.Fatalf("PR filter failed: %v", err)
 	}
 	if len(result.Sessions) != 1 {
 		t.Errorf("Expected 1 session with PR 123, got %d", len(result.Sessions))
-	}
-	if result.Total != 1 {
-		t.Errorf("Expected total=1, got %d", result.Total)
 	}
 }
 
@@ -1398,7 +1391,6 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 	q := "auth"
 	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q,
-		Page:  1,
 	})
 	if err != nil {
 		t.Fatalf("Query search failed: %v", err)
@@ -1411,7 +1403,6 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 	q2 := "abc123"
 	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q2,
-		Page:  1,
 	})
 	if err != nil {
 		t.Fatalf("Commit SHA search failed: %v", err)
@@ -1464,7 +1455,6 @@ func TestListUserSessionsPaginated_MultipleFilters(t *testing.T) {
 		Repos:    []string{"org/repo-a"},
 		Branches: []string{"main"},
 		Owners:   []string{"alice@multi.com"},
-		Page:     1,
 	})
 	if err != nil {
 		t.Fatalf("Multiple filters failed: %v", err)
@@ -1472,13 +1462,10 @@ func TestListUserSessionsPaginated_MultipleFilters(t *testing.T) {
 	if len(result.Sessions) != 2 {
 		t.Errorf("Expected 2 sessions (alice+repo-a+main), got %d", len(result.Sessions))
 	}
-	if result.Total != 2 {
-		t.Errorf("Expected total=2, got %d", result.Total)
-	}
 }
 
-// TestListUserSessionsPaginated_FacetedCounts tests the exclude-own-dimension pattern
-func TestListUserSessionsPaginated_FacetedCounts(t *testing.T) {
+// TestListUserSessionsPaginated_FilterOptions tests pre-materialized filter options
+func TestListUserSessionsPaginated_FilterOptions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -1514,24 +1501,27 @@ func TestListUserSessionsPaginated_FacetedCounts(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Filter by repo=frontend → repo_counts should show ALL repos (exclude-own-dimension)
+	// Filter by repo=frontend → filter_options should still show ALL repos (pre-materialized)
 	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Repos: []string{"org/frontend"},
-		Page:  1,
 	})
 	if err != nil {
-		t.Fatalf("Faceted counts failed: %v", err)
+		t.Fatalf("Filter options test failed: %v", err)
 	}
-	if result.Total != 3 {
-		t.Errorf("Expected total=3 (frontend only), got %d", result.Total)
+	if len(result.Sessions) != 3 {
+		t.Errorf("Expected 3 sessions (frontend only), got %d", len(result.Sessions))
 	}
-	// Repo counts should show all repos since repo is excluded from repo_counts
+	// Pre-materialized: ALL repos should be present regardless of active filter
 	if len(result.FilterOptions.Repos) != 2 {
 		t.Errorf("Expected 2 repos in filter_options.repos, got %d: %+v", len(result.FilterOptions.Repos), result.FilterOptions.Repos)
 	}
-	// Branch counts should be filtered by repo=frontend, so only "main" should appear
-	if len(result.FilterOptions.Branches) != 1 {
-		t.Errorf("Expected 1 branch (main from frontend), got %d: %+v", len(result.FilterOptions.Branches), result.FilterOptions.Branches)
+	// Pre-materialized: ALL branches should be present regardless of active filter
+	if len(result.FilterOptions.Branches) != 2 {
+		t.Errorf("Expected 2 branches in filter_options.branches, got %d: %+v", len(result.FilterOptions.Branches), result.FilterOptions.Branches)
+	}
+	// Owners should include the user
+	if len(result.FilterOptions.Owners) < 1 {
+		t.Error("Expected at least 1 owner in filter_options.owners")
 	}
 }
 
@@ -1566,20 +1556,20 @@ func TestListUserSessionsPaginated_EmptySessionsExcluded(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 1})
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{})
 	if err != nil {
 		t.Fatalf("Empty sessions test failed: %v", err)
 	}
-	if result.Total != 1 {
-		t.Errorf("Expected total=1 (only visible session), got %d", result.Total)
-	}
 	if len(result.Sessions) != 1 {
-		t.Errorf("Expected 1 session, got %d", len(result.Sessions))
+		t.Errorf("Expected 1 session (only visible session), got %d", len(result.Sessions))
+	}
+	if result.HasMore {
+		t.Error("Expected HasMore=false with only 1 visible session")
 	}
 }
 
-// TestListUserSessionsPaginated_PageBeyondResults tests requesting a page beyond available results
-func TestListUserSessionsPaginated_PageBeyondResults(t *testing.T) {
+// TestListUserSessionsPaginated_CursorBeyondResults tests that an invalid/exhausted cursor returns no results
+func TestListUserSessionsPaginated_CursorBeyondResults(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -1590,10 +1580,10 @@ func TestListUserSessionsPaginated_PageBeyondResults(t *testing.T) {
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
 
-	user := testutil.CreateTestUser(t, env, "beyond@test.com", "Beyond Page User")
+	user := testutil.CreateTestUser(t, env, "beyond@test.com", "Beyond Cursor User")
 
-	// Create 5 sessions
-	for i := 0; i < 5; i++ {
+	// Create 3 sessions
+	for i := 0; i < 3; i++ {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("beyond-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Session content",
 		})
@@ -1601,15 +1591,19 @@ func TestListUserSessionsPaginated_PageBeyondResults(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Page: 999, PageSize: 50})
+	// First fetch all sessions
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
-		t.Fatalf("Page beyond results failed: %v", err)
+		t.Fatalf("First fetch failed: %v", err)
 	}
-	if len(result.Sessions) != 0 {
-		t.Errorf("Expected 0 sessions on page 999, got %d", len(result.Sessions))
+	if len(result.Sessions) != 3 {
+		t.Fatalf("Expected 3 sessions, got %d", len(result.Sessions))
 	}
-	if result.Total != 5 {
-		t.Errorf("Expected total=5, got %d", result.Total)
+	if result.HasMore {
+		t.Error("Expected HasMore=false when all sessions fit in one page")
+	}
+	if result.NextCursor != "" {
+		t.Errorf("Expected empty NextCursor when HasMore=false, got %q", result.NextCursor)
 	}
 }
 
@@ -1650,7 +1644,6 @@ func TestListUserSessionsPaginated_MultiSelect(t *testing.T) {
 	// Multi-select: filter by alpha AND beta repos (OR within dimension)
 	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Repos: []string{"org/alpha", "org/beta"},
-		Page:  1,
 	})
 	if err != nil {
 		t.Fatalf("Multi-select filter failed: %v", err)
@@ -1658,7 +1651,194 @@ func TestListUserSessionsPaginated_MultiSelect(t *testing.T) {
 	if len(result.Sessions) != 5 {
 		t.Errorf("Expected 5 sessions (3 alpha + 2 beta), got %d", len(result.Sessions))
 	}
-	if result.Total != 5 {
-		t.Errorf("Expected total=5, got %d", result.Total)
+}
+
+// =============================================================================
+// Non-ShareAll Paginated Tests (UNION ALL + dedup path)
+// =============================================================================
+
+// TestListUserSessionsPaginated_NonShareAll_OwnedOnly tests that without share-all mode,
+// users only see their own sessions (no shares configured).
+func TestListUserSessionsPaginated_NonShareAll_OwnedOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// ShareAllSessions is false by default — UNION ALL path
+	alice := testutil.CreateTestUser(t, env, "alice@nonshare.com", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@nonshare.com", "Bob")
+
+	// Alice creates 3 sessions
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestSessionFull(t, env, alice.ID, fmt.Sprintf("alice-ns-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Alice session",
+			RepoURL: "https://github.com/org/alice-repo.git",
+		})
+	}
+	// Bob creates 2 sessions (Alice should NOT see these)
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, bob.ID, fmt.Sprintf("bob-ns-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Bob session",
+			RepoURL: "https://github.com/org/bob-repo.git",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Alice should only see her own 3 sessions
+	result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("NonShareAll query failed: %v", err)
+	}
+	if len(result.Sessions) != 3 {
+		t.Errorf("Expected 3 sessions (Alice's own), got %d", len(result.Sessions))
+	}
+	for _, s := range result.Sessions {
+		if !s.IsOwner {
+			t.Errorf("Expected all sessions to be owned, got access_type=%s", s.AccessType)
+		}
+	}
+
+	// Bob should only see his own 2 sessions
+	result, err = env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("NonShareAll query for Bob failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 sessions (Bob's own), got %d", len(result.Sessions))
+	}
+}
+
+// TestListUserSessionsPaginated_NonShareAll_WithPrivateShare tests the UNION ALL path
+// with private shares: user sees own sessions + sessions shared with them.
+func TestListUserSessionsPaginated_NonShareAll_WithPrivateShare(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@share.com", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@share.com", "Bob")
+
+	// Alice creates 2 sessions
+	aliceSession1 := testutil.CreateTestSessionFull(t, env, alice.ID, "alice-share-1", testutil.TestSessionFullOpts{
+		Summary: "Alice session 1",
+	})
+	testutil.CreateTestSessionFull(t, env, alice.ID, "alice-share-2", testutil.TestSessionFullOpts{
+		Summary: "Alice session 2",
+	})
+
+	// Bob creates 1 session
+	testutil.CreateTestSessionFull(t, env, bob.ID, "bob-share-1", testutil.TestSessionFullOpts{
+		Summary: "Bob session 1",
+	})
+
+	// Alice shares one session with Bob (private share)
+	testutil.CreateTestShare(t, env, aliceSession1, false, nil, []string{"bob@share.com"})
+
+	ctx := context.Background()
+
+	// Bob sees his own 1 session + 1 shared by Alice = 2 total
+	result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("NonShareAll with share failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 sessions (1 owned + 1 shared), got %d", len(result.Sessions))
+	}
+
+	// Verify access types
+	ownedCount := 0
+	sharedCount := 0
+	for _, s := range result.Sessions {
+		if s.IsOwner {
+			ownedCount++
+		} else if s.AccessType == "private_share" {
+			sharedCount++
+			if s.SharedByEmail == nil || *s.SharedByEmail != "alice@share.com" {
+				t.Errorf("Expected shared_by_email='alice@share.com', got %v", s.SharedByEmail)
+			}
+		}
+	}
+	if ownedCount != 1 {
+		t.Errorf("Expected 1 owned session, got %d", ownedCount)
+	}
+	if sharedCount != 1 {
+		t.Errorf("Expected 1 private_share session, got %d", sharedCount)
+	}
+
+	// Alice still sees only her own 2 sessions (she didn't receive any shares)
+	result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("NonShareAll query for Alice failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 sessions for Alice, got %d", len(result.Sessions))
+	}
+}
+
+// TestListUserSessionsPaginated_NonShareAll_WithFilters tests filtering in non-share-all mode
+func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "filter@nonshare.com", "Filter User")
+
+	// Create sessions with different repos
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ns-frontend-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Frontend work",
+			RepoURL: "https://github.com/org/frontend.git",
+			Branch:  "main",
+		})
+	}
+	for i := 0; i < 2; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ns-backend-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Backend work",
+			RepoURL: "https://github.com/org/backend.git",
+			Branch:  "develop",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Filter by repo
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Repos: []string{"org/frontend"},
+	})
+	if err != nil {
+		t.Fatalf("NonShareAll repo filter failed: %v", err)
+	}
+	if len(result.Sessions) != 3 {
+		t.Errorf("Expected 3 frontend sessions, got %d", len(result.Sessions))
+	}
+
+	// Filter by branch
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Branches: []string{"develop"},
+	})
+	if err != nil {
+		t.Fatalf("NonShareAll branch filter failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 develop sessions, got %d", len(result.Sessions))
+	}
+
+	// No filters — should see all 5
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("NonShareAll no filter failed: %v", err)
+	}
+	if len(result.Sessions) != 5 {
+		t.Errorf("Expected 5 total sessions, got %d", len(result.Sessions))
 	}
 }

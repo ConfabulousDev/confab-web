@@ -433,6 +433,18 @@ func CreateTestSessionFull(t *testing.T, env *TestEnvironment, userID int64, ext
 		t.Fatalf("failed to create test session: %v", err)
 	}
 
+	// Populate filter lookup tables (mirrors upsertFilterLookups in production write path)
+	if opts.RepoURL != "" {
+		env.DB.Exec(env.Ctx,
+			`INSERT INTO session_repos (repo_name) VALUES (regexp_replace(regexp_replace($1, '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1')) ON CONFLICT DO NOTHING`,
+			opts.RepoURL)
+	}
+	if opts.Branch != "" {
+		env.DB.Exec(env.Ctx,
+			`INSERT INTO session_branches (branch_name) VALUES ($1) ON CONFLICT DO NOTHING`,
+			opts.Branch)
+	}
+
 	// Add a sync file to make total_lines > 0 (required for visibility)
 	// SyncLines: 0 → default 100 lines, SyncLines: -1 → skip (invisible session)
 	syncLines := opts.SyncLines

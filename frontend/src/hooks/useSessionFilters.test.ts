@@ -33,7 +33,6 @@ describe('useSessionFilters', () => {
       expect(result.current.branches).toEqual([]);
       expect(result.current.owners).toEqual([]);
       expect(result.current.query).toBe('');
-      expect(result.current.page).toBe(1);
     });
 
     it('parses comma-separated repo values from URL', () => {
@@ -58,24 +57,6 @@ describe('useSessionFilters', () => {
       setParams({ q: 'fix auth bug' });
       const { result } = renderHook(() => useSessionFilters());
       expect(result.current.query).toBe('fix auth bug');
-    });
-
-    it('parses page from URL', () => {
-      setParams({ page: '3' });
-      const { result } = renderHook(() => useSessionFilters());
-      expect(result.current.page).toBe(3);
-    });
-
-    it('defaults page to 1 for invalid values', () => {
-      setParams({ page: 'abc' });
-      const { result } = renderHook(() => useSessionFilters());
-      expect(result.current.page).toBe(1);
-    });
-
-    it('clamps page to minimum 1', () => {
-      setParams({ page: '0' });
-      const { result } = renderHook(() => useSessionFilters());
-      expect(result.current.page).toBe(1);
     });
   });
 
@@ -103,14 +84,6 @@ describe('useSessionFilters', () => {
       act(() => result.current.toggleRepo('confab-web'));
 
       expect(currentParams.has('repo')).toBe(false);
-    });
-
-    it('resets page when toggling repo', () => {
-      setParams({ repo: 'confab-web', page: '3' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.toggleRepo('confab-cli'));
-
-      expect(currentParams.has('page')).toBe(false);
     });
   });
 
@@ -163,74 +136,15 @@ describe('useSessionFilters', () => {
 
       expect(currentParams.has('q')).toBe(false);
     });
-
-    it('resets page when changing query', () => {
-      setParams({ page: '3' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.setQuery('search'));
-
-      expect(currentParams.has('page')).toBe(false);
-    });
-  });
-
-  describe('setPage', () => {
-    it('sets page param for page > 1', () => {
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.setPage(2));
-
-      expect(currentParams.get('page')).toBe('2');
-    });
-
-    it('removes page param for page 1', () => {
-      setParams({ page: '3' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.setPage(1));
-
-      expect(currentParams.has('page')).toBe(false);
-    });
-
-    it('does not reset page (setPage uses resetPage=false)', () => {
-      setParams({ repo: 'confab-web' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.setPage(5));
-
-      // repo should still be present
-      expect(currentParams.get('repo')).toBe('confab-web');
-      expect(currentParams.get('page')).toBe('5');
-    });
   });
 
   describe('clearAll', () => {
     it('clears all params', () => {
-      setParams({ repo: 'confab-web', branch: 'main', owner: 'alice@co.com', q: 'test', page: '2' });
+      setParams({ repo: 'confab-web', branch: 'main', owner: 'alice@co.com', q: 'test' });
       const { result } = renderHook(() => useSessionFilters());
       act(() => result.current.clearAll());
 
       expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true });
     });
-  });
-
-  describe('filter changes reset page', () => {
-    it('toggleRepo resets page', () => {
-      setParams({ page: '5', repo: 'a' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.toggleRepo('b'));
-      expect(currentParams.has('page')).toBe(false);
-    });
-
-    it('toggleBranch resets page', () => {
-      setParams({ page: '5' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.toggleBranch('main'));
-      expect(currentParams.has('page')).toBe(false);
-    });
-
-    it('toggleOwner resets page', () => {
-      setParams({ page: '5' });
-      const { result } = renderHook(() => useSessionFilters());
-      act(() => result.current.toggleOwner('alice@co.com'));
-      expect(currentParams.has('page')).toBe(false);
-    });
-
   });
 });

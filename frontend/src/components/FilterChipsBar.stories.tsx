@@ -3,22 +3,9 @@ import FilterChipsBar from './FilterChipsBar';
 import type { SessionFilterOptions } from '@/schemas/api';
 
 const sampleFilterOptions: SessionFilterOptions = {
-  repos: [
-    { value: 'confab-web', count: 85 },
-    { value: 'confab-cli', count: 42 },
-    { value: 'backend-api', count: 23 },
-  ],
-  branches: [
-    { value: 'main', count: 60 },
-    { value: 'feature/auth', count: 20 },
-    { value: 'fix/pagination', count: 10 },
-  ],
-  owners: [
-    { value: 'alice@example.com', count: 70 },
-    { value: 'bob@example.com', count: 45 },
-    { value: 'carol@example.com', count: 35 },
-  ],
-  total: 150,
+  repos: ['backend-api', 'confab-cli', 'confab-web'],
+  branches: ['feature/auth', 'fix/pagination', 'main'],
+  owners: ['alice@example.com', 'bob@example.com', 'carol@example.com'],
 };
 
 const meta: Meta<typeof FilterChipsBar> = {

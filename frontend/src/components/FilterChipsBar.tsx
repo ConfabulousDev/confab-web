@@ -23,7 +23,7 @@ interface FilterChipsBarProps {
 interface DimensionDropdownProps {
   label: string;
   icon: React.ReactNode;
-  options: { value: string; count: number }[];
+  options: string[];
   selected: string[];
   currentUserEmail?: string | null;
   onToggle: (value: string) => void;
@@ -39,15 +39,15 @@ function DimensionDropdown({ label, icon, options, selected, currentUserEmail, o
   };
 
   const filtered = search
-    ? options.filter((o) => o.value.toLowerCase().includes(search.toLowerCase()))
+    ? options.filter((o) => o.toLowerCase().includes(search.toLowerCase()))
     : options;
 
-  // Sort: selected first, then by count desc
+  // Sort: selected first, then alphabetical
   const sorted = [...filtered].sort((a, b) => {
-    const aSelected = selected.includes(a.value) ? 0 : 1;
-    const bSelected = selected.includes(b.value) ? 0 : 1;
+    const aSelected = selected.includes(a) ? 0 : 1;
+    const bSelected = selected.includes(b) ? 0 : 1;
     if (aSelected !== bSelected) return aSelected - bSelected;
-    return b.count - a.count;
+    return a.localeCompare(b);
   });
 
   return (
@@ -77,21 +77,20 @@ function DimensionDropdown({ label, icon, options, selected, currentUserEmail, o
           )}
           <div className={styles.dimensionList}>
             {sorted.map((opt) => {
-              const isSelected = selected.includes(opt.value);
-              const displayLabel = currentUserEmail && opt.value.toLowerCase() === currentUserEmail.toLowerCase()
-                ? `${opt.value} (you)`
-                : opt.value;
+              const isSelected = selected.includes(opt);
+              const displayLabel = currentUserEmail && opt.toLowerCase() === currentUserEmail.toLowerCase()
+                ? `${opt} (you)`
+                : opt;
               return (
                 <button
-                  key={opt.value}
+                  key={opt}
                   className={`${styles.dimensionItem} ${isSelected ? styles.dimensionItemSelected : ''}`}
-                  onClick={() => onToggle(opt.value)}
+                  onClick={() => onToggle(opt)}
                 >
                   <span className={`${styles.checkbox} ${isSelected ? styles.checked : ''}`}>
                     {CheckIcon}
                   </span>
                   <span className={styles.dimensionLabel}>{displayLabel}</span>
-                  <span className={styles.dimensionCount}>{opt.count}</span>
                 </button>
               );
             })}

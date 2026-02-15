@@ -436,12 +436,6 @@ func TestListSessionsWithFilters_API(t *testing.T) {
 		if len(result.Sessions) != 3 {
 			t.Errorf("Expected 3 frontend sessions, got %d", len(result.Sessions))
 		}
-		if result.Total != 3 {
-			t.Errorf("Expected total=3, got %d", result.Total)
-		}
-		if result.Page != 1 {
-			t.Errorf("Expected page=1, got %d", result.Page)
-		}
 		if result.PageSize != 50 {
 			t.Errorf("Expected page_size=50, got %d", result.PageSize)
 		}
@@ -486,8 +480,8 @@ func TestListSessionsWithFilters_API(t *testing.T) {
 	})
 }
 
-// TestListSessionsWithFilters_InvalidPage tests that invalid page params return 400
-func TestListSessionsWithFilters_InvalidPage(t *testing.T) {
+// TestListSessionsWithCursor_API tests cursor-based pagination via the HTTP handler
+func TestListSessionsWithCursor_API(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -496,32 +490,55 @@ func TestListSessionsWithFilters_InvalidPage(t *testing.T) {
 	defer env.Cleanup(t)
 
 	ctx := context.Background()
-	user := testutil.CreateTestUser(t, env, "invalidpage@test.com", "Invalid Page User")
 
-	tests := []struct {
-		name     string
-		page     string
-		wantCode int
-	}{
-		{"page=0", "0", http.StatusBadRequest},
-		{"page=-1", "-1", http.StatusBadRequest},
-		{"page=abc", "abc", http.StatusBadRequest},
-		{"page=1 (valid)", "1", http.StatusOK},
-	}
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "/api/v1/sessions?page="+tc.page, nil)
-			reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), user.ID)
-			req = req.WithContext(reqCtx)
+	user := testutil.CreateTestUser(t, env, "cursor@test.com", "Cursor User")
 
-			rr := httptest.NewRecorder()
-			handler := api.HandleListSessions(env.DB)
-			handler.ServeHTTP(rr, req)
-
-			if rr.Code != tc.wantCode {
-				t.Errorf("page=%s: expected status %d, got %d: %s", tc.page, tc.wantCode, rr.Code, rr.Body.String())
-			}
+	// Create 3 sessions
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("cursor-%d", i), testutil.TestSessionFullOpts{
+			Summary: "Session content",
 		})
 	}
+
+	t.Run("First page with small page size", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/api/v1/sessions", nil)
+		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), user.ID)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler := api.HandleListSessions(env.DB)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		result := parseSessionListResult(t, rr)
+
+		if len(result.Sessions) != 3 {
+			t.Errorf("Expected 3 sessions, got %d", len(result.Sessions))
+		}
+		// All sessions fit in default page size, so no more pages
+		if result.HasMore {
+			t.Error("Expected HasMore=false")
+		}
+	})
+
+	t.Run("Cursor param is accepted", func(t *testing.T) {
+		// An empty/missing cursor should work (returns first page)
+		req, _ := http.NewRequest("GET", "/api/v1/sessions?cursor=", nil)
+		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), user.ID)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler := api.HandleListSessions(env.DB)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
 }

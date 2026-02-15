@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -34,7 +33,7 @@ func parseCommaSeparated(value string) []string {
 }
 
 // HandleListSessions lists all sessions visible to the authenticated user.
-// Supports server-side filtering, pagination, and returns faceted filter counts.
+// Supports server-side filtering, cursor-based pagination, and returns pre-materialized filter options.
 func HandleListSessions(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -52,8 +51,8 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			Branches: parseCommaSeparated(r.URL.Query().Get("branch")),
 			Owners:   parseCommaSeparated(r.URL.Query().Get("owner")),
 			PRs:      parseCommaSeparated(r.URL.Query().Get("pr")),
+			Cursor:   r.URL.Query().Get("cursor"),
 			PageSize: db.DefaultPageSize,
-			Page:     1,
 		}
 
 		// Parse search query
@@ -61,21 +60,11 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 			params.Query = &q
 		}
 
-		// Parse page (1-indexed)
-		if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-			page, err := strconv.Atoi(pageStr)
-			if err != nil || page < 1 {
-				respondError(w, http.StatusBadRequest, "Invalid page parameter: must be a positive integer")
-				return
-			}
-			params.Page = page
-		}
-
 		// Create context with timeout for database operation
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Get paginated sessions with faceted counts
+		// Get cursor-paginated sessions with filter options
 		result, err := database.ListUserSessionsPaginated(ctx, userID, params)
 		if err != nil {
 			log.Error("Failed to list sessions", "error", err)

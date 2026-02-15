@@ -213,13 +213,6 @@
   white-space: nowrap;
 }
 
-.dimensionCount {
-  font-size: var(--font-xs);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
 .dimensionEmpty {
   padding: var(--spacing-sm);
   text-align: center;

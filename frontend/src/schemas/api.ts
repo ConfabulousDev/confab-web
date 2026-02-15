@@ -48,19 +48,16 @@ const SessionSchema = z.object({
   shared_by_email: z.string().nullable().optional(),
 });
 
-const FilterOptionSchema = z.object({ value: z.string(), count: z.number() });
-
 const SessionFilterOptionsSchema = z.object({
-  repos: z.array(FilterOptionSchema),
-  branches: z.array(FilterOptionSchema),
-  owners: z.array(FilterOptionSchema),
-  total: z.number(),
+  repos: z.array(z.string()),
+  branches: z.array(z.string()),
+  owners: z.array(z.string()),
 });
 
 export const SessionListResponseSchema = z.object({
   sessions: z.array(SessionSchema),
-  total: z.number(),
-  page: z.number(),
+  has_more: z.boolean(),
+  next_cursor: z.string().optional().default(''),
   page_size: z.number(),
   filter_options: SessionFilterOptionsSchema,
 });
@@ -462,7 +459,6 @@ export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
 export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
-export type FilterOption = z.infer<typeof FilterOptionSchema>;
 export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
 export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 
