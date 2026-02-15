@@ -54,6 +54,14 @@ function SessionsPage() {
   const { sessions, loading, error } = useSessionsPolling(showSharedWithMe ? 'shared' : 'owned');
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
+  // Helper to check if a session passes the base filters (excluding repo/branch)
+  const passesBaseFilters = useCallback((s: typeof sessions[0]) => {
+    if (s.total_lines <= 0) return false;
+    if (!showEmptySessions && !s.summary && !s.first_user_message) return false;
+    if (showSharedWithMe ? s.is_owner : !s.is_owner) return false;
+    return true;
+  }, [showSharedWithMe, showEmptySessions]);
+
   // Get unique repos, branches, hostnames, owners, and PRs for filtering
   const { repos, branches, hostnames, owners, prs } = useMemo(() => {
     const repoSet = new Set<string>();
@@ -63,6 +71,7 @@ function SessionsPage() {
     const prSet = new Set<string>();
 
     sessions.forEach((s) => {
+      if (!passesBaseFilters(s)) return;
       if (s.git_repo) repoSet.add(s.git_repo);
       if (s.git_branch) branchSet.add(s.git_branch);
       if (s.hostname) hostnameSet.add(s.hostname);
@@ -90,7 +99,7 @@ function SessionsPage() {
         return numB - numA;
       }),
     };
-  }, [sessions]);
+  }, [sessions, passesBaseFilters]);
 
   // Sorted and filtered sessions
   const sortedSessions = useMemo(() => {
@@ -131,14 +140,6 @@ function SessionsPage() {
       },
     });
   }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch, selectedHostname, selectedOwner, selectedPR, selectedCommit, searchQuery, showEmptySessions]);
-
-  // Helper to check if a session passes the base filters (excluding repo/branch)
-  const passesBaseFilters = useCallback((s: typeof sessions[0]) => {
-    if (s.total_lines <= 0) return false;
-    if (!showEmptySessions && !s.summary && !s.first_user_message) return false;
-    if (showSharedWithMe ? s.is_owner : !s.is_owner) return false;
-    return true;
-  }, [showSharedWithMe, showEmptySessions]);
 
   // Count sessions per repo/branch
   const repoCounts = useMemo(() => {
