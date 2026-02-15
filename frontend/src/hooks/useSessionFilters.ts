@@ -9,6 +9,7 @@ interface SessionFilters {
   selectedRepo: string | null;
   selectedBranch: string | null;
   selectedHostname: string | null;
+  selectedOwner: string | null;
   selectedPR: string | null;
   selectedCommit: string | null;
   searchQuery: string;
@@ -22,6 +23,7 @@ interface SessionFiltersActions {
   setSelectedRepo: (value: string | null) => void;
   setSelectedBranch: (value: string | null) => void;
   setSelectedHostname: (value: string | null) => void;
+  setSelectedOwner: (value: string | null) => void;
   setSelectedPR: (value: string | null) => void;
   setSelectedCommit: (value: string | null) => void;
   setSearchQuery: (value: string) => void;
@@ -30,6 +32,7 @@ interface SessionFiltersActions {
   handleSort: (column: SortColumn) => void;
   handleRepoClick: (repo: string | null) => void;
   handleHostnameClick: (hostname: string | null) => void;
+  handleOwnerClick: (owner: string | null) => void;
   toggleShowEmptySessions: () => void;
 }
 
@@ -38,6 +41,7 @@ const PARAM_KEYS = {
   repo: 'repo',
   branch: 'branch',
   hostname: 'hostname',
+  owner: 'owner',
   pr: 'pr',
   commit: 'commit',
   q: 'q',
@@ -67,6 +71,7 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     const repoParam = searchParams.get(PARAM_KEYS.repo);
     const branchParam = searchParams.get(PARAM_KEYS.branch);
     const hostnameParam = searchParams.get(PARAM_KEYS.hostname);
+    const ownerParam = searchParams.get(PARAM_KEYS.owner);
     const prParam = searchParams.get(PARAM_KEYS.pr);
     const commitParam = searchParams.get(PARAM_KEYS.commit);
     const queryParam = searchParams.get(PARAM_KEYS.q);
@@ -78,6 +83,7 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
       selectedRepo: repoParam,
       selectedBranch: branchParam,
       selectedHostname: hostnameParam,
+      selectedOwner: ownerParam,
       selectedPR: prParam,
       selectedCommit: commitParam,
       searchQuery: queryParam || '',
@@ -115,6 +121,7 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
         [PARAM_KEYS.repo]: null,
         [PARAM_KEYS.branch]: null,
         [PARAM_KEYS.hostname]: null,
+        [PARAM_KEYS.owner]: null,
         [PARAM_KEYS.pr]: null,
         [PARAM_KEYS.commit]: null,
         [PARAM_KEYS.q]: null,
@@ -146,6 +153,13 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
   const setSelectedHostname = useCallback(
     (value: string | null) => {
       updateParams({ [PARAM_KEYS.hostname]: value });
+    },
+    [updateParams]
+  );
+
+  const setSelectedOwner = useCallback(
+    (value: string | null) => {
+      updateParams({ [PARAM_KEYS.owner]: value });
     },
     [updateParams]
   );
@@ -227,6 +241,13 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [updateParams]
   );
 
+  const handleOwnerClick = useCallback(
+    (owner: string | null) => {
+      updateParams({ [PARAM_KEYS.owner]: owner });
+    },
+    [updateParams]
+  );
+
   const toggleShowEmptySessions = useCallback(() => {
     setShowEmptySessions((prev) => !prev);
   }, []);
@@ -237,6 +258,7 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     setSelectedRepo,
     setSelectedBranch,
     setSelectedHostname,
+    setSelectedOwner,
     setSelectedPR,
     setSelectedCommit,
     setSearchQuery,
@@ -245,6 +267,7 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     handleSort,
     handleRepoClick,
     handleHostnameClick,
+    handleOwnerClick,
     toggleShowEmptySessions,
   };
 }

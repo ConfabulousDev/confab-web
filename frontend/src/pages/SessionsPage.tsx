@@ -29,6 +29,7 @@ function SessionsPage() {
     selectedBranch,
     setSelectedBranch,
     selectedHostname,
+    selectedOwner,
     selectedPR,
     setSelectedPR,
     selectedCommit,
@@ -40,6 +41,7 @@ function SessionsPage() {
     handleSort,
     handleRepoClick,
     handleHostnameClick,
+    handleOwnerClick,
     showEmptySessions,
     toggleShowEmptySessions,
   } = useSessionFilters();
@@ -52,17 +54,22 @@ function SessionsPage() {
   const { sessions, loading, error } = useSessionsPolling(showSharedWithMe ? 'shared' : 'owned');
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
-  // Get unique repos, branches, hostnames, and PRs for filtering
-  const { repos, branches, hostnames, prs } = useMemo(() => {
+  // Get unique repos, branches, hostnames, owners, and PRs for filtering
+  const { repos, branches, hostnames, owners, prs } = useMemo(() => {
     const repoSet = new Set<string>();
     const branchSet = new Set<string>();
     const hostnameSet = new Set<string>();
+    const ownerMap = new Map<string, string>();
     const prSet = new Set<string>();
 
     sessions.forEach((s) => {
       if (s.git_repo) repoSet.add(s.git_repo);
       if (s.git_branch) branchSet.add(s.git_branch);
       if (s.hostname) hostnameSet.add(s.hostname);
+      if (s.shared_by_email) {
+        const key = s.shared_by_email.toLowerCase();
+        if (!ownerMap.has(key)) ownerMap.set(key, s.shared_by_email);
+      }
       s.github_prs?.forEach((pr) => prSet.add(pr));
     });
 
@@ -70,6 +77,9 @@ function SessionsPage() {
       repos: Array.from(repoSet).sort(),
       branches: Array.from(branchSet).sort(),
       hostnames: Array.from(hostnameSet).sort(),
+      owners: Array.from(ownerMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, display]) => display),
       // Sort PRs numerically descending (newest first), with fallback for non-numeric values
       prs: Array.from(prSet).sort((a, b) => {
         const numA = Number(a);
@@ -102,6 +112,8 @@ function SessionsPage() {
         if (selectedBranch && s.git_branch !== selectedBranch) return false;
         // Filter by selected hostname
         if (selectedHostname && s.hostname !== selectedHostname) return false;
+        // Filter by selected owner
+        if (selectedOwner && s.shared_by_email?.toLowerCase() !== selectedOwner.toLowerCase()) return false;
         // Filter by selected PR
         if (selectedPR && !s.github_prs?.includes(selectedPR)) return false;
         // Filter by commit search (prefix match)
@@ -118,7 +130,7 @@ function SessionsPage() {
         return true;
       },
     });
-  }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch, selectedHostname, selectedPR, selectedCommit, searchQuery, showEmptySessions]);
+  }, [sessions, sortColumn, sortDirection, showSharedWithMe, selectedRepo, selectedBranch, selectedHostname, selectedOwner, selectedPR, selectedCommit, searchQuery, showEmptySessions]);
 
   // Helper to check if a session passes the base filters (excluding repo/branch)
   const passesBaseFilters = useCallback((s: typeof sessions[0]) => {
@@ -160,6 +172,20 @@ function SessionsPage() {
         const hostname = s.hostname || '';
         if (hostname) {
           counts[hostname] = (counts[hostname] || 0) + 1;
+        }
+      }
+    });
+    return counts;
+  }, [sessions, passesBaseFilters]);
+
+  const ownerCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sessions.forEach((s) => {
+      if (passesBaseFilters(s)) {
+        const owner = s.shared_by_email || '';
+        if (owner) {
+          const key = owner.toLowerCase();
+          counts[key] = (counts[key] || 0) + 1;
         }
       }
     });
@@ -221,21 +247,25 @@ function SessionsPage() {
               repos={repos}
               branches={branches}
               hostnames={showSharedWithMe ? [] : hostnames}
+              owners={showSharedWithMe ? owners : []}
               prs={prs}
               selectedRepo={selectedRepo}
               selectedBranch={selectedBranch}
               selectedHostname={selectedHostname}
+              selectedOwner={selectedOwner}
               selectedPR={selectedPR}
               commitSearch={selectedCommit || ''}
               repoCounts={repoCounts}
               branchCounts={branchCounts}
               hostnameCounts={hostnameCounts}
+              ownerCounts={ownerCounts}
               prCounts={prCounts}
               totalCount={totalCount}
               searchQuery={searchQuery}
               onRepoClick={handleRepoClick}
               onBranchClick={(branch) => setSelectedBranch(branch)}
               onHostnameClick={handleHostnameClick}
+              onOwnerClick={handleOwnerClick}
               onPRClick={(pr) => setSelectedPR(pr)}
               onCommitSearchChange={(commit) => setSelectedCommit(commit || null)}
               onSearchChange={setSearchQuery}
@@ -260,10 +290,10 @@ function SessionsPage() {
             {loading && sessions.length === 0 ? (
               <p className={styles.loading}>Loading sessions...</p>
             ) : sortedSessions.length === 0 ? (
-              showSharedWithMe ? (
-                <SessionEmptyState variant="no-shared" />
-              ) : selectedRepo || selectedBranch || selectedHostname || selectedPR || selectedCommit || searchQuery ? (
+              selectedRepo || selectedBranch || selectedHostname || selectedOwner || selectedPR || selectedCommit || searchQuery ? (
                 <SessionEmptyState variant="no-matches" />
+              ) : showSharedWithMe ? (
+                <SessionEmptyState variant="no-shared" />
               ) : (
                 <Quickstart />
               )

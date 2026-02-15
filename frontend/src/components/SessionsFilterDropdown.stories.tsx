@@ -34,20 +34,31 @@ const samplePRCounts: Record<string, number> = {
   '119': 2,
 };
 
+const sampleOwners = ['alice@example.com', 'bob@company.org', 'carol@dev.io'];
+
+const sampleOwnerCounts: Record<string, number> = {
+  'alice@example.com': 22,
+  'bob@company.org': 15,
+  'carol@dev.io': 8,
+};
+
 // Interactive wrapper component
 function SessionsFilterDropdownInteractive({
   repos = sampleRepos,
   branches = sampleBranches,
   hostnames = sampleHostnames,
+  owners = [],
   prs = samplePRs,
   repoCounts = sampleRepoCounts,
   branchCounts = sampleBranchCounts,
   hostnameCounts = sampleHostnameCounts,
+  ownerCounts = {},
   prCounts = samplePRCounts,
   totalCount = 80,
   initialRepo = null,
   initialBranch = null,
   initialHostname = null,
+  initialOwner = null,
   initialPR = null,
   initialCommitSearch = '',
   initialSearchQuery = '',
@@ -55,15 +66,18 @@ function SessionsFilterDropdownInteractive({
   repos?: string[];
   branches?: string[];
   hostnames?: string[];
+  owners?: string[];
   prs?: string[];
   repoCounts?: Record<string, number>;
   branchCounts?: Record<string, number>;
   hostnameCounts?: Record<string, number>;
+  ownerCounts?: Record<string, number>;
   prCounts?: Record<string, number>;
   totalCount?: number;
   initialRepo?: string | null;
   initialBranch?: string | null;
   initialHostname?: string | null;
+  initialOwner?: string | null;
   initialPR?: string | null;
   initialCommitSearch?: string;
   initialSearchQuery?: string;
@@ -71,6 +85,7 @@ function SessionsFilterDropdownInteractive({
   const [selectedRepo, setSelectedRepo] = useState<string | null>(initialRepo);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(initialBranch);
   const [selectedHostname, setSelectedHostname] = useState<string | null>(initialHostname);
+  const [selectedOwner, setSelectedOwner] = useState<string | null>(initialOwner);
   const [selectedPR, setSelectedPR] = useState<string | null>(initialPR);
   const [commitSearch, setCommitSearch] = useState<string>(initialCommitSearch);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
@@ -91,6 +106,10 @@ function SessionsFilterDropdownInteractive({
     setSelectedHostname(hostname);
   };
 
+  const handleOwnerClick = (owner: string | null) => {
+    setSelectedOwner(owner);
+  };
+
   const handlePRClick = (pr: string | null) => {
     setSelectedPR(pr);
   };
@@ -100,21 +119,25 @@ function SessionsFilterDropdownInteractive({
       repos={repos}
       branches={branches}
       hostnames={hostnames}
+      owners={owners}
       prs={prs}
       selectedRepo={selectedRepo}
       selectedBranch={selectedBranch}
       selectedHostname={selectedHostname}
+      selectedOwner={selectedOwner}
       selectedPR={selectedPR}
       commitSearch={commitSearch}
       repoCounts={repoCounts}
       branchCounts={branchCounts}
       hostnameCounts={hostnameCounts}
+      ownerCounts={ownerCounts}
       prCounts={prCounts}
       totalCount={totalCount}
       searchQuery={searchQuery}
       onRepoClick={handleRepoClick}
       onBranchClick={handleBranchClick}
       onHostnameClick={handleHostnameClick}
+      onOwnerClick={handleOwnerClick}
       onPRClick={handlePRClick}
       onCommitSearchChange={setCommitSearch}
       onSearchChange={setSearchQuery}
@@ -227,6 +250,27 @@ export const NoHostnames: Story = {
   args: {
     hostnames: [],
     hostnameCounts: {},
+  },
+};
+
+export const SharedWithMeView: Story = {
+  args: {
+    hostnames: [],
+    hostnameCounts: {},
+    owners: sampleOwners,
+    ownerCounts: sampleOwnerCounts,
+    totalCount: 45,
+  },
+};
+
+export const WithOwnerSelected: Story = {
+  args: {
+    hostnames: [],
+    hostnameCounts: {},
+    owners: sampleOwners,
+    ownerCounts: sampleOwnerCounts,
+    initialOwner: 'alice@example.com',
+    totalCount: 45,
   },
 };
 
