@@ -73,8 +73,8 @@ Track with TodoWrite:
 - [ ] Review package structure (use Task/Explore agent)
 - [ ] Security review
 - [ ] Code smell detection
-- [ ] Duplication analysis (DRY violations)
-- [ ] Simplification opportunities
+- [ ] DRY / code deduplication review
+- [ ] Logic simplification review
 
 ### Security Review Checklist
 
@@ -127,6 +127,32 @@ Pattern: "if err != nil {\s*}" (multiline)
 # Silent error ignoring
 Pattern: ", _ :="
 ```
+
+### DRY / Code Deduplication Review
+
+Actively search for opportunities to reduce duplication and simplify logic:
+
+**Duplicated patterns to look for:**
+- Similar handler functions that could share a common helper (e.g., CRUD handlers, middleware patterns)
+- Repeated SQL query fragments or database access patterns across functions
+- Copy-pasted error handling, response formatting, or validation logic
+- Near-identical struct definitions or type conversions
+- Similar test setup/teardown code that could use shared helpers
+
+**How to search:**
+1. Look at the largest files first - they often contain logic that could be extracted
+2. Use Grep to find repeated patterns: similar function signatures, identical SQL fragments, duplicated struct fields
+3. Compare handlers that do similar things (e.g., multiple CRUD endpoints with the same get/validate/respond pattern)
+4. Check for inline logic that already exists as a utility function elsewhere
+
+**Logic simplification to look for:**
+- Overly nested conditionals that could be flattened (early returns, guard clauses)
+- Complex expressions that could be extracted into well-named variables or functions
+- Redundant nil/error checks that are already guaranteed by prior logic
+- Verbose patterns that have simpler idiomatic Go equivalents (e.g., using `errors.Is` instead of type switches)
+- Functions doing too many things that could be split into focused helpers
+
+**Action:** Report findings with specific file locations and a brief description of the simplification. For low-risk improvements (extracting a shared helper, simplifying a conditional), fix directly. For larger refactors, note in the findings table.
 
 ### DRY Violations - Known Hotspots
 
@@ -196,7 +222,7 @@ Create a summary with:
 | Security | High/Med/Low | Description | file:line | Fix/Ticket/Ignore |
 | Dead Code | ... | ... | ... | ... |
 | Code Smell | ... | ... | ... | ... |
-| DRY Violation | ... | ... | ... | ... |
+| Duplication | ... | ... | ... | ... |
 | Simplification | ... | ... | ... | ... |
 
 ### Severity Guidelines
