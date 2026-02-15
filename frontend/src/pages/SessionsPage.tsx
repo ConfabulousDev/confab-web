@@ -57,23 +57,15 @@ function SessionsPage() {
                 `${total.toLocaleString()} session${total !== 1 ? 's' : ''}`
               )}
             </span>
-            <div className={styles.toolbarActions}>
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-              />
-              <button
-                className={styles.refreshBtn}
-                onClick={() => refetch()}
-                title="Refresh sessions"
-                aria-label="Refresh sessions"
-                disabled={loading}
-              >
-                {RefreshIcon}
-              </button>
-            </div>
+            <button
+              className={styles.refreshBtn}
+              onClick={() => refetch()}
+              title="Refresh sessions"
+              aria-label="Refresh sessions"
+              disabled={loading}
+            >
+              {RefreshIcon}
+            </button>
           </div>
 
           <FilterChipsBar
@@ -87,6 +79,13 @@ function SessionsPage() {
             onRemovePR={removePR}
             onQueryChange={setQuery}
             onClearAll={clearAll}
+          />
+
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
           />
         </header>
 
