@@ -45,7 +45,7 @@ export function useSmartPolling<T>(
   const { merge, enabled = true, resetKey, intervalOverride } = options;
 
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<Error | null>(null);
 
   const isVisible = useVisibility();

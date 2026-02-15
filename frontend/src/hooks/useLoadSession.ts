@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SessionDetail } from '@/types';
 import { type SessionErrorType, statusToErrorType, getErrorMessage } from '@/utils/sessionErrors';
 
@@ -35,6 +35,17 @@ export function useLoadSession({
   const [loading, setLoading] = useState(true);
   const [error, setErrorState] = useState('');
   const [errorType, setErrorType] = useState<SessionErrorType>(null);
+
+  // Reset state synchronously when deps change to prevent stale error/session flash.
+  // Uses React's "store previous render info" pattern to detect changes during render.
+  const prevDepsRef = useRef(deps);
+  if (deps.length !== prevDepsRef.current.length || deps.some((d, i) => d !== prevDepsRef.current[i])) {
+    prevDepsRef.current = deps;
+    setLoading(true);
+    setErrorState('');
+    setErrorType(null);
+    setSession(null);
+  }
 
   const setError = useCallback((message: string, type: SessionErrorType = 'general') => {
     setErrorState(message);
