@@ -103,10 +103,11 @@ const BaseMessageSchema = z.object({
 });
 
 const ThinkingMetadataSchema = z.object({
-  level: z.string(), // 'high' | 'medium' | 'low' | 'off' - use string for forward compat
-  disabled: z.boolean(),
-  triggers: z.array(z.string()),
-});
+  level: z.string().optional(), // 'high' | 'medium' | 'low' | 'off' - use string for forward compat
+  disabled: z.boolean().optional(),
+  triggers: z.array(z.string()).optional(),
+  maxThinkingTokens: z.number().optional(),
+}).passthrough();
 
 // ToolUseResult contains tool-specific metadata about what the tool returned.
 // This is highly variable depending on the tool (Bash, Read, Grep, etc.) so we use
