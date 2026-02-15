@@ -33,6 +33,12 @@
   gap: var(--spacing-sm);
 }
 
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .sessionCount {
   font-size: var(--font-sm);
   color: var(--color-text-muted);

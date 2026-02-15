@@ -57,15 +57,23 @@ function SessionsPage() {
                 'Sessions'
               )}
             </span>
-            <button
-              className={styles.refreshBtn}
-              onClick={() => refetch()}
-              title="Refresh sessions"
-              aria-label="Refresh sessions"
-              disabled={loading}
-            >
-              {RefreshIcon}
-            </button>
+            <div className={styles.toolbarActions}>
+              <Pagination
+                hasMore={hasMore}
+                canGoPrev={canGoPrev}
+                onNext={goNext}
+                onPrev={goPrev}
+              />
+              <button
+                className={styles.refreshBtn}
+                onClick={() => refetch()}
+                title="Refresh sessions"
+                aria-label="Refresh sessions"
+                disabled={loading}
+              >
+                {RefreshIcon}
+              </button>
+            </div>
           </div>
 
           <FilterChipsBar
@@ -77,13 +85,6 @@ function SessionsPage() {
             onToggleOwner={toggleOwner}
             onQueryChange={setQuery}
             onClearAll={clearAll}
-          />
-
-          <Pagination
-            hasMore={hasMore}
-            canGoPrev={canGoPrev}
-            onNext={goNext}
-            onPrev={goPrev}
           />
         </header>
 
