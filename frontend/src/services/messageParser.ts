@@ -13,7 +13,7 @@ import {
   usesTools,
 } from '@/types';
 
-export interface ParsedMessageData {
+interface ParsedMessageData {
   role: 'user' | 'assistant' | 'system';
   timestamp?: string;
   content: ContentBlock[];

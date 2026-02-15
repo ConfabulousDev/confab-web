@@ -60,7 +60,7 @@ function PageSidebar({
 
 export type SidebarItemColor = 'default' | 'green' | 'blue' | 'gray' | 'cyan' | 'purple' | 'amber';
 
-export interface SidebarItemProps {
+interface SidebarItemProps {
   icon: React.ReactNode;
   label: string;
   count?: number;

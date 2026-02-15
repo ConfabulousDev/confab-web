@@ -20,10 +20,7 @@ interface SessionFilters {
 
 interface SessionFiltersActions {
   setShowSharedWithMe: (value: boolean) => void;
-  setSelectedRepo: (value: string | null) => void;
   setSelectedBranch: (value: string | null) => void;
-  setSelectedHostname: (value: string | null) => void;
-  setSelectedOwner: (value: string | null) => void;
   setSelectedPR: (value: string | null) => void;
   setSelectedCommit: (value: string | null) => void;
   setSearchQuery: (value: string) => void;
@@ -130,36 +127,9 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [updateParams]
   );
 
-  const setSelectedRepo = useCallback(
-    (value: string | null) => {
-      updateParams({
-        [PARAM_KEYS.repo]: value,
-        // Reset repo-scoped filters when repo changes
-        [PARAM_KEYS.branch]: null,
-        [PARAM_KEYS.pr]: null,
-        [PARAM_KEYS.commit]: null,
-      });
-    },
-    [updateParams]
-  );
-
   const setSelectedBranch = useCallback(
     (value: string | null) => {
       updateParams({ [PARAM_KEYS.branch]: value });
-    },
-    [updateParams]
-  );
-
-  const setSelectedHostname = useCallback(
-    (value: string | null) => {
-      updateParams({ [PARAM_KEYS.hostname]: value });
-    },
-    [updateParams]
-  );
-
-  const setSelectedOwner = useCallback(
-    (value: string | null) => {
-      updateParams({ [PARAM_KEYS.owner]: value });
     },
     [updateParams]
   );
@@ -255,10 +225,7 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
   return {
     ...filters,
     setShowSharedWithMe,
-    setSelectedRepo,
     setSelectedBranch,
-    setSelectedHostname,
-    setSelectedOwner,
     setSelectedPR,
     setSelectedCommit,
     setSearchQuery,

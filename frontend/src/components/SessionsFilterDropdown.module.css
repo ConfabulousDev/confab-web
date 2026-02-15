@@ -25,9 +25,9 @@
 }
 
 .filterBtn.active {
-  background: #f5f3ff;
-  border-color: #7c3aed;
-  color: #7c3aed;
+  background: var(--color-selected-bg);
+  border-color: var(--color-selected-border);
+  color: var(--color-selected);
 }
 
 .filterBtn svg {
@@ -95,7 +95,7 @@
 
 .searchInput:focus {
   outline: none;
-  border-color: #7c3aed;
+  border-color: var(--color-selected-border);
 }
 
 /* Section divider and label */
@@ -151,8 +151,8 @@
 }
 
 .checkbox.checked {
-  background: #7c3aed;
-  border-color: #7c3aed;
+  background: var(--color-selected);
+  border-color: var(--color-selected-border);
 }
 
 .checkbox.checked svg {

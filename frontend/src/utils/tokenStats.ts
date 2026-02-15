@@ -1,6 +1,6 @@
 import type { TranscriptLine } from '@/types';
 
-export interface TokenStats {
+interface TokenStats {
   input: number;
   output: number;
   cacheCreated: number;

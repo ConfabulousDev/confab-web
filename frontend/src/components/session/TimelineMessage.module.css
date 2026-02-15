@@ -44,7 +44,7 @@
 
 .message.summary {
   background: rgba(124, 58, 237, 0.04);
-  border-left: 3px solid #7c3aed;
+  border-left: 3px solid var(--color-selected);
 }
 
 .message.queueOperation {
@@ -105,7 +105,7 @@
 }
 
 .thinking .role {
-  color: #7c3aed;
+  color: var(--color-selected);
 }
 
 /* Agent badge for sub-agent messages */

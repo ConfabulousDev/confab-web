@@ -4,7 +4,7 @@
 
 export type SortDirection = 'asc' | 'desc';
 
-export interface SortConfig<T, K extends keyof T> {
+interface SortConfig<T, K extends keyof T> {
   data: T[];
   sortBy: K;
   direction: SortDirection;

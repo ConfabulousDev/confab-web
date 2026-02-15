@@ -68,6 +68,8 @@ Track with TodoWrite:
 
 - [ ] Security review
 - [ ] Code smell detection
+- [ ] DRY / code deduplication review
+- [ ] Logic simplification review
 - [ ] Bundle size check
 
 ### Security Review Checklist
@@ -95,6 +97,32 @@ Pattern: ": any"
 Pattern: "eslint-disable"
 ```
 
+### DRY / Code Deduplication Review
+
+Actively search for opportunities to reduce duplication and simplify logic:
+
+**Duplicated patterns to look for:**
+- Similar UI components that could share a common base (e.g., pages with tables, modal dialogs, form patterns)
+- Repeated fetch/state/error handling logic across hooks or components
+- Identical or near-identical CSS patterns across module files
+- Copy-pasted utility logic (formatting, validation, data transforms)
+- Similar conditional rendering blocks across components
+
+**How to search:**
+1. Look at the largest files first - they often contain logic that could be extracted
+2. Use Grep to find repeated patterns: similar function signatures, identical JSX structures, duplicated state management
+3. Compare hooks that do similar things (e.g., multiple hooks that fetch + poll + handle errors)
+4. Check for inline logic that already exists as a utility function elsewhere
+
+**Logic simplification to look for:**
+- Overly nested conditionals that could be flattened (early returns, guard clauses)
+- Complex expressions that could be extracted into well-named variables or functions
+- State that could be derived from other state instead of tracked independently
+- Effects that could be replaced with event handlers or useMemo
+- Verbose patterns that have simpler idiomatic equivalents
+
+**Action:** Report findings with specific file locations and a brief description of the simplification. For low-risk improvements (extracting a shared component, simplifying a conditional), fix directly. For larger refactors, note in the findings table.
+
 ### Bundle Size Check
 
 ```bash
@@ -120,6 +148,8 @@ Create a summary with:
 |----------|----------|-------|----------|--------|
 | Security | High/Med/Low | Description | file:line | Fix/Ticket/Ignore |
 | Dead Code | ... | ... | ... | ... |
+| Duplication | ... | ... | ... | ... |
+| Simplification | ... | ... | ... | ... |
 | Code Smell | ... | ... | ... | ... |
 | Bundle | ... | ... | ... | ... |
 

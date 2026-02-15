@@ -12,7 +12,7 @@ export function formatResponseTime(ms: number | null): string {
   return formatDuration(ms, { decimalSeconds: true });
 }
 
-export interface CompactionStats {
+interface CompactionStats {
   total: number;
   auto: number;
   manual: number;

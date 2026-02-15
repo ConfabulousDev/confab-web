@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { trendsAPI, type TrendsParams } from '@/services/api';
 import type { TrendsResponse } from '@/schemas/api';
 
-export interface UseTrendsReturn {
+interface UseTrendsReturn {
   /** Current trends data */
   data: TrendsResponse | null;
   /** Whether a fetch is in progress */

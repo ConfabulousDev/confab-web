@@ -15,7 +15,7 @@
 .title {
   font-size: 6rem;
   font-weight: 700;
-  color: #dee2e6;
+  color: var(--color-border);
   margin: 0;
   line-height: 1;
 }
@@ -23,13 +23,13 @@
 .subtitle {
   font-size: 2rem;
   font-weight: 600;
-  color: #222;
+  color: var(--color-text-primary);
   margin: 1rem 0;
 }
 
 .message {
   font-size: 1.1rem;
-  color: #6c757d;
+  color: var(--color-text-muted);
   margin: 1.5rem 0 2rem;
   line-height: 1.6;
 }
@@ -46,29 +46,29 @@
   padding: 0.75rem 1.5rem;
   font-size: 1rem;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   text-decoration: none;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   cursor: pointer;
   border: none;
   font-family: inherit;
 }
 
 .homeBtn {
-  background: #007bff;
+  background: var(--color-accent);
   color: white;
 }
 
 .homeBtn:hover {
-  background: #0056b3;
+  background: var(--color-accent-hover);
 }
 
 .backBtn {
-  background: #f8f9fa;
-  color: #495057;
-  border: 1px solid #dee2e6;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
 }
 
 .backBtn:hover {
-  background: #e9ecef;
+  background: var(--color-bg-hover);
 }

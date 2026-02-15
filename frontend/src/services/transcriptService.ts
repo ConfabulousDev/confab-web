@@ -13,7 +13,7 @@ import { syncFilesAPI } from './api';
 /**
  * Parsed transcript with metadata
  */
-export interface ParsedTranscript {
+interface ParsedTranscript {
   sessionId: string;
   messages: TranscriptLine[];
   agents: AgentNode[];
