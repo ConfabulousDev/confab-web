@@ -513,6 +513,9 @@ Content-Type: application/json
 }
 ```
 
+**Errors:**
+- `403` - Share creation is disabled (`DISABLE_SHARES=true`): `{"error": "Share creation is disabled by the administrator"}`
+
 **Note:** Share URLs use the canonical session URL format (`/sessions/{id}`). For private shares, invitation emails include the recipient's email as a query parameter: `https://confab.dev/sessions/{id}?email={recipient_email}`. This allows the login flow to guide the recipient to sign in with the correct email address.
 
 #### List Shares for Session
@@ -1006,7 +1009,10 @@ Returns the list of enabled authentication providers. No authentication required
       "display_name": "Okta",
       "login_url": "/auth/oidc/login"
     }
-  ]
+  ],
+  "features": {
+    "shares_enabled": true
+  }
 }
 ```
 
@@ -1015,6 +1021,7 @@ Returns the list of enabled authentication providers. No authentication required
 | `providers[].name` | string | Provider identifier: `"password"`, `"github"`, `"google"`, or `"oidc"` |
 | `providers[].display_name` | string | Human-readable name for the provider (e.g., `"GitHub"`, `"Okta"`) |
 | `providers[].login_url` | string | Path to initiate login with this provider |
+| `features.shares_enabled` | bool | Whether share creation is enabled (`false` when `DISABLE_SHARES=true`) |
 
 Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.
 

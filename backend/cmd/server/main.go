@@ -65,6 +65,11 @@ func main() {
 		logger.Info("share-all-sessions mode enabled: all sessions visible to authenticated users")
 	}
 
+	// Disable share creation for on-prem deployments
+	if os.Getenv("DISABLE_SHARES") == "true" {
+		logger.Info("share creation disabled: DISABLE_SHARES=true")
+	}
+
 	// Bootstrap admin user if password auth is enabled and no users exist
 	if config.OAuthConfig.PasswordEnabled {
 		ctx := context.Background()

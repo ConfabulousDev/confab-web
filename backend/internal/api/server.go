@@ -63,6 +63,7 @@ type Server struct {
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
 	supportEmail      string                    // Support contact email address
 	version           string                    // Application version (set via ldflags at build time)
+	sharesDisabled    bool                      // When true, share creation is disabled (DISABLE_SHARES=true)
 	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -76,13 +77,14 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig auth.OAuth
 		supportEmail = "support@example.com"
 	}
 	return &Server{
-		db:           database,
-		storage:      store,
-		oauthConfig:  oauthConfig,
-		emailService: emailService,
-		frontendURL:  os.Getenv("FRONTEND_URL"),
-		supportEmail: supportEmail,
-		version:      version,
+		db:             database,
+		storage:        store,
+		oauthConfig:    oauthConfig,
+		emailService:   emailService,
+		frontendURL:    os.Getenv("FRONTEND_URL"),
+		supportEmail:   supportEmail,
+		version:        version,
+		sharesDisabled: os.Getenv("DISABLE_SHARES") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -261,7 +263,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db))))
 
 	// Admin routes (require web session + super admin)
-	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled, s.oauthConfig.AllowedEmailDomains)
+	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled, s.oauthConfig.AllowedEmailDomains, s.sharesDisabled)
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(csrfMiddleware)
 		r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
@@ -352,7 +354,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
-			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService)))
+			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService, s.sharesDisabled)))
 			r.Get("/sessions/{id}/shares", withMaxBody(MaxBodyXS, HandleListShares(s.db)))
 			r.Get("/shares", withMaxBody(MaxBodyXS, HandleListAllUserShares(s.db)))
 			r.Delete("/shares/{shareID}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))

@@ -1,6 +1,9 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/validation"
@@ -152,6 +155,45 @@ func TestPrivateShareEmailLimits(t *testing.T) {
 			return
 		}
 		t.Error("public share should not require emails")
+	})
+}
+
+func TestHandleCreateShareDisabled(t *testing.T) {
+	t.Run("returns 403 when shares are disabled", func(t *testing.T) {
+		handler := HandleCreateShare(nil, "", nil, true)
+
+		req := httptest.NewRequest("POST", "/api/v1/sessions/test-id/share", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("expected 403, got %d", rr.Code)
+		}
+		body := rr.Body.String()
+		if !strings.Contains(body, "Share creation is disabled by the administrator") {
+			t.Errorf("expected disabled message, got: %s", body)
+		}
+	})
+
+	t.Run("does not return 403 when shares are enabled", func(t *testing.T) {
+		// With sharesDisabled=false and nil db, it should fail with auth error (not 403)
+		handler := HandleCreateShare(nil, "", nil, false)
+
+		req := httptest.NewRequest("POST", "/api/v1/sessions/test-id/share", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		// Should not be 403 (disabled), will be 401 because no auth context
+		if rr.Code == http.StatusForbidden {
+			body := rr.Body.String()
+			if strings.Contains(body, "disabled") {
+				t.Error("should not return disabled message when shares are enabled")
+			}
+		}
 	})
 }
 

@@ -8,8 +8,13 @@ type providerInfo struct {
 	LoginURL    string `json:"login_url"`    // "/auth/github/login", etc.
 }
 
+type authConfigFeatures struct {
+	SharesEnabled bool `json:"shares_enabled"`
+}
+
 type authConfigResponse struct {
-	Providers []providerInfo `json:"providers"`
+	Providers []providerInfo    `json:"providers"`
+	Features  authConfigFeatures `json:"features"`
 }
 
 // handleAuthConfig returns the list of enabled authentication providers.
@@ -55,5 +60,8 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, authConfigResponse{
 		Providers: providers,
+		Features: authConfigFeatures{
+			SharesEnabled: !s.sharesDisabled,
+		},
 	})
 }

@@ -36,15 +36,17 @@ type Handlers struct {
 	Storage             *storage.S3Storage
 	PasswordAuthEnabled bool
 	AllowedEmailDomains []string
+	SharesDisabled      bool
 }
 
 // NewHandlers creates admin handlers with dependencies
-func NewHandlers(database *db.DB, store *storage.S3Storage, passwordAuthEnabled bool, allowedDomains []string) *Handlers {
+func NewHandlers(database *db.DB, store *storage.S3Storage, passwordAuthEnabled bool, allowedDomains []string, sharesDisabled bool) *Handlers {
 	return &Handlers{
 		DB:                  database,
 		Storage:             store,
 		PasswordAuthEnabled: passwordAuthEnabled,
 		AllowedEmailDomains: allowedDomains,
+		SharesDisabled:      sharesDisabled,
 	}
 }
 
@@ -599,6 +601,22 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 			</div>`, html.EscapeString(shareURL))
 	}
 
+	var formContentHTML string
+	if h.SharesDisabled {
+		formContentHTML = `<p style="color: #856404; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.75rem 1rem; font-size: 0.875rem;">Share creation is disabled by the administrator (DISABLE_SHARES=true).</p>`
+	} else {
+		formContentHTML = fmt.Sprintf(`
+			<form method="POST" action="%s/system-shares">
+				<input type="hidden" name="gorilla.csrf.Token" value="%s">
+				<div class="form-group">
+					<label for="sessionId">Session ID (UUID)</label>
+					<input type="text" id="sessionId" name="session_id" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
+					<p class="help-text">The internal UUID of the session (not the external_id). Find this in the database or session detail URL.</p>
+				</div>
+				<button type="submit" class="btn btn-primary">Create System Share</button>
+			</form>`, AdminPathPrefix, csrfToken)
+	}
+
 	htmlPage := fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
@@ -755,15 +773,7 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
         %s
         <div class="card">
             <h2>Create System Share</h2>
-            <form method="POST" action="%s/system-shares">
-                <input type="hidden" name="gorilla.csrf.Token" value="%s">
-                <div class="form-group">
-                    <label for="sessionId">Session ID (UUID)</label>
-                    <input type="text" id="sessionId" name="session_id" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
-                    <p class="help-text">The internal UUID of the session (not the external_id). Find this in the database or session detail URL.</p>
-                </div>
-                <button type="submit" class="btn btn-primary">Create System Share</button>
-            </form>
+            ` + formContentHTML + `
         </div>
     </div>
 </body>
@@ -771,8 +781,6 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 		AdminPathPrefix,
 		flashHTML,
 		shareResultHTML,
-		AdminPathPrefix,
-		csrfToken,
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -781,6 +789,11 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 
 // HandleCreateSystemShareForm handles form submission for creating system shares
 func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Request, frontendURL string) {
+	if h.SharesDisabled {
+		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Share+creation+is+disabled+by+the+administrator", http.StatusSeeOther)
+		return
+	}
+
 	log := logger.Ctx(r.Context())
 
 	if err := r.ParseForm(); err != nil {

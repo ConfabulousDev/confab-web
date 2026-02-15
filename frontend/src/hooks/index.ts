@@ -1,4 +1,5 @@
 // Export hooks that are imported through this barrel
+export { useAppConfig } from './useAppConfig';
 export { useAuth } from './useAuth';
 export { useSessionsPolling } from './useSessionsPolling';
 export { useDocumentTitle } from './useDocumentTitle';

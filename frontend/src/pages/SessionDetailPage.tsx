@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchWithCSRF } from '@/services/csrf';
 import { sessionsAPI } from '@/services/api';
-import { useAuth, useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
+import { useAppConfig, useAuth, useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
 import type { SessionDetail } from '@/types';
 import { getErrorIcon, getErrorDescription } from '@/utils/sessionErrors';
 import { SessionViewer, type ViewTab } from '@/components/session';
@@ -20,6 +20,7 @@ function SessionDetailPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated } = useAuth();
+  const { sharesEnabled } = useAppConfig();
   const {
     message: successMessage,
     fading: successFading,
@@ -188,7 +189,7 @@ function SessionDetailPage() {
 
       <SessionViewer
         session={session}
-        onShare={isOwner ? () => setShowShareDialog(true) : undefined}
+        onShare={isOwner && sharesEnabled ? () => setShowShareDialog(true) : undefined}
         onDelete={isOwner ? openDeleteDialog : undefined}
         onSessionUpdate={isOwner ? (updatedSession) => {
           setSession(updatedSession);
