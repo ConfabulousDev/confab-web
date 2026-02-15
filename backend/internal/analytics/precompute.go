@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -83,48 +84,6 @@ type Precomputer struct {
 	smartRecapGenerator *SmartRecapGenerator
 }
 
-// precomputeDB implements SmartRecapDB using raw SQL queries.
-// This allows the precomputer to use the shared SmartRecapGenerator
-// without depending on the db package.
-type precomputeDB struct {
-	db *sql.DB
-}
-
-// ResetQuotaIfNewMonth resets a user's smart recap quota if a new calendar month
-// has started. This is the precompute-path equivalent of db.ResetSmartRecapQuotaIfNeeded.
-// It uses an atomic UPDATE with a WHERE clause (no read-then-write race).
-func ResetQuotaIfNewMonth(ctx context.Context, conn *sql.DB, userID int64) error {
-	query := `
-		UPDATE smart_recap_quota
-		SET compute_count = 0, quota_reset_at = NOW()
-		WHERE user_id = $1
-		AND (
-			(quota_reset_at IS NOT NULL AND DATE_TRUNC('month', quota_reset_at) < DATE_TRUNC('month', NOW()))
-			OR (quota_reset_at IS NULL AND last_compute_at IS NOT NULL AND DATE_TRUNC('month', last_compute_at) < DATE_TRUNC('month', NOW()))
-		)
-	`
-	_, err := conn.ExecContext(ctx, query, userID)
-	return err
-}
-
-func (p *precomputeDB) IncrementSmartRecapQuota(ctx context.Context, userID int64) error {
-	query := `
-		INSERT INTO smart_recap_quota (user_id, compute_count, last_compute_at)
-		VALUES ($1, 1, NOW())
-		ON CONFLICT (user_id) DO UPDATE SET
-			compute_count = smart_recap_quota.compute_count + 1,
-			last_compute_at = NOW()
-	`
-	_, err := p.db.ExecContext(ctx, query, userID)
-	return err
-}
-
-func (p *precomputeDB) UpdateSessionSuggestedTitle(ctx context.Context, sessionID string, title string) error {
-	query := `UPDATE sessions SET suggested_session_title = $1 WHERE id = $2`
-	_, err := p.db.ExecContext(ctx, query, title, sessionID)
-	return err
-}
-
 // NewPrecomputer creates a new Precomputer.
 func NewPrecomputer(db *sql.DB, store *storage.S3Storage, analyticsStore *Store, config PrecomputeConfig) *Precomputer {
 	p := &Precomputer{
@@ -138,7 +97,7 @@ func NewPrecomputer(db *sql.DB, store *storage.S3Storage, analyticsStore *Store,
 	if config.SmartRecapEnabled {
 		p.smartRecapGenerator = NewSmartRecapGenerator(
 			analyticsStore,
-			&precomputeDB{db: db},
+			db,
 			SmartRecapGeneratorConfig{
 				APIKey:              config.AnthropicAPIKey,
 				Model:               config.SmartRecapModel,
@@ -473,18 +432,9 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		return nil
 	}
 
-	// Reset quota if a new month has started (lazy reset, mirrors db.ResetSmartRecapQuotaIfNeeded)
-	if err := ResetQuotaIfNewMonth(ctx, p.db, session.UserID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	// Check quota for session owner
-	quotaQuery := `SELECT compute_count FROM smart_recap_quota WHERE user_id = $1`
-	var computeCount int
-	err = p.db.QueryRowContext(ctx, quotaQuery, session.UserID).Scan(&computeCount)
-	if err != nil && err != sql.ErrNoRows {
+	// Check quota for session owner (GetCount returns 0 for stale/missing months)
+	computeCount, err := recapquota.GetCount(ctx, p.db, session.UserID)
+	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err

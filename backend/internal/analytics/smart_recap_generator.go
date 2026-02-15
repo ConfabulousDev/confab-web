@@ -2,22 +2,15 @@ package analytics
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
+	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
-
-// SmartRecapDB defines the database operations needed for smart recap generation.
-// This interface allows the analytics package to remain decoupled from the db package.
-type SmartRecapDB interface {
-	// IncrementSmartRecapQuota increments the compute count for the user.
-	IncrementSmartRecapQuota(ctx context.Context, userID int64) error
-	// UpdateSessionSuggestedTitle updates the suggested title for a session.
-	UpdateSessionSuggestedTitle(ctx context.Context, sessionID string, title string) error
-}
 
 // SmartRecapGeneratorConfig holds configuration for the smart recap generator.
 type SmartRecapGeneratorConfig struct {
@@ -32,12 +25,12 @@ type SmartRecapGeneratorConfig struct {
 // It coordinates lock acquisition, LLM generation, and persistence.
 type SmartRecapGenerator struct {
 	store  *Store
-	db     SmartRecapDB
+	db     *sql.DB
 	config SmartRecapGeneratorConfig
 }
 
 // NewSmartRecapGenerator creates a new generator with the given dependencies.
-func NewSmartRecapGenerator(store *Store, db SmartRecapDB, config SmartRecapGeneratorConfig) *SmartRecapGenerator {
+func NewSmartRecapGenerator(store *Store, db *sql.DB, config SmartRecapGeneratorConfig) *SmartRecapGenerator {
 	// Default timeout if not specified
 	if config.GenerationTimeout == 0 {
 		config.GenerationTimeout = 30 * time.Second
@@ -144,14 +137,16 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 
 	// Update suggested title if generated
 	if result.SuggestedSessionTitle != "" {
-		if err := g.db.UpdateSessionSuggestedTitle(saveCtx, input.SessionID, result.SuggestedSessionTitle); err != nil {
+		_, err := g.db.ExecContext(saveCtx, `UPDATE sessions SET suggested_session_title = $1 WHERE id = $2`,
+			result.SuggestedSessionTitle, input.SessionID)
+		if err != nil {
 			// Log but don't fail - the main operation succeeded
 			span.SetAttributes(attribute.String("title.update.error", err.Error()))
 		}
 	}
 
 	// Increment quota
-	if err := g.db.IncrementSmartRecapQuota(saveCtx, input.UserID); err != nil {
+	if err := recapquota.Increment(saveCtx, g.db, input.UserID); err != nil {
 		// Log but don't fail - the main operation succeeded
 		span.SetAttributes(attribute.String("quota.increment.error", err.Error()))
 	}

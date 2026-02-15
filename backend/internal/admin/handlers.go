@@ -17,6 +17,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
@@ -68,7 +69,7 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get smart recap stats per user
-	recapStats, err := h.DB.ListUserSmartRecapStats(ctx)
+	recapStats, err := recapquota.ListUserStats(ctx, h.DB.Conn())
 	if err != nil {
 		log.Error("Failed to list smart recap stats", "error", err)
 		http.Error(w, "Failed to load smart recap stats", http.StatusInternalServerError)
@@ -76,13 +77,13 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build a map for quick lookup by user ID
-	recapStatsByUser := make(map[int64]db.UserSmartRecapStats)
+	recapStatsByUser := make(map[int64]recapquota.UserStats)
 	for _, stat := range recapStats {
 		recapStatsByUser[stat.UserID] = stat
 	}
 
 	// Get totals for summary display
-	recapTotals, err := h.DB.GetSmartRecapTotals(ctx)
+	recapTotals, err := recapquota.GetTotals(ctx, h.DB.Conn())
 	if err != nil {
 		log.Error("Failed to get smart recap totals", "error", err)
 		http.Error(w, "Failed to load smart recap totals", http.StatusInternalServerError)

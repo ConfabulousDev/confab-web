@@ -15,6 +15,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -373,10 +374,8 @@ func attachOrGenerateSmartRecap(
 
 	// Get quota info - needed for generation decisions, but only expose to owner
 	// Quota is tracked against the session owner, not the viewer
-	// Reset quota if needed (start of new month)
-	_, _ = database.ResetSmartRecapQuotaIfNeeded(dbCtx, sessionUserID)
-
-	quota, err := database.GetOrCreateSmartRecapQuota(dbCtx, sessionUserID)
+	// GetOrCreate atomically resets count if month is stale
+	quota, err := recapquota.GetOrCreate(dbCtx, database.Conn(), sessionUserID)
 	if err != nil {
 		log.Error("Failed to get smart recap quota", "error", err, "user_id", sessionUserID)
 	} else if isOwner {
@@ -554,7 +553,7 @@ func generateSmartRecapSync(
 	}
 
 	// Increment quota
-	if err := database.IncrementSmartRecapQuota(saveCtx, sessionUserID); err != nil {
+	if err := recapquota.Increment(saveCtx, database.Conn(), sessionUserID); err != nil {
 		span.RecordError(err)
 		// Don't set error status for quota increment failure - the main operation succeeded
 		log.Error("Failed to increment smart recap quota", "error", err, "user_id", sessionUserID)
@@ -633,9 +632,8 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			}
 		}
 
-		// Check quota
-		_, _ = database.ResetSmartRecapQuotaIfNeeded(dbCtx, userID)
-		quota, err := database.GetOrCreateSmartRecapQuota(dbCtx, userID)
+		// Check quota (GetOrCreate atomically resets count if month is stale)
+		quota, err := recapquota.GetOrCreate(dbCtx, database.Conn(), userID)
 		if err != nil {
 			log.Error("Failed to get quota", "error", err, "user_id", userID)
 			respondError(w, http.StatusInternalServerError, "Failed to check quota")

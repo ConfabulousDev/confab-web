@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -2094,14 +2095,13 @@ func TestIndependentThresholds_SmartRecapTimeThreshold_RegularFresh(t *testing.T
 }
 
 // =============================================================================
-// Precompute Quota Reset Integration Tests
+// Precompute Quota Month Integration Tests
 // =============================================================================
 
-// TestPrecomputeQuotaReset_ResetsOnNewMonth verifies that ResetQuotaIfNewMonth
-// correctly resets quota when the month has changed. This covers the case where
-// a user's quota was exhausted in a prior month and the worker is the first
-// path to touch their quota in the new month.
-func TestPrecomputeQuotaReset_ResetsOnNewMonth(t *testing.T) {
+// TestPrecomputeQuota_StaleMonthReturnsZero verifies that GetCount returns 0
+// when the stored quota_month is from a previous month, ensuring the precompute
+// worker correctly allows quota-exceeded users to generate again in a new month.
+func TestPrecomputeQuota_StaleMonthReturnsZero(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -2109,49 +2109,32 @@ func TestPrecomputeQuotaReset_ResetsOnNewMonth(t *testing.T) {
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 
-	user := testutil.CreateTestUser(t, env, "quotareset@test.com", "QuotaReset User")
+	user := testutil.CreateTestUser(t, env, "quotastale@test.com", "QuotaStale User")
 	ctx := context.Background()
 	conn := env.DB.Conn()
 
-	// Create a quota record with count at limit, reset_at set to last month
+	// Create a quota record with count at limit, quota_month set to last month
 	_, err := conn.ExecContext(ctx, `
-		INSERT INTO smart_recap_quota (user_id, compute_count, last_compute_at, quota_reset_at)
-		VALUES ($1, 100, NOW() - INTERVAL '35 days', NOW() - INTERVAL '35 days')
+		INSERT INTO smart_recap_quota (user_id, compute_count, quota_month, last_compute_at)
+		VALUES ($1, 100, TO_CHAR((NOW() - INTERVAL '35 days') AT TIME ZONE 'UTC', 'YYYY-MM'), NOW() - INTERVAL '35 days')
 	`, user.ID)
 	if err != nil {
 		t.Fatalf("failed to insert quota: %v", err)
 	}
 
-	// Verify quota is at 100 before reset
-	var countBefore int
-	err = conn.QueryRowContext(ctx, `SELECT compute_count FROM smart_recap_quota WHERE user_id = $1`, user.ID).Scan(&countBefore)
+	// GetCount for current month should return 0 (stale month)
+	count, err := recapquota.GetCount(ctx, conn, user.ID)
 	if err != nil {
-		t.Fatalf("failed to read quota: %v", err)
+		t.Fatalf("GetCount failed: %v", err)
 	}
-	if countBefore != 100 {
-		t.Fatalf("expected compute_count=100 before reset, got %d", countBefore)
-	}
-
-	// Run the same reset function used in precomputeSmartRecap
-	err = analytics.ResetQuotaIfNewMonth(ctx, conn, user.ID)
-	if err != nil {
-		t.Fatalf("ResetQuotaIfNewMonth failed: %v", err)
-	}
-
-	// Verify quota was reset to 0
-	var countAfter int
-	err = conn.QueryRowContext(ctx, `SELECT compute_count FROM smart_recap_quota WHERE user_id = $1`, user.ID).Scan(&countAfter)
-	if err != nil {
-		t.Fatalf("failed to read quota after reset: %v", err)
-	}
-	if countAfter != 0 {
-		t.Errorf("expected compute_count=0 after reset, got %d", countAfter)
+	if count != 0 {
+		t.Errorf("expected count=0 for stale month, got %d", count)
 	}
 }
 
-// TestPrecomputeQuotaReset_NoResetSameMonth verifies that ResetQuotaIfNewMonth
-// does NOT reset quota when the quota was already reset in the current month.
-func TestPrecomputeQuotaReset_NoResetSameMonth(t *testing.T) {
+// TestPrecomputeQuota_CurrentMonthPreserved verifies that GetCount returns the
+// correct count when the stored quota_month matches the current month.
+func TestPrecomputeQuota_CurrentMonthPreserved(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -2159,70 +2142,24 @@ func TestPrecomputeQuotaReset_NoResetSameMonth(t *testing.T) {
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 
-	user := testutil.CreateTestUser(t, env, "quotanoreset@test.com", "QuotaNoReset User")
+	user := testutil.CreateTestUser(t, env, "quotacurrent@test.com", "QuotaCurrent User")
 	ctx := context.Background()
 	conn := env.DB.Conn()
 
-	// Create a quota record with count at 50, reset_at set to today (same month)
+	// Create a quota record with count at 50, quota_month set to current month
 	_, err := conn.ExecContext(ctx, `
-		INSERT INTO smart_recap_quota (user_id, compute_count, last_compute_at, quota_reset_at)
-		VALUES ($1, 50, NOW(), NOW())
+		INSERT INTO smart_recap_quota (user_id, compute_count, quota_month, last_compute_at)
+		VALUES ($1, 50, TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM'), NOW())
 	`, user.ID)
 	if err != nil {
 		t.Fatalf("failed to insert quota: %v", err)
 	}
 
-	err = analytics.ResetQuotaIfNewMonth(ctx, conn, user.ID)
+	count, err := recapquota.GetCount(ctx, conn, user.ID)
 	if err != nil {
-		t.Fatalf("ResetQuotaIfNewMonth failed: %v", err)
+		t.Fatalf("GetCount failed: %v", err)
 	}
-
-	// Verify quota was NOT reset (still 50)
-	var countAfter int
-	err = conn.QueryRowContext(ctx, `SELECT compute_count FROM smart_recap_quota WHERE user_id = $1`, user.ID).Scan(&countAfter)
-	if err != nil {
-		t.Fatalf("failed to read quota after reset attempt: %v", err)
-	}
-	if countAfter != 50 {
-		t.Errorf("expected compute_count=50 (no reset same month), got %d", countAfter)
-	}
-}
-
-// TestPrecomputeQuotaReset_NullResetAt_UsesLastComputeAt verifies the fallback
-// path where quota_reset_at is NULL and the reset uses last_compute_at instead.
-func TestPrecomputeQuotaReset_NullResetAt_UsesLastComputeAt(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	env := testutil.SetupTestEnvironment(t)
-	env.CleanDB(t)
-
-	user := testutil.CreateTestUser(t, env, "quotanullreset@test.com", "QuotaNullReset User")
-	ctx := context.Background()
-	conn := env.DB.Conn()
-
-	// Create a quota record with no reset_at but last_compute_at in previous month
-	_, err := conn.ExecContext(ctx, `
-		INSERT INTO smart_recap_quota (user_id, compute_count, last_compute_at, quota_reset_at)
-		VALUES ($1, 75, NOW() - INTERVAL '35 days', NULL)
-	`, user.ID)
-	if err != nil {
-		t.Fatalf("failed to insert quota: %v", err)
-	}
-
-	err = analytics.ResetQuotaIfNewMonth(ctx, conn, user.ID)
-	if err != nil {
-		t.Fatalf("ResetQuotaIfNewMonth failed: %v", err)
-	}
-
-	// Verify quota was reset to 0
-	var countAfter int
-	err = conn.QueryRowContext(ctx, `SELECT compute_count FROM smart_recap_quota WHERE user_id = $1`, user.ID).Scan(&countAfter)
-	if err != nil {
-		t.Fatalf("failed to read quota after reset: %v", err)
-	}
-	if countAfter != 0 {
-		t.Errorf("expected compute_count=0 after reset (null reset_at fallback), got %d", countAfter)
+	if count != 50 {
+		t.Errorf("expected count=50 for current month, got %d", count)
 	}
 }
