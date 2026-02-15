@@ -40,6 +40,33 @@ export const LastPage: Story = {
   },
 };
 
+export const ManyPages: Story = {
+  args: {
+    page: 8,
+    pageSize: 50,
+    total: 1200,
+    onPageChange: () => {},
+  },
+};
+
+export const LastOfManyPages: Story = {
+  args: {
+    page: 24,
+    pageSize: 50,
+    total: 1200,
+    onPageChange: () => {},
+  },
+};
+
+export const FewPages: Story = {
+  args: {
+    page: 2,
+    pageSize: 50,
+    total: 120,
+    onPageChange: () => {},
+  },
+};
+
 export const SinglePage: Story = {
   args: {
     page: 1,

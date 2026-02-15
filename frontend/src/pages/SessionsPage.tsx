@@ -2,7 +2,6 @@ import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessionsFetch, useAuth, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { formatDuration } from '@/utils';
-import PageHeader from '@/components/PageHeader';
 import { RelativeTime } from '@/components/RelativeTime';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
@@ -49,8 +48,8 @@ function SessionsPage() {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.mainContent}>
-        <PageHeader
-          leftContent={
+        <header className={styles.toolbar}>
+          <div className={styles.toolbarTop}>
             <span className={styles.sessionCount}>
               {loading && sessions.length > 0 ? (
                 <span className={styles.loadingIndicator}>Updating...</span>
@@ -58,9 +57,13 @@ function SessionsPage() {
                 `${total.toLocaleString()} session${total !== 1 ? 's' : ''}`
               )}
             </span>
-          }
-          actions={
-            <div className={styles.headerActions}>
+            <div className={styles.toolbarActions}>
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+              />
               <button
                 className={styles.refreshBtn}
                 onClick={() => refetch()}
@@ -71,21 +74,7 @@ function SessionsPage() {
                 {RefreshIcon}
               </button>
             </div>
-          }
-        />
-
-        <div ref={containerRef} className={styles.container}>
-          <ScrollNavButtons scrollRef={containerRef} />
-
-          {successMessage && (
-            <Alert
-              variant="success"
-              className={`${styles.successAlert} ${successFading ? styles.alertFading : ''}`}
-            >
-              {successMessage}
-            </Alert>
-          )}
-          {error && <Alert variant="error">{error.message}</Alert>}
+          </div>
 
           <FilterChipsBar
             filters={{ repos, branches, owners, prs, query }}
@@ -99,6 +88,20 @@ function SessionsPage() {
             onQueryChange={setQuery}
             onClearAll={clearAll}
           />
+        </header>
+
+        <div ref={containerRef} className={styles.container}>
+          <ScrollNavButtons scrollRef={containerRef} />
+
+          {successMessage && (
+            <Alert
+              variant="success"
+              className={`${styles.successAlert} ${successFading ? styles.alertFading : ''}`}
+            >
+              {successMessage}
+            </Alert>
+          )}
+          {error && <Alert variant="error">{error.message}</Alert>}
 
           <div className={styles.card}>
             {loading && sessions.length === 0 ? (
@@ -200,13 +203,6 @@ function SessionsPage() {
               </div>
             )}
           </div>
-
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
-          />
         </div>
       </div>
     </div>
