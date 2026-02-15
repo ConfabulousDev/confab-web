@@ -62,18 +62,14 @@ func NewS3Storage(config S3Config) (*S3Storage, error) {
 		return nil, fmt.Errorf("failed to create S3 client: %w", err)
 	}
 
-	// Ensure bucket exists
+	// Verify bucket exists (bucket must be created out-of-band)
 	ctx := context.Background()
 	exists, err := client.BucketExists(ctx, config.BucketName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
 	}
-
 	if !exists {
-		err = client.MakeBucket(ctx, config.BucketName, minio.MakeBucketOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create bucket: %w", err)
-		}
+		return nil, fmt.Errorf("bucket %q does not exist: create it before starting the server", config.BucketName)
 	}
 
 	return &S3Storage{

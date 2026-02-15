@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	minioclient "github.com/minio/minio-go/v7"
+	miniocreds "github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -102,25 +104,38 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		t.Fatalf("Failed to get minio endpoint: %v", err)
 	}
 
-	// Create S3 storage client with retry (MinIO needs time to initialize)
-	t.Log("Initializing S3 storage...")
-	var s3Storage *storage.S3Storage
+	// Pre-create test bucket (MinIO needs time to initialize, so retry)
+	t.Log("Creating test bucket...")
+	const testBucket = "confab-test"
 	maxRetries := 20
 	for i := 0; i < maxRetries; i++ {
-		s3Storage, err = storage.NewS3Storage(storage.S3Config{
-			Endpoint:        minioEndpoint,
-			AccessKeyID:     "minioadmin",
-			SecretAccessKey: "minioadmin",
-			BucketName:      "confab-test",
-			UseSSL:          false, // Local testing without SSL
+		mc, mcErr := minioclient.New(minioEndpoint, &minioclient.Options{
+			Creds:  miniocreds.NewStaticV4("minioadmin", "minioadmin", ""),
+			Secure: false,
 		})
-		if err == nil {
-			break
+		if mcErr == nil {
+			mcErr = mc.MakeBucket(ctx, testBucket, minioclient.MakeBucketOptions{})
+			if mcErr == nil {
+				break
+			}
 		}
 		if i == maxRetries-1 {
-			t.Fatalf("Failed to create S3 storage after %d retries: %v", maxRetries, err)
+			t.Fatalf("Failed to create test bucket after %d retries: %v", maxRetries, mcErr)
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Create S3 storage client
+	t.Log("Initializing S3 storage...")
+	s3Storage, err := storage.NewS3Storage(storage.S3Config{
+		Endpoint:        minioEndpoint,
+		AccessKeyID:     "minioadmin",
+		SecretAccessKey: "minioadmin",
+		BucketName:      testBucket,
+		UseSSL:          false,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create S3 storage: %v", err)
 	}
 
 	env := &TestEnvironment{
