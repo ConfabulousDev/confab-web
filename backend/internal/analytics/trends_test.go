@@ -26,8 +26,9 @@ func TestGetTrends_EmptyResults(t *testing.T) {
 	// Get trends with no sessions
 	now := time.Now().UTC()
 	req := analytics.TrendsRequest{
-		StartDate:     now.Add(-7 * 24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{},
 		IncludeNoRepo: true,
 	}
@@ -178,8 +179,9 @@ func TestGetTrends_WithSessions(t *testing.T) {
 	// Get trends
 	now := time.Now().UTC()
 	req := analytics.TrendsRequest{
-		StartDate:     now.Add(-7 * 24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{},
 		IncludeNoRepo: true,
 	}
@@ -277,8 +279,9 @@ func TestGetTrends_RepoFilter(t *testing.T) {
 
 	// Filter by matching repo
 	req := analytics.TrendsRequest{
-		StartDate:     now.Add(-7 * 24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{"org/repo1"},
 		IncludeNoRepo: false,
 	}
@@ -294,8 +297,9 @@ func TestGetTrends_RepoFilter(t *testing.T) {
 
 	// Filter by non-matching repo
 	req2 := analytics.TrendsRequest{
-		StartDate:     now.Add(-7 * 24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{"org/other-repo"},
 		IncludeNoRepo: false,
 	}
@@ -328,10 +332,12 @@ func TestGetTrends_DateRange(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	// Query for today only
+	// Query for today only (UTC midnight to midnight)
+	todayMidnight := now.Truncate(24 * time.Hour)
 	req := analytics.TrendsRequest{
-		StartDate:     now.Truncate(24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       todayMidnight.Unix(),
+		EndTS:         todayMidnight.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{},
 		IncludeNoRepo: true,
 	}
@@ -346,10 +352,11 @@ func TestGetTrends_DateRange(t *testing.T) {
 	}
 
 	// Query for yesterday (should be empty)
-	yesterday := now.Add(-24 * time.Hour)
+	yesterdayMidnight := todayMidnight.Add(-24 * time.Hour)
 	req2 := analytics.TrendsRequest{
-		StartDate:     yesterday.Truncate(24 * time.Hour),
-		EndDate:       yesterday.Truncate(24 * time.Hour).Add(24 * time.Hour),
+		StartTS:       yesterdayMidnight.Unix(),
+		EndTS:         todayMidnight.Unix(),
+		TZOffset:      0,
 		Repos:         []string{},
 		IncludeNoRepo: true,
 	}
@@ -402,11 +409,14 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
+	startTS := now.Add(-7 * 24 * time.Hour).Unix()
+	endTS := now.Add(24 * time.Hour).Unix()
 
 	t.Run("explicit all repos + includeNoRepo=true should return ALL sessions", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{"org/repo1", "org/repo2"},
 			IncludeNoRepo: true,
 		}
@@ -425,8 +435,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	t.Run("explicit all repos + includeNoRepo=false should return only sessions WITH repos", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{"org/repo1", "org/repo2"},
 			IncludeNoRepo: false,
 		}
@@ -445,8 +456,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	t.Run("empty repos + includeNoRepo=true should return only no-repo sessions", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{},
 			IncludeNoRepo: true,
 		}
@@ -465,8 +477,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	t.Run("empty repos + includeNoRepo=false should return no sessions", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{},
 			IncludeNoRepo: false,
 		}
@@ -481,8 +494,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	t.Run("specific repo + includeNoRepo=true should return matching repo AND no-repo sessions", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{"org/repo1"},
 			IncludeNoRepo: true,
 		}
@@ -501,8 +515,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	t.Run("specific repo + includeNoRepo=false should return only matching repo", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{"org/repo1"},
 			IncludeNoRepo: false,
 		}
@@ -521,8 +536,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	t.Run("multiple repos should return sessions matching any of them", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{"org/repo1", "org/repo2"},
 			IncludeNoRepo: false,
 		}
@@ -541,8 +557,9 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	t.Run("non-matching repo should return no sessions", func(t *testing.T) {
 		req := analytics.TrendsRequest{
-			StartDate:     now.Add(-7 * 24 * time.Hour),
-			EndDate:       now.Add(24 * time.Hour),
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      0,
 			Repos:         []string{"org/nonexistent"},
 			IncludeNoRepo: false,
 		}
@@ -575,8 +592,9 @@ func TestGetTrends_DifferentUsers(t *testing.T) {
 
 	now := time.Now().UTC()
 	req := analytics.TrendsRequest{
-		StartDate:     now.Add(-7 * 24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{},
 		IncludeNoRepo: true,
 	}
@@ -667,8 +685,9 @@ func TestGetTrends_AgentsAndSkillsAggregation(t *testing.T) {
 
 	now := time.Now().UTC()
 	req := analytics.TrendsRequest{
-		StartDate:     now.Add(-7 * 24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{},
 		IncludeNoRepo: true,
 	}
@@ -756,8 +775,9 @@ func TestGetTrends_AgentsAndSkillsEmpty(t *testing.T) {
 
 	now := time.Now().UTC()
 	req := analytics.TrendsRequest{
-		StartDate:     now.Add(-7 * 24 * time.Hour),
-		EndDate:       now.Add(24 * time.Hour),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
 		Repos:         []string{},
 		IncludeNoRepo: true,
 	}
@@ -782,5 +802,88 @@ func TestGetTrends_AgentsAndSkillsEmpty(t *testing.T) {
 	}
 	if len(response.Cards.AgentsAndSkills.SkillStats) != 0 {
 		t.Errorf("SkillStats length = %d, want 0", len(response.Cards.AgentsAndSkills.SkillStats))
+	}
+}
+
+func TestGetTrends_TimezoneOffset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-tz@test.com", "Trends TZ User")
+	ctx := context.Background()
+
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Create a session at a known UTC time
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-tz")
+
+	// Insert a tokens card so we have data to aggregate
+	err := store.UpsertCards(ctx, &analytics.Cards{
+		Tokens: &analytics.TokensCardRecord{
+			SessionID:        sessionID,
+			Version:          analytics.TokensCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         10,
+			InputTokens:      100,
+			OutputTokens:     50,
+			EstimatedCostUSD: decimal.NewFromFloat(0.01),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards failed: %v", err)
+	}
+
+	now := time.Now().UTC()
+
+	// Query with UTC offset (tz_offset=0) — should find the session
+	req := analytics.TrendsRequest{
+		StartTS:       now.Add(-24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+	response, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends (UTC) failed: %v", err)
+	}
+	if response.SessionCount != 1 {
+		t.Errorf("SessionCount (UTC) = %d, want 1", response.SessionCount)
+	}
+
+	// Query with PST offset (tz_offset=480, UTC-8) — wide range should still find it
+	req2 := analytics.TrendsRequest{
+		StartTS:       now.Add(-24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      480,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+	response2, err := store.GetTrends(ctx, user.ID, req2)
+	if err != nil {
+		t.Fatalf("GetTrends (PST) failed: %v", err)
+	}
+	if response2.SessionCount != 1 {
+		t.Errorf("SessionCount (PST) = %d, want 1", response2.SessionCount)
+	}
+
+	// Query with JST offset (tz_offset=-540, UTC+9) — wide range should still find it
+	req3 := analytics.TrendsRequest{
+		StartTS:       now.Add(-24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      -540,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+	response3, err := store.GetTrends(ctx, user.ID, req3)
+	if err != nil {
+		t.Fatalf("GetTrends (JST) failed: %v", err)
+	}
+	if response3.SessionCount != 1 {
+		t.Errorf("SessionCount (JST) = %d, want 1", response3.SessionCount)
 	}
 }

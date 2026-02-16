@@ -490,23 +490,40 @@ export const analyticsAPI = {
 };
 
 export interface TrendsParams {
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string;   // YYYY-MM-DD
+  startDate?: string; // YYYY-MM-DD (local date)
+  endDate?: string;   // YYYY-MM-DD (local date, inclusive)
   repos?: string[];
   includeNoRepo?: boolean;
+}
+
+// Convert a local YYYY-MM-DD date string to epoch seconds at local midnight
+function localDateToEpoch(dateStr: string): number {
+  const year = Number(dateStr.slice(0, 4));
+  const month = Number(dateStr.slice(5, 7)) - 1; // JS months are 0-indexed
+  const day = Number(dateStr.slice(8, 10));
+  return Math.floor(new Date(year, month, day).getTime() / 1000);
 }
 
 export const trendsAPI = {
   /**
    * Get aggregated analytics trends across multiple sessions.
+   * Converts local date strings to epoch seconds for timezone-correct querying.
    *
    * @param params - Optional filter parameters
    * @returns TrendsResponse with aggregated card data
    */
   get: async (params: TrendsParams = {}): Promise<TrendsResponse> => {
     const searchParams = new URLSearchParams();
-    if (params.startDate) searchParams.set('start_date', params.startDate);
-    if (params.endDate) searchParams.set('end_date', params.endDate);
+    // Convert date strings to epoch seconds for correct timezone handling
+    if (params.startDate) {
+      searchParams.set('start_ts', String(localDateToEpoch(params.startDate)));
+    }
+    if (params.endDate) {
+      // end_ts is exclusive: midnight of the day AFTER the selected end date
+      searchParams.set('end_ts', String(localDateToEpoch(params.endDate) + 86400));
+    }
+    // Always send timezone offset for correct daily grouping
+    searchParams.set('tz_offset', String(new Date().getTimezoneOffset()));
     if (params.repos && params.repos.length > 0) {
       searchParams.set('repos', params.repos.join(','));
     }

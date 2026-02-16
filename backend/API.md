@@ -656,7 +656,7 @@ Requires session ownership (web session auth only, no API key).
 
 #### Get Trends
 ```
-GET /api/v1/trends?start_date=<date>&end_date=<date>&repos=<repos>&include_no_repo=<bool>
+GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>
 ```
 
 Returns aggregated analytics across multiple sessions for the authenticated user.
@@ -664,14 +664,14 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 **Query Parameters:**
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| start_date | string | No | 7 days ago | Start of date range (YYYY-MM-DD) |
-| end_date | string | No | today | End of date range (YYYY-MM-DD) |
+| start_ts | integer | No | 7 days ago (UTC) | Start of date range as epoch seconds (inclusive, typically local midnight) |
+| end_ts | integer | No | tomorrow (UTC) | End of date range as epoch seconds (exclusive, typically local midnight of day after last day) |
+| tz_offset | integer | No | 0 | Client timezone offset in minutes (from JS `getTimezoneOffset()`; positive = behind UTC, e.g. 480 for PST) |
 | repos | string | No | all | Comma-separated repo names to filter |
 | include_no_repo | boolean | No | true | Include sessions without a git repo |
 
 **Constraints:**
 - Maximum date range: 90 days
-- Date format: YYYY-MM-DD
 
 **Response:**
 ```json
@@ -1043,6 +1043,7 @@ Returns the list of enabled authentication providers. No authentication required
   "features": {
     "shares_enabled": true,
     "footer_enabled": true,
+    "termly_enabled": true,
     "support_email": "support@example.com"
   }
 }
@@ -1055,6 +1056,7 @@ Returns the list of enabled authentication providers. No authentication required
 | `providers[].login_url` | string | Path to initiate login with this provider |
 | `features.shares_enabled` | bool | Whether share creation is enabled (`false` when `DISABLE_SHARE_CREATION=true`) |
 | `features.footer_enabled` | bool | Whether the frontend footer is shown (`false` when `DISABLE_FOOTER=true`) |
+| `features.termly_enabled` | bool | Whether Termly cookie consent is enabled (`false` when `DISABLE_TERMLY=true`) |
 | `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |
 
 Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.

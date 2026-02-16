@@ -18,16 +18,22 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	ctx, span := tracer.Start(ctx, "analytics.get_trends",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
-			attribute.String("start_date", req.StartDate.Format("2006-01-02")),
-			attribute.String("end_date", req.EndDate.Format("2006-01-02")),
+			attribute.Int64("start_ts", req.StartTS),
+			attribute.Int64("end_ts", req.EndTS),
+			attribute.Int("tz_offset", req.TZOffset),
 		))
 	defer span.End()
+
+	// Derive local dates from epoch timestamps and timezone offset for the response
+	tzDuration := time.Duration(req.TZOffset) * time.Minute
+	startLocal := time.Unix(req.StartTS, 0).UTC().Add(-tzDuration)
+	endLocal := time.Unix(req.EndTS, 0).UTC().Add(-tzDuration).Add(-24 * time.Hour) // EndTS is exclusive
 
 	response := &TrendsResponse{
 		ComputedAt: time.Now().UTC(),
 		DateRange: DateRange{
-			StartDate: req.StartDate.Format("2006-01-02"),
-			EndDate:   req.EndDate.Add(-24 * time.Hour).Format("2006-01-02"), // EndDate is exclusive, so show last inclusive day
+			StartDate: startLocal.Format("2006-01-02"),
+			EndDate:   endLocal.Format("2006-01-02"),
 		},
 		ReposIncluded: req.Repos,
 		IncludeNoRepo: req.IncludeNoRepo,
@@ -120,18 +126,23 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, req TrendsRequest) (*TrendsOverviewCard, *TrendsActivityCard, *TrendsUtilizationCard, int, error) {
 	// Query sessions and their code activity data
 	// Uses generate_series to ensure all dates in range are returned (with zeros for missing days)
+	// $2/$3 are epoch seconds; $6 is the client TZ offset in minutes (JS getTimezoneOffset convention)
 	query := `
 		WITH date_range AS (
-			SELECT generate_series($2::date, ($3::date - interval '1 day')::date, '1 day')::date as d
+			SELECT generate_series(
+				(to_timestamp($2) - make_interval(mins => $6))::date,
+				(to_timestamp($3) - make_interval(mins => $6) - interval '1 day')::date,
+				'1 day'
+			)::date as d
 		),
 		filtered_sessions AS (
 			SELECT
 				s.id,
-				s.first_seen::date as session_date
+				(s.first_seen - make_interval(mins => $6))::date as session_date
 			FROM sessions s
 			WHERE s.user_id = $1
-				AND s.first_seen >= $2
-				AND s.first_seen < $3
+				AND s.first_seen >= to_timestamp($2)
+				AND s.first_seen < to_timestamp($3)
 				AND (
 					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
@@ -169,10 +180,11 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 
 	rows, err := s.db.QueryContext(ctx, query,
 		userID,
-		req.StartDate,
-		req.EndDate,
+		req.StartTS,
+		req.EndTS,
 		pq.Array(req.Repos),
 		req.IncludeNoRepo,
+		req.TZOffset,
 	)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -274,16 +286,20 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsRequest) (*TrendsTokensCard, error) {
 	query := `
 		WITH date_range AS (
-			SELECT generate_series($2::date, ($3::date - interval '1 day')::date, '1 day')::date as d
+			SELECT generate_series(
+				(to_timestamp($2) - make_interval(mins => $6))::date,
+				(to_timestamp($3) - make_interval(mins => $6) - interval '1 day')::date,
+				'1 day'
+			)::date as d
 		),
 		filtered_sessions AS (
 			SELECT
 				s.id,
-				s.first_seen::date as session_date
+				(s.first_seen - make_interval(mins => $6))::date as session_date
 			FROM sessions s
 			WHERE s.user_id = $1
-				AND s.first_seen >= $2
-				AND s.first_seen < $3
+				AND s.first_seen >= to_timestamp($2)
+				AND s.first_seen < to_timestamp($3)
 				AND (
 					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
@@ -315,10 +331,11 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 
 	rows, err := s.db.QueryContext(ctx, query,
 		userID,
-		req.StartDate,
-		req.EndDate,
+		req.StartTS,
+		req.EndTS,
 		pq.Array(req.Repos),
 		req.IncludeNoRepo,
+		req.TZOffset,
 	)
 	if err != nil {
 		return nil, err
@@ -384,8 +401,8 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 				s.id
 			FROM sessions s
 			WHERE s.user_id = $1
-				AND s.first_seen >= $2
-				AND s.first_seen < $3
+				AND s.first_seen >= to_timestamp($2)
+				AND s.first_seen < to_timestamp($3)
 				AND (
 					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
@@ -401,8 +418,8 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 
 	rows, err := s.db.QueryContext(ctx, query,
 		userID,
-		req.StartDate,
-		req.EndDate,
+		req.StartTS,
+		req.EndTS,
 		pq.Array(req.Repos),
 		req.IncludeNoRepo,
 	)
@@ -461,8 +478,8 @@ func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req 
 				s.id
 			FROM sessions s
 			WHERE s.user_id = $1
-				AND s.first_seen >= $2
-				AND s.first_seen < $3
+				AND s.first_seen >= to_timestamp($2)
+				AND s.first_seen < to_timestamp($3)
 				AND (
 					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
@@ -479,8 +496,8 @@ func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req 
 
 	rows, err := s.db.QueryContext(ctx, query,
 		userID,
-		req.StartDate,
-		req.EndDate,
+		req.StartTS,
+		req.EndTS,
 		pq.Array(req.Repos),
 		req.IncludeNoRepo,
 	)

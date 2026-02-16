@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,18 +12,16 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
-// MaxTrendsDateRange is the maximum allowed date range for trends queries (90 days).
-const MaxTrendsDateRange = 90 * 24 * time.Hour
-
-// DefaultTrendsDateRange is the default date range when no dates are specified (7 days).
-const DefaultTrendsDateRange = 7 * 24 * time.Hour
+// maxTrendsRangeSeconds is the maximum allowed date range for trends queries (90 days).
+const maxTrendsRangeSeconds = 90 * 24 * 60 * 60
 
 // HandleGetTrends returns aggregated analytics across sessions for the authenticated user.
 // Supports filtering by date range and repos.
 //
 // Query parameters:
-//   - start_date: Start of date range (YYYY-MM-DD), default: 7 days ago
-//   - end_date: End of date range (YYYY-MM-DD), default: today
+//   - start_ts: Start of date range as epoch seconds (inclusive, typically local midnight)
+//   - end_ts: End of date range as epoch seconds (exclusive, typically local midnight of day after last day)
+//   - tz_offset: Client timezone offset in minutes (from JS getTimezoneOffset(); positive=behind UTC)
 //   - repos: Comma-separated repo names to filter by
 //   - include_no_repo: Include sessions without a repo (default: true)
 func HandleGetTrends(database *db.DB) http.HandlerFunc {
@@ -38,38 +37,49 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Parse query parameters
+		// Default: last 7 days in UTC
 		now := time.Now().UTC()
 		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		startTS := today.Add(-7 * 24 * time.Hour).Unix()
+		endTS := today.Add(24 * time.Hour).Unix()
+		tzOffset := 0
 
-		// Parse start_date (default: 7 days ago)
-		startDate := today.Add(-DefaultTrendsDateRange)
-		if startStr := r.URL.Query().Get("start_date"); startStr != "" {
-			parsed, err := time.Parse("2006-01-02", startStr)
+		// Parse start_ts
+		if tsStr := r.URL.Query().Get("start_ts"); tsStr != "" {
+			ts, err := strconv.ParseInt(tsStr, 10, 64)
 			if err != nil {
-				respondError(w, http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
+				respondError(w, http.StatusBadRequest, "Invalid start_ts")
 				return
 			}
-			startDate = parsed
+			startTS = ts
 		}
 
-		// Parse end_date (default: today, but we add 1 day to make it exclusive)
-		endDate := today.Add(24 * time.Hour) // Make end_date exclusive
-		if endStr := r.URL.Query().Get("end_date"); endStr != "" {
-			parsed, err := time.Parse("2006-01-02", endStr)
+		// Parse end_ts
+		if tsStr := r.URL.Query().Get("end_ts"); tsStr != "" {
+			ts, err := strconv.ParseInt(tsStr, 10, 64)
 			if err != nil {
-				respondError(w, http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
+				respondError(w, http.StatusBadRequest, "Invalid end_ts")
 				return
 			}
-			endDate = parsed.Add(24 * time.Hour) // Make end_date exclusive
+			endTS = ts
 		}
 
-		// Validate date range
-		if endDate.Before(startDate) || endDate.Equal(startDate) {
-			respondError(w, http.StatusBadRequest, "end_date must be after start_date")
+		// Parse tz_offset (minutes, matching JS getTimezoneOffset convention)
+		if offsetStr := r.URL.Query().Get("tz_offset"); offsetStr != "" {
+			offset, err := strconv.Atoi(offsetStr)
+			if err != nil {
+				respondError(w, http.StatusBadRequest, "Invalid tz_offset")
+				return
+			}
+			tzOffset = offset
+		}
+
+		// Validate
+		if endTS <= startTS {
+			respondError(w, http.StatusBadRequest, "end_ts must be after start_ts")
 			return
 		}
-		if endDate.Sub(startDate) > MaxTrendsDateRange {
+		if endTS-startTS > maxTrendsRangeSeconds {
 			respondError(w, http.StatusBadRequest, "Date range cannot exceed 90 days")
 			return
 		}
@@ -92,8 +102,9 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 
 		// Build request
 		req := analytics.TrendsRequest{
-			StartDate:     startDate,
-			EndDate:       endDate,
+			StartTS:       startTS,
+			EndTS:         endTS,
+			TZOffset:      tzOffset,
 			Repos:         repos,
 			IncludeNoRepo: includeNoRepo,
 		}

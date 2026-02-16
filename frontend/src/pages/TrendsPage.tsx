@@ -15,10 +15,12 @@ import {
 import Alert from '@/components/Alert';
 import styles from './TrendsPage.module.css';
 
-// Format date as YYYY-MM-DD
+// Format date as YYYY-MM-DD using local date components (not UTC)
 function formatDate(date: Date): string {
-  const iso = date.toISOString();
-  return iso.slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 // Get default date range (last 7 days)

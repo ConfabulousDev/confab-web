@@ -10,10 +10,11 @@ import (
 
 // TrendsRequest contains parameters for querying trends.
 type TrendsRequest struct {
-	StartDate     time.Time // Start of date range
-	EndDate       time.Time // End of date range (exclusive)
-	Repos         []string  // Filter by extracted repo names (e.g., "org/repo", not full URL)
-	IncludeNoRepo bool      // Include sessions without a git repo
+	StartTS       int64    // Start of date range (epoch seconds, inclusive — local midnight)
+	EndTS         int64    // End of date range (epoch seconds, exclusive — local midnight of day after last day)
+	TZOffset      int      // Client timezone offset in minutes (from JS getTimezoneOffset: positive=behind UTC, negative=ahead)
+	Repos         []string // Filter by extracted repo names (e.g., "org/repo", not full URL)
+	IncludeNoRepo bool     // Include sessions without a git repo
 }
 
 // =============================================================================
