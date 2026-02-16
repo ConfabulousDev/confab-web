@@ -37,6 +37,7 @@ const mockResponse: SessionListResponse = {
       is_owner: true,
       access_type: 'owner',
       shared_by_email: null,
+      owner_email: 'test@example.com',
     },
   ],
   has_more: false,

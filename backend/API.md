@@ -347,7 +347,8 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
       "github_commits": ["abc1234", "def5678"],
       "is_owner": true,
       "access_type": "owner",
-      "shared_by_email": null
+      "shared_by_email": null,
+      "owner_email": "alice@example.com"
     }
   ],
   "has_more": true,
@@ -410,6 +411,7 @@ Authentication is optional - the endpoint extracts user from session cookie if p
   "username": "developer",
   "is_owner": true,
   "shared_by_email": null,
+  "owner_email": "alice@example.com",
   "files": [
     {
       "file_name": "transcript.jsonl",
@@ -427,6 +429,7 @@ Authentication is optional - the endpoint extracts user from session cookie if p
 | `hostname` | string\|null | Machine hostname (owner-only, null for shared access) |
 | `username` | string\|null | OS username (owner-only, null for shared access) |
 | `shared_by_email` | string\|null | Email of session owner (non-owner access only, null for owners) |
+| `owner_email` | string | Email of session owner (always populated) |
 
 **Errors:**
 - `403` - Session owner is deactivated

@@ -217,6 +217,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           hasCustomTitle={!!session.custom_title}
           autoTitle={session.suggested_session_title ?? session.summary ?? session.first_user_message ?? undefined}
           externalId={session.external_id}
+          ownerEmail={session.owner_email}
           model={sessionMeta.model}
           durationMs={sessionMeta.durationMs}
           sessionDate={sessionMeta.sessionDate}

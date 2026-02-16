@@ -83,6 +83,13 @@ const CloseIcon = (
   </svg>
 );
 
+const PersonIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="8" r="4" />
+    <path d="M20 21a8 8 0 0 0-16 0" />
+  </svg>
+);
+
 // NOTE: This component has a large prop list (18 props). This is acceptable for now
 // as it serves as the main session header orchestrating multiple concerns. If this
 // grows further or filter-related props are needed elsewhere, consider:
@@ -95,6 +102,7 @@ interface SessionHeaderProps {
   hasCustomTitle?: boolean;
   autoTitle?: string; // The auto-derived title (summary || first_user_message)
   externalId: string;
+  ownerEmail: string; // Email of session owner (always populated)
   model?: string;
   durationMs?: number;
   sessionDate?: Date;
@@ -120,6 +128,7 @@ function SessionHeader({
   hasCustomTitle = false,
   autoTitle,
   externalId,
+  ownerEmail,
   model,
   durationMs,
   sessionDate,
@@ -129,7 +138,6 @@ function SessionHeader({
   onSessionUpdate,
   isOwner = true,
   isShared = false,
-  sharedByEmail,
   categoryCounts,
   filterState,
   onToggleCategory,
@@ -283,6 +291,7 @@ function SessionHeader({
           </button>
         </div>
         <div className={styles.metadata}>
+          <MetaItem icon={PersonIcon} value={ownerEmail} />
           <GitInfoMeta gitInfo={gitInfo} />
           {model && (
             <MetaItem icon={ModelIcon} value={formatModelName(model)} />
@@ -316,7 +325,7 @@ function SessionHeader({
           ) : (
             <div className={styles.sharedIndicator}>
               {ShareIcon}
-              <span>{sharedByEmail ? `Shared by ${sharedByEmail}` : 'Shared Session'}</span>
+              <span>Shared Session</span>
             </div>
           )
         ) : isOwner && (

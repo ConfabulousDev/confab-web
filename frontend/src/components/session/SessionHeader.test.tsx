@@ -12,10 +12,11 @@ describe('SessionHeader', () => {
   const defaultProps = {
     sessionId: '123e4567-e89b-12d3-a456-426614174000',
     externalId: 'abc12345-6789-0def-ghij-klmnopqrstuv',
+    ownerEmail: 'owner@example.com',
   };
 
   describe('sharedByEmail', () => {
-    it('renders "Shared by <email>" when sharedByEmail is provided and not owner', () => {
+    it('renders "Shared Session" when sharedByEmail is provided and not owner', () => {
       renderWithRouter(
         <SessionHeader
           {...defaultProps}
@@ -25,7 +26,7 @@ describe('SessionHeader', () => {
         />
       );
 
-      expect(screen.getByText('Shared by owner@example.com')).toBeInTheDocument();
+      expect(screen.getByText('Shared Session')).toBeInTheDocument();
     });
 
     it('falls back to "Shared Session" when sharedByEmail is null', () => {

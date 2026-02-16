@@ -46,6 +46,7 @@ const SessionSchema = z.object({
   is_owner: z.boolean(),
   access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),
   shared_by_email: z.string().nullable().optional(),
+  owner_email: z.string(),
 });
 
 const SessionFilterOptionsSchema = z.object({
@@ -79,6 +80,7 @@ export const SessionDetailSchema = z.object({
   username: z.string().nullable().optional(), // OS username (owner-only, null for shared)
   is_owner: z.boolean().optional(), // True if viewer is session owner (shared sessions only)
   shared_by_email: z.string().nullable().optional(), // Email of session owner (non-owner access only)
+  owner_email: z.string(), // Email of session owner (always populated)
 });
 
 const SessionShareSchema = z.object({

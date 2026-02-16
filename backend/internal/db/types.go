@@ -33,6 +33,7 @@ type SessionListItem struct {
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
+	OwnerEmail       string     `json:"owner_email"`                  // email of session owner (always populated)
 }
 
 // SessionListParams contains filtering and pagination parameters for listing sessions
@@ -81,6 +82,7 @@ type SessionDetail struct {
 	Username         *string          `json:"username,omitempty"`           // OS username (owner-only)
 	IsOwner          *bool            `json:"is_owner,omitempty"`           // True if viewer is session owner (shared sessions only)
 	SharedByEmail    *string          `json:"shared_by_email,omitempty"`    // Email of session owner (non-owner access only)
+	OwnerEmail       string           `json:"owner_email"`                  // Email of session owner (always populated)
 }
 
 // SyncFileDetail represents a synced file

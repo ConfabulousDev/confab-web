@@ -174,6 +174,9 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 		return nil, ErrOwnerInactive
 	}
 
+	// Always include owner email
+	session.OwnerEmail = ownerEmail
+
 	// Only include hostname/username for owners
 	if accessInfo.AccessType == SessionAccessOwner {
 		session.Hostname = hostname

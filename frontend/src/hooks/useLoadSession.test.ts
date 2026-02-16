@@ -26,6 +26,7 @@ const mockSession: SessionDetail = {
       updated_at: '2025-01-01T12:00:00Z',
     },
   ],
+  owner_email: 'test@example.com',
 };
 
 describe('useLoadSession', () => {

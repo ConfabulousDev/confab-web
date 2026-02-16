@@ -34,6 +34,7 @@ const mockSession: SessionDetail = {
   hostname: 'dev-machine',
   username: 'developer',
   is_owner: true,
+  owner_email: 'developer@example.com',
 };
 
 // Mock transcript messages

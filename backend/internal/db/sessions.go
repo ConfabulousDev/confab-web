@@ -132,6 +132,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			&session.IsOwner,
 			&session.AccessType,
 			&session.SharedByEmail,
+			&session.OwnerEmail,
 		); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -190,7 +191,8 @@ func (db *DB) buildSharedWithMeQuery() string {
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 					false as is_owner,
 					'system_share' as access_type,
-					u.email as shared_by_email
+					u.email as shared_by_email,
+					u.email as owner_email
 				FROM sessions s
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_system sss ON sh.id = sss.share_id
@@ -230,7 +232,8 @@ func (db *DB) buildSharedWithMeQuery() string {
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 					false as is_owner,
 					'system_share' as access_type,
-					u.email as shared_by_email
+					u.email as shared_by_email,
+					u.email as owner_email
 				FROM sessions s
 				JOIN users u ON s.user_id = u.id
 				LEFT JOIN (
@@ -281,8 +284,10 @@ func (db *DB) buildSharedWithMeQuery() string {
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 					true as is_owner,
 					'owner' as access_type,
-					NULL::text as shared_by_email
+					NULL::text as shared_by_email,
+					u.email as owner_email
 				FROM sessions s
+				JOIN users u ON s.user_id = u.id
 				LEFT JOIN (
 					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
 					FROM sync_files
@@ -312,7 +317,8 @@ func (db *DB) buildSharedWithMeQuery() string {
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 					false as is_owner,
 					'private_share' as access_type,
-					u.email as shared_by_email
+					u.email as shared_by_email,
+					u.email as owner_email
 				FROM sessions s
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_recipients sr ON sh.id = sr.share_id
@@ -658,7 +664,8 @@ func (db *DB) buildShareAllQuery(userID int64, params SessionListParams) (string
 		SELECT` + sessionSelectCols + `,
 				(s.user_id = $1) as is_owner,
 				CASE WHEN s.user_id = $1 THEN 'owner' ELSE 'system_share' END as access_type,
-				CASE WHEN s.user_id = $1 THEN NULL ELSE u.email END as shared_by_email
+				CASE WHEN s.user_id = $1 THEN NULL ELSE u.email END as shared_by_email,
+				u.email as owner_email
 			FROM sessions s
 			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
 			WHERE 1=1` + commonFilters + sharedOwnerFilter
@@ -701,7 +708,8 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 				SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
 					false as is_owner,
 					'system_share' as access_type,
-					u.email as shared_by_email
+					u.email as shared_by_email,
+					u.email as owner_email
 				FROM sessions s
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_system sss ON sh.id = sss.share_id
@@ -717,15 +725,18 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 			SELECT` + sessionSelectCols + `,
 				true as is_owner,
 				'owner' as access_type,
-				NULL::text as shared_by_email
-			FROM sessions s` + sessionStatsJoins + `
+				NULL::text as shared_by_email,
+				u.email as owner_email
+			FROM sessions s
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
 			WHERE s.user_id = $1` + commonFilters + ownedOwnerFilter + `
 		),
 		shared_sessions AS (
 			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
 				false as is_owner,
 				'private_share' as access_type,
-				u.email as shared_by_email
+				u.email as shared_by_email,
+				u.email as owner_email
 			FROM sessions s
 			JOIN session_shares sh ON s.id = sh.session_id
 			JOIN session_share_recipients sr ON sh.id = sr.share_id
@@ -806,6 +817,7 @@ func (db *DB) queryPaginatedSessions(ctx context.Context, userID int64, params S
 			&session.IsOwner,
 			&session.AccessType,
 			&session.SharedByEmail,
+			&session.OwnerEmail,
 		); err != nil {
 			return nil, false, "", fmt.Errorf("failed to scan session: %w", err)
 		}
@@ -862,9 +874,10 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 	var session SessionDetail
 	var gitInfoBytes []byte
 	sessionQuery := `
-		SELECT id, external_id, custom_title, suggested_session_title, summary, first_user_message, first_seen, cwd, transcript_path, git_info, last_sync_at, hostname, username
-		FROM sessions
-		WHERE id = $1 AND user_id = $2
+		SELECT s.id, s.external_id, s.custom_title, s.suggested_session_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.email
+		FROM sessions s
+		JOIN users u ON s.user_id = u.id
+		WHERE s.id = $1 AND s.user_id = $2
 	`
 	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(
 		&session.ID,
@@ -880,6 +893,7 @@ func (db *DB) GetSessionDetail(ctx context.Context, sessionID string, userID int
 		&session.LastSyncAt,
 		&session.Hostname,
 		&session.Username,
+		&session.OwnerEmail,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {

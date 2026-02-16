@@ -10,7 +10,7 @@ import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon, RefreshIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon, RefreshIcon, PersonIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
 // Strip .git suffix from repo URLs for clean GitHub links
@@ -134,6 +134,9 @@ function SessionsPage() {
                               <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>
                                 {session.external_id.substring(0, 8)}
                               </Chip>
+                              <Chip icon={PersonIcon} variant="neutral" copyValue={session.owner_email}>
+                                {session.owner_email}
+                              </Chip>
                               {session.git_repo && (
                                 <Chip
                                   icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
@@ -172,11 +175,6 @@ function SessionsPage() {
                                 </Chip>
                               )}
                             </div>
-                            {session.shared_by_email && (
-                              <div className={styles.sharedByLine}>
-                                Shared by {session.shared_by_email}
-                              </div>
-                            )}
                           </td>
                           <td className={styles.timestamp}>
                             <span className={styles.activityContent}>

@@ -110,6 +110,7 @@ export const Default: Story = {
     hasCustomTitle: false,
     autoTitle: 'CLI Refactoring: Summary Linking & macOS Binary Fix',
     externalId: 'abc123def456',
+    ownerEmail: 'developer@example.com',
     model: 'claude-opus-4-5-20251101',
     durationMs: 4980000, // ~1h 23m
     sessionDate: new Date('2025-12-06T22:09:00'),
@@ -129,6 +130,7 @@ export const SharedSession: Story = {
     hasCustomTitle: false,
     autoTitle: 'Implementing Dark Mode Toggle',
     externalId: 'xyz789abc123',
+    ownerEmail: 'alice@example.com',
     model: 'claude-sonnet-4-20250514',
     durationMs: 1800000, // 30 min
     sessionDate: new Date('2025-12-05T14:30:00'),
@@ -147,6 +149,7 @@ export const SharedSessionWithoutEmail: Story = {
     hasCustomTitle: false,
     autoTitle: 'Legacy Shared Session',
     externalId: 'legacy789abc',
+    ownerEmail: 'bob@example.com',
     model: 'claude-sonnet-4-20250514',
     durationMs: 1200000, // 20 min
     sessionDate: new Date('2025-12-04T09:00:00'),
@@ -165,6 +168,7 @@ export const OwnerViewingShareLink: Story = {
     hasCustomTitle: false,
     autoTitle: 'API Authentication Implementation',
     externalId: 'owner123share456',
+    ownerEmail: 'developer@example.com',
     model: 'claude-opus-4-5-20251101',
     durationMs: 3600000, // 1 hour
     sessionDate: new Date('2025-12-06T10:00:00'),
@@ -181,6 +185,7 @@ export const NoGitInfo: Story = {
     hasCustomTitle: false,
     autoTitle: 'Quick debugging session',
     externalId: 'def456ghi789',
+    ownerEmail: 'developer@example.com',
     model: 'claude-haiku-3-5-20241022',
     durationMs: 300000, // 5 min
     sessionDate: new Date(),
@@ -195,6 +200,7 @@ export const NoGitInfo: Story = {
 export const LongTitle: Story = {
   args: {
     sessionId: 'session-long',
+    ownerEmail: 'developer@example.com',
     title:
       'This is a very long session title that might need to wrap or be truncated depending on the available space in the header component',
     hasCustomTitle: false,
@@ -218,6 +224,7 @@ export const FallbackTitle: Story = {
     sessionId: 'session-fallback',
     hasCustomTitle: false,
     externalId: 'fallback123456789',
+    ownerEmail: 'developer@example.com',
     model: 'claude-sonnet-4-20250514',
     sessionDate: new Date(),
     isOwner: true,
@@ -239,6 +246,7 @@ export const WithoutFilter: DirectStory = {
       hasCustomTitle={false}
       autoTitle="Viewing Analytics Tab"
       externalId="analytics123"
+      ownerEmail="developer@example.com"
       model="claude-opus-4-5-20251101"
       durationMs={3600000}
       sessionDate={new Date('2025-12-06T10:00:00')}
