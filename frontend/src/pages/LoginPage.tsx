@@ -98,8 +98,9 @@ function LoginPage() {
   }, []);
 
   // Auto-redirect: single OAuth provider (not password)
+  // Skip redirect when there's an auth error to avoid infinite redirect loops
   useEffect(() => {
-    if (!config) return;
+    if (!config || authError) return;
     const sole = config.providers.length === 1 ? config.providers[0] : undefined;
     if (sole && sole.name !== 'password') {
       let loginURL = sole.login_url;
@@ -110,15 +111,15 @@ function LoginPage() {
       if (qs) loginURL += '?' + qs;
       window.location.href = loginURL;
     }
-  }, [config, redirectParam, emailParam]);
+  }, [config, authError, redirectParam, emailParam]);
 
   // Show nothing while loading
   if (authLoading || !config) return null;
   if (isAuthenticated) return null;
 
-  // If single non-password provider, we're about to redirect — show nothing
+  // If single non-password provider and no error, we're about to redirect — show nothing
   const soleProvider = config.providers.length === 1 ? config.providers[0] : undefined;
-  if (soleProvider && soleProvider.name !== 'password') {
+  if (soleProvider && soleProvider.name !== 'password' && !authError) {
     return null;
   }
 
