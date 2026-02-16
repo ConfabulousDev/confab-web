@@ -3,6 +3,8 @@ set -e
 
 # Confab CLI Installer
 # Usage: curl -fsSL https://confabulous.dev/install | bash
+# Pin to a specific version:
+#   curl -fsSL https://confabulous.dev/install | CONFAB_VERSION=1.2.3 bash
 
 BINARY_NAME="confab"
 GITHUB_REPO="ConfabulousDev/confab"
@@ -136,16 +138,27 @@ main() {
     platform="$(detect_platform)"
     echo "Installing confab for ${platform}..."
 
-    # Get the latest release info from GitHub API
-    echo "Fetching latest release..."
-    release_json="$(fetch "https://api.github.com/repos/${GITHUB_REPO}/releases/latest")"
-
-    version="$(echo "$release_json" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/')"
-    if [ -z "$version" ]; then
-        echo "Error: Failed to determine latest version"
-        exit 1
+    # Get release info from GitHub API
+    if [ -n "$CONFAB_VERSION" ]; then
+        # Strip leading "v" if present
+        CONFAB_VERSION="${CONFAB_VERSION#v}"
+        echo "Fetching release v${CONFAB_VERSION}..."
+        release_json="$(fetch "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v${CONFAB_VERSION}")"
+        if [ -z "$release_json" ]; then
+            echo "Error: Release v${CONFAB_VERSION} not found"
+            exit 1
+        fi
+        version="$CONFAB_VERSION"
+    else
+        echo "Fetching latest release..."
+        release_json="$(fetch "https://api.github.com/repos/${GITHUB_REPO}/releases/latest")"
+        version="$(echo "$release_json" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/')"
+        if [ -z "$version" ]; then
+            echo "Error: Failed to determine latest version"
+            exit 1
+        fi
     fi
-    echo "Latest version: ${version}"
+    echo "Installing version: ${version}"
 
     # Create temp directory
     tmp_dir="$(mktemp -d)"

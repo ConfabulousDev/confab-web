@@ -33,8 +33,11 @@ The app runs at `http://localhost:8080`
 ### Step 2: Install and Configure CLI
 
 ```bash
-# Install the CLI
+# Install the CLI (latest version)
 curl -fsSL http://localhost:8080/install | bash
+
+# Or install a specific version
+curl -fsSL http://localhost:8080/install | CONFAB_VERSION=1.2.3 bash
 
 # Configure to use your local backend
 confab setup --backend-url http://localhost:8080
