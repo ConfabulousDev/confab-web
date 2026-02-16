@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useAppConfig } from '@/hooks/useAppConfig';
 import ThemeToggle from './ThemeToggle';
 import styles from './Header.module.css';
 
 function Header() {
   const { user, isAuthenticated } = useAuth();
+  const { sharesEnabled } = useAppConfig();
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -94,9 +96,11 @@ function Header() {
             <Link to="/keys" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
               API Keys
             </Link>
-            <Link to="/shares" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
-              Shares
-            </Link>
+            {sharesEnabled && (
+              <Link to="/shares" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
+                Shares
+              </Link>
+            )}
             <div className={styles.dropdownDivider} />
             <button className={styles.dropdownItem} onClick={handleLogout}>
               Logout

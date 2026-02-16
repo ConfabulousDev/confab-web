@@ -43,7 +43,7 @@ function Quickstart() {
         <div className={styles.step}>
           <span className={styles.stepNumber}>2</span>
           <div className={styles.stepContent}>
-            <CopyableCode label="Run setup" code="confab setup" />
+            <CopyableCode label="Run setup" code="confab setup --backend-url https://confabulous.dev" />
           </div>
         </div>
 

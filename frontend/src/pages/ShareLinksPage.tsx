@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { sharesAPI, sessionsAPI, AuthenticationError } from '@/services/api';
-import { useDocumentTitle, useCopyToClipboard, useSuccessMessage } from '@/hooks';
+import { useAppConfig, useDocumentTitle, useCopyToClipboard, useSuccessMessage } from '@/hooks';
 import type { SessionShare } from '@/types';
 import { formatRelativeTime, sortData, type SortDirection } from '@/utils';
 import PageHeader from '@/components/PageHeader';
@@ -63,6 +63,7 @@ const CopyIcon = (
 function ShareLinksPage() {
   useDocumentTitle('Shares');
   const navigate = useNavigate();
+  const { sharesEnabled } = useAppConfig();
   const [shares, setShares] = useState<SessionShare[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -118,6 +119,12 @@ function ShareLinksPage() {
       direction: sortDirection,
     });
   }, [shares, filter, sortColumn, sortDirection]);
+
+  useEffect(() => {
+    if (!sharesEnabled) {
+      navigate('/sessions', { replace: true });
+    }
+  }, [sharesEnabled, navigate]);
 
   useEffect(() => {
     fetchShares();
