@@ -123,6 +123,48 @@ func TestHashAPIKey_Integration(t *testing.T) {
 	}
 }
 
+// TestOptionalAuth_DomainRestriction tests that OptionalAuth requires authentication
+// when allowedDomains is configured (on-prem security: prevents anonymous public share access)
+func TestOptionalAuth_DomainRestriction(t *testing.T) {
+	t.Run("unauthenticated request passes through without domain restrictions", func(t *testing.T) {
+		handlerCalled := false
+		handler := OptionalAuth(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/v1/sessions/test", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if !handlerCalled {
+			t.Error("expected handler to be called for unauthenticated request without domain restrictions")
+		}
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
+
+	t.Run("unauthenticated request blocked with domain restrictions", func(t *testing.T) {
+		handlerCalled := false
+		handler := OptionalAuth(nil, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/api/v1/sessions/test", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if handlerCalled {
+			t.Error("expected handler NOT to be called for unauthenticated request with domain restrictions")
+		}
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+		}
+	})
+}
+
 // TestCookieSecure tests the cookie security flag logic
 func TestCookieSecure(t *testing.T) {
 	// Note: This test doesn't modify env vars since that could affect

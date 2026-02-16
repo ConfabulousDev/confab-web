@@ -384,6 +384,8 @@ This endpoint provides unified access to session details. It supports:
 
 Authentication is optional - the endpoint extracts user from session cookie if present.
 
+**Note:** When `ALLOWED_EMAIL_DOMAINS` is configured, authentication is **required** for all access types (including public shares). Unauthenticated requests return `401`.
+
 **Response:**
 ```json
 {
@@ -1067,7 +1069,7 @@ Providers are returned in order: password, GitHub, Google, OIDC. Only enabled pr
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Health check (`{"status": "ok"}`) |
+| `GET /health` | Health check. Response: `{"status": "ok"}` |
 | `GET /help/delete-account` | Account deletion help page |
 
 ---
@@ -1116,7 +1118,9 @@ When `ALLOWED_EMAIL_DOMAINS` is set (comma-separated list of domains), only user
 | Password login | Redirect to `/login?error=Your email domain is not permitted...` |
 | API key requests | `403 Forbidden` with body `"Email domain not permitted"` |
 | Session-authenticated requests | `403 Forbidden` with body `"Email domain not permitted"` |
+| Device code verification | `403 Forbidden` with HTML error `"Your email domain is not permitted"` |
 | Device code token exchange | `403 Forbidden` with JSON `{"error": "access_denied"}` |
+| Optional auth endpoints (session detail, analytics, sync file) | `401 Unauthorized` with `"Authentication required"` (anonymous access blocked) |
 | Admin user creation | Redirect with error `"Email domain not permitted"` |
 
 **Behavior:**

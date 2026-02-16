@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -34,6 +35,25 @@ func setupDeviceCodeTestServer(t *testing.T, env *testutil.TestEnvironment) *tes
 		GoogleClientID:     "test-google-client-id",
 		GoogleClientSecret: "test-google-client-secret",
 		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
+	}
+
+	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
+	handler := apiServer.SetupRoutes()
+
+	return testutil.StartTestServer(t, env, handler)
+}
+
+// setupDeviceCodeTestServerWithDomains creates a test server with email domain restrictions
+func setupDeviceCodeTestServerWithDomains(t *testing.T, env *testutil.TestEnvironment, allowedDomains []string) *testutil.TestServer {
+	t.Helper()
+
+	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
+	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
+	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
+	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
+
+	oauthConfig := auth.OAuthConfig{
+		AllowedEmailDomains: allowedDomains,
 	}
 
 	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
@@ -535,6 +555,46 @@ func TestDeviceVerify_HTTP_Integration(t *testing.T) {
 		location := resp.Header.Get("Location")
 		if !strings.Contains(location, "/login") {
 			t.Errorf("expected redirect to /login, got %s", location)
+		}
+	})
+
+	t.Run("rejects user with non-allowed email domain", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@external.com", "External User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		deviceCode := "domaincheckddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+		expiresAt := time.Now().UTC().Add(15 * time.Minute)
+		testutil.CreateTestDeviceCode(t, env, deviceCode, "DOMN-CHK1", "Test Key", expiresAt)
+
+		// Set up server with domain restrictions
+		ts := setupDeviceCodeTestServerWithDomains(t, env, []string{"allowed.com"})
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.PostForm("/auth/device/verify", "code=DOMN-CHK1")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusForbidden)
+
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), "not permitted") {
+			t.Errorf("expected domain not permitted error, got: %s", string(body))
+		}
+
+		// Verify device code was NOT authorized
+		var authorizedAt *time.Time
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT authorized_at FROM device_codes WHERE user_code = $1",
+			"DOMN-CHK1")
+		if err := row.Scan(&authorizedAt); err != nil {
+			t.Fatalf("failed to query device_codes: %v", err)
+		}
+		if authorizedAt != nil {
+			t.Error("device code should NOT have been authorized for non-allowed domain")
 		}
 	})
 }

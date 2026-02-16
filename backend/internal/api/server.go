@@ -62,7 +62,6 @@ type Server struct {
 	emailService      *email.RateLimitedService // Email service for share invitations (may be nil)
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
 	supportEmail      string                    // Support contact email address
-	version           string                    // Application version (set via ldflags at build time)
 	sharesDisabled    bool                      // When true, share creation is disabled (DISABLE_SHARE_CREATION=true)
 	footerDisabled    bool                      // When true, frontend footer is hidden (DISABLE_FOOTER=true)
 	termlyDisabled    bool                      // When true, Termly cookie consent is disabled (DISABLE_TERMLY=true)
@@ -73,7 +72,7 @@ type Server struct {
 }
 
 // NewServer creates a new API server
-func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAuthConfig, emailService *email.RateLimitedService, version string) *Server {
+func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAuthConfig, emailService *email.RateLimitedService, _ string) *Server {
 	supportEmail := os.Getenv("SUPPORT_EMAIL")
 	if supportEmail == "" {
 		supportEmail = "support@example.com"
@@ -85,7 +84,6 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		emailService:   emailService,
 		frontendURL:    os.Getenv("FRONTEND_URL"),
 		supportEmail:   supportEmail,
-		version:        version,
 		sharesDisabled: os.Getenv("DISABLE_SHARE_CREATION") == "true",
 		footerDisabled: os.Getenv("DISABLE_FOOTER") == "true",
 		termlyDisabled: os.Getenv("DISABLE_TERMLY") == "true",
@@ -260,7 +258,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Post("/auth/device/code", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceCode(s.db, backendURL))))
 	r.Post("/auth/device/token", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db, s.oauthConfig.AllowedEmailDomains))))
 	r.Get("/auth/device", withMaxBody(MaxBodyXS, auth.HandleDevicePage(s.db)))
-	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db))))
+	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db, s.oauthConfig.AllowedEmailDomains))))
 
 	// Admin routes (require web session + super admin)
 	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled, s.oauthConfig.AllowedEmailDomains, s.sharesDisabled)
@@ -358,10 +356,18 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions/{id}/shares", withMaxBody(MaxBodyXS, HandleListShares(s.db)))
 			r.Get("/shares", withMaxBody(MaxBodyXS, HandleListAllUserShares(s.db)))
 			r.Delete("/shares/{shareID}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))
+
+			// GitHub links - delete (owner-only)
+			r.Delete("/sessions/{id}/github-links/{linkID}", withMaxBody(MaxBodyXS, HandleDeleteGitHubLink(s.db)))
+
+			// Smart recap regeneration (owner-only)
+			r.Post("/sessions/{id}/analytics/smart-recap/regenerate", withMaxBody(MaxBodyXS, HandleRegenerateSmartRecap(s.db, s.storage)))
 		})
 
 		// Session lookup by external_id - requires auth (session cookie OR API key)
+		// CSRF applied conditionally: enforced for session cookie auth, skipped for API key auth
 		r.Group(func(r chi.Router) {
+			r.Use(csrfWhenSession(csrfMiddleware))
 			r.Use(auth.RequireSessionOrAPIKey(s.db, s.oauthConfig.AllowedEmailDomains))
 			r.Get("/sessions/by-external-id/{external_id}", withMaxBody(MaxBodyXS, HandleLookupSessionByExternalID(s.db)))
 			// GitHub links - create (CLI or web)
@@ -382,17 +388,6 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions/{id}/github-links", withMaxBody(MaxBodyXS, HandleListGitHubLinks(s.db)))
 		})
 
-		// GitHub links - delete (owner-only, web session required)
-		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
-			r.Delete("/sessions/{id}/github-links/{linkID}", withMaxBody(MaxBodyXS, HandleDeleteGitHubLink(s.db)))
-		})
-
-		// Smart recap regeneration (owner-only, web session required)
-		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
-			r.Post("/sessions/{id}/analytics/smart-recap/regenerate", withMaxBody(MaxBodyXS, HandleRegenerateSmartRecap(s.db, s.storage)))
-		})
 	})
 
 	// Static file serving (production mode when frontend is bundled with backend)
@@ -405,13 +400,25 @@ func (s *Server) SetupRoutes() http.Handler {
 	return r
 }
 
+// csrfWhenSession applies CSRF protection only when the request uses session cookie auth.
+// Requests with an API key (Authorization: Bearer ...) skip CSRF validation since
+// the Authorization header cannot be set cross-origin without CORS approval.
+func csrfWhenSession(csrfHandler func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		withCSRF := csrfHandler(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			withCSRF.ServeHTTP(w, r)
+		})
+	}
+}
+
 // handleHealth returns server health status
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	resp := map[string]string{"status": "ok"}
-	if s.version != "" {
-		resp["version"] = s.version
-	}
-	respondJSON(w, http.StatusOK, resp)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // handleDeleteAccountHelp serves a help page explaining how to request account deletion

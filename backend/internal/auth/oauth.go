@@ -553,7 +553,14 @@ func OptionalAuth(database *db.DB, allowedDomains []string) func(http.Handler) h
 				return
 			}
 
-			// No auth - continue without user ID in context
+			// No auth - when domain restrictions are in place, require authentication
+			// to prevent anonymous access to public shares on on-prem instances
+			if len(allowedDomains) > 0 {
+				http.Error(w, "Authentication required", http.StatusUnauthorized)
+				return
+			}
+
+			// No auth and no domain restrictions - continue without user ID in context
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -1926,7 +1933,7 @@ func HandleDevicePage(database *db.DB) http.HandlerFunc {
 
 // HandleDeviceVerify handles the form submission to verify a device code
 // POST /device/verify
-func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
+func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1955,6 +1962,16 @@ func HandleDeviceVerify(database *db.DB) http.HandlerFunc {
 		session, err := database.GetWebSession(ctx, cookie.Value)
 		if err != nil {
 			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Check email domain restriction before authorizing device code
+		if !validation.IsAllowedEmailDomain(session.UserEmail, allowedDomains) {
+			log.Warn("Email domain not permitted in device verify", "email", session.UserEmail)
+			html := generateDeviceResultHTML(false, "Your email domain is not permitted. Contact your administrator.")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(html))
 			return
 		}
 
