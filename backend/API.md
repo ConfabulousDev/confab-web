@@ -1042,7 +1042,8 @@ Returns the list of enabled authentication providers. No authentication required
   ],
   "features": {
     "shares_enabled": true,
-    "footer_enabled": true
+    "footer_enabled": true,
+    "support_email": "support@example.com"
   }
 }
 ```
@@ -1054,6 +1055,7 @@ Returns the list of enabled authentication providers. No authentication required
 | `providers[].login_url` | string | Path to initiate login with this provider |
 | `features.shares_enabled` | bool | Whether share creation is enabled (`false` when `DISABLE_SHARE_CREATION=true`) |
 | `features.footer_enabled` | bool | Whether the frontend footer is shown (`false` when `DISABLE_FOOTER=true`) |
+| `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |
 
 Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.
 

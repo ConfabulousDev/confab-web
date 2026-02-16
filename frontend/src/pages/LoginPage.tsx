@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { SUPPORT_EMAIL } from '@/config';
+import { useAppConfig } from '@/hooks/useAppConfig';
 import Alert from '@/components/Alert';
 import styles from './LoginPage.module.css';
 
@@ -46,6 +46,7 @@ function LockIcon() {
 function LoginPage() {
   useDocumentTitle('Log in');
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { supportEmail } = useAppConfig();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [config, setConfig] = useState<AuthConfig | null>(null);
@@ -166,7 +167,7 @@ function LoginPage() {
         {authError && (
           <Alert variant="error" className={styles.errorAlert}>
             {authError.type === 'access_denied' ? (
-              <>Please request access <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Requesting access to Confabulous')}`}>here</a>.</>
+              <>Please request access <a href={`mailto:${supportEmail}?subject=${encodeURIComponent('Requesting access to Confabulous')}`}>here</a>.</>
             ) : (
               authError.message
             )}

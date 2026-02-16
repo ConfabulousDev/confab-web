@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Alert from '@/components/Alert';
-import { SUPPORT_EMAIL } from '@/config';
 import styles from './LoginPage.module.css';
+
+const SUPPORT_EMAIL = 'support@example.com';
 
 // Inline SVG icons (same as LoginPage.tsx)
 function GitHubIcon() {

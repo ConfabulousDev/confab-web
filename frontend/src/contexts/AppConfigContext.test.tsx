@@ -145,4 +145,43 @@ describe('AppConfigContext', () => {
 
     expect(result.current.footerEnabled).toBe(true);
   });
+
+  it('reads supportEmail from server response', async () => {
+    mockFetchResponse(true, {
+      providers: [],
+      features: { shares_enabled: true, footer_enabled: true, support_email: 'help@example.com' },
+    });
+
+    const { result } = renderHook(() => useAppConfig(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.supportEmail).toBe('help@example.com');
+    });
+  });
+
+  it('defaults supportEmail to empty string before fetch resolves', () => {
+    vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useAppConfig(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.supportEmail).toBe('');
+  });
+
+  it('defaults supportEmail to empty string when features field is missing', async () => {
+    mockFetchResponse(true, { providers: [] });
+
+    const { result } = renderHook(() => useAppConfig(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+
+    expect(result.current.supportEmail).toBe('');
+  });
 });
