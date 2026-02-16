@@ -743,7 +743,7 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
-// wwwRedirectMiddleware redirects www.confabulous.dev to confabulous.dev
+// wwwRedirectMiddleware redirects www subdomain requests to the apex domain
 func wwwRedirectMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

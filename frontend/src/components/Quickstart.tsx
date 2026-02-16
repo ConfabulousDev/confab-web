@@ -23,6 +23,8 @@ function CopyableCode({ label, code }: { label: string; code: string }) {
 }
 
 function Quickstart() {
+  const origin = window.location.origin;
+
   return (
     <div className={styles.container}>
       <div className={styles.icon}>🚀</div>
@@ -36,14 +38,14 @@ function Quickstart() {
         <div className={styles.step}>
           <span className={styles.stepNumber}>1</span>
           <div className={styles.stepContent}>
-            <CopyableCode label="Install the CLI" code="curl -fsSL https://confabulous.dev/install | bash" />
+            <CopyableCode label="Install the CLI" code={`curl -fsSL ${origin}/install | bash`} />
           </div>
         </div>
 
         <div className={styles.step}>
           <span className={styles.stepNumber}>2</span>
           <div className={styles.stepContent}>
-            <CopyableCode label="Run setup" code="confab setup --backend-url https://confabulous.dev" />
+            <CopyableCode label="Run setup" code={`confab setup --backend-url ${origin}`} />
           </div>
         </div>
 
