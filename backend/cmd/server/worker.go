@@ -65,10 +65,12 @@ func runWorker() {
 		logger.Fatal("missing required env var", "var", "DATABASE_URL")
 	}
 
-	// Initialize database connection
-	database, err := db.Connect(databaseURL)
+	// Initialize database connection with retry (handles DB not yet ready in containers)
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	database, err := db.ConnectWithRetry(dbCtx, databaseURL)
+	dbCancel()
 	if err != nil {
-		logger.Fatal("failed to connect to database", "error", err)
+		logger.Fatal("failed to connect to database after retries", "error", err)
 	}
 	defer database.Close()
 

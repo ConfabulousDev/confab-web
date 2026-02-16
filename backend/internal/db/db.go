@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/otel"
 )
@@ -30,6 +31,7 @@ func Connect(dsn string) (*DB, error) {
 
 	// Test connection
 	if err := conn.Ping(); err != nil {
+		conn.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -42,6 +44,40 @@ func Connect(dsn string) (*DB, error) {
 	conn.SetConnMaxLifetime(20 * time.Minute)
 
 	return &DB{conn: conn}, nil
+}
+
+// ConnectWithRetry attempts to connect to the database with exponential backoff.
+// It retries until the context is cancelled or a connection is established.
+// Backoff schedule: 1s, 2s, 4s, 8s, 16s, 32s, then capped at 60s.
+func ConnectWithRetry(ctx context.Context, dsn string) (*DB, error) {
+	delay := 1 * time.Second
+	const maxDelay = 60 * time.Second
+
+	for {
+		database, err := Connect(dsn)
+		if err == nil {
+			return database, nil
+		}
+
+		// Check if context is already done before sleeping
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("giving up connecting to database: %w (last error: %v)", ctx.Err(), err)
+		}
+
+		logger.Warn("database connection failed, retrying", "error", err, "retry_in", delay)
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("giving up connecting to database: %w (last error: %v)", ctx.Err(), err)
+		case <-time.After(delay):
+		}
+
+		// Exponential backoff with cap
+		delay *= 2
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+	}
 }
 
 // Close closes the database connection

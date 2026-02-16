@@ -50,12 +50,14 @@ func main() {
 	// Load configuration from environment
 	config := loadConfig()
 
-	// Initialize database connection
+	// Initialize database connection with retry (handles DB not yet ready in containers)
 	// Note: Migrations are run separately via CLI before starting the server
 	// See: migrate -database "$DATABASE_URL" -path internal/db/migrations up
-	database, err := db.Connect(config.DatabaseURL)
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	database, err := db.ConnectWithRetry(dbCtx, config.DatabaseURL)
+	dbCancel()
 	if err != nil {
-		logger.Fatal("failed to connect to database", "error", err)
+		logger.Fatal("failed to connect to database after retries", "error", err)
 	}
 	defer database.Close()
 
