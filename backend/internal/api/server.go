@@ -65,6 +65,7 @@ type Server struct {
 	version           string                    // Application version (set via ldflags at build time)
 	sharesDisabled    bool                      // When true, share creation is disabled (DISABLE_SHARE_CREATION=true)
 	footerDisabled    bool                      // When true, frontend footer is hidden (DISABLE_FOOTER=true)
+	termlyDisabled    bool                      // When true, Termly cookie consent is disabled (DISABLE_TERMLY=true)
 	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -87,6 +88,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		version:        version,
 		sharesDisabled: os.Getenv("DISABLE_SHARE_CREATION") == "true",
 		footerDisabled: os.Getenv("DISABLE_FOOTER") == "true",
+		termlyDisabled: os.Getenv("DISABLE_TERMLY") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -582,6 +584,35 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 	// Clean staticDir once during initialization for security check
 	cleanStaticDir := filepath.Clean(staticDir)
 
+	// Pre-process index.html at startup: strip Termly script if disabled
+	indexPath := filepath.Join(cleanStaticDir, "index.html")
+	var processedIndex []byte
+	if raw, err := os.ReadFile(indexPath); err == nil {
+		if s.termlyDisabled {
+			var filtered []string
+			for _, line := range strings.Split(string(raw), "\n") {
+				if strings.Contains(line, "app.termly.io/resource-blocker") ||
+					strings.Contains(line, "<!-- Termly Consent Banner -->") {
+					continue
+				}
+				filtered = append(filtered, line)
+			}
+			processedIndex = []byte(strings.Join(filtered, "\n"))
+		} else {
+			processedIndex = raw
+		}
+	}
+
+	serveIndex := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		if processedIndex != nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(processedIndex)
+		} else {
+			http.ServeFile(w, r, indexPath)
+		}
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Clean the requested path to prevent path traversal attacks
 		// This resolves .. sequences and removes redundant separators
@@ -594,14 +625,14 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 		// This prevents path traversal attacks like /../../../etc/passwd
 		if !strings.HasPrefix(fullPath, cleanStaticDir) {
 			// Path escapes static directory, serve index.html instead
-			serveIndexHTML(w, r, cleanStaticDir)
+			serveIndex(w, r)
 			return
 		}
 
 		// Check if file exists
 		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 			// File doesn't exist, serve index.html for SPA routing
-			serveIndexHTML(w, r, cleanStaticDir)
+			serveIndex(w, r)
 			return
 		}
 
@@ -612,19 +643,14 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 			// Hashed assets - cache for 1 year (immutable)
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else if requestPath == "/" || requestPath == "/index.html" {
-			// HTML - never cache
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			// Always serve processed index.html (may have Termly stripped)
+			serveIndex(w, r)
+			return
 		}
 
 		// File exists, serve it
 		fileServer.ServeHTTP(w, r)
 	}
-}
-
-// serveIndexHTML serves index.html with no-cache headers for SPA routing
-func serveIndexHTML(w http.ResponseWriter, r *http.Request, staticDir string) {
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
 }
 
 // respondJSON writes a JSON response
@@ -664,6 +690,7 @@ func respondStorageError(w http.ResponseWriter, err error, defaultMsg string) {
 func securityHeadersMiddleware() func(http.Handler) http.Handler {
 	staticDir := os.Getenv("STATIC_FILES_DIR")
 	servingStatic := staticDir != ""
+	termlyDisabled := os.Getenv("DISABLE_TERMLY") == "true"
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -673,8 +700,13 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 				// Relaxed CSP for SPA frontend: allows inline scripts needed for SPA bootstrap
 				// - script-src 'self' 'unsafe-inline': Allow inline scripts (React apps may need this)
 				// - style-src 'self' 'unsafe-inline': Allow inline styles
-				w.Header().Set("Content-Security-Policy",
-					"default-src 'self'; script-src 'self' 'unsafe-inline' https://app.termly.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.termly.io; frame-src https://app.termly.io; frame-ancestors 'none'")
+				if termlyDisabled {
+					w.Header().Set("Content-Security-Policy",
+						"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'")
+				} else {
+					w.Header().Set("Content-Security-Policy",
+						"default-src 'self'; script-src 'self' 'unsafe-inline' https://app.termly.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.termly.io; frame-src https://app.termly.io; frame-ancestors 'none'")
+				}
 			} else {
 				// Strict CSP for API-only mode
 				// - script-src 'self': Only execute scripts from same origin

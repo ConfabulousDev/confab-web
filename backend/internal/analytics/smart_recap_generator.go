@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
@@ -19,6 +20,7 @@ type SmartRecapGeneratorConfig struct {
 	GenerationTimeout   time.Duration
 	MaxOutputTokens     int // 0 means use DefaultMaxOutputTokens
 	MaxTranscriptTokens int // 0 means use DefaultMaxTranscriptTokens
+	BaseURL             string // Custom base URL for the Anthropic API (for testing)
 }
 
 // SmartRecapGenerator handles the full smart recap generation flow.
@@ -84,7 +86,11 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 	}
 
 	// Create the analyzer and generate
-	client := anthropic.NewClient(g.config.APIKey)
+	var clientOpts []anthropic.ClientOption
+	if g.config.BaseURL != "" {
+		clientOpts = append(clientOpts, anthropic.WithBaseURL(g.config.BaseURL))
+	}
+	client := anthropic.NewClient(g.config.APIKey, clientOpts...)
 	analyzer := NewSmartRecapAnalyzer(client, g.config.Model, SmartRecapAnalyzerConfig{
 		MaxOutputTokens:    g.config.MaxOutputTokens,
 		MaxTranscriptTokens: g.config.MaxTranscriptTokens,
@@ -123,11 +129,20 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 		GenerationTimeMs:          &result.GenerationTimeMs,
 	}
 
-	// Save the card (this also clears the lock via upsert)
-	// Use background context to ensure save completes even if request was canceled
+	// Use background context to ensure operations complete even if request was canceled
 	saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer saveCancel()
 
+	// Increment quota BEFORE saving the card.
+	// If we can't track usage, we must not produce the recap.
+	if err := recapquota.Increment(saveCtx, g.db, input.UserID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "quota increment failed: "+err.Error())
+		_ = g.store.ClearSmartRecapLock(saveCtx, input.SessionID)
+		return &GenerateResult{Error: fmt.Errorf("failed to increment quota: %w", err)}
+	}
+
+	// Save the card (this also clears the lock via upsert)
 	if err := g.store.UpsertSmartRecapCard(saveCtx, card); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -143,12 +158,6 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 			// Log but don't fail - the main operation succeeded
 			span.SetAttributes(attribute.String("title.update.error", err.Error()))
 		}
-	}
-
-	// Increment quota
-	if err := recapquota.Increment(saveCtx, g.db, input.UserID); err != nil {
-		// Log but don't fail - the main operation succeeded
-		span.SetAttributes(attribute.String("quota.increment.error", err.Error()))
 	}
 
 	span.SetAttributes(

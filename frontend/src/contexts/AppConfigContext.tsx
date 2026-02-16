@@ -3,12 +3,14 @@ import { createContext, useEffect, useState, type ReactNode } from 'react';
 export interface AppConfig {
   sharesEnabled: boolean;
   footerEnabled: boolean;
+  termlyEnabled: boolean;
   supportEmail: string;
 }
 
 const defaultAppConfig: AppConfig = {
   sharesEnabled: true,
   footerEnabled: true,
+  termlyEnabled: true,
   supportEmail: '',
 };
 
@@ -31,6 +33,7 @@ export function AppConfigProvider({ children }: AppConfigProviderProps) {
         setConfig({
           sharesEnabled: data.features?.shares_enabled ?? true,
           footerEnabled: data.features?.footer_enabled ?? true,
+          termlyEnabled: data.features?.termly_enabled ?? true,
           supportEmail: data.features?.support_email ?? '',
         });
       })

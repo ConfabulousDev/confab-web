@@ -513,8 +513,7 @@ func generateSmartRecapSync(
 		attribute.Int("generation.time_ms", result.GenerationTimeMs),
 	)
 
-	// Save the result (this also clears the lock via upsert)
-	// Use Background context to ensure save completes even if request was canceled
+	// Use Background context to ensure operations complete even if request was canceled
 	saveCtx, saveCancel := context.WithTimeout(context.Background(), DatabaseTimeout)
 	defer saveCancel()
 
@@ -535,6 +534,16 @@ func generateSmartRecapSync(
 		GenerationTimeMs:          &result.GenerationTimeMs,
 	}
 
+	// Increment quota BEFORE saving the card.
+	// If we can't track usage, we must not produce the recap.
+	if err := recapquota.Increment(saveCtx, database.Conn(), sessionUserID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		log.Error("Failed to increment smart recap quota, aborting save", "error", err, "user_id", sessionUserID)
+		_ = analyticsStore.ClearSmartRecapLock(saveCtx, sessionID)
+		return nil
+	}
+
 	if err := analyticsStore.UpsertSmartRecapCard(saveCtx, card); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -550,13 +559,6 @@ func generateSmartRecapSync(
 			// Log but don't fail - the main operation succeeded
 			log.Error("Failed to update suggested title", "error", err, "session_id", sessionID)
 		}
-	}
-
-	// Increment quota
-	if err := recapquota.Increment(saveCtx, database.Conn(), sessionUserID); err != nil {
-		span.RecordError(err)
-		// Don't set error status for quota increment failure - the main operation succeeded
-		log.Error("Failed to increment smart recap quota", "error", err, "user_id", sessionUserID)
 	}
 
 	log.Info("Smart recap generated",

@@ -8,7 +8,7 @@ declare global {
 }
 
 function Footer() {
-  const { supportEmail } = useAppConfig();
+  const { supportEmail, termlyEnabled } = useAppConfig();
   const handleCookieSettings = (e: React.MouseEvent) => {
     e.preventDefault();
     window.displayPreferenceModal?.();
@@ -21,7 +21,9 @@ function Footer() {
         <a href="https://discord.gg/p6H7MQnQD8" target="_blank" rel="noopener noreferrer">Discord</a>
         <a href={`mailto:${supportEmail}`}>Help</a>
         <a href="/policies">Policies</a>
-        <a href="#" onClick={handleCookieSettings} className="termly-display-preferences">Cookie Settings</a>
+        {termlyEnabled && (
+          <a href="#" onClick={handleCookieSettings} className="termly-display-preferences">Cookie Settings</a>
+        )}
       </div>
       <div className={styles.copyright}>
         © {new Date().getFullYear()} Confabulous Software LLC
