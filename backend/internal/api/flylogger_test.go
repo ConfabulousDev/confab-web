@@ -364,7 +364,7 @@ func TestFlyLoggerMiddleware_NoUserID_WhenUnauthenticated(t *testing.T) {
 	wrapped := FlyLogger(handler)
 
 	// Request without user ID in context
-	req := httptest.NewRequest("GET", "/health", nil)
+	req := httptest.NewRequest("GET", "/api/v1/test", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
 	logOutput := captureLogOutput(t, func() {
@@ -432,7 +432,7 @@ func TestFlyLoggerMiddleware_NoErrorMessage_On2xx(t *testing.T) {
 
 	wrapped := FlyLogger(handler)
 
-	req := httptest.NewRequest("GET", "/health", nil)
+	req := httptest.NewRequest("GET", "/api/v1/test", nil)
 	req.RemoteAddr = "192.168.1.1:8080"
 
 	logOutput := captureLogOutput(t, func() {

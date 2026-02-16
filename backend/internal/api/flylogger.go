@@ -54,6 +54,12 @@ const maxErrorMessageLength = 200
 //   - user_agent: User-Agent header (truncated to 100 chars, sanitized)
 func FlyLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip logging for health checks to reduce noise
+		if r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		start := time.Now()
 
 		// Wrap response writer to capture status code, bytes written, and body for 4xx
