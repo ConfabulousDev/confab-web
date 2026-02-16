@@ -25,6 +25,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     steps:
+      - name: Lowercase registry image
+        run: echo "REGISTRY_IMAGE=${REGISTRY_IMAGE,,}" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -73,6 +76,9 @@ jobs:
     needs: build
 
     steps:
+      - name: Lowercase registry image
+        run: echo "REGISTRY_IMAGE=${REGISTRY_IMAGE,,}" >> "$GITHUB_ENV"
+
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
@@ -114,6 +120,9 @@ jobs:
     needs: merge
 
     steps:
+      - name: Lowercase registry image
+        run: echo "REGISTRY_IMAGE=${REGISTRY_IMAGE,,}" >> "$GITHUB_ENV"
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
