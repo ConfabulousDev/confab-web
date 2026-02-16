@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle, useTrends } from '@/hooks';
 import { sessionsAPI } from '@/services/api';
+import { formatLocalDate } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import TrendsFilters, { type TrendsFiltersValue, type DateRange } from '@/components/trends/TrendsFilters';
 import {
@@ -15,14 +16,6 @@ import {
 import Alert from '@/components/Alert';
 import styles from './TrendsPage.module.css';
 
-// Format date as YYYY-MM-DD using local date components (not UTC)
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 // Get default date range (last 7 days)
 function getDefaultDateRange(): DateRange {
   const today = new Date();
@@ -30,8 +23,8 @@ function getDefaultDateRange(): DateRange {
   const last7Days = new Date(today);
   last7Days.setDate(last7Days.getDate() - 6);
   return {
-    startDate: formatDate(last7Days),
-    endDate: formatDate(today),
+    startDate: formatLocalDate(last7Days),
+    endDate: formatLocalDate(today),
     label: 'Last 7 Days',
   };
 }
@@ -40,7 +33,7 @@ function getDefaultDateRange(): DateRange {
 function getDateRangeLabel(startDate: string, endDate: string): string {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = formatDate(today);
+  const todayStr = formatLocalDate(today);
 
   // Check common presets
   const daysDiff = Math.round(

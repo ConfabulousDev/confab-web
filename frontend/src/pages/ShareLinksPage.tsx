@@ -236,17 +236,20 @@ function ShareLinksPage() {
           {error && <Alert variant="error">{error}</Alert>}
 
           <div className={styles.card}>
-            {loading ? (
+            {loading && (
               <p className={styles.loading}>Loading shares...</p>
-            ) : shares.length === 0 ? (
+            )}
+            {!loading && shares.length === 0 && (
               <p className={styles.empty}>
                 No shares yet. Share a session to see shares here.
               </p>
-            ) : sortedShares.length === 0 ? (
+            )}
+            {!loading && shares.length > 0 && sortedShares.length === 0 && (
               <p className={styles.empty}>
                 No shares match the selected filter.
               </p>
-            ) : (
+            )}
+            {!loading && sortedShares.length > 0 && (
               <div className={styles.sharesTable}>
                 <table>
                   <thead>

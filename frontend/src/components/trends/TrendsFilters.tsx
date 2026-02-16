@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useDropdown } from '@/hooks';
+import { formatLocalDate } from '@/utils';
 import { CalendarIcon, RepoIcon, CheckIcon } from '@/components/icons';
 import styles from './TrendsFilters.module.css';
 
@@ -19,14 +20,6 @@ interface TrendsFiltersProps {
   repos: string[];
   value: TrendsFiltersValue;
   onChange: (value: TrendsFiltersValue) => void;
-}
-
-// Format date as YYYY-MM-DD using local date components (not UTC)
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 // Get start of week (Monday)
@@ -64,12 +57,12 @@ function getDatePresets(): DateRange[] {
   last90Days.setDate(last90Days.getDate() - 89);
 
   return [
-    { startDate: formatDate(startOfThisWeek), endDate: formatDate(today), label: 'This Week' },
-    { startDate: formatDate(startOfLastWeek), endDate: formatDate(endOfLastWeek), label: 'Last Week' },
-    { startDate: formatDate(startOfThisMonth), endDate: formatDate(today), label: 'This Month' },
-    { startDate: formatDate(startOfLastMonth), endDate: formatDate(endOfLastMonth), label: 'Last Month' },
-    { startDate: formatDate(last30Days), endDate: formatDate(today), label: 'Last 30 Days' },
-    { startDate: formatDate(last90Days), endDate: formatDate(today), label: 'Last 90 Days' },
+    { startDate: formatLocalDate(startOfThisWeek), endDate: formatLocalDate(today), label: 'This Week' },
+    { startDate: formatLocalDate(startOfLastWeek), endDate: formatLocalDate(endOfLastWeek), label: 'Last Week' },
+    { startDate: formatLocalDate(startOfThisMonth), endDate: formatLocalDate(today), label: 'This Month' },
+    { startDate: formatLocalDate(startOfLastMonth), endDate: formatLocalDate(endOfLastMonth), label: 'Last Month' },
+    { startDate: formatLocalDate(last30Days), endDate: formatLocalDate(today), label: 'Last 30 Days' },
+    { startDate: formatLocalDate(last90Days), endDate: formatLocalDate(today), label: 'Last 90 Days' },
   ];
 }
 
@@ -116,6 +109,13 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
   };
 
   const allReposSelected = repos.length > 0 && value.repos.length === repos.length;
+
+  function getRepoLabel(): string {
+    if (allReposSelected) return 'All Repos';
+    if (value.repos.length === 0) return 'No Repos';
+    const count = value.repos.length;
+    return `${count} repo${count > 1 ? 's' : ''}`;
+  }
 
   return (
     <div className={styles.container}>
@@ -164,13 +164,7 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
           aria-expanded={repoIsOpen}
         >
           {RepoIcon}
-          <span className={styles.filterLabel}>
-            {allReposSelected
-              ? 'All Repos'
-              : value.repos.length === 0
-                ? 'No Repos'
-                : `${value.repos.length} repo${value.repos.length > 1 ? 's' : ''}`}
-          </span>
+          <span className={styles.filterLabel}>{getRepoLabel()}</span>
         </button>
 
         {repoIsOpen && (

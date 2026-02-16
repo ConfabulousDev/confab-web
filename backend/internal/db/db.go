@@ -59,11 +59,6 @@ func ConnectWithRetry(ctx context.Context, dsn string) (*DB, error) {
 			return database, nil
 		}
 
-		// Check if context is already done before sleeping
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("giving up connecting to database: %w (last error: %v)", ctx.Err(), err)
-		}
-
 		logger.Warn("database connection failed, retrying", "error", err, "retry_in", delay)
 
 		select {

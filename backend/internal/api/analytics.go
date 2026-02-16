@@ -679,26 +679,16 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
-		// Return the generated card
+		// Return the generated card using the shared helper
 		response := &analytics.AnalyticsResponse{
-			Cards: map[string]interface{}{
-				"smart_recap": analytics.SmartRecapCardData{
-					Recap:                     newCard.Recap,
-					WentWell:                  newCard.WentWell,
-					WentBad:                   newCard.WentBad,
-					HumanSuggestions:          newCard.HumanSuggestions,
-					EnvironmentSuggestions:    newCard.EnvironmentSuggestions,
-					DefaultContextSuggestions: newCard.DefaultContextSuggestions,
-					ComputedAt:                newCard.ComputedAt.Format(time.RFC3339),
-					ModelUsed:                 newCard.ModelUsed,
-				},
-			},
+			Cards: make(map[string]interface{}),
 			SmartRecapQuota: &analytics.SmartRecapQuotaInfo{
 				Used:     quota.ComputeCount + 1, // Increment since we just generated
 				Limit:    smartRecapConfig.QuotaLimit,
 				Exceeded: quota.ComputeCount+1 >= smartRecapConfig.QuotaLimit,
 			},
 		}
+		addSmartRecapToResponse(response, newCard)
 		respondJSON(w, http.StatusOK, response)
 	}
 }

@@ -585,41 +585,26 @@ func parseSmartRecapResponse(content string) (*SmartRecapResult, error) {
 		result.SuggestedSessionTitle = result.SuggestedSessionTitle[:100]
 	}
 
-	// Validate and limit array sizes
-	if len(result.WentWell) > 3 {
-		result.WentWell = result.WentWell[:3]
-	}
-	if len(result.WentBad) > 3 {
-		result.WentBad = result.WentBad[:3]
-	}
-	if len(result.HumanSuggestions) > 3 {
-		result.HumanSuggestions = result.HumanSuggestions[:3]
-	}
-	if len(result.EnvironmentSuggestions) > 3 {
-		result.EnvironmentSuggestions = result.EnvironmentSuggestions[:3]
-	}
-	if len(result.DefaultContextSuggestions) > 3 {
-		result.DefaultContextSuggestions = result.DefaultContextSuggestions[:3]
-	}
-
-	// Ensure arrays are not nil (for JSON serialization)
-	if result.WentWell == nil {
-		result.WentWell = []string{}
-	}
-	if result.WentBad == nil {
-		result.WentBad = []string{}
-	}
-	if result.HumanSuggestions == nil {
-		result.HumanSuggestions = []string{}
-	}
-	if result.EnvironmentSuggestions == nil {
-		result.EnvironmentSuggestions = []string{}
-	}
-	if result.DefaultContextSuggestions == nil {
-		result.DefaultContextSuggestions = []string{}
-	}
+	// Truncate arrays to max 3 items and ensure non-nil for JSON serialization
+	result.WentWell = truncateStringSlice(result.WentWell, 3)
+	result.WentBad = truncateStringSlice(result.WentBad, 3)
+	result.HumanSuggestions = truncateStringSlice(result.HumanSuggestions, 3)
+	result.EnvironmentSuggestions = truncateStringSlice(result.EnvironmentSuggestions, 3)
+	result.DefaultContextSuggestions = truncateStringSlice(result.DefaultContextSuggestions, 3)
 
 	return &result, nil
+}
+
+// truncateStringSlice truncates a string slice to maxLen and ensures a non-nil result
+// for consistent JSON serialization ([] instead of null).
+func truncateStringSlice(s []string, maxLen int) []string {
+	if s == nil {
+		return []string{}
+	}
+	if len(s) > maxLen {
+		return s[:maxLen]
+	}
+	return s
 }
 
 const smartRecapSystemPrompt = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.

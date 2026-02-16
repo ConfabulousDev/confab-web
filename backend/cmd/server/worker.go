@@ -236,48 +236,22 @@ func (w *Worker) runOnce(ctx context.Context) {
 
 // processRegularSessions processes sessions with stale regular cards.
 func (w *Worker) processRegularSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	for i, session := range sessions {
-		select {
-		case <-ctx.Done():
-			logger.Info("stopping processing due to shutdown")
-			return
-		default:
-		}
-
-		err := w.precomputer.PrecomputeRegularCards(ctx, session)
-		if err != nil {
-			logger.Error("failed to precompute session",
-				"session_id", session.SessionID,
-				"user_id", session.UserID,
-				"external_id", session.ExternalID,
-				"total_lines", session.TotalLines,
-				"error", err,
-			)
-			errors++
-		} else {
-			logger.Info("precomputed session",
-				"session_id", session.SessionID,
-				"user_id", session.UserID,
-				"external_id", session.ExternalID,
-				"total_lines", session.TotalLines,
-			)
-			processed++
-		}
-
-		// Brief delay between sessions for steady pacing (skip after last)
-		if i < len(sessions)-1 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(500 * time.Millisecond):
-			}
-		}
-	}
-	return
+	return w.processSessions(ctx, sessions, "session", w.precomputer.PrecomputeRegularCards)
 }
 
 // processSmartRecapSessions processes sessions with only stale smart recap.
 func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
+	return w.processSessions(ctx, sessions, "smart recap", w.precomputer.PrecomputeSmartRecapOnly)
+}
+
+// processSessions is a generic loop that processes a list of stale sessions with pacing.
+// The label parameter is used for log messages (e.g., "session" or "smart recap").
+func (w *Worker) processSessions(
+	ctx context.Context,
+	sessions []analytics.StaleSession,
+	label string,
+	process func(context.Context, analytics.StaleSession) error,
+) (processed, errors int) {
 	for i, session := range sessions {
 		select {
 		case <-ctx.Done():
@@ -286,9 +260,9 @@ func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analy
 		default:
 		}
 
-		err := w.precomputer.PrecomputeSmartRecapOnly(ctx, session)
+		err := process(ctx, session)
 		if err != nil {
-			logger.Error("failed to precompute smart recap",
+			logger.Error("failed to precompute "+label,
 				"session_id", session.SessionID,
 				"user_id", session.UserID,
 				"external_id", session.ExternalID,
@@ -297,7 +271,7 @@ func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analy
 			)
 			errors++
 		} else {
-			logger.Info("precomputed smart recap",
+			logger.Info("precomputed "+label,
 				"session_id", session.SessionID,
 				"user_id", session.UserID,
 				"external_id", session.ExternalID,

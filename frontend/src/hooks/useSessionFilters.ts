@@ -57,37 +57,30 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [setSearchParams]
   );
 
-  const toggleRepo = useCallback(
-    (value: string) => {
-      const current = parseCommaSeparated(searchParams.get('repo'));
+  const toggleParam = useCallback(
+    (paramKey: string, value: string) => {
+      const current = parseCommaSeparated(searchParams.get(paramKey));
       const next = current.includes(value)
         ? current.filter((v) => v !== value)
         : [...current, value];
-      updateParams({ repo: joinOrEmpty(next) });
+      updateParams({ [paramKey]: joinOrEmpty(next) });
     },
     [searchParams, updateParams]
+  );
+
+  const toggleRepo = useCallback(
+    (value: string) => toggleParam('repo', value),
+    [toggleParam]
   );
 
   const toggleBranch = useCallback(
-    (value: string) => {
-      const current = parseCommaSeparated(searchParams.get('branch'));
-      const next = current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value];
-      updateParams({ branch: joinOrEmpty(next) });
-    },
-    [searchParams, updateParams]
+    (value: string) => toggleParam('branch', value),
+    [toggleParam]
   );
 
   const toggleOwner = useCallback(
-    (value: string) => {
-      const current = parseCommaSeparated(searchParams.get('owner'));
-      const next = current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value];
-      updateParams({ owner: joinOrEmpty(next) });
-    },
-    [searchParams, updateParams]
+    (value: string) => toggleParam('owner', value),
+    [toggleParam]
   );
 
   const setQuery = useCallback(

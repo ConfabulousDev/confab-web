@@ -342,12 +342,14 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 	}
 	defer rows.Close()
 
-	dailyCosts := []DailyCostPoint{}
-	totalInput := int64(0)
-	totalOutput := int64(0)
-	totalCacheCreation := int64(0)
-	totalCacheRead := int64(0)
-	totalCost := decimal.Zero
+	var (
+		dailyCosts         = []DailyCostPoint{}
+		totalInput         int64
+		totalOutput        int64
+		totalCacheCreation int64
+		totalCacheRead     int64
+		totalCost          = decimal.Zero
+	)
 
 	for rows.Next() {
 		var sessionDate time.Time

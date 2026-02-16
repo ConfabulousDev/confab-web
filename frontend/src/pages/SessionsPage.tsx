@@ -102,15 +102,13 @@ function SessionsPage() {
           {error && <Alert variant="error">{error.message}</Alert>}
 
           <div className={styles.card}>
-            {loading && sessions.length === 0 ? (
+            {loading && sessions.length === 0 && (
               <p className={styles.loading}>Loading sessions...</p>
-            ) : sessions.length === 0 ? (
-              hasActiveFilters ? (
-                <SessionEmptyState />
-              ) : (
-                <Quickstart />
-              )
-            ) : (
+            )}
+            {!loading && sessions.length === 0 && (
+              hasActiveFilters ? <SessionEmptyState /> : <Quickstart />
+            )}
+            {sessions.length > 0 && (
               <div className={`${styles.sessionsTable} ${loading ? styles.tableLoading : ''}`}>
                 <table>
                   <thead>
@@ -123,77 +121,77 @@ function SessionsPage() {
                     {sessions.map((session) => {
                       const title = getSessionTitle(session);
                       return (
-                      <tr
-                        key={session.id}
-                        className={`${styles.clickableRow} ${!session.is_owner ? styles.sharedRow : ''}`}
-                        onClick={() => handleRowClick(session.id)}
-                      >
-                        <td className={styles.sessionCell}>
-                          <div className={title ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
-                            {title || 'Untitled'}
-                          </div>
-                          <div className={styles.chipRow}>
-                            <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>
-                              {session.external_id.substring(0, 8)}
-                            </Chip>
-                            {session.git_repo && (
-                              <Chip
-                                icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
-                                variant="neutral"
-                                copyValue={session.git_repo_url ? cleanRepoUrl(session.git_repo_url) : session.git_repo}
-                              >
-                                {session.git_repo}
-                              </Chip>
-                            )}
-                            {session.git_branch && (
-                              <Chip
-                                icon={BranchIcon}
-                                variant="blue"
-                                copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/tree/${session.git_branch}` : session.git_branch}
-                              >
-                                {session.git_branch}
-                              </Chip>
-                            )}
-                            {session.github_prs?.map((pr) => (
-                              <Chip
-                                key={pr}
-                                icon={PRIcon}
-                                variant="purple"
-                                copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/pull/${pr}` : pr}
-                              >
-                                #{pr}
-                              </Chip>
-                            ))}
-                            {session.github_commits?.[0] && (
-                              <Chip
-                                icon={CommitIcon}
-                                variant="purple"
-                                copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/commit/${session.github_commits[0]}` : session.github_commits[0]}
-                              >
-                                {session.github_commits[0].slice(0, 7)}
-                              </Chip>
-                            )}
-                          </div>
-                          {session.shared_by_email && (
-                            <div className={styles.sharedByLine}>
-                              Shared by {session.shared_by_email}
+                        <tr
+                          key={session.id}
+                          className={`${styles.clickableRow} ${!session.is_owner ? styles.sharedRow : ''}`}
+                          onClick={() => handleRowClick(session.id)}
+                        >
+                          <td className={styles.sessionCell}>
+                            <div className={title ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
+                              {title || 'Untitled'}
                             </div>
-                          )}
-                        </td>
-                        <td className={styles.timestamp}>
-                          <span className={styles.activityContent}>
-                            <span className={styles.activityTime}>
-                              {session.last_sync_time ? <RelativeTime date={session.last_sync_time} /> : '-'}
-                            </span>
-                            {session.first_seen && session.last_sync_time && (
-                              <span className={styles.activityDuration}>
-                                {DurationIcon}
-                                {formatDuration(new Date(session.last_sync_time).getTime() - new Date(session.first_seen).getTime())}
-                              </span>
+                            <div className={styles.chipRow}>
+                              <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>
+                                {session.external_id.substring(0, 8)}
+                              </Chip>
+                              {session.git_repo && (
+                                <Chip
+                                  icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
+                                  variant="neutral"
+                                  copyValue={session.git_repo_url ? cleanRepoUrl(session.git_repo_url) : session.git_repo}
+                                >
+                                  {session.git_repo}
+                                </Chip>
+                              )}
+                              {session.git_branch && (
+                                <Chip
+                                  icon={BranchIcon}
+                                  variant="blue"
+                                  copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/tree/${session.git_branch}` : session.git_branch}
+                                >
+                                  {session.git_branch}
+                                </Chip>
+                              )}
+                              {session.github_prs?.map((pr) => (
+                                <Chip
+                                  key={pr}
+                                  icon={PRIcon}
+                                  variant="purple"
+                                  copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/pull/${pr}` : pr}
+                                >
+                                  #{pr}
+                                </Chip>
+                              ))}
+                              {session.github_commits?.[0] && (
+                                <Chip
+                                  icon={CommitIcon}
+                                  variant="purple"
+                                  copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/commit/${session.github_commits[0]}` : session.github_commits[0]}
+                                >
+                                  {session.github_commits[0].slice(0, 7)}
+                                </Chip>
+                              )}
+                            </div>
+                            {session.shared_by_email && (
+                              <div className={styles.sharedByLine}>
+                                Shared by {session.shared_by_email}
+                              </div>
                             )}
-                          </span>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className={styles.timestamp}>
+                            <span className={styles.activityContent}>
+                              <span className={styles.activityTime}>
+                                {session.last_sync_time ? <RelativeTime date={session.last_sync_time} /> : '-'}
+                              </span>
+                              {session.first_seen && session.last_sync_time && (
+                                <span className={styles.activityDuration}>
+                                  {DurationIcon}
+                                  {formatDuration(new Date(session.last_sync_time).getTime() - new Date(session.first_seen).getTime())}
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                        </tr>
                       );
                     })}
                   </tbody>

@@ -3,6 +3,7 @@ export { stripAnsi } from './utils';
 
 // Re-export formatting utilities
 export {
+  formatLocalDate,
   formatDateString,
   formatRelativeTime,
   formatDuration,
