@@ -39,7 +39,8 @@ function SessionsPage() {
   const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
-  const hasActiveFilters = repos.length > 0 || branches.length > 0 || owners.length > 0 || query !== '';
+  const ownersExceptSelf = owners.filter(o => o !== user?.email);
+  const hasActiveFilters = repos.length > 0 || branches.length > 0 || ownersExceptSelf.length > 0 || query !== '';
 
   const handleRowClick = (sessionId: string) => {
     navigate(`/sessions/${sessionId}`);
