@@ -521,3 +521,174 @@ func TestSmartRecap_CacheHitVsMissPath(t *testing.T) {
 		}
 	})
 }
+
+// TestSuggestedTitle_IncludedInAnalyticsResponse verifies that suggested_session_title
+// from the database is included in the analytics response (the attachSuggestedTitle fallback path).
+func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("includes suggested_session_title when present in DB", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "title@test.com", "Title Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-title")
+
+		// Upload JSONL content
+		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session-title", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+		// Set suggested title in DB (simulates prior smart recap generation)
+		err := env.DB.UpdateSessionSuggestedTitle(context.Background(), sessionID, "AI-generated session title")
+		if err != nil {
+			t.Fatalf("Failed to set suggested title: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var rawResult map[string]interface{}
+		testutil.ParseJSON(t, resp, &rawResult)
+
+		// Verify suggested_session_title is present in response
+		title, hasTitle := rawResult["suggested_session_title"].(string)
+		if !hasTitle {
+			t.Fatal("expected suggested_session_title in analytics response")
+		}
+		if title != "AI-generated session title" {
+			t.Errorf("suggested_session_title = %q, want %q", title, "AI-generated session title")
+		}
+	})
+
+	t.Run("omits suggested_session_title when not set in DB", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "notitle@test.com", "No Title User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-notitle")
+
+		// Upload JSONL content
+		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session-notitle", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+		// Do NOT set suggested title
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var rawResult map[string]interface{}
+		testutil.ParseJSON(t, resp, &rawResult)
+
+		// Verify suggested_session_title is NOT present (omitempty)
+		if _, hasTitle := rawResult["suggested_session_title"]; hasTitle {
+			t.Error("suggested_session_title should be omitted when not set in DB")
+		}
+	})
+
+	t.Run("includes suggested_session_title on cache-hit path", func(t *testing.T) {
+		env.CleanDB(t)
+
+		// Enable smart recap so the cache-hit path runs through attachOrGenerateSmartRecap
+		os.Setenv("SMART_RECAP_ENABLED", "true")
+		os.Setenv("ANTHROPIC_API_KEY", "test-api-key-not-used")
+		os.Setenv("SMART_RECAP_MODEL", "claude-haiku-4-5-20251101")
+		os.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
+		defer func() {
+			os.Unsetenv("SMART_RECAP_ENABLED")
+			os.Unsetenv("ANTHROPIC_API_KEY")
+			os.Unsetenv("SMART_RECAP_MODEL")
+			os.Unsetenv("SMART_RECAP_QUOTA_LIMIT")
+		}()
+
+		user := testutil.CreateTestUser(t, env, "cachetitle@test.com", "Cache Title User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-cachetitle")
+
+		// Upload JSONL content
+		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+		testutil.UploadTestChunk(t, env, user.ID, "test-session-cachetitle", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+		// Pre-populate smart recap card (cache hit path - card is valid/current)
+		store := analytics.NewStore(env.DB.Conn())
+		cachedCard := &analytics.SmartRecapCardRecord{
+			SessionID:                 sessionID,
+			Version:                   analytics.SmartRecapCardVersion,
+			ComputedAt:                time.Now().UTC(),
+			UpToLine:                  1,
+			Recap:                     "Cached recap",
+			WentWell:                  []string{},
+			WentBad:                   []string{},
+			HumanSuggestions:          []string{},
+			EnvironmentSuggestions:    []string{},
+			DefaultContextSuggestions: []string{},
+			ModelUsed:                 "claude-haiku-4-5-20251101",
+			InputTokens:               500,
+			OutputTokens:              100,
+		}
+		err := store.UpsertSmartRecapCard(context.Background(), cachedCard)
+		if err != nil {
+			t.Fatalf("Failed to insert smart recap card: %v", err)
+		}
+
+		// Set suggested title in DB (from prior generation)
+		err = env.DB.UpdateSessionSuggestedTitle(context.Background(), sessionID, "Title from prior generation")
+		if err != nil {
+			t.Fatalf("Failed to set suggested title: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var rawResult map[string]interface{}
+		testutil.ParseJSON(t, resp, &rawResult)
+
+		// Verify smart recap card is present
+		cards := rawResult["cards"].(map[string]interface{})
+		if _, hasSmartRecap := cards["smart_recap"]; !hasSmartRecap {
+			t.Fatal("expected smart_recap card")
+		}
+
+		// Verify suggested_session_title is present alongside the smart recap
+		title, hasTitle := rawResult["suggested_session_title"].(string)
+		if !hasTitle {
+			t.Fatal("expected suggested_session_title in analytics response on cache-hit path")
+		}
+		if title != "Title from prior generation" {
+			t.Errorf("suggested_session_title = %q, want %q", title, "Title from prior generation")
+		}
+	})
+}

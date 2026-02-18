@@ -203,8 +203,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			}
 
 			// Include suggested session title if available
-			// Use a fresh context since dbCtx may have timed out during Smart Recap generation
-			attachSuggestedTitle(r.Context(), database, sessionID, response)
+			attachSuggestedTitle(database, sessionID, response)
 
 			respondJSON(w, http.StatusOK, response)
 			return
@@ -310,8 +309,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Include suggested session title if available
-		// Use a fresh context since dbCtx may have timed out during Smart Recap generation
-		attachSuggestedTitle(r.Context(), database, sessionID, response)
+		attachSuggestedTitle(database, sessionID, response)
 
 		respondJSON(w, http.StatusOK, response)
 	}
@@ -409,9 +407,15 @@ func attachOrGenerateSmartRecap(
 	}
 
 	// Generate synchronously (first-time generation)
-	newCard := generateSmartRecapSync(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, transcriptFC, cardStats, log)
-	if newCard != nil {
-		addSmartRecapToResponse(response, newCard)
+	genResult := generateSmartRecapSync(ctx, database, analyticsStore, config, sessionID, sessionUserID, lineCount, transcriptFC, cardStats, log)
+	if genResult != nil {
+		addSmartRecapToResponse(response, genResult.Card)
+		// Set the title directly from the LLM result to avoid a separate DB round-trip.
+		// This is more reliable than re-querying via attachSuggestedTitle, which can fail
+		// if the request context is near its deadline after a long LLM generation.
+		if genResult.SuggestedTitle != "" {
+			response.SuggestedSessionTitle = &genResult.SuggestedTitle
+		}
 	} else {
 		// Generation failed - add error for graceful degradation
 		addCardError("Failed to generate smart recap")
@@ -419,8 +423,15 @@ func attachOrGenerateSmartRecap(
 }
 
 // attachSuggestedTitle fetches and attaches the suggested session title to the response.
-func attachSuggestedTitle(ctx context.Context, database *db.DB, sessionID string, response *analytics.AnalyticsResponse) {
-	titleCtx, titleCancel := context.WithTimeout(ctx, DatabaseTimeout)
+// Uses context.Background() to ensure the query succeeds even if the request context
+// is near its deadline (e.g., after a long smart recap generation).
+// Skips the query if the title is already set on the response (e.g., from fresh generation).
+func attachSuggestedTitle(database *db.DB, sessionID string, response *analytics.AnalyticsResponse) {
+	// Skip if title was already set directly (e.g., from freshly generated smart recap)
+	if response.SuggestedSessionTitle != nil {
+		return
+	}
+	titleCtx, titleCancel := context.WithTimeout(context.Background(), DatabaseTimeout)
 	defer titleCancel()
 	var suggestedTitle sql.NullString
 	if err := database.Conn().QueryRowContext(titleCtx,
@@ -444,8 +455,14 @@ func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analyt
 	}
 }
 
+// smartRecapGenResult holds the result of a smart recap generation attempt.
+type smartRecapGenResult struct {
+	Card           *analytics.SmartRecapCardRecord
+	SuggestedTitle string // Title from LLM, empty if not generated
+}
+
 // generateSmartRecapSync generates the smart recap synchronously using the LLM and saves it.
-// Returns the generated card on success, or nil on failure.
+// Returns the generated card and suggested title on success, or nil card on failure.
 // The lock is acquired at the start and released (via upsert) on success or cleared on failure.
 // cardStats contains the computed analytics cards to include in the LLM prompt.
 func generateSmartRecapSync(
@@ -459,7 +476,7 @@ func generateSmartRecapSync(
 	fc *analytics.FileCollection,
 	cardStats map[string]interface{},
 	log *slog.Logger,
-) *analytics.SmartRecapCardRecord {
+) *smartRecapGenResult {
 	// Try to acquire the lock
 	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	acquired, err := analyticsStore.AcquireSmartRecapLock(dbCtx, sessionID, config.LockTimeoutSeconds)
@@ -568,7 +585,10 @@ func generateSmartRecapSync(
 		"generation_time_ms", result.GenerationTimeMs,
 	)
 
-	return card
+	return &smartRecapGenResult{
+		Card:           card,
+		SuggestedTitle: result.SuggestedSessionTitle,
+	}
 }
 
 // HandleRegenerateSmartRecap forces regeneration of the smart recap for a session.
@@ -666,8 +686,8 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Generate synchronously (this acquires the lock internally)
-		newCard := generateSmartRecapSync(r.Context(), database, analyticsStore, smartRecapConfig, sessionID, sessionUserID, totalLineCount, fc, cardStats, log)
-		if newCard == nil {
+		genResult := generateSmartRecapSync(r.Context(), database, analyticsStore, smartRecapConfig, sessionID, sessionUserID, totalLineCount, fc, cardStats, log)
+		if genResult == nil {
 			// Could be lock conflict (race) or generation failure
 			// Check if it's a lock conflict
 			smartCard, _ = analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
@@ -688,7 +708,10 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 				Exceeded: quota.ComputeCount+1 >= smartRecapConfig.QuotaLimit,
 			},
 		}
-		addSmartRecapToResponse(response, newCard)
+		addSmartRecapToResponse(response, genResult.Card)
+		if genResult.SuggestedTitle != "" {
+			response.SuggestedSessionTitle = &genResult.SuggestedTitle
+		}
 		respondJSON(w, http.StatusOK, response)
 	}
 }
