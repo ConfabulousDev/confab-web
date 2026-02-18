@@ -263,3 +263,13 @@ deadcode -test ./...
 ```
 
 Note: Neither tool catches unused *exported* identifiers, since those could theoretically be used by external packages.
+
+## Cutting a Release
+
+Tags follow semver (`v0.3.6`, `v0.3.7`, etc.). To release:
+
+```bash
+git tag v0.X.Y
+git push origin v0.X.Y
+gh release create v0.X.Y --generate-notes
+```
