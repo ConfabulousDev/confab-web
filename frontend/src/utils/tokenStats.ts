@@ -24,7 +24,8 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   // Opus 4.1 and 4
   'opus-4-1': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
   'opus-4': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
-  // Sonnet 4.5, 4, 3.7
+  // Sonnet 4.6, 4.5, 4, 3.7
+  'sonnet-4-6': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
   'sonnet-4-5': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
   'sonnet-4': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
   'sonnet-3-7': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },

@@ -216,6 +216,15 @@ When adding new analytics cards to the session summary panel, **use the `/add-se
 - Frontend Zod schemas, components, and registry
 - Storybook stories and testing requirements
 
+## Updating Model Pricing
+
+When adding a new Anthropic model, update the pricing tables in **both** places (they must stay in sync):
+
+- **Backend**: `backend/internal/analytics/pricing.go` — `modelPricingTable`
+- **Frontend**: `frontend/src/utils/tokenStats.ts` — `MODEL_PRICING`
+
+Look up current prices on the Anthropic pricing page.
+
 ## Finding Dead Code
 
 ### Frontend (TypeScript)

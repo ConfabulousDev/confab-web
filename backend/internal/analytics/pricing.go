@@ -46,7 +46,13 @@ var modelPricingTable = map[string]ModelPricing{
 		CacheWrite: decimal.NewFromFloat(18.75),
 		CacheRead:  decimal.NewFromFloat(1.50),
 	},
-	// Sonnet 4.5, 4, 3.7
+	// Sonnet 4.6, 4.5, 4, 3.7
+	"sonnet-4-6": {
+		Input:      decimal.NewFromFloat(3),
+		Output:     decimal.NewFromFloat(15),
+		CacheWrite: decimal.NewFromFloat(3.75),
+		CacheRead:  decimal.NewFromFloat(0.30),
+	},
 	"sonnet-4-5": {
 		Input:      decimal.NewFromFloat(3),
 		Output:     decimal.NewFromFloat(15),
