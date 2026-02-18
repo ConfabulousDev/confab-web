@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { formatBytes, stripAnsi } from './utils';
 import { formatDateString, formatRelativeTime } from './formatting';
 
@@ -34,51 +34,55 @@ describe('formatDateString', () => {
 });
 
 describe('formatRelativeTime', () => {
+  const NOW = new Date('2025-06-15T12:00:00Z').getTime();
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should format time just now', () => {
-    const now = new Date().toISOString();
-    expect(formatRelativeTime(now)).toBe('just now');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW).toISOString())).toBe('just now');
   });
 
   it('should format seconds ago', () => {
-    const past = new Date(Date.now() - 30000).toISOString();
-    expect(formatRelativeTime(past)).toBe('30s ago');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW - 30000).toISOString())).toBe('30s ago');
   });
 
   it('should format minutes ago', () => {
-    const past = new Date(Date.now() - 120000).toISOString();
-    expect(formatRelativeTime(past)).toBe('2m ago');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW - 120000).toISOString())).toBe('2m ago');
   });
 
   it('should format hours ago', () => {
-    const past = new Date(Date.now() - 7200000).toISOString();
-    expect(formatRelativeTime(past)).toBe('2h ago');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW - 7200000).toISOString())).toBe('2h ago');
   });
 
   it('should format days ago', () => {
-    const past = new Date(Date.now() - 172800000).toISOString();
-    expect(formatRelativeTime(past)).toBe('2d ago');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW - 172800000).toISOString())).toBe('2d ago');
   });
 
   it('should format future seconds', () => {
-    const future = new Date(Date.now() + 30000).toISOString();
-    expect(formatRelativeTime(future)).toBe('in 30s');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW + 30000).toISOString())).toBe('in 30s');
   });
 
   it('should format future minutes', () => {
-    // Add buffer to avoid flaky test at boundary (2m + 1s)
-    const future = new Date(Date.now() + 121000).toISOString();
-    expect(formatRelativeTime(future)).toBe('in 2m');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW + 120000).toISOString())).toBe('in 2m');
   });
 
   it('should format future hours', () => {
-    // Add buffer to avoid flaky test at boundary (2h + 1s)
-    const future = new Date(Date.now() + 7201000).toISOString();
-    expect(formatRelativeTime(future)).toBe('in 2h');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW + 7200000).toISOString())).toBe('in 2h');
   });
 
   it('should format future days', () => {
-    const future = new Date(Date.now() + 172800000).toISOString();
-    expect(formatRelativeTime(future)).toBe('in 2d');
+    vi.useFakeTimers({ now: NOW });
+    expect(formatRelativeTime(new Date(NOW + 172800000).toISOString())).toBe('in 2d');
   });
 });
 
