@@ -25,6 +25,9 @@ test_hook_with_agents.json
 # Dependency directories
 vendor/
 
+# Local-only files
+.local/
+
 # IDE
 .vscode/
 .idea/

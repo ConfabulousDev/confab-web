@@ -136,14 +136,8 @@ func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerF
 		}
 
 		// CLI login flow
-		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
-			clearCookie(w, "cli_redirect")
-			// SECURITY: Only allow internal CLI authorize paths
-			if strings.HasPrefix(cliRedirect.Value, "/auth/cli/") {
-				http.Redirect(w, r, cliRedirect.Value, http.StatusSeeOther)
-				return
-			}
-			// Invalid cli_redirect, fall through to default
+		if handleCLIRedirect(w, r, http.StatusSeeOther) {
+			return
 		}
 
 		// Default: redirect to frontend

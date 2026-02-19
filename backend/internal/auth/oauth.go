@@ -46,6 +46,23 @@ func clearCookie(w http.ResponseWriter, name string) {
 	})
 }
 
+// handleCLIRedirect checks for a cli_redirect cookie and, if valid, redirects to it.
+// Returns true if a redirect was performed (caller should return immediately).
+// SECURITY: Only allows redirects to /auth/cli/ paths to prevent open redirects.
+func handleCLIRedirect(w http.ResponseWriter, r *http.Request, statusCode int) bool {
+	cliRedirect, err := r.Cookie("cli_redirect")
+	if err != nil || cliRedirect.Value == "" {
+		return false
+	}
+	clearCookie(w, "cli_redirect")
+	if strings.HasPrefix(cliRedirect.Value, "/auth/cli/") {
+		http.Redirect(w, r, cliRedirect.Value, statusCode)
+		return true
+	}
+	logger.Ctx(r.Context()).Warn("Blocked invalid cli_redirect", "value", cliRedirect.Value)
+	return false
+}
+
 // oauthHTTPClient returns an HTTP client with timeout for OAuth API calls
 func oauthHTTPClient() *http.Client {
 	return &http.Client{
@@ -323,11 +340,7 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		}
 
 		// Check if this was a CLI login flow
-		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
-			// Clear the cli_redirect cookie
-			clearCookie(w, "cli_redirect")
-			// Redirect back to CLI authorize endpoint
-			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
+		if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
 			return
 		}
 
@@ -914,9 +927,7 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		}
 
 		// Check if this was a CLI login flow
-		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
-			clearCookie(w, "cli_redirect")
-			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
+		if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
 			return
 		}
 
@@ -1381,9 +1392,7 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 		}
 
 		// Check if this was a CLI login flow
-		if cliRedirect, err := r.Cookie("cli_redirect"); err == nil && cliRedirect.Value != "" {
-			clearCookie(w, "cli_redirect")
-			http.Redirect(w, r, cliRedirect.Value, http.StatusTemporaryRedirect)
+		if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
 			return
 		}
 
