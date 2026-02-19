@@ -159,3 +159,20 @@ export const NoQuotaInfo: Story = {
     quota: null,
   },
 };
+
+export const QuotaExceededNoData: Story = {
+  args: {
+    data: null,
+    loading: false,
+    quota: { used: 20, limit: 20, exceeded: true },
+    missingReason: 'quota_exceeded',
+  },
+};
+
+export const UnavailableNonOwner: Story = {
+  args: {
+    data: null,
+    loading: false,
+    missingReason: 'unavailable',
+  },
+};

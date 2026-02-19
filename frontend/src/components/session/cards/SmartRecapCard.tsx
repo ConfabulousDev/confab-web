@@ -17,6 +17,8 @@ import panelStyles from '../SessionSummaryPanel.module.css';
 
 interface SmartRecapCardProps extends CardProps<SmartRecapCardData> {
   quota?: SmartRecapQuotaInfo | null;
+  /** Why smart recap data is missing: "quota_exceeded" (owner) or "unavailable" (non-owner) */
+  missingReason?: 'quota_exceeded' | 'unavailable' | null;
   /** Callback to force regeneration (only available to owners) */
   onRefresh?: () => void;
   /** Whether a refresh is in progress */
@@ -35,6 +37,7 @@ export function SmartRecapCard({
   loading,
   error,
   quota,
+  missingReason,
   onRefresh,
   isRefreshing,
 }: SmartRecapCardProps) {
@@ -55,19 +58,30 @@ export function SmartRecapCard({
     );
   }
 
-  // No data - but show placeholder if quota exceeded
+  // No data - show placeholder based on missing reason
   if (!data) {
-    if (quota?.exceeded) {
+    if (missingReason === 'quota_exceeded') {
       return (
         <CardWrapper
           title="Smart Recap"
           icon={SparklesIcon}
-          subtitle={`${quota.used}/${quota.limit} used`}
+          subtitle={quota ? `${quota.used}/${quota.limit} used` : undefined}
         >
           <div className={styles.quotaPlaceholder}>
             <p className={styles.quotaPlaceholderTitle}>Monthly limit reached</p>
             <p className={styles.quotaPlaceholderText}>
               Recaps will be available next month.
+            </p>
+          </div>
+        </CardWrapper>
+      );
+    }
+    if (missingReason === 'unavailable') {
+      return (
+        <CardWrapper title="Smart Recap" icon={SparklesIcon}>
+          <div className={styles.quotaPlaceholder}>
+            <p className={styles.quotaPlaceholderText}>
+              No smart recap available for this session.
             </p>
           </div>
         </CardWrapper>

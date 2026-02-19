@@ -386,6 +386,15 @@ func attachOrGenerateSmartRecap(
 		// Quota exceeded - return whatever cached data we have (even if invalid version)
 		if smartCard != nil {
 			addSmartRecapToResponse(response, smartCard)
+		} else {
+			// No card data at all — tell the frontend why
+			if isOwner {
+				reason := "quota_exceeded"
+				response.SmartRecapMissingReason = &reason
+			} else {
+				reason := "unavailable"
+				response.SmartRecapMissingReason = &reason
+			}
 		}
 		return
 	}

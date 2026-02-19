@@ -165,12 +165,15 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
 
           // Build additional props for specific cards
           const extraProps: Record<string, unknown> = {};
-          if (cardDef.key === 'smart_recap' && isOwner) {
-            // Only show quota to session owner (private info)
-            extraProps.quota = analytics?.smart_recap_quota;
-            // Provide refresh capability to owners
-            extraProps.onRefresh = handleRegenerateSmartRecap;
-            extraProps.isRefreshing = isRegenerating;
+          if (cardDef.key === 'smart_recap') {
+            extraProps.missingReason = analytics?.smart_recap_missing_reason;
+            if (isOwner) {
+              // Only show quota to session owner (private info)
+              extraProps.quota = analytics?.smart_recap_quota;
+              // Provide refresh capability to owners
+              extraProps.onRefresh = handleRegenerateSmartRecap;
+              extraProps.isRefreshing = isRegenerating;
+            }
           }
 
           return (

@@ -316,8 +316,10 @@ export const SessionAnalyticsSchema = z.object({
   // Per-card computation errors (graceful degradation)
   // Maps card key (e.g., "tokens", "session") to error message
   card_errors: z.record(z.string(), z.string()).optional().nullable(),
-  // Smart recap quota (only present if feature is enabled)
+  // Smart recap quota (only present if feature is enabled, owner only)
   smart_recap_quota: SmartRecapQuotaInfoSchema.optional().nullable(),
+  // Why smart recap data is missing: "quota_exceeded" (owner) or "unavailable" (non-owner)
+  smart_recap_missing_reason: z.enum(['quota_exceeded', 'unavailable']).optional().nullable(),
   // Suggested session title from Smart Recap (if generated)
   suggested_session_title: z.string().nullable().optional(),
 });

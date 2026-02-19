@@ -26,6 +26,10 @@ type AnalyticsResponse struct {
 	// Smart recap quota information (separate from cards since it's user-level, not session-level)
 	SmartRecapQuota *SmartRecapQuotaInfo `json:"smart_recap_quota,omitempty"`
 
+	// Why smart recap card data is missing (omitted when card data is present or feature is disabled)
+	// Values: "quota_exceeded" (owner), "unavailable" (non-owner)
+	SmartRecapMissingReason *string `json:"smart_recap_missing_reason,omitempty"`
+
 	// Suggested session title from Smart Recap (if generated)
 	SuggestedSessionTitle *string `json:"suggested_session_title,omitempty"`
 
