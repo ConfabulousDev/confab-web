@@ -1,7 +1,5 @@
-import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { initCSRF } from '@/services/csrf';
 import { AppConfigProvider } from '@/contexts/AppConfigContext';
 import { useAppConfig } from '@/hooks/useAppConfig';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
@@ -37,11 +35,6 @@ function AppLayout() {
 }
 
 function App() {
-  useEffect(() => {
-    // Initialize CSRF token on app load
-    initCSRF();
-  }, []);
-
   return (
     <ErrorBoundary>
       <ThemeProvider>

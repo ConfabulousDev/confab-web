@@ -39,7 +39,7 @@ function SessionsPage() {
   const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
-  const ownersExceptSelf = owners.filter(o => o !== user?.email);
+  const ownersExceptSelf = owners.filter((o: string) => o !== user?.email);
   const hasActiveFilters = repos.length > 0 || branches.length > 0 || ownersExceptSelf.length > 0 || query !== '';
 
   const handleRowClick = (sessionId: string) => {

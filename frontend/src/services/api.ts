@@ -1,7 +1,6 @@
 // Centralized API client with error handling, interceptors, and Zod validation
 // All API responses are validated at runtime to ensure type safety
 import { z } from 'zod';
-import { getCSRFToken, initCSRF, clearCSRFToken, updateCSRFTokenFromResponse } from './csrf';
 import { shouldSkip401Redirect } from '@/utils/sessionErrors';
 import {
   SessionDetailSchema,
@@ -33,11 +32,10 @@ import {
 export type { GitHubLink, SessionAnalytics } from '@/schemas/api';
 
 /**
- * Handles authentication failures by clearing cached state and redirecting to home.
+ * Handles authentication failures by redirecting to home.
  * Call this when a 401 response is received.
  */
 function handleAuthFailure(): void {
-  clearCSRFToken();
   window.location.href = '/';
 }
 
@@ -96,7 +94,6 @@ export class AuthenticationError extends APIError {
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   skipAuth?: boolean;
-  skipCSRF?: boolean;
   body?: unknown;
 }
 
@@ -108,9 +105,6 @@ class APIClient {
   }
 
   private async handleResponse(response: Response, endpoint: string): Promise<unknown> {
-    // Update CSRF token from response header (keeps token fresh for next request)
-    updateCSRFTokenFromResponse(response);
-
     // Handle authentication errors
     if (response.status === 401) {
       // Some endpoints handle 401 gracefully (e.g., showing login prompt)
@@ -152,27 +146,11 @@ class APIClient {
    * Callers must validate/narrow the response type.
    */
   private async requestRaw(endpoint: string, options: RequestOptions = {}): Promise<unknown> {
-    const { skipAuth, skipCSRF, body: requestBody, ...fetchOptions } = options;
+    const { skipAuth, body: requestBody, ...fetchOptions } = options;
 
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
 
     const headers = new Headers(fetchOptions.headers);
-
-    // Add CSRF token for state-changing operations
-    const method = (options.method || 'GET').toUpperCase();
-    if (!skipCSRF && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-      let token = getCSRFToken();
-
-      // Initialize CSRF token if not present
-      if (!token) {
-        await initCSRF();
-        token = getCSRFToken();
-      }
-
-      if (token) {
-        headers.set('X-CSRF-Token', token);
-      }
-    }
 
     // Add JSON content type and stringify if body is an object
     let body: BodyInit | undefined;
@@ -453,16 +431,11 @@ export const analyticsAPI = {
     const url = `/sessions/${sessionId}/analytics/smart-recap/regenerate`;
     const fullUrl = `${api['baseURL']}${url}`;
 
-    // Need CSRF token for POST
-    await initCSRF();
-    const csrfToken = getCSRFToken();
-
     const response = await fetch(fullUrl, {
       method: 'POST',
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       },
     });
 

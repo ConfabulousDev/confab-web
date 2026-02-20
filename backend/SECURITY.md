@@ -35,7 +35,7 @@ Confab implements defense-in-depth with multiple security layers:
 ├─────────────────────────────────────────┤
 │ 4. Rate Limiting (DoS Protection)       │
 ├─────────────────────────────────────────┤
-│ 5. CSRF Protection (Token Validation)   │
+│ 5. CSRF Protection (Fetch Metadata)      │
 ├─────────────────────────────────────────┤
 │ 6. Authentication (OAuth + API Keys)    │
 ├─────────────────────────────────────────┤
@@ -52,7 +52,7 @@ Confab implements defense-in-depth with multiple security layers:
 **Protected Against:**
 - ✅ SQL Injection (parameterized queries)
 - ✅ XSS Attacks (Content-Security-Policy)
-- ✅ CSRF Attacks (double-submit cookie)
+- ✅ CSRF Attacks (Fetch metadata validation)
 - ✅ Clickjacking (X-Frame-Options: DENY)
 - ✅ MIME Sniffing (X-Content-Type-Options)
 - ✅ Man-in-the-Middle (HSTS, Secure cookies)
@@ -172,8 +172,8 @@ ALLOWED_ORIGINS=https://confab.yourdomain.com,https://staging.confab.yourdomain.
 ```go
 AllowedOrigins:   // From ALLOWED_ORIGINS env var
 AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"}
-ExposedHeaders:   []string{"Link", "X-CSRF-Token"}
+AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"}
+ExposedHeaders:   []string{"Link"}
 AllowCredentials: true  // Allow cookies
 MaxAge:           300   // Cache preflight for 5 minutes
 ```
@@ -199,7 +199,7 @@ fetch('https://confab.dev/api/v1/sessions', {
 
 **Purpose:** Prevent attackers from forging requests using victim's session
 
-**Implementation:** Double-submit cookie pattern using gorilla/csrf
+**Implementation:** Fetch metadata validation using `filippo.io/csrf` (successor to gorilla/csrf)
 
 **Configuration:**
 ```bash
@@ -212,20 +212,25 @@ INSECURE_DEV_MODE=true
 
 **How It Works:**
 
-1. Client requests `/api/v1/csrf-token` (web session required)
-2. Server sets `_gorilla_csrf` cookie and returns token in response
-3. Client includes token in `X-CSRF-Token` header on state-changing requests
-4. Server validates token matches cookie
+The library validates CSRF using browser-set Fetch metadata headers, which cannot be forged by cross-origin requests:
+
+1. Browser automatically sets `Sec-Fetch-Site` and `Origin` headers on requests
+2. Server validates that state-changing requests come from a same-origin or trusted origin
+3. Cross-origin requests from untrusted origins are rejected with 403
+
+No client-side token management is needed. The browser's built-in Fetch metadata headers provide the protection automatically.
 
 **Protected Endpoints:**
+All state-changing endpoints behind `csrfMiddleware`:
 - `POST /api/v1/keys` - Create API key
 - `DELETE /api/v1/keys/{id}` - Delete API key
 - `POST /api/v1/sessions/{id}/share` - Create share
-- `DELETE /api/v1/shares/{token}` - Revoke share
+- `DELETE /api/v1/shares/{shareId}` - Revoke share
+- All admin form submissions
 
 **Exempt Endpoints:**
-- All `GET` requests (read-only)
-- `/api/v1/sessions/save` - Uses API key auth (not cookies)
+- All `GET` requests (read-only, safe methods)
+- API key authenticated routes (CLI uses Bearer tokens, not cookies)
 - Public shared session endpoints
 
 **Attack Prevented:**
@@ -236,13 +241,12 @@ INSECURE_DEV_MODE=true
   <input name="name" value="stolen-key">
 </form>
 <script>document.forms[0].submit()</script>
-<!-- ❌ Blocked: Missing valid CSRF token -->
+<!-- ❌ Blocked: Sec-Fetch-Site: cross-site (not same-origin/trusted) -->
 ```
 
 **Settings:**
 - `Secure: true` - HTTPS only (except `INSECURE_DEV_MODE=true`)
 - `SameSite: Lax` - Compatible with OAuth redirects
-- `Path: /` - All routes
 - `TrustedOrigins: <from ALLOWED_ORIGINS>` - Match CORS
 
 ---
@@ -592,18 +596,15 @@ if session.ExpiresAt.Before(time.Now()) {
 
 **Cookie Name:** `_gorilla_csrf`
 
-**Purpose:** Store CSRF token for validation
+**Purpose:** Internal state for the CSRF middleware (Fetch metadata validation)
 
 **Settings:**
-- HttpOnly: `false` (JavaScript needs to read for token extraction)
+- HttpOnly: `true`
 - Secure: `true` (HTTPS only in production)
 - SameSite: `Lax`
 - Path: `/`
 
-**Why Not HttpOnly?**
-- Frontend needs to read cookie to extract token
-- Token is not sensitive (requires matching cookie)
-- Double-submit pattern provides security
+**Note:** The frontend does not need to read or manage this cookie. CSRF protection is fully server-side using Fetch metadata headers (`Sec-Fetch-Site`, `Origin`).
 
 ---
 
@@ -736,15 +737,18 @@ curl -H "Origin: https://confab.dev" https://confab.dev/api/v1/sessions
 
 **CSRF:**
 ```bash
-# Should fail (missing token)
+# Should fail (cross-site request, no valid Fetch metadata)
 curl -X POST https://confab.dev/api/v1/keys \
      -H "Cookie: confab_session=abc" \
+     -H "Content-Type: application/json" \
      -d '{"name":"test"}'
 
-# Should succeed (with token)
+# Should succeed (same-origin request with proper Fetch metadata)
 curl -X POST https://confab.dev/api/v1/keys \
-     -H "Cookie: confab_session=abc; _gorilla_csrf=xyz" \
-     -H "X-CSRF-Token: valid_token" \
+     -H "Cookie: confab_session=abc" \
+     -H "Content-Type: application/json" \
+     -H "Origin: https://confab.dev" \
+     -H "Sec-Fetch-Site: same-origin" \
      -d '{"name":"test"}'
 ```
 

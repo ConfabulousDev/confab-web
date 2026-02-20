@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { fetchWithCSRF } from '@/services/csrf';
 import { sessionsAPI } from '@/services/api';
 import { useAppConfig, useAuth, useDocumentTitle, useSuccessMessage, useLoadSession } from '@/hooks';
 import type { SessionDetail } from '@/types';
@@ -89,8 +88,9 @@ function SessionDetailPage() {
     try {
       const url = `/api/v1/sessions/${sessionId}`;
 
-      const response = await fetchWithCSRF(url, {
+      const response = await fetch(url, {
         method: 'DELETE',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });

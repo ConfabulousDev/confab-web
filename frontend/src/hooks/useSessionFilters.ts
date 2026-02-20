@@ -8,7 +8,7 @@ export interface SessionFilters {
   query: string;
 }
 
-export interface SessionFiltersActions {
+interface SessionFiltersActions {
   toggleRepo: (value: string) => void;
   toggleBranch: (value: string) => void;
   toggleOwner: (value: string) => void;

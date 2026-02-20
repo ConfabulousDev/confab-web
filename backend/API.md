@@ -16,7 +16,7 @@ User-Agent: confab/1.2.3 (darwin; arm64)
 The `User-Agent` header includes CLI version, OS, and architecture.
 
 ### 2. Session Cookie Authentication (Web)
-Used by the web frontend. Session cookie (`confab_session`) is set after OAuth login. CSRF token required for mutating requests.
+Used by the web frontend. Session cookie (`confab_session`) is set after OAuth login. CSRF protection is provided automatically via Fetch metadata validation (no token required).
 
 ## Base URL
 
@@ -210,27 +210,9 @@ Content-Type: application/json
 
 ---
 
-## Web Endpoints (Session Auth + CSRF)
+## Web Endpoints (Session Auth)
 
-All web endpoints require:
-1. Valid session cookie (`confab_session`)
-2. CSRF token in `X-CSRF-Token` header (for POST/PUT/DELETE)
-
-### Get CSRF Token
-
-```
-GET /api/v1/csrf-token
-```
-
-**Response:**
-```json
-{
-  "csrf_token": "token-value"
-}
-```
-Also sets the CSRF cookie.
-
----
+All web endpoints require a valid session cookie (`confab_session`). CSRF protection is handled automatically by the server via Fetch metadata headers (`Sec-Fetch-Site`, `Origin`).
 
 ### Get Current User
 
@@ -257,7 +239,6 @@ GET /api/v1/me
 #### Create API Key
 ```
 POST /api/v1/keys
-X-CSRF-Token: <token>
 Content-Type: application/json
 ```
 
@@ -299,7 +280,6 @@ GET /api/v1/keys
 #### Delete API Key
 ```
 DELETE /api/v1/keys/{id}
-X-CSRF-Token: <token>
 ```
 
 **Response:** `204 No Content`
@@ -459,7 +439,6 @@ Read the contents of a synced file, or incrementally fetch new lines. Uses the s
 #### Update Session Title
 ```
 PATCH /api/v1/sessions/{id}/title
-X-CSRF-Token: <token>
 Content-Type: application/json
 ```
 
@@ -484,7 +463,6 @@ Content-Type: application/json
 #### Delete Session
 ```
 DELETE /api/v1/sessions/{id}
-X-CSRF-Token: <token>
 ```
 
 **Response:** `204 No Content`
@@ -498,7 +476,6 @@ Deletes session, all files, and all shares.
 #### Create Share
 ```
 POST /api/v1/sessions/{id}/share
-X-CSRF-Token: <token>
 Content-Type: application/json
 ```
 
@@ -550,7 +527,6 @@ GET /api/v1/shares
 #### Revoke Share
 ```
 DELETE /api/v1/shares/{shareId}
-X-CSRF-Token: <token>
 ```
 
 **Response:** `204 No Content`
@@ -566,9 +542,7 @@ Link sessions to GitHub artifacts (commits and PRs) for bidirectional navigation
 #### Create GitHub Link
 ```
 POST /api/v1/sessions/{id}/github-links
-Authorization: Bearer <api_key>  (CLI)
-   or
-X-CSRF-Token: <token>  (Web)
+Authorization: Bearer <api_key>  (CLI, or session cookie for Web)
 Content-Type: application/json
 ```
 
@@ -645,7 +619,6 @@ Works for any user with session access (owner, shared, public).
 #### Delete GitHub Link
 ```
 DELETE /api/v1/sessions/{id}/github-links/{linkId}
-X-CSRF-Token: <token>
 ```
 
 Requires session ownership (web session auth only, no API key).
@@ -1089,7 +1062,7 @@ All errors return JSON:
 Common HTTP status codes:
 - `400` - Bad request (validation error)
 - `401` - Unauthorized (missing/invalid auth)
-- `403` - Forbidden (CSRF failure, insufficient permissions, email domain not permitted)
+- `403` - Forbidden (CSRF validation failure, insufficient permissions, email domain not permitted)
 - `404` - Not found
 - `409` - Conflict (e.g., API key limit reached)
 - `410` - Gone (e.g., share expired)

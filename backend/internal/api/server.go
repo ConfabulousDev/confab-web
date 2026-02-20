@@ -170,9 +170,9 @@ func (s *Server) SetupRoutes() http.Handler {
 		// AllowedMethods: HTTP methods that can be used
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		// AllowedHeaders: Headers that can be sent by the client
-		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type"},
 		// ExposedHeaders: Headers that can be accessed by the client
-		ExposedHeaders: []string{"Link", "X-CSRF-Token"},
+		ExposedHeaders: []string{"Link"},
 		// AllowCredentials: Allow cookies and auth headers
 		AllowCredentials: true,
 		// MaxAge: How long the browser can cache CORS responses (5 minutes)
@@ -191,20 +191,15 @@ func (s *Server) SetupRoutes() http.Handler {
 		csrf.TrustedOrigins(trustedOrigins), // Trust the frontend origin(s)
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			log := logger.Ctx(r.Context())
-			// Truncate CSRF token to avoid exposing full token in logs
-			csrfToken := r.Header.Get("X-CSRF-Token")
-			if len(csrfToken) > 8 {
-				csrfToken = csrfToken[:8] + "..."
-			}
 			log.Warn("CSRF validation failed",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"remote_addr", r.RemoteAddr,
-				"csrf_token_prefix", csrfToken,
 				"origin", r.Header.Get("Origin"),
 				"referer", r.Header.Get("Referer"),
+				"sec_fetch_site", r.Header.Get("Sec-Fetch-Site"),
 			)
-			respondError(w, http.StatusForbidden, "CSRF token validation failed")
+			respondError(w, http.StatusForbidden, "CSRF validation failed")
 		})),
 	)
 
@@ -324,13 +319,6 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Use(csrfMiddleware)
 			r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
 
-			// CSRF token endpoint - must be inside CSRF middleware to set cookie
-			r.Get("/csrf-token", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("X-CSRF-Token", csrf.Token(r))
-				respondJSON(w, http.StatusOK, map[string]string{
-					"csrf_token": csrf.Token(r),
-				})
-			}))
 			r.Get("/me", withMaxBody(MaxBodyXS, s.handleGetMe))
 
 			// Trends - aggregated analytics across sessions

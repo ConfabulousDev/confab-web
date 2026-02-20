@@ -133,6 +133,3 @@ export function KeyboardShortcutProvider({ children }: KeyboardShortcutProviderP
   );
 }
 
-// Exported for use by useKeyboardShortcut hook
-export { KeyboardShortcutContext };
-export type { KeyboardShortcutContextValue };

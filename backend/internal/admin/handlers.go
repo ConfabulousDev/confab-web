@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gorilla/csrf"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
@@ -90,9 +89,6 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get CSRF token for forms
-	csrfToken := csrf.Token(r)
-
 	// Check for flash message from query params
 	message := r.URL.Query().Get("message")
 	errorMsg := r.URL.Query().Get("error")
@@ -142,7 +138,6 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 				<td class="actions">
 					%s
 					<form method="POST" action="%s" class="inline-form" onsubmit="return confirm('PERMANENTLY DELETE user %s and all their data? This cannot be undone!');">
-						<input type="hidden" name="gorilla.csrf.Token" value="%s">
 						<button type="submit" class="btn btn-danger">Delete</button>
 					</form>
 				</td>
@@ -158,10 +153,9 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 			lastAPIKeyUsed,
 			lastLoggedIn,
 			user.CreatedAt.Format("Jan 2, 2006"),
-			h.buildStatusToggleForm(user.User, csrfToken),
+			h.buildStatusToggleForm(user.User),
 			deleteAction,
 			html.EscapeString(user.Email),
-			csrfToken,
 		)
 	}
 
@@ -413,27 +407,23 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildStatusToggleForm creates the activate/deactivate form based on user status
-func (h *Handlers) buildStatusToggleForm(user models.User, csrfToken string) string {
+func (h *Handlers) buildStatusToggleForm(user models.User) string {
 	if user.Status == models.UserStatusActive {
 		return fmt.Sprintf(`
 			<form method="POST" action="%s/users/%d/deactivate" class="inline-form" onsubmit="return confirm('Deactivate user %s? They will lose all access.');">
-				<input type="hidden" name="gorilla.csrf.Token" value="%s">
 				<button type="submit" class="btn btn-warning">Deactivate</button>
 			</form>`,
 			AdminPathPrefix,
 			user.ID,
 			html.EscapeString(user.Email),
-			csrfToken,
 		)
 	}
 	return fmt.Sprintf(`
 		<form method="POST" action="%s/users/%d/activate" class="inline-form">
-			<input type="hidden" name="gorilla.csrf.Token" value="%s">
 			<button type="submit" class="btn btn-primary">Activate</button>
 		</form>`,
 		AdminPathPrefix,
 		user.ID,
-		csrfToken,
 	)
 }
 
@@ -579,8 +569,6 @@ func buildFlashHTML(message, errorMsg string) string {
 
 // HandleSystemSharePage renders the system share creation page
 func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request) {
-	csrfToken := csrf.Token(r)
-
 	// Check for flash messages
 	message := r.URL.Query().Get("message")
 	errorMsg := r.URL.Query().Get("error")
@@ -607,14 +595,13 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 	} else {
 		formContentHTML = fmt.Sprintf(`
 			<form method="POST" action="%s/system-shares">
-				<input type="hidden" name="gorilla.csrf.Token" value="%s">
 				<div class="form-group">
 					<label for="sessionId">Session ID (UUID)</label>
 					<input type="text" id="sessionId" name="session_id" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
 					<p class="help-text">The internal UUID of the session (not the external_id). Find this in the database or session detail URL.</p>
 				</div>
 				<button type="submit" class="btn btn-primary">Create System Share</button>
-			</form>`, AdminPathPrefix, csrfToken)
+			</form>`, AdminPathPrefix)
 	}
 
 	htmlPage := fmt.Sprintf(`<!DOCTYPE html>
@@ -840,8 +827,6 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 
 // HandleCreateUserPage renders the user creation page
 func (h *Handlers) HandleCreateUserPage(w http.ResponseWriter, r *http.Request) {
-	csrfToken := csrf.Token(r)
-
 	// Check for flash messages
 	message := r.URL.Query().Get("message")
 	errorMsg := r.URL.Query().Get("error")
@@ -973,7 +958,6 @@ func (h *Handlers) HandleCreateUserPage(w http.ResponseWriter, r *http.Request) 
         %s
         <div class="card">
             <form method="POST" action="%s/users/create">
-                <input type="hidden" name="gorilla.csrf.Token" value="%s">
                 <div class="form-group">
                     <label for="email">Email</label>
                     <input type="email" id="email" name="email" required>
@@ -998,7 +982,6 @@ func (h *Handlers) HandleCreateUserPage(w http.ResponseWriter, r *http.Request) 
 		AdminPathPrefix,
 		flashHTML,
 		AdminPathPrefix,
-		csrfToken,
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
