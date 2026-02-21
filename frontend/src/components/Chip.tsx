@@ -1,6 +1,5 @@
 import { useState, type ReactNode, type MouseEvent } from 'react';
 import styles from './Chip.module.css';
-import { ClipboardCheckIcon } from './icons';
 
 type ChipVariant = 'neutral' | 'blue' | 'green' | 'purple';
 
@@ -34,7 +33,7 @@ function Chip({ children, icon, variant = 'neutral', copyValue }: ChipProps) {
         <span className={`${styles.text} ${copied ? styles.hidden : ''}`}>{children}</span>
         {copyValue && (
           <span className={`${styles.copiedText} ${copied ? '' : styles.hidden}`}>
-            {ClipboardCheckIcon}
+            copied!
           </span>
         )}
       </span>
