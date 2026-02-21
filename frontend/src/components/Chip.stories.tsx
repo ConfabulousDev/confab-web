@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Chip from './Chip';
-import { RepoIcon, BranchIcon, ComputerIcon, UserIcon } from './icons';
+import { RepoIcon, BranchIcon, ComputerIcon, UserIcon, PRIcon, CommitIcon } from './icons';
 
 const meta: Meta<typeof Chip> = {
   title: 'Components/Chip',
@@ -127,6 +127,22 @@ export const ClickableVariants: Story = {
     docs: {
       description: {
         story: 'All chip variants support the clickable copy behavior. Hover to see the border, click to copy.',
+      },
+    },
+  },
+};
+
+export const LinkableChips: Story = {
+  render: () => (
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <Chip icon={PRIcon} variant="purple" linkUrl="https://github.com/example/repo/pull/42">#42</Chip>
+      <Chip icon={CommitIcon} variant="purple" linkUrl="https://github.com/example/repo/commit/abc1234">abc1234</Chip>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story: 'Chips with `linkUrl` open the URL in a new tab when clicked instead of copying to clipboard.',
       },
     },
   },

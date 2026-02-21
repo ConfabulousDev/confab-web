@@ -73,3 +73,7 @@
 .clickable:hover {
   border-color: var(--color-text-secondary);
 }
+
+.linkable {
+  cursor: pointer;
+}

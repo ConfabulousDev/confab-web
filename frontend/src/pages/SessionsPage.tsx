@@ -156,25 +156,33 @@ function SessionsPage() {
                                   {session.git_branch}
                                 </Chip>
                               )}
-                              {session.github_prs?.map((pr) => (
-                                <Chip
-                                  key={pr}
-                                  icon={PRIcon}
-                                  variant="purple"
-                                  copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/pull/${pr}` : pr}
-                                >
-                                  #{pr}
-                                </Chip>
-                              ))}
-                              {session.github_commits?.[0] && (
-                                <Chip
-                                  icon={CommitIcon}
-                                  variant="purple"
-                                  copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/commit/${session.github_commits[0]}` : session.github_commits[0]}
-                                >
-                                  {session.github_commits[0].slice(0, 7)}
-                                </Chip>
-                              )}
+                              {session.github_prs?.map((pr) => {
+                                const prUrl = session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/pull/${pr}` : undefined;
+                                return (
+                                  <Chip
+                                    key={pr}
+                                    icon={PRIcon}
+                                    variant="purple"
+                                    linkUrl={prUrl}
+                                    copyValue={prUrl ? undefined : pr}
+                                  >
+                                    #{pr}
+                                  </Chip>
+                                );
+                              })}
+                              {session.github_commits?.[0] && (() => {
+                                const commitUrl = session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/commit/${session.github_commits[0]}` : undefined;
+                                return (
+                                  <Chip
+                                    icon={CommitIcon}
+                                    variant="purple"
+                                    linkUrl={commitUrl}
+                                    copyValue={commitUrl ? undefined : session.github_commits[0]}
+                                  >
+                                    {session.github_commits[0].slice(0, 7)}
+                                  </Chip>
+                                );
+                              })()}
                             </div>
                           </td>
                           <td className={styles.timestamp}>
