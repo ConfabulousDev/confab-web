@@ -80,6 +80,79 @@ func loadSmartRecapConfig() SmartRecapConfig {
 	return config
 }
 
+// classifiedFiles holds the transcript and agent files from a session,
+// along with the total line count used for cache validation.
+type classifiedFiles struct {
+	transcript *db.SyncFileDetail
+	agents     []db.SyncFileDetail
+	lineCount  int64
+}
+
+// classifySessionFiles separates session files into transcript and agent files
+// and computes the total line count. Returns nil if no transcript file exists.
+func classifySessionFiles(files []db.SyncFileDetail) *classifiedFiles {
+	var result classifiedFiles
+	for i := range files {
+		switch files[i].FileType {
+		case "transcript":
+			result.transcript = &files[i]
+		case "agent":
+			result.agents = append(result.agents, files[i])
+		}
+	}
+	if result.transcript == nil {
+		return nil
+	}
+	result.lineCount = int64(result.transcript.LastSyncedLine)
+	for _, af := range result.agents {
+		result.lineCount += int64(af.LastSyncedLine)
+	}
+	return &result
+}
+
+// downloadAndBuildFileCollection downloads the transcript and agent chunks from storage
+// and assembles them into a FileCollection. Returns nil on failure (errors are logged).
+func downloadAndBuildFileCollection(
+	ctx context.Context,
+	store *storage.S3Storage,
+	files *classifiedFiles,
+	sessionUserID int64,
+	externalID string,
+	log *slog.Logger,
+) *analytics.FileCollection {
+	storageCtx, storageCancel := context.WithTimeout(ctx, StorageTimeout)
+	defer storageCancel()
+
+	mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, files.transcript.FileName)
+	if err != nil || mainContent == nil {
+		log.Error("Failed to download transcript", "error", err)
+		return nil
+	}
+
+	agentContents := make(map[string][]byte)
+	for _, af := range files.agents {
+		agentID := analytics.ExtractAgentID(af.FileName)
+		if agentID == "" {
+			continue
+		}
+		content, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, af.FileName)
+		if err != nil {
+			log.Warn("Failed to download agent file", "error", err, "file", af.FileName)
+			continue
+		}
+		if content != nil {
+			agentContents[agentID] = content
+		}
+	}
+
+	fc, err := analytics.NewFileCollectionWithAgents(mainContent, agentContents)
+	if err != nil {
+		log.Error("Failed to parse transcript", "error", err)
+		return nil
+	}
+	return fc
+}
+
 // HandleGetSessionAnalytics returns computed analytics for a session.
 // Uses the same canonical access model as HandleGetSession (CF-132):
 // - Owner access: authenticated user who owns the session
@@ -124,28 +197,13 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		session := result.Session
 
-		// Collect transcript and agent files
-		var mainFile *db.SyncFileDetail
-		var agentFiles []db.SyncFileDetail
-		for i := range session.Files {
-			switch session.Files[i].FileType {
-			case "transcript":
-				mainFile = &session.Files[i]
-			case "agent":
-				agentFiles = append(agentFiles, session.Files[i])
-			}
-		}
-		if mainFile == nil {
-			// No transcript file - return empty analytics
+		// Classify session files and compute total line count
+		files := classifySessionFiles(session.Files)
+		if files == nil {
 			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 			return
 		}
-
-		// Current state for cache validation (sum of all file line counts)
-		totalLineCount := int64(mainFile.LastSyncedLine)
-		for _, af := range agentFiles {
-			totalLineCount += int64(af.LastSyncedLine)
-		}
+		totalLineCount := files.lineCount
 
 		// Parse optional as_of_line query parameter for conditional requests
 		// If client already has analytics up to the current line count, return 304
@@ -218,48 +276,16 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			return
 		}
 
-		storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
-		defer storageCancel()
-
-		// Download main transcript
-		mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, mainFile.FileName)
-		if err != nil {
-			respondStorageError(w, err, "Failed to download transcript")
-			return
-		}
-		if mainContent == nil {
-			// No chunks - return empty analytics
+		// Download transcript and agent files
+		fc := downloadAndBuildFileCollection(r.Context(), store, files, sessionUserID, externalID, log)
+		if fc == nil {
 			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 			return
 		}
 
-		// Download agent files
-		agentContents := make(map[string][]byte)
-		for _, af := range agentFiles {
-			agentID := analytics.ExtractAgentID(af.FileName)
-			if agentID == "" {
-				continue
-			}
-			content, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, af.FileName)
-			if err != nil {
-				// Log but continue - graceful degradation
-				log.Warn("Failed to download agent file", "error", err, "file", af.FileName)
-				continue
-			}
-			if content != nil {
-				agentContents[agentID] = content
-			}
-		}
-
-		// Build FileCollection with agents
-		fc, err := analytics.NewFileCollectionWithAgents(mainContent, agentContents)
-		if err != nil {
-			log.Error("Failed to parse transcript", "error", err, "session_id", sessionID)
-			respondError(w, http.StatusInternalServerError, "Failed to process session data")
-			return
-		}
-
 		// Compute analytics from FileCollection
+		storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
+		defer storageCancel()
 		computed, err := analytics.ComputeFromFileCollection(storageCtx, fc)
 		if err != nil {
 			log.Error("Failed to compute analytics", "error", err, "session_id", sessionID)
@@ -387,14 +413,12 @@ func attachOrGenerateSmartRecap(
 		if smartCard != nil {
 			addSmartRecapToResponse(response, smartCard)
 		} else {
-			// No card data at all — tell the frontend why
+			// No card data at all -- tell the frontend why
+			reason := "unavailable"
 			if isOwner {
-				reason := "quota_exceeded"
-				response.SmartRecapMissingReason = &reason
-			} else {
-				reason := "unavailable"
-				response.SmartRecapMissingReason = &reason
+				reason = "quota_exceeded"
 			}
+			response.SmartRecapMissingReason = &reason
 		}
 		return
 	}
@@ -738,59 +762,16 @@ func downloadTranscriptForSmartRecap(
 	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
 
-	// Get session files
 	session, err := database.GetSessionDetail(dbCtx, sessionID, sessionUserID)
 	if err != nil {
 		log.Error("Failed to get session for smart recap", "error", err, "session_id", sessionID)
 		return nil
 	}
 
-	// Find transcript and agent files
-	var mainFile *db.SyncFileDetail
-	var agentFiles []db.SyncFileDetail
-	for i := range session.Files {
-		switch session.Files[i].FileType {
-		case "transcript":
-			mainFile = &session.Files[i]
-		case "agent":
-			agentFiles = append(agentFiles, session.Files[i])
-		}
-	}
-
-	if mainFile == nil {
+	files := classifySessionFiles(session.Files)
+	if files == nil {
 		return nil
 	}
 
-	storageCtx, storageCancel := context.WithTimeout(ctx, StorageTimeout)
-	defer storageCancel()
-
-	// Download main transcript
-	mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, mainFile.FileName)
-	if err != nil || mainContent == nil {
-		log.Error("Failed to download transcript for smart recap", "error", err, "session_id", sessionID)
-		return nil
-	}
-
-	// Download agent files
-	agentContents := make(map[string][]byte)
-	for _, af := range agentFiles {
-		agentID := analytics.ExtractAgentID(af.FileName)
-		if agentID == "" {
-			continue
-		}
-		content, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, af.FileName)
-		if err != nil || content == nil {
-			continue
-		}
-		agentContents[agentID] = content
-	}
-
-	// Build FileCollection
-	fc, err := analytics.NewFileCollectionWithAgents(mainContent, agentContents)
-	if err != nil {
-		log.Error("Failed to parse transcript for smart recap", "error", err, "session_id", sessionID)
-		return nil
-	}
-
-	return fc
+	return downloadAndBuildFileCollection(ctx, store, files, sessionUserID, externalID, log)
 }

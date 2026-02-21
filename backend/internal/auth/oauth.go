@@ -63,6 +63,77 @@ func handleCLIRedirect(w http.ResponseWriter, r *http.Request, statusCode int) b
 	return false
 }
 
+// checkExpectedEmailMismatch reads the expected_email cookie and checks if the
+// user's actual email matches. Returns the expected email and whether there was
+// a mismatch. Always clears the cookie.
+func checkExpectedEmailMismatch(w http.ResponseWriter, r *http.Request, actualEmail, provider string) (expectedEmail string, mismatch bool) {
+	cookie, err := r.Cookie("expected_email")
+	if err != nil || cookie.Value == "" {
+		return "", false
+	}
+	expectedEmail = cookie.Value
+	clearCookie(w, "expected_email")
+	if !strings.EqualFold(expectedEmail, actualEmail) {
+		logger.Ctx(r.Context()).Warn("OAuth email mismatch",
+			"expected_email", expectedEmail,
+			"actual_email", actualEmail,
+			"provider", provider)
+		return expectedEmail, true
+	}
+	return expectedEmail, false
+}
+
+// appendEmailMismatchParams appends email mismatch query parameters to a URL if needed.
+func appendEmailMismatchParams(baseURL, expectedEmail, actualEmail string) string {
+	separator := "?"
+	if strings.Contains(baseURL, "?") {
+		separator = "&"
+	}
+	return baseURL + separator + "email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(actualEmail)
+}
+
+// handlePostLoginRedirect performs the standard post-login redirect sequence:
+// 1. CLI redirect cookie
+// 2. Post-login redirect cookie (e.g., from /device page)
+// 3. Default: redirect to frontend
+//
+// Handles email mismatch parameters throughout. Returns after writing the redirect.
+func handlePostLoginRedirect(w http.ResponseWriter, r *http.Request, frontendURL, actualEmail, expectedEmail string, emailMismatch bool) {
+	log := logger.Ctx(r.Context())
+
+	// Check if this was a CLI login flow
+	if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
+		return
+	}
+
+	// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
+	if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
+		clearCookie(w, "post_login_redirect")
+		redirectURL := postLoginRedirect.Value
+		// SECURITY: Only allow relative paths to prevent open redirect attacks
+		if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
+			log.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
+			redirectURL = "/"
+		}
+		// If it's a frontend path (not a backend path like /device), prepend frontend URL
+		if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
+			redirectURL = frontendURL + redirectURL
+		}
+		if emailMismatch {
+			redirectURL = appendEmailMismatchParams(redirectURL, expectedEmail, actualEmail)
+		}
+		http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+		return
+	}
+
+	// Default: redirect to frontend
+	finalURL := frontendURL
+	if emailMismatch {
+		finalURL = appendEmailMismatchParams(finalURL, expectedEmail, actualEmail)
+	}
+	http.Redirect(w, r, finalURL, http.StatusTemporaryRedirect)
+}
+
 // oauthHTTPClient returns an HTTP client with timeout for OAuth API calls
 func oauthHTTPClient() *http.Client {
 	return &http.Client{
@@ -321,62 +392,9 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Check for expected email (from share link flow)
-		// If user logged in with different email than expected, redirect with mismatch error
-		var emailMismatch bool
-		var expectedEmail string
-		if expectedEmailCookie, err := r.Cookie("expected_email"); err == nil && expectedEmailCookie.Value != "" {
-			expectedEmail = expectedEmailCookie.Value
-			// Clear the cookie
-			clearCookie(w, "expected_email")
-			// Compare emails (case-insensitive)
-			if !strings.EqualFold(expectedEmail, user.Email) {
-				emailMismatch = true
-				log.Warn("OAuth email mismatch",
-					"expected_email", expectedEmail,
-					"actual_email", user.Email,
-					"provider", "github")
-			}
-		}
-
-		// Check if this was a CLI login flow
-		if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
-			return
-		}
-
-		// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
-		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
-			// Clear the cookie
-			clearCookie(w, "post_login_redirect")
-			redirectURL := postLoginRedirect.Value
-			// SECURITY: Only allow relative paths to prevent open redirect attacks
-			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
-				log.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
-				redirectURL = "/"
-			}
-			// If it's a frontend path (not a backend path like /device), prepend frontend URL
-			if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
-				redirectURL = os.Getenv("FRONTEND_URL") + redirectURL
-			}
-			// Add email mismatch params if applicable
-			if emailMismatch {
-				separator := "?"
-				if strings.Contains(redirectURL, "?") {
-					separator = "&"
-				}
-				redirectURL += separator + "email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
-			}
-			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
-			return
-		}
-
-		// Redirect back to frontend (normal web login)
-		// Note: FRONTEND_URL is validated at startup in main.go
-		frontendURL := os.Getenv("FRONTEND_URL")
-		if emailMismatch {
-			frontendURL += "?email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
-		}
-		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
+		// Handle email mismatch check and post-login redirect
+		expectedEmail, emailMismatch := checkExpectedEmailMismatch(w, r, user.Email, "github")
+		handlePostLoginRedirect(w, r, os.Getenv("FRONTEND_URL"), user.Email, expectedEmail, emailMismatch)
 	}
 }
 
@@ -908,61 +926,9 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Check for expected email (from share link flow)
-		// If user logged in with different email than expected, redirect with mismatch error
-		var emailMismatch bool
-		var expectedEmail string
-		if expectedEmailCookie, err := r.Cookie("expected_email"); err == nil && expectedEmailCookie.Value != "" {
-			expectedEmail = expectedEmailCookie.Value
-			// Clear the cookie
-			clearCookie(w, "expected_email")
-			// Compare emails (case-insensitive)
-			if !strings.EqualFold(expectedEmail, user.Email) {
-				emailMismatch = true
-				log.Warn("OAuth email mismatch",
-					"expected_email", expectedEmail,
-					"actual_email", user.Email,
-					"provider", "google")
-			}
-		}
-
-		// Check if this was a CLI login flow
-		if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
-			return
-		}
-
-		// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
-		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
-			// Clear the cookie
-			clearCookie(w, "post_login_redirect")
-			redirectURL := postLoginRedirect.Value
-			// SECURITY: Only allow relative paths to prevent open redirect attacks
-			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
-				log.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
-				redirectURL = "/"
-			}
-			// If it's a frontend path (not a backend path like /device), prepend frontend URL
-			if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
-				redirectURL = frontendURL + redirectURL
-			}
-			// Add email mismatch params if applicable
-			if emailMismatch {
-				separator := "?"
-				if strings.Contains(redirectURL, "?") {
-					separator = "&"
-				}
-				redirectURL += separator + "email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
-			}
-			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
-			return
-		}
-
-		// Redirect to frontend
-		finalURL := frontendURL
-		if emailMismatch {
-			finalURL += "?email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
-		}
-		http.Redirect(w, r, finalURL, http.StatusTemporaryRedirect)
+		// Handle email mismatch check and post-login redirect
+		expectedEmail, emailMismatch := checkExpectedEmailMismatch(w, r, user.Email, "google")
+		handlePostLoginRedirect(w, r, frontendURL, user.Email, expectedEmail, emailMismatch)
 	}
 }
 
@@ -1376,55 +1342,9 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Check for expected email (from share link flow)
-		var emailMismatch bool
-		var expectedEmail string
-		if expectedEmailCookie, err := r.Cookie("expected_email"); err == nil && expectedEmailCookie.Value != "" {
-			expectedEmail = expectedEmailCookie.Value
-			clearCookie(w, "expected_email")
-			if !strings.EqualFold(expectedEmail, user.Email) {
-				emailMismatch = true
-				log.Warn("OAuth email mismatch",
-					"expected_email", expectedEmail,
-					"actual_email", user.Email,
-					"provider", "oidc")
-			}
-		}
-
-		// Check if this was a CLI login flow
-		if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
-			return
-		}
-
-		// Check if there's a post-login redirect
-		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
-			clearCookie(w, "post_login_redirect")
-			redirectURL := postLoginRedirect.Value
-			// SECURITY: Only allow relative paths to prevent open redirect attacks
-			if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
-				log.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
-				redirectURL = "/"
-			}
-			if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
-				redirectURL = frontendURL + redirectURL
-			}
-			if emailMismatch {
-				separator := "?"
-				if strings.Contains(redirectURL, "?") {
-					separator = "&"
-				}
-				redirectURL += separator + "email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
-			}
-			http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
-			return
-		}
-
-		// Redirect to frontend
-		finalURL := frontendURL
-		if emailMismatch {
-			finalURL += "?email_mismatch=1&expected=" + url.QueryEscape(expectedEmail) + "&actual=" + url.QueryEscape(user.Email)
-		}
-		http.Redirect(w, r, finalURL, http.StatusTemporaryRedirect)
+		// Handle email mismatch check and post-login redirect
+		expectedEmail, emailMismatch := checkExpectedEmailMismatch(w, r, user.Email, "oidc")
+		handlePostLoginRedirect(w, r, frontendURL, user.Email, expectedEmail, emailMismatch)
 	}
 }
 
