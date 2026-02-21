@@ -385,6 +385,8 @@ export const analyticsAPI = {
 
     const fullUrl = `${api['baseURL']}${url}`;
 
+    // Special case: need to handle 304 before fetchRaw's error checking,
+    // and need custom cache control headers
     const response = await fetch(fullUrl, {
       method: 'GET',
       credentials: 'include',
@@ -393,18 +395,16 @@ export const analyticsAPI = {
       ...(hasCacheBustingParam ? {} : { cache: 'no-store' as const }),
     });
 
-    // Handle 304 Not Modified - no new data
+    // Handle 304 Not Modified - no new data (before shared error handling)
     if (response.status === 304) {
       return null;
     }
 
-    // Handle authentication errors
     if (response.status === 401) {
       handleAuthFailure();
       throw new AuthenticationError();
     }
 
-    // Handle other HTTP errors
     if (!response.ok) {
       let errorData: unknown;
       try {
@@ -415,7 +415,6 @@ export const analyticsAPI = {
       throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
     }
 
-    // Parse and validate response
     const data = await response.json();
     return validateResponse(SessionAnalyticsSchema, data, url);
   },
@@ -429,38 +428,46 @@ export const analyticsAPI = {
    */
   regenerateSmartRecap: async (sessionId: string): Promise<SessionAnalytics> => {
     const url = `/sessions/${sessionId}/analytics/smart-recap/regenerate`;
-    const fullUrl = `${api['baseURL']}${url}`;
-
-    const response = await fetch(fullUrl, {
+    const response = await fetchRaw(url, {
       method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
-
-    // Handle authentication errors
-    if (response.status === 401) {
-      handleAuthFailure();
-      throw new AuthenticationError();
-    }
-
-    // Handle other HTTP errors
-    if (!response.ok) {
-      let errorData: unknown;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = await response.text();
-      }
-      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
-    }
-
-    // Parse and validate response
     const data = await response.json();
     return validateResponse(SessionAnalyticsSchema, data, url);
   },
 };
+
+/**
+ * Shared helper for raw fetch calls that bypass the APIClient.
+ * Handles auth failures, HTTP error parsing, and JSON response extraction.
+ * Used by endpoints that need custom fetch behavior (e.g., 304 handling, cache headers).
+ */
+async function fetchRaw(url: string, init: RequestInit): Promise<Response> {
+  const fullUrl = `${api['baseURL']}${url}`;
+  const response = await fetch(fullUrl, { credentials: 'include', ...init });
+
+  if (response.status === 401) {
+    handleAuthFailure();
+    throw new AuthenticationError();
+  }
+
+  if (!response.ok) {
+    let errorData: unknown;
+    try {
+      errorData = await response.json();
+    } catch {
+      errorData = await response.text();
+    }
+    throw new APIError(
+      `Request failed: ${response.statusText}`,
+      response.status,
+      response.statusText,
+      errorData,
+    );
+  }
+
+  return response;
+}
 
 export interface TrendsParams {
   startDate?: string; // YYYY-MM-DD (local date)
@@ -506,31 +513,7 @@ export const trendsAPI = {
 
     const queryString = searchParams.toString();
     const url = `/trends${queryString ? `?${queryString}` : ''}`;
-    const fullUrl = `${api['baseURL']}${url}`;
-
-    const response = await fetch(fullUrl, {
-      method: 'GET',
-      credentials: 'include',
-    });
-
-    // Handle authentication errors
-    if (response.status === 401) {
-      handleAuthFailure();
-      throw new AuthenticationError();
-    }
-
-    // Handle other HTTP errors
-    if (!response.ok) {
-      let errorData: unknown;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = await response.text();
-      }
-      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
-    }
-
-    // Parse and validate response
+    const response = await fetchRaw(url, { method: 'GET' });
     const data = await response.json();
     return validateResponse(TrendsResponseSchema, data, url);
   },

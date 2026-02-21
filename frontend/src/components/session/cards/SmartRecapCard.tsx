@@ -90,18 +90,13 @@ export function SmartRecapCard({
     return null;
   }
 
-  const recapData = data;
-
   // Build subtitle showing when generated, model, and quota
-  const subtitleParts: string[] = [];
-  // Show when the recap was generated
-  subtitleParts.push(formatRelativeTime(recapData.computed_at));
-  // Show model name (extract just the model part, e.g., "claude-haiku-4-5")
-  const modelShort = recapData.model_used.replace(/-\d{8}$/, '');
-  subtitleParts.push(modelShort);
-  if (quota) {
-    subtitleParts.push(`${quota.used}/${quota.limit} used`);
-  }
+  const modelShort = data.model_used.replace(/-\d{8}$/, '');
+  const subtitleParts = [
+    formatRelativeTime(data.computed_at),
+    modelShort,
+    ...(quota ? [`${quota.used}/${quota.limit} used`] : []),
+  ];
   const subtitle = subtitleParts.join(' · ');
 
   // Refresh button for owners (disabled if quota exceeded)
@@ -121,14 +116,14 @@ export function SmartRecapCard({
   return (
     <CardWrapper title="Smart Recap" icon={SparklesIcon} subtitle={subtitle} action={refreshButton}>
       {/* Recap */}
-      <div className={styles.recap}>{recapData.recap}</div>
+      <div className={styles.recap}>{data.recap}</div>
 
       {/* What went well */}
-      {recapData.went_well.length > 0 && (
+      {data.went_well.length > 0 && (
         <>
           <SectionHeader label="Went Well" icon={CheckCircleIcon} />
           <ul className={styles.list}>
-            {recapData.went_well.map((item, i) => (
+            {data.went_well.map((item, i) => (
               <li key={i} className={styles.listItemSuccess}>
                 <span className={styles.listIcon}>{CheckCircleIcon}</span>
                 <span>{item}</span>
@@ -139,11 +134,11 @@ export function SmartRecapCard({
       )}
 
       {/* What didn't go well */}
-      {recapData.went_bad.length > 0 && (
+      {data.went_bad.length > 0 && (
         <>
           <SectionHeader label="Needs Improvement" icon={AlertCircleIcon} />
           <ul className={styles.list}>
-            {recapData.went_bad.map((item, i) => (
+            {data.went_bad.map((item, i) => (
               <li key={i} className={styles.listItemWarning}>
                 <span className={styles.listIcon}>{AlertCircleIcon}</span>
                 <span>{item}</span>
@@ -154,25 +149,25 @@ export function SmartRecapCard({
       )}
 
       {/* Suggestions */}
-      {(recapData.human_suggestions.length > 0 ||
-        recapData.environment_suggestions.length > 0 ||
-        recapData.default_context_suggestions.length > 0) && (
+      {(data.human_suggestions.length > 0 ||
+        data.environment_suggestions.length > 0 ||
+        data.default_context_suggestions.length > 0) && (
         <>
           <SectionHeader label="Suggestions" icon={LightbulbIcon} />
           <ul className={styles.list}>
-            {recapData.human_suggestions.map((item, i) => (
+            {data.human_suggestions.map((item, i) => (
               <li key={`human-${i}`} className={styles.listItem}>
                 <span className={styles.listIcon}>{LightbulbIcon}</span>
                 <span>{item}</span>
               </li>
             ))}
-            {recapData.environment_suggestions.map((item, i) => (
+            {data.environment_suggestions.map((item, i) => (
               <li key={`env-${i}`} className={styles.listItem}>
                 <span className={styles.listIcon}>{LightbulbIcon}</span>
                 <span>{item}</span>
               </li>
             ))}
-            {recapData.default_context_suggestions.map((item, i) => (
+            {data.default_context_suggestions.map((item, i) => (
               <li key={`ctx-${i}`} className={styles.listItem}>
                 <span className={styles.listIcon}>{LightbulbIcon}</span>
                 <span>{item}</span>

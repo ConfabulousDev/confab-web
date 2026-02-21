@@ -10,6 +10,18 @@ import { getOrderedCards } from './cards';
 import GitHubLinksCard from './GitHubLinksCard';
 import styles from './SessionSummaryPanel.module.css';
 
+// Lookup maps for card grid layout classes
+const SPAN_CLASSES: Record<string, string | undefined> = {
+  full: styles.spanFull,
+  '2': styles.span2,
+  '3': styles.span3,
+};
+const SIZE_CLASSES: Record<string, string | undefined> = {
+  compact: styles.sizeCompact,
+  standard: styles.sizeStandard,
+  tall: styles.sizeTall,
+};
+
 interface SessionSummaryPanelProps {
   sessionId: string;
   isOwner: boolean;
@@ -155,13 +167,8 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
             return null;
           }
 
-          const spanClass = cardDef.span === 'full' ? styles.spanFull
-            : cardDef.span === 2 ? styles.span2
-            : cardDef.span === 3 ? styles.span3
-            : '';
-          const sizeClass = cardDef.size === 'compact' ? styles.sizeCompact
-            : cardDef.size === 'tall' ? styles.sizeTall
-            : styles.sizeStandard;
+          const spanClass = SPAN_CLASSES[String(cardDef.span)] ?? '';
+          const sizeClass = SIZE_CLASSES[cardDef.size ?? 'standard'] ?? styles.sizeStandard;
 
           // Build additional props for specific cards
           const extraProps: Record<string, unknown> = {};

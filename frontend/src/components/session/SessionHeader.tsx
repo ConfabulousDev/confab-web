@@ -11,6 +11,7 @@ import type {
   HierarchicalCounts,
   FilterState,
 } from './messageCategories';
+import { PersonIcon } from '@/components/icons';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
 import FilterDropdown from './FilterDropdown';
@@ -18,7 +19,7 @@ import styles from './SessionHeader.module.css';
 
 const MAX_CUSTOM_TITLE_LENGTH = 255;
 
-// SVG Icons
+// SVG Icons (local to this component; not shared because they use header-specific sizes)
 const CopyIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -80,13 +81,6 @@ const CloseIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <line x1="18" y1="6" x2="6" y2="18" />
     <line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
-);
-
-const PersonIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="8" r="4" />
-    <path d="M20 21a8 8 0 0 0-16 0" />
   </svg>
 );
 
