@@ -1,161 +1,93 @@
-# Confabulous.dev
+# Confabulous
 
-Archive and search your Claude Code sessions in the cloud.
+Self-hosted analytics for your Claude Code sessions.
 
-**This repo contains:**
-- **[backend/](backend/)** - Cloud backend service (PostgreSQL + MinIO)
-- **[frontend/](frontend/)** - React web dashboard
+[![GitHub Stars](https://img.shields.io/github/stars/ConfabulousDev/confab-web)](https://github.com/ConfabulousDev/confab-web)
+[![Docker Image](https://img.shields.io/badge/ghcr.io-confabulousdev%2Fconfab--web-blue?logo=docker)](https://ghcr.io/confabulousdev/confab-web)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**See also:** [confab](https://github.com/ConfabulousDev/confab) - Command-line tool for capturing and uploading sessions
+![Dashboard](docs/screenshot-placeholder.svg)
 
-## Running Locally
+**Open-source, self-hosted** platform for archiving, searching, and analyzing your Claude Code sessions. Runs entirely in Docker on **your own infrastructure**.
 
-### Prerequisites
+> [!IMPORTANT]
+> Code sessions contain proprietary code, architecture decisions, and internal workflows. Confabulous keeps all of it on your network — no third-party access, no vendor lock-in.
 
-- **Docker & Docker Compose**
+## Quickstart
 
-### Step 1: Start the Stack
+**Prerequisites:** Docker and Docker Compose
+
+### Start the Stack
 
 ```bash
-# Start everything (PostgreSQL, MinIO, backend, worker)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f app
+docker compose up -d
 ```
 
-The app runs at `http://localhost:8080`
+Open [http://localhost:8080](http://localhost:8080) — log in with `admin@local.dev` / `localdevpassword`.
 
-**Default credentials:**
-- Email: `admin@local.dev`
-- Password: `localdevpassword`
+### Connect the CLI
 
-### Step 2: Install and Configure CLI
+Install the [Confab CLI](https://github.com/ConfabulousDev/confab):
 
 ```bash
-# Install the CLI (latest version)
 curl -fsSL http://localhost:8080/install | bash
-
-# Or install a specific version
-curl -fsSL http://localhost:8080/install | CONFAB_VERSION=1.2.3 bash
-
-# Configure to use your local backend
 confab setup --backend-url http://localhost:8080
 ```
 
-This will:
-1. Download and install the Confab CLI
-2. Open a browser to authenticate with your local backend
-3. Create an API key and install the Claude Code hook
+Start a Claude Code session — it appears in the dashboard automatically.
 
-### Step 3: Verify Setup
+## Features
 
-1. **Log in** at http://localhost:8080 using the admin credentials
-2. **Start a Claude Code session** - it will be automatically captured
-3. **View your session** in the dashboard
-
-### Configuration
-
-Configuration is set in `docker-compose.yml`. Key settings:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ADMIN_BOOTSTRAP_EMAIL` | `admin@local.dev` | Initial admin email |
-| `ADMIN_BOOTSTRAP_PASSWORD` | `localdevpassword` | Initial admin password |
-| `FRONTEND_URL` | `http://localhost:8080` | Frontend URL for redirects |
-
-See [`backend/.env.example`](backend/.env.example) for all available environment variables including OAuth, email, smart recap, worker, and deployment options.
-
-### Admin Panel
-
-Super admins can access the admin panel at `/admin/users` to:
-- **View all users** with session counts and storage usage
-- **Create new users** (when password authentication is enabled)
-- **Activate/deactivate users**
-- **Delete users** and all their data
-
-To grant admin access, add the user's email to `SUPER_ADMIN_EMAILS` in `docker-compose.yml`:
-
-```yaml
-SUPER_ADMIN_EMAILS: admin@local.dev,another-admin@example.com
-```
+- **Session Management** — Archive, browse, search sessions; full transcript viewer
+- **Analytics & Smart Recaps** (optional) — Cost tracking, AI-powered recaps (requires Anthropic API key)
+- **Sharing** — Public and private share links
+- **Multi-User** — Password auth, GitHub OAuth, Google OAuth, or OIDC (Okta, Auth0, Azure AD, Keycloak)
+- **Team Deployment** — Shared-session mode, configurable user limits, white-label options
+- **Admin Panel** — User management, activation/deactivation, storage monitoring
+- **Developer Experience** — GitHub link detection, API keys, per-user rate limiting
+- **Infrastructure** — PostgreSQL + MinIO (S3-compatible), runs in Docker
 
 ## Architecture
 
 ```
-┌──────────────────┐
-│   Confab CLI     │ ← Runs on user's machine (separate repo)
-│                  │   - Captures sessions via SessionEnd hook
-│  ~/.confab/      │   - Uploads to cloud backend
-└────────┬─────────┘
-         │ HTTPS
-         ▼
-┌──────────────────┐
-│  Backend Service │ ← Cloud/self-hosted server
-│                  │   - PostgreSQL database
-│  - REST API      │   - MinIO object storage (S3-compatible)
-│  - Multi-user    │   - GitHub OAuth authentication
-│  - Rate limiting │   - API key support
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  React Frontend  │ ← Web dashboard
-│                  │   - Browse sessions
-│  - GitHub OAuth  │   - View transcripts
-│  - Search        │   - Share links
-│  - Share Links   │   - Delete sessions
-└──────────────────┘
+┌──────────────────────┐
+│     Confab CLI       │  ← Runs on developer's machine
+│                      │    Captures sessions via Claude Code hook
+│  ~/.confab/          │    Uploads to your Confabulous server
+└──────────┬───────────┘
+           │ HTTP/HTTPS
+           ▼
+┌─────────────────────────────────────────┐
+│  Self-Hosted Stack (docker compose)     │
+│                                         │
+│  ┌─────────────┐  ┌─────────────────┐  │
+│  │  Backend    │  │  React Frontend │  │
+│  │  (Go API)   │  │  (Dashboard)    │  │
+│  └──────┬──────┘  └─────────────────┘  │
+│         │                               │
+│  ┌──────┴──────┐  ┌─────────────────┐  │
+│  │ PostgreSQL  │  │  MinIO (S3)     │  │
+│  └─────────────┘  └─────────────────┘  │
+└─────────────────────────────────────────┘
 ```
 
-## Features
+## Configuration
 
-### Backend
-- PostgreSQL 18 database
-- MinIO S3-compatible storage
-- GitHub OAuth authentication
-- API key authentication
-- Weekly upload rate limiting (200 runs/week)
-- Session sharing with public/private links
-- Delete sessions and individual runs
+Environment variables are set in `docker-compose.yml`. See [CONFIGURATION.md](CONFIGURATION.md) for the full reference.
 
-### Frontend
-- Browse all sessions with search
-- View session details and transcripts
-- Create and manage share links
-- Delete sessions and versions
-- Responsive React UI with React Query
+Admin panel is at `/admin/users`. Grant access via `SUPER_ADMIN_EMAILS` in `docker-compose.yml`.
 
-## Project Structure
+## Cloud Deployment
 
-```
-confab-web/
-├── docker-compose.yml     # Local development stack
-├── backend/               # Backend service (Go)
-│   ├── cmd/server/       # Server entry point
-│   ├── internal/         # Internal packages
-│   │   ├── api/         # HTTP handlers
-│   │   ├── auth/        # OAuth & API keys
-│   │   ├── db/          # PostgreSQL layer
-│   │   ├── storage/     # MinIO/S3 client
-│   │   └── testutil/    # Test infrastructure
-│   └── README.md
-│
-└── frontend/              # React web dashboard
-    ├── src/pages/        # Pages and routes
-    ├── src/services/     # API client
-    └── README.md
-```
-
-See also: [confab](https://github.com/ConfabulousDev/confab) (separate repo)
+Fly.io is the tested cloud deployment option. See [backend/README.md](backend/README.md) for instructions.
 
 ## Development
 
-For local development with hot-reload:
+For contributors with hot-reload:
 
 ```bash
 # Start databases only
-docker-compose up -d postgres minio minio-setup migrate
+docker compose up -d postgres minio minio-setup migrate
 
 # Backend (requires Go 1.21+)
 cp backend/.env.example backend/.env
@@ -178,10 +110,30 @@ cd backend && go test ./...
 cd frontend && npm test
 ```
 
-## Deployment
+### Project Structure
 
-See [backend/README.md](backend/README.md) for production deployment options including Fly.io.
+```
+confab-web/
+├── docker-compose.yml     # Local development stack
+├── CONFIGURATION.md       # Full configuration reference
+├── backend/               # Backend service (Go)
+│   ├── cmd/server/       # Server entry point
+│   ├── internal/         # Internal packages
+│   │   ├── api/         # HTTP handlers
+│   │   ├── auth/        # OAuth & API keys
+│   │   ├── db/          # PostgreSQL layer
+│   │   ├── storage/     # MinIO/S3 client
+│   │   └── testutil/    # Test infrastructure
+│   └── README.md
+│
+└── frontend/              # React web dashboard
+    ├── src/pages/        # Pages and routes
+    ├── src/services/     # API client
+    └── README.md
+```
+
+See also: [Confab CLI](https://github.com/ConfabulousDev/confab) (separate repo)
 
 ## License
 
-MIT
+[MIT](LICENSE)
