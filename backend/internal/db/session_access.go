@@ -177,12 +177,12 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	// Always include owner email
 	session.OwnerEmail = ownerEmail
 
-	// Only include hostname/username for owners
+	// Only include PII fields for owners; redact for all shared access
 	if accessInfo.AccessType == SessionAccessOwner {
 		session.Hostname = hostname
 		session.Username = username
 	} else {
-		// Include owner email for non-owner access
+		session.RedactForSharing()
 		session.SharedByEmail = &ownerEmail
 	}
 
