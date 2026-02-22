@@ -42,6 +42,8 @@ func ValidateLine(raw map[string]interface{}) []ValidationError {
 		errors = validateSummaryMessage(raw)
 	case "queue-operation":
 		errors = validateQueueOperationMessage(raw)
+	case "pr-link":
+		errors = validatePRLinkMessage(raw)
 	case "":
 		errors = append(errors, ValidationError{
 			Path:     "type",
@@ -507,6 +509,73 @@ func validateQueueOperationMessage(raw map[string]interface{}) []ValidationError
 	}
 
 	// content is optional
+
+	return errors
+}
+
+// validatePRLinkMessage validates a pr-link message.
+func validatePRLinkMessage(raw map[string]interface{}) []ValidationError {
+	var errors []ValidationError
+
+	// type must be "pr-link"
+	if t, _ := raw["type"].(string); t != "pr-link" {
+		errors = append(errors, ValidationError{
+			Path:     "type",
+			Message:  "invalid literal value",
+			Expected: `"pr-link"`,
+			Received: fmt.Sprintf("%q", t),
+		})
+	}
+
+	// prNumber is required (must be number)
+	if _, ok := raw["prNumber"].(float64); !ok {
+		errors = append(errors, ValidationError{
+			Path:     "prNumber",
+			Message:  "required field missing or invalid type",
+			Expected: "number",
+			Received: typeOf(raw["prNumber"]),
+		})
+	}
+
+	// prRepository is required
+	if _, ok := raw["prRepository"].(string); !ok {
+		errors = append(errors, ValidationError{
+			Path:     "prRepository",
+			Message:  "required field missing or invalid type",
+			Expected: "string",
+			Received: typeOf(raw["prRepository"]),
+		})
+	}
+
+	// prUrl is required
+	if _, ok := raw["prUrl"].(string); !ok {
+		errors = append(errors, ValidationError{
+			Path:     "prUrl",
+			Message:  "required field missing or invalid type",
+			Expected: "string",
+			Received: typeOf(raw["prUrl"]),
+		})
+	}
+
+	// sessionId is required
+	if _, ok := raw["sessionId"].(string); !ok {
+		errors = append(errors, ValidationError{
+			Path:     "sessionId",
+			Message:  "required field missing or invalid type",
+			Expected: "string",
+			Received: typeOf(raw["sessionId"]),
+		})
+	}
+
+	// timestamp is required
+	if _, ok := raw["timestamp"].(string); !ok {
+		errors = append(errors, ValidationError{
+			Path:     "timestamp",
+			Message:  "required field missing or invalid type",
+			Expected: "string",
+			Received: typeOf(raw["timestamp"]),
+		})
+	}
 
 	return errors
 }

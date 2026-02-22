@@ -2,7 +2,7 @@ import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
 import { isToolResultMessage, isSkillExpansionMessage, isUserMessage, isAssistantMessage } from '@/schemas/transcript';
 
 // Message categories for filtering - matches top-level transcript types
-export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation';
+export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation' | 'pr-link';
 
 // Subcategory types for hierarchical filtering
 export type UserSubcategory = 'prompt' | 'tool-result' | 'skill';
@@ -29,6 +29,7 @@ export interface HierarchicalCounts {
   'file-history-snapshot': number;
   summary: number;
   'queue-operation': number;
+  'pr-link': number;
 }
 
 
@@ -40,6 +41,7 @@ export interface FilterState {
   'file-history-snapshot': boolean;
   summary: boolean;
   'queue-operation': boolean;
+  'pr-link': boolean;
 }
 
 // Default filter state (user and assistant visible with all subs, others hidden)
@@ -50,6 +52,7 @@ export const DEFAULT_FILTER_STATE: FilterState = {
   'file-history-snapshot': false,
   summary: false,
   'queue-operation': false,
+  'pr-link': false,
 };
 
 /**
@@ -87,6 +90,7 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
     'file-history-snapshot': 0,
     summary: 0,
     'queue-operation': 0,
+    'pr-link': 0,
   };
 
   for (const message of messages) {
@@ -109,6 +113,8 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
         counts.summary++;
       } else if (msgType === 'queue-operation') {
         counts['queue-operation']++;
+      } else if (msgType === 'pr-link') {
+        counts['pr-link']++;
       }
     }
   }
@@ -167,6 +173,7 @@ export function messageMatchesFilter(message: TranscriptLine, filterState: Filte
   if (msgType === 'file-history-snapshot') return filterState['file-history-snapshot'];
   if (msgType === 'summary') return filterState.summary;
   if (msgType === 'queue-operation') return filterState['queue-operation'];
+  if (msgType === 'pr-link') return filterState['pr-link'];
 
   // This shouldn't happen, but default to visible
   return true;

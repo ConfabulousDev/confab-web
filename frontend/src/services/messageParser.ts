@@ -8,6 +8,7 @@ import {
   isSummaryMessage,
   isFileHistorySnapshot,
   isQueueOperationMessage,
+  isPRLinkMessage,
   isToolResultMessage,
   hasThinking,
   usesTools,
@@ -70,6 +71,10 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
     const operationEmoji = message.operation === 'enqueue' ? '➕' : '➖';
     const operationText = message.operation === 'enqueue' ? 'Added to queue' : 'Removed from queue';
     content = [{ type: 'text', text: `${operationEmoji} ${operationText}` }];
+  } else if (isPRLinkMessage(message)) {
+    role = 'system';
+    timestamp = message.timestamp;
+    content = [{ type: 'text', text: `🔗 PR #${message.prNumber} — [${message.prRepository}](${message.prUrl})` }];
   } else {
     // Exhaustive check - should never reach here if Zod validation is working
     const _exhaustiveCheck: never = message;

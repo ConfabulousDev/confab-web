@@ -33,7 +33,7 @@ const ASSISTANT_SUBCATEGORIES: Array<{ key: AssistantSubcategory; label: string 
 ];
 
 // Flat category type - categories without subcategories
-type FlatCategory = 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation';
+type FlatCategory = 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation' | 'pr-link';
 
 // Flat categories (no subcategories)
 interface FlatFilterItem {
@@ -47,6 +47,7 @@ const FLAT_CATEGORIES: FlatFilterItem[] = [
   { category: 'file-history-snapshot', label: 'File Snapshot', color: 'cyan' },
   { category: 'summary', label: 'Summary', color: 'purple' },
   { category: 'queue-operation', label: 'Queue', color: 'amber' },
+  { category: 'pr-link', label: 'PR Link', color: 'green' },
 ];
 
 // Checkbox state types
@@ -102,6 +103,7 @@ function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSub
     if (counts['file-history-snapshot'] > 0 && !filterState['file-history-snapshot']) return true;
     if (counts.summary > 0 && !filterState.summary) return true;
     if (counts['queue-operation'] > 0 && !filterState['queue-operation']) return true;
+    if (counts['pr-link'] > 0 && !filterState['pr-link']) return true;
 
     return false;
   }

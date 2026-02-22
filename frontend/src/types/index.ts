@@ -17,6 +17,7 @@ export type {
   UserMessage,
   AssistantMessage,
   SystemMessage,
+  PRLinkMessage,
 } from '@/schemas/transcript';
 
 // Re-export type guards
@@ -32,6 +33,7 @@ export {
   isFileHistorySnapshot,
   isSummaryMessage,
   isQueueOperationMessage,
+  isPRLinkMessage,
 } from '@/schemas/transcript';
 
 // Re-export utility functions

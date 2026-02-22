@@ -4,6 +4,7 @@ import {
   isCommandExpansionMessage,
   getCommandExpansionSkillName,
   stripCommandExpansionTags,
+  parseTranscriptLineWithError,
 } from './transcript';
 
 // Helper to create a minimal UserMessage with string content
@@ -75,6 +76,47 @@ describe('getCommandExpansionSkillName', () => {
   it('returns null when tag is malformed (no closing tag)', () => {
     const msg = makeUserMessage('<command-name>/broken');
     expect(getCommandExpansionSkillName(msg)).toBeNull();
+  });
+});
+
+describe('PRLinkMessage validation', () => {
+  it('accepts a valid pr-link message', () => {
+    const raw = JSON.stringify({
+      type: 'pr-link',
+      prNumber: 22,
+      prRepository: 'ConfabulousDev/confab-web',
+      prUrl: 'https://github.com/ConfabulousDev/confab-web/pull/22',
+      sessionId: 'b42b9d37-96be-4046-91f0-83c04a4466ce',
+      timestamp: '2026-02-22T08:00:41.865Z',
+    });
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects pr-link missing prNumber', () => {
+    const raw = JSON.stringify({
+      type: 'pr-link',
+      prRepository: 'ConfabulousDev/confab-web',
+      prUrl: 'https://github.com/ConfabulousDev/confab-web/pull/22',
+      sessionId: 'session-123',
+      timestamp: '2026-02-22T08:00:41.865Z',
+    });
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts pr-link with extra fields (Zod strips them)', () => {
+    const raw = JSON.stringify({
+      type: 'pr-link',
+      prNumber: 22,
+      prRepository: 'ConfabulousDev/confab-web',
+      prUrl: 'https://github.com/ConfabulousDev/confab-web/pull/22',
+      sessionId: 'session-123',
+      timestamp: '2026-02-22T08:00:41.865Z',
+      prTitle: 'Add widget support',
+    });
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
   });
 });
 

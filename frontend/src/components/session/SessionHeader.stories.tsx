@@ -20,6 +20,7 @@ const sampleCounts: HierarchicalCounts = {
   'file-history-snapshot': 39,
   summary: 0,
   'queue-operation': 6,
+  'pr-link': 0,
 };
 
 const sampleGitInfo: GitInfo = {
