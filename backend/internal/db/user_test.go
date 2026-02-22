@@ -271,3 +271,217 @@ func TestUserExistsByEmail_MultipleUsers(t *testing.T) {
 		t.Error("expected user notinlist@example.com to not exist")
 	}
 }
+
+// TestHasOwnSessions_NoSessions tests that a user with no sessions returns false
+func TestHasOwnSessions_NoSessions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-no-sessions",
+		Email:      "nosessions@example.com",
+		Name:       "No Sessions User",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	has, err := env.DB.HasOwnSessions(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("HasOwnSessions failed: %v", err)
+	}
+	if has {
+		t.Error("expected no sessions for new user")
+	}
+}
+
+// TestHasOwnSessions_WithSessions tests that a user with sessions returns true
+func TestHasOwnSessions_WithSessions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-with-sessions",
+		Email:      "withsessions@example.com",
+		Name:       "With Sessions User",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	// Create a session for this user
+	testutil.CreateTestSession(t, env, user.ID, "ext-session-1")
+
+	has, err := env.DB.HasOwnSessions(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("HasOwnSessions failed: %v", err)
+	}
+	if !has {
+		t.Error("expected user to have sessions")
+	}
+}
+
+// TestHasOwnSessions_OtherUserSessions tests that another user's sessions don't count
+func TestHasOwnSessions_OtherUserSessions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-user1",
+		Email:      "user1-sessions@example.com",
+		Name:       "User 1",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-user2",
+		Email:      "user2-sessions@example.com",
+		Name:       "User 2",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	// Create a session for user1 only
+	testutil.CreateTestSession(t, env, user1.ID, "ext-session-other")
+
+	// user2 should not have sessions
+	has, err := env.DB.HasOwnSessions(ctx, user2.ID)
+	if err != nil {
+		t.Fatalf("HasOwnSessions failed: %v", err)
+	}
+	if has {
+		t.Error("expected user2 to not have sessions")
+	}
+}
+
+// TestHasAPIKeys_NoKeys tests that a user with no API keys returns false
+func TestHasAPIKeys_NoKeys(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-no-keys",
+		Email:      "nokeys@example.com",
+		Name:       "No Keys User",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	has, err := env.DB.HasAPIKeys(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("HasAPIKeys failed: %v", err)
+	}
+	if has {
+		t.Error("expected no API keys for new user")
+	}
+}
+
+// TestHasAPIKeys_WithKeys tests that a user with API keys returns true
+func TestHasAPIKeys_WithKeys(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-with-keys",
+		Email:      "withkeys@example.com",
+		Name:       "With Keys User",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	// Create an API key for this user
+	testutil.CreateTestAPIKey(t, env, user.ID, "test-key-hash", "Test Key")
+
+	has, err := env.DB.HasAPIKeys(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("HasAPIKeys failed: %v", err)
+	}
+	if !has {
+		t.Error("expected user to have API keys")
+	}
+}
+
+// TestHasAPIKeys_OtherUserKeys tests that another user's API keys don't count
+func TestHasAPIKeys_OtherUserKeys(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+
+	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-key-user1",
+		Email:      "user1-keys@example.com",
+		Name:       "User 1",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "gh-key-user2",
+		Email:      "user2-keys@example.com",
+		Name:       "User 2",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
+	}
+
+	// Create an API key for user1 only
+	testutil.CreateTestAPIKey(t, env, user1.ID, "test-key-hash-other", "Test Key")
+
+	// user2 should not have API keys
+	has, err := env.DB.HasAPIKeys(ctx, user2.ID)
+	if err != nil {
+		t.Fatalf("HasAPIKeys failed: %v", err)
+	}
+	if has {
+		t.Error("expected user2 to not have API keys")
+	}
+}

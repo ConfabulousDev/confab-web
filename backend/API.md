@@ -228,9 +228,16 @@ GET /api/v1/me
   "name": "User Name",
   "avatar_url": "https://...",
   "status": "active",
-  "created_at": "2024-01-01T00:00:00Z"
+  "created_at": "2024-01-01T00:00:00Z",
+  "has_own_sessions": false,
+  "has_api_keys": false
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `has_own_sessions` | bool | Whether the user owns any synced sessions |
+| `has_api_keys` | bool | Whether the user has any API keys configured |
 
 ---
 

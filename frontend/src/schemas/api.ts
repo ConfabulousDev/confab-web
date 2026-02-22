@@ -104,6 +104,8 @@ export const UserSchema = z.object({
   name: z.string().optional(),
   email: z.string(),
   avatar_url: z.string().optional(),
+  has_own_sessions: z.boolean().optional(),
+  has_api_keys: z.boolean().optional(),
 });
 
 // ============================================================================

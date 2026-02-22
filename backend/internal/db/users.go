@@ -197,6 +197,42 @@ func (db *DB) DeleteUser(ctx context.Context, userID int64) error {
 	return nil
 }
 
+// HasOwnSessions checks if a user has any sessions they own
+func (db *DB) HasOwnSessions(ctx context.Context, userID int64) (bool, error) {
+	ctx, span := tracer.Start(ctx, "db.has_own_sessions",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	query := `SELECT EXISTS(SELECT 1 FROM sessions WHERE user_id = $1)`
+	var exists bool
+	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&exists)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return false, fmt.Errorf("failed to check user sessions: %w", err)
+	}
+	span.SetAttributes(attribute.Bool("user.has_own_sessions", exists))
+	return exists, nil
+}
+
+// HasAPIKeys checks if a user has any API keys
+func (db *DB) HasAPIKeys(ctx context.Context, userID int64) (bool, error) {
+	ctx, span := tracer.Start(ctx, "db.has_api_keys",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	query := `SELECT EXISTS(SELECT 1 FROM api_keys WHERE user_id = $1)`
+	var exists bool
+	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&exists)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return false, fmt.Errorf("failed to check user API keys: %w", err)
+	}
+	span.SetAttributes(attribute.Bool("user.has_api_keys", exists))
+	return exists, nil
+}
+
 // GetUserSessionIDs returns all session IDs (UUIDs) for a user
 // Used for S3 cleanup before user deletion
 func (db *DB) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, error) {
