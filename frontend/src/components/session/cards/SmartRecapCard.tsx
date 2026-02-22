@@ -65,12 +65,12 @@ export function SmartRecapCard({
         <CardWrapper
           title="Smart Recap"
           icon={SparklesIcon}
-          subtitle={quota ? `${quota.used}/${quota.limit} used` : undefined}
+          subtitle={quota ? `${quota.used}/${quota.limit} this month` : undefined}
         >
           <div className={styles.quotaPlaceholder}>
-            <p className={styles.quotaPlaceholderTitle}>Monthly limit reached</p>
+            <p className={styles.quotaPlaceholderTitle}>Configured limit reached</p>
             <p className={styles.quotaPlaceholderText}>
-              Recaps will be available next month.
+              The per-user monthly recap limit has been reached. This resets next month.
             </p>
           </div>
         </CardWrapper>
@@ -95,7 +95,7 @@ export function SmartRecapCard({
   const subtitleParts = [
     formatRelativeTime(data.computed_at),
     modelShort,
-    ...(quota ? [`${quota.used}/${quota.limit} used`] : []),
+    ...(quota ? [`${quota.used}/${quota.limit} this month`] : []),
   ];
   const subtitle = subtitleParts.join(' · ');
 
@@ -106,7 +106,7 @@ export function SmartRecapCard({
       className={panelStyles.cardActionButton}
       onClick={onRefresh}
       disabled={quota?.exceeded}
-      title={quota?.exceeded ? 'Monthly limit reached' : 'Regenerate recap'}
+      title={quota?.exceeded ? 'Configured limit reached' : 'Regenerate recap'}
       aria-label="Regenerate recap"
     >
       {RefreshIcon}
@@ -180,7 +180,7 @@ export function SmartRecapCard({
       {/* Footer - only show quota warning if exceeded */}
       {quota?.exceeded && (
         <div className={styles.footer}>
-          <span className={styles.quotaWarning}>Monthly limit reached</span>
+          <span className={styles.quotaWarning}>Configured limit reached</span>
         </div>
       )}
     </CardWrapper>

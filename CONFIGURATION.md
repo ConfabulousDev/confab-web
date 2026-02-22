@@ -120,7 +120,7 @@ AI-powered session summaries. Requires an [Anthropic API key](https://console.an
 | `SMART_RECAP_ENABLED` | `false` | No | Set to `true` to enable smart recaps |
 | `ANTHROPIC_API_KEY` | *(none)* | If smart recaps enabled | Anthropic API key |
 | `SMART_RECAP_MODEL` | *(none)* | If smart recaps enabled | Model to use (e.g. `claude-haiku-4-5-20251001`) |
-| `SMART_RECAP_QUOTA_LIMIT` | *(none)* | If smart recaps enabled | Monthly generation limit |
+| `SMART_RECAP_QUOTA_LIMIT` | `0` (unlimited) | No | Per-user monthly generation cap. Positive integer enforces a limit; `0` or omitted means unlimited. |
 | `SMART_RECAP_MAX_OUTPUT_TOKENS` | `1000` | No | Maximum LLM output tokens per recap |
 | `SMART_RECAP_MAX_TRANSCRIPT_TOKENS` | `50000` | No | Maximum input tokens per transcript (~chars/4) |
 

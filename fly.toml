@@ -60,7 +60,7 @@ primary_region = 'sjc'
   # fly secrets set ANTHROPIC_API_KEY=sk-ant-xxx
   SMART_RECAP_ENABLED = "true"
   SMART_RECAP_MODEL = "claude-haiku-4-5-20251001"
-  SMART_RECAP_QUOTA_LIMIT = "500"
+  SMART_RECAP_QUOTA_LIMIT = "500"  # Per-user monthly cap (0 = unlimited)
   SMART_RECAP_MAX_OUTPUT_TOKENS = "1000"
   SMART_RECAP_MAX_TRANSCRIPT_TOKENS = "50000"
 

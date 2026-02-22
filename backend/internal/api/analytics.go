@@ -51,11 +51,13 @@ func loadSmartRecapConfig() SmartRecapConfig {
 		LockTimeoutSeconds: defaultSmartRecapLockTimeoutSecs,
 	}
 
-	// Parse quota limit (required)
+	// Parse quota limit: positive integer = cap, 0 or omitted = unlimited
 	if quotaStr := os.Getenv("SMART_RECAP_QUOTA_LIMIT"); quotaStr != "" {
-		if quota, err := strconv.Atoi(quotaStr); err == nil && quota > 0 {
-			config.QuotaLimit = quota
+		quota, err := strconv.Atoi(quotaStr)
+		if err != nil || quota < 0 {
+			logger.Fatal("invalid SMART_RECAP_QUOTA_LIMIT", "value", quotaStr)
 		}
+		config.QuotaLimit = quota
 	}
 
 	// Parse max output tokens
@@ -72,12 +74,18 @@ func loadSmartRecapConfig() SmartRecapConfig {
 		}
 	}
 
-	// Disable if any required config is missing
-	if config.APIKey == "" || config.Model == "" || config.QuotaLimit == 0 {
+	// Disable if required config is missing (quota=0 means unlimited, not disabled)
+	if config.APIKey == "" || config.Model == "" {
 		config.Enabled = false
 	}
 
 	return config
+}
+
+// QuotaEnabled returns true if a per-user quota cap is configured (QuotaLimit > 0).
+// When false, usage is still tracked but no cap is enforced.
+func (c SmartRecapConfig) QuotaEnabled() bool {
+	return c.QuotaLimit > 0
 }
 
 // classifiedFiles holds the transcript and agent files from a session,
@@ -390,8 +398,8 @@ func attachOrGenerateSmartRecap(
 	quota, err := recapquota.GetOrCreate(dbCtx, database.Conn(), sessionUserID)
 	if err != nil {
 		log.Error("Failed to get smart recap quota", "error", err, "user_id", sessionUserID)
-	} else if isOwner {
-		// Only include quota in response for session owner (private info)
+	} else if config.QuotaEnabled() && isOwner {
+		// Only include quota in response when capped and viewer is the session owner
 		response.SmartRecapQuota = &analytics.SmartRecapQuotaInfo{
 			Used:     quota.ComputeCount,
 			Limit:    config.QuotaLimit,
@@ -407,8 +415,8 @@ func attachOrGenerateSmartRecap(
 
 	// No valid card exists - generate first-time if quota allows
 
-	// Check quota
-	if quota != nil && quota.ComputeCount >= config.QuotaLimit {
+	// Check quota (skip when unlimited)
+	if config.QuotaEnabled() && quota != nil && quota.ComputeCount >= config.QuotaLimit {
 		// Quota exceeded - return whatever cached data we have (even if invalid version)
 		if smartCard != nil {
 			addSmartRecapToResponse(response, smartCard)
@@ -695,8 +703,8 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
-		if quota.ComputeCount >= smartRecapConfig.QuotaLimit {
-			respondError(w, http.StatusForbidden, "Monthly recap limit reached")
+		if smartRecapConfig.QuotaEnabled() && quota.ComputeCount >= smartRecapConfig.QuotaLimit {
+			respondError(w, http.StatusForbidden, "Recap generation limit reached")
 			return
 		}
 
@@ -735,11 +743,13 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		// Return the generated card using the shared helper
 		response := &analytics.AnalyticsResponse{
 			Cards: make(map[string]interface{}),
-			SmartRecapQuota: &analytics.SmartRecapQuotaInfo{
+		}
+		if smartRecapConfig.QuotaEnabled() {
+			response.SmartRecapQuota = &analytics.SmartRecapQuotaInfo{
 				Used:     quota.ComputeCount + 1, // Increment since we just generated
 				Limit:    smartRecapConfig.QuotaLimit,
 				Exceeded: quota.ComputeCount+1 >= smartRecapConfig.QuotaLimit,
-			},
+			}
 		}
 		addSmartRecapToResponse(response, genResult.Card)
 		if genResult.SuggestedTitle != "" {

@@ -904,6 +904,11 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.redactions.total_redactions` | int | Total count of [REDACTED:TYPE] markers found |
 | `cards.redactions.redaction_counts` | object | Map of redaction type to occurrence count |
 | `card_errors` | object\|null | Map of card key to error message for failed computations (graceful degradation) |
+| `smart_recap_quota` | object\|null | Per-user quota info (present when quota is capped and viewer is owner; omitted when unlimited or non-owner) |
+| `smart_recap_quota.used` | int | Recaps generated this month |
+| `smart_recap_quota.limit` | int | Monthly cap |
+| `smart_recap_quota.exceeded` | bool | Whether the cap has been reached |
+| `smart_recap_missing_reason` | string\|null | Why smart recap data is absent: `"quota_exceeded"` (owner) or `"unavailable"` (non-owner). Omitted when smart recap data is present. |
 
 **Graceful Degradation:**
 

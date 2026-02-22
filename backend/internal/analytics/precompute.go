@@ -436,7 +436,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if computeCount >= p.config.SmartRecapQuota {
+	if p.config.SmartRecapQuota > 0 && computeCount >= p.config.SmartRecapQuota {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "quota_exceeded"))
 		return nil
 	}
