@@ -30,14 +30,14 @@ describe('AppConfigContext', () => {
     vi.useRealTimers();
   });
 
-  it('defaults sharesEnabled to true before fetch resolves', () => {
+  it('defaults sharesEnabled to false before fetch resolves', () => {
     vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => {}));
 
     const { result } = renderHook(() => useAppConfig(), {
       wrapper: createWrapper(),
     });
 
-    expect(result.current.sharesEnabled).toBe(true);
+    expect(result.current.sharesEnabled).toBe(false);
   });
 
   it('sets sharesEnabled to true from server response', async () => {
@@ -214,7 +214,7 @@ describe('fetchConfigWithRetry', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(result.saasFooterEnabled).toBe(false);
     expect(result.saasTermlyEnabled).toBe(false);
-    expect(result.sharesEnabled).toBe(true);
+    expect(result.sharesEnabled).toBe(false);
   });
 
   it('retries on non-ok response and defaults to false', async () => {

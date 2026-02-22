@@ -62,7 +62,7 @@ type Server struct {
 	emailService      *email.RateLimitedService // Email service for share invitations (may be nil)
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
 	supportEmail      string                    // Support contact email address
-	sharesDisabled    bool                      // When true, share creation is disabled (DISABLE_SHARE_CREATION=true)
+	sharesEnabled     bool                      // When true, share creation is enabled (ENABLE_SHARE_CREATION=true)
 	saasFooterEnabled bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
 	saasTermlyEnabled bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
 	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
@@ -84,7 +84,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		emailService:   emailService,
 		frontendURL:    os.Getenv("FRONTEND_URL"),
 		supportEmail:   supportEmail,
-		sharesDisabled:    os.Getenv("DISABLE_SHARE_CREATION") == "true",
+		sharesEnabled:     os.Getenv("ENABLE_SHARE_CREATION") == "true",
 		saasFooterEnabled: os.Getenv("ENABLE_SAAS_FOOTER") == "true",
 		saasTermlyEnabled: os.Getenv("ENABLE_SAAS_TERMLY") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
@@ -256,7 +256,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db, s.oauthConfig.AllowedEmailDomains))))
 
 	// Admin routes (require web session + super admin)
-	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled, s.oauthConfig.AllowedEmailDomains, s.sharesDisabled)
+	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled, s.oauthConfig.AllowedEmailDomains, s.sharesEnabled)
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(csrfMiddleware)
 		r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
@@ -340,7 +340,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
-			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService, s.sharesDisabled)))
+			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService, s.sharesEnabled)))
 			r.Get("/sessions/{id}/shares", withMaxBody(MaxBodyXS, HandleListShares(s.db)))
 			r.Get("/shares", withMaxBody(MaxBodyXS, HandleListAllUserShares(s.db)))
 			r.Delete("/shares/{shareID}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))

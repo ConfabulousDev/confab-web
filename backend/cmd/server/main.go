@@ -67,9 +67,8 @@ func main() {
 		logger.Info("share-all-sessions mode enabled: all sessions visible to authenticated users")
 	}
 
-	// Disable share creation for on-prem deployments
-	if os.Getenv("DISABLE_SHARE_CREATION") == "true" {
-		logger.Info("share creation disabled: DISABLE_SHARE_CREATION=true")
+	if os.Getenv("ENABLE_SHARE_CREATION") == "true" {
+		logger.Info("share creation enabled: ENABLE_SHARE_CREATION=true")
 	}
 	if os.Getenv("ENABLE_SAAS_FOOTER") == "true" {
 		logger.Info("SaaS footer enabled: ENABLE_SAAS_FOOTER=true")

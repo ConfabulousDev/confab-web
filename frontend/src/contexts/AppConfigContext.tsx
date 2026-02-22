@@ -9,7 +9,7 @@ export interface AppConfig {
 }
 
 const defaultAppConfig: AppConfig = {
-  sharesEnabled: true,
+  sharesEnabled: false,
   saasFooterEnabled: false,
   saasTermlyEnabled: false,
   supportEmail: '',

@@ -64,7 +64,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, authConfigResponse{
 		Providers: providers,
 		Features: authConfigFeatures{
-			SharesEnabled:    !s.sharesDisabled,
+			SharesEnabled:    s.sharesEnabled,
 			SaasFooterEnabled: s.saasFooterEnabled,
 			SaasTermlyEnabled: s.saasTermlyEnabled,
 			SupportEmail:     s.supportEmail,
