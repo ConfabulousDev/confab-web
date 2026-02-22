@@ -274,7 +274,17 @@ Note: Neither tool catches unused *exported* identifiers, since those could theo
 Tags follow semver (`v0.3.6`, `v0.3.7`, etc.). To release:
 
 ```bash
+git checkout main && git pull origin main
 git tag v0.X.Y
 git push origin v0.X.Y
-gh release create v0.X.Y --generate-notes
+gh release create v0.X.Y --notes "<release notes>"
 ```
+
+### Release Notes
+
+Do **not** use `--generate-notes`. Write release notes manually by reviewing all commits since the last tag (`git log <prev-tag>..HEAD --oneline`). Include:
+
+- **All commits listed with descriptions**, grouped by category (Features, Security, Refactoring, Docs, CI, etc.)
+- **Link to PRs** where commits have them (e.g., `[#20](url)`)
+- **Breaking changes section** covering: renamed/removed env vars, API changes, DB migrations, CLI impact
+- Note if there are **no** breaking changes in a given category (no migrations, no CLI changes, etc.)
