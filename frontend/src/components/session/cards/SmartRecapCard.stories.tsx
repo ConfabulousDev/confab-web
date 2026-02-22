@@ -143,7 +143,7 @@ export const Loading: Story = {
   },
 };
 
-export const NoQuotaInfo: Story = {
+export const UnlimitedQuota: Story = {
   args: {
     data: {
       recap: 'Recap without quota information displayed.',

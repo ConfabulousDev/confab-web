@@ -141,6 +141,11 @@ cd backend && go test -short ./...
 cd frontend && npm run build && npm run lint && npm test
 ```
 
+**Important:** Always run frontend commands from the `frontend/` directory using `npm run`.
+Do NOT run `tsc`, `eslint`, or `vitest` directly — they are local binaries
+resolved via `node_modules/.bin` which `npm run` adds to PATH automatically.
+If commands fail with "command not found", run `npm install` first.
+
 ### Sharded Backend Tests (Faster)
 
 For faster test runs, shard by package using 6 parallel Bash tool calls:

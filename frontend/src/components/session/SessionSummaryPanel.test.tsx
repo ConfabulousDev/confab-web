@@ -146,7 +146,7 @@ describe('SessionSummaryPanel', () => {
       );
 
       // SmartRecapCard should receive the missingReason and render the quota exceeded placeholder
-      expect(screen.getByText('Monthly limit reached')).toBeInTheDocument();
+      expect(screen.getByText('Configured limit reached')).toBeInTheDocument();
     });
 
     it('passes quota and onRefresh to owners', () => {
@@ -177,7 +177,7 @@ describe('SessionSummaryPanel', () => {
       );
 
       // Owner should see quota in subtitle and refresh button
-      expect(screen.getByText(/3\/10 used/)).toBeInTheDocument();
+      expect(screen.getByText(/3\/10 this month/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Regenerate recap' })).toBeInTheDocument();
     });
 
@@ -210,7 +210,7 @@ describe('SessionSummaryPanel', () => {
 
       // Non-owner should see recap but no quota and no refresh button
       expect(screen.getByText('Test recap')).toBeInTheDocument();
-      expect(screen.queryByText(/3\/10 used/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/3\/10 this month/)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Regenerate recap' })).not.toBeInTheDocument();
     });
   });
@@ -338,7 +338,7 @@ describe('SessionSummaryPanel', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Monthly recap limit reached. Try again next month.')).toBeInTheDocument();
+        expect(screen.getByText('Recap limit reached. This limit resets next month.')).toBeInTheDocument();
       });
     });
 

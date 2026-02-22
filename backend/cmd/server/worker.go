@@ -366,11 +366,13 @@ func loadPrecomputeConfig() analytics.PrecomputeConfig {
 		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
 	}
 
-	// Parse quota limit
+	// Parse quota limit: positive integer = cap, 0 or omitted = unlimited
 	if quotaStr := os.Getenv("SMART_RECAP_QUOTA_LIMIT"); quotaStr != "" {
-		if quota, err := strconv.Atoi(quotaStr); err == nil && quota > 0 {
-			config.SmartRecapQuota = quota
+		quota, err := strconv.Atoi(quotaStr)
+		if err != nil || quota < 0 {
+			logger.Fatal("invalid SMART_RECAP_QUOTA_LIMIT", "value", quotaStr, "error", "must be a non-negative integer")
 		}
+		config.SmartRecapQuota = quota
 	}
 
 	// Parse max output tokens
@@ -399,8 +401,8 @@ func loadPrecomputeConfig() analytics.PrecomputeConfig {
 		analytics.DefaultSmartRecapThresholds(),
 	)
 
-	// Disable if required config is missing
-	if config.AnthropicAPIKey == "" || config.SmartRecapModel == "" || config.SmartRecapQuota == 0 {
+	// Disable if required config is missing (quota=0 means unlimited, not disabled)
+	if config.AnthropicAPIKey == "" || config.SmartRecapModel == "" {
 		config.SmartRecapEnabled = false
 	}
 

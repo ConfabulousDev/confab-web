@@ -93,7 +93,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           console.log('Smart recap generation already in progress');
         } else if (err.status === 403) {
           // Quota exceeded
-          setRegenerateError('Monthly recap limit reached. Try again next month.');
+          setRegenerateError('Recap limit reached. This limit resets next month.');
         } else {
           console.error('Failed to regenerate smart recap:', err);
           setRegenerateError('Failed to regenerate recap. Please try again.');

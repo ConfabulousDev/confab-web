@@ -33,13 +33,13 @@ describe('SmartRecapCard', () => {
   it('subtitle includes quota info when quota prop provided', () => {
     render(<SmartRecapCard data={mockData} loading={false} quota={mockQuota} />);
 
-    expect(screen.getByText(/3\/10 used/)).toBeInTheDocument();
+    expect(screen.getByText(/3\/10 this month/)).toBeInTheDocument();
   });
 
   it('subtitle excludes quota info when no quota', () => {
     render(<SmartRecapCard data={mockData} loading={false} />);
 
-    expect(screen.queryByText(/used$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/this month$/)).not.toBeInTheDocument();
   });
 
   it('loading state shows "Loading..."', () => {
@@ -70,9 +70,9 @@ describe('SmartRecapCard', () => {
       />
     );
 
-    expect(screen.getByText('Monthly limit reached')).toBeInTheDocument();
-    expect(screen.getByText('Recaps will be available next month.')).toBeInTheDocument();
-    expect(screen.getByText('3/10 used')).toBeInTheDocument();
+    expect(screen.getByText('Configured limit reached')).toBeInTheDocument();
+    expect(screen.getByText('The per-user monthly recap limit has been reached. This resets next month.')).toBeInTheDocument();
+    expect(screen.getByText('3/10 this month')).toBeInTheDocument();
   });
 
   it('missingReason=unavailable shows unavailable placeholder', () => {
@@ -157,7 +157,7 @@ describe('SmartRecapCard', () => {
 
     const button = screen.getByRole('button', { name: 'Regenerate recap' });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', 'Monthly limit reached');
+    expect(button).toHaveAttribute('title', 'Configured limit reached');
   });
 
   it('no refresh button when onRefresh not provided', () => {
