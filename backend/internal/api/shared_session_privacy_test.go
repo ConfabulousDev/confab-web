@@ -14,28 +14,41 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
-// createSessionWithHostnameUsername creates a test session with hostname and username set
-func createSessionWithHostnameUsername(t *testing.T, env *testutil.TestEnvironment, userID int64, externalID, hostname, username string) string {
+// createSessionWithPII creates a test session with all PII fields set (hostname, username, cwd, transcript_path)
+func createSessionWithPII(t *testing.T, env *testutil.TestEnvironment, userID int64, externalID, hostname, username, cwd, transcriptPath string) string {
 	t.Helper()
 
 	sessionID := testutil.CreateTestSession(t, env, userID, externalID)
 
-	// Update the session with hostname and username
-	query := `UPDATE sessions SET hostname = $1, username = $2 WHERE id = $3`
-	_, err := env.DB.Exec(env.Ctx, query, hostname, username, sessionID)
+	query := `UPDATE sessions SET hostname = $1, username = $2, cwd = $3, transcript_path = $4 WHERE id = $5`
+	_, err := env.DB.Exec(env.Ctx, query, hostname, username, cwd, transcriptPath, sessionID)
 	if err != nil {
-		t.Fatalf("failed to set hostname/username: %v", err)
+		t.Fatalf("failed to set PII fields: %v", err)
 	}
 
 	return sessionID
 }
 
-// NOTE: hostname/username are no longer included in the session list API response (SessionListItem).
-// They are only available in the session detail API (SessionDetail). The list-API privacy tests
-// have been removed since there's nothing to test — the fields don't exist in the list response.
+// assertPIIRedacted checks that all PII fields are nil in a session detail response
+func assertPIIRedacted(t *testing.T, session db.SessionDetail) {
+	t.Helper()
 
-// TestHostnameUsernamePrivacy_SessionDetail tests that hostname/username are visible in the owner detail endpoint
-func TestHostnameUsernamePrivacy_SessionDetail(t *testing.T) {
+	if session.Hostname != nil {
+		t.Errorf("PRIVACY VIOLATION: hostname exposed: '%s'", *session.Hostname)
+	}
+	if session.Username != nil {
+		t.Errorf("PRIVACY VIOLATION: username exposed: '%s'", *session.Username)
+	}
+	if session.CWD != nil {
+		t.Errorf("PRIVACY VIOLATION: cwd exposed: '%s'", *session.CWD)
+	}
+	if session.TranscriptPath != nil {
+		t.Errorf("PRIVACY VIOLATION: transcript_path exposed: '%s'", *session.TranscriptPath)
+	}
+}
+
+// TestSharedSessionPrivacy_OwnerSeesPII tests that all PII fields are visible to the session owner
+func TestSharedSessionPrivacy_OwnerSeesPII(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -47,14 +60,13 @@ func TestHostnameUsernamePrivacy_SessionDetail(t *testing.T) {
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 
-	// Owner creates a session with hostname and username
-	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "detail-test-session", "workstation.local", "developer")
+	sessionID := createSessionWithPII(t, env, owner.ID, "detail-test-session",
+		"workstation.local", "developer", "/Users/developer/dev/project", "/Users/developer/.claude/transcript.jsonl")
 
-	t.Run("Owner sees hostname and username in session detail", func(t *testing.T) {
+	t.Run("Owner sees all PII fields in session detail", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 		reqCtx := context.WithValue(ctx, auth.GetUserIDContextKey(), owner.ID)
 
-		// Add URL parameter
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(reqCtx, chi.RouteCtxKey, rctx))
@@ -72,22 +84,23 @@ func TestHostnameUsernamePrivacy_SessionDetail(t *testing.T) {
 			t.Fatalf("Failed to parse response: %v", err)
 		}
 
-		if session.Hostname == nil {
-			t.Error("Expected hostname to be set for owner, got nil")
-		} else if *session.Hostname != "workstation.local" {
-			t.Errorf("Expected hostname 'workstation.local', got '%s'", *session.Hostname)
+		if session.Hostname == nil || *session.Hostname != "workstation.local" {
+			t.Errorf("Expected hostname 'workstation.local', got %v", session.Hostname)
 		}
-
-		if session.Username == nil {
-			t.Error("Expected username to be set for owner, got nil")
-		} else if *session.Username != "developer" {
-			t.Errorf("Expected username 'developer', got '%s'", *session.Username)
+		if session.Username == nil || *session.Username != "developer" {
+			t.Errorf("Expected username 'developer', got %v", session.Username)
+		}
+		if session.CWD == nil || *session.CWD != "/Users/developer/dev/project" {
+			t.Errorf("Expected cwd '/Users/developer/dev/project', got %v", session.CWD)
+		}
+		if session.TranscriptPath == nil || *session.TranscriptPath != "/Users/developer/.claude/transcript.jsonl" {
+			t.Errorf("Expected transcript_path '/Users/developer/.claude/transcript.jsonl', got %v", session.TranscriptPath)
 		}
 	})
 }
 
-// TestHostnameUsernamePrivacy_SharedSession tests that hostname/username are NOT visible via shared session endpoint
-func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
+// TestSharedSessionPrivacy_PublicShare tests that PII is redacted for public share access
+func TestSharedSessionPrivacy_PublicShare(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -99,8 +112,8 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 
-	// Owner creates a session with hostname and username
-	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "shared-detail-session", "secret-server.internal", "secretuser")
+	sessionID := createSessionWithPII(t, env, owner.ID, "shared-detail-session",
+		"secret-server.internal", "secretuser", "/Users/secretuser/dev/secret-project", "/Users/secretuser/.claude/transcript.jsonl")
 
 	// Create a public share
 	var shareID int64
@@ -112,7 +125,6 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 		t.Fatalf("Failed to create share: %v", err)
 	}
 
-	// Make it public
 	_, err = env.DB.Exec(ctx,
 		`INSERT INTO session_share_public (share_id) VALUES ($1)`,
 		shareID)
@@ -120,10 +132,9 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 		t.Fatalf("Failed to make share public: %v", err)
 	}
 
-	t.Run("Canonical session endpoint does NOT expose hostname/username for shared access", func(t *testing.T) {
+	t.Run("Public share does NOT expose PII", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 
-		// Add URL parameters
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", sessionID)
 		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
@@ -141,18 +152,12 @@ func TestHostnameUsernamePrivacy_SharedSession(t *testing.T) {
 			t.Fatalf("Failed to parse response: %v", err)
 		}
 
-		// The critical privacy check: hostname and username must NOT be exposed
-		if session.Hostname != nil {
-			t.Errorf("PRIVACY VIOLATION: hostname exposed via canonical session endpoint: '%s'", *session.Hostname)
-		}
-		if session.Username != nil {
-			t.Errorf("PRIVACY VIOLATION: username exposed via canonical session endpoint: '%s'", *session.Username)
-		}
+		assertPIIRedacted(t, session)
 	})
 }
 
-// TestHostnameUsernamePrivacy_SharedSessionPrivate tests private shares also don't leak hostname/username
-func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
+// TestSharedSessionPrivacy_PrivateShare tests that PII is redacted for private share recipients
+func TestSharedSessionPrivacy_PrivateShare(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -165,8 +170,8 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
 
-	// Owner creates a session with hostname and username
-	sessionID := createSessionWithHostnameUsername(t, env, owner.ID, "private-shared-session", "private-machine.home", "privateuser")
+	sessionID := createSessionWithPII(t, env, owner.ID, "private-shared-session",
+		"private-machine.home", "privateuser", "/Users/privateuser/work/internal-project", "/Users/privateuser/.claude/transcript.jsonl")
 
 	// Create a private share for viewer
 	var shareID int64
@@ -178,7 +183,6 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 		t.Fatalf("Failed to create share: %v", err)
 	}
 
-	// Add viewer as recipient
 	_, err = env.DB.Exec(ctx,
 		`INSERT INTO session_share_recipients (share_id, email, user_id) VALUES ($1, $2, $3)`,
 		shareID, viewer.Email, viewer.ID)
@@ -186,14 +190,12 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 		t.Fatalf("Failed to create recipient: %v", err)
 	}
 
-	t.Run("Private shared session via canonical endpoint does NOT expose hostname/username", func(t *testing.T) {
+	t.Run("Private share does NOT expose PII", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
 
-		// Add URL parameters
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", sessionID)
 
-		// Set up context with route params and authenticated user
 		reqCtx := context.WithValue(ctx, chi.RouteCtxKey, rctx)
 		reqCtx = auth.SetUserIDForTest(reqCtx, viewer.ID)
 		req = req.WithContext(reqCtx)
@@ -211,12 +213,6 @@ func TestHostnameUsernamePrivacy_SharedSessionPrivate(t *testing.T) {
 			t.Fatalf("Failed to parse response: %v", err)
 		}
 
-		// The critical privacy check: hostname and username must NOT be exposed
-		if session.Hostname != nil {
-			t.Errorf("PRIVACY VIOLATION: hostname exposed via canonical session endpoint: '%s'", *session.Hostname)
-		}
-		if session.Username != nil {
-			t.Errorf("PRIVACY VIOLATION: username exposed via canonical session endpoint: '%s'", *session.Username)
-		}
+		assertPIIRedacted(t, session)
 	})
 }

@@ -595,9 +595,9 @@ func TestGetSessionDetailWithAccess_SharedAccess(t *testing.T) {
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
-	// Add hostname/username to the session
+	// Add PII fields to the session
 	_, err := env.DB.Exec(env.Ctx,
-		"UPDATE sessions SET hostname = 'test-host', username = 'test-user' WHERE id = $1",
+		"UPDATE sessions SET hostname = 'test-host', username = 'test-user', cwd = '/Users/test-user/dev/project', transcript_path = '/Users/test-user/.claude/transcript.jsonl' WHERE id = $1",
 		sessionID)
 	if err != nil {
 		t.Fatalf("failed to update session: %v", err)
@@ -618,12 +618,18 @@ func TestGetSessionDetailWithAccess_SharedAccess(t *testing.T) {
 	if session.IsOwner == nil || *session.IsOwner {
 		t.Error("expected IsOwner = false for shared access")
 	}
-	// Shared access should NOT have hostname/username
+	// Shared access should NOT have any PII fields
 	if session.Hostname != nil {
 		t.Error("expected Hostname = nil for shared access")
 	}
 	if session.Username != nil {
 		t.Error("expected Username = nil for shared access")
+	}
+	if session.CWD != nil {
+		t.Error("expected CWD = nil for shared access")
+	}
+	if session.TranscriptPath != nil {
+		t.Error("expected TranscriptPath = nil for shared access")
 	}
 }
 

@@ -85,6 +85,15 @@ type SessionDetail struct {
 	OwnerEmail       string           `json:"owner_email"`                  // Email of session owner (always populated)
 }
 
+// RedactForSharing strips PII fields that should not be visible to non-owners.
+// Centralizes all share-related redaction for easy auditing and extension.
+func (s *SessionDetail) RedactForSharing() {
+	s.Hostname = nil
+	s.Username = nil
+	s.CWD = nil
+	s.TranscriptPath = nil
+}
+
 // SyncFileDetail represents a synced file
 type SyncFileDetail struct {
 	FileName       string    `json:"file_name"`
