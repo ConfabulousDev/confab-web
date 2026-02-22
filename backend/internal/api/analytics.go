@@ -709,15 +709,24 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Check if generation is already in progress (lock check) - return 409 Conflict
-		smartCard, _ := analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
+		smartCard, err := analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
+		if err != nil {
+			log.Error("Failed to get smart recap card", "error", err, "session_id", sessionID)
+		}
 		if smartCard != nil && !smartCard.CanAcquireLock(smartRecapConfig.LockTimeoutSeconds) {
 			respondError(w, http.StatusConflict, "Generation already in progress")
 			return
 		}
 
 		// Get cached cards for stats context
-		cached, _ := analyticsStore.GetCards(dbCtx, sessionID)
-		cardStats := cached.ToResponse().Cards
+		cached, err := analyticsStore.GetCards(dbCtx, sessionID)
+		if err != nil {
+			log.Error("Failed to get cached cards", "error", err, "session_id", sessionID)
+		}
+		var cardStats map[string]interface{}
+		if cached != nil {
+			cardStats = cached.ToResponse().Cards
+		}
 
 		// Download transcript synchronously
 		fc := downloadTranscriptForSmartRecap(r.Context(), database, store, sessionID, sessionUserID, externalID, log)
@@ -731,7 +740,10 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		if genResult == nil {
 			// Could be lock conflict (race) or generation failure
 			// Check if it's a lock conflict
-			smartCard, _ = analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
+			smartCard, err = analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
+			if err != nil {
+				log.Error("Failed to get smart recap card after generation", "error", err, "session_id", sessionID)
+			}
 			if smartCard != nil && !smartCard.CanAcquireLock(smartRecapConfig.LockTimeoutSeconds) {
 				respondError(w, http.StatusConflict, "Generation already in progress")
 				return

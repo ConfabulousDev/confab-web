@@ -53,6 +53,11 @@ func ValidateDomainList(domains []string) error {
 	return nil
 }
 
+// NormalizeEmail lowercases and trims whitespace from an email address.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 // IsValidEmail checks if an email address is valid
 // Returns true if the email matches expected format with proper domain (requires TLD)
 func IsValidEmail(email string) bool {

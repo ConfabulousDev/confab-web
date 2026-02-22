@@ -3,6 +3,8 @@ package admin
 import (
 	"os"
 	"strings"
+
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // IsSuperAdmin checks if the given email is in the super admin list
@@ -12,9 +14,9 @@ func IsSuperAdmin(email string) bool {
 		return false
 	}
 
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = validation.NormalizeEmail(email)
 	for _, adminEmail := range strings.Split(adminEmails, ",") {
-		if strings.ToLower(strings.TrimSpace(adminEmail)) == email {
+		if validation.NormalizeEmail(adminEmail) == email {
 			return true
 		}
 	}

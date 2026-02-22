@@ -54,7 +54,7 @@ func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerF
 			return
 		}
 
-		email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
+		email := validation.NormalizeEmail(r.FormValue("email"))
 		password := r.FormValue("password")
 
 		// Validate inputs
@@ -182,7 +182,7 @@ func BootstrapAdmin(ctx context.Context, database *db.DB, allowedDomains []strin
 	}
 
 	// Validate email
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = validation.NormalizeEmail(email)
 	if !validation.IsValidEmail(email) {
 		return fmt.Errorf("ADMIN_BOOTSTRAP_EMAIL is not a valid email address")
 	}
