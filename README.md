@@ -41,11 +41,12 @@ Start a Claude Code session — it appears in the dashboard automatically.
 - **Session Management** — Archive, browse, search sessions; full transcript viewer
 - **Analytics & Smart Recaps** (optional) — Cost tracking, AI-powered recaps (requires Anthropic API key)
 - **Sharing** — Public and private share links
-- **Multi-User** — Password auth, GitHub OAuth, Google OAuth, or OIDC (Okta, Auth0, Azure AD, Keycloak)
-- **Team Deployment** — Shared-session mode, configurable user limits, white-label options
+- **Multi-User Auth** — Password auth, GitHub OAuth, Google OAuth, or OIDC (Okta, Auth0, Azure AD, Keycloak)
+- **Team Sharing** — Shared-session mode makes all sessions visible to authenticated team members
+- **White-Label** — Disable footer branding and cookie banners for internal deployments
 - **Admin Panel** — User management, activation/deactivation, storage monitoring
 - **Developer Experience** — GitHub link detection, API keys, per-user rate limiting
-- **Infrastructure** — PostgreSQL + MinIO (S3-compatible), runs in Docker
+- **Infrastructure** — Single Docker image (frontend + backend), Docker Compose one-command deploy, PostgreSQL + MinIO, custom domain support
 
 ## Architecture
 
