@@ -378,6 +378,11 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	})
 
+	// Redirect /install to canonical GitHub raw URL (backwards compat for old install commands)
+	r.Get("/install", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh", http.StatusMovedPermanently)
+	})
+
 	// Static file serving (production mode when frontend is bundled with backend)
 	if staticDir != "" {
 		logger.Info("serving static files", "dir", staticDir)
