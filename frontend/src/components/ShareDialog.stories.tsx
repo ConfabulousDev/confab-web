@@ -329,7 +329,7 @@ export const WithRecipients: Story = {
 // Success state after share is created
 export const ShareCreated: Story = {
   args: {
-    createdShareURL: 'https://app.confabulous.dev/sessions/abc123def456',
+    createdShareURL: 'https://app.example.com/sessions/abc123def456',
   },
 };
 
@@ -365,7 +365,7 @@ export const WithError: Story = {
 // Complete flow: success with active shares
 export const SuccessWithShares: Story = {
   args: {
-    createdShareURL: 'https://app.confabulous.dev/sessions/abc123def456',
+    createdShareURL: 'https://app.example.com/sessions/abc123def456',
     shares: sampleShares,
   },
 };

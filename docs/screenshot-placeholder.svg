@@ -1,5 +1,5 @@
 <svg width="960" height="540" xmlns="http://www.w3.org/2000/svg">
   <rect width="960" height="540" rx="8" fill="#1a1a2e" stroke="#333" stroke-width="2"/>
   <text x="480" y="250" text-anchor="middle" fill="#888" font-family="system-ui, sans-serif" font-size="24">Dashboard Screenshot Coming Soon</text>
-  <text x="480" y="290" text-anchor="middle" fill="#666" font-family="system-ui, sans-serif" font-size="16">confabulous.dev</text>
+  <text x="480" y="290" text-anchor="middle" fill="#666" font-family="system-ui, sans-serif" font-size="16">your-server.example.com</text>
 </svg>
