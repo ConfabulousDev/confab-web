@@ -57,3 +57,18 @@
   color: var(--color-text-secondary);
   line-height: 1.5;
 }
+
+.githubLink {
+  display: block;
+  margin-top: var(--spacing-lg);
+  text-align: center;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.githubLink:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}

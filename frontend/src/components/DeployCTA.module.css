@@ -1,0 +1,22 @@
+.container {
+  text-align: center;
+  margin-top: var(--spacing-3xl);
+}
+
+.tagline {
+  font-size: var(--font-base);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.githubLink {
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.githubLink:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}
