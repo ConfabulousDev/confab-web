@@ -25,6 +25,7 @@ func setupSharesTestServer(t *testing.T, env *testutil.TestEnvironment) *testuti
 	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
 	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
 	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
+	testutil.SetEnvForTest(t, "ENABLE_SHARE_CREATION", "true")
 
 	oauthConfig := auth.OAuthConfig{
 		GitHubClientID:     "test-github-client-id",
