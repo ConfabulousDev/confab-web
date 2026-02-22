@@ -1,6 +1,6 @@
 # Confab Backend
 
-Cloud backend service for Confab - Claude Code session archiver.
+Backend service for Confab — the self-hosted Claude Code session analytics platform. See the [root README](../README.md) for deployment instructions.
 
 ## Features
 
