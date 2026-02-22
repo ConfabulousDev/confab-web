@@ -8,6 +8,7 @@ import Pagination from '@/components/Pagination';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
+import QuickstartCTA from '@/components/QuickstartCTA';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
 import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon, RefreshIcon, PersonIcon } from '@/components/icons';
@@ -101,6 +102,10 @@ function SessionsPage() {
             </Alert>
           )}
           {error && <Alert variant="error">{error.message}</Alert>}
+
+          <QuickstartCTA
+            show={user?.has_own_sessions === false && user?.has_api_keys === false}
+          />
 
           <div className={styles.card}>
             {loading && sessions.length === 0 && (
