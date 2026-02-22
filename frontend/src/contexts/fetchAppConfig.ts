@@ -1,7 +1,7 @@
 import type { AppConfig } from './AppConfigContext';
 
 const defaultAppConfig: AppConfig = {
-  sharesEnabled: true,
+  sharesEnabled: false,
   saasFooterEnabled: false,
   saasTermlyEnabled: false,
   supportEmail: '',
@@ -17,7 +17,7 @@ export async function fetchConfigWithRetry(): Promise<AppConfig> {
       if (!res.ok) throw new Error('Failed to fetch config');
       const data = await res.json();
       return {
-        sharesEnabled: data.features?.shares_enabled ?? true,
+        sharesEnabled: data.features?.shares_enabled ?? false,
         saasFooterEnabled: data.features?.saas_footer_enabled ?? false,
         saasTermlyEnabled: data.features?.saas_termly_enabled ?? false,
         supportEmail: data.features?.support_email ?? '',

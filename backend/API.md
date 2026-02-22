@@ -517,7 +517,7 @@ Content-Type: application/json
 ```
 
 **Errors:**
-- `403` - Share creation is disabled (`DISABLE_SHARE_CREATION=true`): `{"error": "Share creation is disabled by the administrator"}`
+- `403` - Share creation is not enabled (`ENABLE_SHARE_CREATION` is not set to `true`): `{"error": "Share creation is disabled by the administrator"}`
 
 **Note:** Share URLs use the canonical session URL format (`/sessions/{id}`). For private shares, invitation emails include the recipient's email as a query parameter: `https://confab.dev/sessions/{id}?email={recipient_email}`. This allows the login flow to guide the recipient to sign in with the correct email address.
 
@@ -1044,7 +1044,7 @@ Returns the list of enabled authentication providers. No authentication required
 | `providers[].name` | string | Provider identifier: `"password"`, `"github"`, `"google"`, or `"oidc"` |
 | `providers[].display_name` | string | Human-readable name for the provider (e.g., `"GitHub"`, `"Okta"`) |
 | `providers[].login_url` | string | Path to initiate login with this provider |
-| `features.shares_enabled` | bool | Whether share creation is enabled (`false` when `DISABLE_SHARE_CREATION=true`) |
+| `features.shares_enabled` | bool | Whether share creation is enabled (`true` when `ENABLE_SHARE_CREATION=true`) |
 | `features.saas_footer_enabled` | bool | Whether the SaaS footer is shown (`true` when `ENABLE_SAAS_FOOTER=true`) |
 | `features.saas_termly_enabled` | bool | Whether Termly cookie consent is enabled (`true` when `ENABLE_SAAS_TERMLY=true`) |
 | `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |

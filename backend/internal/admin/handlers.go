@@ -36,17 +36,17 @@ type Handlers struct {
 	Storage             *storage.S3Storage
 	PasswordAuthEnabled bool
 	AllowedEmailDomains []string
-	SharesDisabled      bool
+	SharesEnabled       bool
 }
 
 // NewHandlers creates admin handlers with dependencies
-func NewHandlers(database *db.DB, store *storage.S3Storage, passwordAuthEnabled bool, allowedDomains []string, sharesDisabled bool) *Handlers {
+func NewHandlers(database *db.DB, store *storage.S3Storage, passwordAuthEnabled bool, allowedDomains []string, sharesEnabled bool) *Handlers {
 	return &Handlers{
 		DB:                  database,
 		Storage:             store,
 		PasswordAuthEnabled: passwordAuthEnabled,
 		AllowedEmailDomains: allowedDomains,
-		SharesDisabled:      sharesDisabled,
+		SharesEnabled:       sharesEnabled,
 	}
 }
 
@@ -590,8 +590,8 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 	}
 
 	var formContentHTML string
-	if h.SharesDisabled {
-		formContentHTML = `<p style="color: #856404; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.75rem 1rem; font-size: 0.875rem;">Share creation is disabled by the administrator (DISABLE_SHARE_CREATION=true).</p>`
+	if !h.SharesEnabled {
+		formContentHTML = `<p style="color: #856404; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 0.75rem 1rem; font-size: 0.875rem;">Share creation is not enabled. Set ENABLE_SHARE_CREATION=true to enable.</p>`
 	} else {
 		formContentHTML = fmt.Sprintf(`
 			<form method="POST" action="%s/system-shares">
@@ -776,8 +776,8 @@ func (h *Handlers) HandleSystemSharePage(w http.ResponseWriter, r *http.Request)
 
 // HandleCreateSystemShareForm handles form submission for creating system shares
 func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Request, frontendURL string) {
-	if h.SharesDisabled {
-		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Share+creation+is+disabled+by+the+administrator", http.StatusSeeOther)
+	if !h.SharesEnabled {
+		http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Share+creation+is+not+enabled", http.StatusSeeOther)
 		return
 	}
 

@@ -360,7 +360,7 @@ Configure how your team interacts with sessions and sharing.
 | Variable | What it does |
 |----------|-------------|
 | `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | Set to `"true"` to make every session visible to all authenticated users. Useful for small teams that want full transparency. |
-| `DISABLE_SHARE_CREATION` | Set to `"true"` to prevent users from creating external share links. |
+| `ENABLE_SHARE_CREATION` | Set to `"true"` to allow users to create external share links. |
 | `MAX_USERS` | Maximum registered users (default: `50`). Set to `"0"` to block new registrations. |
 | `SUPER_ADMIN_EMAILS` | Comma-separated emails with access to the admin panel at `/admin/users`. |
 
@@ -370,8 +370,6 @@ Configure how your team interacts with sessions and sharing.
 
 | Variable | What it does |
 |----------|-------------|
-| `DISABLE_FOOTER` | Set to `"true"` to hide the default footer (GitHub, Discord, Help links). |
-| `DISABLE_TERMLY` | Set to `"true"` to remove the Termly cookie-consent banner. |
 | `SUPPORT_EMAIL` | Support email address shown in the UI. |
 
 ### Email (for Share Invitations)

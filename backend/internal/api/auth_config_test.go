@@ -185,7 +185,7 @@ func TestHandleAuthConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("features shares_enabled defaults to true", func(t *testing.T) {
+	t.Run("features shares_enabled defaults to false", func(t *testing.T) {
 		s := &Server{
 			oauthConfig: &auth.OAuthConfig{
 				GitHubEnabled: true,
@@ -200,8 +200,8 @@ func TestHandleAuthConfig(t *testing.T) {
 		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		if !resp.Features.SharesEnabled {
-			t.Error("expected features.shares_enabled to be true by default")
+		if resp.Features.SharesEnabled {
+			t.Error("expected features.shares_enabled to be false by default")
 		}
 	})
 
@@ -279,10 +279,10 @@ func TestHandleAuthConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("features shares_enabled false when shares disabled", func(t *testing.T) {
+	t.Run("features shares_enabled false when not enabled", func(t *testing.T) {
 		s := &Server{
-			oauthConfig:    &auth.OAuthConfig{},
-			sharesDisabled: true,
+			oauthConfig:   &auth.OAuthConfig{},
+			sharesEnabled: false,
 		}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
 		rr := httptest.NewRecorder()
@@ -294,7 +294,26 @@ func TestHandleAuthConfig(t *testing.T) {
 			t.Fatalf("failed to decode response: %v", err)
 		}
 		if resp.Features.SharesEnabled {
-			t.Error("expected features.shares_enabled to be false when shares disabled")
+			t.Error("expected features.shares_enabled to be false when not enabled")
+		}
+	})
+
+	t.Run("features shares_enabled true when enabled", func(t *testing.T) {
+		s := &Server{
+			oauthConfig:   &auth.OAuthConfig{},
+			sharesEnabled: true,
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		var resp authConfigResponse
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if !resp.Features.SharesEnabled {
+			t.Error("expected features.shares_enabled to be true when enabled")
 		}
 	})
 }

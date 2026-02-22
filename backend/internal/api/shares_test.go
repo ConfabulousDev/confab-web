@@ -159,8 +159,8 @@ func TestPrivateShareEmailLimits(t *testing.T) {
 }
 
 func TestHandleCreateShareDisabled(t *testing.T) {
-	t.Run("returns 403 when shares are disabled", func(t *testing.T) {
-		handler := HandleCreateShare(nil, "", nil, true)
+	t.Run("returns 403 when shares are not enabled", func(t *testing.T) {
+		handler := HandleCreateShare(nil, "", nil, false)
 
 		req := httptest.NewRequest("POST", "/api/v1/sessions/test-id/share", strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -178,8 +178,8 @@ func TestHandleCreateShareDisabled(t *testing.T) {
 	})
 
 	t.Run("does not return 403 when shares are enabled", func(t *testing.T) {
-		// With sharesDisabled=false and nil db, it should fail with auth error (not 403)
-		handler := HandleCreateShare(nil, "", nil, false)
+		// With sharesEnabled=true and nil db, it should fail with auth error (not 403)
+		handler := HandleCreateShare(nil, "", nil, true)
 
 		req := httptest.NewRequest("POST", "/api/v1/sessions/test-id/share", strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "application/json")

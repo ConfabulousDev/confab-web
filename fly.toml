@@ -41,7 +41,8 @@ primary_region = 'sjc'
   # Support email shown in UI for help requests and account deletion
   SUPPORT_EMAIL = "help@confabulous.dev"
 
-  # SaaS UI features (off by default for self-hosted)
+  # SaaS features (off by default for self-hosted)
+  ENABLE_SHARE_CREATION = "true"
   ENABLE_SAAS_FOOTER = "true"
   ENABLE_SAAS_TERMLY = "true"
 

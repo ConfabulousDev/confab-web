@@ -41,9 +41,9 @@ type CreateShareResponse struct {
 }
 
 // HandleCreateShare creates a new share for a session
-func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService, sharesDisabled bool) http.HandlerFunc {
+func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService, sharesEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if sharesDisabled {
+		if !sharesEnabled {
 			respondError(w, http.StatusForbidden, "Share creation is disabled by the administrator")
 			return
 		}
