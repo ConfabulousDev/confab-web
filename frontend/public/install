@@ -2,9 +2,9 @@
 set -e
 
 # Confab CLI Installer
-# Usage: curl -fsSL https://confabulous.dev/install | bash
+# Usage: curl -fsSL https://your-server.example.com/install | bash
 # Pin to a specific version:
-#   curl -fsSL https://confabulous.dev/install | CONFAB_VERSION=1.2.3 bash
+#   curl -fsSL https://your-server.example.com/install | CONFAB_VERSION=1.2.3 bash
 
 BINARY_NAME="confab"
 GITHUB_REPO="ConfabulousDev/confab"

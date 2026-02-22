@@ -63,7 +63,7 @@ Authorization: Bearer <api_key>
 
 ```bash
 curl -X PATCH \
-  'https://api.confabulous.dev/api/v1/sessions/01234567-89ab-cdef-0123-456789abcdef/summary' \
+  'https://your-server.example.com/api/v1/sessions/01234567-89ab-cdef-0123-456789abcdef/summary' \
   -H 'Authorization: Bearer your_api_key_here' \
   -H 'Content-Type: application/json' \
   -d '{"summary": "Implemented dark mode toggle for settings page"}'

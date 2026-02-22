@@ -60,7 +60,7 @@ function HowItWorksDiagram() {
         <circle cx="32" cy="15" r="4" fill="#fcd34d"/>
         <circle cx="46" cy="15" r="4" fill="#86efac"/>
         <rect x="70" y="8" width="120" height="14" rx="3" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1"/>
-        <text x="130" y="18" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="9" fill="#64748b">confabulous.dev</text>
+        <text x="130" y="18" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="9" fill="#64748b">{window.location.host}</text>
 
         <g transform="translate(20, 42)">
           <circle cx="5" cy="8" r="3" fill="#3b82f6"/>
@@ -83,7 +83,7 @@ function HowItWorksDiagram() {
       {/* BACKEND SECTION */}
       <g transform="translate(390, 210)">
         <rect x="0" y="0" width="260" height="50" rx="6" fill="#ffffff" filter="url(#shadow)" stroke="#e2e8f0" strokeWidth="1"/>
-        <text x="130" y="22" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="14" fontWeight="600" fill="#1a1a1a">confabulous.dev</text>
+        <text x="130" y="22" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="14" fontWeight="600" fill="#1a1a1a">{window.location.host}</text>
         <text x="130" y="38" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="11" fill="#64748b">Backend API</text>
       </g>
 
