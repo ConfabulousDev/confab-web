@@ -140,7 +140,7 @@ Visit [http://localhost:8080](http://localhost:8080) and log in with `admin@loca
 **5. Connect the CLI:**
 
 ```bash
-curl -fsSL http://localhost:8080/install | bash
+curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash
 confab setup --backend-url http://localhost:8080
 ```
 
@@ -389,10 +389,10 @@ See [CONFIGURATION.md](CONFIGURATION.md) for additional email settings.
 
 ## Connecting the CLI
 
-Install the [Confab CLI](https://github.com/ConfabulousDev/confab) from your running server:
+Install the [Confab CLI](https://github.com/ConfabulousDev/confab):
 
 ```bash
-curl -fsSL https://confab.example.com/install | bash
+curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash
 ```
 
 Then configure it to point at your instance:
