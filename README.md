@@ -45,7 +45,7 @@ Open [http://localhost:8080](http://localhost:8080) — log in with `admin@local
 Install the [Confab CLI](https://github.com/ConfabulousDev/confab):
 
 ```bash
-curl -fsSL http://localhost:8080/install | bash
+curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash
 confab setup --backend-url http://localhost:8080
 ```
 

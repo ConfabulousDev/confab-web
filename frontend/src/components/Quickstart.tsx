@@ -38,7 +38,7 @@ function Quickstart() {
         <div className={styles.step}>
           <span className={styles.stepNumber}>1</span>
           <div className={styles.stepContent}>
-            <CopyableCode label="Install the CLI" code={`curl -fsSL ${origin}/install | bash`} />
+            <CopyableCode label="Install the CLI" code="curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash" />
           </div>
         </div>
 
