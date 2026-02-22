@@ -22,3 +22,9 @@
   margin: 0;
   letter-spacing: -0.02em;
 }
+
+.subheadline {
+  font-size: var(--font-lg);
+  color: var(--color-text-secondary);
+  margin: var(--spacing-sm) 0 0 0;
+}

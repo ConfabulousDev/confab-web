@@ -2,7 +2,7 @@ import { useState } from 'react';
 import AnalysisModal from './AnalysisModal';
 import HowItWorksModal from './HowItWorksModal';
 import PRLinkingModal from './PRLinkingModal';
-import PrivacyModal from './PrivacyModal';
+import SelfHostedModal from './SelfHostedModal';
 import QuickstartModal from './QuickstartModal';
 import ReviewModal from './ReviewModal';
 import ShareModal from './ShareModal';
@@ -49,16 +49,16 @@ const cards: HeroCard[] = [
     description: 'Track token usage, costs, and productivity metrics across all your sessions.',
   },
   {
-    id: 'privacy',
-    icon: '🔒',
-    title: 'Privacy & Security',
-    description: 'Your data is encrypted and private by default, only accessible to you.',
+    id: 'self-hosted',
+    icon: '🏠',
+    title: 'Self-Hosted',
+    description: 'Deploy on your own infrastructure. Your data never leaves your servers. MIT licensed and open source.',
   },
   {
     id: 'how-it-works',
     icon: '⚙️',
     title: 'How it works',
-    description: 'Learn how Confabulous syncs and organizes your Claude Code sessions.',
+    description: 'Learn how Confab syncs and organizes your Claude Code sessions on your own server.',
   },
   {
     id: 'quickstart',
@@ -68,7 +68,7 @@ const cards: HeroCard[] = [
   },
 ];
 
-const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share', 'privacy'];
+const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share', 'self-hosted'];
 
 function HeroCards() {
   const [smartRecapOpen, setSmartRecapOpen] = useState(false);
@@ -78,7 +78,7 @@ function HeroCards() {
   const [prLinkingOpen, setPrLinkingOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [selfHostedOpen, setSelfHostedOpen] = useState(false);
 
   const handleCardClick = (cardId: string) => {
     if (cardId === 'smart-recap') {
@@ -95,8 +95,8 @@ function HeroCards() {
       setReviewOpen(true);
     } else if (cardId === 'share') {
       setShareOpen(true);
-    } else if (cardId === 'privacy') {
-      setPrivacyOpen(true);
+    } else if (cardId === 'self-hosted') {
+      setSelfHostedOpen(true);
     }
   };
 
@@ -157,9 +157,9 @@ function HeroCards() {
         isOpen={shareOpen}
         onClose={() => setShareOpen(false)}
       />
-      <PrivacyModal
-        isOpen={privacyOpen}
-        onClose={() => setPrivacyOpen(false)}
+      <SelfHostedModal
+        isOpen={selfHostedOpen}
+        onClose={() => setSelfHostedOpen(false)}
       />
     </div>
   );

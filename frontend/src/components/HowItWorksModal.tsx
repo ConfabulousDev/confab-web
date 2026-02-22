@@ -51,6 +51,10 @@ function HowItWorksDiagram() {
         <text x="170" y="222" fontFamily="system-ui, sans-serif" fontSize="10" fontWeight="500" fill="#94a3b8">watches</text>
       </g>
 
+      {/* YOUR SERVER grouping */}
+      <rect x="375" y="8" width="290" height="382" rx="12" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="6 4"/>
+      <text x="520" y="382" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="10" fontWeight="600" fill="#94a3b8" letterSpacing="1">YOUR SERVER</text>
+
       {/* WEB APP SECTION */}
       <g transform="translate(390, 20)">
         <rect x="0" y="0" width="260" height="156" rx="10" fill="#ffffff" filter="url(#shadow)" stroke="#e2e8f0" strokeWidth="1"/>

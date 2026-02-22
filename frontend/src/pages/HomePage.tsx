@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import DeployCTA from '@/components/DeployCTA';
 import HeroCards from '@/components/HeroCards';
 import styles from './HomePage.module.css';
 
@@ -27,9 +28,11 @@ function HomePage() {
       <div className={styles.container}>
         <div className={styles.hero}>
           <h1 className={styles.headline}>Understand your Claude Code sessions</h1>
+          <p className={styles.subheadline}>Open source and self-hostable. Maintain data sovereignty.</p>
         </div>
 
         <HeroCards />
+        <DeployCTA />
       </div>
     </div>
   );
