@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="420" rx="12" fill="#fafafa" stroke="#e5e7eb" stroke-width="1"/>
+
+  <!-- CLI Box -->
+  <rect x="260" y="20" width="280" height="90" rx="8" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="400" y="52" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">Confab CLI</text>
+  <text x="400" y="72" text-anchor="middle" font-size="12" fill="#6b7280">Runs on developer machine</text>
+  <text x="400" y="88" text-anchor="middle" font-size="12" fill="#6b7280">Captures sessions via Claude Code hook</text>
+
+  <!-- Arrow: CLI → Stack -->
+  <line x1="400" y1="110" x2="400" y2="155" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="415" y="138" font-size="11" fill="#9ca3af">HTTPS</text>
+
+  <!-- Self-Hosted Stack outline -->
+  <rect x="80" y="160" width="640" height="240" rx="10" fill="#f9fafb" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6 3"/>
+  <text x="400" y="188" text-anchor="middle" font-size="13" font-weight="600" fill="#7c3aed">Self-Hosted Stack</text>
+  <text x="400" y="204" text-anchor="middle" font-size="11" fill="#a78bfa">docker compose up -d</text>
+
+  <!-- Backend box -->
+  <rect x="120" y="220" width="200" height="70" rx="6" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="220" y="250" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Backend</text>
+  <text x="220" y="268" text-anchor="middle" font-size="12" fill="#6b7280">Go API server</text>
+
+  <!-- Frontend box -->
+  <rect x="480" y="220" width="200" height="70" rx="6" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="580" y="250" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">React Frontend</text>
+  <text x="580" y="268" text-anchor="middle" font-size="12" fill="#6b7280">Dashboard</text>
+
+  <!-- PostgreSQL box -->
+  <rect x="120" y="320" width="200" height="60" rx="6" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="220" y="348" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">PostgreSQL</text>
+  <text x="220" y="364" text-anchor="middle" font-size="12" fill="#6b7280">Metadata &amp; analytics</text>
+
+  <!-- MinIO box -->
+  <rect x="480" y="320" width="200" height="60" rx="6" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="580" y="348" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">MinIO (S3)</text>
+  <text x="580" y="364" text-anchor="middle" font-size="12" fill="#6b7280">Session storage</text>
+
+  <!-- Arrow: Backend → PostgreSQL -->
+  <line x1="220" y1="290" x2="220" y2="315" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrow: Backend → MinIO -->
+  <line x1="320" y1="270" x2="475" y2="340" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrow: Frontend → Backend -->
+  <line x1="480" y1="255" x2="325" y2="255" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+</svg>
