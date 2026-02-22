@@ -102,6 +102,7 @@ services:
       ADMIN_BOOTSTRAP_EMAIL: admin@local.dev
       ADMIN_BOOTSTRAP_PASSWORD: localdevpassword
       SUPER_ADMIN_EMAILS: admin@local.dev
+      ENABLE_SHARE_CREATION: "true"
       INSECURE_DEV_MODE: "true"
 
   worker:
