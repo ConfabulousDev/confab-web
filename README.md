@@ -72,6 +72,10 @@ Start a Claude Code session — it appears in the dashboard automatically.
 └─────────────────────────────────────────┘
 ```
 
+## Self-Hosting
+
+See the [Self-Hosting Guide](SELF-HOSTING.md) for complete deployment instructions including HTTPS setup, authentication options, and production hardening.
+
 ## Configuration
 
 Environment variables are set in `docker-compose.yml`. See [CONFIGURATION.md](CONFIGURATION.md) for the full reference.
