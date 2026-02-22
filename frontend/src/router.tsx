@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import App from './App';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAppConfig } from '@/hooks/useAppConfig';
 
 // Lazy load pages for code splitting
 const HomePage = lazy(() => import('@/pages/HomePage'));
@@ -39,6 +40,14 @@ function RedirectToPrivacy() {
   return null;
 }
 
+/** Gate SaaS-only routes — renders children when SaaS footer is enabled, NotFound otherwise */
+// eslint-disable-next-line react-refresh/only-export-components
+function SaasRoute({ children }: { children: ReactNode }) {
+  const { saasFooterEnabled } = useAppConfig();
+  if (!saasFooterEnabled) return <NotFoundPage />;
+  return <>{children}</>;
+}
+
 /** Wrap a page component with Suspense and optional ProtectedRoute */
 function page(component: ReactNode, isProtected = false) {
   const wrapped = isProtected ? <ProtectedRoute>{component}</ProtectedRoute> : component;
@@ -57,10 +66,10 @@ export const router = createBrowserRouter([
       { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },
       { path: 'keys', element: page(<APIKeysPage />, true) },
       { path: 'shares', element: page(<ShareLinksPage />, true) },
-      { path: 'terms', element: <RedirectToTerms /> },
-      { path: 'privacy', element: <RedirectToPrivacy /> },
+      { path: 'terms', element: <Suspense fallback={null}><SaasRoute><RedirectToTerms /></SaasRoute></Suspense> },
+      { path: 'privacy', element: <Suspense fallback={null}><SaasRoute><RedirectToPrivacy /></SaasRoute></Suspense> },
       { path: 'login', element: page(<LoginPage />) },
-      { path: 'policies', element: page(<PoliciesPage />) },
+      { path: 'policies', element: <Suspense fallback={null}><SaasRoute><PoliciesPage /></SaasRoute></Suspense> },
       { path: '*', element: page(<NotFoundPage />) },
     ],
   },

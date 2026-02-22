@@ -80,6 +80,9 @@ services:
       ADMIN_BOOTSTRAP_PASSWORD: localdevpassword
       SUPER_ADMIN_EMAILS: admin@local.dev
       INSECURE_DEV_MODE: "true"
+      # SaaS branding (off by default for self-hosted)
+      # ENABLE_SAAS_FOOTER: "true"
+      # ENABLE_SAAS_TERMLY: "true"
       # Email disabled (not set)
       # Smart recap disabled (ANTHROPIC_API_KEY not set)
 

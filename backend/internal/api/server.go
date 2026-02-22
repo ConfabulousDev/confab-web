@@ -63,8 +63,8 @@ type Server struct {
 	frontendURL       string                    // Base URL for the frontend (for building session URLs)
 	supportEmail      string                    // Support contact email address
 	sharesDisabled    bool                      // When true, share creation is disabled (DISABLE_SHARE_CREATION=true)
-	footerDisabled    bool                      // When true, frontend footer is hidden (DISABLE_FOOTER=true)
-	termlyDisabled    bool                      // When true, Termly cookie consent is disabled (DISABLE_TERMLY=true)
+	saasFooterEnabled bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
+	saasTermlyEnabled bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
 	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -84,9 +84,9 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		emailService:   emailService,
 		frontendURL:    os.Getenv("FRONTEND_URL"),
 		supportEmail:   supportEmail,
-		sharesDisabled: os.Getenv("DISABLE_SHARE_CREATION") == "true",
-		footerDisabled: os.Getenv("DISABLE_FOOTER") == "true",
-		termlyDisabled: os.Getenv("DISABLE_TERMLY") == "true",
+		sharesDisabled:    os.Getenv("DISABLE_SHARE_CREATION") == "true",
+		saasFooterEnabled: os.Getenv("ENABLE_SAAS_FOOTER") == "true",
+		saasTermlyEnabled: os.Getenv("ENABLE_SAAS_TERMLY") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -584,20 +584,15 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 	// Clean staticDir once during initialization for security check
 	cleanStaticDir := filepath.Clean(staticDir)
 
-	// Pre-process index.html at startup: strip Termly script if disabled
+	// Pre-process index.html at startup: inject Termly script if enabled
 	indexPath := filepath.Join(cleanStaticDir, "index.html")
 	var processedIndex []byte
 	if raw, err := os.ReadFile(indexPath); err == nil {
-		if s.termlyDisabled {
-			var filtered []string
-			for _, line := range strings.Split(string(raw), "\n") {
-				if strings.Contains(line, "app.termly.io/resource-blocker") ||
-					strings.Contains(line, "<!-- Termly Consent Banner -->") {
-					continue
-				}
-				filtered = append(filtered, line)
-			}
-			processedIndex = []byte(strings.Join(filtered, "\n"))
+		if s.saasTermlyEnabled {
+			// Inject Termly consent banner script before </head>
+			termlyScript := `    <!-- Termly Consent Banner -->
+    <script src="https://app.termly.io/resource-blocker/6f350df0-f6a8-4213-b299-da2516ace3ac?autoBlock=on"></script>`
+			processedIndex = []byte(strings.Replace(string(raw), "</head>", termlyScript+"\n  </head>", 1))
 		} else {
 			processedIndex = raw
 		}
@@ -643,7 +638,7 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 			// Hashed assets - cache for 1 year (immutable)
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else if requestPath == "/" || requestPath == "/index.html" {
-			// Always serve processed index.html (may have Termly stripped)
+			// Always serve processed index.html (may have Termly injected)
 			serveIndex(w, r)
 			return
 		}
@@ -690,7 +685,7 @@ func respondStorageError(w http.ResponseWriter, err error, defaultMsg string) {
 func securityHeadersMiddleware() func(http.Handler) http.Handler {
 	staticDir := os.Getenv("STATIC_FILES_DIR")
 	servingStatic := staticDir != ""
-	termlyDisabled := os.Getenv("DISABLE_TERMLY") == "true"
+	saasTermlyEnabled := os.Getenv("ENABLE_SAAS_TERMLY") == "true"
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -700,12 +695,12 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 				// Relaxed CSP for SPA frontend: allows inline scripts needed for SPA bootstrap
 				// - script-src 'self' 'unsafe-inline': Allow inline scripts (React apps may need this)
 				// - style-src 'self' 'unsafe-inline': Allow inline styles
-				if termlyDisabled {
-					w.Header().Set("Content-Security-Policy",
-						"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'")
-				} else {
+				if saasTermlyEnabled {
 					w.Header().Set("Content-Security-Policy",
 						"default-src 'self'; script-src 'self' 'unsafe-inline' https://app.termly.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.termly.io; frame-src https://app.termly.io; frame-ancestors 'none'")
+				} else {
+					w.Header().Set("Content-Security-Policy",
+						"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'")
 				}
 			} else {
 				// Strict CSP for API-only mode

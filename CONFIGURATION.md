@@ -143,8 +143,8 @@ Sharing behavior and UI customization.
 |----------|---------|----------|-------------|
 | `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | `false` | No | Make every session visible to every authenticated user; useful for small teams that want full transparency |
 | `DISABLE_SHARE_CREATION` | `false` | No | Prevent users from creating share links |
-| `DISABLE_FOOTER` | `false` | No | Hide the default footer (GitHub, Discord, Help links, copyright) |
-| `DISABLE_TERMLY` | `false` | No | Remove the Termly cookie-consent banner |
+| `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright); off by default for self-hosted |
+| `ENABLE_SAAS_TERMLY` | `false` | No | Enable the Termly cookie-consent banner (SaaS only); off by default for self-hosted |
 
 ## Worker
 

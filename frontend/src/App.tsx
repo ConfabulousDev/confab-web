@@ -21,7 +21,7 @@ const queryClient = new QueryClient({
 });
 
 function AppLayout() {
-  const { footerEnabled } = useAppConfig();
+  const { saasFooterEnabled } = useAppConfig();
 
   return (
     <div className="app-container">
@@ -29,7 +29,7 @@ function AppLayout() {
       <main>
         <Outlet />
       </main>
-      {footerEnabled && <Footer />}
+      {saasFooterEnabled && <Footer />}
     </div>
   );
 }
