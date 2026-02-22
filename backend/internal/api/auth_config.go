@@ -9,10 +9,10 @@ type providerInfo struct {
 }
 
 type authConfigFeatures struct {
-	SharesEnabled bool   `json:"shares_enabled"`
-	FooterEnabled bool   `json:"footer_enabled"`
-	TermlyEnabled bool   `json:"termly_enabled"`
-	SupportEmail  string `json:"support_email"`
+	SharesEnabled    bool   `json:"shares_enabled"`
+	SaasFooterEnabled bool   `json:"saas_footer_enabled"`
+	SaasTermlyEnabled bool   `json:"saas_termly_enabled"`
+	SupportEmail     string `json:"support_email"`
 }
 
 type authConfigResponse struct {
@@ -64,10 +64,10 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, authConfigResponse{
 		Providers: providers,
 		Features: authConfigFeatures{
-			SharesEnabled: !s.sharesDisabled,
-			FooterEnabled: !s.footerDisabled,
-			TermlyEnabled: !s.termlyDisabled,
-			SupportEmail:  s.supportEmail,
+			SharesEnabled:    !s.sharesDisabled,
+			SaasFooterEnabled: s.saasFooterEnabled,
+			SaasTermlyEnabled: s.saasTermlyEnabled,
+			SupportEmail:     s.supportEmail,
 		},
 	})
 }

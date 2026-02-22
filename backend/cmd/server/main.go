@@ -71,8 +71,11 @@ func main() {
 	if os.Getenv("DISABLE_SHARE_CREATION") == "true" {
 		logger.Info("share creation disabled: DISABLE_SHARE_CREATION=true")
 	}
-	if os.Getenv("DISABLE_FOOTER") == "true" {
-		logger.Info("frontend footer disabled: DISABLE_FOOTER=true")
+	if os.Getenv("ENABLE_SAAS_FOOTER") == "true" {
+		logger.Info("SaaS footer enabled: ENABLE_SAAS_FOOTER=true")
+	}
+	if os.Getenv("ENABLE_SAAS_TERMLY") == "true" {
+		logger.Info("SaaS Termly consent enabled: ENABLE_SAAS_TERMLY=true")
 	}
 
 	// Bootstrap admin user if password auth is enabled and no users exist

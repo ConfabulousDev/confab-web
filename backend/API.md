@@ -1027,8 +1027,8 @@ Returns the list of enabled authentication providers. No authentication required
   ],
   "features": {
     "shares_enabled": true,
-    "footer_enabled": true,
-    "termly_enabled": true,
+    "saas_footer_enabled": false,
+    "saas_termly_enabled": false,
     "support_email": "support@example.com"
   }
 }
@@ -1040,8 +1040,8 @@ Returns the list of enabled authentication providers. No authentication required
 | `providers[].display_name` | string | Human-readable name for the provider (e.g., `"GitHub"`, `"Okta"`) |
 | `providers[].login_url` | string | Path to initiate login with this provider |
 | `features.shares_enabled` | bool | Whether share creation is enabled (`false` when `DISABLE_SHARE_CREATION=true`) |
-| `features.footer_enabled` | bool | Whether the frontend footer is shown (`false` when `DISABLE_FOOTER=true`) |
-| `features.termly_enabled` | bool | Whether Termly cookie consent is enabled (`false` when `DISABLE_TERMLY=true`) |
+| `features.saas_footer_enabled` | bool | Whether the SaaS footer is shown (`true` when `ENABLE_SAAS_FOOTER=true`) |
+| `features.saas_termly_enabled` | bool | Whether Termly cookie consent is enabled (`true` when `ENABLE_SAAS_TERMLY=true`) |
 | `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |
 
 Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.

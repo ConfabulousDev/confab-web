@@ -205,7 +205,7 @@ func TestHandleAuthConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("features footer_enabled defaults to true", func(t *testing.T) {
+	t.Run("features saas_footer_enabled defaults to false", func(t *testing.T) {
 		s := &Server{
 			oauthConfig: &auth.OAuthConfig{},
 		}
@@ -218,15 +218,15 @@ func TestHandleAuthConfig(t *testing.T) {
 		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		if !resp.Features.FooterEnabled {
-			t.Error("expected features.footer_enabled to be true by default")
+		if resp.Features.SaasFooterEnabled {
+			t.Error("expected features.saas_footer_enabled to be false by default")
 		}
 	})
 
-	t.Run("features footer_enabled false when footer disabled", func(t *testing.T) {
+	t.Run("features saas_footer_enabled true when enabled", func(t *testing.T) {
 		s := &Server{
-			oauthConfig:    &auth.OAuthConfig{},
-			footerDisabled: true,
+			oauthConfig:       &auth.OAuthConfig{},
+			saasFooterEnabled: true,
 		}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
 		rr := httptest.NewRecorder()
@@ -237,12 +237,12 @@ func TestHandleAuthConfig(t *testing.T) {
 		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		if resp.Features.FooterEnabled {
-			t.Error("expected features.footer_enabled to be false when footer disabled")
+		if !resp.Features.SaasFooterEnabled {
+			t.Error("expected features.saas_footer_enabled to be true when enabled")
 		}
 	})
 
-	t.Run("features termly_enabled defaults to true", func(t *testing.T) {
+	t.Run("features saas_termly_enabled defaults to false", func(t *testing.T) {
 		s := &Server{
 			oauthConfig: &auth.OAuthConfig{},
 		}
@@ -255,15 +255,15 @@ func TestHandleAuthConfig(t *testing.T) {
 		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		if !resp.Features.TermlyEnabled {
-			t.Error("expected features.termly_enabled to be true by default")
+		if resp.Features.SaasTermlyEnabled {
+			t.Error("expected features.saas_termly_enabled to be false by default")
 		}
 	})
 
-	t.Run("features termly_enabled false when termly disabled", func(t *testing.T) {
+	t.Run("features saas_termly_enabled true when enabled", func(t *testing.T) {
 		s := &Server{
-			oauthConfig:    &auth.OAuthConfig{},
-			termlyDisabled: true,
+			oauthConfig:       &auth.OAuthConfig{},
+			saasTermlyEnabled: true,
 		}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
 		rr := httptest.NewRecorder()
@@ -274,8 +274,8 @@ func TestHandleAuthConfig(t *testing.T) {
 		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		if resp.Features.TermlyEnabled {
-			t.Error("expected features.termly_enabled to be false when termly disabled")
+		if !resp.Features.SaasTermlyEnabled {
+			t.Error("expected features.saas_termly_enabled to be true when enabled")
 		}
 	})
 

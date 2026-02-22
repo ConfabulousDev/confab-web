@@ -1,16 +1,17 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react';
+import { fetchConfigWithRetry } from './fetchAppConfig';
 
 export interface AppConfig {
   sharesEnabled: boolean;
-  footerEnabled: boolean;
-  termlyEnabled: boolean;
+  saasFooterEnabled: boolean;
+  saasTermlyEnabled: boolean;
   supportEmail: string;
 }
 
 const defaultAppConfig: AppConfig = {
   sharesEnabled: true,
-  footerEnabled: true,
-  termlyEnabled: true,
+  saasFooterEnabled: false,
+  saasTermlyEnabled: false,
   supportEmail: '',
 };
 
@@ -24,22 +25,7 @@ export function AppConfigProvider({ children }: AppConfigProviderProps) {
   const [config, setConfig] = useState<AppConfig>(defaultAppConfig);
 
   useEffect(() => {
-    fetch('/api/v1/auth/config')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch config');
-        return res.json();
-      })
-      .then((data) => {
-        setConfig({
-          sharesEnabled: data.features?.shares_enabled ?? true,
-          footerEnabled: data.features?.footer_enabled ?? true,
-          termlyEnabled: data.features?.termly_enabled ?? true,
-          supportEmail: data.features?.support_email ?? '',
-        });
-      })
-      .catch(() => {
-        // On error, keep defaults (shares enabled) for safe fallback
-      });
+    fetchConfigWithRetry().then(setConfig);
   }, []);
 
   return (
