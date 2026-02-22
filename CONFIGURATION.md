@@ -133,18 +133,18 @@ AI-powered session summaries. Requires an [Anthropic API key](https://console.an
 | `SUPER_ADMIN_EMAILS` | *(none)* | No | Comma-separated email addresses with admin panel access |
 | `MAX_USERS` | `50` | No | Maximum number of registered users; set to `0` to block new registrations |
 
-## Deployment Features
+## Instance Customization
 
 *Applies to: web server*
 
-Team deployments and white-labeling.
+Sharing behavior and UI customization.
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | `false` | No | Team mode: every session visible to every authenticated user |
-| `DISABLE_SHARE_CREATION` | `false` | No | Disable public/private share link creation |
-| `DISABLE_FOOTER` | `false` | No | Hide the frontend footer (GitHub, Discord, Help links, copyright) |
-| `DISABLE_TERMLY` | `false` | No | Disable Termly cookie consent banner |
+| `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | `false` | No | Make every session visible to every authenticated user; useful for small teams that want full transparency |
+| `DISABLE_SHARE_CREATION` | `false` | No | Prevent users from creating share links |
+| `DISABLE_FOOTER` | `false` | No | Hide the default footer (GitHub, Discord, Help links, copyright) |
+| `DISABLE_TERMLY` | `false` | No | Remove the Termly cookie-consent banner |
 
 ## Worker
 
