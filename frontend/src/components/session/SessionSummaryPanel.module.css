@@ -185,6 +185,14 @@
   min-height: 280px;
 }
 
+/* Collapse empty grid cells (e.g., SmartRecapCard returns null when disabled) */
+.sizeCompact:empty,
+.sizeStandard:empty,
+.sizeTall:empty {
+  min-height: 0;
+  display: none;
+}
+
 /* Responsive grid: 3 columns on medium-large screens */
 @media (min-width: 801px) and (max-width: 1099px) {
   .grid {
