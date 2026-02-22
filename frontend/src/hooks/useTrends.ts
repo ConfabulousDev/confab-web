@@ -48,7 +48,7 @@ export function useTrends(initialParams: TrendsParams = {}): UseTrendsReturn {
   // Initial fetch
   useEffect(() => {
     fetchTrends(params);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only fetch once on mount
 
   return {
     data,

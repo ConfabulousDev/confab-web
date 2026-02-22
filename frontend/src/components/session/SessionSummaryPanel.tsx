@@ -90,7 +90,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       if (err instanceof APIError) {
         if (err.status === 409) {
           // Generation already in progress - not an error to show user
-          console.log('Smart recap generation already in progress');
+          console.debug('Smart recap generation already in progress');
         } else if (err.status === 403) {
           // Quota exceeded
           setRegenerateError('Recap limit reached. This limit resets next month.');

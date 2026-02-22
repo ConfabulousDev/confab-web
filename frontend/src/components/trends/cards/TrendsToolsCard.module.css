@@ -2,42 +2,8 @@
   width: 100%;
 }
 
-.tooltip {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  box-shadow: var(--shadow-card);
-}
-
-.tooltipTitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 6px;
-  word-break: break-all;
-}
-
-.tooltipRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-bottom: 2px;
-}
-
-.tooltipDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.tooltipTotal {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--color-border);
-}
+.tooltip { composes: tooltip from './trendsChart.module.css'; }
+.tooltipTitle { composes: tooltipTitle from './trendsChart.module.css'; }
+.tooltipRow { composes: tooltipRow from './trendsChart.module.css'; }
+.tooltipDot { composes: tooltipDot from './trendsChart.module.css'; }
+.tooltipTotal { composes: tooltipTotal from './trendsChart.module.css'; }

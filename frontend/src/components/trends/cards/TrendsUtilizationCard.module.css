@@ -2,31 +2,7 @@
   margin-top: 8px;
 }
 
-.chartLabel {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
-}
-
-.tooltip {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  box-shadow: var(--shadow-card);
-}
-
-.tooltipDate {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin-bottom: 4px;
-}
-
-.tooltipValue {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
+.chartLabel { composes: chartLabel from './trendsChart.module.css'; }
+.tooltip { composes: tooltip from './trendsChart.module.css'; }
+.tooltipDate { composes: tooltipDate from './trendsChart.module.css'; }
+.tooltipValue { composes: tooltipValue from './trendsChart.module.css'; }

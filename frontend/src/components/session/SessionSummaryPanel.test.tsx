@@ -258,7 +258,7 @@ describe('SessionSummaryPanel', () => {
     });
 
     it('409 error is handled silently', async () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       vi.spyOn(analyticsAPI, 'regenerateSmartRecap').mockRejectedValue(
         new APIError('Conflict', 409, 'Conflict')
