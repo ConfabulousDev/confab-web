@@ -997,7 +997,7 @@ func (h *Handlers) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
+	email := validation.NormalizeEmail(r.FormValue("email"))
 	password := r.FormValue("password")
 	isAdmin := r.FormValue("is_admin") == "true"
 
