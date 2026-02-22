@@ -6,7 +6,22 @@ Self-hosted analytics for your Claude Code sessions.
 [![Docker Image](https://img.shields.io/badge/ghcr.io-confabulousdev%2Fconfab--web-blue?logo=docker)](https://ghcr.io/confabulousdev/confab-web)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-![Dashboard](docs/screenshot-placeholder.svg)
+<table>
+<tr>
+<td align="center">
+<img src="docs/screenshot-summary.png" width="300"/>
+<br/><b>Session Summary</b>
+</td>
+<td align="center">
+<img src="docs/screenshot-transcript.png" width="300"/>
+<br/><b>Transcript</b>
+</td>
+<td align="center">
+<img src="docs/screenshot-analytics.png" width="300"/>
+<br/><b>Analytics</b>
+</td>
+</tr>
+</table>
 
 **Open-source, self-hosted** platform for archiving, searching, and analyzing your Claude Code sessions. Runs entirely in Docker on **your own infrastructure**.
 
