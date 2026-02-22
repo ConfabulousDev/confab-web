@@ -5,7 +5,7 @@ import {
   extractTextContent,
   getRoleLabel,
 } from './messageParser';
-import type { UserMessage, AssistantMessage, ContentBlock } from '@/types';
+import type { UserMessage, AssistantMessage, PRLinkMessage, ContentBlock } from '@/types';
 
 describe('messageParser', () => {
   describe('parseMessage', () => {
@@ -68,6 +68,27 @@ describe('messageParser', () => {
       expect(result.messageModel).toBe('claude-sonnet-4-5-20250929');
       expect(result.hasThinkingContent).toBe(false);
       expect(result.hasToolUse).toBe(false);
+    });
+
+    it('should parse pr-link message as system with markdown link', () => {
+      const message: PRLinkMessage = {
+        type: 'pr-link',
+        prNumber: 22,
+        prRepository: 'ConfabulousDev/confab-web',
+        prUrl: 'https://github.com/ConfabulousDev/confab-web/pull/22',
+        sessionId: 'session-1',
+        timestamp: '2024-01-15T10:30:00Z',
+      };
+
+      const result = parseMessage(message);
+
+      expect(result.role).toBe('system');
+      expect(result.timestamp).toBe('2024-01-15T10:30:00Z');
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0]).toEqual({
+        type: 'text',
+        text: '🔗 PR #22 — [ConfabulousDev/confab-web](https://github.com/ConfabulousDev/confab-web/pull/22)',
+      });
     });
   });
 

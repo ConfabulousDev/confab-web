@@ -18,6 +18,7 @@ const sampleCounts: HierarchicalCounts = {
   'file-history-snapshot': 39,
   summary: 0,
   'queue-operation': 6,
+  'pr-link': 0,
 };
 
 // Interactive wrapper component
@@ -102,6 +103,7 @@ export const AllFiltersActive: Story = {
       'file-history-snapshot': true,
       summary: true,
       'queue-operation': true,
+      'pr-link': true,
     },
   },
 };
@@ -115,6 +117,7 @@ export const SomeFiltersHidden: Story = {
       'file-history-snapshot': false,
       summary: false,
       'queue-operation': false,
+      'pr-link': false,
     },
   },
 };
@@ -128,6 +131,7 @@ export const IndeterminateState: Story = {
       'file-history-snapshot': false,
       summary: false,
       'queue-operation': false,
+      'pr-link': false,
     },
   },
 };
@@ -141,6 +145,7 @@ export const AllCategoriesHaveMessages: Story = {
       'file-history-snapshot': 40,
       summary: 5,
       'queue-operation': 10,
+      'pr-link': 2,
     },
   },
 };

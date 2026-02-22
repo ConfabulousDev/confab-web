@@ -206,6 +206,15 @@ const QueueOperationMessageSchema = z.object({
   sessionId: z.string(),
 });
 
+const PRLinkMessageSchema = z.object({
+  type: z.literal('pr-link'),
+  prNumber: z.number(),
+  prRepository: z.string(),
+  prUrl: z.string(),
+  sessionId: z.string(),
+  timestamp: z.string(),
+});
+
 const TranscriptLineSchema = z.union([
   UserMessageSchema,
   AssistantMessageSchema,
@@ -213,6 +222,7 @@ const TranscriptLineSchema = z.union([
   SystemMessageSchema,
   SummaryMessageSchema,
   QueueOperationMessageSchema,
+  PRLinkMessageSchema,
 ]);
 
 export type TranscriptLine = z.infer<typeof TranscriptLineSchema>;
@@ -494,6 +504,10 @@ export function isQueueOperationMessage(line: TranscriptLine): line is z.infer<t
   return line.type === 'queue-operation';
 }
 
+export function isPRLinkMessage(line: TranscriptLine): line is z.infer<typeof PRLinkMessageSchema> {
+  return line.type === 'pr-link';
+}
+
 // ============================================================================
 // Inferred Message Types
 // ============================================================================
@@ -501,6 +515,7 @@ export function isQueueOperationMessage(line: TranscriptLine): line is z.infer<t
 export type UserMessage = z.infer<typeof UserMessageSchema>;
 export type AssistantMessage = z.infer<typeof AssistantMessageSchema>;
 export type SystemMessage = z.infer<typeof SystemMessageSchema>;
+export type PRLinkMessage = z.infer<typeof PRLinkMessageSchema>;
 
 // ============================================================================
 // Utility Functions

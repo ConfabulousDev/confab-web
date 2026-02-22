@@ -561,6 +561,95 @@ func TestValidateLine_QueueOperationMessage(t *testing.T) {
 	}
 }
 
+func TestValidateLine_PRLinkMessage(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      map[string]interface{}
+		wantErrors int
+		wantPaths  []string
+	}{
+		{
+			name: "valid pr-link message",
+			input: map[string]interface{}{
+				"type":         "pr-link",
+				"prNumber":     float64(22),
+				"prRepository": "ConfabulousDev/confab-web",
+				"prUrl":        "https://github.com/ConfabulousDev/confab-web/pull/22",
+				"sessionId":    "session-123",
+				"timestamp":    "2026-02-22T08:00:41.865Z",
+			},
+			wantErrors: 0,
+		},
+		{
+			name: "missing prNumber",
+			input: map[string]interface{}{
+				"type":         "pr-link",
+				"prRepository": "ConfabulousDev/confab-web",
+				"prUrl":        "https://github.com/ConfabulousDev/confab-web/pull/22",
+				"sessionId":    "session-123",
+				"timestamp":    "2026-02-22T08:00:41.865Z",
+			},
+			wantErrors: 1,
+			wantPaths:  []string{"prNumber"},
+		},
+		{
+			name: "missing prRepository",
+			input: map[string]interface{}{
+				"type":      "pr-link",
+				"prNumber":  float64(22),
+				"prUrl":     "https://github.com/ConfabulousDev/confab-web/pull/22",
+				"sessionId": "session-123",
+				"timestamp": "2026-02-22T08:00:41.865Z",
+			},
+			wantErrors: 1,
+			wantPaths:  []string{"prRepository"},
+		},
+		{
+			name: "missing prUrl",
+			input: map[string]interface{}{
+				"type":         "pr-link",
+				"prNumber":     float64(22),
+				"prRepository": "ConfabulousDev/confab-web",
+				"sessionId":    "session-123",
+				"timestamp":    "2026-02-22T08:00:41.865Z",
+			},
+			wantErrors: 1,
+			wantPaths:  []string{"prUrl"},
+		},
+		{
+			name: "missing all required fields except type",
+			input: map[string]interface{}{
+				"type": "pr-link",
+			},
+			wantErrors: 5,
+			wantPaths:  []string{"prNumber", "prRepository", "prUrl", "sessionId", "timestamp"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errors := ValidateLine(tt.input)
+			if len(errors) != tt.wantErrors {
+				t.Errorf("ValidateLine() got %d errors, want %d", len(errors), tt.wantErrors)
+				for _, e := range errors {
+					t.Logf("  - %s: %s", e.Path, e.Message)
+				}
+			}
+			if tt.wantPaths != nil {
+				pathSet := make(map[string]bool)
+				for _, e := range errors {
+					pathSet[e.Path] = true
+				}
+				for _, p := range tt.wantPaths {
+					if !pathSet[p] {
+						t.Errorf("expected error at path %q, but not found", p)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestValidateLine_UnknownType(t *testing.T) {
 	// Unknown types should be allowed for forward compatibility
 	input := map[string]interface{}{
