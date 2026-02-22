@@ -1,7 +1,14 @@
 {
-  "name": "frontend-new",
+  "name": "confab-frontend",
   "private": true,
-  "version": "0.0.0",
+  "description": "Self-hosted analytics dashboard for Claude Code sessions",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ConfabulousDev/confab-web",
+    "directory": "frontend"
+  },
+  "homepage": "https://confabulous.dev",
   "type": "module",
   "scripts": {
     "dev": "vite",
