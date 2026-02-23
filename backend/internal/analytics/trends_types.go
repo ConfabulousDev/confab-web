@@ -45,6 +45,7 @@ type TrendsCards struct {
 	Tools           *TrendsToolsCard           `json:"tools"`
 	Utilization     *TrendsUtilizationCard     `json:"utilization"`
 	AgentsAndSkills *TrendsAgentsAndSkillsCard `json:"agents_and_skills"`
+	TopSessions     *TrendsTopSessionsCard     `json:"top_sessions"`
 }
 
 // =============================================================================
@@ -116,6 +117,20 @@ type TrendsAgentsAndSkillsCard struct {
 	TotalSkillInvocations int                    `json:"total_skill_invocations"`
 	AgentStats            map[string]*AgentStats `json:"agent_stats"`
 	SkillStats            map[string]*SkillStats `json:"skill_stats"`
+}
+
+// TrendsTopSessionsCard provides the most expensive sessions ranked by cost.
+type TrendsTopSessionsCard struct {
+	Sessions []TopSessionItem `json:"sessions"`
+}
+
+// TopSessionItem represents a single session in the top sessions ranking.
+type TopSessionItem struct {
+	ID               string  `json:"id"`
+	Title            string  `json:"title"`
+	EstimatedCostUSD string  `json:"estimated_cost_usd"`
+	DurationMs       *int64  `json:"duration_ms,omitempty"`
+	GitRepo          *string `json:"git_repo,omitempty"`
 }
 
 // =============================================================================

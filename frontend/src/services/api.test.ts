@@ -88,6 +88,7 @@ const validTrendsResponse = {
     tools: null,
     utilization: null,
     agents_and_skills: null,
+    top_sessions: null,
   },
 };
 

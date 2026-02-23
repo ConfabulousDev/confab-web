@@ -47,7 +47,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	errChan := make(chan error, 5)
+	errChan := make(chan error, 6)
 
 	// Helper to run aggregation in parallel
 	runAgg := func(name string, fn func() error) {
@@ -104,6 +104,17 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		}
 		mu.Lock()
 		response.Cards.AgentsAndSkills = agentsAndSkills
+		mu.Unlock()
+		return nil
+	})
+
+	runAgg("top_sessions", func() error {
+		topSessions, err := s.aggregateTopSessions(ctx, userID, req)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		response.Cards.TopSessions = topSessions
 		mu.Unlock()
 		return nil
 	})
@@ -470,6 +481,89 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 		TotalErrors: totalErrors,
 		ToolStats:   aggregatedStats,
 	}, nil
+}
+
+// aggregateTopSessions returns the top 10 most expensive sessions ranked by cost.
+func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req TrendsRequest) (*TrendsTopSessionsCard, error) {
+	query := `
+		WITH filtered_sessions AS (
+			SELECT
+				s.id,
+				s.external_id,
+				COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message) AS title,
+				NULLIF(regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1'), '') AS git_repo
+			FROM sessions s
+			WHERE s.user_id = $1
+				AND s.first_seen >= to_timestamp($2)
+				AND s.first_seen < to_timestamp($3)
+				AND (
+					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
+				)
+		)
+		SELECT fs.id, fs.external_id, fs.title, fs.git_repo,
+			   t.estimated_cost_usd, sess.duration_ms
+		FROM filtered_sessions fs
+		INNER JOIN session_card_tokens t ON fs.id = t.session_id
+		LEFT JOIN session_card_session sess ON fs.id = sess.session_id
+		WHERE t.estimated_cost_usd > 0
+		ORDER BY t.estimated_cost_usd DESC
+		LIMIT 10
+	`
+
+	rows, err := s.db.QueryContext(ctx, query,
+		userID,
+		req.StartTS,
+		req.EndTS,
+		pq.Array(req.Repos),
+		req.IncludeNoRepo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sessions := []TopSessionItem{}
+	for rows.Next() {
+		var item TopSessionItem
+		var externalID string
+		var title *string
+		var costStr string
+
+		err := rows.Scan(
+			&item.ID,
+			&externalID,
+			&title,
+			&item.GitRepo,
+			&costStr,
+			&item.DurationMs,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if title != nil {
+			item.Title = *title
+		} else {
+			// Fallback: "Untitled session - <first 8 chars of external_id>"
+			truncID := externalID
+			if len(truncID) > 8 {
+				truncID = truncID[:8]
+			}
+			item.Title = "Untitled session - " + truncID
+		}
+
+		cost, _ := decimal.NewFromString(costStr)
+		item.EstimatedCostUSD = cost.String()
+
+		sessions = append(sessions, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &TrendsTopSessionsCard{Sessions: sessions}, nil
 }
 
 // aggregateAgentsAndSkills computes the agents and skills card with per-name breakdown.

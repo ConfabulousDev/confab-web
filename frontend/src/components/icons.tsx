@@ -220,6 +220,14 @@ export const UsersIcon = (
   </svg>
 );
 
+// Trending up icon for Costliest Sessions card header
+export const TrendingUpIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+    <polyline points="17 6 23 6 23 12" />
+  </svg>
+);
+
 // Zap/lightning icon for Skills card header
 export const ZapIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

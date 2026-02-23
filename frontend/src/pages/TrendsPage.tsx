@@ -12,6 +12,7 @@ import {
   TrendsToolsCard,
   TrendsUtilizationCard,
   TrendsAgentsAndSkillsCard,
+  TrendsTopSessionsCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
 import styles from './TrendsPage.module.css';
@@ -213,6 +214,7 @@ function TrendsPage() {
             <div className={styles.cardsGrid}>
               <TrendsOverviewCard data={data.cards.overview} />
               <TrendsTokensCard data={data.cards.tokens} />
+              <TrendsTopSessionsCard data={data.cards.top_sessions} />
               <TrendsActivityCard data={data.cards.activity} />
               <TrendsToolsCard data={data.cards.tools} />
               <TrendsUtilizationCard data={data.cards.utilization} />

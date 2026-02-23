@@ -182,6 +182,15 @@ const defaultMockData: TrendsResponse = {
         'frontend-design': { success: 4, errors: 0 },
       },
     },
+    top_sessions: {
+      sessions: [
+        { id: '1', title: 'Implement dark mode with theme system', estimated_cost_usd: '45.20', duration_ms: 7200000, git_repo: 'org/repo-web' },
+        { id: '2', title: 'Debug OAuth redirect loop', estimated_cost_usd: '32.15', duration_ms: 5400000, git_repo: 'org/repo-api' },
+        { id: '3', title: 'Refactor API validation middleware', estimated_cost_usd: '28.90', duration_ms: 3600000, git_repo: 'org/repo-api' },
+        { id: '4', title: 'Add session analytics dashboard', estimated_cost_usd: '22.50', duration_ms: 4800000, git_repo: 'org/repo-web' },
+        { id: '5', title: 'Write integration tests', estimated_cost_usd: '18.75', duration_ms: 2700000 },
+      ],
+    },
   },
 };
 
@@ -266,6 +275,7 @@ export const HighUsage: Story = {
           ],
         },
         agents_and_skills: null,
+        top_sessions: null,
       },
     },
     repos: ['org/repo-web', 'org/repo-api', 'org/repo-cli'],
@@ -322,6 +332,7 @@ export const SingleSession: Story = {
           daily_utilization: [{ date: '2024-01-14', utilization_pct: 75.0 }],
         },
         agents_and_skills: null,
+        top_sessions: null,
       },
     },
     repos: ['org/repo-web'],
@@ -373,6 +384,7 @@ export const EmptyState: Story = {
         tools: null,
         utilization: null,
         agents_and_skills: null,
+        top_sessions: null,
       },
     },
     repos: [],
