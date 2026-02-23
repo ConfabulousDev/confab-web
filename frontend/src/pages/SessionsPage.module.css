@@ -188,6 +188,7 @@
   font-size: var(--font-sm);
   white-space: nowrap;
   width: 1%;
+  text-align: right;
 }
 
 /* Alert styling */

@@ -121,8 +121,8 @@ function SessionsPage() {
                   <thead>
                     <tr>
                       <th>Session</th>
-                      <th>Activity</th>
                       <th className={styles.costHeader}>Est. Cost</th>
+                      <th>Activity</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -192,6 +192,11 @@ function SessionsPage() {
                               })()}
                             </div>
                           </td>
+                          <td className={styles.costCell}>
+                            {session.estimated_cost_usd
+                              ? formatCost(parseFloat(session.estimated_cost_usd))
+                              : '-'}
+                          </td>
                           <td className={styles.timestamp}>
                             <span className={styles.activityContent}>
                               <span className={styles.activityTime}>
@@ -204,11 +209,6 @@ function SessionsPage() {
                                 </span>
                               )}
                             </span>
-                          </td>
-                          <td className={styles.costCell}>
-                            {session.estimated_cost_usd
-                              ? formatCost(parseFloat(session.estimated_cost_usd))
-                              : '-'}
                           </td>
                         </tr>
                       );
