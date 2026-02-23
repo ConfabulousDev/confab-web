@@ -2170,3 +2170,79 @@ func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 		t.Errorf("Expected 5 total sessions, got %d", len(result.Sessions))
 	}
 }
+
+// =============================================================================
+// EstimatedCostUSD Tests
+// =============================================================================
+
+// TestListUserSessionsPaginated_EstimatedCostUSD tests that estimated_cost_usd
+// from session_card_tokens propagates into the paginated session list.
+func TestListUserSessionsPaginated_EstimatedCostUSD(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "cost@test.com", "Cost User")
+
+	// Create two sessions: one with cost data, one without
+	sessionWithCost := testutil.CreateTestSessionFull(t, env, user.ID, "session-with-cost", testutil.TestSessionFullOpts{
+		Summary: "Session with cost analytics",
+	})
+	_ = testutil.CreateTestSessionFull(t, env, user.ID, "session-no-cost", testutil.TestSessionFullOpts{
+		Summary: "Session without cost analytics",
+	})
+
+	// Seed session_card_tokens for the first session
+	_, err := env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_tokens (
+			session_id, version, computed_at, up_to_line,
+			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+			estimated_cost_usd
+		) VALUES ($1, 2, NOW(), 100, 50000, 20000, 1000, 5000, '4.2300')
+	`, sessionWithCost)
+	if err != nil {
+		t.Fatalf("Failed to insert session_card_tokens: %v", err)
+	}
+
+	ctx := context.Background()
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("ListUserSessionsPaginated failed: %v", err)
+	}
+
+	if len(result.Sessions) != 2 {
+		t.Fatalf("Expected 2 sessions, got %d", len(result.Sessions))
+	}
+
+	// Find each session and verify cost
+	var foundWithCost, foundWithoutCost bool
+	for _, s := range result.Sessions {
+		switch s.ExternalID {
+		case "session-with-cost":
+			foundWithCost = true
+			if s.EstimatedCostUSD == nil {
+				t.Error("session-with-cost: expected non-nil EstimatedCostUSD")
+			} else if *s.EstimatedCostUSD != "4.2300" {
+				t.Errorf("session-with-cost: expected EstimatedCostUSD='4.2300', got '%s'", *s.EstimatedCostUSD)
+			}
+		case "session-no-cost":
+			foundWithoutCost = true
+			if s.EstimatedCostUSD != nil {
+				t.Errorf("session-no-cost: expected nil EstimatedCostUSD, got '%s'", *s.EstimatedCostUSD)
+			}
+		}
+	}
+
+	if !foundWithCost {
+		t.Error("session-with-cost not found in results")
+	}
+	if !foundWithoutCost {
+		t.Error("session-no-cost not found in results")
+	}
+}

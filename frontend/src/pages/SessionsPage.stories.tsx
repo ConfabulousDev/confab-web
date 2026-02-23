@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import Chip from '@/components/Chip';
 import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, ClaudeCodeIcon } from '@/components/icons';
 import { formatRelativeTime, formatDuration } from '@/utils';
+import { formatCost } from '@/utils/tokenStats';
 import styles from './SessionsPage.module.css';
 
 // Type for mock session data
@@ -13,6 +14,7 @@ interface MockSession {
   first_user_message: string | null;
   first_seen: string;
   last_sync_time: string | null;
+  estimated_cost_usd?: string | null;
   git_repo: string | null;
   git_repo_url: string | null;
   git_branch: string | null;
@@ -30,6 +32,7 @@ const mockSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 18 * 1000).toISOString(),
+    estimated_cost_usd: '4.2300',
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
@@ -43,6 +46,7 @@ const mockSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '0.1200',
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
@@ -55,6 +59,7 @@ const mockSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
+    estimated_cost_usd: null,
     git_repo: 'internal/confab',
     git_repo_url: 'https://gitlab.company.com/internal/confab',
     git_branch: 'main',
@@ -67,6 +72,7 @@ const mockSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '12.8700',
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
@@ -79,6 +85,7 @@ const mockSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '0.0500',
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/quickstart',
@@ -92,6 +99,7 @@ const mockSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 45 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '1.5600',
     git_repo: 'ConfabulousDev/confab',
     git_repo_url: 'https://github.com/ConfabulousDev/confab',
     git_branch: 'develop',
@@ -112,6 +120,7 @@ function SessionListTable({ sessions }: SessionListTableProps) {
             <tr>
               <th>Session</th>
               <th>Activity</th>
+              <th className={styles.costHeader}>Est. Cost</th>
             </tr>
           </thead>
           <tbody>
@@ -163,6 +172,11 @@ function SessionListTable({ sessions }: SessionListTableProps) {
                     )}
                   </span>
                 </td>
+                <td className={styles.costCell}>
+                  {session.estimated_cost_usd
+                    ? formatCost(parseFloat(session.estimated_cost_usd))
+                    : '-'}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -202,6 +216,7 @@ export const WithMixedData: Story = {
         first_user_message: null,
         first_seen: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
         last_sync_time: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        estimated_cost_usd: '0.0030',
         git_repo: 'company/another-repo',
         git_repo_url: 'https://github.com/company/another-repo',
         git_branch: 'main',
@@ -237,6 +252,7 @@ const mockSharedSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '7.4500',
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/api-v2',
@@ -250,6 +266,7 @@ const mockSharedSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+    estimated_cost_usd: null,
     git_repo: 'company/backend',
     git_repo_url: 'https://github.com/company/backend',
     git_branch: 'main',
@@ -263,6 +280,7 @@ const mockSharedSessions: MockSession[] = [
     first_user_message: null,
     first_seen: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     last_sync_time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '0.8900',
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'perf/lazy-loading',

@@ -43,6 +43,7 @@ const SessionSchema = z.object({
   git_branch: z.string().nullable().optional(),
   github_prs: z.array(z.string()).nullable().optional(), // Linked GitHub PR refs (e.g., ["123", "456"])
   github_commits: z.array(z.string()).nullable().optional(), // Linked GitHub commit SHAs (latest first)
+  estimated_cost_usd: z.string().nullable().optional(), // Estimated API cost from analytics
   is_owner: z.boolean(),
   access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),
   shared_by_email: z.string().nullable().optional(),

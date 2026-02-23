@@ -181,6 +181,15 @@
   gap: 4px;
 }
 
+/* Cost column */
+.costHeader,
+.costCell {
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  width: 1%;
+}
+
 /* Alert styling */
 .alertFading {
   opacity: 0;
@@ -199,5 +208,10 @@
 
   .toolbar {
     padding: var(--spacing-sm);
+  }
+
+  .costHeader,
+  .costCell {
+    display: none;
   }
 }
