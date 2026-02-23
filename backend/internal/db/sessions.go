@@ -129,6 +129,7 @@ func (db *DB) ListUserSessions(ctx context.Context, userID int64) ([]SessionList
 			&session.GitBranch,
 			&githubPRs,
 			&githubCommits,
+			&session.EstimatedCostUSD,
 			&session.IsOwner,
 			&session.AccessType,
 			&session.SharedByEmail,
@@ -189,6 +190,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 					s.git_info->>'branch' as git_branch,
 					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
+					sct.estimated_cost_usd,
 					false as is_owner,
 					'system_share' as access_type,
 					u.email as shared_by_email,
@@ -204,6 +206,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 				) sf_stats ON s.id = sf_stats.session_id
 				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
 				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
 				ORDER BY s.id, sh.created_at DESC  -- Pick most recent share per session
@@ -230,6 +233,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 					s.git_info->>'branch' as git_branch,
 					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
+					sct.estimated_cost_usd,
 					false as is_owner,
 					'system_share' as access_type,
 					u.email as shared_by_email,
@@ -243,6 +247,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 				) sf_stats ON s.id = sf_stats.session_id
 				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
 				WHERE s.user_id != $1
 				ORDER BY s.id
 			)`
@@ -282,6 +287,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 					s.git_info->>'branch' as git_branch,
 					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
+					sct.estimated_cost_usd,
 					true as is_owner,
 					'owner' as access_type,
 					NULL::text as shared_by_email,
@@ -295,6 +301,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 				) sf_stats ON s.id = sf_stats.session_id
 				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
 				WHERE s.user_id = $1
 			),
 			-- Sessions shared with user (via session_share_recipients by user_id)
@@ -315,6 +322,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 					s.git_info->>'branch' as git_branch,
 					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
+					sct.estimated_cost_usd,
 					false as is_owner,
 					'private_share' as access_type,
 					u.email as shared_by_email,
@@ -330,6 +338,7 @@ func (db *DB) buildSharedWithMeQuery() string {
 				) sf_stats ON s.id = sf_stats.session_id
 				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
 				WHERE sr.user_id = $1
 				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1  -- Don't duplicate owned sessions
@@ -624,7 +633,8 @@ const sessionSelectCols = `
 				s.git_info->>'repo_url' as git_repo_url,
 				s.git_info->>'branch' as git_branch,
 				COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
-				COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits`
+				COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
+				sct.estimated_cost_usd`
 
 // JOIN clause shared across session list query builders.
 const sessionStatsJoins = `
@@ -634,7 +644,8 @@ const sessionStatsJoins = `
 				GROUP BY session_id
 			) sf_stats ON s.id = sf_stats.session_id
 			LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-			LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id`
+			LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+			LEFT JOIN session_card_tokens sct ON s.id = sct.session_id`
 
 // GitHub link CTE definitions shared across session list query builders.
 const githubRefCTEs = `
@@ -814,6 +825,7 @@ func (db *DB) queryPaginatedSessions(ctx context.Context, userID int64, params S
 			&session.GitBranch,
 			&githubPRs,
 			&githubCommits,
+			&session.EstimatedCostUSD,
 			&session.IsOwner,
 			&session.AccessType,
 			&session.SharedByEmail,

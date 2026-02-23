@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessionsFetch, useAuth, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { formatDuration } from '@/utils';
+import { formatCost } from '@/utils/tokenStats';
 import { RelativeTime } from '@/components/RelativeTime';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
@@ -121,6 +122,7 @@ function SessionsPage() {
                     <tr>
                       <th>Session</th>
                       <th>Activity</th>
+                      <th className={styles.costHeader}>Est. Cost</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -202,6 +204,11 @@ function SessionsPage() {
                                 </span>
                               )}
                             </span>
+                          </td>
+                          <td className={styles.costCell}>
+                            {session.estimated_cost_usd
+                              ? formatCost(parseFloat(session.estimated_cost_usd))
+                              : '-'}
                           </td>
                         </tr>
                       );

@@ -332,6 +332,7 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
       "git_branch": "main",
       "github_prs": ["123", "456"],
       "github_commits": ["abc1234", "def5678"],
+      "estimated_cost_usd": "4.2300",
       "is_owner": true,
       "access_type": "owner",
       "shared_by_email": null,
@@ -353,6 +354,7 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
 - `custom_title` is null/omitted when not set. Frontend displays: `custom_title || summary || first_user_message || fallback`.
 - `github_prs` contains linked PR refs (ordered by creation time ascending).
 - `github_commits` contains linked commit SHAs (ordered by creation time descending, so latest is first).
+- `estimated_cost_usd` is the estimated API cost (decimal as string, e.g. `"4.2300"`). Null/omitted when analytics have not been computed for the session.
 - **Page size** is fixed at 50 sessions per page.
 - **Cursor pagination**: Pass `next_cursor` from the response as `cursor` param to get the next page. When `has_more` is false, there are no more results. `next_cursor` is only present when `has_more` is true.
 - **Visibility filter**: Only sessions with `total_lines > 0` and at least one of `summary` or `first_user_message` are included.

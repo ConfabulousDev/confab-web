@@ -34,6 +34,7 @@ type SessionListItem struct {
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
 	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
 	OwnerEmail       string     `json:"owner_email"`                  // email of session owner (always populated)
+	EstimatedCostUSD *string    `json:"estimated_cost_usd,omitempty"` // Estimated API cost from analytics
 }
 
 // SessionListParams contains filtering and pagination parameters for listing sessions
