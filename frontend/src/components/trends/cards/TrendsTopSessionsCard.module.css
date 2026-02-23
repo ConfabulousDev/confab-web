@@ -1,6 +1,5 @@
 .wrapper {
-  grid-column: 1 / -1;
-  max-width: 800px;
+  grid-column: span 2;
 }
 
 .sessionList {
