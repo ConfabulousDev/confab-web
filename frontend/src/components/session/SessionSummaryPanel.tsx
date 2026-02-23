@@ -168,7 +168,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           }
 
           const spanClass = SPAN_CLASSES[String(cardDef.span)] ?? '';
-          const sizeClass = SIZE_CLASSES[cardDef.size ?? 'standard'] ?? styles.sizeStandard;
+          const sizeClass = cardDef.size ? (SIZE_CLASSES[cardDef.size] ?? '') : '';
 
           // Build additional props for specific cards
           const extraProps: Record<string, unknown> = {};

@@ -32,7 +32,6 @@ export const cardRegistry: CardDefinition[] = [
     component: SmartRecapCard,
     order: 0,
     span: 'full',
-    size: 'tall',
     // No shouldRender gate — the component handles no-data states internally
     // (quota_exceeded placeholder, unavailable placeholder, or returns null)
   },
