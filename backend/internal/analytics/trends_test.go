@@ -66,6 +66,12 @@ func TestGetTrends_EmptyResults(t *testing.T) {
 	} else if response.Cards.AgentsAndSkills.TotalAgentInvocations != 0 {
 		t.Errorf("AgentsAndSkills.TotalAgentInvocations = %d, want 0", response.Cards.AgentsAndSkills.TotalAgentInvocations)
 	}
+
+	if response.Cards.TopSessions == nil {
+		t.Error("expected TopSessions card to be non-nil")
+	} else if len(response.Cards.TopSessions.Sessions) != 0 {
+		t.Errorf("TopSessions.Sessions length = %d, want 0", len(response.Cards.TopSessions.Sessions))
+	}
 }
 
 func TestGetTrends_WithSessions(t *testing.T) {
@@ -220,6 +226,21 @@ func TestGetTrends_WithSessions(t *testing.T) {
 	}
 	if response.Cards.Tools.TotalErrors != 2 {
 		t.Errorf("TotalErrors = %d, want 2", response.Cards.Tools.TotalErrors)
+	}
+
+	// Check top sessions — both sessions have cost > 0, ordered descending
+	if response.Cards.TopSessions == nil {
+		t.Fatal("expected TopSessions card to be non-nil")
+	}
+	if len(response.Cards.TopSessions.Sessions) != 2 {
+		t.Fatalf("TopSessions.Sessions length = %d, want 2", len(response.Cards.TopSessions.Sessions))
+	}
+	// Session 2 ($1.00) should be first, session 1 ($0.50) second
+	if response.Cards.TopSessions.Sessions[0].EstimatedCostUSD != "1" {
+		t.Errorf("TopSessions[0].EstimatedCostUSD = %s, want 1", response.Cards.TopSessions.Sessions[0].EstimatedCostUSD)
+	}
+	if response.Cards.TopSessions.Sessions[1].EstimatedCostUSD != "0.5" {
+		t.Errorf("TopSessions[1].EstimatedCostUSD = %s, want 0.5", response.Cards.TopSessions.Sessions[1].EstimatedCostUSD)
 	}
 
 	// Check agents and skills aggregation
@@ -886,4 +907,218 @@ func TestGetTrends_TimezoneOffset(t *testing.T) {
 	if response3.SessionCount != 1 {
 		t.Errorf("SessionCount (JST) = %d, want 1", response3.SessionCount)
 	}
+}
+
+func TestGetTrends_TopSessions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-top-sessions@test.com", "Trends TopSessions User")
+	ctx := context.Background()
+
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Session 1: has summary as title, with repo, cost $5.00
+	session1 := testutil.CreateTestSessionFull(t, env, user.ID, "top-session-1", testutil.TestSessionFullOpts{
+		RepoURL:          "https://github.com/org/expensive-repo.git",
+		Summary:          "Implement dark mode",
+		FirstUserMessage: "Add dark mode to settings",
+	})
+	err := store.UpsertCards(ctx, &analytics.Cards{
+		Tokens: &analytics.TokensCardRecord{
+			SessionID:        session1,
+			Version:          analytics.TokensCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         100,
+			InputTokens:      50000,
+			OutputTokens:     25000,
+			EstimatedCostUSD: decimal.NewFromFloat(5.00),
+		},
+		Session: &analytics.SessionCardRecord{
+			SessionID:  session1,
+			Version:    analytics.SessionCardVersion,
+			ComputedAt: time.Now().UTC(),
+			UpToLine:   100,
+			DurationMs: int64Ptr(3600000), // 1 hour
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards (session 1) failed: %v", err)
+	}
+
+	// Session 2: has first_user_message only (no summary), no repo, cost $10.00 (most expensive)
+	session2 := testutil.CreateTestSession(t, env, user.ID, "top-session-2")
+	// Set first_user_message directly
+	_, err = env.DB.Exec(env.Ctx, `UPDATE sessions SET first_user_message = $1 WHERE id = $2`, "Debug auth flow", session2)
+	if err != nil {
+		t.Fatalf("failed to set first_user_message: %v", err)
+	}
+	err = store.UpsertCards(ctx, &analytics.Cards{
+		Tokens: &analytics.TokensCardRecord{
+			SessionID:        session2,
+			Version:          analytics.TokensCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         200,
+			InputTokens:      100000,
+			OutputTokens:     50000,
+			EstimatedCostUSD: decimal.NewFromFloat(10.00),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards (session 2) failed: %v", err)
+	}
+
+	// Session 3: no title fields at all, cost $2.50
+	session3 := testutil.CreateTestSession(t, env, user.ID, "top-session-3")
+	err = store.UpsertCards(ctx, &analytics.Cards{
+		Tokens: &analytics.TokensCardRecord{
+			SessionID:        session3,
+			Version:          analytics.TokensCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         50,
+			InputTokens:      25000,
+			OutputTokens:     12500,
+			EstimatedCostUSD: decimal.NewFromFloat(2.50),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards (session 3) failed: %v", err)
+	}
+
+	// Session 4: cost $0.00 (should be excluded)
+	session4 := testutil.CreateTestSession(t, env, user.ID, "top-session-4")
+	err = store.UpsertCards(ctx, &analytics.Cards{
+		Tokens: &analytics.TokensCardRecord{
+			SessionID:        session4,
+			Version:          analytics.TokensCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         10,
+			InputTokens:      100,
+			OutputTokens:     50,
+			EstimatedCostUSD: decimal.NewFromFloat(0.00),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards (session 4) failed: %v", err)
+	}
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{"org/expensive-repo"},
+		IncludeNoRepo: true,
+	}
+
+	response, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends failed: %v", err)
+	}
+
+	if response.Cards.TopSessions == nil {
+		t.Fatal("expected TopSessions card to be non-nil")
+	}
+
+	sessions := response.Cards.TopSessions.Sessions
+
+	// Should have 3 sessions (session 4 with $0 cost excluded)
+	if len(sessions) != 3 {
+		t.Fatalf("TopSessions length = %d, want 3", len(sessions))
+	}
+
+	// Verify descending cost order: $10, $5, $2.50
+	if sessions[0].EstimatedCostUSD != "10" {
+		t.Errorf("sessions[0].EstimatedCostUSD = %s, want 10", sessions[0].EstimatedCostUSD)
+	}
+	if sessions[1].EstimatedCostUSD != "5" {
+		t.Errorf("sessions[1].EstimatedCostUSD = %s, want 5", sessions[1].EstimatedCostUSD)
+	}
+	if sessions[2].EstimatedCostUSD != "2.5" {
+		t.Errorf("sessions[2].EstimatedCostUSD = %s, want 2.5", sessions[2].EstimatedCostUSD)
+	}
+
+	// Verify title resolution
+	// Session 2 ($10): first_user_message = "Debug auth flow"
+	if sessions[0].Title != "Debug auth flow" {
+		t.Errorf("sessions[0].Title = %q, want %q", sessions[0].Title, "Debug auth flow")
+	}
+	// Session 1 ($5): summary = "Implement dark mode" (takes precedence over first_user_message)
+	if sessions[1].Title != "Implement dark mode" {
+		t.Errorf("sessions[1].Title = %q, want %q", sessions[1].Title, "Implement dark mode")
+	}
+	// Session 3 ($2.50): no title fields, should fallback
+	if sessions[2].Title != "Untitled session - top-sess" {
+		t.Errorf("sessions[2].Title = %q, want %q", sessions[2].Title, "Untitled session - top-sess")
+	}
+
+	// Verify git_repo populated for session 1, nil for session 2
+	if sessions[1].GitRepo == nil || *sessions[1].GitRepo != "org/expensive-repo" {
+		t.Errorf("sessions[1].GitRepo = %v, want 'org/expensive-repo'", sessions[1].GitRepo)
+	}
+	if sessions[0].GitRepo != nil {
+		t.Errorf("sessions[0].GitRepo = %v, want nil", sessions[0].GitRepo)
+	}
+
+	// Verify duration populated for session 1, nil for session 2
+	if sessions[1].DurationMs == nil || *sessions[1].DurationMs != 3600000 {
+		t.Errorf("sessions[1].DurationMs = %v, want 3600000", sessions[1].DurationMs)
+	}
+	if sessions[0].DurationMs != nil {
+		t.Errorf("sessions[0].DurationMs = %v, want nil", sessions[0].DurationMs)
+	}
+
+	// Verify IDs are UUIDs
+	if sessions[0].ID != session2 {
+		t.Errorf("sessions[0].ID = %s, want %s", sessions[0].ID, session2)
+	}
+	if sessions[1].ID != session1 {
+		t.Errorf("sessions[1].ID = %s, want %s", sessions[1].ID, session1)
+	}
+}
+
+func TestGetTrends_TopSessionsEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-top-empty@test.com", "Trends TopEmpty User")
+	ctx := context.Background()
+
+	// Create a session with no tokens card
+	_ = testutil.CreateTestSession(t, env, user.ID, "session-no-tokens")
+
+	store := analytics.NewStore(env.DB.Conn())
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+
+	response, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends failed: %v", err)
+	}
+
+	if response.Cards.TopSessions == nil {
+		t.Fatal("expected TopSessions card to be non-nil")
+	}
+	if len(response.Cards.TopSessions.Sessions) != 0 {
+		t.Errorf("TopSessions.Sessions length = %d, want 0", len(response.Cards.TopSessions.Sessions))
+	}
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }

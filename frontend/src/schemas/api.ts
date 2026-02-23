@@ -409,6 +409,18 @@ const TrendsAgentsAndSkillsCardSchema = z.object({
   skill_stats: z.record(z.string(), TrendsSkillStatsSchema),
 });
 
+const TopSessionItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  estimated_cost_usd: z.string(),
+  duration_ms: z.number().nullable().optional(),
+  git_repo: z.string().nullable().optional(),
+});
+
+const TrendsTopSessionsCardSchema = z.object({
+  sessions: z.array(TopSessionItemSchema),
+});
+
 const TrendsCardsSchema = z.object({
   overview: TrendsOverviewCardSchema.nullable(),
   tokens: TrendsTokensCardSchema.nullable(),
@@ -416,6 +428,7 @@ const TrendsCardsSchema = z.object({
   tools: TrendsToolsCardSchema.nullable(),
   utilization: TrendsUtilizationCardSchema.nullable(),
   agents_and_skills: TrendsAgentsAndSkillsCardSchema.nullable(),
+  top_sessions: TrendsTopSessionsCardSchema.nullable(),
 });
 
 export const TrendsResponseSchema = z.object({
@@ -466,6 +479,8 @@ export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
 export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
+export type TrendsTopSessionsCard = z.infer<typeof TrendsTopSessionsCardSchema>;
+export type TopSessionItem = z.infer<typeof TopSessionItemSchema>;
 export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
 export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 
