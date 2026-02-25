@@ -624,6 +624,161 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	return sessions, nil
 }
 
+// FindStaleSearchIndexSessions returns sessions where the search index is stale
+// but all 7 regular cards are up-to-date. A session's search index is stale when:
+// 1. No index exists (never indexed)
+// 2. Version mismatch (search logic changed)
+// 3. Transcript grew (indexed_up_to_line < total_lines)
+// 4. Recap changed (recap computed_at > recap_indexed_at, or recap exists but not indexed)
+// 5. Metadata changed (MD5 hash mismatch on titles/summary/first_user_message)
+func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit int) ([]StaleSession, error) {
+	ctx, span := tracer.Start(ctx, "precompute.find_stale_search_index_sessions",
+		trace.WithAttributes(attribute.Int("limit", limit)))
+	defer span.End()
+
+	query := `
+		WITH session_lines AS (
+			SELECT session_id, SUM(last_synced_line) as total_lines
+			FROM sync_files
+			WHERE file_type IN ('transcript', 'agent')
+			GROUP BY session_id
+			HAVING SUM(last_synced_line) > 0
+		)
+		SELECT sl.session_id, s.user_id, s.external_id, sl.total_lines
+		FROM session_lines sl
+		JOIN sessions s ON sl.session_id = s.id
+		-- All 7 regular cards must be current
+		JOIN session_card_tokens tc ON sl.session_id = tc.session_id
+			AND tc.version = $1 AND tc.up_to_line = sl.total_lines
+		JOIN session_card_session sc ON sl.session_id = sc.session_id
+			AND sc.version = $2 AND sc.up_to_line = sl.total_lines
+		JOIN session_card_tools tl ON sl.session_id = tl.session_id
+			AND tl.version = $3 AND tl.up_to_line = sl.total_lines
+		JOIN session_card_code_activity ca ON sl.session_id = ca.session_id
+			AND ca.version = $4 AND ca.up_to_line = sl.total_lines
+		JOIN session_card_conversation cv ON sl.session_id = cv.session_id
+			AND cv.version = $5 AND cv.up_to_line = sl.total_lines
+		JOIN session_card_agents_and_skills as_card ON sl.session_id = as_card.session_id
+			AND as_card.version = $6 AND as_card.up_to_line = sl.total_lines
+		JOIN session_card_redactions rd ON sl.session_id = rd.session_id
+			AND rd.version = $7 AND rd.up_to_line = sl.total_lines
+		LEFT JOIN session_search_index si ON sl.session_id = si.session_id
+		LEFT JOIN session_card_smart_recap sr ON sl.session_id = sr.session_id
+		WHERE s.session_type = 'Claude Code'
+		  AND (
+			-- 1. Never indexed
+			si.session_id IS NULL
+			-- 2. Version mismatch
+			OR si.version != $8
+			-- 3. Transcript grew
+			OR si.indexed_up_to_line < sl.total_lines
+			-- 4. Recap changed (recap exists but not yet indexed, or recap recomputed after indexing)
+			OR (sr.session_id IS NOT NULL AND (si.recap_indexed_at IS NULL OR sr.computed_at > si.recap_indexed_at))
+			-- 5. Metadata changed
+			OR si.metadata_hash != MD5(COALESCE(s.custom_title, '') || '|' || COALESCE(s.suggested_session_title, '') || '|' || COALESCE(s.summary, '') || '|' || COALESCE(s.first_user_message, ''))
+		  )
+		ORDER BY s.last_sync_at DESC NULLS LAST
+		LIMIT $9
+	`
+
+	rows, err := p.db.QueryContext(ctx, query,
+		TokensCardVersion,          // $1
+		SessionCardVersion,         // $2
+		ToolsCardVersion,           // $3
+		CodeActivityCardVersion,    // $4
+		ConversationCardVersion,    // $5
+		AgentsAndSkillsCardVersion, // $6
+		RedactionsCardVersion,      // $7
+		SearchIndexVersion,         // $8
+		limit,                      // $9
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []StaleSession
+	for rows.Next() {
+		var s StaleSession
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &s.TotalLines); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		sessions = append(sessions, s)
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	span.SetAttributes(attribute.Int("sessions.found", len(sessions)))
+	return sessions, nil
+}
+
+// BuildSearchIndexOnly builds the search index for a session.
+// Downloads transcript, extracts content, queries recap timestamp, and upserts the index.
+func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSession) error {
+	ctx, span := tracer.Start(ctx, "precompute.build_search_index",
+		trace.WithAttributes(
+			attribute.String("session.id", session.SessionID),
+			attribute.Int64("session.total_lines", session.TotalLines),
+		))
+	defer span.End()
+
+	// Download transcript
+	fc, err := p.downloadTranscript(ctx, session)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	// Extract search content (metadata + recap + user messages)
+	content, err := ExtractSearchContent(ctx, p.db, session.SessionID, fc)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	// Get recap computed_at for freshness tracking
+	var recapIndexedAt *time.Time
+	var recapComputedAt sql.NullTime
+	recapQuery := `SELECT computed_at FROM session_card_smart_recap WHERE session_id = $1`
+	err = p.db.QueryRowContext(ctx, recapQuery, session.SessionID).Scan(&recapComputedAt)
+	if err != nil && err != sql.ErrNoRows {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if recapComputedAt.Valid {
+		t := recapComputedAt.Time.UTC()
+		recapIndexedAt = &t
+	}
+
+	// Upsert search index
+	record := &SearchIndexRecord{
+		SessionID:       session.SessionID,
+		Version:         SearchIndexVersion,
+		IndexedUpToLine: session.TotalLines,
+		RecapIndexedAt:  recapIndexedAt,
+		MetadataHash:    content.MetadataHash,
+	}
+
+	if err := p.analyticsStore.UpsertSearchIndex(ctx, record, content); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	span.SetAttributes(attribute.Bool("session.indexed", true))
+	return nil
+}
+
 // PrecomputeSmartRecapOnly computes only the smart recap for a session.
 // Use this when regular cards are already up-to-date but smart recap is stale.
 // It downloads the transcript, fetches existing card stats from DB, and generates smart recap.

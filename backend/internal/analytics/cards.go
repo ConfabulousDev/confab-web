@@ -16,6 +16,7 @@ const (
 	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
 	RedactionsCardVersion      = 2 // v2: filter out "TYPE" placeholder
 	SmartRecapCardVersion      = 1 // v1: initial AI-powered session recap
+	SearchIndexVersion         = 1 // v1: initial full-text search index
 )
 
 // =============================================================================
@@ -164,6 +165,18 @@ type SmartRecapCardRecord struct {
 
 	// Race prevention (optimistic lock)
 	ComputingStartedAt *time.Time `json:"computing_started_at,omitempty"`
+}
+
+// SearchIndexRecord is the DB record for the full-text search index.
+// Unlike other cards, this is not a card but a search index with independent freshness tracking.
+type SearchIndexRecord struct {
+	SessionID       string     `json:"session_id"`
+	Version         int        `json:"version"`
+	ContentText     string     `json:"content_text"`
+	IndexedUpToLine int64      `json:"indexed_up_to_line"`
+	RecapIndexedAt  *time.Time `json:"recap_indexed_at,omitempty"`
+	MetadataHash    string     `json:"metadata_hash"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // Cards aggregates all card data for a session.

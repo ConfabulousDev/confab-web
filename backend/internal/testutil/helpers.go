@@ -458,3 +458,30 @@ func CreateTestSessionFull(t *testing.T, env *TestEnvironment, userID int64, ext
 	return sessionID
 }
 
+// CreateTestSearchIndex inserts a search index row with a weighted tsvector for testing.
+// The text is indexed with weight 'A' for simplicity.
+func CreateTestSearchIndex(t *testing.T, env *TestEnvironment, sessionID string, text string, indexedUpToLine int64) {
+	t.Helper()
+
+	query := `
+		INSERT INTO session_search_index (
+			session_id, version, content_text, search_vector,
+			indexed_up_to_line, metadata_hash, updated_at
+		) VALUES (
+			$1, 1, $2,
+			setweight(to_tsvector('english', $2), 'A'),
+			$3, '', NOW()
+		)
+		ON CONFLICT (session_id) DO UPDATE SET
+			content_text = EXCLUDED.content_text,
+			search_vector = EXCLUDED.search_vector,
+			indexed_up_to_line = EXCLUDED.indexed_up_to_line,
+			updated_at = NOW()
+	`
+
+	_, err := env.DB.Exec(env.Ctx, query, sessionID, text, indexedUpToLine)
+	if err != nil {
+		t.Fatalf("failed to create test search index: %v", err)
+	}
+}
+

@@ -309,7 +309,7 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
 | `branch` | string | No | all | Comma-separated branch names |
 | `owner` | string | No | all | Comma-separated owner emails |
 | `pr` | string | No | all | Comma-separated PR numbers |
-| `q` | string | No | none | Search query (matches title, summary, first message, commit SHA) |
+| `q` | string | No | none | Full-text search with prefix matching. Searches session metadata (titles, summary, first message), smart recap, and user transcript messages via PostgreSQL FTS. Multiple words use AND semantics. Prefix matching is automatic (e.g., `auth` matches `authentication`). Also matches commit SHA prefixes as fallback. |
 | `cursor` | string | No | none | Opaque cursor for pagination (from `next_cursor` of previous response) |
 
 **Response:**

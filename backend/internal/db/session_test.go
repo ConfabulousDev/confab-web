@@ -1358,7 +1358,7 @@ func TestListUserSessionsPaginated_PRFilter(t *testing.T) {
 	}
 }
 
-// TestListUserSessionsPaginated_QuerySearch tests search across titles and commit SHA
+// TestListUserSessionsPaginated_QuerySearch tests FTS search via session_search_index and commit SHA fallback
 func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -1373,10 +1373,10 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "querysearch@test.com", "Query Search User")
 
 	// Create sessions with different titles/content
-	testutil.CreateTestSessionFull(t, env, user.ID, "search-session-1", testutil.TestSessionFullOpts{
+	s1 := testutil.CreateTestSessionFull(t, env, user.ID, "search-session-1", testutil.TestSessionFullOpts{
 		Summary: "Implementing authentication flow",
 	})
-	testutil.CreateTestSessionFull(t, env, user.ID, "search-session-2", testutil.TestSessionFullOpts{
+	s2 := testutil.CreateTestSessionFull(t, env, user.ID, "search-session-2", testutil.TestSessionFullOpts{
 		Summary:          "Fixing database connection pool",
 		FirstUserMessage: "Help me fix the auth system",
 	})
@@ -1385,9 +1385,14 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 	})
 	testutil.CreateTestGitHubLink(t, env, s3, "commit", "abc123def")
 
+	// Populate search index for FTS
+	testutil.CreateTestSearchIndex(t, env, s1, "Implementing authentication flow", 100)
+	testutil.CreateTestSearchIndex(t, env, s2, "Fixing database connection pool Help me fix the auth system", 100)
+	testutil.CreateTestSearchIndex(t, env, s3, "Unrelated work", 100)
+
 	ctx := context.Background()
 
-	// Search for "auth" - should match session 1 (summary) and session 2 (first_user_message)
+	// Search for "auth" - should match session 1 and session 2 via FTS
 	q := "auth"
 	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q,
@@ -1399,7 +1404,7 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 		t.Errorf("Expected 2 sessions matching 'auth', got %d", len(result.Sessions))
 	}
 
-	// Search for commit SHA prefix
+	// Search for commit SHA prefix (fallback path, no FTS match needed)
 	q2 := "abc123"
 	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q2,
@@ -1409,6 +1414,119 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 	}
 	if len(result.Sessions) != 1 {
 		t.Errorf("Expected 1 session matching commit SHA 'abc123', got %d", len(result.Sessions))
+	}
+}
+
+// TestListUserSessionsPaginated_FTSPrefixAndMultiWord tests FTS prefix matching and multi-word queries
+func TestListUserSessionsPaginated_FTSPrefixAndMultiWord(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "ftsmulti@test.com", "FTS Multi User")
+
+	s1 := testutil.CreateTestSessionFull(t, env, user.ID, "fts-session-1", testutil.TestSessionFullOpts{
+		Summary: "Authentication flow implementation",
+	})
+	s2 := testutil.CreateTestSessionFull(t, env, user.ID, "fts-session-2", testutil.TestSessionFullOpts{
+		Summary: "Database migration refactoring",
+	})
+
+	testutil.CreateTestSearchIndex(t, env, s1, "Authentication flow implementation with OAuth2", 100)
+	testutil.CreateTestSearchIndex(t, env, s2, "Database migration refactoring for PostgreSQL", 100)
+
+	ctx := context.Background()
+
+	// Prefix match: "authen" should match "authentication"
+	q := "authen"
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Query: &q,
+	})
+	if err != nil {
+		t.Fatalf("Prefix search failed: %v", err)
+	}
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session matching prefix 'authen', got %d", len(result.Sessions))
+	}
+
+	// Multi-word: "auth flow" should match session 1 (AND semantics)
+	q2 := "auth flow"
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Query: &q2,
+	})
+	if err != nil {
+		t.Fatalf("Multi-word search failed: %v", err)
+	}
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session matching 'auth flow', got %d", len(result.Sessions))
+	}
+
+	// Multi-word no match: "auth database" should match nothing (AND means both must be present)
+	q3 := "auth database"
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Query: &q3,
+	})
+	if err != nil {
+		t.Fatalf("Multi-word no-match search failed: %v", err)
+	}
+	if len(result.Sessions) != 0 {
+		t.Errorf("Expected 0 sessions matching 'auth database', got %d", len(result.Sessions))
+	}
+
+	// No match at all
+	q4 := "kubernetes"
+	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+		Query: &q4,
+	})
+	if err != nil {
+		t.Fatalf("No-match search failed: %v", err)
+	}
+	if len(result.Sessions) != 0 {
+		t.Errorf("Expected 0 sessions matching 'kubernetes', got %d", len(result.Sessions))
+	}
+}
+
+// TestListUserSessionsPaginated_UnindexedSessionsInUnfilteredResults tests that sessions
+// without a search index still appear when no query filter is applied
+func TestListUserSessionsPaginated_UnindexedSessionsInUnfilteredResults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "unindexed@test.com", "Unindexed User")
+
+	// Create sessions - one indexed, one not
+	s1 := testutil.CreateTestSessionFull(t, env, user.ID, "indexed-session", testutil.TestSessionFullOpts{
+		Summary: "Indexed session",
+	})
+	testutil.CreateTestSessionFull(t, env, user.ID, "unindexed-session", testutil.TestSessionFullOpts{
+		Summary: "Unindexed session",
+	})
+
+	testutil.CreateTestSearchIndex(t, env, s1, "Indexed session content", 100)
+	// Note: s2 has no search index
+
+	ctx := context.Background()
+
+	// Without query filter, both sessions should appear
+	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{})
+	if err != nil {
+		t.Fatalf("Unfiltered list failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Errorf("Expected 2 sessions in unfiltered list, got %d", len(result.Sessions))
 	}
 }
 
