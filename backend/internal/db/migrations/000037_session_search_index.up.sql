@@ -1,11 +1,11 @@
 CREATE TABLE session_search_index (
     session_id UUID PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
-    version INT NOT NULL DEFAULT 1,
-    content_text TEXT NOT NULL DEFAULT '',
+    version INT NOT NULL,
+    content_text TEXT NOT NULL,
     search_vector TSVECTOR NOT NULL,
-    indexed_up_to_line BIGINT NOT NULL DEFAULT 0,
+    indexed_up_to_line BIGINT NOT NULL,
     recap_indexed_at TIMESTAMPTZ,
-    metadata_hash TEXT NOT NULL DEFAULT '',
+    metadata_hash TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
