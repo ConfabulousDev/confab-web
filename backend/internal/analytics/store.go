@@ -1251,3 +1251,88 @@ func (s *Store) ClearSmartRecapLock(ctx context.Context, sessionID string) error
 	}
 	return err
 }
+
+// =============================================================================
+// Search Index operations
+// =============================================================================
+
+// UpsertSearchIndex inserts or updates the search index for a session.
+// The tsvector is built server-side with weighted components:
+//   - Weight A: metadata (titles, summary, first message)
+//   - Weight B: smart recap content
+//   - Weight C: user messages from transcript
+func (s *Store) UpsertSearchIndex(ctx context.Context, record *SearchIndexRecord, content *SearchIndexContent) error {
+	ctx, span := tracer.Start(ctx, "analytics.upsert_search_index",
+		trace.WithAttributes(attribute.String("session.id", record.SessionID)))
+	defer span.End()
+
+	query := `
+		INSERT INTO session_search_index (
+			session_id, version, content_text, search_vector,
+			indexed_up_to_line, recap_indexed_at, metadata_hash, updated_at
+		) VALUES (
+			$1, $2, $3,
+			setweight(to_tsvector('english', COALESCE($4, '')), 'A') ||
+			setweight(to_tsvector('english', COALESCE($5, '')), 'B') ||
+			setweight(to_tsvector('english', COALESCE($6, '')), 'C'),
+			$7, $8, $9, NOW()
+		)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			content_text = EXCLUDED.content_text,
+			search_vector = EXCLUDED.search_vector,
+			indexed_up_to_line = EXCLUDED.indexed_up_to_line,
+			recap_indexed_at = EXCLUDED.recap_indexed_at,
+			metadata_hash = EXCLUDED.metadata_hash,
+			updated_at = NOW()
+	`
+
+	_, err := s.db.ExecContext(ctx, query,
+		record.SessionID,          // $1
+		record.Version,            // $2
+		content.CombinedText(),    // $3
+		content.MetadataText,      // $4
+		content.RecapText,         // $5
+		content.UserMessagesText,  // $6
+		record.IndexedUpToLine,    // $7
+		record.RecapIndexedAt,     // $8
+		record.MetadataHash,       // $9
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// GetSearchIndex retrieves the search index record for a session.
+// Returns nil if no index exists.
+func (s *Store) GetSearchIndex(ctx context.Context, sessionID string) (*SearchIndexRecord, error) {
+	query := `
+		SELECT session_id, version, content_text, indexed_up_to_line,
+			recap_indexed_at, metadata_hash, updated_at
+		FROM session_search_index
+		WHERE session_id = $1
+	`
+
+	var record SearchIndexRecord
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ContentText,
+		&record.IndexedUpToLine,
+		&record.RecapIndexedAt,
+		&record.MetadataHash,
+		&record.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -583,8 +584,9 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 
 // buildPushdownFilters builds WHERE clause fragments for the pushdown query (Query 2).
 // Returns commonFilters (applied to all CTEs on the 's' table alias),
-// ownedOwnerFilter (for owned_sessions CTE), and sharedOwnerFilter (for shared/system CTEs).
-func buildPushdownFilters(pb *paramBuilder, params SessionListParams) (commonFilters, ownedOwnerFilter, sharedOwnerFilter string) {
+// ownedOwnerFilter (for owned_sessions CTE), sharedOwnerFilter (for shared/system CTEs),
+// and searchJoin (extra JOIN clause when search query is active).
+func buildPushdownFilters(pb *paramBuilder, params SessionListParams) (commonFilters, ownedOwnerFilter, sharedOwnerFilter, searchJoin string) {
 	// Visibility (always applied)
 	commonFilters = "\n\t\t\t\tAND COALESCE(sf_stats.total_lines, 0) > 0" +
 		"\n\t\t\t\tAND (s.summary IS NOT NULL OR s.first_user_message IS NOT NULL)"
@@ -607,14 +609,43 @@ func buildPushdownFilters(pb *paramBuilder, params SessionListParams) (commonFil
 		commonFilters += "\n\t\t\t\tAND EXISTS (SELECT 1 FROM session_github_links sgl WHERE sgl.session_id = s.id AND sgl.link_type = 'pull_request' AND sgl.ref = ANY(" + p + "))"
 	}
 	if params.Query != nil && *params.Query != "" {
-		p := pb.add(*params.Query)
-		commonFilters += "\n\t\t\t\tAND (s.custom_title ILIKE '%'||" + p + "||'%'" +
-			" OR s.suggested_session_title ILIKE '%'||" + p + "||'%'" +
-			" OR s.summary ILIKE '%'||" + p + "||'%'" +
-			" OR s.first_user_message ILIKE '%'||" + p + "||'%'" +
-			" OR EXISTS (SELECT 1 FROM session_github_links sgl WHERE sgl.session_id = s.id AND sgl.link_type = 'commit' AND LOWER(sgl.ref) LIKE LOWER(" + p + ")||'%'))"
+		tsquery := BuildPrefixTsquery(*params.Query)
+		if tsquery != "" {
+			tsqueryParam := pb.add(tsquery)
+			rawQueryParam := pb.add(*params.Query)
+			searchJoin = "\n\t\t\tLEFT JOIN session_search_index ssi ON s.id = ssi.session_id"
+			commonFilters += "\n\t\t\t\tAND (ssi.search_vector @@ to_tsquery('english', " + tsqueryParam + ")" +
+				" OR EXISTS (SELECT 1 FROM session_github_links sgl WHERE sgl.session_id = s.id AND sgl.link_type = 'commit' AND LOWER(sgl.ref) LIKE LOWER(" + rawQueryParam + ")||'%'))"
+		}
 	}
 	return
+}
+
+// tsquerySpecialChars matches characters that need escaping in tsquery terms.
+var tsquerySpecialChars = regexp.MustCompile(`[&|!<>():'\\]`)
+
+// BuildPrefixTsquery builds a tsquery string with prefix matching from a search query.
+// Each word gets :* appended for prefix matching, and words are AND'd together.
+// Example: "auth flow" → "auth:* & flow:*"
+// Returns empty string for empty input.
+func BuildPrefixTsquery(query string) string {
+	words := strings.Fields(query)
+	if len(words) == 0 {
+		return ""
+	}
+
+	terms := make([]string, 0, len(words))
+	for _, w := range words {
+		escaped := tsquerySpecialChars.ReplaceAllString(w, "")
+		if escaped == "" {
+			continue
+		}
+		terms = append(terms, escaped+":*")
+	}
+	if len(terms) == 0 {
+		return ""
+	}
+	return strings.Join(terms, " & ")
 }
 
 // Column list shared across session list query builders (minus the last 3 CTE-specific columns).
@@ -667,7 +698,7 @@ const githubRefCTEs = `
 // Returns the same 18-column output as buildFilteredSessionsQuery.
 func (db *DB) buildShareAllQuery(userID int64, params SessionListParams) (string, []interface{}) {
 	pb := newParamBuilder(userID)
-	commonFilters, _, sharedOwnerFilter := buildPushdownFilters(pb, params)
+	commonFilters, _, sharedOwnerFilter, searchJoin := buildPushdownFilters(pb, params)
 	limitP := pb.add(params.PageSize + 1) // N+1 trick
 
 	query := `
@@ -678,7 +709,7 @@ func (db *DB) buildShareAllQuery(userID int64, params SessionListParams) (string
 				CASE WHEN s.user_id = $1 THEN NULL ELSE u.email END as shared_by_email,
 				u.email as owner_email
 			FROM sessions s
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
 			WHERE 1=1` + commonFilters + sharedOwnerFilter
 
 	// Add cursor WHERE clause if cursor is provided
@@ -710,7 +741,7 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 	}
 
 	pb := newParamBuilder(userID)
-	commonFilters, ownedOwnerFilter, sharedOwnerFilter := buildPushdownFilters(pb, params)
+	commonFilters, ownedOwnerFilter, sharedOwnerFilter, searchJoin := buildPushdownFilters(pb, params)
 	limitP := pb.add(params.PageSize + 1) // N+1 trick
 
 	// Build system_shared_sessions CTE (requires session_share_system rows)
@@ -724,7 +755,7 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 				FROM sessions s
 				JOIN session_shares sh ON s.id = sh.session_id
 				JOIN session_share_system sss ON sh.id = sss.share_id
-				JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+				JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
 				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
 				  AND s.user_id != $1` + commonFilters + sharedOwnerFilter + `
 				ORDER BY s.id, sh.created_at DESC
@@ -739,7 +770,7 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 				NULL::text as shared_by_email,
 				u.email as owner_email
 			FROM sessions s
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
 			WHERE s.user_id = $1` + commonFilters + ownedOwnerFilter + `
 		),
 		shared_sessions AS (
@@ -751,7 +782,7 @@ func (db *DB) buildFilteredSessionsQuery(userID int64, params SessionListParams)
 			FROM sessions s
 			JOIN session_shares sh ON s.id = sh.session_id
 			JOIN session_share_recipients sr ON sh.id = sr.share_id
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
 			WHERE sr.user_id = $1
 			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
 			  AND s.user_id != $1` + commonFilters + sharedOwnerFilter + `

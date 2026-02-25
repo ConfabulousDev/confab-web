@@ -165,12 +165,22 @@ func (w *Worker) runOnce(ctx context.Context) {
 		return
 	}
 
-	totalFound := len(regularSessions) + len(smartRecapSessions)
+	// Bucket 3: Find sessions with stale search index (regular cards up-to-date)
+	searchIndexSessions, err := w.precomputer.FindStaleSearchIndexSessions(ctx, w.config.MaxSessions)
+	if err != nil {
+		logger.Error("failed to find stale search index sessions", "error", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+
+	totalFound := len(regularSessions) + len(smartRecapSessions) + len(searchIndexSessions)
 	if totalFound == 0 {
 		logger.Info("no stale sessions found")
 		span.SetAttributes(
 			attribute.Int("sessions.regular.found", 0),
 			attribute.Int("sessions.smart_recap.found", 0),
+			attribute.Int("sessions.search_index.found", 0),
 		)
 		return
 	}
@@ -178,10 +188,12 @@ func (w *Worker) runOnce(ctx context.Context) {
 	logger.Info("found stale sessions",
 		"regular_cards", len(regularSessions),
 		"smart_recap_only", len(smartRecapSessions),
+		"search_index_only", len(searchIndexSessions),
 	)
 	span.SetAttributes(
 		attribute.Int("sessions.regular.found", len(regularSessions)),
 		attribute.Int("sessions.smart_recap.found", len(smartRecapSessions)),
+		attribute.Int("sessions.search_index.found", len(searchIndexSessions)),
 	)
 
 	// In dry-run mode, just log what would be processed and return
@@ -202,14 +214,24 @@ func (w *Worker) runOnce(ctx context.Context) {
 				"total_lines", session.TotalLines,
 			)
 		}
+		for _, session := range searchIndexSessions {
+			logger.Info("[DRY-RUN] would build search index",
+				"session_id", session.SessionID,
+				"user_id", session.UserID,
+				"external_id", session.ExternalID,
+				"total_lines", session.TotalLines,
+			)
+		}
 		logger.Info("[DRY-RUN] precomputation cycle complete",
 			"would_process_regular", len(regularSessions),
 			"would_process_smart_recap", len(smartRecapSessions),
+			"would_process_search_index", len(searchIndexSessions),
 		)
 		span.SetAttributes(
 			attribute.Bool("dry_run", true),
 			attribute.Int("sessions.regular.would_process", len(regularSessions)),
 			attribute.Int("sessions.smart_recap.would_process", len(smartRecapSessions)),
+			attribute.Int("sessions.search_index.would_process", len(searchIndexSessions)),
 		)
 		return
 	}
@@ -220,17 +242,24 @@ func (w *Worker) runOnce(ctx context.Context) {
 	// Process Bucket 2: Sessions with only stale smart recap
 	smartRecapProcessed, smartRecapErrors := w.processSmartRecapSessions(ctx, smartRecapSessions)
 
+	// Process Bucket 3: Sessions with stale search index
+	searchIndexProcessed, searchIndexErrors := w.processSearchIndexSessions(ctx, searchIndexSessions)
+
 	logger.Info("precomputation cycle complete",
 		"regular_processed", regularProcessed,
 		"regular_errors", regularErrors,
 		"smart_recap_processed", smartRecapProcessed,
 		"smart_recap_errors", smartRecapErrors,
+		"search_index_processed", searchIndexProcessed,
+		"search_index_errors", searchIndexErrors,
 	)
 	span.SetAttributes(
 		attribute.Int("sessions.regular.processed", regularProcessed),
 		attribute.Int("sessions.regular.errors", regularErrors),
 		attribute.Int("sessions.smart_recap.processed", smartRecapProcessed),
 		attribute.Int("sessions.smart_recap.errors", smartRecapErrors),
+		attribute.Int("sessions.search_index.processed", searchIndexProcessed),
+		attribute.Int("sessions.search_index.errors", searchIndexErrors),
 	)
 }
 
@@ -242,6 +271,11 @@ func (w *Worker) processRegularSessions(ctx context.Context, sessions []analytic
 // processSmartRecapSessions processes sessions with only stale smart recap.
 func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
 	return w.processSessions(ctx, sessions, "smart recap", w.precomputer.PrecomputeSmartRecapOnly)
+}
+
+// processSearchIndexSessions processes sessions with stale search index.
+func (w *Worker) processSearchIndexSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
+	return w.processSessions(ctx, sessions, "search index", w.precomputer.BuildSearchIndexOnly)
 }
 
 // processSessions is a generic loop that processes a list of stale sessions with pacing.

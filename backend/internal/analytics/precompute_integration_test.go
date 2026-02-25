@@ -2163,3 +2163,234 @@ func TestPrecomputeQuota_CurrentMonthPreserved(t *testing.T) {
 		t.Errorf("expected count=50 for current month, got %d", count)
 	}
 }
+
+// =============================================================================
+// FindStaleSearchIndexSessions Integration Tests
+// =============================================================================
+
+func TestFindStaleSearchIndexSessions_NoIndex_Found(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "searchnoindex@test.com", "SearchNoIndex User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "searchnoindex-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+
+	// Insert all up-to-date regular cards (search index requires these)
+	insertAllCards(t, env, sessionID, 100)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session (no index), got %d", len(sessions))
+	}
+	if sessions[0].SessionID != sessionID {
+		t.Errorf("session ID = %s, want %s", sessions[0].SessionID, sessionID)
+	}
+}
+
+func TestFindStaleSearchIndexSessions_RegularCardsStale_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "searchregstale@test.com", "SearchRegStale User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "searchregstale-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+
+	// Only insert tokens card (other regular cards missing)
+	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion, 100)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions (regular cards stale), got %d", len(sessions))
+	}
+}
+
+func TestFindStaleSearchIndexSessions_TranscriptGrew_Found(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "searchtranscript@test.com", "SearchTranscript User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "searchtranscript-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 200)
+	insertAllCards(t, env, sessionID, 200)
+
+	// Insert search index at 100 lines (transcript has 200)
+	testutil.CreateTestSearchIndex(t, env, sessionID, "old content", 100)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session (transcript grew), got %d", len(sessions))
+	}
+}
+
+func TestFindStaleSearchIndexSessions_RecapChanged_Found(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "searchrecap@test.com", "SearchRecap User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "searchrecap-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, sessionID, 100)
+
+	// Insert search index at 100 lines with no recap_indexed_at
+	testutil.CreateTestSearchIndex(t, env, sessionID, "content", 100)
+
+	// Insert a smart recap card (recap exists, but search index has no recap_indexed_at)
+	insertSmartRecapCard(t, env, sessionID, analytics.SmartRecapCardVersion, 100, time.Now().UTC())
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session (recap not indexed), got %d", len(sessions))
+	}
+}
+
+func TestFindStaleSearchIndexSessions_MetadataChanged_Found(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "searchmeta@test.com", "SearchMeta User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "searchmeta-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, sessionID, 100)
+
+	// Insert search index with a metadata_hash
+	testutil.CreateTestSearchIndex(t, env, sessionID, "content", 100)
+	// Update the metadata hash to something that won't match
+	_, err := env.DB.Exec(env.Ctx,
+		"UPDATE session_search_index SET metadata_hash = 'old_hash' WHERE session_id = $1",
+		sessionID)
+	if err != nil {
+		t.Fatalf("failed to update metadata_hash: %v", err)
+	}
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session (metadata changed), got %d", len(sessions))
+	}
+}
+
+func TestFindStaleSearchIndexSessions_AllCurrent_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "searchcurrent@test.com", "SearchCurrent User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "searchcurrent-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, sessionID, 100)
+
+	// Insert search index at 100 lines with matching metadata hash
+	testutil.CreateTestSearchIndex(t, env, sessionID, "content", 100)
+	// Compute the correct metadata hash (session has no custom_title/summary/etc so all empty)
+	_, err := env.DB.Exec(env.Ctx,
+		"UPDATE session_search_index SET metadata_hash = MD5('|||') WHERE session_id = $1",
+		sessionID)
+	if err != nil {
+		t.Fatalf("failed to update metadata_hash: %v", err)
+	}
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions (all current), got %d", len(sessions))
+	}
+}
+
+func TestFindStaleSearchIndexSessions_VersionMismatch_Found(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "searchversion@test.com", "SearchVersion User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "searchversion-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, sessionID, 100)
+
+	// Insert search index with correct metadata hash but wrong version
+	testutil.CreateTestSearchIndex(t, env, sessionID, "content", 100)
+	_, err := env.DB.Exec(env.Ctx,
+		"UPDATE session_search_index SET version = 0, metadata_hash = MD5('|||') WHERE session_id = $1",
+		sessionID)
+	if err != nil {
+		t.Fatalf("failed to update version: %v", err)
+	}
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session (version mismatch), got %d", len(sessions))
+	}
+}
