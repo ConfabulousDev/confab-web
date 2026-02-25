@@ -22,9 +22,10 @@ var workerTracer = otel.Tracer("confab/worker")
 
 // WorkerConfig holds configuration for the analytics precompute worker.
 type WorkerConfig struct {
-	PollInterval time.Duration
-	MaxSessions  int  // Maximum sessions to query per cycle
-	DryRun       bool // If true, log what would be done without actually precomputing
+	PollInterval           time.Duration
+	MaxSessions            int  // Maximum sessions to query per cycle (regular cards + smart recap)
+	MaxSearchIndexSessions int  // Maximum search index sessions per cycle (defaults to MaxSessions if 0)
+	DryRun                 bool // If true, log what would be done without actually precomputing
 }
 
 // Worker is the background analytics precompute worker.
@@ -52,6 +53,7 @@ func runWorker() {
 	logger.Info("worker configuration loaded",
 		"poll_interval", workerConfig.PollInterval,
 		"max_sessions", workerConfig.MaxSessions,
+		"max_search_index_sessions", workerConfig.MaxSearchIndexSessions,
 		"dry_run", workerConfig.DryRun,
 	)
 
@@ -166,7 +168,7 @@ func (w *Worker) runOnce(ctx context.Context) {
 	}
 
 	// Bucket 3: Find sessions with stale search index (regular cards up-to-date)
-	searchIndexSessions, err := w.precomputer.FindStaleSearchIndexSessions(ctx, w.config.MaxSessions)
+	searchIndexSessions, err := w.precomputer.FindStaleSearchIndexSessions(ctx, w.config.MaxSearchIndexSessions)
 	if err != nil {
 		logger.Error("failed to find stale search index sessions", "error", err)
 		span.RecordError(err)
@@ -265,17 +267,17 @@ func (w *Worker) runOnce(ctx context.Context) {
 
 // processRegularSessions processes sessions with stale regular cards.
 func (w *Worker) processRegularSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	return w.processSessions(ctx, sessions, "session", w.precomputer.PrecomputeRegularCards)
+	return w.processSessions(ctx, sessions, "session", w.precomputer.PrecomputeRegularCards, 500*time.Millisecond)
 }
 
 // processSmartRecapSessions processes sessions with only stale smart recap.
 func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	return w.processSessions(ctx, sessions, "smart recap", w.precomputer.PrecomputeSmartRecapOnly)
+	return w.processSessions(ctx, sessions, "smart recap", w.precomputer.PrecomputeSmartRecapOnly, 500*time.Millisecond)
 }
 
 // processSearchIndexSessions processes sessions with stale search index.
 func (w *Worker) processSearchIndexSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	return w.processSessions(ctx, sessions, "search index", w.precomputer.BuildSearchIndexOnly)
+	return w.processSessions(ctx, sessions, "search index", w.precomputer.BuildSearchIndexOnly, 50*time.Millisecond)
 }
 
 // processSessions is a generic loop that processes a list of stale sessions with pacing.
@@ -285,6 +287,7 @@ func (w *Worker) processSessions(
 	sessions []analytics.StaleSession,
 	label string,
 	process func(context.Context, analytics.StaleSession) error,
+	pacing time.Duration,
 ) (processed, errors int) {
 	for i, session := range sessions {
 		select {
@@ -319,7 +322,7 @@ func (w *Worker) processSessions(
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(500 * time.Millisecond):
+			case <-time.After(pacing):
 			}
 		}
 	}
@@ -349,6 +352,14 @@ func loadWorkerConfig() WorkerConfig {
 		logger.Fatal("invalid WORKER_MAX_SESSIONS", "value", maxSessions)
 	}
 	config.MaxSessions = parsed
+
+	// MaxSearchIndexSessions: optional, defaults to 200 (search indexing is cheap)
+	config.MaxSearchIndexSessions = 200
+	if maxSearch := os.Getenv("WORKER_MAX_SEARCH_INDEX_SESSIONS"); maxSearch != "" {
+		if n, err := strconv.Atoi(maxSearch); err == nil && n > 0 {
+			config.MaxSearchIndexSessions = n
+		}
+	}
 
 	// Dry-run mode: log what would be done without actually precomputing
 	if dryRun := os.Getenv("WORKER_DRY_RUN"); dryRun == "true" || dryRun == "1" {
