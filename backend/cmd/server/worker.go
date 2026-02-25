@@ -296,13 +296,20 @@ func (w *Worker) processSessions(
 
 		err := process(ctx, session)
 		if err != nil {
-			logger.Error("failed to precompute "+label,
-				"session_id", session.SessionID,
-				"user_id", session.UserID,
-				"external_id", session.ExternalID,
-				"total_lines", session.TotalLines,
-				"error", err,
-			)
+			if err == analytics.ErrQuotaExceeded {
+				logger.Warn("skipped precompute "+label+": quota exceeded",
+					"session_id", session.SessionID,
+					"user_id", session.UserID,
+				)
+			} else {
+				logger.Error("failed to precompute "+label,
+					"session_id", session.SessionID,
+					"user_id", session.UserID,
+					"external_id", session.ExternalID,
+					"total_lines", session.TotalLines,
+					"error", err,
+				)
+			}
 			errors++
 		} else {
 			logger.Info("precomputed "+label,

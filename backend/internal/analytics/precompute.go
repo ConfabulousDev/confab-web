@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
@@ -11,6 +12,9 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// ErrQuotaExceeded is returned when a user has exceeded their smart recap quota for the month.
+var ErrQuotaExceeded = errors.New("smart recap quota exceeded")
 
 // StaleSession represents a session that needs analytics precomputation.
 type StaleSession struct {
@@ -438,7 +442,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 	}
 	if p.config.SmartRecapQuota > 0 && computeCount >= p.config.SmartRecapQuota {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "quota_exceeded"))
-		return nil
+		return ErrQuotaExceeded
 	}
 
 	// Use the shared generator for the actual generation (handles lock, LLM call, save, quota increment)
@@ -554,7 +558,10 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			JOIN session_card_redactions rd ON sl.session_id = rd.session_id
 				AND rd.version = $7 AND rd.up_to_line = sl.total_lines
 			LEFT JOIN session_card_smart_recap sr ON sl.session_id = sr.session_id
+			LEFT JOIN smart_recap_quota sq ON s.user_id = sq.user_id
+				AND sq.quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
 			WHERE s.session_type = 'Claude Code'
+				AND ($15::int = 0 OR COALESCE(sq.compute_count, 0) < $15::int)
 		)
 		SELECT session_id, user_id, external_id, total_lines
 		FROM recap_status
@@ -595,6 +602,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 		th.MinInitialLines,            // $12
 		th.MinSessionAge.Seconds(),    // $13
 		limit,                         // $14
+		p.config.SmartRecapQuota,      // $15
 	)
 	if err != nil {
 		span.RecordError(err)
