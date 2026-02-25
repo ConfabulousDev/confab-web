@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSessionsFetch, useAuth, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { formatDuration } from '@/utils';
 import { formatCost } from '@/utils/tokenStats';
+import { getRepoWebURL } from '@/utils/git';
 import { RelativeTime } from '@/components/RelativeTime';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
@@ -14,11 +15,6 @@ import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
 import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon, RefreshIcon, PersonIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
-
-// Strip .git suffix from repo URLs for clean GitHub links
-function cleanRepoUrl(url: string): string {
-  return url.replace(/\.git$/, '');
-}
 
 // Derive display title from session fields with fallback chain
 function getSessionTitle(session: { custom_title?: string | null; suggested_session_title?: string | null; summary?: string | null; first_user_message?: string | null }): string | null {
@@ -145,26 +141,33 @@ function SessionsPage() {
                               <Chip icon={PersonIcon} variant="neutral" copyValue={session.owner_email}>
                                 {session.owner_email}
                               </Chip>
-                              {session.git_repo && (
-                                <Chip
-                                  icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
-                                  variant="neutral"
-                                  copyValue={session.git_repo_url ? cleanRepoUrl(session.git_repo_url) : session.git_repo}
-                                >
-                                  {session.git_repo}
-                                </Chip>
-                              )}
-                              {session.git_branch && (
-                                <Chip
-                                  icon={BranchIcon}
-                                  variant="blue"
-                                  copyValue={session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/tree/${session.git_branch}` : session.git_branch}
-                                >
-                                  {session.git_branch}
-                                </Chip>
-                              )}
+                              {session.git_repo && (() => {
+                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
+                                return (
+                                  <Chip
+                                    icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
+                                    variant="neutral"
+                                    copyValue={webUrl ?? session.git_repo}
+                                  >
+                                    {session.git_repo}
+                                  </Chip>
+                                );
+                              })()}
+                              {session.git_branch && (() => {
+                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
+                                return (
+                                  <Chip
+                                    icon={BranchIcon}
+                                    variant="blue"
+                                    copyValue={webUrl ? `${webUrl}/tree/${session.git_branch}` : session.git_branch}
+                                  >
+                                    {session.git_branch}
+                                  </Chip>
+                                );
+                              })()}
                               {session.github_prs?.map((pr) => {
-                                const prUrl = session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/pull/${pr}` : undefined;
+                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
+                                const prUrl = webUrl ? `${webUrl}/pull/${pr}` : undefined;
                                 return (
                                   <Chip
                                     key={pr}
@@ -178,7 +181,8 @@ function SessionsPage() {
                                 );
                               })}
                               {session.github_commits?.[0] && (() => {
-                                const commitUrl = session.git_repo_url ? `${cleanRepoUrl(session.git_repo_url)}/commit/${session.github_commits[0]}` : undefined;
+                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
+                                const commitUrl = webUrl ? `${webUrl}/commit/${session.github_commits[0]}` : undefined;
                                 return (
                                   <Chip
                                     icon={CommitIcon}
