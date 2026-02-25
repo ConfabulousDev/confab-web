@@ -2608,3 +2608,154 @@ func TestBuildSearchIndexOnly_EndToEnd(t *testing.T) {
 		t.Error("expected FTS to match 'oauth2'")
 	}
 }
+
+// =============================================================================
+// Smart Recap Quota Filtering Integration Tests
+// =============================================================================
+
+func TestFindStaleSmartRecapSessions_QuotaExceeded_Excluded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Create a user and session with stale smart recap (missing)
+	user := testutil.CreateTestUser(t, env, "quotaexceeded@test.com", "QuotaExceeded User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "quotaexceeded-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, sessionID, 100)
+	// No smart recap card → stale
+
+	// Set user's quota to the limit (5 computations with quota=5 → at limit)
+	_, err := recapquota.GetOrCreate(context.Background(), env.DB.Conn(), user.ID)
+	if err != nil {
+		t.Fatalf("failed to create quota: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := recapquota.Increment(context.Background(), env.DB.Conn(), user.ID); err != nil {
+			t.Fatalf("failed to increment quota: %v", err)
+		}
+	}
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
+		SmartRecapEnabled:      true,
+		AnthropicAPIKey:        "test-key",
+		SmartRecapModel:        "test-model",
+		SmartRecapQuota:        5, // quota = 5, user has 5 → at limit
+		LockTimeoutSeconds:     60,
+		RegularCardsThresholds: analytics.DefaultRegularCardsThresholds(),
+		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
+	})
+
+	sessions, err := precomputer.FindStaleSmartRecapSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSmartRecapSessions failed: %v", err)
+	}
+
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions (quota exceeded), got %d", len(sessions))
+	}
+}
+
+func TestFindStaleSmartRecapSessions_QuotaUnderLimit_Included(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Create a user and session with stale smart recap (missing)
+	user := testutil.CreateTestUser(t, env, "quotaunder@test.com", "QuotaUnder User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "quotaunder-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, sessionID, 100)
+	// No smart recap card → stale
+
+	// Set user's quota to 3 computations (under limit of 5)
+	_, err := recapquota.GetOrCreate(context.Background(), env.DB.Conn(), user.ID)
+	if err != nil {
+		t.Fatalf("failed to create quota: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := recapquota.Increment(context.Background(), env.DB.Conn(), user.ID); err != nil {
+			t.Fatalf("failed to increment quota: %v", err)
+		}
+	}
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
+		SmartRecapEnabled:      true,
+		AnthropicAPIKey:        "test-key",
+		SmartRecapModel:        "test-model",
+		SmartRecapQuota:        5, // quota = 5, user has 3 → under limit
+		LockTimeoutSeconds:     60,
+		RegularCardsThresholds: analytics.DefaultRegularCardsThresholds(),
+		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
+	})
+
+	sessions, err := precomputer.FindStaleSmartRecapSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSmartRecapSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session (under quota), got %d", len(sessions))
+	}
+	if sessions[0].SessionID != sessionID {
+		t.Errorf("session ID = %s, want %s", sessions[0].SessionID, sessionID)
+	}
+}
+
+func TestFindStaleSmartRecapSessions_QuotaDisabled_Included(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	// Create a user and session with stale smart recap (missing)
+	user := testutil.CreateTestUser(t, env, "quotadisabled@test.com", "QuotaDisabled User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "quotadisabled-external-id")
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, sessionID, 100)
+	// No smart recap card → stale
+
+	// Give user a high compute count — should not matter when quota is 0 (unlimited)
+	_, err := recapquota.GetOrCreate(context.Background(), env.DB.Conn(), user.ID)
+	if err != nil {
+		t.Fatalf("failed to create quota: %v", err)
+	}
+	for i := 0; i < 100; i++ {
+		if err := recapquota.Increment(context.Background(), env.DB.Conn(), user.ID); err != nil {
+			t.Fatalf("failed to increment quota: %v", err)
+		}
+	}
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
+		SmartRecapEnabled:      true,
+		AnthropicAPIKey:        "test-key",
+		SmartRecapModel:        "test-model",
+		SmartRecapQuota:        0, // 0 = unlimited
+		LockTimeoutSeconds:     60,
+		RegularCardsThresholds: analytics.DefaultRegularCardsThresholds(),
+		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
+	})
+
+	sessions, err := precomputer.FindStaleSmartRecapSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSmartRecapSessions failed: %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session (quota disabled/unlimited), got %d", len(sessions))
+	}
+	if sessions[0].SessionID != sessionID {
+		t.Errorf("session ID = %s, want %s", sessions[0].SessionID, sessionID)
+	}
+}
