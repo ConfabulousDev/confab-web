@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useDropdown } from '@/hooks';
 import { SearchIcon, RepoIcon, BranchIcon, UserIcon, CheckIcon } from './icons';
 import type { SessionFilterOptions } from '@/schemas/api';
@@ -114,6 +114,30 @@ function FilterChipsBar({
   onQueryChange,
   onClearAll,
 }: FilterChipsBarProps) {
+  // Debounce search: keep local state responsive, defer URL/API update
+  const [localQuery, setLocalQuery] = useState(filters.query);
+  const [prevQuery, setPrevQuery] = useState(filters.query);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Sync local state when external filters change (e.g. clear all, back/forward nav)
+  // Uses the React-recommended "adjusting state during rendering" pattern
+  if (filters.query !== prevQuery) {
+    setPrevQuery(filters.query);
+    setLocalQuery(filters.query);
+  }
+
+  const handleQueryChange = useCallback(
+    (value: string) => {
+      setLocalQuery(value);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => onQueryChange(value), 300);
+    },
+    [onQueryChange]
+  );
+
+  // Cleanup timer on unmount
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
   const hasActiveFilters =
     filters.repos.length > 0 ||
     filters.branches.length > 0 ||
@@ -128,9 +152,9 @@ function FilterChipsBar({
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Search by title or commit..."
-            value={filters.query}
-            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="Search sessions..."
+            value={localQuery}
+            onChange={(e) => handleQueryChange(e.target.value)}
           />
         </div>
         <div className={styles.dimensionButtons}>
