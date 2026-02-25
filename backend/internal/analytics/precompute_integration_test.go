@@ -2394,3 +2394,217 @@ func TestFindStaleSearchIndexSessions_VersionMismatch_Found(t *testing.T) {
 		t.Fatalf("expected 1 session (version mismatch), got %d", len(sessions))
 	}
 }
+
+// =============================================================================
+// ExtractSearchContent Integration Tests
+// =============================================================================
+
+func TestExtractSearchContent_MetadataAndRecap(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "extractcontent@test.com", "ExtractContent User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "extractcontent-external-id")
+
+	// Set metadata fields on the session
+	_, err := env.DB.Exec(env.Ctx,
+		`UPDATE sessions SET summary = $2, first_user_message = $3, suggested_session_title = $4 WHERE id = $1`,
+		sessionID, "Fix login bug", "Help me fix the login page", "Debugging login issues")
+	if err != nil {
+		t.Fatalf("failed to update session metadata: %v", err)
+	}
+
+	// Insert a smart recap card with recap text and suggestions
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_smart_recap (
+			session_id, version, computed_at, up_to_line,
+			recap, went_well, went_bad, human_suggestions, environment_suggestions, default_context_suggestions,
+			model_used, input_tokens, output_tokens, generation_time_ms
+		) VALUES ($1, 1, NOW(), 100,
+			'Session focused on debugging a login redirect issue',
+			'["Found the root cause quickly"]',
+			'["Initial approach was wrong"]',
+			'["Consider adding test coverage"]',
+			'[]', '[]', 'test-model', 0, 0, 0)
+	`, sessionID)
+	if err != nil {
+		t.Fatalf("failed to insert smart recap: %v", err)
+	}
+
+	// Call ExtractSearchContent with nil FileCollection (no transcript)
+	content, err := analytics.ExtractSearchContent(context.Background(), env.DB.Conn(), sessionID, nil)
+	if err != nil {
+		t.Fatalf("ExtractSearchContent failed: %v", err)
+	}
+
+	// Verify metadata text includes all set fields
+	if content.MetadataText == "" {
+		t.Error("expected MetadataText to be non-empty")
+	}
+	for _, expected := range []string{"Debugging login issues", "Fix login bug", "Help me fix the login page"} {
+		if !strContains(content.MetadataText, expected) {
+			t.Errorf("MetadataText missing %q, got %q", expected, content.MetadataText)
+		}
+	}
+
+	// Verify recap text includes recap and flattened suggestions
+	if content.RecapText == "" {
+		t.Error("expected RecapText to be non-empty")
+	}
+	for _, expected := range []string{"debugging a login redirect issue", "Found the root cause quickly", "Initial approach was wrong", "Consider adding test coverage"} {
+		if !strContains(content.RecapText, expected) {
+			t.Errorf("RecapText missing %q, got %q", expected, content.RecapText)
+		}
+	}
+
+	// Verify user messages text is empty (no transcript)
+	if content.UserMessagesText != "" {
+		t.Errorf("expected empty UserMessagesText, got %q", content.UserMessagesText)
+	}
+
+	// Verify metadata hash is non-empty and deterministic
+	if content.MetadataHash == "" {
+		t.Error("expected MetadataHash to be non-empty")
+	}
+	content2, err := analytics.ExtractSearchContent(context.Background(), env.DB.Conn(), sessionID, nil)
+	if err != nil {
+		t.Fatalf("second ExtractSearchContent failed: %v", err)
+	}
+	if content.MetadataHash != content2.MetadataHash {
+		t.Errorf("MetadataHash not deterministic: %q != %q", content.MetadataHash, content2.MetadataHash)
+	}
+}
+
+func TestExtractSearchContent_NoRecap(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "norecap@test.com", "NoRecap User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "norecap-external-id")
+
+	_, err := env.DB.Exec(env.Ctx,
+		`UPDATE sessions SET summary = $2 WHERE id = $1`,
+		sessionID, "Some work")
+	if err != nil {
+		t.Fatalf("failed to update session: %v", err)
+	}
+
+	content, err := analytics.ExtractSearchContent(context.Background(), env.DB.Conn(), sessionID, nil)
+	if err != nil {
+		t.Fatalf("ExtractSearchContent failed: %v", err)
+	}
+
+	if content.MetadataText != "Some work" {
+		t.Errorf("MetadataText = %q, want %q", content.MetadataText, "Some work")
+	}
+	if content.RecapText != "" {
+		t.Errorf("expected empty RecapText, got %q", content.RecapText)
+	}
+}
+
+// strContains is a test helper to check substring containment.
+func strContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// =============================================================================
+// BuildSearchIndexOnly Integration Tests
+// =============================================================================
+
+func TestBuildSearchIndexOnly_EndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "buildindex@test.com", "BuildIndex User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "buildindex-external-id")
+
+	// Set metadata
+	_, err := env.DB.Exec(env.Ctx,
+		`UPDATE sessions SET summary = $2, first_user_message = $3 WHERE id = $1`,
+		sessionID, "Implementing OAuth2", "Help me add OAuth")
+	if err != nil {
+		t.Fatalf("failed to update session: %v", err)
+	}
+
+	// Create sync file and upload transcript to S3
+	// Lines must include uuid/parentUuid/isSidechain/userType/cwd/sessionId/version to pass validation
+	transcript := []byte(`{"type":"init","timestamp":"2024-01-01T00:00:00Z","session_id":"test","model":"claude-sonnet-4-20250514"}
+{"type":"user","message":{"role":"user","content":"Help me implement OAuth login"},"uuid":"u1","timestamp":"2024-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"assistant","message":{"role":"assistant","content":"Sure!"},"uuid":"a1","timestamp":"2024-01-01T00:00:02Z","parentUuid":"u1","isSidechain":false,"usage":{"input_tokens":10,"output_tokens":5}}
+`)
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)
+	testutil.UploadTestTranscript(t, env, user.ID, "buildindex-external-id", "transcript.jsonl", transcript)
+
+	// Run BuildSearchIndexOnly
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	staleSession := analytics.StaleSession{
+		SessionID:  sessionID,
+		UserID:     user.ID,
+		ExternalID: "buildindex-external-id",
+		TotalLines: 3,
+	}
+
+	err = precomputer.BuildSearchIndexOnly(context.Background(), staleSession)
+	if err != nil {
+		t.Fatalf("BuildSearchIndexOnly failed: %v", err)
+	}
+
+	// Verify search index was created
+	record, err := analyticsStore.GetSearchIndex(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSearchIndex failed: %v", err)
+	}
+	if record == nil {
+		t.Fatal("expected search index record to be created")
+	}
+
+	// Verify fields
+	if record.Version != analytics.SearchIndexVersion {
+		t.Errorf("Version = %d, want %d", record.Version, analytics.SearchIndexVersion)
+	}
+	if record.IndexedUpToLine != 3 {
+		t.Errorf("IndexedUpToLine = %d, want 3", record.IndexedUpToLine)
+	}
+	if record.MetadataHash == "" {
+		t.Error("expected MetadataHash to be non-empty")
+	}
+	// Content should include metadata
+	if !strContains(record.ContentText, "Implementing OAuth2") {
+		t.Errorf("ContentText missing metadata, got %q", record.ContentText)
+	}
+	// Content should include user message from transcript
+	if !strContains(record.ContentText, "Help me implement OAuth login") {
+		t.Errorf("ContentText missing transcript user message, got %q", record.ContentText)
+	}
+
+	// Verify FTS actually works via raw query
+	var found bool
+	err = env.DB.Conn().QueryRowContext(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM session_search_index WHERE session_id = $1 AND search_vector @@ to_tsquery('english', 'oauth2'))`,
+		sessionID).Scan(&found)
+	if err != nil {
+		t.Fatalf("FTS query failed: %v", err)
+	}
+	if !found {
+		t.Error("expected FTS to match 'oauth2'")
+	}
+}
