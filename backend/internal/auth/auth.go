@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -95,11 +96,20 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 	// Validate key in database
 	userID, keyID, userEmail, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
 	if err != nil {
+		log := logger.Ctx(r.Context())
+		log.Warn("API key validation failed",
+			"key_hash_prefix", keyHash[:8],
+			"client_ip", clientip.FromRequest(r).Primary)
 		return nil
 	}
 
 	// Check if user is inactive
 	if userStatus == models.UserStatusInactive {
+		log := logger.Ctx(r.Context())
+		log.Warn("API key rejected: user inactive",
+			"key_hash_prefix", keyHash[:8],
+			"user_id", userID,
+			"client_ip", clientip.FromRequest(r).Primary)
 		return nil
 	}
 
@@ -138,12 +148,21 @@ func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) 
 			// Validate key in database
 			userID, keyID, userEmail, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
 			if err != nil {
+				log := logger.Ctx(r.Context())
+				log.Warn("API key validation failed",
+					"key_hash_prefix", keyHash[:8],
+					"client_ip", clientip.FromRequest(r).Primary)
 				http.Error(w, "Invalid API key", http.StatusUnauthorized)
 				return
 			}
 
 			// Check if user is inactive
 			if userStatus == models.UserStatusInactive {
+				log := logger.Ctx(r.Context())
+				log.Warn("API key rejected: user inactive",
+					"key_hash_prefix", keyHash[:8],
+					"user_id", userID,
+					"client_ip", clientip.FromRequest(r).Primary)
 				http.Error(w, "Account deactivated", http.StatusForbidden)
 				return
 			}
