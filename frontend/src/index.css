@@ -240,3 +240,18 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Search highlight marks */
+mark.search-highlight {
+  background-color: var(--color-search-highlight);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.search-highlight-active {
+  background-color: var(--color-search-highlight-active);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}

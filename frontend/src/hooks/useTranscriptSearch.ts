@@ -5,6 +5,8 @@ import { parseMessage, extractTextContent } from '@/services/messageParser';
 export interface TranscriptSearchResult {
   isOpen: boolean;
   query: string;
+  /** The debounced query used for inline text highlighting (300ms debounce) */
+  highlightQuery: string;
   matches: number[];
   currentMatchIndex: number;
   /** The filteredIndex of the currently active match, or null */
@@ -18,6 +20,7 @@ export interface TranscriptSearchResult {
 }
 
 const DEBOUNCE_MS = 150;
+const HIGHLIGHT_DEBOUNCE_MS = 300;
 const EMPTY_MATCHES: number[] = [];
 
 /**
@@ -28,10 +31,12 @@ export function useTranscriptSearch(messages: TranscriptLine[]): TranscriptSearc
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQueryState] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [highlightQuery, setHighlightQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Build search index: lowercased text for each filtered message
   const searchIndex = useMemo(() => {
@@ -72,6 +77,13 @@ export function useTranscriptSearch(messages: TranscriptLine[]): TranscriptSearc
     debounceTimerRef.current = setTimeout(() => {
       setDebouncedQuery(newQuery);
     }, DEBOUNCE_MS);
+
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightQuery(newQuery);
+    }, HIGHLIGHT_DEBOUNCE_MS);
   }, []);
 
   const open = useCallback(() => {
@@ -89,9 +101,13 @@ export function useTranscriptSearch(messages: TranscriptLine[]): TranscriptSearc
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+    }
     setIsOpen(false);
     setQueryState('');
     setDebouncedQuery('');
+    setHighlightQuery('');
     setCurrentMatchIndex(0);
   }, []);
 
@@ -112,11 +128,14 @@ export function useTranscriptSearch(messages: TranscriptLine[]): TranscriptSearc
   const currentMatchFilteredIndex =
     matches.length > 0 ? matches[currentMatchIndex] ?? null : null;
 
-  // Cleanup debounce timer on unmount
+  // Cleanup debounce timers on unmount
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+      }
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
       }
     };
   }, []);
@@ -124,6 +143,7 @@ export function useTranscriptSearch(messages: TranscriptLine[]): TranscriptSearc
   return {
     isOpen,
     query,
+    highlightQuery,
     matches,
     currentMatchIndex,
     currentMatchFilteredIndex,

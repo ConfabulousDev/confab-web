@@ -13,7 +13,10 @@ interface TimelineMessageProps {
   previousMessage?: TranscriptLine;
   isSelected?: boolean;
   isDeepLinkTarget?: boolean;
-  isSearchMatch?: boolean;
+  /** Whether this message is the currently active search match (drives both
+   *  the amber box-shadow and the active highlight color on inline marks) */
+  isCurrentSearchMatch?: boolean;
+  searchQuery?: string;
   sessionId?: string;
   onSkipToNext?: () => void;
   onSkipToPrevious?: () => void;
@@ -174,7 +177,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isSearchMatch, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp }: TimelineMessageProps) {
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp }: TimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -221,7 +224,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
     isDifferentRole && styles.newSpeaker,
     isSelected && styles.selected,
     isDeepLinkTarget && styles.deepLinkTarget,
-    isSearchMatch && styles.searchMatch,
+    isCurrentSearchMatch && styles.searchMatch,
   ].filter(Boolean).join(' ');
 
   return (
@@ -290,6 +293,8 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
               key={i}
               block={block}
               toolName={getToolNameForResult(block, toolNameMap)}
+              searchQuery={searchQuery}
+              isCurrentSearchMatch={isCurrentSearchMatch}
             />
           ))
         )}

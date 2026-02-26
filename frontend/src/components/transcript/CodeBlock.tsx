@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import Prism from 'prismjs';
 import { useCopyToClipboard } from '@/hooks';
 import { stripAnsi } from '@/utils';
+import { escapeHtml, getHighlightClass, highlightTextInHtml } from '@/utils/highlightSearch';
 
 // Import core languages
 import 'prismjs/components/prism-bash';
@@ -39,18 +40,14 @@ function normalizeLanguage(lang: string): string {
   return languageMap[normalized] || normalized;
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 interface CodeBlockProps {
   code: string;
   language?: string;
   showLineNumbers?: boolean;
   maxHeight?: string;
   truncateLines?: number;
+  searchQuery?: string;
+  isCurrentSearchMatch?: boolean;
 }
 
 function CodeBlock({
@@ -59,6 +56,8 @@ function CodeBlock({
   showLineNumbers = false,
   maxHeight = 'none',
   truncateLines = 0,
+  searchQuery,
+  isCurrentSearchMatch,
 }: CodeBlockProps) {
   const { copy, copied } = useCopyToClipboard();
   const [showingFull, setShowingFull] = useState(false);
@@ -81,22 +80,50 @@ function CodeBlock({
     };
   }, [code, truncateLines, showingFull]);
 
+  // Auto-expand truncated code blocks when search query matches only in hidden content.
+  // Uses the React-recommended "adjust state during render" pattern to avoid cascading effects.
+  const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
+  if (prevSearchQuery !== searchQuery) {
+    setPrevSearchQuery(searchQuery);
+    if (searchQuery && searchQuery.trim() && !showingFull && truncateLines > 0) {
+      const cleanCode = stripAnsi(code);
+      const needle = searchQuery.toLowerCase();
+      if (cleanCode.toLowerCase().includes(needle)) {
+        const lines = cleanCode.split('\n');
+        if (lines.length > truncateLines) {
+          const truncatedText = lines.slice(0, truncateLines).join('\n');
+          if (!truncatedText.toLowerCase().includes(needle)) {
+            setShowingFull(true);
+          }
+        }
+      }
+    }
+  }
+
   // Highlight code synchronously via useMemo (not useEffect)
   const highlightedCode = useMemo(() => {
     const lang = normalizeLanguage(language);
+    let highlighted: string;
 
     // Check if language is supported
     if (lang === 'plain' || !Prism.languages[lang]) {
-      return escapeHtml(displayCode);
+      highlighted = escapeHtml(displayCode);
+    } else {
+      try {
+        highlighted = Prism.highlight(displayCode, Prism.languages[lang], lang);
+      } catch (e) {
+        console.warn(`Failed to highlight code with language '${lang}':`, e);
+        highlighted = escapeHtml(displayCode);
+      }
     }
 
-    try {
-      return Prism.highlight(displayCode, Prism.languages[lang], lang);
-    } catch (e) {
-      console.warn(`Failed to highlight code with language '${lang}':`, e);
-      return escapeHtml(displayCode);
+    // Apply search highlighting on top of syntax highlighting
+    if (searchQuery) {
+      highlighted = highlightTextInHtml(highlighted, searchQuery, getHighlightClass(isCurrentSearchMatch ?? false));
     }
-  }, [displayCode, language]);
+
+    return highlighted;
+  }, [displayCode, language, searchQuery, isCurrentSearchMatch]);
 
   function toggleFullView() {
     setShowingFull(!showingFull);
