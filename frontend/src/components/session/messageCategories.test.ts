@@ -51,5 +51,82 @@ describe('messageCategories', () => {
       };
       expect(messageMatchesFilter(prLinkMessage, filterState)).toBe(true);
     });
+
+    it('hides system messages by default (deep-link filter reset scenario)', () => {
+      const systemMessage = parseLine({
+        type: 'system',
+        uuid: 'sys-uuid-1',
+        timestamp: '2026-02-22T08:00:00Z',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/test',
+        sessionId: 'session-123',
+        version: '1.0.0',
+        subtype: 'info',
+        content: 'System info message',
+      });
+      expect(messageMatchesFilter(systemMessage, DEFAULT_FILTER_STATE)).toBe(false);
+    });
+
+    it('shows system messages after filter reset with system enabled', () => {
+      const systemMessage = parseLine({
+        type: 'system',
+        uuid: 'sys-uuid-1',
+        timestamp: '2026-02-22T08:00:00Z',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/test',
+        sessionId: 'session-123',
+        version: '1.0.0',
+        subtype: 'info',
+        content: 'System info message',
+      });
+      const resetState: FilterState = { ...DEFAULT_FILTER_STATE, system: true };
+      expect(messageMatchesFilter(systemMessage, resetState)).toBe(true);
+    });
+
+    it('shows user messages with DEFAULT_FILTER_STATE (deep-link targets visible after reset)', () => {
+      const userMessage = parseLine({
+        type: 'user',
+        uuid: 'user-uuid-1',
+        timestamp: '2026-02-22T08:00:00Z',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/test',
+        sessionId: 'session-123',
+        version: '1.0.0',
+        message: { role: 'user', content: 'Hello' },
+      });
+      expect(messageMatchesFilter(userMessage, DEFAULT_FILTER_STATE)).toBe(true);
+    });
+
+    it('shows assistant messages with DEFAULT_FILTER_STATE (deep-link targets visible after reset)', () => {
+      const assistantMessage = parseLine({
+        type: 'assistant',
+        uuid: 'asst-uuid-1',
+        timestamp: '2026-02-22T08:00:00Z',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/test',
+        sessionId: 'session-123',
+        version: '1.0.0',
+        requestId: 'req-1',
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          id: 'msg-1',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello!' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+      });
+      expect(messageMatchesFilter(assistantMessage, DEFAULT_FILTER_STATE)).toBe(true);
+    });
   });
 });
