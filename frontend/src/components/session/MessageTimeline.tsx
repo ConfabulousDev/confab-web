@@ -282,20 +282,39 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
     );
     setSelectedIndex(allIndex);
 
-    // After the message scrolls into view, scroll the first <mark> into view
-    // within any scrollable container (e.g., thinking blocks).
-    // Scope the query to the current match message's DOM element to avoid
-    // accidentally scrolling to a mark in a different visible message.
-    requestAnimationFrame(() => {
+    // After the message scrolls into view, scroll the first <mark> into view.
+    // Wait for scrollToIndex retries to settle (6 frames) before starting,
+    // otherwise scrollToIndex will override our scrollIntoView.
+    // Then retry across frames in case the virtualizer hasn't finished
+    // rendering tall messages yet.
+    let cancelled = false;
+    const scrollToIndexFrames = 6;
+    const maxMarkRetries = 10;
+    function scrollToMark(attempt: number) {
+      if (cancelled || attempt >= maxMarkRetries) return;
       const scrollEl = parentRef.current;
       if (!scrollEl) return;
       const messageEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
-      if (!messageEl) return;
+      if (!messageEl) {
+        requestAnimationFrame(() => scrollToMark(attempt + 1));
+        return;
+      }
       const mark = messageEl.querySelector('mark');
       if (mark) {
         mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        requestAnimationFrame(() => scrollToMark(attempt + 1));
       }
-    });
+    }
+    // Delay start so scrollToIndex retries don't override the mark scroll
+    function delayThenScroll(framesLeft: number) {
+      if (cancelled) return;
+      if (framesLeft <= 0) { scrollToMark(0); return; }
+      requestAnimationFrame(() => delayThenScroll(framesLeft - 1));
+    }
+    delayThenScroll(scrollToIndexFrames);
+
+    return () => { cancelled = true; };
   }, [search.currentMatchFilteredIndex, messages, messageToAllIndex, messageIndexToVirtualIndex, virtualizer]);
 
   // Track first visible message for TimelineBar position indicator
