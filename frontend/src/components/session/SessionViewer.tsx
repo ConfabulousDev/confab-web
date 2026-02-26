@@ -33,6 +33,8 @@ interface SessionViewerProps {
   activeTab?: ViewTab;
   /** Callback when tab changes - required if activeTab is provided */
   onTabChange?: (tab: ViewTab) => void;
+  /** UUID of a message to scroll to and highlight (deep-link target) */
+  targetMessageUuid?: string;
   /** For Storybook: pass messages directly instead of fetching from API */
   initialMessages?: TranscriptLine[];
   /** For Storybook: pass analytics directly instead of fetching from API */
@@ -41,7 +43,7 @@ interface SessionViewerProps {
   initialGithubLinks?: import('@/services/api').GitHubLink[];
 }
 
-function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, activeTab: controlledTab, onTabChange, initialMessages, initialAnalytics, initialGithubLinks }: SessionViewerProps) {
+function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, activeTab: controlledTab, onTabChange, targetMessageUuid, initialMessages, initialAnalytics, initialGithubLinks }: SessionViewerProps) {
   // Support both controlled and uncontrolled modes
   const [uncontrolledTab, setUncontrolledTab] = useState<ViewTab>('summary');
   const activeTab = controlledTab ?? uncontrolledTab;
@@ -66,6 +68,24 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   const filteredMessages = useMemo(() => {
     return messages.filter((message) => messageMatchesFilter(message, filterState));
   }, [messages, filterState]);
+
+  // When a deep-link target exists but is hidden by the active filter, reset
+  // filters so the target becomes visible. Runs once per target change since
+  // the reset itself makes the target pass on the next check.
+  useEffect(() => {
+    if (!targetMessageUuid || messages.length === 0) return;
+
+    const targetMessage = messages.find(
+      (m) => 'uuid' in m && m.uuid === targetMessageUuid
+    );
+    if (!targetMessage) return;
+    if (messageMatchesFilter(targetMessage, filterState)) return;
+
+    setFilterState({
+      ...DEFAULT_FILTER_STATE,
+      system: targetMessage.type === 'system',
+    });
+  }, [targetMessageUuid, messages, filterState]);
 
   // Get transcript file info
   const transcriptFile = useMemo(() => {
@@ -270,7 +290,12 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
                   <strong>Error:</strong> {error}
                 </div>
               ) : (
-                <MessageTimeline messages={filteredMessages} allMessages={messages} />
+                <MessageTimeline
+                  messages={filteredMessages}
+                  allMessages={messages}
+                  targetMessageUuid={targetMessageUuid}
+                  sessionId={session.id}
+                />
               )}
             </div>
           )}

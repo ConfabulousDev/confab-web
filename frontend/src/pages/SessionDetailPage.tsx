@@ -13,6 +13,16 @@ function isValidViewTab(value: string | null): value is ViewTab {
   return value === 'summary' || value === 'transcript';
 }
 
+/**
+ * Derive the active tab from URL search params.
+ * When a msg param is present, always force transcript tab.
+ */
+function resolveActiveTab(tabParam: string | null, msgParam: string | null): ViewTab {
+  if (msgParam) return 'transcript';
+  if (isValidViewTab(tabParam)) return tabParam;
+  return 'summary';
+}
+
 function SessionDetailPage() {
   const { id: sessionId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -25,9 +35,9 @@ function SessionDetailPage() {
     fading: successFading,
   } = useSuccessMessage();
 
-  // Tab state from URL params (defaults to 'summary')
   const tabParam = searchParams.get('tab');
-  const activeTab: ViewTab = isValidViewTab(tabParam) ? tabParam : 'summary';
+  const msgParam = searchParams.get('msg');
+  const activeTab = resolveActiveTab(tabParam, msgParam);
 
   const handleTabChange = useCallback((tab: ViewTab) => {
     setSearchParams(prev => {
@@ -37,8 +47,12 @@ function SessionDetailPage() {
       } else {
         next.set('tab', tab);
       }
+      // Clear msg param when switching away from transcript
+      if (tab !== 'transcript') {
+        next.delete('msg');
+      }
       return next;
-    }, { replace: true });
+    }, { replace: false });
   }, [setSearchParams]);
 
   // Email mismatch query params (for recipient shares with wrong account)
@@ -200,6 +214,7 @@ function SessionDetailPage() {
         isShared={!isOwner}
         activeTab={activeTab}
         onTabChange={handleTabChange}
+        targetMessageUuid={msgParam ?? undefined}
       />
 
       {/* Share Dialog Modal */}

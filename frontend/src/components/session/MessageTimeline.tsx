@@ -9,6 +9,8 @@ import styles from './MessageTimeline.module.css';
 interface MessageTimelineProps {
   messages: TranscriptLine[];
   allMessages: TranscriptLine[]; // Used for building tool name map
+  targetMessageUuid?: string; // Deep-link target message UUID
+  sessionId?: string; // Session ID for copy-link URLs
 }
 
 // Item types for virtual list
@@ -75,13 +77,49 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
   return map;
 }
 
-function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
+/**
+ * Repeatedly call `action` across animation frames until `shouldStop` returns
+ * true or `maxAttempts` is reached. Useful for virtual scroll positioning where
+ * item sizes are estimated until measured.
+ */
+function retryOnAnimationFrame(
+  action: () => void,
+  shouldStop: () => boolean,
+  maxAttempts = 5,
+): void {
+  function attempt(n: number) {
+    action();
+    if (n < maxAttempts && !shouldStop()) {
+      requestAnimationFrame(() => attempt(n + 1));
+    }
+  }
+  attempt(0);
+}
+
+function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const hasScrolledToTarget = useRef(false);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
+
+  // Build UUID-to-allMessages-index map for deep-linking
+  const uuidToAllIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [i, msg] of allMessages.entries()) {
+      if ('uuid' in msg && typeof msg.uuid === 'string') {
+        map.set(msg.uuid, i);
+      }
+    }
+    return map;
+  }, [allMessages]);
+
+  // Derive the allMessages index for the deep-link target
+  const targetMessageAllIndex = targetMessageUuid !== undefined
+    ? uuidToAllIndex.get(targetMessageUuid) ?? null
+    : null;
 
   // Build a map from message reference to its index in allMessages
   // This is needed because TimelineBar uses allMessages indices
@@ -165,6 +203,26 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
     return map;
   }, [virtualItems]);
 
+  // Reset scroll guard when target changes
+  useEffect(() => {
+    hasScrolledToTarget.current = false;
+  }, [targetMessageUuid]);
+
+  // Scroll to deep-link target on load
+  useEffect(() => {
+    if (targetMessageAllIndex === null || hasScrolledToTarget.current) return;
+
+    const virtualIndex = messageIndexToVirtualIndex.get(targetMessageAllIndex);
+    if (virtualIndex === undefined) return;
+
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
+      () => false, // always retry - sizes are estimated until measured
+    );
+    setSelectedIndex(targetMessageAllIndex);
+    hasScrolledToTarget.current = true;
+  }, [targetMessageAllIndex, messageIndexToVirtualIndex, virtualizer]);
+
   // Track first visible message for TimelineBar position indicator
   const updateFirstVisible = useCallback(() => {
     const visibleItems = virtualizer.getVirtualItems();
@@ -217,44 +275,26 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
   const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
 
   const scrollToTop = useCallback(() => {
-    const scrollWithRetry = (attempts = 0) => {
-      virtualizer.scrollToIndex(0, { align: 'start' });
-
-      if (attempts < 5) {
-        requestAnimationFrame(() => {
-          const items = virtualizer.getVirtualItems();
-          const firstVisible = items[0];
-          if (!firstVisible || firstVisible.index > 0) {
-            scrollWithRetry(attempts + 1);
-          }
-        });
-      }
-    };
-
-    scrollWithRetry();
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(0, { align: 'start' }),
+      () => {
+        const items = virtualizer.getVirtualItems();
+        const first = items[0];
+        return !!first && first.index === 0;
+      },
+    );
   }, [virtualizer]);
 
   const scrollToBottom = useCallback(() => {
     const lastIndex = virtualItems.length - 1;
-
-    // With dynamic sizes, scrollToIndex may not reach the true end on first try
-    // because item sizes are estimated until measured. We retry until the last
-    // item is actually visible.
-    const scrollWithRetry = (attempts = 0) => {
-      virtualizer.scrollToIndex(lastIndex, { align: 'end' });
-
-      if (attempts < 5) {
-        requestAnimationFrame(() => {
-          const items = virtualizer.getVirtualItems();
-          const lastVisible = items[items.length - 1];
-          if (!lastVisible || lastVisible.index < lastIndex) {
-            scrollWithRetry(attempts + 1);
-          }
-        });
-      }
-    };
-
-    scrollWithRetry();
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(lastIndex, { align: 'end' }),
+      () => {
+        const items = virtualizer.getVirtualItems();
+        const last = items[items.length - 1];
+        return !!last && last.index >= lastIndex;
+      },
+    );
   }, [virtualizer, virtualItems.length]);
 
   if (messages.length === 0) {
@@ -316,6 +356,8 @@ function MessageTimeline({ messages, allMessages }: MessageTimelineProps) {
                     toolNameMap={toolNameMap}
                     previousMessage={item.filteredIndex > 0 ? messages[item.filteredIndex - 1] : undefined}
                     isSelected={isSelected}
+                    isDeepLinkTarget={targetMessageAllIndex !== null && item.index === targetMessageAllIndex}
+                    sessionId={sessionId}
                   />
                 )}
               </div>

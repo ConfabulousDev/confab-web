@@ -12,9 +12,32 @@
   border-color: var(--color-border);
 }
 
-/* Selected message highlight */
+/* Selected message highlight (hover/seek) */
 .message.selected {
   box-shadow: inset 0 0 0 2px #bbb;
+}
+
+/* Deep-link target highlight — persists independently of selection */
+.message.deepLinkTarget {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  animation: deepLinkPulse 2s ease-out;
+}
+
+/* Both selected and deep-link target — accent wins */
+.message.selected.deepLinkTarget {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+@keyframes deepLinkPulse {
+  0% {
+    box-shadow: inset 0 0 0 3px var(--color-accent), 0 0 8px var(--color-accent-light);
+  }
+  50% {
+    box-shadow: inset 0 0 0 3px var(--color-accent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
 }
 
 /* Add visual separation for new speakers */

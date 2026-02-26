@@ -11,6 +11,8 @@ interface TimelineMessageProps {
   toolNameMap: Map<string, string>;
   previousMessage?: TranscriptLine;
   isSelected?: boolean;
+  isDeepLinkTarget?: boolean;
+  sessionId?: string;
 }
 
 /**
@@ -195,8 +197,9 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected }: TimelineMessageProps) {
-  const { copy, copied } = useCopyToClipboard();
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, sessionId }: TimelineMessageProps) {
+  const { copy: copyText, copied: textCopied } = useCopyToClipboard();
+  const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
   const styleClass = getStyleClass(message.type);
   const roleLabel = getRoleLabel(message);
@@ -223,16 +226,28 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected }: 
   const previousRole = previousMessage ? getRoleLabel(previousMessage) : null;
   const isDifferentRole = previousRole !== roleLabel;
 
-  // Copy message content
-  function handleCopy() {
-    const text = extractTextContent(contentBlocks);
-    copy(text);
+  // Get message UUID if available (user, assistant, system messages have it)
+  const messageUuid = 'uuid' in message && typeof message.uuid === 'string' ? message.uuid : undefined;
+
+  function handleCopyText() {
+    copyText(extractTextContent(contentBlocks));
   }
 
+  function handleCopyLink() {
+    if (!messageUuid || !sessionId) return;
+    copyLink(`${window.location.origin}/sessions/${sessionId}?tab=transcript&msg=${messageUuid}`);
+  }
+
+  const className = [
+    styles.message,
+    styles[styleClass],
+    isDifferentRole && styles.newSpeaker,
+    isSelected && styles.selected,
+    isDeepLinkTarget && styles.deepLinkTarget,
+  ].filter(Boolean).join(' ');
+
   return (
-    <div
-      className={`${styles.message} ${styles[styleClass]} ${isDifferentRole ? styles.newSpeaker : ''} ${isSelected ? styles.selected : ''}`}
-    >
+    <div className={className}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <span className={styles.role}>{roleLabel}</span>
@@ -249,12 +264,22 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected }: 
           {model && <span className={styles.model}>{extractModelVariant(model)}</span>}
           <button
             className={styles.copyBtn}
-            onClick={handleCopy}
+            onClick={handleCopyText}
             title="Copy message"
             aria-label="Copy message"
           >
-            {copied ? '✓' : '⎘'}
+            {textCopied ? '✓' : '⎘'}
           </button>
+          {messageUuid && sessionId && (
+            <button
+              className={styles.copyBtn}
+              onClick={handleCopyLink}
+              title="Copy link to message"
+              aria-label="Copy link to message"
+            >
+              {linkCopied ? '✓' : '🔗'}
+            </button>
+          )}
         </div>
       </div>
 

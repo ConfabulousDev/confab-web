@@ -365,3 +365,58 @@ export const EmptySession: Story = {
     initialGithubLinks: [],
   },
 };
+
+/**
+ * Deep-link targeting the second assistant message (msg-4).
+ * Opens directly to the Transcript tab with the target message highlighted.
+ * Hover over messages to see both selection and deep-link highlight coexist.
+ */
+export const DeepLinkTarget: Story = {
+  args: {
+    session: mockSession,
+    isOwner: true,
+    isShared: false,
+    activeTab: 'transcript',
+    targetMessageUuid: 'msg-4',
+    initialMessages: mockMessages,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
+  },
+};
+
+/**
+ * Deep-link with an invalid UUID that doesn't match any message.
+ * Should show the transcript normally without any highlight.
+ */
+export const DeepLinkInvalidUuid: Story = {
+  args: {
+    session: mockSession,
+    isOwner: true,
+    isShared: false,
+    activeTab: 'transcript',
+    targetMessageUuid: 'nonexistent-uuid',
+    initialMessages: mockMessages,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
+  },
+};
+
+/**
+ * Shared session with deep-link — non-owners also get copy-link buttons.
+ */
+export const DeepLinkSharedSession: Story = {
+  args: {
+    session: {
+      ...mockSession,
+      is_owner: false,
+      shared_by_email: 'alice@example.com',
+    },
+    isOwner: false,
+    isShared: true,
+    activeTab: 'transcript',
+    targetMessageUuid: 'msg-2',
+    initialMessages: mockMessages,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
+  },
+};
