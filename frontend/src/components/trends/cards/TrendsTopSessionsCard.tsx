@@ -1,19 +1,12 @@
 import { TrendsCard } from './TrendsCard';
 import { TrendingUpIcon } from '@/components/icons';
 import { formatDuration } from '@/utils';
+import { formatCost } from '@/utils/tokenStats';
 import type { TrendsTopSessionsCard as TrendsTopSessionsCardData } from '@/schemas/api';
 import styles from './TrendsTopSessionsCard.module.css';
 
 interface TrendsTopSessionsCardProps {
   data: TrendsTopSessionsCardData | null;
-}
-
-function formatCost(usd: string): string {
-  const value = parseFloat(usd);
-  if (value >= 1) {
-    return `$${value.toFixed(2)}`;
-  }
-  return `$${value.toFixed(4)}`;
 }
 
 /** Strip org prefix from "org/repo" → "repo" */
@@ -53,7 +46,7 @@ export function TrendsTopSessionsCard({ data }: TrendsTopSessionsCardProps) {
                   )}
                 </div>
               </div>
-              <span className={styles.cost}>{formatCost(session.estimated_cost_usd)}</span>
+              <span className={styles.cost}>{formatCost(parseFloat(session.estimated_cost_usd))}</span>
             </a>
           ))}
         </div>

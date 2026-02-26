@@ -124,6 +124,10 @@ function SessionsPage() {
                   <tbody>
                     {sessions.map((session) => {
                       const title = getSessionTitle(session);
+                      const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
+                      const isGitHub = session.git_repo_url?.includes('github.com');
+                      const firstCommit = session.github_commits?.[0];
+                      const commitUrl = firstCommit && webUrl ? `${webUrl}/commit/${firstCommit}` : undefined;
                       return (
                         <tr
                           key={session.id}
@@ -141,32 +145,25 @@ function SessionsPage() {
                               <Chip icon={PersonIcon} variant="neutral" copyValue={session.owner_email}>
                                 {session.owner_email}
                               </Chip>
-                              {session.git_repo && (() => {
-                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
-                                return (
-                                  <Chip
-                                    icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
-                                    variant="neutral"
-                                    copyValue={webUrl ?? session.git_repo}
-                                  >
-                                    {session.git_repo}
-                                  </Chip>
-                                );
-                              })()}
-                              {session.git_branch && (() => {
-                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
-                                return (
-                                  <Chip
-                                    icon={BranchIcon}
-                                    variant="blue"
-                                    copyValue={webUrl ? `${webUrl}/tree/${session.git_branch}` : session.git_branch}
-                                  >
-                                    {session.git_branch}
-                                  </Chip>
-                                );
-                              })()}
+                              {session.git_repo && (
+                                <Chip
+                                  icon={isGitHub ? GitHubIcon : RepoIcon}
+                                  variant="neutral"
+                                  copyValue={webUrl ?? session.git_repo}
+                                >
+                                  {session.git_repo}
+                                </Chip>
+                              )}
+                              {session.git_branch && (
+                                <Chip
+                                  icon={BranchIcon}
+                                  variant="blue"
+                                  copyValue={webUrl ? `${webUrl}/tree/${session.git_branch}` : session.git_branch}
+                                >
+                                  {session.git_branch}
+                                </Chip>
+                              )}
                               {session.github_prs?.map((pr) => {
-                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
                                 const prUrl = webUrl ? `${webUrl}/pull/${pr}` : undefined;
                                 return (
                                   <Chip
@@ -180,20 +177,16 @@ function SessionsPage() {
                                   </Chip>
                                 );
                               })}
-                              {session.github_commits?.[0] && (() => {
-                                const webUrl = getRepoWebURL(session.git_repo_url ?? undefined);
-                                const commitUrl = webUrl ? `${webUrl}/commit/${session.github_commits[0]}` : undefined;
-                                return (
-                                  <Chip
-                                    icon={CommitIcon}
-                                    variant="purple"
-                                    linkUrl={commitUrl}
-                                    copyValue={commitUrl ? undefined : session.github_commits[0]}
-                                  >
-                                    {session.github_commits[0].slice(0, 7)}
-                                  </Chip>
-                                );
-                              })()}
+                              {firstCommit && (
+                                <Chip
+                                  icon={CommitIcon}
+                                  variant="purple"
+                                  linkUrl={commitUrl}
+                                  copyValue={commitUrl ? undefined : firstCommit}
+                                >
+                                  {firstCommit.slice(0, 7)}
+                                </Chip>
+                              )}
                             </div>
                           </td>
                           <td className={styles.costCell}>

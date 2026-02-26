@@ -1,5 +1,6 @@
 import { TrendsCard, StatRow } from './TrendsCard';
 import { TokenIcon } from '@/components/icons';
+import { formatTokenCount, formatCost } from '@/utils/tokenStats';
 import type { TrendsTokensCard as TrendsTokensCardData } from '@/schemas/api';
 import {
   AreaChart,
@@ -13,27 +14,6 @@ import styles from './TrendsTokensCard.module.css';
 
 interface TrendsTokensCardProps {
   data: TrendsTokensCardData | null;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000_000) {
-    return `${(n / 1_000_000_000).toFixed(1)}B`;
-  }
-  if (n >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1)}M`;
-  }
-  if (n >= 1_000) {
-    return `${(n / 1_000).toFixed(1)}K`;
-  }
-  return n.toLocaleString();
-}
-
-function formatCost(usd: string): string {
-  const value = parseFloat(usd);
-  if (value >= 1) {
-    return `$${value.toFixed(2)}`;
-  }
-  return `$${value.toFixed(4)}`;
 }
 
 // Format date for chart axis
@@ -66,7 +46,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   return (
     <div className={styles.tooltip}>
       <div className={styles.tooltipDate}>{formattedDate}</div>
-      <div className={styles.tooltipValue}>{formatCost(item.cost_usd)}</div>
+      <div className={styles.tooltipValue}>{formatCost(parseFloat(item.cost_usd))}</div>
     </div>
   );
 }
@@ -96,21 +76,21 @@ export function TrendsTokensCard({ data }: TrendsTokensCardProps) {
             color: parseFloat(data.total_cost_usd) === 0 ? 'var(--color-warning-text)' : '#22c55e',
             fontWeight: 600,
           }}>
-            {formatCost(data.total_cost_usd)}
+            {formatCost(parseFloat(data.total_cost_usd))}
           </span>
         }
       />
       <StatRow
         label="Total Tokens"
-        value={formatTokens(totalTokens)}
+        value={formatTokenCount(totalTokens)}
       />
       <StatRow
         label="Input / Output"
-        value={`${formatTokens(data.total_input_tokens)} / ${formatTokens(data.total_output_tokens)}`}
+        value={`${formatTokenCount(data.total_input_tokens)} / ${formatTokenCount(data.total_output_tokens)}`}
       />
       <StatRow
         label="Cache (Create / Read)"
-        value={`${formatTokens(data.total_cache_creation_tokens)} / ${formatTokens(data.total_cache_read_tokens)}`}
+        value={`${formatTokenCount(data.total_cache_creation_tokens)} / ${formatTokenCount(data.total_cache_read_tokens)}`}
       />
 
       {hasChartData && (
