@@ -185,20 +185,19 @@
 
 /* Skip to next/prev same-type button */
 .skipBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
-  padding: 2px;
-  font-size: var(--font-xs);
+  padding: var(--spacing-xs);
+  width: 28px;
+  height: 28px;
   cursor: pointer;
-  color: var(--color-text-muted);
-  opacity: 0;
-  transition: opacity var(--transition-fast), color var(--transition-fast);
+  color: var(--color-text-tertiary);
+  transition: color var(--transition-fast), background var(--transition-fast);
   line-height: 1;
   border-radius: var(--radius-sm);
-}
-
-.message:hover .skipBtn {
-  opacity: 1;
 }
 
 .skipBtn:hover {
@@ -208,25 +207,28 @@
 
 /* Copy button */
 .copyBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
-  padding: 2px;
-  font-size: var(--font-sm);
+  padding: var(--spacing-xs);
+  width: 28px;
+  height: 28px;
   cursor: pointer;
-  color: var(--color-text-muted);
-  opacity: 0;
-  transition: opacity var(--transition-fast), color var(--transition-fast);
+  color: var(--color-text-tertiary);
+  transition: color var(--transition-fast), background var(--transition-fast);
   line-height: 1;
   border-radius: var(--radius-sm);
-}
-
-.message:hover .copyBtn {
-  opacity: 1;
 }
 
 .copyBtn:hover {
   color: var(--color-accent);
   background: var(--color-bg-hover);
+}
+
+.copyBtn.copied {
+  color: var(--color-success);
 }
 
 /* Message content area */
@@ -295,7 +297,8 @@
 
   .skipBtn,
   .copyBtn {
-    opacity: 1;
+    width: 32px;
+    height: 32px;
   }
 
   .header {
