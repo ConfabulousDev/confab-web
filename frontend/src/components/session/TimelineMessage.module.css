@@ -183,6 +183,29 @@
   font-family: 'SF Mono', Monaco, monospace;
 }
 
+/* Skip to next/prev same-type button */
+.skipBtn {
+  background: none;
+  border: none;
+  padding: 2px;
+  font-size: var(--font-xs);
+  cursor: pointer;
+  color: var(--color-text-muted);
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+  line-height: 1;
+  border-radius: var(--radius-sm);
+}
+
+.message:hover .skipBtn {
+  opacity: 1;
+}
+
+.skipBtn:hover {
+  color: var(--color-accent);
+  background: var(--color-bg-hover);
+}
+
 /* Copy button */
 .copyBtn {
   background: none;
@@ -270,6 +293,7 @@
     border-radius: var(--radius-md);
   }
 
+  .skipBtn,
   .copyBtn {
     opacity: 1;
   }

@@ -4,6 +4,7 @@ import type { TranscriptLine } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import TimelineMessage from './TimelineMessage';
 import TranscriptSearchBar from './TranscriptSearchBar';
+import { getRoleLabel } from './messageCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
 import styles from './MessageTimeline.module.css';
@@ -169,6 +170,28 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
     return items;
   }, [messages, messageToAllIndex]);
 
+  // Precompute next/prev same-role indices for skip navigation
+  const { nextOfSameRole, prevOfSameRole } = useMemo(() => {
+    const next = new Map<number, number>();
+    const prev = new Map<number, number>();
+    // Track last seen index per role label
+    const lastSeenByRole = new Map<string, number>();
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (!msg) continue;
+      const label = getRoleLabel(msg);
+      const prevIdx = lastSeenByRole.get(label);
+      if (prevIdx !== undefined) {
+        next.set(prevIdx, i);
+        prev.set(i, prevIdx);
+      }
+      lastSeenByRole.set(label, i);
+    }
+
+    return { nextOfSameRole: next, prevOfSameRole: prev };
+  }, [messages]);
+
   // Setup virtual scrolling
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
   const virtualizer = useVirtualizer({
@@ -307,6 +330,21 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
     setSelectedIndex(messageIndex);
   }, []);
 
+  // Scroll to a message by its filtered index (used by skip navigation)
+  const scrollToFilteredIndex = useCallback((filteredIndex: number) => {
+    const msg = messages[filteredIndex];
+    if (!msg) return;
+    const allIndex = messageToAllIndex.get(msg);
+    if (allIndex === undefined) return;
+    const virtualIndex = messageIndexToVirtualIndex.get(allIndex);
+    if (virtualIndex === undefined) return;
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
+      () => false,
+    );
+    setSelectedIndex(allIndex);
+  }, [messages, messageToAllIndex, messageIndexToVirtualIndex, virtualizer]);
+
   // Selected message drives the position indicator
   // Falls back to first visible message when nothing is explicitly selected
   const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
@@ -397,6 +435,13 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
                     isDeepLinkTarget={targetMessageAllIndex !== null && item.index === targetMessageAllIndex}
                     isSearchMatch={search.currentMatchFilteredIndex === item.filteredIndex}
                     sessionId={sessionId}
+                    roleLabel={getRoleLabel(item.message)}
+                    onSkipToNext={nextOfSameRole.has(item.filteredIndex)
+                      ? () => scrollToFilteredIndex(nextOfSameRole.get(item.filteredIndex)!)
+                      : undefined}
+                    onSkipToPrevious={prevOfSameRole.has(item.filteredIndex)
+                      ? () => scrollToFilteredIndex(prevOfSameRole.get(item.filteredIndex)!)
+                      : undefined}
                   />
                 )}
               </div>

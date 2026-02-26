@@ -196,3 +196,47 @@ export const NoSessionId: Story = {
     toolNameMap: emptyToolNameMap,
   },
 };
+
+/**
+ * User message with both skip navigation buttons.
+ * Hover to see ↑ and ↓ arrows for jumping to previous/next User message.
+ */
+export const WithSkipBothDirections: Story = {
+  name: 'Skip Navigation (Both)',
+  args: {
+    message: mockUserMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    roleLabel: 'User',
+    onSkipToNext: () => {},
+    onSkipToPrevious: () => {},
+  },
+};
+
+/**
+ * First message of its type — only "next" skip button, no "previous".
+ */
+export const WithSkipNextOnly: Story = {
+  name: 'Skip Navigation (Next Only)',
+  args: {
+    message: mockAssistantMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    roleLabel: 'Assistant',
+    onSkipToNext: () => {},
+  },
+};
+
+/**
+ * Last message of its type — only "previous" skip button, no "next".
+ */
+export const WithSkipPreviousOnly: Story = {
+  name: 'Skip Navigation (Previous Only)',
+  args: {
+    message: mockAssistantMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    roleLabel: 'Assistant',
+    onSkipToPrevious: () => {},
+  },
+};

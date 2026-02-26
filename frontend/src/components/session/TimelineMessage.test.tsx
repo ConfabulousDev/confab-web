@@ -238,4 +238,113 @@ describe('TimelineMessage', () => {
       expect(screen.getByLabelText('Copy link to message')).toBeInTheDocument();
     });
   });
+
+  describe('skip navigation buttons', () => {
+    it('renders both skip buttons when both callbacks are provided', () => {
+      const message = createUserMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          roleLabel="User"
+          onSkipToNext={() => {}}
+          onSkipToPrevious={() => {}}
+        />
+      );
+
+      expect(screen.getByLabelText('Previous User message')).toBeInTheDocument();
+      expect(screen.getByLabelText('Next User message')).toBeInTheDocument();
+    });
+
+    it('renders only next button when onSkipToPrevious is absent', () => {
+      const message = createAssistantMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          roleLabel="Assistant"
+          onSkipToNext={() => {}}
+        />
+      );
+
+      expect(screen.queryByLabelText('Previous Assistant message')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Next Assistant message')).toBeInTheDocument();
+    });
+
+    it('renders only previous button when onSkipToNext is absent', () => {
+      const message = createAssistantMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          roleLabel="Assistant"
+          onSkipToPrevious={() => {}}
+        />
+      );
+
+      expect(screen.getByLabelText('Previous Assistant message')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Next Assistant message')).not.toBeInTheDocument();
+    });
+
+    it('renders no skip buttons when neither callback is provided', () => {
+      const message = createUserMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+        />
+      );
+
+      expect(screen.queryByLabelText(/Previous .* message/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Next .* message/)).not.toBeInTheDocument();
+    });
+
+    it('calls onSkipToNext when next button is clicked', async () => {
+      const user = userEvent.setup();
+      const onSkipToNext = vi.fn();
+      const message = createUserMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          roleLabel="User"
+          onSkipToNext={onSkipToNext}
+        />
+      );
+
+      await user.click(screen.getByLabelText('Next User message'));
+      expect(onSkipToNext).toHaveBeenCalledOnce();
+    });
+
+    it('calls onSkipToPrevious when previous button is clicked', async () => {
+      const user = userEvent.setup();
+      const onSkipToPrevious = vi.fn();
+      const message = createUserMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          roleLabel="User"
+          onSkipToPrevious={onSkipToPrevious}
+        />
+      );
+
+      await user.click(screen.getByLabelText('Previous User message'));
+      expect(onSkipToPrevious).toHaveBeenCalledOnce();
+    });
+
+    it('falls back to computed roleLabel when roleLabel prop is not provided', () => {
+      const message = createUserMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          onSkipToNext={() => {}}
+        />
+      );
+
+      // getRoleLabel returns 'User' for a user message
+      expect(screen.getByLabelText('Next User message')).toBeInTheDocument();
+    });
+  });
 });
