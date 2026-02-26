@@ -136,10 +136,6 @@ func (l *InMemoryRateLimiter) cleanupOldLimiters() {
 		l.lastAccess.Delete(key)
 	}
 
-	if len(keysToDelete) > 0 {
-		// Optional: log cleanup
-		// log.Printf("Cleaned up %d old rate limiters", len(keysToDelete))
-	}
 }
 
 // Stop stops the cleanup goroutine
