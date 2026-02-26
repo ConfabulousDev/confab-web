@@ -264,7 +264,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [openSearch]);
 
-  // Scroll to current search match
+  // Scroll to current search match, then scroll first <mark> into view within the message
   useEffect(() => {
     if (search.currentMatchFilteredIndex === null) return;
 
@@ -281,6 +281,21 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
       () => false,
     );
     setSelectedIndex(allIndex);
+
+    // After the message scrolls into view, scroll the first <mark> into view
+    // within any scrollable container (e.g., thinking blocks).
+    // Scope the query to the current match message's DOM element to avoid
+    // accidentally scrolling to a mark in a different visible message.
+    requestAnimationFrame(() => {
+      const scrollEl = parentRef.current;
+      if (!scrollEl) return;
+      const messageEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
+      if (!messageEl) return;
+      const mark = messageEl.querySelector('mark');
+      if (mark) {
+        mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    });
   }, [search.currentMatchFilteredIndex, messages, messageToAllIndex, messageIndexToVirtualIndex, virtualizer]);
 
   // Track first visible message for TimelineBar position indicator
@@ -433,7 +448,8 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
                     previousMessage={item.filteredIndex > 0 ? messages[item.filteredIndex - 1] : undefined}
                     isSelected={isSelected}
                     isDeepLinkTarget={targetMessageAllIndex !== null && item.index === targetMessageAllIndex}
-                    isSearchMatch={search.currentMatchFilteredIndex === item.filteredIndex}
+                    isCurrentSearchMatch={search.currentMatchFilteredIndex === item.filteredIndex}
+                    searchQuery={search.isOpen ? search.highlightQuery : undefined}
                     sessionId={sessionId}
                     roleLabel={getRoleLabel(item.message)}
                     onSkipToNext={nextOfSameRole.has(item.filteredIndex)

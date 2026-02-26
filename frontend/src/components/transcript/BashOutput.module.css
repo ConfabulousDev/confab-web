@@ -105,3 +105,13 @@
   color: #f48771;
   font-weight: bold;
 }
+
+/* Search highlights inside the always-dark terminal need dark-mode colors
+   regardless of the page theme, since BashOutput has a fixed dark background */
+.bashContent :global(mark.search-highlight) {
+  background-color: #5C4B00;
+}
+
+.bashContent :global(mark.search-highlight-active) {
+  background-color: #7A4A00;
+}

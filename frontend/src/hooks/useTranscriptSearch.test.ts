@@ -244,6 +244,35 @@ describe('useTranscriptSearch', () => {
     expect(result.current.matches).toEqual([0, 1]);
   });
 
+  it('debounces highlightQuery at 300ms separately from match-finding at 150ms', () => {
+    const messages = [makeUserMessage('hello world')];
+    const { result } = renderHook(() => useTranscriptSearch(messages));
+
+    act(() => result.current.setQuery('hello'));
+
+    // At 150ms: debouncedQuery fires (matches found), but highlightQuery not yet
+    act(() => { vi.advanceTimersByTime(150); });
+    expect(result.current.matches).toEqual([0]);
+    expect(result.current.highlightQuery).toBe('');
+
+    // At 300ms: highlightQuery fires
+    act(() => { vi.advanceTimersByTime(150); });
+    expect(result.current.highlightQuery).toBe('hello');
+  });
+
+  it('clears highlightQuery on close', () => {
+    const messages = [makeUserMessage('hello')];
+    const { result } = renderHook(() => useTranscriptSearch(messages));
+
+    act(() => result.current.open());
+    act(() => result.current.setQuery('hello'));
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(result.current.highlightQuery).toBe('hello');
+
+    act(() => result.current.close());
+    expect(result.current.highlightQuery).toBe('');
+  });
+
   it('searches tool_use content', () => {
     const msg: AssistantMessage = {
       type: 'assistant',

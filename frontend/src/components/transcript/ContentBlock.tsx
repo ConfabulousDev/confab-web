@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock } from '@/types';
 import { stripAnsi } from '@/utils';
+import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
 import CodeBlock from './CodeBlock';
 import BashOutput from './BashOutput';
 import styles from './ContentBlock.module.css';
@@ -17,9 +18,11 @@ marked.use({
 interface ContentBlockProps {
   block: ContentBlockType;
   toolName?: string;
+  searchQuery?: string;
+  isCurrentSearchMatch?: boolean;
 }
 
-function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockProps) {
+function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCurrentSearchMatch }: ContentBlockProps) {
   // Derive tool name from block if it's a tool_use block, otherwise use the passed-in name
   const toolName = isToolUseBlock(block) ? block.name : initialToolName;
 
@@ -63,21 +66,28 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
     }
   }
 
+  const highlightClass = getHighlightClass(isCurrentSearchMatch ?? false);
+
   if (isTextBlock(block)) {
     // Check if text content is JSON - if so, pretty-print it
     const jsonContent = tryParseAsJson(block.text);
     if (jsonContent) {
-      return <CodeBlock code={jsonContent} language="json" maxHeight="500px" />;
+      return <CodeBlock code={jsonContent} language="json" maxHeight="500px" searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />;
+    }
+    let html = renderMarkdown(block.text);
+    if (searchQuery) {
+      html = highlightTextInHtml(html, searchQuery, highlightClass);
     }
     return (
       <div
         className={styles.textBlock}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(block.text) }}
+        dangerouslySetInnerHTML={{ __html: html }}
       />
     );
   }
 
   if (isThinkingBlock(block)) {
+    const thinkingText = stripAnsi(block.thinking);
     return (
       <div className={styles.thinkingBlock}>
         <div className={styles.thinkingHeader}>
@@ -85,7 +95,16 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
           <span className={styles.thinkingLabel}>Thinking</span>
         </div>
         <div className={styles.thinkingContent}>
-          <pre>{stripAnsi(block.thinking)}</pre>
+          <pre>
+            {searchQuery
+              ? splitTextByQuery(thinkingText, searchQuery).map((segment, i) =>
+                  typeof segment === 'string'
+                    ? segment
+                    : <mark key={i} className={highlightClass}>{segment.match}</mark>
+                )
+              : thinkingText
+            }
+          </pre>
         </div>
       </div>
     );
@@ -99,7 +118,7 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
           <span className={styles.toolName}>{block.name}</span>
         </div>
         <div className={styles.toolInput}>
-          <CodeBlock code={JSON.stringify(block.input, null, 2)} language="json" />
+          <CodeBlock code={JSON.stringify(block.input, null, 2)} language="json" searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
         </div>
       </div>
     );
@@ -115,9 +134,9 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
         <div className={styles.toolResultContent}>
           {typeof block.content === 'string' ? (
             isBashOutput(block.content, toolName) ? (
-              <BashOutput output={block.content} />
+              <BashOutput output={block.content} searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
             ) : (
-              <CodeBlock code={block.content} language="plain" maxHeight="500px" truncateLines={100} />
+              <CodeBlock code={block.content} language="plain" maxHeight="500px" truncateLines={100} searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
             )
           ) : (
             // Recursive rendering for nested content blocks
@@ -126,6 +145,8 @@ function ContentBlock({ block, toolName: initialToolName = '' }: ContentBlockPro
                 key={i}
                 block={nestedBlock}
                 toolName={toolName}
+                searchQuery={searchQuery}
+                isCurrentSearchMatch={isCurrentSearchMatch}
               />
             ))
           )}
