@@ -138,7 +138,19 @@ Watch for chunks exceeding 500 KB - consider code-splitting.
 2. `pages/ShareLinksPage.tsx` (~347 lines) - Complex UI
 3. `pages/APIKeysPage.tsx` (~316 lines) - Complex UI
 
-## Phase 3: Triage and Report
+## Phase 3: Code Simplification
+
+After fixing issues in Phases 1-2, run the **code-simplifier** agent to simplify and refine any modified frontend code:
+
+```
+Use the Task tool with subagent_type="code-simplifier" and prompt:
+"Simplify and refine recently modified TypeScript/React code in the frontend/src/ directory.
+Focus on clarity, consistency, and maintainability while preserving all functionality."
+```
+
+This catches additional simplification opportunities (verbose patterns, unnecessary complexity, inconsistent style) that automated tools miss.
+
+## Phase 4: Triage and Report
 
 Create a summary with:
 

@@ -211,7 +211,19 @@ Actively search for opportunities to reduce duplication and simplify logic:
 3. ~~**Cookie helper functions**~~ - DONE (`clearCookie` helper added)
 4. **Consolidate error response helpers** - Medium value, low risk (optional)
 
-## Phase 3: Triage and Report
+## Phase 3: Code Simplification
+
+After fixing issues in Phases 1-2, run the **code-simplifier** agent to simplify and refine any modified backend code:
+
+```
+Use the Task tool with subagent_type="code-simplifier" and prompt:
+"Simplify and refine recently modified Go code in the backend/ directory.
+Focus on clarity, consistency, and maintainability while preserving all functionality."
+```
+
+This catches additional simplification opportunities (verbose patterns, unnecessary complexity, inconsistent style) that automated tools miss.
+
+## Phase 4: Triage and Report
 
 Create a summary with:
 
