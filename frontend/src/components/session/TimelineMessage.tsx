@@ -4,6 +4,7 @@ import { isTextBlock, isFileHistorySnapshot, isUserMessage } from '@/types';
 import { isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/schemas/transcript';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
+import { getRoleLabel } from './messageCategories';
 import styles from './TimelineMessage.module.css';
 
 interface TimelineMessageProps {
@@ -14,34 +15,9 @@ interface TimelineMessageProps {
   isDeepLinkTarget?: boolean;
   isSearchMatch?: boolean;
   sessionId?: string;
-}
-
-/**
- * Get role label for display
- */
-function getRoleLabel(message: TranscriptLine): string {
-  switch (message.type) {
-    case 'user': {
-      const content = message.message.content;
-      if (Array.isArray(content)) {
-        const hasToolResult = content.some((block) => block.type === 'tool_result');
-        if (hasToolResult) return 'Tool';
-      }
-      return 'User';
-    }
-    case 'assistant':
-      return 'Assistant';
-    case 'system':
-      return 'System';
-    case 'summary':
-      return 'Summary';
-    case 'file-history-snapshot':
-      return 'File Snapshot';
-    case 'queue-operation':
-      return 'Queue';
-    default:
-      return 'Unknown';
-  }
+  onSkipToNext?: () => void;
+  onSkipToPrevious?: () => void;
+  roleLabel?: string;
 }
 
 /**
@@ -198,7 +174,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isSearchMatch, sessionId }: TimelineMessageProps) {
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isSearchMatch, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp }: TimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -264,6 +240,26 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
             </span>
           )}
           {model && <span className={styles.model}>{extractModelVariant(model)}</span>}
+          {onSkipToPrevious && (
+            <button
+              className={styles.skipBtn}
+              onClick={onSkipToPrevious}
+              title={`Previous ${roleLabelProp ?? roleLabel} message`}
+              aria-label={`Previous ${roleLabelProp ?? roleLabel} message`}
+            >
+              ↑
+            </button>
+          )}
+          {onSkipToNext && (
+            <button
+              className={styles.skipBtn}
+              onClick={onSkipToNext}
+              title={`Next ${roleLabelProp ?? roleLabel} message`}
+              aria-label={`Next ${roleLabelProp ?? roleLabel} message`}
+            >
+              ↓
+            </button>
+          )}
           <button
             className={styles.copyBtn}
             onClick={handleCopyText}

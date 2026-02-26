@@ -123,6 +123,34 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
 }
 
 /**
+ * Get role label for display (used by TimelineMessage header and skip navigation)
+ */
+export function getRoleLabel(message: TranscriptLine): string {
+  switch (message.type) {
+    case 'user': {
+      const content = message.message.content;
+      if (Array.isArray(content)) {
+        const hasToolResult = content.some((block) => block.type === 'tool_result');
+        if (hasToolResult) return 'Tool';
+      }
+      return 'User';
+    }
+    case 'assistant':
+      return 'Assistant';
+    case 'system':
+      return 'System';
+    case 'summary':
+      return 'Summary';
+    case 'file-history-snapshot':
+      return 'File Snapshot';
+    case 'queue-operation':
+      return 'Queue';
+    default:
+      return 'Unknown';
+  }
+}
+
+/**
  * Check if a message has any displayable content.
  * Messages with only whitespace text (e.g. interrupted assistant responses
  * with content: [{type: "text", text: "\n\n"}]) render as empty cards.
