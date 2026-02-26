@@ -13,6 +13,8 @@ interface ScrollNavButtonsProps {
   onAtBottomChange?: (atBottom: boolean) => void;
   /** Dependency value that triggers button visibility re-evaluation when changed */
   contentDependency?: number;
+  /** Handler for search button click — renders a search icon when provided */
+  onSearchClick?: () => void;
 }
 
 /**
@@ -26,6 +28,7 @@ function ScrollNavButtons({
   onScrollToBottom,
   onAtBottomChange,
   contentDependency,
+  onSearchClick,
 }: ScrollNavButtonsProps) {
   const [showTopButton, setShowTopButton] = useState(false);
   const [showBottomButton, setShowBottomButton] = useState(false);
@@ -81,12 +84,25 @@ function ScrollNavButtons({
     }
   }, [scrollRef, onScrollToBottom]);
 
-  if (!showTopButton && !showBottomButton) {
+  if (!showTopButton && !showBottomButton && !onSearchClick) {
     return null;
   }
 
   return (
     <div className={styles.navButtons}>
+      {onSearchClick && (
+        <button
+          className={styles.navButton}
+          onClick={onSearchClick}
+          title="Search transcript"
+          aria-label="Search transcript"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+      )}
       {showTopButton && (
         <button
           className={styles.navButton}

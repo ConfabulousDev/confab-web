@@ -12,6 +12,7 @@ interface TimelineMessageProps {
   previousMessage?: TranscriptLine;
   isSelected?: boolean;
   isDeepLinkTarget?: boolean;
+  isSearchMatch?: boolean;
   sessionId?: string;
 }
 
@@ -197,7 +198,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, sessionId }: TimelineMessageProps) {
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isSearchMatch, sessionId }: TimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -244,6 +245,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
     isDifferentRole && styles.newSpeaker,
     isSelected && styles.selected,
     isDeepLinkTarget && styles.deepLinkTarget,
+    isSearchMatch && styles.searchMatch,
   ].filter(Boolean).join(' ');
 
   return (

@@ -11,3 +11,4 @@ export { useSessionFilters } from './useSessionFilters';
 export { useDropdown } from './useDropdown';
 export { useVisibility } from './useVisibility';
 export { useTrends } from './useTrends';
+export { useTranscriptSearch } from './useTranscriptSearch';

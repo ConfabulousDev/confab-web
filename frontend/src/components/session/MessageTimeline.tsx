@@ -1,7 +1,9 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
+import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import TimelineMessage from './TimelineMessage';
+import TranscriptSearchBar from './TranscriptSearchBar';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
 import styles from './MessageTimeline.module.css';
@@ -101,6 +103,9 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const hasScrolledToTarget = useRef(false);
+
+  // Transcript search
+  const search = useTranscriptSearch(messages);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
@@ -223,6 +228,38 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
     hasScrolledToTarget.current = true;
   }, [targetMessageAllIndex, messageIndexToVirtualIndex, virtualizer]);
 
+  // Intercept Cmd/Ctrl+F to open transcript search
+  const openSearch = search.open;
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        openSearch();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [openSearch]);
+
+  // Scroll to current search match
+  useEffect(() => {
+    if (search.currentMatchFilteredIndex === null) return;
+
+    // Convert filteredIndex → allMessages index → virtualIndex
+    const matchedMessage = messages[search.currentMatchFilteredIndex];
+    if (!matchedMessage) return;
+    const allIndex = messageToAllIndex.get(matchedMessage);
+    if (allIndex === undefined) return;
+    const virtualIndex = messageIndexToVirtualIndex.get(allIndex);
+    if (virtualIndex === undefined) return;
+
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
+      () => false,
+    );
+    setSelectedIndex(allIndex);
+  }, [search.currentMatchFilteredIndex, messages, messageToAllIndex, messageIndexToVirtualIndex, virtualizer]);
+
   // Track first visible message for TimelineBar position indicator
   const updateFirstVisible = useCallback(() => {
     const visibleItems = virtualizer.getVirtualItems();
@@ -314,6 +351,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
           onScrollToTop={scrollToTop}
           onScrollToBottom={scrollToBottom}
           contentDependency={messages.length}
+          onSearchClick={search.open}
         />
 
         <div
@@ -357,6 +395,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
                     previousMessage={item.filteredIndex > 0 ? messages[item.filteredIndex - 1] : undefined}
                     isSelected={isSelected}
                     isDeepLinkTarget={targetMessageAllIndex !== null && item.index === targetMessageAllIndex}
+                    isSearchMatch={search.currentMatchFilteredIndex === item.filteredIndex}
                     sessionId={sessionId}
                   />
                 )}
@@ -372,6 +411,19 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
         visibleIndices={visibleIndices}
         onSeek={scrollToMessage}
       />
+
+      {search.isOpen && (
+        <TranscriptSearchBar
+          query={search.query}
+          onQueryChange={search.setQuery}
+          currentMatch={search.matches.length > 0 ? search.currentMatchIndex + 1 : 0}
+          totalMatches={search.matches.length}
+          onNext={search.goToNextMatch}
+          onPrev={search.goToPreviousMatch}
+          onClose={search.close}
+          inputRef={search.inputRef}
+        />
+      )}
     </div>
   );
 }
