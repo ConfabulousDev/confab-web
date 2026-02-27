@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { UserMessage, AssistantMessage, TranscriptLine } from '@/types';
-import type { SystemMessage } from '@/schemas/transcript';
+import type { UserMessage, AssistantMessage, SystemMessage, TranscriptLine } from '@/types';
 import TimelineMessage from './TimelineMessage';
 
 const emptyToolNameMap = new Map<string, string>();

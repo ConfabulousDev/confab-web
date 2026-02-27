@@ -14,6 +14,8 @@ export type {
   TranscriptLine,
   ContentBlock,
   TextBlock,
+  UnknownBlock,
+  UnknownMessage,
   UserMessage,
   AssistantMessage,
   SystemMessage,
@@ -27,6 +29,7 @@ export {
   isToolUseBlock,
   isToolResultBlock,
   isImageBlock,
+  isUnknownBlock,
   isUserMessage,
   isAssistantMessage,
   isSystemMessage,
@@ -34,6 +37,7 @@ export {
   isSummaryMessage,
   isQueueOperationMessage,
   isPRLinkMessage,
+  isUnknownMessage,
 } from '@/schemas/transcript';
 
 // Re-export utility functions
@@ -41,4 +45,9 @@ export {
   hasThinking,
   usesTools,
   isToolResultMessage,
+  isSkillExpansionMessage,
+  isCommandExpansionMessage,
+  getCommandExpansionSkillName,
+  stripCommandExpansionTags,
+  warnIfKnownTypeCaughtByCatchall,
 } from '@/schemas/transcript';

@@ -75,15 +75,16 @@ ${createSystemMessage(2)}`;
     expect(result.errors[0]?.rawJson).toBe('invalid json line');
   });
 
-  it('reports validation errors for invalid schema', () => {
+  it('accepts unknown message types via catch-all schema (forward compatibility)', () => {
     const content = `${createSystemMessage(1)}
 {"type":"unknown","invalid":"data"}
 ${createSystemMessage(2)}`;
 
     const result = parseJSONL(content);
 
-    expect(result.successCount).toBe(2);
-    expect(result.errorCount).toBe(1);
+    // All 3 lines pass — the unknown type matches the catch-all schema
+    expect(result.successCount).toBe(3);
+    expect(result.errorCount).toBe(0);
     expect(result.totalLines).toBe(3);
   });
 

@@ -19,6 +19,7 @@ const sampleCounts: HierarchicalCounts = {
   summary: 0,
   'queue-operation': 6,
   'pr-link': 0,
+  unknown: 0,
 };
 
 // Interactive wrapper component
@@ -104,6 +105,7 @@ export const AllFiltersActive: Story = {
       summary: true,
       'queue-operation': true,
       'pr-link': true,
+      unknown: true,
     },
   },
 };
@@ -118,6 +120,7 @@ export const SomeFiltersHidden: Story = {
       summary: false,
       'queue-operation': false,
       'pr-link': false,
+      unknown: true,
     },
   },
 };
@@ -132,6 +135,7 @@ export const IndeterminateState: Story = {
       summary: false,
       'queue-operation': false,
       'pr-link': false,
+      unknown: true,
     },
   },
 };
@@ -146,6 +150,7 @@ export const AllCategoriesHaveMessages: Story = {
       summary: 5,
       'queue-operation': 10,
       'pr-link': 2,
+      unknown: 0,
     },
   },
 };

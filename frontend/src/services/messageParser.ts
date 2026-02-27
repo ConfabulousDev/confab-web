@@ -10,12 +10,16 @@ import {
   isQueueOperationMessage,
   isPRLinkMessage,
   isToolResultMessage,
+  isTextBlock,
+  isThinkingBlock,
+  isToolUseBlock,
+  isToolResultBlock,
   hasThinking,
   usesTools,
 } from '@/types';
 
 interface ParsedMessageData {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'unknown';
   timestamp?: string;
   content: ContentBlock[];
   messageModel?: string;
@@ -28,7 +32,7 @@ interface ParsedMessageData {
  * Parse a transcript line into display-ready message data
  */
 export function parseMessage(message: TranscriptLine): ParsedMessageData {
-  let role: 'user' | 'assistant' | 'system' = 'user';
+  let role: 'user' | 'assistant' | 'system' | 'unknown' = 'user';
   let timestamp: string | undefined;
   let content: ContentBlock[] = [];
   let messageModel: string | undefined;
@@ -76,11 +80,10 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
     timestamp = message.timestamp;
     content = [{ type: 'text', text: `🔗 PR #${message.prNumber} — [${message.prRepository}](${message.prUrl})` }];
   } else {
-    // Exhaustive check - should never reach here if Zod validation is working
-    const _exhaustiveCheck: never = message;
-    console.warn('Unknown message type encountered:', _exhaustiveCheck);
-    role = 'system';
-    content = [{ type: 'text', text: '⚠️ Unknown message type' }];
+    // Unknown message type — forward compatibility catch-all
+    role = 'unknown';
+    timestamp = 'timestamp' in message && typeof message.timestamp === 'string' ? message.timestamp : undefined;
+    content = [{ type: 'text', text: `Unknown message type: ${message.type}` }];
   }
 
   return {
@@ -95,32 +98,19 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
 }
 
 /**
- * Build a map of tool use IDs to tool names from content blocks
- */
-export function buildToolNameMap(content: ContentBlock[]): Map<string, string> {
-  const map = new Map<string, string>();
-  content.forEach((block) => {
-    if (block.type === 'tool_use' && block.id && block.name) {
-      map.set(block.id, block.name);
-    }
-  });
-  return map;
-}
-
-/**
  * Extract plain text content from a message for copying
  */
 export function extractTextContent(content: ContentBlock[]): string {
   const parts: string[] = [];
 
   for (const block of content) {
-    if (block.type === 'text' && block.text) {
+    if (isTextBlock(block)) {
       parts.push(block.text);
-    } else if (block.type === 'thinking' && block.thinking) {
+    } else if (isThinkingBlock(block)) {
       parts.push(`[Thinking]\n${block.thinking}`);
-    } else if (block.type === 'tool_use') {
+    } else if (isToolUseBlock(block)) {
       parts.push(`[Tool: ${block.name}]\n${JSON.stringify(block.input, null, 2)}`);
-    } else if (block.type === 'tool_result') {
+    } else if (isToolResultBlock(block)) {
       const resultContent =
         typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2);
       parts.push(`[Tool Result]\n${resultContent}`);

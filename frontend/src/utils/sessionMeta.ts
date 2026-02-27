@@ -1,4 +1,5 @@
 import type { TranscriptLine } from '@/types';
+import { isUserMessage, isAssistantMessage } from '@/types';
 
 interface SessionMetaInput {
   firstSeen?: string;
@@ -31,7 +32,7 @@ export function computeSessionMeta(
 
   // Find earliest and latest timestamps from messages
   for (const msg of messages) {
-    if (msg.type === 'user' || msg.type === 'assistant') {
+    if (isUserMessage(msg) || isAssistantMessage(msg)) {
       const ts = new Date(msg.timestamp).getTime();
       if (!isNaN(ts)) {
         if (firstTimestamp === undefined || ts < firstTimestamp) {

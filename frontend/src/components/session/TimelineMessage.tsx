@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
-import { isTextBlock, isFileHistorySnapshot, isUserMessage } from '@/types';
-import { isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/schemas/transcript';
+import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
 import { getRoleLabel } from './messageCategories';
@@ -96,27 +95,26 @@ function buildTokenTooltip(usage: TokenUsage): string {
  * Get content blocks from a message
  */
 function getContentBlocks(message: TranscriptLine): ContentBlock[] {
-  switch (message.type) {
-    case 'user': {
-      const content = message.message.content;
-      if (typeof content === 'string') {
-        // Strip command-expansion XML tags for clean display
-        const text = isUserMessage(message) && isCommandExpansionMessage(message)
-          ? stripCommandExpansionTags(content)
-          : content;
-        return [{ type: 'text', text }];
-      }
-      return content;
+  if (isUserMessage(message)) {
+    const content = message.message.content;
+    if (typeof content === 'string') {
+      const text = isCommandExpansionMessage(message)
+        ? stripCommandExpansionTags(content)
+        : content;
+      return [{ type: 'text', text }];
     }
-    case 'assistant':
-      return message.message.content;
-    case 'system':
-      return message.content ? [{ type: 'text', text: message.content }] : [];
-    case 'summary':
-      return [{ type: 'text', text: message.summary }];
-    default:
-      return [];
+    return content;
   }
+  if (isAssistantMessage(message)) {
+    return message.message.content;
+  }
+  if (isSystemMessage(message)) {
+    return message.content ? [{ type: 'text', text: message.content }] : [];
+  }
+  if (isSummaryMessage(message)) {
+    return [{ type: 'text', text: message.summary }];
+  }
+  return [];
 }
 
 /**
@@ -133,10 +131,10 @@ function extractTextContent(blocks: ContentBlock[]): string {
  * Get tool name for a tool result block
  */
 function getToolNameForResult(block: ContentBlock, toolNameMap: Map<string, string>): string {
-  if (block.type === 'tool_result') {
+  if (isToolResultBlock(block)) {
     return toolNameMap.get(block.tool_use_id) || '';
   }
-  if (block.type === 'tool_use') {
+  if (isToolUseBlock(block)) {
     return block.name;
   }
   return '';
@@ -186,16 +184,16 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
   const contentBlocks = useMemo(() => getContentBlocks(message), [message]);
 
   // Get timestamp if available
-  const timestamp = 'timestamp' in message ? message.timestamp : undefined;
+  const timestamp = 'timestamp' in message && typeof message.timestamp === 'string' ? message.timestamp : undefined;
 
   // Get token usage for assistant messages
-  const tokenUsage = message.type === 'assistant' ? message.message.usage : undefined;
+  const tokenUsage = isAssistantMessage(message) ? message.message.usage : undefined;
 
   // Get model for assistant messages
-  const model = message.type === 'assistant' ? message.message.model : undefined;
+  const model = isAssistantMessage(message) ? message.message.model : undefined;
 
   // Get agent ID for sub-agent messages
-  const agentId = message.type === 'assistant' ? message.agentId : undefined;
+  const agentId = isAssistantMessage(message) ? message.agentId : undefined;
 
   // Get skill name for command-expansion messages
   const skillName = isUserMessage(message) && isCommandExpansionMessage(message)

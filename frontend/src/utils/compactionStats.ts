@@ -1,4 +1,5 @@
 import type { TranscriptLine } from '@/types';
+import { isSystemMessage } from '@/types';
 import { formatDuration } from './formatting';
 
 /**
@@ -43,7 +44,8 @@ export function calculateCompactionStats(messages: TranscriptLine[]): Compaction
   // Build a map of uuid → timestamp for quick lookup
   const timestampByUuid = new Map<string, string>();
   for (const message of messages) {
-    if ('uuid' in message && 'timestamp' in message) {
+    if ('uuid' in message && typeof message.uuid === 'string' &&
+        'timestamp' in message && typeof message.timestamp === 'string') {
       timestampByUuid.set(message.uuid, message.timestamp);
     }
   }
@@ -51,7 +53,7 @@ export function calculateCompactionStats(messages: TranscriptLine[]): Compaction
   const compactionTimes: number[] = [];
 
   for (const message of messages) {
-    if (message.type !== 'system' || message.subtype !== 'compact_boundary') {
+    if (!isSystemMessage(message) || message.subtype !== 'compact_boundary') {
       continue;
     }
 

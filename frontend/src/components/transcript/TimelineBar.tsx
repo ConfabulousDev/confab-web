@@ -1,10 +1,6 @@
 import { useMemo, useCallback, useState, useRef } from 'react';
 import type { TranscriptLine } from '@/types';
-import {
-  isUserMessage,
-  isAssistantMessage,
-  isToolResultMessage,
-} from '@/schemas/transcript';
+import { isUserMessage, isAssistantMessage, isToolResultMessage } from '@/types';
 import styles from './TimelineBar.module.css';
 
 type Speaker = 'user' | 'assistant';
@@ -55,7 +51,7 @@ function computeSegments(messages: TranscriptLine[]): TimelineSegment[] {
 
     // Handle human prompts (start of a new user turn)
     if (isHumanPrompt(line)) {
-      const timestamp = 'timestamp' in line ? line.timestamp : null;
+      const timestamp = 'timestamp' in line && typeof line.timestamp === 'string' ? line.timestamp : null;
       if (!timestamp) {
         // Can't compute timing without timestamp - reset state
         lastHumanPromptTime = null;

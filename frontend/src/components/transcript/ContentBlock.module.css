@@ -221,4 +221,16 @@
   color: var(--color-text-muted);
   font-style: italic;
   font-size: var(--font-xs);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin: var(--spacing-xs) 0;
+}
+
+.unknownBlockContent {
+  font-style: normal;
+  margin-top: var(--spacing-xs);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--color-text-secondary);
 }
