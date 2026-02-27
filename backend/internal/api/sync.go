@@ -15,6 +15,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
@@ -334,18 +335,29 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build chunk content (lines joined by newlines, with trailing newline)
-	// Also extract timestamp metadata from transcript lines
+	// Also extract timestamp metadata and pr-link associations from transcript lines
 	var content bytes.Buffer
 	var latestTimestamp *time.Time
+	var prLinks []*models.GitHubLink
+	prLinkSeen := make(map[string]struct{}) // dedup by "owner/repo/ref"
 	for _, line := range req.Lines {
 		content.WriteString(line)
 		content.WriteString("\n")
 
-		// Try to extract timestamp from transcript lines
 		if req.FileType == "transcript" {
+			// Try to extract timestamp from transcript lines
 			if ts := extractTimestampFromLine(line); ts != nil {
 				if latestTimestamp == nil || ts.After(*latestTimestamp) {
 					latestTimestamp = ts
+				}
+			}
+
+			// Try to extract pr-link associations
+			if link := extractPRLinkFromLine(line); link != nil {
+				dedupKey := link.Owner + "/" + link.Repo + "/" + link.Ref
+				if _, exists := prLinkSeen[dedupKey]; !exists {
+					prLinkSeen[dedupKey] = struct{}{}
+					prLinks = append(prLinks, link)
 				}
 			}
 		}
@@ -394,6 +406,20 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		// The next sync will detect the mismatch and can retry
 		respondError(w, http.StatusInternalServerError, "Failed to update sync state")
 		return
+	}
+
+	// Create GitHub links extracted from pr-link transcript lines
+	// Errors here must not fail the chunk upload
+	for _, link := range prLinks {
+		link.SessionID = req.SessionID
+		if _, err := s.db.CreateGitHubLink(updateCtx, link, false); err != nil {
+			log.Warn("Failed to create transcript pr-link",
+				"error", err,
+				"session_id", req.SessionID,
+				"owner", link.Owner,
+				"repo", link.Repo,
+				"ref", link.Ref)
+		}
 	}
 
 	log.Debug("Chunk uploaded",

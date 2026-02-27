@@ -157,8 +157,9 @@ const (
 type GitHubLinkSource string
 
 const (
-	GitHubLinkSourceCLIHook GitHubLinkSource = "cli_hook"
-	GitHubLinkSourceManual  GitHubLinkSource = "manual"
+	GitHubLinkSourceCLIHook    GitHubLinkSource = "cli_hook"
+	GitHubLinkSourceManual     GitHubLinkSource = "manual"
+	GitHubLinkSourceTranscript GitHubLinkSource = "transcript"
 )
 
 // GitHubLink represents a link between a session and a GitHub artifact

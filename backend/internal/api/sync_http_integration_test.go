@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -3027,5 +3028,428 @@ func TestSyncFileRead_LineOffset_DBShortCircuit_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 
 		testutil.RequireStatus(t, resp, http.StatusNotFound)
+	})
+}
+
+// =============================================================================
+// PR-link extraction from transcript chunks
+// =============================================================================
+
+func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("extracts pr-link from transcript chunk and creates github link", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-prlink-session")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		lines := []string{
+			`{"type":"user","message":"Create a PR"}`,
+			`{"type":"pr-link","prNumber":44,"prUrl":"https://github.com/ConfabulousDev/confab-web/pull/44","prRepository":"ConfabulousDev/confab-web","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`,
+			`{"type":"assistant","message":"PR created!"}`,
+		}
+
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     lines,
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// Verify github link was created
+		var link struct {
+			ID       int64  `db:"id"`
+			Owner    string `db:"owner"`
+			Repo     string `db:"repo"`
+			Ref      string `db:"ref"`
+			Source   string `db:"source"`
+			LinkType string `db:"link_type"`
+			Title    *string `db:"title"`
+		}
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT id, owner, repo, ref, source, link_type, title FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&link.ID, &link.Owner, &link.Repo, &link.Ref, &link.Source, &link.LinkType, &link.Title); err != nil {
+			t.Fatalf("expected github link in DB, got error: %v", err)
+		}
+
+		if link.Owner != "ConfabulousDev" {
+			t.Errorf("expected owner 'ConfabulousDev', got %s", link.Owner)
+		}
+		if link.Repo != "confab-web" {
+			t.Errorf("expected repo 'confab-web', got %s", link.Repo)
+		}
+		if link.Ref != "44" {
+			t.Errorf("expected ref '44', got %s", link.Ref)
+		}
+		if link.Source != "transcript" {
+			t.Errorf("expected source 'transcript', got %s", link.Source)
+		}
+		if link.LinkType != "pull_request" {
+			t.Errorf("expected link_type 'pull_request', got %s", link.LinkType)
+		}
+		expectedTitle := "ConfabulousDev/confab-web#44"
+		if link.Title == nil || *link.Title != expectedTitle {
+			t.Errorf("expected title %q, got %v", expectedTitle, link.Title)
+		}
+	})
+
+	t.Run("deduplicates pr-links within same chunk", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-prlink-dedup")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// Same PR link appears twice in one chunk
+		prLine := `{"type":"pr-link","prNumber":10,"prUrl":"https://github.com/owner/repo/pull/10","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
+		lines := []string{prLine, prLine}
+
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     lines,
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// Should only have 1 link (deduped in-memory)
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("expected 1 github link, got %d", count)
+		}
+	})
+
+	t.Run("re-uploading same chunk does not fail", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-prlink-reupl")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		prLine := `{"type":"pr-link","prNumber":5,"prUrl":"https://github.com/owner/repo/pull/5","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
+
+		// Upload first chunk
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{prLine},
+		}
+
+		resp1, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("first request failed: %v", err)
+		}
+		resp1.Body.Close()
+		testutil.RequireStatus(t, resp1, http.StatusOK)
+
+		// Upload second chunk with same PR link (different lines, next chunk)
+		reqBody2 := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 2,
+			Lines:     []string{prLine},
+		}
+
+		resp2, err := client.Post("/api/v1/sync/chunk", reqBody2)
+		if err != nil {
+			t.Fatalf("second request failed: %v", err)
+		}
+		defer resp2.Body.Close()
+
+		testutil.RequireStatus(t, resp2, http.StatusOK)
+
+		// Still only 1 link in DB (DB upsert handles cross-chunk dedup)
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("expected 1 github link, got %d", count)
+		}
+	})
+
+	t.Run("invalid pr-link does not fail chunk upload", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-prlink-invalid")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// Invalid: prUrl is not a GitHub URL
+		lines := []string{
+			`{"type":"pr-link","prNumber":1,"prUrl":"https://gitlab.com/owner/repo/pull/1","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`,
+		}
+
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     lines,
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Chunk upload should still succeed
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// No link should be created
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("expected 0 github links, got %d", count)
+		}
+	})
+
+	t.Run("does not extract pr-links from non-transcript file types", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-prlink-agent")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		prLine := `{"type":"pr-link","prNumber":99,"prUrl":"https://github.com/owner/repo/pull/99","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
+
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "agent.jsonl",
+			FileType:  "agent",
+			FirstLine: 1,
+			Lines:     []string{prLine},
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// No link should be created for non-transcript files
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("expected 0 github links, got %d", count)
+		}
+	})
+
+	t.Run("upsert title priority: transcript fills null, cli_hook overwrites", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-prlink-title")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// Step 1: Upload transcript chunk with pr-link → creates link with constructed title
+		prLine := `{"type":"pr-link","prNumber":7,"prUrl":"https://github.com/owner/repo/pull/7","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{prLine},
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("chunk request failed: %v", err)
+		}
+		resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// Verify transcript-sourced title
+		var title1 string
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT title FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&title1); err != nil {
+			t.Fatalf("expected link, got error: %v", err)
+		}
+		if title1 != "owner/repo#7" {
+			t.Errorf("expected title 'owner/repo#7', got %s", title1)
+		}
+
+		// Step 2: cli_hook creates same link with real title → should overwrite
+		realTitle := "Fix critical login bug"
+		cliLink := &models.GitHubLink{
+			SessionID: sessionID,
+			LinkType:  models.GitHubLinkTypePullRequest,
+			URL:       "https://github.com/owner/repo/pull/7",
+			Owner:     "owner",
+			Repo:      "repo",
+			Ref:       "7",
+			Title:     &realTitle,
+			Source:    models.GitHubLinkSourceCLIHook,
+		}
+		_, err = env.DB.CreateGitHubLink(env.Ctx, cliLink, true)
+		if err != nil {
+			t.Fatalf("failed to upsert cli_hook link: %v", err)
+		}
+
+		// Verify title was overwritten by cli_hook
+		var title2 string
+		row = env.DB.QueryRow(env.Ctx,
+			"SELECT title FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&title2); err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if title2 != "Fix critical login bug" {
+			t.Errorf("expected cli_hook title to overwrite, got %s", title2)
+		}
+
+		// Step 3: Upload another transcript chunk with same pr-link → should NOT overwrite the cli_hook title
+		reqBody2 := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 2,
+			Lines:     []string{prLine},
+		}
+
+		resp2, err := client.Post("/api/v1/sync/chunk", reqBody2)
+		if err != nil {
+			t.Fatalf("second chunk request failed: %v", err)
+		}
+		resp2.Body.Close()
+		testutil.RequireStatus(t, resp2, http.StatusOK)
+
+		// Verify title is still the cli_hook title (transcript didn't overwrite)
+		var title3 string
+		row = env.DB.QueryRow(env.Ctx,
+			"SELECT title FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&title3); err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if title3 != "Fix critical login bug" {
+			t.Errorf("expected cli_hook title preserved, got %s", title3)
+		}
+
+		// Verify source was updated to transcript (last writer wins for source)
+		var source string
+		row = env.DB.QueryRow(env.Ctx,
+			"SELECT source FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&source); err != nil {
+			t.Fatalf("query failed: %v", err)
+		}
+		if source != "transcript" {
+			t.Errorf("expected source 'transcript' (last writer wins), got %s", source)
+		}
+	})
+
+	t.Run("multiple pr-links in one chunk", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "test-prlink-multi")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		lines := []string{
+			`{"type":"pr-link","prNumber":1,"prUrl":"https://github.com/owner/repo-a/pull/1","prRepository":"owner/repo-a","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`,
+			`{"type":"pr-link","prNumber":2,"prUrl":"https://github.com/owner/repo-b/pull/2","prRepository":"owner/repo-b","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`,
+		}
+
+		reqBody := SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     lines,
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query: %v", err)
+		}
+		if count != 2 {
+			t.Errorf("expected 2 github links, got %d", count)
+		}
 	})
 }

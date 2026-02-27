@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
@@ -150,12 +151,8 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 			Source:    req.Source,
 		}
 
-		createdLink, err := database.CreateGitHubLink(ctx, link)
+		createdLink, err := database.CreateGitHubLink(ctx, link, true)
 		if err != nil {
-			if errors.Is(err, db.ErrGitHubLinkDuplicate) {
-				respondError(w, http.StatusConflict, "GitHub link already exists")
-				return
-			}
 			log.Error("Failed to create GitHub link", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to create GitHub link")
 			return
@@ -302,6 +299,69 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 			"link_id", linkID)
 
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// extractPRLinkFromLine parses a JSONL transcript line and extracts a PR link if present.
+// Returns nil if the line is not a pr-link message or if any validation fails.
+func extractPRLinkFromLine(line string) *models.GitHubLink {
+	// Quick check to avoid JSON parsing on most lines
+	if !strings.Contains(line, `"pr-link"`) {
+		return nil
+	}
+
+	var entry map[string]interface{}
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return nil
+	}
+
+	// Check type field
+	msgType, _ := entry["type"].(string)
+	if msgType != "pr-link" {
+		return nil
+	}
+
+	// Extract and validate prRepository (must be "owner/repo" format)
+	prRepository, _ := entry["prRepository"].(string)
+	if prRepository == "" {
+		return nil
+	}
+	parts := strings.SplitN(prRepository, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return nil
+	}
+	owner, repo := parts[0], parts[1]
+
+	// Extract and validate prNumber (JSON numbers are float64)
+	prNumberFloat, ok := entry["prNumber"].(float64)
+	if !ok || prNumberFloat < 1 {
+		return nil
+	}
+	prNumber := int(prNumberFloat)
+	ref := strconv.Itoa(prNumber)
+
+	// Extract prUrl and cross-validate it is consistent with prRepository and prNumber
+	prURL, _ := entry["prUrl"].(string)
+	if prURL == "" {
+		return nil
+	}
+	parsed, err := ParseGitHubURL(prURL)
+	if err != nil {
+		return nil
+	}
+	if parsed.Owner != owner || parsed.Repo != repo || parsed.Ref != ref {
+		return nil
+	}
+
+	title := fmt.Sprintf("%s/%s#%d", owner, repo, prNumber)
+	return &models.GitHubLink{
+		LinkType: models.GitHubLinkTypePullRequest,
+		URL:      prURL,
+		Owner:    owner,
+		Repo:     repo,
+		Ref:      ref,
+		Title:    &title,
+		Source:   models.GitHubLinkSourceTranscript,
 	}
 }
 
