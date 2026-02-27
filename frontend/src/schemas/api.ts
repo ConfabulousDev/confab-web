@@ -485,6 +485,39 @@ export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
 export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 
 // ============================================================================
+// Organization Analytics Schemas
+// ============================================================================
+
+const OrgUserInfoSchema = z.object({
+  id: z.number(),
+  email: z.string(),
+  name: z.string().nullable().optional(),
+});
+
+const OrgUserAnalyticsSchema = z.object({
+  user: OrgUserInfoSchema,
+  session_count: z.number(),
+  total_cost_usd: z.string(),
+  total_duration_ms: z.number(),
+  total_claude_time_ms: z.number(),
+  total_user_time_ms: z.number(),
+  avg_cost_usd: z.string(),
+  avg_duration_ms: z.number().nullable().optional(),
+  avg_claude_time_ms: z.number().nullable().optional(),
+  avg_user_time_ms: z.number().nullable().optional(),
+});
+
+export const OrgAnalyticsResponseSchema = z.object({
+  computed_at: z.string(),
+  date_range: DateRangeSchema,
+  users: z.array(OrgUserAnalyticsSchema),
+});
+
+export type OrgUserInfo = z.infer<typeof OrgUserInfoSchema>;
+export type OrgUserAnalytics = z.infer<typeof OrgUserAnalyticsSchema>;
+export type OrgAnalyticsResponse = z.infer<typeof OrgAnalyticsResponseSchema>;
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 

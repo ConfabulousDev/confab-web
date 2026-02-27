@@ -11,3 +11,11 @@ export {
 
 // Re-export sorting utilities
 export { sortData, type SortDirection } from './sorting';
+
+// Re-export date range utilities
+export {
+  type DateRange,
+  getDefaultDateRange,
+  getDateRangeLabel,
+  parseDateRangeFromURL,
+} from './dateRange';

@@ -7,7 +7,7 @@ import styles from './Header.module.css';
 
 function Header() {
   const { user, isAuthenticated } = useAuth();
-  const { sharesEnabled } = useAppConfig();
+  const { sharesEnabled, orgAnalyticsEnabled } = useAppConfig();
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -60,6 +60,7 @@ function Header() {
       <nav className={styles.nav}>
         <Link to={user?.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions'} className={styles.navLink}>Sessions</Link>
         <Link to="/trends" className={styles.navLink}>Personal Trends</Link>
+        {orgAnalyticsEnabled && <Link to="/org" className={styles.navLink}>Organization</Link>}
       </nav>
 
       <div className={styles.actions}>

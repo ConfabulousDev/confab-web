@@ -64,8 +64,9 @@ type Server struct {
 	supportEmail      string                    // Support contact email address
 	sharesEnabled     bool                      // When true, share creation is enabled (ENABLE_SHARE_CREATION=true)
 	saasFooterEnabled bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
-	saasTermlyEnabled bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
-	globalLimiter     ratelimit.RateLimiter     // Global rate limiter for all requests
+	saasTermlyEnabled    bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
+	orgAnalyticsEnabled  bool                      // When true, org-wide analytics view is enabled (ENABLE_ORG_ANALYTICS=true)
+	globalLimiter        ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
 	validationLimiter ratelimit.RateLimiter     // Moderate limiter for API key validation
@@ -86,7 +87,8 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		supportEmail:   supportEmail,
 		sharesEnabled:     os.Getenv("ENABLE_SHARE_CREATION") == "true",
 		saasFooterEnabled: os.Getenv("ENABLE_SAAS_FOOTER") == "true",
-		saasTermlyEnabled: os.Getenv("ENABLE_SAAS_TERMLY") == "true",
+		saasTermlyEnabled:   os.Getenv("ENABLE_SAAS_TERMLY") == "true",
+		orgAnalyticsEnabled: os.Getenv("ENABLE_ORG_ANALYTICS") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -323,6 +325,11 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Trends - aggregated analytics across sessions
 			r.Get("/trends", withMaxBody(MaxBodyXS, HandleGetTrends(s.db)))
+
+			// Organization analytics (requires ENABLE_ORG_ANALYTICS=true)
+			if s.orgAnalyticsEnabled {
+				r.Get("/org/analytics", withMaxBody(MaxBodyXS, HandleGetOrgAnalytics(s.db)))
+			}
 
 			// API key management
 			r.Post("/keys", withMaxBody(MaxBodyM, HandleCreateAPIKey(s.db)))

@@ -14,6 +14,7 @@ import {
   GitHubLinksResponseSchema,
   SessionAnalyticsSchema,
   TrendsResponseSchema,
+  OrgAnalyticsResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -26,6 +27,7 @@ import {
   type SessionAnalytics,
   type SessionListResponse,
   type TrendsResponse,
+  type OrgAnalyticsResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
@@ -516,5 +518,29 @@ export const trendsAPI = {
     const response = await fetchRaw(url, { method: 'GET' });
     const data = await response.json();
     return validateResponse(TrendsResponseSchema, data, url);
+  },
+};
+
+export interface OrgAnalyticsParams {
+  startDate?: string; // YYYY-MM-DD (local date)
+  endDate?: string;   // YYYY-MM-DD (local date, inclusive)
+}
+
+export const orgAnalyticsAPI = {
+  get: async (params: OrgAnalyticsParams = {}): Promise<OrgAnalyticsResponse> => {
+    const searchParams = new URLSearchParams();
+    if (params.startDate) {
+      searchParams.set('start_ts', String(localDateToEpoch(params.startDate)));
+    }
+    if (params.endDate) {
+      searchParams.set('end_ts', String(localDateToEpoch(params.endDate) + 86400));
+    }
+    searchParams.set('tz_offset', String(new Date().getTimezoneOffset()));
+
+    const queryString = searchParams.toString();
+    const url = `/org/analytics${queryString ? `?${queryString}` : ''}`;
+    const response = await fetchRaw(url, { method: 'GET' });
+    const data = await response.json();
+    return validateResponse(OrgAnalyticsResponseSchema, data, url);
   },
 };

@@ -5,6 +5,7 @@ export interface AppConfig {
   sharesEnabled: boolean;
   saasFooterEnabled: boolean;
   saasTermlyEnabled: boolean;
+  orgAnalyticsEnabled: boolean;
   supportEmail: string;
 }
 
@@ -12,6 +13,7 @@ const defaultAppConfig: AppConfig = {
   sharesEnabled: false,
   saasFooterEnabled: false,
   saasTermlyEnabled: false,
+  orgAnalyticsEnabled: false,
   supportEmail: '',
 };
 

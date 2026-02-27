@@ -1,0 +1,97 @@
+.container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filterWrapper {
+  position: relative;
+}
+
+.filterBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.filterBtn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.filterBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.filterLabel {
+  font-weight: 500;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1000;
+  min-width: 240px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-hover);
+}
+
+.dropdownContent {
+  padding: 8px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.section {
+  padding: 0 4px;
+}
+
+.filterItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.filterItem:hover {
+  background: var(--color-bg-hover);
+}
+
+.filterItem.selected {
+  background: var(--color-bg-hover);
+  color: var(--color-accent);
+}
+
+.itemLabel {
+  flex: 1;
+}
+
+.checkIcon {
+  color: var(--color-accent);
+}
+
+.checkIcon svg {
+  width: 14px;
+  height: 14px;
+}

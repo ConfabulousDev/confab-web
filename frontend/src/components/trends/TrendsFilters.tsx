@@ -1,14 +1,9 @@
 import { useMemo } from 'react';
 import { useDropdown } from '@/hooks';
 import { formatLocalDate } from '@/utils';
+import type { DateRange } from '@/utils/dateRange';
 import { CalendarIcon, RepoIcon, CheckIcon } from '@/components/icons';
 import styles from './TrendsFilters.module.css';
-
-export interface DateRange {
-  startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
-  label: string;
-}
 
 export interface TrendsFiltersValue {
   dateRange: DateRange;
