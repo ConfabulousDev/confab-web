@@ -1,0 +1,93 @@
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 8px 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sortableHeader {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.sortableHeader:hover {
+  color: var(--color-text-primary);
+}
+
+.headerContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sortIndicator {
+  display: inline-flex;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* Alignment */
+.alignLeft {
+  text-align: left;
+}
+
+.alignRight {
+  text-align: right;
+}
+
+/* Summary row */
+.summaryRow td {
+  font-weight: 600;
+  background: var(--color-bg-secondary);
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* User cell */
+.userName {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.userEmail {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.userCell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Data cells */
+.numericCell {
+  color: var(--color-text-primary);
+}
+
+.zeroCell {
+  color: var(--color-text-muted);
+}

@@ -11,6 +11,7 @@ const SessionDetailPage = lazy(() => import('@/pages/SessionDetailPage'));
 const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const TrendsPage = lazy(() => import('@/pages/TrendsPage'));
+const OrgPage = lazy(() => import('@/pages/OrgPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const PoliciesPage = lazy(() => import('@/pages/PoliciesPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -48,6 +49,20 @@ function SaasRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Gate org analytics route — shows a message when feature is disabled */
+// eslint-disable-next-line react-refresh/only-export-components
+function OrgAnalyticsRoute({ children }: { children: ReactNode }) {
+  const { orgAnalyticsEnabled } = useAppConfig();
+  if (!orgAnalyticsEnabled) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+        Feature not enabled. Contact your administrator.
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 /** Wrap a page component with Suspense and optional ProtectedRoute */
 function page(component: ReactNode, isProtected = false) {
   const wrapped = isProtected ? <ProtectedRoute>{component}</ProtectedRoute> : component;
@@ -62,6 +77,7 @@ export const router = createBrowserRouter([
       { index: true, element: page(<HomePage />) },
       { path: 'sessions', element: page(<SessionsPage />, true) },
       { path: 'trends', element: page(<TrendsPage />, true) },
+      { path: 'org', element: page(<OrgAnalyticsRoute><OrgPage /></OrgAnalyticsRoute>, true) },
       { path: 'sessions/:id', element: page(<SessionDetailPage />) },
       { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },
       { path: 'keys', element: page(<APIKeysPage />, true) },

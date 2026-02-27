@@ -783,6 +783,81 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 
 ---
 
+### Organization Analytics
+
+#### Get Organization Analytics
+```
+GET /api/v1/org/analytics?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>
+```
+
+Returns per-user aggregated analytics across all sessions in the organization. Requires `ENABLE_ORG_ANALYTICS=true` environment variable. Available to any authenticated user when enabled.
+
+**Query Parameters:**
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| start_ts | integer | No | 7 days ago (UTC) | Start of date range as epoch seconds (inclusive) |
+| end_ts | integer | No | tomorrow (UTC) | End of date range as epoch seconds (exclusive) |
+| tz_offset | integer | No | 0 | Client timezone offset in minutes |
+
+**Constraints:**
+- Maximum date range: 90 days
+- Route returns 404 when `ENABLE_ORG_ANALYTICS` is not enabled
+
+**Response:**
+```json
+{
+  "computed_at": "2024-01-15T10:30:00Z",
+  "date_range": {
+    "start_date": "2024-01-08",
+    "end_date": "2024-01-15"
+  },
+  "users": [
+    {
+      "user": {
+        "id": 1,
+        "email": "alice@example.com",
+        "name": "Alice Chen"
+      },
+      "session_count": 45,
+      "total_cost_usd": "128.50",
+      "total_duration_ms": 432000000,
+      "total_claude_time_ms": 216000000,
+      "total_user_time_ms": 216000000,
+      "avg_cost_usd": "2.86",
+      "avg_duration_ms": 9600000,
+      "avg_claude_time_ms": 4800000,
+      "avg_user_time_ms": 4800000
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `computed_at` | string | ISO timestamp when analytics were computed |
+| `date_range.start_date` | string | Start date (inclusive) |
+| `date_range.end_date` | string | End date (inclusive) |
+| `users` | array | One entry per active user |
+| `users[].user.id` | int | User ID |
+| `users[].user.email` | string | User email |
+| `users[].user.name` | string\|null | User display name |
+| `users[].session_count` | int | Sessions with both tokens and conversation cards |
+| `users[].total_cost_usd` | string | Total estimated cost (decimal as string) |
+| `users[].total_duration_ms` | int | Total session duration in milliseconds |
+| `users[].total_claude_time_ms` | int | Total assistant (Claude) time in milliseconds |
+| `users[].total_user_time_ms` | int | Total user time in milliseconds |
+| `users[].avg_cost_usd` | string | Average cost per session (decimal as string) |
+| `users[].avg_duration_ms` | int\|null | Average session duration (null if 0 sessions) |
+| `users[].avg_claude_time_ms` | int\|null | Average Claude time per session (null if 0 sessions) |
+| `users[].avg_user_time_ms` | int\|null | Average user time per session (null if 0 sessions) |
+
+**Errors:**
+- `400` - Invalid parameters or range exceeds 90 days
+- `401` - Authentication required
+- `404` - Feature not enabled (`ENABLE_ORG_ANALYTICS` env var not set)
+
+---
+
 ### Session Analytics
 
 #### Get Session Analytics

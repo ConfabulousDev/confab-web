@@ -4,6 +4,7 @@ const defaultAppConfig: AppConfig = {
   sharesEnabled: false,
   saasFooterEnabled: false,
   saasTermlyEnabled: false,
+  orgAnalyticsEnabled: false,
   supportEmail: '',
 };
 
@@ -20,6 +21,7 @@ export async function fetchConfigWithRetry(): Promise<AppConfig> {
         sharesEnabled: data.features?.shares_enabled ?? false,
         saasFooterEnabled: data.features?.saas_footer_enabled ?? false,
         saasTermlyEnabled: data.features?.saas_termly_enabled ?? false,
+        orgAnalyticsEnabled: data.features?.org_analytics_enabled ?? false,
         supportEmail: data.features?.support_email ?? '',
       };
     } catch {

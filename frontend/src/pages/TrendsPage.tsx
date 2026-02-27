@@ -2,9 +2,9 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle, useTrends } from '@/hooks';
 import { sessionsAPI } from '@/services/api';
-import { formatLocalDate } from '@/utils';
+import { getDefaultDateRange, parseDateRangeFromURL } from '@/utils';
 import PageHeader from '@/components/PageHeader';
-import TrendsFilters, { type TrendsFiltersValue, type DateRange } from '@/components/trends/TrendsFilters';
+import TrendsFilters, { type TrendsFiltersValue } from '@/components/trends/TrendsFilters';
 import {
   TrendsOverviewCard,
   TrendsTokensCard,
@@ -17,68 +17,20 @@ import {
 import Alert from '@/components/Alert';
 import styles from './TrendsPage.module.css';
 
-// Get default date range (last 7 days)
-function getDefaultDateRange(): DateRange {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const last7Days = new Date(today);
-  last7Days.setDate(last7Days.getDate() - 6);
-  return {
-    startDate: formatLocalDate(last7Days),
-    endDate: formatLocalDate(today),
-    label: 'Last 7 Days',
-  };
-}
-
-// Get label for a date range (used when loading from URL)
-function getDateRangeLabel(startDate: string, endDate: string): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = formatLocalDate(today);
-
-  // Check common presets
-  const daysDiff = Math.round(
-    (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  if (endDate === todayStr) {
-    if (daysDiff === 6) return 'Last 7 Days';
-    if (daysDiff === 29) return 'Last 30 Days';
-    if (daysDiff === 89) return 'Last 90 Days';
-  }
-
-  // Default to showing the date range
-  return `${startDate} - ${endDate}`;
-}
-
-// Parse filters from URL search params
 function parseFiltersFromURL(searchParams: URLSearchParams): TrendsFiltersValue | null {
-  const start = searchParams.get('start');
-  const end = searchParams.get('end');
+  const dateRange = parseDateRangeFromURL(searchParams);
+  if (!dateRange) return null;
 
-  // If no date params, return null to use defaults
-  if (!start || !end) return null;
-
-  // Validate date format (YYYY-MM-DD)
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(start) || !dateRegex.test(end)) return null;
-
-  // Use getAll for repos to support multiple 'repo' params
   const repos = searchParams.getAll('repo').filter(Boolean);
   const includeNoRepo = searchParams.get('includeNoRepo');
 
   return {
-    dateRange: {
-      startDate: start,
-      endDate: end,
-      label: getDateRangeLabel(start, end),
-    },
+    dateRange,
     repos,
-    includeNoRepo: includeNoRepo !== 'false', // Default to true
+    includeNoRepo: includeNoRepo !== 'false',
   };
 }
 
-// Serialize filters to URL search params
 function serializeFiltersToURL(filters: TrendsFiltersValue): URLSearchParams {
   const params = new URLSearchParams();
   params.set('start', filters.dateRange.startDate);
