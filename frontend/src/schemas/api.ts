@@ -140,7 +140,7 @@ export const CreateShareResponseSchema = z.object({
 // ============================================================================
 
 const GitHubLinkTypeSchema = z.enum(['commit', 'pull_request']);
-const GitHubLinkSourceSchema = z.enum(['cli_hook', 'manual']);
+const GitHubLinkSourceSchema = z.string(); // forward-compatible: backend may add new sources
 
 export const GitHubLinkSchema = z.object({
   id: z.number(),
