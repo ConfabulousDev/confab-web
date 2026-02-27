@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -13,9 +12,11 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
-// CreateGitHubLink creates a new GitHub link for a session.
-// Returns ErrGitHubLinkDuplicate if link already exists.
-func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink) (*models.GitHubLink, error) {
+// CreateGitHubLink creates or updates a GitHub link for a session (upsert).
+// On conflict (same session, link_type, owner, repo, ref), it updates source and url.
+// When overwriteTitle is true, the new title always wins.
+// When overwriteTitle is false, the existing title is preserved if non-null (fill-only).
+func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink, overwriteTitle bool) (*models.GitHubLink, error) {
 	ctx, span := tracer.Start(ctx, "db.create_github_link",
 		trace.WithAttributes(
 			attribute.String("session.id", link.SessionID),
@@ -26,6 +27,11 @@ func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink) (*m
 	query := `
 		INSERT INTO session_github_links (session_id, link_type, url, owner, repo, ref, title, source)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (session_id, link_type, owner, repo, ref)
+		DO UPDATE SET
+			source = EXCLUDED.source,
+			url = EXCLUDED.url,
+			title = CASE WHEN $9 THEN EXCLUDED.title ELSE COALESCE(session_github_links.title, EXCLUDED.title) END
 		RETURNING id, created_at
 	`
 	err := db.conn.QueryRowContext(ctx, query,
@@ -37,12 +43,10 @@ func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink) (*m
 		link.Ref,
 		link.Title,
 		link.Source,
+		overwriteTitle,
 	).Scan(&link.ID, &link.CreatedAt)
 
 	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, ErrGitHubLinkDuplicate
-		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to create github link: %w", err)

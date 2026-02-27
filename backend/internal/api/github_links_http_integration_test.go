@@ -175,7 +175,7 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusCreated)
 	})
 
-	t.Run("returns 409 for duplicate link", func(t *testing.T) {
+	t.Run("upserts duplicate link idempotently", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
@@ -199,14 +199,26 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		resp1.Body.Close()
 		testutil.RequireStatus(t, resp1, http.StatusCreated)
 
-		// Second request should fail with 409
+		// Second request should also succeed (upsert is idempotent)
 		resp2, err := client.Post("/api/v1/sessions/"+sessionID+"/github-links", reqBody)
 		if err != nil {
 			t.Fatalf("second request failed: %v", err)
 		}
 		defer resp2.Body.Close()
 
-		testutil.RequireStatus(t, resp2, http.StatusConflict)
+		testutil.RequireStatus(t, resp2, http.StatusCreated)
+
+		// Verify only one link in database (not two)
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("failed to query github links: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("expected 1 github link in database, got %d", count)
+		}
 	})
 
 	t.Run("returns 400 for invalid URL", func(t *testing.T) {
@@ -291,7 +303,7 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 			Title:     &title1,
 			Source:    models.GitHubLinkSourceManual,
 		}
-		_, err := env.DB.CreateGitHubLink(env.Ctx, link1)
+		_, err := env.DB.CreateGitHubLink(env.Ctx, link1, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -305,7 +317,7 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 			Ref:       "abc123",
 			Source:    models.GitHubLinkSourceCLIHook,
 		}
-		_, err = env.DB.CreateGitHubLink(env.Ctx, link2)
+		_, err = env.DB.CreateGitHubLink(env.Ctx, link2, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -356,7 +368,7 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		_, err = env.DB.CreateGitHubLink(env.Ctx, link)
+		_, err = env.DB.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -464,7 +476,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link)
+		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -532,7 +544,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link)
+		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -569,7 +581,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link)
+		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -652,6 +664,113 @@ func TestParseGitHubURL(t *testing.T) {
 		_, err := ParseGitHubURL("https://github.com/owner/repo/issues/123")
 		if err == nil {
 			t.Error("expected error for issues URL")
+		}
+	})
+}
+
+// =============================================================================
+// extractPRLinkFromLine Unit Tests
+// =============================================================================
+
+func TestExtractPRLinkFromLine(t *testing.T) {
+	t.Run("extracts valid pr-link", func(t *testing.T) {
+		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://github.com/ConfabulousDev/confab-web/pull/44","prRepository":"ConfabulousDev/confab-web","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
+		link := extractPRLinkFromLine(line)
+		if link == nil {
+			t.Fatal("expected non-nil link")
+		}
+		if link.Owner != "ConfabulousDev" {
+			t.Errorf("expected owner 'ConfabulousDev', got %s", link.Owner)
+		}
+		if link.Repo != "confab-web" {
+			t.Errorf("expected repo 'confab-web', got %s", link.Repo)
+		}
+		if link.Ref != "44" {
+			t.Errorf("expected ref '44', got %s", link.Ref)
+		}
+		if link.LinkType != models.GitHubLinkTypePullRequest {
+			t.Errorf("expected link_type 'pull_request', got %s", link.LinkType)
+		}
+		if link.Source != models.GitHubLinkSourceTranscript {
+			t.Errorf("expected source 'transcript', got %s", link.Source)
+		}
+		expectedTitle := "ConfabulousDev/confab-web#44"
+		if link.Title == nil || *link.Title != expectedTitle {
+			t.Errorf("expected title %q, got %v", expectedTitle, link.Title)
+		}
+		if link.URL != "https://github.com/ConfabulousDev/confab-web/pull/44" {
+			t.Errorf("expected URL preserved, got %s", link.URL)
+		}
+	})
+
+	t.Run("returns nil for non-pr-link type", func(t *testing.T) {
+		line := `{"type":"assistant","message":{"content":"hello"}}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for non-pr-link type")
+		}
+	})
+
+	t.Run("returns nil for malformed JSON", func(t *testing.T) {
+		if link := extractPRLinkFromLine(`{not valid json`); link != nil {
+			t.Error("expected nil for malformed JSON")
+		}
+	})
+
+	t.Run("returns nil for missing prUrl", func(t *testing.T) {
+		line := `{"type":"pr-link","prNumber":44,"prRepository":"owner/repo"}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for missing prUrl")
+		}
+	})
+
+	t.Run("returns nil for missing prRepository", func(t *testing.T) {
+		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://github.com/owner/repo/pull/44"}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for missing prRepository")
+		}
+	})
+
+	t.Run("returns nil for missing prNumber", func(t *testing.T) {
+		line := `{"type":"pr-link","prUrl":"https://github.com/owner/repo/pull/44","prRepository":"owner/repo"}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for missing prNumber")
+		}
+	})
+
+	t.Run("returns nil for invalid prUrl format", func(t *testing.T) {
+		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://gitlab.com/owner/repo/pull/44","prRepository":"owner/repo"}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for non-GitHub prUrl")
+		}
+	})
+
+	t.Run("returns nil for inconsistent fields", func(t *testing.T) {
+		// prUrl says owner-a/repo-b#5, but prRepository says owner-x/repo-y and prNumber says 10
+		line := `{"type":"pr-link","prNumber":10,"prUrl":"https://github.com/owner-a/repo-b/pull/5","prRepository":"owner-x/repo-y"}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for inconsistent fields")
+		}
+	})
+
+	t.Run("returns nil for invalid prRepository format", func(t *testing.T) {
+		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://github.com/owner/repo/pull/44","prRepository":"noslash"}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for invalid prRepository")
+		}
+	})
+
+	t.Run("returns nil for zero prNumber", func(t *testing.T) {
+		line := `{"type":"pr-link","prNumber":0,"prUrl":"https://github.com/owner/repo/pull/0","prRepository":"owner/repo"}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for zero prNumber")
+		}
+	})
+
+	t.Run("returns nil for line without pr-link string", func(t *testing.T) {
+		// This line doesn't contain "pr-link" at all — quick check should skip it
+		line := `{"type":"human","message":{"content":"hello world"}}`
+		if link := extractPRLinkFromLine(line); link != nil {
+			t.Error("expected nil for unrelated line")
 		}
 	})
 }
