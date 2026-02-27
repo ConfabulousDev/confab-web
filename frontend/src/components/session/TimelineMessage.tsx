@@ -50,12 +50,20 @@ function formatTimestamp(timestamp: string): string {
   });
 }
 
+interface ServerToolUsage {
+  web_search_requests?: number;
+  web_fetch_requests?: number;
+  code_execution_requests?: number;
+}
+
 interface TokenUsage {
   input_tokens: number;
   output_tokens: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
   service_tier?: string | null;
+  server_tool_use?: ServerToolUsage;
+  speed?: string;
 }
 
 /**
@@ -87,8 +95,44 @@ function buildTokenTooltip(usage: TokenUsage): string {
   if (usage.service_tier) {
     lines.push(`Tier: ${usage.service_tier}`);
   }
+  if (usage.speed) {
+    lines.push(`Speed: ${usage.speed}`);
+  }
+
+  const stu = usage.server_tool_use;
+  if (stu) {
+    if (stu.web_search_requests) {
+      lines.push(`Web searches: ${stu.web_search_requests}`);
+    }
+    if (stu.web_fetch_requests) {
+      lines.push(`Web fetches: ${stu.web_fetch_requests}`);
+    }
+    if (stu.code_execution_requests) {
+      lines.push(`Code executions: ${stu.code_execution_requests}`);
+    }
+  }
 
   return lines.join('\n');
+}
+
+/**
+ * Build server tool badge labels from usage
+ */
+function getServerToolBadges(usage: TokenUsage): string[] {
+  const badges: string[] = [];
+  const stu = usage.server_tool_use;
+  if (!stu) return badges;
+
+  if (stu.web_search_requests) {
+    badges.push(`${stu.web_search_requests} ${stu.web_search_requests === 1 ? 'search' : 'searches'}`);
+  }
+  if (stu.web_fetch_requests) {
+    badges.push(`${stu.web_fetch_requests} ${stu.web_fetch_requests === 1 ? 'fetch' : 'fetches'}`);
+  }
+  if (stu.code_execution_requests) {
+    badges.push(`${stu.code_execution_requests} ${stu.code_execution_requests === 1 ? 'exec' : 'execs'}`);
+  }
+  return badges;
 }
 
 /**
@@ -240,6 +284,17 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
               {formatTokens(tokenUsage)}
             </span>
           )}
+          {tokenUsage?.speed === 'fast' && (
+            <span className={styles.fastBadge} title="Fast mode (6x pricing)">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8.5 1L3 9h4.5L6.5 15 13 7H8.5L10 1H8.5z" />
+              </svg>
+              fast
+            </span>
+          )}
+          {tokenUsage && getServerToolBadges(tokenUsage).map((badge) => (
+            <span key={badge} className={styles.serverToolBadge}>{badge}</span>
+          ))}
           {model && <span className={styles.model}>{extractModelVariant(model)}</span>}
           {onSkipToPrevious && (
             <button

@@ -35,15 +35,9 @@ func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 			result.CacheCreationTokens += usage.CacheCreationInputTokens
 			result.CacheReadTokens += usage.CacheReadInputTokens
 
-			// Calculate cost with model-specific pricing
+			// Calculate cost with model-specific pricing (includes fast mode + server tools)
 			pricing := GetPricing(line.Message.Model)
-			cost := CalculateCost(
-				pricing,
-				usage.InputTokens,
-				usage.OutputTokens,
-				usage.CacheCreationInputTokens,
-				usage.CacheReadInputTokens,
-			)
+			cost := CalculateTotalCost(pricing, usage)
 			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
 		}
 	}
@@ -66,13 +60,7 @@ func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 
 			// Agent usage doesn't include model info, so we use default pricing
 			pricing := GetPricing("")
-			cost := CalculateCost(
-				pricing,
-				usage.InputTokens,
-				usage.OutputTokens,
-				usage.CacheCreationInputTokens,
-				usage.CacheReadInputTokens,
-			)
+			cost := CalculateTotalCost(pricing, usage)
 			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
 		}
 	}

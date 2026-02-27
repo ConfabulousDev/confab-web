@@ -176,6 +176,28 @@
   border-radius: var(--radius-sm);
 }
 
+/* Fast mode badge */
+.fastBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-xs);
+  color: var(--color-warning-text);
+  padding: 1px var(--spacing-xs);
+  background: rgba(234, 179, 8, 0.1);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* Server tool usage badge */
+.serverToolBadge {
+  font-size: var(--font-xs);
+  color: var(--color-info-text);
+  padding: 1px var(--spacing-xs);
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: var(--radius-sm);
+}
+
 /* Model badge */
 .model {
   font-size: var(--font-xs);

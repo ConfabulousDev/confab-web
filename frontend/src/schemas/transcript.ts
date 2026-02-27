@@ -80,6 +80,12 @@ export type ContentBlock =
 // Token Usage Schema
 // ============================================================================
 
+const ServerToolUseSchema = z.object({
+  web_search_requests: z.number().optional(),
+  web_fetch_requests: z.number().optional(),
+  code_execution_requests: z.number().optional(),
+}).passthrough(); // forward-compat for new tool types
+
 const TokenUsageSchema = z.object({
   input_tokens: z.number(),
   cache_creation_input_tokens: z.number().optional(),
@@ -92,7 +98,11 @@ const TokenUsageSchema = z.object({
     .optional(),
   output_tokens: z.number(),
   service_tier: z.string().nullable().optional(),
-});
+  server_tool_use: ServerToolUseSchema.optional(),
+  speed: z.string().optional(),
+  inference_geo: z.string().optional(),
+  iterations: z.array(z.unknown()).optional(),
+}).passthrough(); // forward-compat for future usage fields
 
 // ============================================================================
 // Message Schemas
