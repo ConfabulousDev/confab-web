@@ -45,12 +45,22 @@ type MessageContent struct {
 	StopReason string `json:"stop_reason,omitempty"` // "end_turn", "tool_use", "max_tokens"
 }
 
+// ServerToolUse contains per-request counts for server-side tools.
+// These are billed separately from token usage (e.g., web search at $10/1000 requests).
+type ServerToolUse struct {
+	WebSearchRequests     int `json:"web_search_requests,omitempty"`
+	WebFetchRequests      int `json:"web_fetch_requests,omitempty"`
+	CodeExecutionRequests int `json:"code_execution_requests,omitempty"`
+}
+
 // TokenUsage contains token counts from the API response.
 type TokenUsage struct {
-	InputTokens              int64 `json:"input_tokens"`
-	OutputTokens             int64 `json:"output_tokens"`
-	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens,omitempty"`
-	CacheReadInputTokens     int64 `json:"cache_read_input_tokens,omitempty"`
+	InputTokens              int64          `json:"input_tokens"`
+	OutputTokens             int64          `json:"output_tokens"`
+	CacheCreationInputTokens int64          `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int64          `json:"cache_read_input_tokens,omitempty"`
+	ServerToolUse            *ServerToolUse `json:"server_tool_use,omitempty"`
+	Speed                    string         `json:"speed,omitempty"`
 }
 
 // CompactMetadata contains compaction trigger information.
@@ -359,7 +369,28 @@ func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
 		if v, ok := usageMap["cache_read_input_tokens"].(float64); ok {
 			result.Usage.CacheReadInputTokens = int64(v)
 		}
+		if v, ok := usageMap["speed"].(string); ok {
+			result.Usage.Speed = v
+		}
+		if stuMap, ok := usageMap["server_tool_use"].(map[string]interface{}); ok {
+			result.Usage.ServerToolUse = parseServerToolUse(stuMap)
+		}
 	}
 
 	return result
+}
+
+// parseServerToolUse extracts ServerToolUse from a map.
+func parseServerToolUse(m map[string]interface{}) *ServerToolUse {
+	stu := &ServerToolUse{}
+	if v, ok := m["web_search_requests"].(float64); ok {
+		stu.WebSearchRequests = int(v)
+	}
+	if v, ok := m["web_fetch_requests"].(float64); ok {
+		stu.WebFetchRequests = int(v)
+	}
+	if v, ok := m["code_execution_requests"].(float64); ok {
+		stu.CodeExecutionRequests = int(v)
+	}
+	return stu
 }

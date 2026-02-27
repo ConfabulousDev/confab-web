@@ -333,6 +333,82 @@ func TestHasTextContent(t *testing.T) {
 	})
 }
 
+func TestParseLine_ServerToolUse(t *testing.T) {
+	jsonl := `{"type":"assistant","message":{"model":"claude-opus-4-6","usage":{"input_tokens":500,"output_tokens":200,"server_tool_use":{"web_search_requests":3,"web_fetch_requests":1},"speed":"fast"},"content":[{"type":"text","text":"Search results"}],"stop_reason":"end_turn"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}`
+
+	line, err := ParseLine([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ParseLine failed: %v", err)
+	}
+
+	if !line.IsAssistantMessage() {
+		t.Fatal("IsAssistantMessage should return true")
+	}
+
+	usage := line.Message.Usage
+	if usage.Speed != "fast" {
+		t.Errorf("Speed = %q, want %q", usage.Speed, "fast")
+	}
+	if usage.ServerToolUse == nil {
+		t.Fatal("ServerToolUse should not be nil")
+	}
+	if usage.ServerToolUse.WebSearchRequests != 3 {
+		t.Errorf("WebSearchRequests = %d, want 3", usage.ServerToolUse.WebSearchRequests)
+	}
+	if usage.ServerToolUse.WebFetchRequests != 1 {
+		t.Errorf("WebFetchRequests = %d, want 1", usage.ServerToolUse.WebFetchRequests)
+	}
+	if usage.ServerToolUse.CodeExecutionRequests != 0 {
+		t.Errorf("CodeExecutionRequests = %d, want 0", usage.ServerToolUse.CodeExecutionRequests)
+	}
+}
+
+func TestParseLine_ServerToolUse_Absent(t *testing.T) {
+	// Verify existing messages without server_tool_use still parse fine
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"stop_reason":"end_turn"},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}`
+
+	line, err := ParseLine([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ParseLine failed: %v", err)
+	}
+
+	usage := line.Message.Usage
+	if usage.Speed != "" {
+		t.Errorf("Speed = %q, want empty", usage.Speed)
+	}
+	if usage.ServerToolUse != nil {
+		t.Errorf("ServerToolUse should be nil, got %+v", usage.ServerToolUse)
+	}
+}
+
+func TestParseLine_AgentUsageWithServerToolUse(t *testing.T) {
+	jsonl := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"result"}]},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z","toolUseResult":{"agentId":"agent-1","usage":{"input_tokens":200,"output_tokens":100,"speed":"fast","server_tool_use":{"web_search_requests":2}}}}`
+
+	line, err := ParseLine([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ParseLine failed: %v", err)
+	}
+
+	results := line.GetAgentResults()
+	if len(results) != 1 {
+		t.Fatalf("GetAgentResults returned %d results, want 1", len(results))
+	}
+
+	agentUsage := results[0].Usage
+	if agentUsage == nil {
+		t.Fatal("Agent usage should not be nil")
+	}
+	if agentUsage.Speed != "fast" {
+		t.Errorf("Agent usage Speed = %q, want %q", agentUsage.Speed, "fast")
+	}
+	if agentUsage.ServerToolUse == nil {
+		t.Fatal("Agent ServerToolUse should not be nil")
+	}
+	if agentUsage.ServerToolUse.WebSearchRequests != 2 {
+		t.Errorf("Agent WebSearchRequests = %d, want 2", agentUsage.ServerToolUse.WebSearchRequests)
+	}
+}
+
 func TestHasToolUse(t *testing.T) {
 	t.Run("assistant with tool_use block returns true", func(t *testing.T) {
 		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"toolu_123","name":"Read","input":{}}]},"uuid":"a1"}`

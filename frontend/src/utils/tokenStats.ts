@@ -6,6 +6,9 @@ interface TokenStats {
   output: number;
   cacheCreated: number;
   cacheRead: number;
+  webSearchRequests: number;
+  webFetchRequests: number;
+  codeExecutionRequests: number;
 }
 
 // Pricing per million tokens (5-minute cache pricing)
@@ -42,6 +45,13 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
 
 // Zero pricing for unknown models — cost will be underreported rather than silently wrong.
 const ZERO_PRICING: ModelPricing = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+
+// Server tool pricing (per request, not per token)
+// Source: https://docs.anthropic.com/en/about-claude/pricing
+const WEB_SEARCH_COST_PER_REQUEST = 0.01; // $10 per 1,000 searches
+
+// Fast mode multiplier applied to all token costs
+const FAST_MODE_MULTIPLIER = 6;
 
 /**
  * Extract model family from full model name
@@ -83,6 +93,9 @@ export function calculateTokenStats(messages: TranscriptLine[]): TokenStats {
     output: 0,
     cacheCreated: 0,
     cacheRead: 0,
+    webSearchRequests: 0,
+    webFetchRequests: 0,
+    codeExecutionRequests: 0,
   };
 
   for (const message of messages) {
@@ -92,6 +105,9 @@ export function calculateTokenStats(messages: TranscriptLine[]): TokenStats {
       stats.output += usage.output_tokens;
       stats.cacheCreated += usage.cache_creation_input_tokens ?? 0;
       stats.cacheRead += usage.cache_read_input_tokens ?? 0;
+      stats.webSearchRequests += usage.server_tool_use?.web_search_requests ?? 0;
+      stats.webFetchRequests += usage.server_tool_use?.web_fetch_requests ?? 0;
+      stats.codeExecutionRequests += usage.server_tool_use?.code_execution_requests ?? 0;
     }
   }
 
@@ -121,7 +137,17 @@ export function calculateEstimatedCost(messages: TranscriptLine[]): number {
       const cacheWriteCost = (cacheWriteTokens * pricing.cacheWrite) / 1_000_000;
       const cacheReadCost = (cacheReadTokens * pricing.cacheRead) / 1_000_000;
 
-      totalCost += inputCost + outputCost + cacheWriteCost + cacheReadCost;
+      let cost = inputCost + outputCost + cacheWriteCost + cacheReadCost;
+
+      // Fast mode: 6x all token costs
+      if (usage.speed === 'fast') {
+        cost *= FAST_MODE_MULTIPLIER;
+      }
+
+      // Server tool costs (per-request pricing, not affected by fast mode)
+      cost += (usage.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_COST_PER_REQUEST;
+
+      totalCost += cost;
     }
   }
 

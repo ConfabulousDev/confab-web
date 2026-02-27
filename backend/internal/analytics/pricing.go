@@ -152,7 +152,15 @@ func GetPricing(modelName string) ModelPricing {
 // oneMillion is used for price calculation (pricing is per million tokens).
 var oneMillion = decimal.NewFromInt(1_000_000)
 
-// CalculateCost calculates cost for token usage.
+// Server tool pricing (per request, not per token).
+// Source: https://docs.anthropic.com/en/about-claude/pricing
+var webSearchPricePerRequest = decimal.NewFromFloat(0.01) // $10 per 1,000 searches
+
+// fastModeMultiplier is applied to all token costs when speed is "fast".
+// Source: https://docs.anthropic.com/en/build-with-claude/fast-mode
+var fastModeMultiplier = decimal.NewFromInt(6)
+
+// CalculateCost calculates token-only cost for the given counts.
 func CalculateCost(pricing ModelPricing, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens int64) decimal.Decimal {
 	input := decimal.NewFromInt(inputTokens).Mul(pricing.Input).Div(oneMillion)
 	output := decimal.NewFromInt(outputTokens).Mul(pricing.Output).Div(oneMillion)
@@ -160,4 +168,29 @@ func CalculateCost(pricing ModelPricing, inputTokens, outputTokens, cacheWriteTo
 	cacheRead := decimal.NewFromInt(cacheReadTokens).Mul(pricing.CacheRead).Div(oneMillion)
 
 	return input.Add(output).Add(cacheWrite).Add(cacheRead)
+}
+
+// CalculateTotalCost calculates the full cost including token costs,
+// fast mode multiplier, and server tool per-request charges.
+func CalculateTotalCost(pricing ModelPricing, usage *TokenUsage) decimal.Decimal {
+	cost := CalculateCost(
+		pricing,
+		usage.InputTokens,
+		usage.OutputTokens,
+		usage.CacheCreationInputTokens,
+		usage.CacheReadInputTokens,
+	)
+
+	// Fast mode: 6x all token costs
+	if usage.Speed == "fast" {
+		cost = cost.Mul(fastModeMultiplier)
+	}
+
+	// Server tool costs (per-request pricing, not affected by fast mode)
+	if usage.ServerToolUse != nil {
+		searches := decimal.NewFromInt(int64(usage.ServerToolUse.WebSearchRequests))
+		cost = cost.Add(searches.Mul(webSearchPricePerRequest))
+	}
+
+	return cost
 }

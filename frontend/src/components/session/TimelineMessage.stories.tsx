@@ -239,3 +239,85 @@ export const WithSkipPreviousOnly: Story = {
     onSkipToPrevious: () => {},
   },
 };
+
+const mockAssistantWithWebSearch: AssistantMessage = {
+  ...mockAssistantMessage,
+  uuid: 'assistant-ws-1',
+  message: {
+    ...mockAssistantMessage.message,
+    usage: {
+      ...mockAssistantMessage.message.usage,
+      server_tool_use: {
+        web_search_requests: 3,
+        web_fetch_requests: 1,
+      },
+    },
+  },
+};
+
+/**
+ * Assistant message with server tool usage badges (web search + fetch).
+ */
+export const WithWebSearch: Story = {
+  name: 'Web Search + Fetch',
+  args: {
+    message: mockAssistantWithWebSearch,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+  },
+};
+
+const mockAssistantFastMode: AssistantMessage = {
+  ...mockAssistantMessage,
+  uuid: 'assistant-fast-1',
+  message: {
+    ...mockAssistantMessage.message,
+    model: 'claude-opus-4-6-20260201',
+    usage: {
+      ...mockAssistantMessage.message.usage,
+      speed: 'fast',
+    },
+  },
+};
+
+/**
+ * Assistant message in fast mode — shows lightning bolt badge.
+ */
+export const FastMode: Story = {
+  name: 'Fast Mode',
+  args: {
+    message: mockAssistantFastMode,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+  },
+};
+
+const mockAssistantFastWithSearch: AssistantMessage = {
+  ...mockAssistantMessage,
+  uuid: 'assistant-fast-ws-1',
+  message: {
+    ...mockAssistantMessage.message,
+    model: 'claude-opus-4-6-20260201',
+    usage: {
+      ...mockAssistantMessage.message.usage,
+      speed: 'fast',
+      server_tool_use: {
+        web_search_requests: 5,
+        web_fetch_requests: 2,
+        code_execution_requests: 1,
+      },
+    },
+  },
+};
+
+/**
+ * Fast mode with all server tool types — shows lightning + search + fetch + exec badges.
+ */
+export const FastModeWithAllServerTools: Story = {
+  name: 'Fast Mode + All Server Tools',
+  args: {
+    message: mockAssistantFastWithSearch,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+  },
+};

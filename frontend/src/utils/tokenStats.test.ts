@@ -8,7 +8,11 @@ function createAssistantMessage(
   outputTokens: number,
   cacheCreated = 0,
   cacheRead = 0,
-  model = 'claude-opus-4-5-20251101'
+  model = 'claude-opus-4-5-20251101',
+  extra?: {
+    server_tool_use?: { web_search_requests?: number; web_fetch_requests?: number; code_execution_requests?: number };
+    speed?: string;
+  },
 ): AssistantMessage {
   return {
     type: 'assistant',
@@ -34,6 +38,7 @@ function createAssistantMessage(
         output_tokens: outputTokens,
         cache_creation_input_tokens: cacheCreated,
         cache_read_input_tokens: cacheRead,
+        ...extra,
       },
     },
   };
@@ -47,6 +52,9 @@ describe('calculateTokenStats', () => {
       output: 0,
       cacheCreated: 0,
       cacheRead: 0,
+      webSearchRequests: 0,
+      webFetchRequests: 0,
+      codeExecutionRequests: 0,
     });
   });
 
@@ -60,6 +68,9 @@ describe('calculateTokenStats', () => {
       output: 500,
       cacheCreated: 200,
       cacheRead: 100,
+      webSearchRequests: 0,
+      webFetchRequests: 0,
+      codeExecutionRequests: 0,
     });
   });
 
@@ -75,6 +86,9 @@ describe('calculateTokenStats', () => {
       output: 1900,
       cacheCreated: 500,
       cacheRead: 750,
+      webSearchRequests: 0,
+      webFetchRequests: 0,
+      codeExecutionRequests: 0,
     });
   });
 
@@ -91,6 +105,9 @@ describe('calculateTokenStats', () => {
       output: 500,
       cacheCreated: 0,
       cacheRead: 0,
+      webSearchRequests: 0,
+      webFetchRequests: 0,
+      codeExecutionRequests: 0,
     });
   });
 
@@ -119,7 +136,25 @@ describe('calculateTokenStats', () => {
       output: 500,
       cacheCreated: 200,
       cacheRead: 100,
+      webSearchRequests: 0,
+      webFetchRequests: 0,
+      codeExecutionRequests: 0,
     });
+  });
+
+  it('should accumulate server tool request counts', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage(1000, 500, 0, 0, 'claude-sonnet-4-20250514', {
+        server_tool_use: { web_search_requests: 3, web_fetch_requests: 1 },
+      }),
+      createAssistantMessage(1000, 500, 0, 0, 'claude-sonnet-4-20250514', {
+        server_tool_use: { web_search_requests: 2, code_execution_requests: 1 },
+      }),
+    ];
+    const stats = calculateTokenStats(messages);
+    expect(stats.webSearchRequests).toBe(5);
+    expect(stats.webFetchRequests).toBe(1);
+    expect(stats.codeExecutionRequests).toBe(1);
   });
 });
 
@@ -225,6 +260,70 @@ describe('calculateEstimatedCost', () => {
     const cost = calculateEstimatedCost(messages);
     // Unknown models contribute $0 rather than silently defaulting
     expect(cost).toBe(0);
+  });
+
+  it('should add web search per-request costs', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage(100_000, 10_000, 0, 0, 'claude-sonnet-4-20250514', {
+        server_tool_use: { web_search_requests: 5, web_fetch_requests: 3 },
+      }),
+    ];
+    const cost = calculateEstimatedCost(messages);
+    // Tokens: input 100k * $3/M + output 10k * $15/M = $0.30 + $0.15 = $0.45
+    // Web search: 5 * $0.01 = $0.05
+    // Web fetch: free
+    // Total: $0.50
+    expect(cost).toBeCloseTo(0.50, 4);
+  });
+
+  it('should apply 6x multiplier for fast mode', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage(1_000_000, 100_000, 0, 0, 'claude-opus-4-6-20260201', {
+        speed: 'fast',
+      }),
+    ];
+    const cost = calculateEstimatedCost(messages);
+    // Standard: input 1M * $5/M + output 100k * $25/M = $5 + $2.50 = $7.50
+    // Fast: $7.50 * 6 = $45
+    expect(cost).toBeCloseTo(45, 4);
+  });
+
+  it('should apply fast mode multiplier to cache costs', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage(0, 0, 1_000_000, 1_000_000, 'claude-opus-4-6-20260201', {
+        speed: 'fast',
+      }),
+    ];
+    const cost = calculateEstimatedCost(messages);
+    // Standard: cacheWrite 1M * $6.25/M + cacheRead 1M * $0.50/M = $6.75
+    // Fast: $6.75 * 6 = $40.50
+    expect(cost).toBeCloseTo(40.50, 4);
+  });
+
+  it('should not apply fast mode multiplier to web search costs', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage(1_000_000, 0, 0, 0, 'claude-opus-4-6-20260201', {
+        speed: 'fast',
+        server_tool_use: { web_search_requests: 10 },
+      }),
+    ];
+    const cost = calculateEstimatedCost(messages);
+    // Token cost: 1M * $5/M = $5, fast: $5 * 6 = $30
+    // Web search: 10 * $0.01 = $0.10 (NOT multiplied by fast mode)
+    // Total: $30.10
+    expect(cost).toBeCloseTo(30.10, 4);
+  });
+
+  it('should not change cost for standard speed', () => {
+    const messages: TranscriptLine[] = [
+      createAssistantMessage(1_000_000, 0, 0, 0, 'claude-opus-4-5-20251101', {
+        speed: 'standard',
+      }),
+    ];
+    const cost = calculateEstimatedCost(messages);
+    // Standard speed: no multiplier
+    // input 1M * $5/M = $5
+    expect(cost).toBeCloseTo(5, 4);
   });
 });
 
