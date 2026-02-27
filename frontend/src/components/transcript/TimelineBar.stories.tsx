@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { TimelineBar } from './TimelineBar';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
+import { isUserMessage, isAssistantMessage, isTextBlock } from '@/types';
 
 const meta: Meta<typeof TimelineBar> = {
   title: 'Transcript/TimelineBar',
@@ -218,13 +219,16 @@ function IntegratedDemo() {
         </div>
         {messages.map((msg, index) => {
           // Only render user and assistant messages
-          if (msg.type !== 'user' && msg.type !== 'assistant') return null;
+          if (!isUserMessage(msg) && !isAssistantMessage(msg)) return null;
 
-          const content = msg.type === 'user'
-            ? (typeof msg.message.content === 'string' ? msg.message.content : '[complex content]')
-            : msg.message.content[0]?.type === 'text'
-              ? msg.message.content[0].text
-              : '[tool use]';
+          const isUser = isUserMessage(msg);
+          let content = '[unknown]';
+          if (isUserMessage(msg)) {
+            content = typeof msg.message.content === 'string' ? msg.message.content : '[complex content]';
+          } else if (isAssistantMessage(msg)) {
+            const first = msg.message.content[0];
+            content = first && isTextBlock(first) ? first.text : '[tool use]';
+          }
 
           return (
             <div
@@ -237,7 +241,7 @@ function IntegratedDemo() {
                 background: highlightedIndex === index ? 'var(--color-warning-bg)' : 'var(--color-bg-primary)',
                 border: '1px solid var(--color-border)',
                 borderRadius: '6px',
-                borderLeft: msg.type === 'user' ? '3px solid var(--color-accent)' : '3px solid #E57B3A',
+                borderLeft: isUser ? '3px solid var(--color-accent)' : '3px solid #E57B3A',
                 boxShadow: selectedIndex === index ? 'inset 0 0 0 2px var(--color-border-dark)' : 'none',
                 transition: 'background 0.2s ease, box-shadow 0.2s ease',
                 cursor: 'pointer',
@@ -245,12 +249,12 @@ function IntegratedDemo() {
             >
               <div style={{
                 fontSize: '11px',
-                color: msg.type === 'user' ? 'var(--color-accent)' : '#E57B3A',
+                color: isUser ? 'var(--color-accent)' : '#E57B3A',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 marginBottom: '4px',
               }}>
-                {msg.type === 'user' ? 'User' : 'Claude'}
+                {isUser ? 'User' : 'Claude'}
                 <span style={{
                   marginLeft: '8px',
                   color: 'var(--color-text-muted)',

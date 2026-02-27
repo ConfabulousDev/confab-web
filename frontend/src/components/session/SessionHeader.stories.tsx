@@ -21,6 +21,7 @@ const sampleCounts: HierarchicalCounts = {
   summary: 0,
   'queue-operation': 6,
   'pr-link': 0,
+  unknown: 0,
 };
 
 const sampleGitInfo: GitInfo = {

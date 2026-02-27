@@ -46,12 +46,17 @@ const ImageBlockSchema = z.object({
   }),
 });
 
+// Catch-all for forward compatibility — must be last in the union.
+// Unknown block types pass validation and render with a fallback UI.
+const UnknownBlockSchema = z.object({ type: z.string() }).passthrough();
+
 const ContentBlockSchema: z.ZodType<ContentBlock> = z.union([
   TextBlockSchema,
   ThinkingBlockSchema,
   ToolUseBlockSchema,
   ToolResultBlockSchema,
   ImageBlockSchema,
+  UnknownBlockSchema,
 ]);
 
 // Infer types from schemas
@@ -61,12 +66,15 @@ export type ToolUseBlock = z.infer<typeof ToolUseBlockSchema>;
 export type ImageBlock = z.infer<typeof ImageBlockSchema>;
 
 // ContentBlock needs manual definition due to recursion
+export type UnknownBlock = { type: string; [key: string]: unknown };
+
 export type ContentBlock =
   | TextBlock
   | ThinkingBlock
   | ToolUseBlock
   | { type: 'tool_result'; tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean }
-  | ImageBlock;
+  | ImageBlock
+  | UnknownBlock;
 
 // ============================================================================
 // Token Usage Schema
@@ -215,6 +223,10 @@ const PRLinkMessageSchema = z.object({
   timestamp: z.string(),
 });
 
+// Catch-all for forward compatibility — must be last in the union.
+// Unknown message types pass validation and render with a fallback UI.
+const UnknownMessageSchema = z.object({ type: z.string() }).passthrough();
+
 const TranscriptLineSchema = z.union([
   UserMessageSchema,
   AssistantMessageSchema,
@@ -223,6 +235,7 @@ const TranscriptLineSchema = z.union([
   SummaryMessageSchema,
   QueueOperationMessageSchema,
   PRLinkMessageSchema,
+  UnknownMessageSchema,
 ]);
 
 export type TranscriptLine = z.infer<typeof TranscriptLineSchema>;
@@ -455,6 +468,31 @@ export function parseTranscriptLineWithError(
 }
 
 // ============================================================================
+// Forward-compatibility: known type lists for schema drift detection
+// ============================================================================
+
+const KNOWN_BLOCK_TYPES = ['text', 'thinking', 'tool_use', 'tool_result', 'image'];
+const KNOWN_MESSAGE_TYPES = ['user', 'assistant', 'system', 'file-history-snapshot', 'summary', 'queue-operation', 'pr-link'];
+const _warnedTypes = new Set<string>();
+
+/**
+ * Warn (once per type) when the catch-all schema matches a type string
+ * that has a dedicated schema. This indicates the specific schema has drifted
+ * (e.g., a new required field was added upstream).
+ */
+export function warnIfKnownTypeCaughtByCatchall(kind: 'block' | 'message', type: string): void {
+  const knownTypes = kind === 'block' ? KNOWN_BLOCK_TYPES : KNOWN_MESSAGE_TYPES;
+  const key = `${kind}:${type}`;
+  if (knownTypes.includes(type) && !_warnedTypes.has(key)) {
+    _warnedTypes.add(key);
+    console.warn(
+      `${kind === 'block' ? 'Content block' : 'Message'} type "${type}" matched catch-all schema ` +
+      `(expected fields may be missing). This suggests schema drift — update the specific schema.`
+    );
+  }
+}
+
+// ============================================================================
 // Type Guards (derived from schemas)
 // ============================================================================
 
@@ -506,6 +544,16 @@ export function isQueueOperationMessage(line: TranscriptLine): line is z.infer<t
 
 export function isPRLinkMessage(line: TranscriptLine): line is z.infer<typeof PRLinkMessageSchema> {
   return line.type === 'pr-link';
+}
+
+export function isUnknownBlock(block: ContentBlock): block is UnknownBlock {
+  return !KNOWN_BLOCK_TYPES.includes(block.type);
+}
+
+export type UnknownMessage = { type: string; [key: string]: unknown };
+
+export function isUnknownMessage(line: TranscriptLine): line is UnknownMessage {
+  return !KNOWN_MESSAGE_TYPES.includes(line.type);
 }
 
 // ============================================================================

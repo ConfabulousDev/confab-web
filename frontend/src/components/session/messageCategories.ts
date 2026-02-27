@@ -1,8 +1,8 @@
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
-import { isToolResultMessage, isSkillExpansionMessage, isUserMessage, isAssistantMessage } from '@/schemas/transcript';
+import { isToolResultMessage, isToolResultBlock, isSkillExpansionMessage, isUserMessage, isAssistantMessage, isTextBlock, isThinkingBlock, isToolUseBlock } from '@/types';
 
 // Message categories for filtering - matches top-level transcript types
-export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation' | 'pr-link';
+export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation' | 'pr-link' | 'unknown';
 
 // Subcategory types for hierarchical filtering
 export type UserSubcategory = 'prompt' | 'tool-result' | 'skill';
@@ -30,6 +30,7 @@ export interface HierarchicalCounts {
   summary: number;
   'queue-operation': number;
   'pr-link': number;
+  unknown: number;
 }
 
 
@@ -42,6 +43,7 @@ export interface FilterState {
   summary: boolean;
   'queue-operation': boolean;
   'pr-link': boolean;
+  unknown: boolean;
 }
 
 // Default filter state (user and assistant visible with all subs, others hidden)
@@ -53,6 +55,7 @@ export const DEFAULT_FILTER_STATE: FilterState = {
   summary: false,
   'queue-operation': false,
   'pr-link': false,
+  unknown: true,
 };
 
 /**
@@ -71,11 +74,9 @@ function categorizeUserMessage(message: UserMessage): UserSubcategory {
  */
 function categorizeAssistantMessage(message: AssistantMessage): AssistantSubcategory {
   const content = message.message.content;
-  const hasThinking = content.some((block) => block.type === 'thinking');
-  const hasToolUse = content.some((block) => block.type === 'tool_use');
 
-  if (hasThinking) return 'thinking';
-  if (hasToolUse) return 'tool-use';
+  if (content.some(isThinkingBlock)) return 'thinking';
+  if (content.some(isToolUseBlock)) return 'tool-use';
   return 'text';
 }
 
@@ -91,6 +92,7 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
     summary: 0,
     'queue-operation': 0,
     'pr-link': 0,
+    unknown: 0,
   };
 
   for (const message of messages) {
@@ -103,7 +105,7 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
       const subcategory = categorizeAssistantMessage(message);
       counts.assistant[subcategory]++;
     } else {
-      // Flat categories - increment the specific counter
+      // Flat categories - increment the specific counter, unknown as fallback
       const msgType = message.type;
       if (msgType === 'system') {
         counts.system++;
@@ -115,6 +117,8 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
         counts['queue-operation']++;
       } else if (msgType === 'pr-link') {
         counts['pr-link']++;
+      } else {
+        counts.unknown++;
       }
     }
   }
@@ -126,15 +130,14 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
  * Get role label for display (used by TimelineMessage header and skip navigation)
  */
 export function getRoleLabel(message: TranscriptLine): string {
-  switch (message.type) {
-    case 'user': {
-      const content = message.message.content;
-      if (Array.isArray(content)) {
-        const hasToolResult = content.some((block) => block.type === 'tool_result');
-        if (hasToolResult) return 'Tool';
-      }
-      return 'User';
+  if (isUserMessage(message)) {
+    const content = message.message.content;
+    if (Array.isArray(content)) {
+      if (content.some(isToolResultBlock)) return 'Tool';
     }
+    return 'User';
+  }
+  switch (message.type) {
     case 'assistant':
       return 'Assistant';
     case 'system':
@@ -162,7 +165,7 @@ function hasDisplayableContent(message: TranscriptLine): boolean {
     // Has displayable content if any block is non-text (tool_use, thinking)
     // or is a text block with non-whitespace content
     return content.some((block) => {
-      if (block.type === 'text') return block.text.trim().length > 0;
+      if (isTextBlock(block)) return block.text.trim().length > 0;
       return true;
     });
   }
@@ -171,7 +174,7 @@ function hasDisplayableContent(message: TranscriptLine): boolean {
     if (typeof content === 'string') return content.trim().length > 0;
     if (content.length === 0) return false;
     return content.some((block) => {
-      if (block.type === 'text') return block.text.trim().length > 0;
+      if (isTextBlock(block)) return block.text.trim().length > 0;
       return true;
     });
   }
@@ -203,6 +206,6 @@ export function messageMatchesFilter(message: TranscriptLine, filterState: Filte
   if (msgType === 'queue-operation') return filterState['queue-operation'];
   if (msgType === 'pr-link') return filterState['pr-link'];
 
-  // This shouldn't happen, but default to visible
-  return true;
+  // Unknown message types — controlled by the unknown filter chip
+  return filterState.unknown;
 }

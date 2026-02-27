@@ -1,7 +1,7 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
-import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock } from '@/types';
+import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
 import { stripAnsi } from '@/utils';
 import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
 import CodeBlock from './CodeBlock';
@@ -168,9 +168,22 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
     );
   }
 
+  // Forward-compatibility: render unknown block types with best-effort content
+  warnIfKnownTypeCaughtByCatchall('block', block.type);
+
+  let bestEffortText: string | null = null;
+  if ('text' in block && typeof block.text === 'string') {
+    bestEffortText = block.text;
+  } else if ('content' in block && typeof block.content === 'string') {
+    bestEffortText = block.content;
+  }
+
   return (
     <div className={styles.unknownBlock}>
-      <em>Unknown content block type</em>
+      <em>Unknown content block: {block.type}</em>
+      {bestEffortText && (
+        <pre className={styles.unknownBlockContent}>{bestEffortText}</pre>
+      )}
     </div>
   );
 }

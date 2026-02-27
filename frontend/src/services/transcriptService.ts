@@ -165,6 +165,18 @@ async function fetchTranscriptWithErrors(
 }
 
 /**
+ * Extract the version string from the first message that has one.
+ */
+function getFirstVersion(messages: TranscriptLine[]): string {
+  for (const m of messages) {
+    if ('version' in m && typeof m.version === 'string') {
+      return m.version;
+    }
+  }
+  return 'unknown';
+}
+
+/**
  * Fetch and parse a complete transcript with metadata
  */
 export async function fetchParsedTranscript(
@@ -186,7 +198,7 @@ export async function fetchParsedTranscript(
     validationErrors: errors,
     totalLines,
     metadata: {
-      version: messages.find((m) => 'version' in m)?.version || 'unknown',
+      version: getFirstVersion(messages),
       messageCount: messages.length,
       agentCount: 0, // Will be updated by agent tree builder
       firstTimestamp: timestamps[0],

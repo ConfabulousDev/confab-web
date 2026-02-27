@@ -1,4 +1,5 @@
 import type { TranscriptLine } from '@/types';
+import { isAssistantMessage } from '@/types';
 
 interface TokenStats {
   input: number;
@@ -85,7 +86,7 @@ export function calculateTokenStats(messages: TranscriptLine[]): TokenStats {
   };
 
   for (const message of messages) {
-    if (message.type === 'assistant') {
+    if (isAssistantMessage(message)) {
       const usage = message.message.usage;
       stats.input += usage.input_tokens;
       stats.output += usage.output_tokens;
@@ -105,7 +106,7 @@ export function calculateEstimatedCost(messages: TranscriptLine[]): number {
   let totalCost = 0;
 
   for (const message of messages) {
-    if (message.type === 'assistant') {
+    if (isAssistantMessage(message)) {
       const usage = message.message.usage;
       const pricing = getPricing(message.message.model);
 

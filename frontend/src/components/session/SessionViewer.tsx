@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { SessionDetail, TranscriptLine } from '@/types';
+import { isAssistantMessage } from '@/types';
 import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
 import { useVisibility } from '@/hooks/useVisibility';
 import { computeSessionMeta } from '@/utils/sessionMeta';
@@ -216,8 +217,8 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   // Compute session metadata for header
   const sessionMeta = useMemo(() => {
     // Find first assistant message to get model
-    const firstAssistant = messages.find((m) => m.type === 'assistant');
-    const model = firstAssistant?.type === 'assistant' ? firstAssistant.message.model : undefined;
+    const firstAssistant = messages.find(isAssistantMessage);
+    const model = firstAssistant?.message.model;
 
     // Compute duration and date from message timestamps (matches analytics calculation)
     const { durationMs, sessionDate } = computeSessionMeta(messages, {

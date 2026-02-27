@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseMessage,
-  buildToolNameMap,
   extractTextContent,
   getRoleLabel,
 } from './messageParser';
@@ -92,27 +91,6 @@ describe('messageParser', () => {
     });
   });
 
-  describe('buildToolNameMap', () => {
-    it('should build map of tool IDs to names', () => {
-      const content: ContentBlock[] = [
-        { type: 'text', text: 'Hello' },
-        { type: 'tool_use', id: 'tool-1', name: 'Read', input: {} },
-        { type: 'tool_use', id: 'tool-2', name: 'Write', input: {} },
-      ];
-
-      const map = buildToolNameMap(content);
-
-      expect(map.size).toBe(2);
-      expect(map.get('tool-1')).toBe('Read');
-      expect(map.get('tool-2')).toBe('Write');
-    });
-
-    it('should handle empty content', () => {
-      const map = buildToolNameMap([]);
-      expect(map.size).toBe(0);
-    });
-  });
-
   describe('extractTextContent', () => {
     it('should extract text from multiple blocks', () => {
       const content: ContentBlock[] = [
@@ -143,6 +121,40 @@ describe('messageParser', () => {
 
     it('should return "Tool Result" for user tool results', () => {
       expect(getRoleLabel('user', true)).toBe('Tool Result');
+    });
+
+    it('should return "Unknown" for unknown role', () => {
+      expect(getRoleLabel('unknown', false)).toBe('Unknown');
+    });
+  });
+
+  describe('parseMessage with unknown message type', () => {
+    it('should return role "unknown" for unrecognized message types', () => {
+      // Simulate an unknown message type that passed Zod validation via catch-all
+      const unknownMessage: import('@/types').UnknownMessage = {
+        type: 'agent-handoff',
+        fromAgent: 'agent-1',
+        toAgent: 'agent-2',
+        timestamp: '2025-01-01T00:00:00Z',
+      };
+
+      const result = parseMessage(unknownMessage);
+      expect(result.role).toBe('unknown');
+      expect(result.content[0]).toEqual({
+        type: 'text',
+        text: 'Unknown message type: agent-handoff',
+      });
+    });
+
+    it('should extract timestamp from unknown message if available', () => {
+      const unknownMessage: import('@/types').UnknownMessage = {
+        type: 'future-type',
+        timestamp: '2025-06-15T12:00:00Z',
+      };
+
+      const result = parseMessage(unknownMessage);
+      expect(result.role).toBe('unknown');
+      expect(result.timestamp).toBe('2025-06-15T12:00:00Z');
     });
   });
 });

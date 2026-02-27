@@ -1,6 +1,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
+import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import TimelineMessage from './TimelineMessage';
 import TranscriptSearchBar from './TranscriptSearchBar';
@@ -27,8 +28,8 @@ type VirtualItem =
 function shouldShowTimeSeparator(current: TranscriptLine, previous: TranscriptLine | undefined): boolean {
   if (!previous) return false;
 
-  const currentTime = 'timestamp' in current ? new Date(current.timestamp) : null;
-  const previousTime = 'timestamp' in previous ? new Date(previous.timestamp) : null;
+  const currentTime = 'timestamp' in current && typeof current.timestamp === 'string' ? new Date(current.timestamp) : null;
+  const previousTime = 'timestamp' in previous && typeof previous.timestamp === 'string' ? new Date(previous.timestamp) : null;
 
   if (!currentTime || !previousTime) return false;
 
@@ -68,9 +69,9 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
   const map = new Map<string, string>();
 
   for (const message of messages) {
-    if (message.type === 'assistant') {
+    if (isAssistantMessage(message)) {
       for (const block of message.message.content) {
-        if (block.type === 'tool_use') {
+        if (isToolUseBlock(block)) {
           map.set(block.id, block.name);
         }
       }
@@ -157,7 +158,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
 
       // Add time separator if needed
       if (shouldShowTimeSeparator(message, prevMessage)) {
-        if ('timestamp' in message) {
+        if ('timestamp' in message && typeof message.timestamp === 'string') {
           items.push({ type: 'separator', timestamp: message.timestamp });
         }
       }
