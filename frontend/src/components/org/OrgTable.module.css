@@ -11,7 +11,7 @@
 
 .table th,
 .table td {
-  padding: 8px 12px;
+  padding: 5px 8px;
   white-space: nowrap;
   border-bottom: 1px solid var(--color-border);
 }
@@ -62,8 +62,8 @@
 /* Summary row */
 .summaryRow td {
   font-weight: 600;
-  background: var(--color-bg-secondary);
-  border-bottom: 2px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-primary));
+  border-bottom: 2px solid color-mix(in srgb, var(--color-accent) 20%, var(--color-border));
 }
 
 /* User cell */
