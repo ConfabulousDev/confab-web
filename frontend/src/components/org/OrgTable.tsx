@@ -20,23 +20,22 @@ type SortField =
 interface Column {
   key: SortField;
   label: string;
-  align: 'left' | 'right';
   tooltip?: string;
 }
 
 const COST_TOOLTIP = 'Estimated based on token usage and model pricing';
 
 const COLUMNS: Column[] = [
-  { key: 'name', label: 'User', align: 'left' },
-  { key: 'session_count', label: 'Sessions', align: 'right' },
-  { key: 'total_cost', label: 'Est. Cost', align: 'right', tooltip: COST_TOOLTIP },
-  { key: 'total_duration', label: 'Total Duration', align: 'right' },
-  { key: 'claude_time', label: 'Claude Time', align: 'right' },
-  { key: 'user_time', label: 'User Time', align: 'right' },
-  { key: 'avg_cost', label: 'Avg Est. Cost', align: 'right', tooltip: COST_TOOLTIP },
-  { key: 'avg_duration', label: 'Avg Duration', align: 'right' },
-  { key: 'avg_claude', label: 'Avg Claude', align: 'right' },
-  { key: 'avg_user', label: 'Avg User', align: 'right' },
+  { key: 'name', label: 'User', tooltip: 'Organization member' },
+  { key: 'session_count', label: 'Sessions', tooltip: 'Total number of sessions' },
+  { key: 'total_cost', label: 'Est. Cost', tooltip: COST_TOOLTIP },
+  { key: 'total_duration', label: 'Total Duration', tooltip: 'Sum of all session durations' },
+  { key: 'claude_time', label: 'Claude Time', tooltip: 'Total time Claude was actively responding' },
+  { key: 'user_time', label: 'User Time', tooltip: 'Total time the user was active' },
+  { key: 'avg_cost', label: 'Avg Cost', tooltip: 'Average estimated cost per session' },
+  { key: 'avg_duration', label: 'Avg Duration', tooltip: 'Average session duration' },
+  { key: 'avg_claude', label: 'Avg Claude', tooltip: 'Average Claude response time per session' },
+  { key: 'avg_user', label: 'Avg User', tooltip: 'Average user active time per session' },
 ];
 
 function getUserDisplayName(user: OrgUserAnalytics['user']): string {
@@ -107,22 +106,30 @@ function OrgTable({ users }: OrgTableProps) {
   }, [users, sortField, sortDirection]);
 
   const summary = useMemo(() => {
-    const totalSessions = users.reduce((sum, u) => sum + u.session_count, 0);
-    const totalCost = users.reduce((sum, u) => sum + parseFloat(u.total_cost_usd), 0);
-    const totalDuration = users.reduce((sum, u) => sum + u.total_duration_ms, 0);
-    const totalClaude = users.reduce((sum, u) => sum + u.total_claude_time_ms, 0);
-    const totalUser = users.reduce((sum, u) => sum + u.total_user_time_ms, 0);
+    const totals = users.reduce(
+      (acc, u) => ({
+        sessions: acc.sessions + u.session_count,
+        cost: acc.cost + parseFloat(u.total_cost_usd),
+        duration: acc.duration + u.total_duration_ms,
+        claude: acc.claude + u.total_claude_time_ms,
+        user: acc.user + u.total_user_time_ms,
+      }),
+      { sessions: 0, cost: 0, duration: 0, claude: 0, user: 0 },
+    );
+
+    const avg = (value: number) =>
+      totals.sessions > 0 ? Math.round(value / totals.sessions) : null;
 
     return {
-      sessionCount: totalSessions,
-      totalCost,
-      totalDuration,
-      totalClaude,
-      totalUser,
-      avgCost: totalSessions > 0 ? totalCost / totalSessions : 0,
-      avgDuration: totalSessions > 0 ? Math.round(totalDuration / totalSessions) : null,
-      avgClaude: totalSessions > 0 ? Math.round(totalClaude / totalSessions) : null,
-      avgUser: totalSessions > 0 ? Math.round(totalUser / totalSessions) : null,
+      sessionCount: totals.sessions,
+      totalCost: totals.cost,
+      totalDuration: totals.duration,
+      totalClaude: totals.claude,
+      totalUser: totals.user,
+      avgCost: totals.sessions > 0 ? totals.cost / totals.sessions : 0,
+      avgDuration: avg(totals.duration),
+      avgClaude: avg(totals.claude),
+      avgUser: avg(totals.user),
     };
   }, [users]);
 
@@ -143,7 +150,7 @@ function OrgTable({ users }: OrgTableProps) {
             {COLUMNS.map((col) => (
               <th
                 key={col.key}
-                className={`${col.align === 'right' ? styles.alignRight : styles.alignLeft} ${styles.sortableHeader}`}
+                className={`${col.key === 'name' ? styles.alignLeft : styles.alignRight} ${styles.sortableHeader}`}
                 onClick={() => handleSort(col.key)}
                 title={col.tooltip}
               >
@@ -156,7 +163,6 @@ function OrgTable({ users }: OrgTableProps) {
           </tr>
         </thead>
         <tbody>
-          {/* Summary row */}
           <tr className={styles.summaryRow}>
             <td className={styles.alignLeft}>Everyone</td>
             <td className={styles.alignRight}>{summary.sessionCount}</td>
@@ -170,7 +176,6 @@ function OrgTable({ users }: OrgTableProps) {
             <td className={styles.alignRight}>{formatDurationOrDash(summary.avgUser)}</td>
           </tr>
 
-          {/* User rows */}
           {sortedUsers.map((row) => {
             const hasData = row.session_count > 0;
             const cellClass = hasData ? styles.numericCell : styles.zeroCell;

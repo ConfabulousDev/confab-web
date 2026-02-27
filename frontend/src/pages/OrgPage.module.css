@@ -1,16 +1,5 @@
-.pageWrapper {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.mainContent {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+.pageWrapper { composes: pageWrapper from './pageLayout.module.css'; }
+.mainContent { composes: mainContent from './pageLayout.module.css'; }
 
 .title {
   font-size: 1.25rem;
@@ -18,10 +7,12 @@
   margin: 0;
 }
 
-.container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 0 1.5rem;
+.container { composes: container from './pageLayout.module.css'; }
+
+.caption {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
 }
 
 .loading {

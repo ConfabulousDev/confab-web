@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle, useOrgAnalytics } from '@/hooks';
 import { getDefaultDateRange, parseDateRangeFromURL } from '@/utils';
@@ -8,10 +8,9 @@ import OrgTable from '@/components/org/OrgTable';
 import Alert from '@/components/Alert';
 import styles from './OrgPage.module.css';
 
-function parseFiltersFromURL(searchParams: URLSearchParams): OrgFiltersValue | null {
+function parseFiltersFromURL(searchParams: URLSearchParams): OrgFiltersValue {
   const dateRange = parseDateRangeFromURL(searchParams);
-  if (!dateRange) return null;
-  return { dateRange };
+  return { dateRange: dateRange ?? getDefaultDateRange() };
 }
 
 function serializeFiltersToURL(filters: OrgFiltersValue): URLSearchParams {
@@ -25,14 +24,9 @@ function OrgPage() {
   useDocumentTitle('Organization');
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const initialFilters = useMemo(() => {
-    return parseFiltersFromURL(searchParams) ?? {
-      dateRange: getDefaultDateRange(),
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const [filters, setFilters] = useState<OrgFiltersValue>(initialFilters);
+  const [filters, setFilters] = useState<OrgFiltersValue>(() =>
+    parseFiltersFromURL(searchParams),
+  );
 
   const { data, loading, error, refetch } = useOrgAnalytics({
     startDate: filters.dateRange.startDate,
@@ -84,7 +78,14 @@ function OrgPage() {
             </div>
           )}
 
-          {hasData && <OrgTable users={data.users} />}
+          {hasData && (
+            <>
+              <div className={styles.caption}>
+                Averages are per-session. Costs are estimates based on token usage.
+              </div>
+              <OrgTable users={data.users} />
+            </>
+          )}
         </div>
       </div>
     </div>
