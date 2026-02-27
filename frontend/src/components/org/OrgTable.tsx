@@ -21,16 +21,19 @@ interface Column {
   key: SortField;
   label: string;
   align: 'left' | 'right';
+  tooltip?: string;
 }
+
+const COST_TOOLTIP = 'Estimated based on token usage and model pricing';
 
 const COLUMNS: Column[] = [
   { key: 'name', label: 'User', align: 'left' },
   { key: 'session_count', label: 'Sessions', align: 'right' },
-  { key: 'total_cost', label: 'Total Cost', align: 'right' },
+  { key: 'total_cost', label: 'Est. Cost', align: 'right', tooltip: COST_TOOLTIP },
   { key: 'total_duration', label: 'Total Duration', align: 'right' },
   { key: 'claude_time', label: 'Claude Time', align: 'right' },
   { key: 'user_time', label: 'User Time', align: 'right' },
-  { key: 'avg_cost', label: 'Avg Cost', align: 'right' },
+  { key: 'avg_cost', label: 'Avg Est. Cost', align: 'right', tooltip: COST_TOOLTIP },
   { key: 'avg_duration', label: 'Avg Duration', align: 'right' },
   { key: 'avg_claude', label: 'Avg Claude', align: 'right' },
   { key: 'avg_user', label: 'Avg User', align: 'right' },
@@ -142,6 +145,7 @@ function OrgTable({ users }: OrgTableProps) {
                 key={col.key}
                 className={`${col.align === 'right' ? styles.alignRight : styles.alignLeft} ${styles.sortableHeader}`}
                 onClick={() => handleSort(col.key)}
+                title={col.tooltip}
               >
                 <span className={styles.headerContent}>
                   {col.label}
@@ -154,7 +158,7 @@ function OrgTable({ users }: OrgTableProps) {
         <tbody>
           {/* Summary row */}
           <tr className={styles.summaryRow}>
-            <td className={styles.alignLeft}>All Users</td>
+            <td className={styles.alignLeft}>Everyone</td>
             <td className={styles.alignRight}>{summary.sessionCount}</td>
             <td className={styles.alignRight}>{formatCostCompact(summary.totalCost)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.totalDuration)}</td>
