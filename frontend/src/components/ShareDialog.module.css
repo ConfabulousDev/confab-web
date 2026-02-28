@@ -211,3 +211,9 @@
   font-size: 0.875rem;
   color: var(--color-text-secondary);
 }
+
+.noRecipients {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}

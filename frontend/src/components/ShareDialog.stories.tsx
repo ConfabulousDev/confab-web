@@ -13,8 +13,7 @@ import styles from './ShareDialog.module.css';
  * we create a presentational version for Storybook that accepts all state as props.
  */
 
-interface ShareDialogPresentationalProps {
-  // Form state
+interface ShareDialogStoryProps {
   isPublic: boolean;
   onPublicChange: (isPublic: boolean) => void;
   recipients: string[];
@@ -24,22 +23,59 @@ interface ShareDialogPresentationalProps {
   onRemoveEmail: (email: string) => void;
   expiresInDays: number | null;
   onExpiresChange: (days: number | null) => void;
-
-  // Share state
   createdShareURL: string;
   shares: SessionShare[];
-
-  // Loading/error state
   loading: boolean;
   loadingShares: boolean;
   error: string;
-
-  // Actions
   onCreateShare: () => void;
   onRevokeShare: (shareId: number) => void;
   onClose: () => void;
   onCopy: () => void;
   copied: boolean;
+}
+
+function ShareRecipients({ share }: { share: SessionShare }): React.ReactNode {
+  if (share.is_public) return null;
+  if (share.recipients && share.recipients.length > 0) {
+    return <span className={styles.invited}>{share.recipients.join(', ')}</span>;
+  }
+  return <span className={styles.noRecipients}>No recipients</span>;
+}
+
+function SharesList({
+  shares,
+  loadingShares,
+  onRevoke,
+}: {
+  shares: SessionShare[];
+  loadingShares: boolean;
+  onRevoke: (shareId: number) => void;
+}): React.ReactNode {
+  if (loadingShares) {
+    return <p>Loading...</p>;
+  }
+  if (shares.length === 0) {
+    return <p className={styles.empty}>No active shares</p>;
+  }
+  return shares.map((share) => (
+    <div key={share.id} className={styles.shareItem}>
+      <div className={styles.shareInfo}>
+        <span className={`${styles.visibilityBadge} ${share.is_public ? styles.public : styles.private}`}>
+          {share.is_public ? 'public' : 'private'}
+        </span>
+        <ShareRecipients share={share} />
+        {share.expires_at ? (
+          <span className={styles.expires}>Expires: {formatDateString(share.expires_at)}</span>
+        ) : (
+          <span className={styles.neverExpires}>Never expires</span>
+        )}
+      </div>
+      <Button variant="danger" size="sm" onClick={() => onRevoke(share.id)}>
+        Revoke
+      </Button>
+    </div>
+  ));
 }
 
 function ShareDialogPresentational({
@@ -62,189 +98,157 @@ function ShareDialogPresentational({
   onClose,
   onCopy,
   copied,
-}: ShareDialogPresentationalProps) {
+}: ShareDialogStoryProps) {
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2>Share Session</h2>
-          <button className={styles.closeBtn} onClick={onClose}>
-            ×
-          </button>
-        </div>
+    <div className={styles.modal}>
+      <div className={styles.modalHeader}>
+        <h2>Share Session</h2>
+        <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </div>
 
-        <div className={styles.modalBody}>
-          <p className={styles.disclaimer}>
-            Best-effort redaction is applied to sensitive data. A quick review before sharing is recommended.
-          </p>
+      <div className={styles.modalBody}>
+        <p className={styles.disclaimer}>
+          Best-effort redaction is applied to sensitive data. A quick review before sharing is recommended.
+        </p>
 
-          {createdShareURL ? (
-            <div className={styles.successMessage}>
-              <h3>✓ Share Created</h3>
-              <p className={styles.shareUrlLabel}>Session link:</p>
-              <div className={styles.shareUrlBox}>
-                <input
-                  type="text"
-                  readOnly
-                  value={createdShareURL}
-                  className={styles.shareUrlInput}
-                />
-                <Button size="sm" onClick={onCopy}>
-                  {copied ? 'Copied!' : 'Copy'}
-                </Button>
-              </div>
+        {createdShareURL ? (
+          <div className={styles.successMessage}>
+            <h3>✓ Share Created</h3>
+            <p className={styles.shareUrlLabel}>Session link:</p>
+            <div className={styles.shareUrlBox}>
+              <input
+                type="text"
+                readOnly
+                value={createdShareURL}
+                className={styles.shareUrlInput}
+              />
+              <Button size="sm" onClick={onCopy}>
+                {copied ? 'Copied!' : 'Copy'}
+              </Button>
             </div>
-          ) : (
-            <>
-              <div className={styles.formGroup}>
-                <label>
+          </div>
+        ) : (
+          <>
+            <div className={styles.formGroup}>
+              <label>
+                <input
+                  type="radio"
+                  checked={isPublic}
+                  onChange={() => onPublicChange(true)}
+                />
+                <strong>Public</strong> - Anyone with link
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  checked={!isPublic}
+                  onChange={() => onPublicChange(false)}
+                />
+                <strong>Private</strong> - Invite specific people
+              </label>
+            </div>
+
+            {!isPublic && (
+              <FormField
+                label="Invite by email"
+                required
+                error={error}
+              >
+                <div className={styles.emailInputGroup}>
                   <input
-                    type="radio"
-                    checked={isPublic}
-                    onChange={() => onPublicChange(true)}
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => onNewEmailChange(e.target.value)}
+                    placeholder="email@example.com"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        onAddEmail();
+                      }
+                    }}
                   />
-                  <strong>Public</strong> - Anyone with link
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    checked={!isPublic}
-                    onChange={() => onPublicChange(false)}
-                  />
-                  <strong>Private</strong> - Invite specific people
-                </label>
-              </div>
-
-              {!isPublic && (
-                <FormField
-                  label="Invite by email"
-                  required
-                  error={error}
-                >
-                  <div className={styles.emailInputGroup}>
-                    <input
-                      type="email"
-                      value={newEmail}
-                      onChange={(e) => onNewEmailChange(e.target.value)}
-                      placeholder="email@example.com"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          onAddEmail();
-                        }
-                      }}
-                    />
-                    <Button size="sm" onClick={onAddEmail}>
-                      Add
-                    </Button>
-                  </div>
-                  {recipients.length > 0 && (
-                    <div className={styles.emailList}>
-                      {recipients.map((email) => (
-                        <span key={email} className={styles.emailTag}>
-                          {email}
-                          <button className={styles.removeBtn} onClick={() => onRemoveEmail(email)}>
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </FormField>
-              )}
-
-              <div className={styles.formGroup}>
-                <label>Expires:</label>
-                <select
-                  value={expiresInDays ?? 'null'}
-                  onChange={(e) =>
-                    onExpiresChange(e.target.value === 'null' ? null : Number(e.target.value))
-                  }
-                >
-                  <option value={1}>1 day</option>
-                  <option value={7}>7 days</option>
-                  <option value={30}>30 days</option>
-                  <option value="null">Never</option>
-                </select>
-              </div>
-
-              <div className={styles.modalFooter}>
-                <Button
-                  variant="primary"
-                  onClick={onCreateShare}
-                  disabled={loading}
-                >
-                  {loading ? 'Creating...' : 'Create Share'}
-                </Button>
-                <Button variant="secondary" onClick={onClose}>
-                  Cancel
-                </Button>
-              </div>
-            </>
-          )}
-
-          <div className={styles.sharesList}>
-            <h3>Active Shares</h3>
-            {loadingShares ? (
-              <p>Loading...</p>
-            ) : shares.length === 0 ? (
-              <p className={styles.empty}>No active shares</p>
-            ) : (
-              shares.map((share) => (
-                <div key={share.id} className={styles.shareItem}>
-                  <div className={styles.shareInfo}>
-                    <span className={`${styles.visibilityBadge} ${share.is_public ? styles.public : styles.private}`}>
-                      {share.is_public ? 'public' : 'private'}
-                    </span>
-                    {!share.is_public && share.recipients && (
-                      <span className={styles.invited}>{share.recipients.join(', ')}</span>
-                    )}
-                    {share.expires_at ? (
-                      <span className={styles.expires}>Expires: {formatDateString(share.expires_at)}</span>
-                    ) : (
-                      <span className={styles.neverExpires}>Never expires</span>
-                    )}
-                  </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => onRevokeShare(share.id)}
-                  >
-                    Revoke
+                  <Button size="sm" onClick={onAddEmail}>
+                    Add
                   </Button>
                 </div>
-              ))
+                {recipients.length > 0 && (
+                  <div className={styles.emailList}>
+                    {recipients.map((email) => (
+                      <span key={email} className={styles.emailTag}>
+                        {email}
+                        <button className={styles.removeBtn} onClick={() => onRemoveEmail(email)}>
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </FormField>
             )}
-          </div>
+
+            <div className={styles.formGroup}>
+              <label>Expires:</label>
+              <select
+                value={expiresInDays ?? 'null'}
+                onChange={(e) =>
+                  onExpiresChange(e.target.value === 'null' ? null : Number(e.target.value))
+                }
+              >
+                <option value={1}>1 day</option>
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value="null">Never</option>
+              </select>
+            </div>
+
+            <div className={styles.modalFooter}>
+              <Button
+                variant="primary"
+                onClick={onCreateShare}
+                disabled={loading}
+              >
+                {loading ? 'Creating...' : 'Create Share'}
+              </Button>
+              <Button variant="secondary" onClick={onClose}>
+                Cancel
+              </Button>
+            </div>
+          </>
+        )}
+
+        <div className={styles.sharesList}>
+          <h3>Active Shares</h3>
+          <SharesList shares={shares} loadingShares={loadingShares} onRevoke={onRevokeShare} />
         </div>
       </div>
     </div>
   );
 }
 
-// Interactive wrapper that manages state
-function ShareDialogInteractive(props: Partial<ShareDialogPresentationalProps>) {
+function ShareDialogInteractive(props: Partial<ShareDialogStoryProps>): React.ReactNode {
   const [isPublic, setIsPublic] = useState(props.isPublic ?? true);
   const [recipients, setRecipients] = useState<string[]>(props.recipients ?? []);
   const [newEmail, setNewEmail] = useState(props.newEmail ?? '');
   const [expiresInDays, setExpiresInDays] = useState<number | null>(props.expiresInDays ?? 7);
   const [copied, setCopied] = useState(false);
 
-  const handleAddEmail = () => {
+  function handleAddEmail(): void {
     if (newEmail.trim() && !recipients.includes(newEmail.trim())) {
       setRecipients([...recipients, newEmail.trim()]);
       setNewEmail('');
     }
-  };
+  }
 
-  const handleRemoveEmail = (email: string) => {
+  function handleRemoveEmail(email: string): void {
     setRecipients(recipients.filter((e) => e !== email));
-  };
+  }
 
-  const handleCopy = () => {
+  function handleCopy(): void {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
+  }
 
   return (
     <ShareDialogPresentational
@@ -367,5 +371,24 @@ export const SuccessWithShares: Story = {
   args: {
     createdShareURL: 'https://app.example.com/sessions/abc123def456',
     shares: sampleShares,
+  },
+};
+
+// Private share with no recipients (orphaned - all recipients deleted their accounts)
+export const WithOrphanedShare: Story = {
+  args: {
+    shares: [
+      ...sampleShares,
+      {
+        id: 3,
+        session_id: 'session-123',
+        external_id: 'abc123def456',
+        is_public: false,
+        recipients: [],
+        expires_at: null,
+        created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        last_accessed_at: null,
+      },
+    ],
   },
 };
