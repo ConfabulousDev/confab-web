@@ -334,6 +334,32 @@ export const CostModeExpensive: Story = {
 };
 
 /**
+ * Cost mode with cache read only (common for follow-up turns that hit warm cache).
+ */
+export const CostModeCacheReadOnly: Story = {
+  name: 'Cost Mode (Cache Read Only)',
+  args: {
+    message: {
+      ...mockAssistantMessage,
+      uuid: 'cache-read-msg',
+      message: {
+        ...mockAssistantMessage.message,
+        usage: {
+          input_tokens: 12000,
+          output_tokens: 800,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 45000,
+        },
+      },
+    },
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    isCostMode: true,
+    messageCost: 0.08,
+  },
+};
+
+/**
  * Cost mode on a user message (no cost badge shown — users have no token usage).
  */
 export const CostModeUserMessage: Story = {

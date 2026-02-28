@@ -48,7 +48,7 @@ const ZERO_PRICING: ModelPricing = { input: 0, output: 0, cacheWrite: 0, cacheRe
 
 // Server tool pricing (per request, not per token)
 // Source: https://docs.anthropic.com/en/about-claude/pricing
-const WEB_SEARCH_COST_PER_REQUEST = 0.01; // $10 per 1,000 searches
+export const WEB_SEARCH_COST_PER_REQUEST = 0.01; // $10 per 1,000 searches
 
 // Fast mode multiplier applied to all token costs
 const FAST_MODE_MULTIPLIER = 6;

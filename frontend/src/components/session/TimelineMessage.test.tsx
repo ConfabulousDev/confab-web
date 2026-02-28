@@ -223,6 +223,116 @@ describe('TimelineMessage', () => {
     });
   });
 
+  describe('cost mode cache tokens', () => {
+    it('shows cache write and hit when both are non-zero', () => {
+      const message = createAssistantMessage({
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          id: 'msg-1',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 15000,
+            output_tokens: 2500,
+            cache_creation_input_tokens: 5000,
+            cache_read_input_tokens: 80000,
+          },
+        },
+      });
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={true}
+          messageCost={0.42}
+        />
+      );
+
+      expect(screen.getByText(/5.0k write/)).toBeInTheDocument();
+      expect(screen.getByText(/80.0k hit/)).toBeInTheDocument();
+    });
+
+    it('shows only cache write when cache read is zero', () => {
+      const message = createAssistantMessage({
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          id: 'msg-1',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 15000,
+            output_tokens: 2500,
+            cache_creation_input_tokens: 5000,
+            cache_read_input_tokens: 0,
+          },
+        },
+      });
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={true}
+          messageCost={0.20}
+        />
+      );
+
+      expect(screen.getByText(/5.0k write/)).toBeInTheDocument();
+      expect(screen.queryByText(/hit/)).not.toBeInTheDocument();
+    });
+
+    it('shows only cache hit when cache write is zero', () => {
+      const message = createAssistantMessage({
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          id: 'msg-1',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 12000,
+            output_tokens: 800,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 45000,
+          },
+        },
+      });
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={true}
+          messageCost={0.08}
+        />
+      );
+
+      expect(screen.queryByText(/write/)).not.toBeInTheDocument();
+      expect(screen.getByText(/45.0k hit/)).toBeInTheDocument();
+    });
+
+    it('shows no cache section when both are zero', () => {
+      const message = createAssistantMessage();
+      render(
+        <TimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={true}
+          messageCost={0.01}
+        />
+      );
+
+      expect(screen.queryByText(/write/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/hit/)).not.toBeInTheDocument();
+    });
+  });
+
   describe('copy message button (existing)', () => {
     it('still renders copy message button alongside link button', () => {
       const message = createUserMessage();

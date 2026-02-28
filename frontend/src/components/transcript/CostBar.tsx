@@ -80,7 +80,7 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
               className={styles.segment}
               style={{
                 height: `${heightPercents[index]}%`,
-                background: alpha > 0 ? `rgba(239, 68, 68, ${alpha})` : 'transparent',
+                background: alpha > 0 ? `rgba(22, 163, 74, ${alpha})` : 'transparent',
               }}
               onClick={() => handleSegmentClick(segment)}
               onMouseEnter={(e) => handleSegmentHover(segment, cost, e)}

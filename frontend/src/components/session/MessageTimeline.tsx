@@ -12,6 +12,10 @@ import { TimelineBar } from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
 import styles from './MessageTimeline.module.css';
 
+// Right offset for ScrollNavButtons when CostBar is visible.
+// CostBar (22px) + gap (8px from --spacing-sm) + default right (24px from --spacing-xl) + 2px breathing room
+const SCROLL_NAV_COST_MODE_RIGHT = 56;
+
 interface MessageTimelineProps {
   messages: TranscriptLine[];
   allMessages: TranscriptLine[]; // Used for building tool name map
@@ -445,6 +449,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
           onScrollToBottom={scrollToBottom}
           contentDependency={messages.length}
           onSearchClick={search.open}
+          rightOffset={isCostMode ? SCROLL_NAV_COST_MODE_RIGHT : undefined}
         />
 
         <div

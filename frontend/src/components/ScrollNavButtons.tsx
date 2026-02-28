@@ -15,6 +15,8 @@ interface ScrollNavButtonsProps {
   contentDependency?: number;
   /** Handler for search button click — renders a search icon when provided */
   onSearchClick?: () => void;
+  /** Override the right offset (px) to avoid overlapping adjacent UI elements */
+  rightOffset?: number;
 }
 
 /**
@@ -29,6 +31,7 @@ function ScrollNavButtons({
   onAtBottomChange,
   contentDependency,
   onSearchClick,
+  rightOffset,
 }: ScrollNavButtonsProps) {
   const [showTopButton, setShowTopButton] = useState(false);
   const [showBottomButton, setShowBottomButton] = useState(false);
@@ -89,7 +92,7 @@ function ScrollNavButtons({
   }
 
   return (
-    <div className={styles.navButtons}>
+    <div className={styles.navButtons} style={rightOffset != null ? { right: rightOffset } : undefined}>
       {onSearchClick && (
         <button
           className={styles.navButton}
