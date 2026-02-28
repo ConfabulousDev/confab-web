@@ -30,16 +30,22 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
     });
   }, [segments, messageCosts]);
 
-  // Compute alpha values: linear scale from 0.15 (cheapest non-zero) to 0.9 (most expensive)
+  // Compute alpha values based on cost density (cost per message)
+  // Intensity reflects how expensive each API call is, not total segment cost
   const segmentAlphas = useMemo(() => {
-    const maxCost = Math.max(...segmentCosts, 0);
-    if (maxCost === 0) return segmentCosts.map(() => 0);
-
-    return segmentCosts.map((cost) => {
-      if (cost === 0) return 0;
-      return 0.15 + (cost / maxCost) * 0.75;
+    const densities = segments.map((seg, i) => {
+      const cost = segmentCosts[i] ?? 0;
+      if (cost === 0 || seg.messageCount === 0) return 0;
+      return cost / seg.messageCount;
     });
-  }, [segmentCosts]);
+    const maxDensity = Math.max(...densities, 0);
+    if (maxDensity === 0) return densities.map(() => 0);
+
+    return densities.map((density) => {
+      if (density === 0) return 0;
+      return 0.15 + (density / maxDensity) * 0.75;
+    });
+  }, [segments, segmentCosts]);
 
   const handleSegmentClick = useCallback(
     (segment: TimelineSegment) => {
@@ -68,7 +74,7 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
   }
 
   return (
-    <div className={styles.costBar} ref={barRef}>
+    <div className={styles.costBar} ref={barRef} title="Color intensity = cost per message">
       <div className={styles.segmentsContainer}>
         {segments.map((segment, index) => {
           const alpha = segmentAlphas[index] ?? 0;
@@ -94,18 +100,25 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
       <div className={styles.positionIndicator} style={{ top: `${indicatorPosition}%` }} />
 
       {hoveredSegment && (() => {
-        const { cost } = hoveredSegment;
+        const { segment, cost } = hoveredSegment;
         const percent = totalCost > 0 ? ((cost / totalCost) * 100).toFixed(1) : '0';
-        const tooltipText = cost > 0
-          ? `${formatCost(cost)} (${percent}% of session)`
-          : 'No cost';
+        const costPerMsg = segment.messageCount > 0 ? cost / segment.messageCount : 0;
 
         return (
           <div
             className={styles.tooltip}
             style={{ top: tooltipPosition.top, left: tooltipPosition.left }}
           >
-            {tooltipText}
+            {cost > 0 ? (
+              <>
+                <div className={styles.tooltipTotal}>{formatCost(cost)} ({percent}%)</div>
+                <div className={styles.tooltipDensity}>
+                  {formatCost(costPerMsg)}/msg &times; {segment.messageCount}
+                </div>
+              </>
+            ) : (
+              'No cost'
+            )}
           </div>
         );
       })()}
