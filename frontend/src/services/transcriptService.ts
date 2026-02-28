@@ -9,6 +9,50 @@ import {
 } from '@/schemas/transcript';
 import { syncFilesAPI } from './api';
 
+// Maximum errors per report (must match backend maxClientErrors)
+const MAX_ERRORS_PER_REPORT = 50;
+
+// Track which sessions have already had errors reported (dedup across re-parses)
+const reportedSessions = new Set<string>();
+
+/**
+ * Report transcript validation errors to the backend for observability.
+ * Uses raw fetch (bypasses APIClient) so 401s don't redirect the user.
+ * Fire-and-forget: errors are silently ignored.
+ */
+export function reportTranscriptErrors(sessionId: string, errors: TranscriptValidationError[]): void {
+  const payload = {
+    category: 'transcript_validation',
+    session_id: sessionId,
+    errors: errors.slice(0, MAX_ERRORS_PER_REPORT).map((e) => ({
+      line: e.line,
+      message_type: e.messageType,
+      details: e.errors.map((d) => ({
+        path: d.path,
+        message: d.message,
+        expected: d.expected,
+        received: d.received,
+      })),
+      raw_json_preview: e.rawJson.slice(0, 500),
+    })),
+    context: {
+      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+    },
+  };
+
+  fetch('/api/v1/client-errors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  }).catch(() => {}); // Fire-and-forget
+}
+
+/** Reset the dedup set (exposed for testing) */
+export function _resetReportedSessions(): void {
+  reportedSessions.clear();
+}
 
 /**
  * Parsed transcript with metadata
@@ -185,6 +229,12 @@ export async function fetchParsedTranscript(
   skipCache?: boolean
 ): Promise<ParsedTranscript> {
   const { messages, errors, totalLines } = await fetchTranscriptWithErrors(sessionId, fileName, { skipCache });
+
+  // Report validation errors to backend for observability (fire-and-forget, deduped by session)
+  if (errors.length > 0 && !reportedSessions.has(sessionId)) {
+    reportedSessions.add(sessionId);
+    reportTranscriptErrors(sessionId, errors);
+  }
 
   // Extract metadata - filter to messages with timestamp property
   const timestamps = messages

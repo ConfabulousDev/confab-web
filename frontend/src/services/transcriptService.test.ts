@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseJSONL, fetchNewTranscriptMessages } from './transcriptService';
+import { parseJSONL, fetchNewTranscriptMessages, fetchParsedTranscript, reportTranscriptErrors, _resetReportedSessions } from './transcriptService';
+import type { TranscriptValidationError } from '@/schemas/transcript';
 import * as api from './api';
 
 // Mock the api module
@@ -269,5 +270,128 @@ ${createSystemMessage(3)}`;
 
     // Verify the API was called with correct offset
     expect(api.syncFilesAPI.getContent).toHaveBeenLastCalledWith('session-123', 'transcript.jsonl', 10);
+  });
+});
+
+describe('reportTranscriptErrors', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    _resetReportedSessions();
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"status":"ok"}'));
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  /** Extract the parsed JSON body from a fetch spy call */
+  const parseFetchBody = (spy: ReturnType<typeof vi.spyOn>, callIndex = 0) =>
+    JSON.parse(String(spy.mock.calls[callIndex]![1]?.body ?? ''));
+
+  const makeError = (line: number, messageType?: string): TranscriptValidationError => ({
+    line,
+    rawJson: `{"type":"${messageType ?? 'unknown'}","bad":"data"}`,
+    messageType,
+    errors: [
+      { path: 'content.0.type', message: 'Invalid type', expected: 'text', received: 'new_type' },
+    ],
+  });
+
+  it('sends errors to the backend with correct payload structure', () => {
+    const errors = [makeError(42, 'assistant')];
+    reportTranscriptErrors('session-abc', errors);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, options] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('/api/v1/client-errors');
+    expect(options?.method).toBe('POST');
+    expect(options?.credentials).toBe('include');
+
+    const body = parseFetchBody(fetchSpy);
+    expect(body.category).toBe('transcript_validation');
+    expect(body.session_id).toBe('session-abc');
+    expect(body.errors).toHaveLength(1);
+    expect(body.errors[0].line).toBe(42);
+    expect(body.errors[0].message_type).toBe('assistant');
+    expect(body.errors[0].details).toHaveLength(1);
+    expect(body.errors[0].details[0].path).toBe('content.0.type');
+    expect(body.errors[0].details[0].expected).toBe('text');
+    expect(body.errors[0].details[0].received).toBe('new_type');
+  });
+
+  it('truncates raw_json_preview to 500 chars', () => {
+    const longJson = 'x'.repeat(1000);
+    const errors: TranscriptValidationError[] = [{
+      line: 1,
+      rawJson: longJson,
+      errors: [{ path: 'root', message: 'bad' }],
+    }];
+
+    reportTranscriptErrors('session-long', errors);
+
+    const body = parseFetchBody(fetchSpy);
+    expect(body.errors[0].raw_json_preview).toHaveLength(500);
+  });
+
+  it('limits to 50 errors per report', () => {
+    const errors = Array.from({ length: 100 }, (_, i) => makeError(i + 1));
+    reportTranscriptErrors('session-many', errors);
+
+    const body = parseFetchBody(fetchSpy);
+    expect(body.errors).toHaveLength(50);
+  });
+
+  it('silently ignores fetch failures', () => {
+    fetchSpy.mockRejectedValue(new Error('Network error'));
+
+    // Should not throw
+    expect(() => reportTranscriptErrors('session-fail', [makeError(1)])).not.toThrow();
+  });
+});
+
+describe('error reporting dedup in fetchParsedTranscript', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    _resetReportedSessions();
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"status":"ok"}'));
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it('reports errors on first parse but not on subsequent parses of same session', async () => {
+    // Content with a line that will fail validation (not valid JSON, not a valid message)
+    const contentWithError = `${createSystemMessage(1)}
+not-valid-json
+${createSystemMessage(2)}`;
+
+    vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(contentWithError);
+
+    // First call: should report errors
+    await fetchParsedTranscript('session-dedup', 'transcript.jsonl', true);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+
+    // Second call (same session, skipCache): should NOT report again
+    await fetchParsedTranscript('session-dedup', 'transcript.jsonl', true);
+    expect(fetchSpy).toHaveBeenCalledOnce(); // still 1
+
+    // Different session: should report
+    await fetchParsedTranscript('session-dedup-2', 'transcript.jsonl', true);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not report when there are no errors', async () => {
+    const validContent = `${createSystemMessage(1)}
+${createSystemMessage(2)}`;
+
+    vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(validContent);
+
+    await fetchParsedTranscript('session-no-errors', 'transcript.jsonl', true);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
