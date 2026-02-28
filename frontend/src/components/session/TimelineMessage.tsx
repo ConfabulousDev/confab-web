@@ -3,7 +3,7 @@ import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
-import { formatCost, formatTokenCount } from '@/utils/tokenStats';
+import { formatCost, formatTokenCount, WEB_SEARCH_COST_PER_REQUEST } from '@/utils/tokenStats';
 import { getRoleLabel } from './messageCategories';
 import styles from './TimelineMessage.module.css';
 
@@ -106,6 +106,49 @@ function buildTokenTooltip(usage: TokenUsage): string {
   if (stu) {
     if (stu.web_search_requests) {
       lines.push(`Web searches: ${stu.web_search_requests}`);
+    }
+    if (stu.web_fetch_requests) {
+      lines.push(`Web fetches: ${stu.web_fetch_requests}`);
+    }
+    if (stu.code_execution_requests) {
+      lines.push(`Code executions: ${stu.code_execution_requests}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Build verbose cost tooltip that maps inline abbreviations to full labels
+ */
+function buildCostTooltip(usage: TokenUsage, cost: number): string {
+  const lines: string[] = [];
+
+  lines.push(formatCost(cost));
+  lines.push('');
+  lines.push(`Input tokens (in): ${usage.input_tokens.toLocaleString()}`);
+  lines.push(`Output tokens (out): ${usage.output_tokens.toLocaleString()}`);
+
+  if (usage.cache_creation_input_tokens) {
+    lines.push(`Cache write tokens (write): ${usage.cache_creation_input_tokens.toLocaleString()}`);
+  }
+  if (usage.cache_read_input_tokens) {
+    lines.push(`Cache read tokens (hit): ${usage.cache_read_input_tokens.toLocaleString()}`);
+  }
+
+  if (usage.speed) {
+    lines.push('');
+    lines.push(`Speed: ${usage.speed}${usage.speed === 'fast' ? ' (6x pricing)' : ''}`);
+  }
+  if (usage.service_tier) {
+    lines.push(`Tier: ${usage.service_tier}`);
+  }
+
+  const stu = usage.server_tool_use;
+  if (stu && (stu.web_search_requests || stu.web_fetch_requests || stu.code_execution_requests)) {
+    lines.push('');
+    if (stu.web_search_requests) {
+      lines.push(`Web searches: ${stu.web_search_requests} ($${(stu.web_search_requests * WEB_SEARCH_COST_PER_REQUEST).toFixed(2)})`);
     }
     if (stu.web_fetch_requests) {
       lines.push(`Web fetches: ${stu.web_fetch_requests}`);
@@ -285,12 +328,19 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
           {tokenUsage && isCostMode && messageCost != null && (
             <span
               className={styles.costBadge}
-              title={`${formatCost(messageCost)}\n${buildTokenTooltip(tokenUsage)}`}
+              title={buildCostTooltip(tokenUsage, messageCost)}
             >
               {formatCost(messageCost)}
               <span className={styles.costBadgeTokens}>
                 {formatTokenCount(tokenUsage.input_tokens)} in · {formatTokenCount(tokenUsage.output_tokens)} out
               </span>
+              {(tokenUsage.cache_creation_input_tokens || tokenUsage.cache_read_input_tokens) ? (
+                <span className={styles.costBadgeCache}>
+                  {tokenUsage.cache_creation_input_tokens ? `${formatTokenCount(tokenUsage.cache_creation_input_tokens)} write` : null}
+                  {tokenUsage.cache_creation_input_tokens && tokenUsage.cache_read_input_tokens ? ' · ' : null}
+                  {tokenUsage.cache_read_input_tokens ? `${formatTokenCount(tokenUsage.cache_read_input_tokens)} hit` : null}
+                </span>
+              ) : null}
             </span>
           )}
           {tokenUsage && !(isCostMode && messageCost != null) && (

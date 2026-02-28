@@ -182,9 +182,9 @@
   align-items: center;
   gap: 6px;
   font-size: var(--font-xs);
-  color: #dc2626;
+  color: var(--color-cost);
   padding: 1px var(--spacing-xs);
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--color-cost-bg);
   border-radius: var(--radius-sm);
   font-family: 'SF Mono', Monaco, monospace;
 }
@@ -194,10 +194,12 @@
   font-size: var(--font-xs);
 }
 
-:global([data-theme="dark"]) .costBadge {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.15);
+.costBadgeCache {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-xs);
 }
+
+/* dark mode handled by --color-cost / --color-cost-bg variables */
 
 /* Fast mode badge */
 .fastBadge {
