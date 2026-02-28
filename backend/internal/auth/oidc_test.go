@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -62,7 +63,7 @@ func TestDiscoverOIDC(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for missing authorization_endpoint")
 		}
-		if !containsSubstring(err.Error(), "missing authorization_endpoint") {
+		if !strings.Contains(err.Error(), "missing authorization_endpoint") {
 			t.Errorf("error = %q, want mention of missing authorization_endpoint", err.Error())
 		}
 	})
@@ -84,7 +85,7 @@ func TestDiscoverOIDC(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for missing token_endpoint")
 		}
-		if !containsSubstring(err.Error(), "missing token_endpoint") {
+		if !strings.Contains(err.Error(), "missing token_endpoint") {
 			t.Errorf("error = %q, want mention of missing token_endpoint", err.Error())
 		}
 	})
@@ -106,7 +107,7 @@ func TestDiscoverOIDC(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for missing userinfo_endpoint")
 		}
-		if !containsSubstring(err.Error(), "missing userinfo_endpoint") {
+		if !strings.Contains(err.Error(), "missing userinfo_endpoint") {
 			t.Errorf("error = %q, want mention of missing userinfo_endpoint", err.Error())
 		}
 	})
@@ -127,7 +128,7 @@ func TestDiscoverOIDC(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for issuer mismatch")
 		}
-		if !containsSubstring(err.Error(), "issuer mismatch") {
+		if !strings.Contains(err.Error(), "issuer mismatch") {
 			t.Errorf("error = %q, want mention of issuer mismatch", err.Error())
 		}
 	})
@@ -149,7 +150,7 @@ func TestDiscoverOIDC(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for non-200 status")
 		}
-		if !containsSubstring(err.Error(), "status 404") {
+		if !strings.Contains(err.Error(), "status 404") {
 			t.Errorf("error = %q, want mention of status 404", err.Error())
 		}
 	})
@@ -284,17 +285,17 @@ func TestHandleOIDCLogin_StateGeneration(t *testing.T) {
 		t.Fatal("Location header not set")
 	}
 
-	if !containsSubstring(location, server.URL+"/authorize") {
+	if !strings.Contains(location, server.URL+"/authorize") {
 		t.Errorf("redirect location doesn't contain discovered auth endpoint: %s", location)
 	}
 
 	// State in URL should match cookie
-	if !containsSubstring(location, "state="+stateCookie.Value) {
+	if !strings.Contains(location, "state="+stateCookie.Value) {
 		t.Error("redirect URL state doesn't match cookie state")
 	}
 
 	// Should include openid email profile scope
-	if !containsSubstring(location, "scope=openid") {
+	if !strings.Contains(location, "scope=openid") {
 		t.Errorf("redirect URL missing openid scope: %s", location)
 	}
 }
@@ -331,7 +332,7 @@ func TestHandleOIDCLogin_EmailHint(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		location := rec.Header().Get("Location")
-		if !containsSubstring(location, "login_hint=user%40example.com") {
+		if !strings.Contains(location, "login_hint=user%40example.com") {
 			t.Errorf("redirect URL missing login_hint: %s", location)
 		}
 
@@ -361,7 +362,7 @@ func TestHandleOIDCLogin_EmailHint(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		location := rec.Header().Get("Location")
-		if containsSubstring(location, "login_hint=") {
+		if strings.Contains(location, "login_hint=") {
 			t.Errorf("redirect URL should not have login_hint for invalid email: %s", location)
 		}
 	})
@@ -392,10 +393,10 @@ func TestHandleOIDCLogin_DiscoveryFailure(t *testing.T) {
 	}
 
 	location := rec.Header().Get("Location")
-	if !containsSubstring(location, "error=oidc_error") {
+	if !strings.Contains(location, "error=oidc_error") {
 		t.Errorf("redirect URL should contain error=oidc_error: %s", location)
 	}
-	if !containsSubstring(location, "localhost:3000") {
+	if !strings.Contains(location, "localhost:3000") {
 		t.Errorf("redirect URL should go to frontend: %s", location)
 	}
 }

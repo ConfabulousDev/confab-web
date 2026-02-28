@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -235,7 +236,7 @@ func TestHandleGitHubLogin_StateGeneration(t *testing.T) {
 	}
 
 	// State in URL should match cookie
-	if !containsSubstring(location, "state="+stateCookie.Value) {
+	if !strings.Contains(location, "state="+stateCookie.Value) {
 		t.Error("redirect URL state doesn't match cookie state")
 	}
 }
@@ -310,7 +311,7 @@ func TestHandleGoogleLogin_StateGeneration(t *testing.T) {
 
 	// Redirect should go to Google
 	location := rec.Header().Get("Location")
-	if !containsSubstring(location, "accounts.google.com") {
+	if !strings.Contains(location, "accounts.google.com") {
 		t.Errorf("redirect location doesn't contain Google: %s", location)
 	}
 }
@@ -479,7 +480,7 @@ func TestHandleGitHubLogin_EmailHint(t *testing.T) {
 
 		// Should add login hint to redirect URL
 		location := rec.Header().Get("Location")
-		if !containsSubstring(location, "login=alice%40example.com") {
+		if !strings.Contains(location, "login=alice%40example.com") {
 			t.Errorf("redirect URL missing login hint: %s", location)
 		}
 	})
@@ -502,7 +503,7 @@ func TestHandleGitHubLogin_EmailHint(t *testing.T) {
 
 		// Should NOT add login hint to redirect URL
 		location := rec.Header().Get("Location")
-		if containsSubstring(location, "login=") {
+		if strings.Contains(location, "login=") {
 			t.Errorf("redirect URL should not have login hint for invalid email: %s", location)
 		}
 	})
@@ -542,7 +543,7 @@ func TestHandleGoogleLogin_EmailHint(t *testing.T) {
 
 		// Should add login_hint to redirect URL
 		location := rec.Header().Get("Location")
-		if !containsSubstring(location, "login_hint=bob%40example.com") {
+		if !strings.Contains(location, "login_hint=bob%40example.com") {
 			t.Errorf("redirect URL missing login_hint: %s", location)
 		}
 	})
@@ -556,10 +557,40 @@ func TestHandleGoogleLogin_EmailHint(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		location := rec.Header().Get("Location")
-		if containsSubstring(location, "login_hint=") {
+		if strings.Contains(location, "login_hint=") {
 			t.Errorf("redirect URL should not have login_hint for invalid email: %s", location)
 		}
 	})
+}
+
+// TestHandleLogout_ClearsCookie tests that logout always clears the session cookie
+func TestHandleLogout_ClearsCookie(t *testing.T) {
+	t.Setenv("FRONTEND_URL", "http://localhost:3000")
+
+	handler := HandleLogout(nil)
+
+	req := httptest.NewRequest("GET", "/auth/logout", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	// Verify the session cookie is cleared in the response
+	cookies := rec.Result().Cookies()
+	var found bool
+	for _, c := range cookies {
+		if c.Name == SessionCookieName {
+			found = true
+			if c.MaxAge != -1 {
+				t.Errorf("expected MaxAge=-1 to clear cookie, got %d", c.MaxAge)
+			}
+			if c.Value != "" {
+				t.Errorf("expected empty cookie value, got %q", c.Value)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected Set-Cookie header to clear session cookie, but none found")
+	}
 }
 
 // TestHandleLogout_RedirectSupport tests logout redirect functionality
@@ -628,22 +659,10 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		location := rec.Header().Get("Location")
-		if containsSubstring(location, "evil.com") {
+		if strings.Contains(location, "evil.com") {
 			t.Errorf("location contains evil.com - open redirect vulnerability: %s", location)
 		}
 	})
-}
-
-
-// Helper functions
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func containsRune(s string, r rune) bool {
