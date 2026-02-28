@@ -39,7 +39,7 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	cards := &Cards{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	errs := make(chan error, 7)
+	errs := make(chan error, 8)
 
 	// Helper to run a getter in parallel
 	runGet := func(name string, fn func() error) {
@@ -129,6 +129,17 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 		return nil
 	})
 
+	runGet("fast_mode", func() error {
+		result, err := s.getFastModeCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.FastMode = result
+		mu.Unlock()
+		return nil
+	})
+
 	wg.Wait()
 	close(errs)
 
@@ -163,7 +174,7 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	defer span.End()
 
 	var wg sync.WaitGroup
-	errs := make(chan error, 7)
+	errs := make(chan error, 8)
 
 	// Helper to run an upsert in parallel
 	runUpsert := func(name string, fn func() error) {
@@ -215,6 +226,12 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	if cards.Redactions != nil {
 		runUpsert("redactions", func() error {
 			return s.upsertRedactionsCard(ctx, cards.Redactions)
+		})
+	}
+
+	if cards.FastMode != nil {
+		runUpsert("fast_mode", func() error {
+			return s.upsertFastModeCard(ctx, cards.FastMode)
 		})
 	}
 
@@ -782,6 +799,78 @@ func (s *Store) upsertRedactionsCard(ctx context.Context, record *RedactionsCard
 }
 
 // =============================================================================
+// Fast Mode card operations
+// =============================================================================
+
+func (s *Store) getFastModeCard(ctx context.Context, sessionID string) (*FastModeCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line,
+			fast_turns, standard_turns, fast_cost_usd, standard_cost_usd
+		FROM session_card_fast_mode
+		WHERE session_id = $1
+	`
+
+	var record FastModeCardRecord
+	var fastCostStr, standardCostStr string
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&record.FastTurns,
+		&record.StandardTurns,
+		&fastCostStr,
+		&standardCostStr,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	record.FastCostUSD, err = decimal.NewFromString(fastCostStr)
+	if err != nil {
+		return nil, fmt.Errorf("parsing fast_cost_usd: %w", err)
+	}
+	record.StandardCostUSD, err = decimal.NewFromString(standardCostStr)
+	if err != nil {
+		return nil, fmt.Errorf("parsing standard_cost_usd: %w", err)
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertFastModeCard(ctx context.Context, record *FastModeCardRecord) error {
+	query := `
+		INSERT INTO session_card_fast_mode (
+			session_id, version, computed_at, up_to_line,
+			fast_turns, standard_turns, fast_cost_usd, standard_cost_usd
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			fast_turns = EXCLUDED.fast_turns,
+			standard_turns = EXCLUDED.standard_turns,
+			fast_cost_usd = EXCLUDED.fast_cost_usd,
+			standard_cost_usd = EXCLUDED.standard_cost_usd
+	`
+
+	_, err := s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		record.FastTurns,
+		record.StandardTurns,
+		record.FastCostUSD.String(),
+		record.StandardCostUSD.String(),
+	)
+	return err
+}
+
+// =============================================================================
 // Conversion helpers
 // =============================================================================
 
@@ -899,6 +988,19 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			UpToLine:        lineCount,
 			TotalRedactions: r.TotalRedactions,
 			RedactionCounts: r.RedactionCounts,
+		}
+	}
+
+	if _, hasErr := r.CardErrors["fast_mode"]; !hasErr {
+		cards.FastMode = &FastModeCardRecord{
+			SessionID:       sessionID,
+			Version:         FastModeCardVersion,
+			ComputedAt:      now,
+			UpToLine:        lineCount,
+			FastTurns:       r.FastTurns,
+			StandardTurns:   r.StandardTurns,
+			FastCostUSD:     r.FastCostUSD,
+			StandardCostUSD: r.StandardCostUSD,
 		}
 	}
 
@@ -1037,6 +1139,16 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		response.Cards["redactions"] = RedactionsCardData{
 			TotalRedactions: c.Redactions.TotalRedactions,
 			RedactionCounts: c.Redactions.RedactionCounts,
+		}
+	}
+
+	// Only include fast mode card if there are fast mode turns (hide if empty)
+	if c.FastMode != nil && c.FastMode.FastTurns > 0 {
+		response.Cards["fast_mode"] = FastModeCardData{
+			FastTurns:       c.FastMode.FastTurns,
+			StandardTurns:   c.FastMode.StandardTurns,
+			FastCostUSD:     c.FastMode.FastCostUSD.String(),
+			StandardCostUSD: c.FastMode.StandardCostUSD.String(),
 		}
 	}
 

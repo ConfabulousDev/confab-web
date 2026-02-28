@@ -91,6 +91,12 @@ type ComputeResult struct {
 	TotalRedactions int
 	RedactionCounts map[string]int
 
+	// Fast mode stats (from FastModeAnalyzer)
+	FastTurns       int
+	StandardTurns   int
+	FastCostUSD     decimal.Decimal
+	StandardCostUSD decimal.Decimal
+
 	// Validation stats (from parsing)
 	ValidationErrorCount int
 
@@ -185,6 +191,13 @@ func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*Comput
 		cardErrors["redactions"] = err.Error()
 	}
 
+	fastMode, err := runAnalyzer(ctx, "fast_mode", func() (*FastModeResult, error) {
+		return (&FastModeAnalyzer{}).Analyze(fc)
+	})
+	if err != nil {
+		cardErrors["fast_mode"] = err.Error()
+	}
+
 	// Build result with nil-safe field access
 	result := &ComputeResult{
 		// Validation stats (always available from file collection)
@@ -263,6 +276,14 @@ func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*Comput
 	if redactions != nil {
 		result.TotalRedactions = redactions.TotalRedactions
 		result.RedactionCounts = redactions.RedactionCounts
+	}
+
+	// Fast mode stats
+	if fastMode != nil {
+		result.FastTurns = fastMode.FastTurns
+		result.StandardTurns = fastMode.StandardTurns
+		result.FastCostUSD = fastMode.FastCostUSD
+		result.StandardCostUSD = fastMode.StandardCostUSD
 	}
 
 	// Record any errors at span level for observability

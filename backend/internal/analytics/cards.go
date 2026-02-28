@@ -17,6 +17,7 @@ const (
 	RedactionsCardVersion      = 2 // v2: filter out "TYPE" placeholder
 	SmartRecapCardVersion      = 1 // v1: initial AI-powered session recap
 	SearchIndexVersion         = 1 // v1: initial full-text search index
+	FastModeCardVersion        = 1 // v1: fast mode usage and cost premium
 )
 
 // =============================================================================
@@ -141,6 +142,18 @@ type RedactionsCardRecord struct {
 	RedactionCounts  map[string]int `json:"redaction_counts"` // Type -> count (e.g., "GITHUB_TOKEN" -> 5)
 }
 
+// FastModeCardRecord is the DB record for the fast mode usage card.
+type FastModeCardRecord struct {
+	SessionID     string          `json:"session_id"`
+	Version       int             `json:"version"`
+	ComputedAt    time.Time       `json:"computed_at"`
+	UpToLine      int64           `json:"up_to_line"`
+	FastTurns     int             `json:"fast_turns"`
+	StandardTurns int             `json:"standard_turns"`
+	FastCostUSD   decimal.Decimal `json:"fast_cost_usd"`
+	StandardCostUSD decimal.Decimal `json:"standard_cost_usd"`
+}
+
 // SmartRecapCardRecord is the DB record for the AI-generated smart recap card.
 // Unlike other cards, this uses time-based invalidation due to LLM cost.
 type SmartRecapCardRecord struct {
@@ -188,6 +201,7 @@ type Cards struct {
 	Conversation    *ConversationCardRecord
 	AgentsAndSkills *AgentsAndSkillsCardRecord
 	Redactions      *RedactionsCardRecord
+	FastMode        *FastModeCardRecord
 
 	// Per-card computation errors (graceful degradation)
 	CardErrors map[string]string
@@ -273,6 +287,14 @@ type RedactionsCardData struct {
 	RedactionCounts map[string]int `json:"redaction_counts"` // Type -> count
 }
 
+// FastModeCardData is the API response format for the fast mode usage card.
+type FastModeCardData struct {
+	FastTurns     int    `json:"fast_turns"`
+	StandardTurns int    `json:"standard_turns"`
+	FastCostUSD   string `json:"fast_cost_usd"`  // Decimal as string for precision
+	StandardCostUSD string `json:"standard_cost_usd"` // Decimal as string for precision
+}
+
 // SmartRecapCardData is the API response format for the AI-generated smart recap card.
 type SmartRecapCardData struct {
 	Recap                     string   `json:"recap"`
@@ -331,6 +353,11 @@ func (c *RedactionsCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == RedactionsCardVersion && c.UpToLine == currentLineCount
 }
 
+// IsValid checks if a fast mode card record is valid for the current line count.
+func (c *FastModeCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == FastModeCardVersion && c.UpToLine == currentLineCount
+}
+
 // HasValidVersion checks if a smart recap card record exists with the correct version.
 // Used by API handlers to determine if a cached card can be returned.
 func (c *SmartRecapCardRecord) HasValidVersion() bool {
@@ -364,5 +391,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		c.CodeActivity.IsValid(currentLineCount) &&
 		c.Conversation.IsValid(currentLineCount) &&
 		c.AgentsAndSkills.IsValid(currentLineCount) &&
-		c.Redactions.IsValid(currentLineCount)
+		c.Redactions.IsValid(currentLineCount) &&
+		c.FastMode.IsValid(currentLineCount)
 }

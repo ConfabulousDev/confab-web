@@ -274,6 +274,14 @@ const RedactionsCardDataSchema = z.object({
   redaction_counts: z.record(z.string(), z.number()), // Type -> count
 });
 
+// Fast Mode card: fast vs standard turn counts and cost split
+const FastModeCardDataSchema = z.object({
+  fast_turns: z.number(),
+  standard_turns: z.number(),
+  fast_cost_usd: z.string(), // Decimal as string for precision
+  standard_cost_usd: z.string(), // Decimal as string for precision
+});
+
 // Smart Recap card: AI-generated session analysis
 const SmartRecapCardDataSchema = z.object({
   recap: z.string(),
@@ -304,6 +312,7 @@ const AnalyticsCardsSchema = z.object({
   conversation: ConversationCardDataSchema.optional(),
   agents_and_skills: AgentsAndSkillsCardDataSchema.optional(),
   redactions: RedactionsCardDataSchema.optional(),
+  fast_mode: FastModeCardDataSchema.optional(),
   smart_recap: SmartRecapCardDataSchema.optional(),
 });
 
@@ -468,6 +477,7 @@ export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
 export type AgentsAndSkillsCardData = z.infer<typeof AgentsAndSkillsCardDataSchema>;
 export type RedactionsCardData = z.infer<typeof RedactionsCardDataSchema>;
+export type FastModeCardData = z.infer<typeof FastModeCardDataSchema>;
 export type SmartRecapCardData = z.infer<typeof SmartRecapCardDataSchema>;
 export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;

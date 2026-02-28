@@ -91,6 +91,16 @@ func TestCardsAllValid(t *testing.T) {
 				TotalRedactions: 2,
 				RedactionCounts: map[string]int{"GITHUB_TOKEN": 1, "API_KEY": 1},
 			},
+			FastMode: &FastModeCardRecord{
+				SessionID:       "test-session",
+				Version:         FastModeCardVersion,
+				ComputedAt:      now,
+				UpToLine:        upToLine,
+				FastTurns:       3,
+				StandardTurns:   7,
+				FastCostUSD:     decimal.NewFromFloat(0.90),
+				StandardCostUSD: decimal.NewFromFloat(0.60),
+			},
 		}
 	}
 
@@ -105,6 +115,7 @@ func TestCardsAllValid(t *testing.T) {
 		cards.Conversation.Version = version
 		cards.AgentsAndSkills.Version = version
 		cards.Redactions.Version = version
+		cards.FastMode.Version = version
 		return cards
 	}
 
@@ -168,6 +179,14 @@ func TestCardsAllValid(t *testing.T) {
 		cards.Redactions = nil
 		if cards.AllValid(100) {
 			t.Error("expected false when redactions card is nil")
+		}
+	})
+
+	t.Run("returns false when fast mode card is nil", func(t *testing.T) {
+		cards := makeCards(100)
+		cards.FastMode = nil
+		if cards.AllValid(100) {
+			t.Error("expected false when fast mode card is nil")
 		}
 	})
 

@@ -5,12 +5,14 @@ import { ToolsCard } from './ToolsCard';
 import { ConversationCard } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
 import { RedactionsCard } from './RedactionsCard';
+import { FastModeCard } from './FastModeCard';
 import { SmartRecapCard } from './SmartRecapCard';
 import type { CardDefinition } from './types';
 import type {
   ToolsCardData,
   AgentsAndSkillsCardData,
   RedactionsCardData,
+  FastModeCardData,
 } from '@/schemas/api';
 
 /**
@@ -83,10 +85,19 @@ export const cardRegistry: CardDefinition[] = [
       !!data && data.agent_invocations + data.skill_invocations > 0,
   },
   {
+    key: 'fast_mode',
+    title: 'Fast Mode',
+    component: FastModeCard,
+    order: 7,
+    size: 'compact',
+    shouldRender: (data: FastModeCardData | null) =>
+      !!data && data.fast_turns > 0,
+  },
+  {
     key: 'redactions',
     title: 'Redactions',
     component: RedactionsCard,
-    order: 7,
+    order: 8,
     size: 'compact',
     shouldRender: (data: RedactionsCardData | null) =>
       !!data && data.total_redactions > 0,

@@ -1028,6 +1028,12 @@ Returns computed analytics for a session. Uses the same canonical access model a
         "GITHUB_TOKEN": 3,
         "API_KEY": 2
       }
+    },
+    "fast_mode": {
+      "fast_turns": 12,
+      "standard_turns": 38,
+      "fast_cost_usd": "2.4500",
+      "standard_cost_usd": "1.2300"
     }
   }
 }
@@ -1078,6 +1084,11 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.redactions` | object\|null | Redaction metrics (null/omitted if no redactions) |
 | `cards.redactions.total_redactions` | int | Total count of [REDACTED:TYPE] markers found |
 | `cards.redactions.redaction_counts` | object | Map of redaction type to occurrence count |
+| `cards.fast_mode` | object\|null | Fast mode usage metrics (null/omitted if no fast mode turns) |
+| `cards.fast_mode.fast_turns` | int | Number of assistant turns using fast mode (6x cost multiplier) |
+| `cards.fast_mode.standard_turns` | int | Number of assistant turns using standard speed |
+| `cards.fast_mode.fast_cost_usd` | string | Total API cost of fast mode turns (decimal as string) |
+| `cards.fast_mode.standard_cost_usd` | string | Total API cost of standard speed turns (decimal as string) |
 | `card_errors` | object\|null | Map of card key to error message for failed computations (graceful degradation) |
 | `smart_recap_quota` | object\|null | Per-user quota info (present when quota is capped and viewer is owner; omitted when unlimited or non-owner) |
 | `smart_recap_quota.used` | int | Recaps generated this month |
