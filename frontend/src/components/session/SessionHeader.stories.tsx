@@ -237,9 +237,79 @@ export const FallbackTitle: Story = {
   },
 };
 
-// Non-interactive story showing header without filter (Analytics tab view)
+// Interactive cost mode toggle
+function CostModeDemo() {
+  const [isCostMode, setIsCostMode] = useState(false);
+  const [filterState, setFilterState] = useState(DEFAULT_FILTER_STATE);
+
+  const handleToggleCategory = (category: MessageCategory) => {
+    setFilterState((prev) => {
+      const next = { ...prev };
+      if (category === 'user') {
+        const allVisible = prev.user.prompt && prev.user['tool-result'] && prev.user.skill;
+        next.user = { prompt: !allVisible, 'tool-result': !allVisible, skill: !allVisible };
+      } else if (category === 'assistant') {
+        const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
+        next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
+      } else {
+        next[category] = !prev[category];
+      }
+      return next;
+    });
+  };
+
+  const handleToggleUserSubcategory = (subcategory: UserSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
+    }));
+  };
+
+  const handleToggleAssistantSubcategory = (subcategory: AssistantSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
+    }));
+  };
+
+  return (
+    <SessionHeader
+      sessionId="session-cost"
+      title="Cost Mode Demo"
+      hasCustomTitle={false}
+      autoTitle="Cost Mode Demo"
+      externalId="cost123"
+      ownerEmail="developer@example.com"
+      model="claude-opus-4-5-20251101"
+      durationMs={3600000}
+      sessionDate={new Date('2025-12-06T10:00:00')}
+      gitInfo={sampleGitInfo}
+      isOwner={true}
+      isShared={false}
+      onShare={() => alert('Share clicked')}
+      onDelete={() => alert('Delete clicked')}
+      onSessionUpdate={(session) => console.log('Session updated:', session)}
+      isCostMode={isCostMode}
+      onToggleCostMode={() => setIsCostMode((prev) => !prev)}
+      categoryCounts={sampleCounts}
+      filterState={filterState}
+      onToggleCategory={handleToggleCategory}
+      onToggleUserSubcategory={handleToggleUserSubcategory}
+      onToggleAssistantSubcategory={handleToggleAssistantSubcategory}
+    />
+  );
+}
+
+/**
+ * Header with cost mode toggle button. Click $ to toggle.
+ */
 type DirectStory = StoryObj<typeof SessionHeader>;
 
+export const WithCostMode: DirectStory = {
+  render: () => <CostModeDemo />,
+};
+
+// Non-interactive story showing header without filter (Analytics tab view)
 export const WithoutFilter: DirectStory = {
   render: () => (
     <SessionHeader

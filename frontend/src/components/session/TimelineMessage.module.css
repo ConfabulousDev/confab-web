@@ -176,6 +176,29 @@
   border-radius: var(--radius-sm);
 }
 
+/* Cost mode badge — replaces token badge when cost mode is active */
+.costBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-xs);
+  color: #dc2626;
+  padding: 1px var(--spacing-xs);
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.costBadgeTokens {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+}
+
+:global([data-theme="dark"]) .costBadge {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+}
+
 /* Fast mode badge */
 .fastBadge {
   display: inline-flex;

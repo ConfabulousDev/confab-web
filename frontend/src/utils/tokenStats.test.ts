@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { TranscriptLine, AssistantMessage } from '@/types';
-import { calculateTokenStats, calculateEstimatedCost, formatTokenCount, formatCost } from './tokenStats';
+import { calculateTokenStats, calculateEstimatedCost, calculateMessageCost, formatTokenCount, formatCost } from './tokenStats';
 
 // Helper to create a minimal assistant message with token usage
 function createAssistantMessage(
@@ -191,6 +191,56 @@ describe('formatTokenCount', () => {
     expect(formatTokenCount(1256)).toBe('1.3k');
     expect(formatTokenCount(1234567)).toBe('1.2M');
     expect(formatTokenCount(1256789012)).toBe('1.3B');
+  });
+});
+
+describe('calculateMessageCost', () => {
+  it('should return 0 for user messages', () => {
+    const userMsg = {
+      type: 'user' as const,
+      uuid: 'user-uuid',
+      timestamp: new Date().toISOString(),
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/test',
+      sessionId: 'test-session',
+      version: '1.0.0',
+      message: { role: 'user' as const, content: 'Hello' },
+    };
+    expect(calculateMessageCost(userMsg)).toBe(0);
+  });
+
+  it('should calculate cost for a known model', () => {
+    // Sonnet 4: input=$3/M, output=$15/M
+    const msg = createAssistantMessage(100_000, 10_000, 0, 0, 'claude-sonnet-4-20250514');
+    const cost = calculateMessageCost(msg);
+    // input: 100k * $3/M = $0.30, output: 10k * $15/M = $0.15 → $0.45
+    expect(cost).toBeCloseTo(0.45, 4);
+  });
+
+  it('should apply fast mode multiplier to token costs', () => {
+    const msg = createAssistantMessage(1_000_000, 100_000, 0, 0, 'claude-opus-4-6-20260201', {
+      speed: 'fast',
+    });
+    const cost = calculateMessageCost(msg);
+    // Standard: $5 + $2.50 = $7.50, Fast: $7.50 * 6 = $45
+    expect(cost).toBeCloseTo(45, 4);
+  });
+
+  it('should add web search costs without fast multiplier', () => {
+    const msg = createAssistantMessage(0, 0, 0, 0, 'claude-sonnet-4-20250514', {
+      speed: 'fast',
+      server_tool_use: { web_search_requests: 10 },
+    });
+    const cost = calculateMessageCost(msg);
+    // Token cost: $0, Web search: 10 * $0.01 = $0.10
+    expect(cost).toBeCloseTo(0.10, 4);
+  });
+
+  it('should return 0 for unknown models', () => {
+    const msg = createAssistantMessage(1_000_000, 0, 0, 0, 'claude-unknown-model');
+    expect(calculateMessageCost(msg)).toBe(0);
   });
 });
 

@@ -292,6 +292,61 @@ export const FastMode: Story = {
   },
 };
 
+/**
+ * Cost mode — shows red cost badge instead of token count.
+ */
+export const CostMode: Story = {
+  name: 'Cost Mode',
+  args: {
+    message: mockAssistantMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    isCostMode: true,
+    messageCost: 0.42,
+  },
+};
+
+/**
+ * Cost mode with an expensive message (high-cost opus).
+ */
+export const CostModeExpensive: Story = {
+  name: 'Cost Mode (Expensive)',
+  args: {
+    message: {
+      ...mockAssistantMessage,
+      uuid: 'expensive-msg',
+      message: {
+        ...mockAssistantMessage.message,
+        model: 'claude-opus-4-5-20251101',
+        usage: {
+          input_tokens: 150000,
+          output_tokens: 25000,
+          cache_creation_input_tokens: 50000,
+          cache_read_input_tokens: 80000,
+        },
+      },
+    },
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    isCostMode: true,
+    messageCost: 4.73,
+  },
+};
+
+/**
+ * Cost mode on a user message (no cost badge shown — users have no token usage).
+ */
+export const CostModeUserMessage: Story = {
+  name: 'Cost Mode (User)',
+  args: {
+    message: mockUserMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    isCostMode: true,
+    // messageCost is undefined for user messages
+  },
+};
+
 const mockAssistantFastWithSearch: AssistantMessage = {
   ...mockAssistantMessage,
   uuid: 'assistant-fast-ws-1',

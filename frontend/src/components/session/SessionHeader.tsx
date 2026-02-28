@@ -114,6 +114,9 @@ interface SessionHeaderProps {
   onToggleCategory?: (category: MessageCategory) => void;
   onToggleUserSubcategory?: (subcategory: UserSubcategory) => void;
   onToggleAssistantSubcategory?: (subcategory: AssistantSubcategory) => void;
+  // Cost mode toggle - only shown on transcript tab
+  isCostMode?: boolean;
+  onToggleCostMode?: () => void;
 }
 
 function SessionHeader({
@@ -137,6 +140,8 @@ function SessionHeader({
   onToggleCategory,
   onToggleUserSubcategory,
   onToggleAssistantSubcategory,
+  isCostMode,
+  onToggleCostMode,
 }: SessionHeaderProps) {
   const { copy, copied } = useCopyToClipboard();
   const displayTitle = title || `Session ${externalId.substring(0, 8)}`;
@@ -300,6 +305,17 @@ function SessionHeader({
       </div>
 
       <div className={styles.actions}>
+        {onToggleCostMode && (
+          <button
+            className={`${styles.costToggle} ${isCostMode ? styles.costToggleActive : ''}`}
+            onClick={onToggleCostMode}
+            title={isCostMode ? 'Hide cost breakdown' : 'Show cost breakdown'}
+            aria-label={isCostMode ? 'Hide cost breakdown' : 'Show cost breakdown'}
+            aria-pressed={isCostMode}
+          >
+            $
+          </button>
+        )}
         {categoryCounts && filterState && onToggleCategory && onToggleUserSubcategory && onToggleAssistantSubcategory && (
           <FilterDropdown
             counts={categoryCounts}

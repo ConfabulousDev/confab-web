@@ -59,6 +59,9 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   // Track visibility for smart polling
   const isVisible = useVisibility();
 
+  // Cost mode toggle
+  const [isCostMode, setIsCostMode] = useState(false);
+
   // Filter state - hierarchical visibility for subcategories
   const [filterState, setFilterState] = useState<FilterState>(DEFAULT_FILTER_STATE);
 
@@ -159,6 +162,8 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     };
   }, [initialMessages, isVisible, loading, session.id, transcriptFileName]);
 
+  const toggleCostMode = useCallback(() => setIsCostMode((prev) => !prev), []);
+
   // Toggle a top-level category's visibility (toggles all subcategories for hierarchical cats)
   const toggleCategory = useCallback((category: MessageCategory) => {
     setFilterState((prev) => {
@@ -249,6 +254,8 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           isOwner={isOwner}
           isShared={isShared}
           sharedByEmail={session.shared_by_email}
+          isCostMode={activeTab === 'transcript' ? isCostMode : undefined}
+          onToggleCostMode={activeTab === 'transcript' ? toggleCostMode : undefined}
           categoryCounts={activeTab === 'transcript' ? categoryCounts : undefined}
           filterState={activeTab === 'transcript' ? filterState : undefined}
           onToggleCategory={activeTab === 'transcript' ? toggleCategory : undefined}
@@ -296,6 +303,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
                   allMessages={messages}
                   targetMessageUuid={targetMessageUuid}
                   sessionId={session.id}
+                  isCostMode={isCostMode}
                 />
               )}
             </div>

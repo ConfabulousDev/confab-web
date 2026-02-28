@@ -3,11 +3,13 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
 import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
+import { calculateMessageCost } from '@/utils/tokenStats';
 import TimelineMessage from './TimelineMessage';
 import TranscriptSearchBar from './TranscriptSearchBar';
 import { getRoleLabel } from './messageCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
+import { CostBar } from '@/components/transcript/CostBar';
 import styles from './MessageTimeline.module.css';
 
 interface MessageTimelineProps {
@@ -15,6 +17,7 @@ interface MessageTimelineProps {
   allMessages: TranscriptLine[]; // Used for building tool name map
   targetMessageUuid?: string; // Deep-link target message UUID
   sessionId?: string; // Session ID for copy-link URLs
+  isCostMode?: boolean; // When true, show cost heatmap and per-message cost badges
 }
 
 // Item types for virtual list
@@ -100,7 +103,7 @@ function retryOnAnimationFrame(
   attempt(0);
 }
 
-function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }: MessageTimelineProps) {
+function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -111,6 +114,23 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
+
+  // Compute per-message cost map (allMessages index → $ cost) — only when cost mode is on
+  const messageCosts = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!isCostMode) return map;
+    for (let i = 0; i < allMessages.length; i++) {
+      const cost = calculateMessageCost(allMessages[i]!);
+      if (cost > 0) map.set(i, cost);
+    }
+    return map;
+  }, [allMessages, isCostMode]);
+
+  const totalCost = useMemo(() => {
+    let sum = 0;
+    for (const cost of messageCosts.values()) sum += cost;
+    return sum;
+  }, [messageCosts]);
 
   // Build UUID-to-allMessages-index map for deep-linking
   const uuidToAllIndex = useMemo(() => {
@@ -472,6 +492,8 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
                     searchQuery={search.isOpen ? search.highlightQuery : undefined}
                     sessionId={sessionId}
                     roleLabel={getRoleLabel(item.message)}
+                    isCostMode={isCostMode}
+                    messageCost={isCostMode ? messageCosts.get(item.index) : undefined}
                     onSkipToNext={nextOfSameRole.has(item.filteredIndex)
                       ? () => scrollToFilteredIndex(nextOfSameRole.get(item.filteredIndex)!)
                       : undefined}
@@ -484,6 +506,18 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId }
             );
           })}
         </div>
+      </div>
+
+      <div className={`${styles.costBarWrapper} ${isCostMode ? styles.costBarWrapperVisible : ''}`}>
+        {isCostMode && (
+          <CostBar
+            messages={allMessages}
+            messageCosts={messageCosts}
+            totalCost={totalCost}
+            selectedIndex={effectiveSelectedIndex}
+            onSeek={scrollToMessage}
+          />
+        )}
       </div>
 
       <TimelineBar

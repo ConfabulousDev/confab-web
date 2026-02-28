@@ -115,42 +115,48 @@ export function calculateTokenStats(messages: TranscriptLine[]): TokenStats {
 }
 
 /**
+ * Calculate cost for a single message.
+ * Returns cost in dollars (0 for non-assistant messages).
+ */
+export function calculateMessageCost(message: TranscriptLine): number {
+  if (!isAssistantMessage(message)) return 0;
+
+  const usage = message.message.usage;
+  const pricing = getPricing(message.message.model);
+
+  const inputTokens = usage.input_tokens;
+  const outputTokens = usage.output_tokens;
+  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
+  const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
+
+  // Cost per token (pricing is per million tokens)
+  const inputCost = (inputTokens * pricing.input) / 1_000_000;
+  const outputCost = (outputTokens * pricing.output) / 1_000_000;
+  const cacheWriteCost = (cacheWriteTokens * pricing.cacheWrite) / 1_000_000;
+  const cacheReadCost = (cacheReadTokens * pricing.cacheRead) / 1_000_000;
+
+  let cost = inputCost + outputCost + cacheWriteCost + cacheReadCost;
+
+  // Fast mode: 6x all token costs
+  if (usage.speed === 'fast') {
+    cost *= FAST_MODE_MULTIPLIER;
+  }
+
+  // Server tool costs (per-request pricing, not affected by fast mode)
+  cost += (usage.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_COST_PER_REQUEST;
+
+  return cost;
+}
+
+/**
  * Calculate estimated cost from messages
  * Returns cost in dollars
  */
 export function calculateEstimatedCost(messages: TranscriptLine[]): number {
   let totalCost = 0;
-
   for (const message of messages) {
-    if (isAssistantMessage(message)) {
-      const usage = message.message.usage;
-      const pricing = getPricing(message.message.model);
-
-      const inputTokens = usage.input_tokens;
-      const outputTokens = usage.output_tokens;
-      const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
-      const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
-
-      // Cost per token (pricing is per million tokens)
-      const inputCost = (inputTokens * pricing.input) / 1_000_000;
-      const outputCost = (outputTokens * pricing.output) / 1_000_000;
-      const cacheWriteCost = (cacheWriteTokens * pricing.cacheWrite) / 1_000_000;
-      const cacheReadCost = (cacheReadTokens * pricing.cacheRead) / 1_000_000;
-
-      let cost = inputCost + outputCost + cacheWriteCost + cacheReadCost;
-
-      // Fast mode: 6x all token costs
-      if (usage.speed === 'fast') {
-        cost *= FAST_MODE_MULTIPLIER;
-      }
-
-      // Server tool costs (per-request pricing, not affected by fast mode)
-      cost += (usage.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_COST_PER_REQUEST;
-
-      totalCost += cost;
-    }
+    totalCost += calculateMessageCost(message);
   }
-
   return totalCost;
 }
 
