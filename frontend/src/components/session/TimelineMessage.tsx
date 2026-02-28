@@ -3,6 +3,7 @@ import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
+import { formatCost, formatTokenCount } from '@/utils/tokenStats';
 import { getRoleLabel } from './messageCategories';
 import styles from './TimelineMessage.module.css';
 
@@ -20,6 +21,8 @@ interface TimelineMessageProps {
   onSkipToNext?: () => void;
   onSkipToPrevious?: () => void;
   roleLabel?: string;
+  isCostMode?: boolean;
+  messageCost?: number;
 }
 
 /**
@@ -219,7 +222,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp }: TimelineMessageProps) {
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost }: TimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -279,7 +282,18 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
           {timestamp && <span className={styles.timestamp}>{formatTimestamp(timestamp)}</span>}
         </div>
         <div className={styles.headerRight}>
-          {tokenUsage && (
+          {tokenUsage && isCostMode && messageCost != null && (
+            <span
+              className={styles.costBadge}
+              title={`${formatCost(messageCost)}\n${buildTokenTooltip(tokenUsage)}`}
+            >
+              {formatCost(messageCost)}
+              <span className={styles.costBadgeTokens}>
+                {formatTokenCount(tokenUsage.input_tokens)} in · {formatTokenCount(tokenUsage.output_tokens)} out
+              </span>
+            </span>
+          )}
+          {tokenUsage && !(isCostMode && messageCost != null) && (
             <span className={styles.tokens} title={buildTokenTooltip(tokenUsage)}>
               {formatTokens(tokenUsage)}
             </span>

@@ -280,6 +280,52 @@
   background: var(--color-error-bg);
 }
 
+/* Cost mode toggle button */
+.costToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-muted);
+  font-size: var(--font-md);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.costToggle:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+  color: var(--color-text-secondary);
+}
+
+.costToggleActive {
+  color: #dc2626;
+  border-color: #dc2626;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.costToggleActive:hover {
+  color: #dc2626;
+  border-color: #dc2626;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+:global([data-theme="dark"]) .costToggleActive {
+  color: #f87171;
+  border-color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+:global([data-theme="dark"]) .costToggleActive:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
 /* Shared session indicator */
 .sharedIndicator {
   display: flex;

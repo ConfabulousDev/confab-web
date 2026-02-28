@@ -7,6 +7,18 @@
   height: 100%;
 }
 
+/* Cost bar slide-in wrapper */
+.costBarWrapper {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.2s ease;
+  flex-shrink: 0;
+}
+
+.costBarWrapperVisible {
+  width: 22px;
+}
+
 /* Message timeline - virtualized scrollable list */
 .timeline {
   flex: 1;
