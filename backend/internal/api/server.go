@@ -69,7 +69,8 @@ type Server struct {
 	globalLimiter        ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
-	validationLimiter ratelimit.RateLimiter     // Moderate limiter for API key validation
+	validationLimiter   ratelimit.RateLimiter     // Moderate limiter for API key validation
+	clientErrorLimiter  ratelimit.RateLimiter     // Limiter for client error reporting
 }
 
 // NewServer creates a new API server
@@ -101,6 +102,9 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		// Validation endpoint: 30 requests per minute = 0.5 req/sec, burst of 10
 		// Moderate limit for CLI validation checks while preventing abuse
 		validationLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 10),
+		// Client error reporting: 0.5 req/sec, burst of 5
+		// Low limit for fire-and-forget error reports from frontend
+		clientErrorLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 5),
 	}
 }
 
@@ -357,6 +361,9 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Smart recap regeneration (owner-only)
 			r.Post("/sessions/{id}/analytics/smart-recap/regenerate", withMaxBody(MaxBodyXS, HandleRegenerateSmartRecap(s.db, s.storage)))
+
+			// Client error reporting (for frontend observability)
+			r.Post("/client-errors", withMaxBody(MaxBodyM, ratelimit.HandlerFunc(s.clientErrorLimiter, HandleReportClientErrors())))
 		})
 
 		// Session lookup by external_id - requires auth (session cookie OR API key)

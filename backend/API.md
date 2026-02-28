@@ -544,6 +544,80 @@ DELETE /api/v1/shares/{shareId}
 
 ---
 
+### Client Error Reporting
+
+Report client-side errors to the backend for observability. Currently used by the frontend to report transcript validation errors (schema drift detection). Errors are logged server-side with structured fields for querying.
+
+#### Report Client Errors
+```
+POST /api/v1/client-errors
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "category": "transcript_validation",
+  "session_id": "uuid",
+  "errors": [
+    {
+      "line": 42,
+      "message_type": "assistant",
+      "details": [
+        {
+          "path": "content.0.type",
+          "message": "Invalid discriminator value",
+          "expected": "text|thinking|tool_use|tool_result",
+          "received": "new_block_type"
+        }
+      ],
+      "raw_json_preview": "{\"type\":\"assistant\",...}"
+    }
+  ],
+  "context": {
+    "url": "/sessions/abc-123",
+    "user_agent": "Mozilla/5.0..."
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `category` | string | Yes | Error category (e.g., `"transcript_validation"`) |
+| `session_id` | string | No | Session UUID for context |
+| `errors` | array | Yes | 1-50 error items |
+| `errors[].line` | int | Yes | Line number where the error occurred |
+| `errors[].message_type` | string | No | Transcript message type (e.g., `"assistant"`, `"user"`) |
+| `errors[].details` | array | Yes | 1+ validation issue details |
+| `errors[].details[].path` | string | Yes | JSON path to the failing field |
+| `errors[].details[].message` | string | Yes | Validation error message |
+| `errors[].details[].expected` | string | No | Expected value/type |
+| `errors[].details[].received` | string | No | Actual value/type received |
+| `errors[].raw_json_preview` | string | No | Truncated raw JSON (max 500 chars) |
+| `context` | object | No | Additional context |
+| `context.url` | string | No | Page URL where the error occurred |
+| `context.user_agent` | string | No | Browser user agent string |
+
+**Response:**
+```json
+{
+  "status": "ok"
+}
+```
+
+**Errors:**
+- `400` - Missing category, empty errors array, or more than 50 errors
+- `401` - Authentication required
+
+**Rate Limiting:** 0.5 req/sec, burst 5 (dedicated limiter).
+
+**Notes:**
+- Errors are logged server-side at Warn level with structured fields for log aggregation
+- The frontend fires this as fire-and-forget (does not block transcript display)
+- Deduplication is handled client-side (one report per session per page load)
+
+---
+
 ### GitHub Links
 
 Link sessions to GitHub artifacts (commits and PRs) for bidirectional navigation.
