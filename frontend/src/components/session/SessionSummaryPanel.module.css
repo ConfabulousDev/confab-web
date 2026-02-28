@@ -340,7 +340,7 @@
 
 .statValue.cost,
 .statValue.utilization {
-  color: #16a34a;
+  color: var(--color-cost);
 }
 
 .statValue.costWarning {
