@@ -7,6 +7,7 @@ import {
   ArrowLeftIcon,
   DiamondOutlineIcon,
   DiamondFilledIcon,
+  ZapIcon,
 } from '@/components/icons';
 import type { TokensCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -18,6 +19,7 @@ const TOOLTIPS = {
   cacheCreated: 'Tokens written to cache for future use',
   cacheRead: 'Tokens served from cache (reduced cost)',
   cost: 'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
+  fastCost: 'Cost from turns using fast mode (6x multiplier)',
 };
 
 export function TokensCard({ data, loading, error }: CardProps<TokensCardData>) {
@@ -37,6 +39,7 @@ export function TokensCard({ data, loading, error }: CardProps<TokensCardData>) 
 
   const cost = parseFloat(data.estimated_usd);
   const isZeroCost = cost === 0;
+  const hasFastMode = data.fast_turns != null;
 
   return (
     <CardWrapper title="Tokens" icon={TokenIcon}>
@@ -47,6 +50,15 @@ export function TokensCard({ data, loading, error }: CardProps<TokensCardData>) 
         tooltip={isZeroCost ? 'Cost unavailable — session may use models not yet in the pricing table' : TOOLTIPS.cost}
         valueClassName={isZeroCost ? styles.costWarning : styles.cost}
       />
+      {hasFastMode && (
+        <StatRow
+          label="Fast mode"
+          value={formatCost(parseFloat(data.fast_cost_usd!))}
+          icon={ZapIcon}
+          tooltip={TOOLTIPS.fastCost}
+          valueClassName={styles.costFast}
+        />
+      )}
       <StatRow
         label="Input"
         value={formatTokenCount(data.input)}

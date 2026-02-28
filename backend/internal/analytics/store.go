@@ -244,13 +244,14 @@ func (s *Store) getTokensCard(ctx context.Context, sessionID string) (*TokensCar
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
 			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-			estimated_cost_usd
+			estimated_cost_usd,
+			fast_turns, fast_cost_usd
 		FROM session_card_tokens
 		WHERE session_id = $1
 	`
 
 	var record TokensCardRecord
-	var costStr string
+	var costStr, fastCostStr string
 	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
 		&record.SessionID,
 		&record.Version,
@@ -261,6 +262,8 @@ func (s *Store) getTokensCard(ctx context.Context, sessionID string) (*TokensCar
 		&record.CacheCreationTokens,
 		&record.CacheReadTokens,
 		&costStr,
+		&record.FastTurns,
+		&fastCostStr,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -273,6 +276,10 @@ func (s *Store) getTokensCard(ctx context.Context, sessionID string) (*TokensCar
 	if err != nil {
 		return nil, fmt.Errorf("parsing cost: %w", err)
 	}
+	record.FastCostUSD, err = decimal.NewFromString(fastCostStr)
+	if err != nil {
+		return nil, fmt.Errorf("parsing fast_cost: %w", err)
+	}
 
 	return &record, nil
 }
@@ -282,8 +289,9 @@ func (s *Store) upsertTokensCard(ctx context.Context, record *TokensCardRecord) 
 		INSERT INTO session_card_tokens (
 			session_id, version, computed_at, up_to_line,
 			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-			estimated_cost_usd
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			estimated_cost_usd,
+			fast_turns, fast_cost_usd
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
@@ -292,7 +300,9 @@ func (s *Store) upsertTokensCard(ctx context.Context, record *TokensCardRecord) 
 			output_tokens = EXCLUDED.output_tokens,
 			cache_creation_tokens = EXCLUDED.cache_creation_tokens,
 			cache_read_tokens = EXCLUDED.cache_read_tokens,
-			estimated_cost_usd = EXCLUDED.estimated_cost_usd
+			estimated_cost_usd = EXCLUDED.estimated_cost_usd,
+			fast_turns = EXCLUDED.fast_turns,
+			fast_cost_usd = EXCLUDED.fast_cost_usd
 	`
 
 	_, err := s.db.ExecContext(ctx, query,
@@ -305,6 +315,8 @@ func (s *Store) upsertTokensCard(ctx context.Context, record *TokensCardRecord) 
 		record.CacheCreationTokens,
 		record.CacheReadTokens,
 		record.EstimatedCostUSD.String(),
+		record.FastTurns,
+		record.FastCostUSD.String(),
 	)
 	return err
 }
@@ -806,6 +818,8 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 			CacheCreationTokens: r.CacheCreationTokens,
 			CacheReadTokens:     r.CacheReadTokens,
 			EstimatedCostUSD:    r.EstimatedCostUSD,
+			FastTurns:   r.FastTurns,
+			FastCostUSD: r.FastCostUSD,
 		}
 	}
 
@@ -950,13 +964,22 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		}
 
 		// Cards format - tokens includes cost
-		response.Cards["tokens"] = TokensCardData{
+		tokensCard := TokensCardData{
 			Input:         c.Tokens.InputTokens,
 			Output:        c.Tokens.OutputTokens,
 			CacheCreation: c.Tokens.CacheCreationTokens,
 			CacheRead:     c.Tokens.CacheReadTokens,
 			EstimatedUSD:  c.Tokens.EstimatedCostUSD.String(),
 		}
+
+		// Only include fast mode breakdown when fast mode was used
+		if c.Tokens.FastTurns > 0 {
+			fastTurns := c.Tokens.FastTurns
+			tokensCard.FastTurns = &fastTurns
+			tokensCard.FastCostUSD = c.Tokens.FastCostUSD.String()
+		}
+
+		response.Cards["tokens"] = tokensCard
 	}
 
 	if c.Session != nil {

@@ -182,7 +182,7 @@ func CalculateTotalCost(pricing ModelPricing, usage *TokenUsage) decimal.Decimal
 	)
 
 	// Fast mode: 6x all token costs
-	if usage.Speed == "fast" {
+	if usage.Speed == SpeedFast {
 		cost = cost.Mul(fastModeMultiplier)
 	}
 

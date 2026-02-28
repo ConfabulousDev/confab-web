@@ -34,6 +34,10 @@ type TokensCardRecord struct {
 	CacheCreationTokens int64           `json:"cache_creation_tokens"`
 	CacheReadTokens     int64           `json:"cache_read_tokens"`
 	EstimatedCostUSD    decimal.Decimal `json:"estimated_cost_usd"`
+
+	// Fast mode breakdown
+	FastTurns   int             `json:"fast_turns"`
+	FastCostUSD decimal.Decimal `json:"fast_cost_usd"`
 }
 
 // SessionCardRecord is the DB record for the session card (includes compaction and message breakdown).
@@ -204,6 +208,10 @@ type TokensCardData struct {
 	CacheCreation int64  `json:"cache_creation"`
 	CacheRead     int64  `json:"cache_read"`
 	EstimatedUSD  string `json:"estimated_usd"` // Decimal as string for precision
+
+	// Fast mode breakdown (omitted when no fast mode usage)
+	FastTurns   *int   `json:"fast_turns,omitempty"`
+	FastCostUSD string `json:"fast_cost_usd,omitempty"`
 }
 
 // SessionCardData is the API response format for the session card (includes compaction and message breakdown).

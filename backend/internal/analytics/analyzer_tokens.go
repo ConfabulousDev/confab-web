@@ -9,6 +9,10 @@ type TokensResult struct {
 	CacheCreationTokens int64
 	CacheReadTokens     int64
 	EstimatedCostUSD    decimal.Decimal
+
+	// Fast mode breakdown
+	FastTurns   int
+	FastCostUSD decimal.Decimal
 }
 
 // TokensAnalyzer extracts token usage and cost metrics from transcripts.
@@ -20,6 +24,7 @@ type TokensAnalyzer struct{}
 func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 	result := &TokensResult{
 		EstimatedCostUSD: decimal.Zero,
+		FastCostUSD:      decimal.Zero,
 	}
 
 	// Process all files - main and agents
@@ -39,6 +44,11 @@ func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 			pricing := GetPricing(line.Message.Model)
 			cost := CalculateTotalCost(pricing, usage)
 			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
+
+			if usage.Speed == SpeedFast {
+				result.FastTurns++
+				result.FastCostUSD = result.FastCostUSD.Add(cost)
+			}
 		}
 	}
 
@@ -62,6 +72,11 @@ func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 			pricing := GetPricing("")
 			cost := CalculateTotalCost(pricing, usage)
 			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
+
+			if usage.Speed == SpeedFast {
+				result.FastTurns++
+				result.FastCostUSD = result.FastCostUSD.Add(cost)
+			}
 		}
 	}
 

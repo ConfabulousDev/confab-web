@@ -34,6 +34,10 @@ type ComputeResult struct {
 	CacheReadTokens     int64
 	EstimatedCostUSD    decimal.Decimal
 
+	// Fast mode breakdown (from TokensAnalyzer)
+	FastTurns   int
+	FastCostUSD decimal.Decimal
+
 	// Message counts (from SessionAnalyzer)
 	TotalMessages     int
 	UserMessages      int
@@ -200,6 +204,8 @@ func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*Comput
 		result.CacheCreationTokens = tokens.CacheCreationTokens
 		result.CacheReadTokens = tokens.CacheReadTokens
 		result.EstimatedCostUSD = tokens.EstimatedCostUSD
+		result.FastTurns = tokens.FastTurns
+		result.FastCostUSD = tokens.FastCostUSD
 	}
 
 	// Session stats (message counts, breakdown, metadata, compaction)
