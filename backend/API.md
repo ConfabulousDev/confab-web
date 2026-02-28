@@ -974,15 +974,10 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "input": 125000,
       "output": 48000,
       "cache_creation": 5000,
-      "cache_read": 12000
-    },
-    "cost": {
-      "estimated_usd": "1.25"
-    },
-    "compaction": {
-      "auto": 3,
-      "manual": 1,
-      "avg_time_ms": 5000
+      "cache_read": 12000,
+      "estimated_usd": "1.25",
+      "fast_turns": 10,
+      "fast_cost_usd": "0.90"
     },
     "session": {
       "duration_ms": 3600000,
@@ -1038,17 +1033,16 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `computed_at` | string | ISO timestamp when analytics were computed |
 | `computed_lines` | int | Line count through which analytics are computed |
 | `tokens.*` | object | *Deprecated:* Use `cards.tokens` instead |
-| `cost.*` | object | *Deprecated:* Use `cards.cost` instead |
-| `compaction.*` | object | *Deprecated:* Use `cards.compaction` instead |
+| `cost.*` | object | *Deprecated:* Use `cards.tokens.estimated_usd` instead |
+| `compaction.*` | object | *Deprecated:* Use `cards.session` instead |
 | `cards` | object | Card-based analytics data (keyed by card name) |
 | `cards.tokens.input` | int | Total input tokens sent to model |
 | `cards.tokens.output` | int | Total output tokens generated |
 | `cards.tokens.cache_creation` | int | Tokens written to cache |
 | `cards.tokens.cache_read` | int | Tokens served from cache |
-| `cards.cost.estimated_usd` | string | Estimated API cost (assumes 5-min prompt caching) |
-| `cards.compaction.auto` | int | Auto-triggered compaction count |
-| `cards.compaction.manual` | int | Manual compaction count |
-| `cards.compaction.avg_time_ms` | int\|null | Avg auto-compaction time in ms (null if none) |
+| `cards.tokens.estimated_usd` | string | Estimated API cost (assumes 5-min prompt caching) |
+| `cards.tokens.fast_turns` | int\|omitted | Turns using fast mode (omitted if no fast mode usage) |
+| `cards.tokens.fast_cost_usd` | string\|omitted | Cost from fast mode turns (omitted if no fast mode usage) |
 | `cards.session.duration_ms` | int\|null | Session duration in ms (null if single message) |
 | `cards.session.models_used` | string[] | Unique model IDs used in the session |
 | `cards.tools.total_calls` | int | Total number of tool invocations |

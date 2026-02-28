@@ -32,6 +32,36 @@ export const Default: Story = {
   },
 };
 
+export const WithFastMode: Story = {
+  args: {
+    data: {
+      input: 250000,
+      output: 90000,
+      cache_creation: 100000,
+      cache_read: 500000,
+      estimated_usd: '12.40',
+      fast_turns: 15,
+      fast_cost_usd: '9.60',
+    },
+    loading: false,
+  },
+};
+
+export const AllFastMode: Story = {
+  args: {
+    data: {
+      input: 125000,
+      output: 45000,
+      cache_creation: 80000,
+      cache_read: 320000,
+      estimated_usd: '11.10',
+      fast_turns: 25,
+      fast_cost_usd: '11.10',
+    },
+    loading: false,
+  },
+};
+
 export const LowUsage: Story = {
   args: {
     data: {

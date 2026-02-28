@@ -53,6 +53,9 @@ type ServerToolUse struct {
 	CodeExecutionRequests int `json:"code_execution_requests,omitempty"`
 }
 
+// SpeedFast is the value of TokenUsage.Speed when fast mode is enabled.
+const SpeedFast = "fast"
+
 // TokenUsage contains token counts from the API response.
 type TokenUsage struct {
 	InputTokens              int64          `json:"input_tokens"`

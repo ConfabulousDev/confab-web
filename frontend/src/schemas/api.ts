@@ -188,6 +188,9 @@ const TokensCardDataSchema = z.object({
   cache_creation: z.number(),
   cache_read: z.number(),
   estimated_usd: z.string(), // Consolidated from cost card
+  // Fast mode breakdown (only present when fast mode was used)
+  fast_turns: z.number().optional(),
+  fast_cost_usd: z.string().optional(),
 });
 
 // Session card includes compaction info (consolidated from previous separate compaction card)
