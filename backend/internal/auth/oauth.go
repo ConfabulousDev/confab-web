@@ -401,18 +401,20 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 // HandleLogout logs out the user
 func HandleLogout(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log := logger.Ctx(r.Context())
 		ctx := r.Context()
+		log := logger.Ctx(ctx)
 
-		// Get session cookie
 		cookie, err := r.Cookie(SessionCookieName)
-		if err == nil {
-			// Delete session from database
-			database.DeleteWebSession(ctx, cookie.Value)
-		}
 
-		// Clear session cookie
+		// Clear cookie first — this always succeeds (Set-Cookie header) and ensures
+		// the user is logged out even if the DB cleanup fails.
 		clearCookie(w, SessionCookieName)
+
+		if err == nil {
+			if err := database.DeleteWebSession(ctx, cookie.Value); err != nil {
+				log.Warn("Failed to delete web session from database", "error", err)
+			}
+		}
 
 		// Check for redirect URL (e.g., for re-login with different account)
 		frontendURL := os.Getenv("FRONTEND_URL")
