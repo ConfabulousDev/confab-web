@@ -76,9 +76,9 @@
   --color-chip-purple-text: #7b1fa2;
 
   /* Colors - Cost mode (green/money) */
-  --color-cost: #16a34a;
-  --color-cost-bg: rgba(22, 163, 74, 0.08);
-  --color-cost-bg-hover: rgba(22, 163, 74, 0.15);
+  --color-cost: #15803d;
+  --color-cost-bg: rgba(21, 128, 61, 0.1);
+  --color-cost-bg-hover: rgba(21, 128, 61, 0.18);
 
   /* Colors - Timeline segments */
   --color-timeline-assistant: #F0D9C8;
