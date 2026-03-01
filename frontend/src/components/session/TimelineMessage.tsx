@@ -74,55 +74,6 @@ interface TokenUsage {
 }
 
 /**
- * Format token count for display (total of input + output)
- */
-function formatTokens(usage: TokenUsage): string {
-  const total = usage.input_tokens + usage.output_tokens;
-  if (total >= 1000) {
-    return `${(total / 1000).toFixed(1)}k tokens`;
-  }
-  return `${total} ${total === 1 ? 'token' : 'tokens'}`;
-}
-
-/**
- * Build detailed tooltip for token usage
- */
-function buildTokenTooltip(usage: TokenUsage): string {
-  const lines: string[] = [];
-
-  lines.push(`Input: ${usage.input_tokens.toLocaleString()}`);
-  lines.push(`Output: ${usage.output_tokens.toLocaleString()}`);
-
-  if (usage.cache_creation_input_tokens) {
-    lines.push(`Cache created: ${usage.cache_creation_input_tokens.toLocaleString()}`);
-  }
-  if (usage.cache_read_input_tokens) {
-    lines.push(`Cache read: ${usage.cache_read_input_tokens.toLocaleString()}`);
-  }
-  if (usage.service_tier) {
-    lines.push(`Tier: ${usage.service_tier}`);
-  }
-  if (usage.speed) {
-    lines.push(`Speed: ${usage.speed}`);
-  }
-
-  const stu = usage.server_tool_use;
-  if (stu) {
-    if (stu.web_search_requests) {
-      lines.push(`Web searches: ${stu.web_search_requests}`);
-    }
-    if (stu.web_fetch_requests) {
-      lines.push(`Web fetches: ${stu.web_fetch_requests}`);
-    }
-    if (stu.code_execution_requests) {
-      lines.push(`Code executions: ${stu.code_execution_requests}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
-/**
  * Build verbose cost tooltip that maps inline abbreviations to full labels
  */
 function buildCostTooltip(usage: TokenUsage, cost: number): string {
@@ -332,27 +283,30 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
         </div>
         <div className={styles.headerRight}>
           {displayUsage && isCostMode && messageCost != null && (
-            <span
-              className={styles.costBadge}
-              title={buildCostTooltip(displayUsage, messageCost)}
-            >
-              {formatCost(messageCost)}
-              <span className={styles.costBadgeTokens}>
+            <>
+              <span
+                className={styles.costBadge}
+                title={buildCostTooltip(displayUsage, messageCost)}
+              >
+                {formatCost(messageCost)}
+              </span>
+              <span
+                className={styles.tokenPill}
+                title={buildCostTooltip(displayUsage, messageCost)}
+              >
                 {formatTokenCount(displayUsage.input_tokens)} in · {formatTokenCount(displayUsage.output_tokens)} out
               </span>
               {(displayUsage.cache_creation_input_tokens || displayUsage.cache_read_input_tokens) ? (
-                <span className={styles.costBadgeCache}>
+                <span
+                  className={styles.cachePill}
+                  title={buildCostTooltip(displayUsage, messageCost)}
+                >
                   {displayUsage.cache_creation_input_tokens ? `${formatTokenCount(displayUsage.cache_creation_input_tokens)} write` : null}
                   {displayUsage.cache_creation_input_tokens && displayUsage.cache_read_input_tokens ? ' · ' : null}
                   {displayUsage.cache_read_input_tokens ? `${formatTokenCount(displayUsage.cache_read_input_tokens)} hit` : null}
                 </span>
               ) : null}
-            </span>
-          )}
-          {tokenUsage && !(isCostMode && messageCost != null) && (
-            <span className={styles.tokens} title={buildTokenTooltip(tokenUsage)}>
-              {formatTokens(tokenUsage)}
-            </span>
+            </>
           )}
           {tokenUsage?.speed === 'fast' && (
             <span className={styles.fastBadge} title="Fast mode (6x pricing)">
