@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,15 +23,56 @@ const (
 	DefaultMaxTranscriptTokens = 50000
 )
 
+// AnnotatedItem represents a list item with optional message reference.
+// Supports backwards-compatible unmarshaling: accepts both plain strings (legacy)
+// and objects with text + optional message_id (new format).
+type AnnotatedItem struct {
+	Text      string `json:"text"`
+	MessageID string `json:"message_id,omitempty"`
+}
+
+// UnmarshalJSON implements custom unmarshaling for AnnotatedItem.
+// Accepts both "string" (legacy) and {"text":"...", "message_id":"..."} (new).
+func (a *AnnotatedItem) UnmarshalJSON(data []byte) error {
+	// Try string first (legacy format)
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		a.Text = s
+		return nil
+	}
+
+	// Try object format
+	type annotatedItemRaw struct {
+		Text      string      `json:"text"`
+		MessageID interface{} `json:"message_id,omitempty"`
+	}
+	var raw annotatedItemRaw
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	a.Text = raw.Text
+
+	// message_id from LLM can be an integer or string
+	switch v := raw.MessageID.(type) {
+	case float64:
+		a.MessageID = strconv.Itoa(int(v))
+	case string:
+		a.MessageID = v
+	default:
+		a.MessageID = ""
+	}
+	return nil
+}
+
 // SmartRecapResult contains the parsed LLM response.
 type SmartRecapResult struct {
-	SuggestedSessionTitle     string   `json:"suggested_session_title"`
-	Recap                     string   `json:"recap"`
-	WentWell                  []string `json:"went_well"`
-	WentBad                   []string `json:"went_bad"`
-	HumanSuggestions          []string `json:"human_suggestions"`
-	EnvironmentSuggestions    []string `json:"environment_suggestions"`
-	DefaultContextSuggestions []string `json:"default_context_suggestions"`
+	SuggestedSessionTitle     string          `json:"suggested_session_title"`
+	Recap                     string          `json:"recap"`
+	WentWell                  []AnnotatedItem `json:"went_well"`
+	WentBad                   []AnnotatedItem `json:"went_bad"`
+	HumanSuggestions          []AnnotatedItem `json:"human_suggestions"`
+	EnvironmentSuggestions    []AnnotatedItem `json:"environment_suggestions"`
+	DefaultContextSuggestions []AnnotatedItem `json:"default_context_suggestions"`
 
 	// Metadata from LLM response
 	InputTokens      int
@@ -79,7 +121,7 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 	defer span.End()
 
 	// Prepare the transcript for the LLM
-	transcript := PrepareTranscript(fc)
+	transcript, idMap := PrepareTranscript(fc)
 	if transcript == "" {
 		err := fmt.Errorf("no content to analyze")
 		span.RecordError(err)
@@ -160,6 +202,9 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
+	// Translate integer message_ids from LLM response to real UUIDs
+	resolveMessageIDs(result, idMap)
+
 	result.InputTokens = resp.Usage.InputTokens
 	result.OutputTokens = resp.Usage.OutputTokens
 	result.GenerationTimeMs = generationTimeMs
@@ -175,8 +220,11 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 }
 
 // PrepareTranscript converts the file collection into an XML format suitable for LLM analysis.
-func PrepareTranscript(fc *FileCollection) string {
+// Returns the XML string and a mapping from sequential integer IDs to message UUIDs.
+func PrepareTranscript(fc *FileCollection) (string, map[int]string) {
 	var sb strings.Builder
+	idMap := make(map[int]string) // sequential integer -> message UUID
+	counter := 0
 
 	// Build a map of tool_use_id -> tool_name for resolving tool results and skill expansions
 	// For Skill tool uses, we store the skill name (from input.skill) instead of "Skill"
@@ -203,7 +251,8 @@ func PrepareTranscript(fc *FileCollection) string {
 	sb.WriteString("<transcript>\n")
 	for _, file := range fc.AllFiles() {
 		for _, line := range file.Lines {
-			formatted := formatLine(line, toolNameMap)
+			formatted, newCounter := formatLine(line, toolNameMap, counter, idMap)
+			counter = newCounter
 			if formatted != "" {
 				sb.WriteString(formatted)
 				sb.WriteString("\n")
@@ -212,7 +261,7 @@ func PrepareTranscript(fc *FileCollection) string {
 	}
 	sb.WriteString("</transcript>")
 
-	return sb.String()
+	return sb.String(), idMap
 }
 
 // PrepareStats formats the computed analytics cards as XML for the LLM.
@@ -338,23 +387,29 @@ func PrepareStats(cardStats map[string]interface{}) string {
 }
 
 // formatLine converts a transcript line to XML format for the LLM.
-func formatLine(line *TranscriptLine, toolNameMap map[string]string) string {
+// Returns the formatted string and the updated counter.
+func formatLine(line *TranscriptLine, toolNameMap map[string]string, counter int, idMap map[int]string) (string, int) {
 	switch line.Type {
 	case "user":
-		return formatUserLine(line, toolNameMap)
+		return formatUserLine(line, toolNameMap, counter, idMap)
 	case "assistant":
-		return formatAssistantLine(line)
+		return formatAssistantLine(line, counter, idMap)
 	default:
-		return ""
+		return "", counter
 	}
 }
 
 // formatUserLine formats a user message for the LLM in XML format.
-func formatUserLine(line *TranscriptLine, toolNameMap map[string]string) string {
+// Returns the formatted string and the updated counter.
+func formatUserLine(line *TranscriptLine, toolNameMap map[string]string, counter int, idMap map[int]string) (string, int) {
 	// Check for skill expansion messages first (isMeta: true with sourceToolUseID)
 	if line.IsSkillExpansionMessage() {
 		content := getStringContent(line)
 		if content != "" {
+			counter++
+			if line.UUID != "" {
+				idMap[counter] = line.UUID
+			}
 			// Truncate skill content (can be lengthy)
 			if len(content) > 1500 {
 				content = content[:1500] + "... [truncated]"
@@ -367,21 +422,25 @@ func formatUserLine(line *TranscriptLine, toolNameMap map[string]string) string 
 				}
 			}
 			if skillName != "" {
-				return fmt.Sprintf("<skill name=\"%s\">\n%s\n</skill>", skillName, content)
+				return fmt.Sprintf("<skill id=\"%d\" name=\"%s\">\n%s\n</skill>", counter, skillName, content), counter
 			}
-			return fmt.Sprintf("<skill>\n%s\n</skill>", content)
+			return fmt.Sprintf("<skill id=\"%d\">\n%s\n</skill>", counter, content), counter
 		}
-		return ""
+		return "", counter
 	}
 
 	if line.IsHumanMessage() {
 		content := getStringContent(line)
 		if content != "" {
+			counter++
+			if line.UUID != "" {
+				idMap[counter] = line.UUID
+			}
 			// Truncate very long user messages
 			if len(content) > 2000 {
 				content = content[:2000] + "... [truncated]"
 			}
-			return fmt.Sprintf("<user>\n%s\n</user>", content)
+			return fmt.Sprintf("<user id=\"%d\">\n%s\n</user>", counter, content), counter
 		}
 	}
 
@@ -389,6 +448,10 @@ func formatUserLine(line *TranscriptLine, toolNameMap map[string]string) string 
 	if line.IsToolResultMessage() {
 		blocks := getToolResultBlocks(line, toolNameMap)
 		if len(blocks) > 0 {
+			counter++
+			if line.UUID != "" {
+				idMap[counter] = line.UUID
+			}
 			var results []string
 			for _, block := range blocks {
 				status := "success"
@@ -397,17 +460,18 @@ func formatUserLine(line *TranscriptLine, toolNameMap map[string]string) string 
 				}
 				results = append(results, fmt.Sprintf("  <result tool=\"%s\" status=\"%s\"/>", block.toolName, status))
 			}
-			return fmt.Sprintf("<tool_results>\n%s\n</tool_results>", strings.Join(results, "\n"))
+			return fmt.Sprintf("<tool_results id=\"%d\">\n%s\n</tool_results>", counter, strings.Join(results, "\n")), counter
 		}
 	}
 
-	return ""
+	return "", counter
 }
 
 // formatAssistantLine formats an assistant message for the LLM in XML format.
-func formatAssistantLine(line *TranscriptLine) string {
+// Returns the formatted string and the updated counter.
+func formatAssistantLine(line *TranscriptLine, counter int, idMap map[int]string) (string, int) {
 	if !line.IsAssistantMessage() {
-		return ""
+		return "", counter
 	}
 
 	var innerParts []string
@@ -443,10 +507,14 @@ func formatAssistantLine(line *TranscriptLine) string {
 	}
 
 	if len(innerParts) > 0 {
-		return fmt.Sprintf("<assistant>\n%s\n</assistant>", strings.Join(innerParts, "\n"))
+		counter++
+		if line.UUID != "" {
+			idMap[counter] = line.UUID
+		}
+		return fmt.Sprintf("<assistant id=\"%d\">\n%s\n</assistant>", counter, strings.Join(innerParts, "\n")), counter
 	}
 
-	return ""
+	return "", counter
 }
 
 // getStringContent extracts string content from a user message.
@@ -585,21 +653,21 @@ func parseSmartRecapResponse(content string) (*SmartRecapResult, error) {
 		result.SuggestedSessionTitle = result.SuggestedSessionTitle[:100]
 	}
 
-	// Truncate arrays to max 3 items and ensure non-nil for JSON serialization
-	result.WentWell = truncateStringSlice(result.WentWell, 3)
-	result.WentBad = truncateStringSlice(result.WentBad, 3)
-	result.HumanSuggestions = truncateStringSlice(result.HumanSuggestions, 3)
-	result.EnvironmentSuggestions = truncateStringSlice(result.EnvironmentSuggestions, 3)
-	result.DefaultContextSuggestions = truncateStringSlice(result.DefaultContextSuggestions, 3)
+	// Truncate arrays to max items and ensure non-nil for JSON serialization
+	result.WentWell = truncateAnnotatedSlice(result.WentWell, 3)
+	result.WentBad = truncateAnnotatedSlice(result.WentBad, 3)
+	result.HumanSuggestions = truncateAnnotatedSlice(result.HumanSuggestions, 2)
+	result.EnvironmentSuggestions = truncateAnnotatedSlice(result.EnvironmentSuggestions, 2)
+	result.DefaultContextSuggestions = truncateAnnotatedSlice(result.DefaultContextSuggestions, 2)
 
 	return &result, nil
 }
 
-// truncateStringSlice truncates a string slice to maxLen and ensures a non-nil result
+// truncateAnnotatedSlice truncates an AnnotatedItem slice to maxLen and ensures a non-nil result
 // for consistent JSON serialization ([] instead of null).
-func truncateStringSlice(s []string, maxLen int) []string {
+func truncateAnnotatedSlice(s []AnnotatedItem, maxLen int) []AnnotatedItem {
 	if s == nil {
-		return []string{}
+		return []AnnotatedItem{}
 	}
 	if len(s) > maxLen {
 		return s[:maxLen]
@@ -607,11 +675,44 @@ func truncateStringSlice(s []string, maxLen int) []string {
 	return s
 }
 
+// resolveMessageIDs translates integer message_id values in the result to real UUIDs
+// using the provided mapping. Invalid or missing IDs are cleared (text is kept).
+func resolveMessageIDs(result *SmartRecapResult, idMap map[int]string) {
+	lists := []*[]AnnotatedItem{
+		&result.WentWell,
+		&result.WentBad,
+		&result.HumanSuggestions,
+		&result.EnvironmentSuggestions,
+		&result.DefaultContextSuggestions,
+	}
+	for _, list := range lists {
+		for i := range *list {
+			item := &(*list)[i]
+			if item.MessageID == "" {
+				continue
+			}
+			id, err := strconv.Atoi(item.MessageID)
+			if err != nil {
+				// Not a valid integer — clear it
+				item.MessageID = ""
+				continue
+			}
+			if uuid, ok := idMap[id]; ok {
+				item.MessageID = uuid
+			} else {
+				// Integer not in mapping — clear it
+				item.MessageID = ""
+			}
+		}
+	}
+}
+
 const smartRecapSystemPrompt = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
 
 You are analyzing a Claude Code session. The input contains:
 
 1. <transcript> - The conversation in XML format:
+   - Each element has a sequential integer id attribute for reference (e.g., <user id="1">, <assistant id="2">)
    - <user> tags for human messages (prompts from the user)
    - <skill> tags for skill expansions (instructions injected when skills like /commit are invoked)
    - <assistant> tags for Claude's responses, which may include:
@@ -631,12 +732,12 @@ Provide a high-signal analysis. Look for interesting patterns in both the transc
 
 Output ONLY valid JSON with these fields:
 - suggested_session_title: Concise, descriptive title for this session (max 100 chars). Focus on the main task or outcome. Examples: "Add dark mode toggle to settings", "Debug OAuth login redirect loop", "Refactor API validation middleware"
-- recap: Short 2-3 sentence recap of what occurred. If stats show notable patterns (e.g., high assistant utilization showing good flow, high cache hit rate showing efficiency, many tool errors), mention them briefly.
-- went_well: Up to 3 things that went well (omit or use empty array if none are clearly valid)
-- went_bad: Up to 3 things that did not go well (omit or use empty array if none are clearly valid)
-- human_suggestions: Up to 3 human technique improvements (e.g., "provide more context in initial prompts")
-- environment_suggestions: Up to 3 environment improvements (e.g., "speed up test suite")
-- default_context_suggestions: Up to 3 CLAUDE.md/system context improvements. These should be high-level general practices (e.g., "always run tests before committing"), NOT task-specific details (e.g., "when implementing OAuth, use PKCE flow")
+- recap: Short 2-3 sentence recap of what occurred (plain text, no message references). If stats show notable patterns (e.g., high assistant utilization showing good flow, high cache hit rate showing efficiency, many tool errors), mention them briefly.
+- went_well: Up to 3 objects of things that went well (omit or use empty array if none are clearly valid). Each item is {"text": "...", "message_id": N} where message_id is the integer id of the transcript element that best illustrates the point. Omit message_id if no specific message is relevant.
+- went_bad: Up to 3 objects of things that did not go well (same format as went_well)
+- human_suggestions: Up to 2 objects of human technique improvements (same format). Omit or use empty array if nothing stands out.
+- environment_suggestions: Up to 2 objects of environment improvements (same format). Omit or use empty array if nothing stands out.
+- default_context_suggestions: Up to 2 objects of CLAUDE.md/system context improvements (same format). These should be high-level general practices (e.g., "always run tests before committing"), NOT task-specific details (e.g., "when implementing OAuth, use PKCE flow"). Omit or use empty array if nothing stands out.
 
 Guidelines:
 - The session may still be in progress. Do not penalize workflows that appear incomplete or in-progress. Focus on what has happened so far rather than judging whether tasks were "finished."
@@ -650,9 +751,9 @@ Example output:
 {
   "suggested_session_title": "Implement dark mode toggle feature",
   "recap": "User implemented a dark mode feature with 85% cache hit rate showing efficient context reuse. Tests were added and all passed after minor iteration.",
-  "went_well": ["Clear initial requirements", "High cache utilization", "Good iteration on feedback"],
-  "went_bad": ["Multiple rounds needed to fix CSS specificity issues"],
-  "human_suggestions": ["Include browser compatibility requirements upfront"],
+  "went_well": [{"text": "Clear initial requirements", "message_id": 1}, {"text": "High cache utilization"}, {"text": "Good iteration on feedback", "message_id": 12}],
+  "went_bad": [{"text": "Multiple rounds needed to fix CSS specificity issues", "message_id": 5}],
+  "human_suggestions": [{"text": "Include browser compatibility requirements upfront"}],
   "environment_suggestions": [],
-  "default_context_suggestions": ["Document preferred testing patterns in CLAUDE.md"]
+  "default_context_suggestions": [{"text": "Document preferred testing patterns in CLAUDE.md"}]
 }`

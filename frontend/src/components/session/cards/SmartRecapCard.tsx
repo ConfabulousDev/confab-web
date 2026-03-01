@@ -5,10 +5,12 @@ import {
   AlertCircleIcon,
   LightbulbIcon,
   RefreshIcon,
+  ExternalLinkIcon,
 } from '@/components/icons';
 import type {
   SmartRecapCardData,
   SmartRecapQuotaInfo,
+  AnnotatedItem,
 } from '@/schemas/api';
 import type { CardProps } from './types';
 import { formatRelativeTime } from '@/utils/formatting';
@@ -23,6 +25,8 @@ interface SmartRecapCardProps extends CardProps<SmartRecapCardData> {
   onRefresh?: () => void;
   /** Whether a refresh is in progress */
   isRefreshing?: boolean;
+  /** Session ID for building message deep links */
+  sessionId?: string;
 }
 
 /**
@@ -32,6 +36,22 @@ interface SmartRecapCardProps extends CardProps<SmartRecapCardData> {
  * - Things that didn't go well
  * - Suggestions for improvement
  */
+function MessageLink({ item, sessionId }: { item: AnnotatedItem; sessionId?: string }) {
+  if (!item.message_id || !sessionId) return null;
+  return (
+    <a
+      href={`/sessions/${sessionId}?tab=transcript&msg=${item.message_id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={styles.messageLink}
+      title="View in transcript"
+      aria-label="View in transcript"
+    >
+      {ExternalLinkIcon}
+    </a>
+  );
+}
+
 export function SmartRecapCard({
   data,
   loading,
@@ -40,6 +60,7 @@ export function SmartRecapCard({
   missingReason,
   onRefresh,
   isRefreshing,
+  sessionId,
 }: SmartRecapCardProps) {
   // Error state (graceful degradation)
   if (error && !data) {
@@ -126,7 +147,8 @@ export function SmartRecapCard({
             {data.went_well.map((item, i) => (
               <li key={i} className={styles.listItemSuccess}>
                 <span className={styles.listIcon}>{CheckCircleIcon}</span>
-                <span>{item}</span>
+                <span>{item.text}</span>
+                <MessageLink item={item} sessionId={sessionId} />
               </li>
             ))}
           </ul>
@@ -141,36 +163,30 @@ export function SmartRecapCard({
             {data.went_bad.map((item, i) => (
               <li key={i} className={styles.listItemWarning}>
                 <span className={styles.listIcon}>{AlertCircleIcon}</span>
-                <span>{item}</span>
+                <span>{item.text}</span>
+                <MessageLink item={item} sessionId={sessionId} />
               </li>
             ))}
           </ul>
         </>
       )}
 
-      {/* Suggestions */}
+      {/* Suggestions (human, environment, default context) */}
       {(data.human_suggestions.length > 0 ||
         data.environment_suggestions.length > 0 ||
         data.default_context_suggestions.length > 0) && (
         <>
           <SectionHeader label="Suggestions" icon={LightbulbIcon} />
           <ul className={styles.list}>
-            {data.human_suggestions.map((item, i) => (
-              <li key={`human-${i}`} className={styles.listItem}>
+            {[
+              ...data.human_suggestions.map((item, i) => ({ item, key: `human-${i}` })),
+              ...data.environment_suggestions.map((item, i) => ({ item, key: `env-${i}` })),
+              ...data.default_context_suggestions.map((item, i) => ({ item, key: `ctx-${i}` })),
+            ].map(({ item, key }) => (
+              <li key={key} className={styles.listItem}>
                 <span className={styles.listIcon}>{LightbulbIcon}</span>
-                <span>{item}</span>
-              </li>
-            ))}
-            {data.environment_suggestions.map((item, i) => (
-              <li key={`env-${i}`} className={styles.listItem}>
-                <span className={styles.listIcon}>{LightbulbIcon}</span>
-                <span>{item}</span>
-              </li>
-            ))}
-            {data.default_context_suggestions.map((item, i) => (
-              <li key={`ctx-${i}`} className={styles.listItem}>
-                <span className={styles.listIcon}>{LightbulbIcon}</span>
-                <span>{item}</span>
+                <span>{item.text}</span>
+                <MessageLink item={item} sessionId={sessionId} />
               </li>
             ))}
           </ul>

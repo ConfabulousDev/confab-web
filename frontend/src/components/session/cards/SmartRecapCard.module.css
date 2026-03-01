@@ -86,10 +86,6 @@
   color: var(--color-text-muted);
 }
 
-.modelUsed {
-  font-style: italic;
-}
-
 .quotaWarning {
   color: var(--color-error-text);
 }
@@ -110,4 +106,17 @@
   margin: 0;
   font-size: var(--font-sm);
   color: var(--color-text-muted);
+}
+
+.messageLink {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: var(--spacing-xs);
+  color: var(--color-text-muted);
+  transition: color 0.15s;
+}
+
+.messageLink:hover {
+  color: var(--color-accent);
 }

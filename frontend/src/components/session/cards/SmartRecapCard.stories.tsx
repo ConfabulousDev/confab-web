@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SmartRecapCard } from './SmartRecapCard';
 
+/** Shorthand to create an AnnotatedItem */
+const a = (text: string, message_id?: string) => ({ text, message_id });
+
 const meta: Meta<typeof SmartRecapCard> = {
   title: 'Session/Cards/SmartRecapCard',
   component: SmartRecapCard,
@@ -23,25 +26,26 @@ export const Default: Story = {
       recap:
         'The session involved implementing a new feature for user authentication. The user worked through several iterations to get the JWT token handling correct and added appropriate error handling.',
       went_well: [
-        'Clear problem description provided upfront',
-        'Good iteration based on feedback',
-        'Comprehensive test coverage added',
+        a('Clear problem description provided upfront', 'msg-uuid-1'),
+        a('Good iteration based on feedback', 'msg-uuid-5'),
+        a('Comprehensive test coverage added'),
       ],
       went_bad: [
-        'Initial requirements were ambiguous',
-        'Tests took a long time to run',
+        a('Initial requirements were ambiguous', 'msg-uuid-2'),
+        a('Tests took a long time to run'),
       ],
-      human_suggestions: ['Include expected vs actual behavior in bug reports'],
-      environment_suggestions: ['Consider parallelizing test suite'],
+      human_suggestions: [a('Include expected vs actual behavior in bug reports')],
+      environment_suggestions: [a('Consider parallelizing test suite')],
       default_context_suggestions: [
-        'Add authentication patterns to CLAUDE.md',
-        'Document preferred error handling approach',
+        a('Add authentication patterns to CLAUDE.md'),
+        a('Document preferred error handling approach'),
       ],
       computed_at: '2024-01-15T10:30:00Z',
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,
     quota: { used: 3, limit: 20, exceeded: false },
+    sessionId: 'demo-session-id',
   },
 };
 
@@ -49,7 +53,7 @@ export const Refreshing: Story = {
   args: {
     data: {
       recap: 'Old recap content that will be replaced...',
-      went_well: ['Previous item'],
+      went_well: [a('Previous item')],
       went_bad: [],
       human_suggestions: [],
       environment_suggestions: [],
@@ -67,9 +71,9 @@ export const QuotaExceeded: Story = {
   args: {
     data: {
       recap: 'This recap was generated earlier. Monthly quota has been reached.',
-      went_well: ['Task was completed successfully'],
+      went_well: [a('Task was completed successfully')],
       went_bad: [],
-      human_suggestions: ['Be more specific with requirements'],
+      human_suggestions: [a('Be more specific with requirements')],
       environment_suggestions: [],
       default_context_suggestions: [],
       computed_at: '2024-01-10T14:00:00Z',
@@ -103,35 +107,33 @@ export const AllSuggestions: Story = {
       recap:
         'Extended refactoring session covering multiple components with significant architectural changes.',
       went_well: [
-        'Clean separation of concerns achieved',
-        'Performance improved by 40%',
-        'All existing tests still pass',
+        a('Clean separation of concerns achieved', 'msg-uuid-3'),
+        a('Performance improved by 40%', 'msg-uuid-8'),
+        a('All existing tests still pass'),
       ],
       went_bad: [
-        'Some components required multiple rewrites',
-        'Documentation was missing for legacy code',
-        'Build times increased due to new dependencies',
+        a('Some components required multiple rewrites', 'msg-uuid-4'),
+        a('Documentation was missing for legacy code'),
+        a('Build times increased due to new dependencies'),
       ],
       human_suggestions: [
-        'Break large refactors into smaller PRs',
-        'Write ADRs for architectural decisions',
-        'Request code review earlier in the process',
+        a('Break large refactors into smaller PRs'),
+        a('Write ADRs for architectural decisions'),
       ],
       environment_suggestions: [
-        'Enable incremental TypeScript compilation',
-        'Add pre-commit hooks for linting',
-        'Set up CI caching for dependencies',
+        a('Enable incremental TypeScript compilation'),
+        a('Add pre-commit hooks for linting'),
       ],
       default_context_suggestions: [
-        'Document the component architecture in CLAUDE.md',
-        'Add refactoring guidelines',
-        'Include performance targets and benchmarks',
+        a('Document the component architecture in CLAUDE.md'),
+        a('Add refactoring guidelines'),
       ],
       computed_at: '2024-01-15T10:30:00Z',
       model_used: 'claude-haiku-4-5-20251101',
     },
     loading: false,
     quota: { used: 5, limit: 20, exceeded: false },
+    sessionId: 'demo-session-id',
   },
 };
 
@@ -147,7 +149,7 @@ export const UnlimitedQuota: Story = {
   args: {
     data: {
       recap: 'Recap without quota information displayed.',
-      went_well: ['Everything worked as expected'],
+      went_well: [a('Everything worked as expected')],
       went_bad: [],
       human_suggestions: [],
       environment_suggestions: [],

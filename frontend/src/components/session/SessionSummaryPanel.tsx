@@ -173,6 +173,7 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           // Build additional props for specific cards
           const extraProps: Record<string, unknown> = {};
           if (cardDef.key === 'smart_recap') {
+            extraProps.sessionId = sessionId;
             extraProps.missingReason = analytics?.smart_recap_missing_reason;
             if (isOwner) {
               // Only show quota to session owner (private info)
