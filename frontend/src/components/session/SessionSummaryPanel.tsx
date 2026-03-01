@@ -5,6 +5,7 @@ import { analyticsAPI, APIError } from '@/services/api';
 import { RelativeTime } from '@/components/RelativeTime';
 import Alert from '@/components/Alert';
 import { MoreVerticalIcon, GitHubIcon } from '@/components/icons';
+import CardGrid from '@/components/CardGrid';
 import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api';
 import { getOrderedCards } from './cards';
 import GitHubLinksCard from './GitHubLinksCard';
@@ -256,9 +257,9 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
         </Alert>
       )}
 
-      <div className={styles.grid}>
+      <CardGrid>
         {renderAnalyticsCards()}
-      </div>
+      </CardGrid>
     </div>
   );
 }

@@ -142,23 +142,6 @@
   display: block;
 }
 
-/* Stats Grid - explicit column counts for predictable layout */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-auto-rows: auto;
-  gap: var(--spacing-md);
-}
-
-/* 5 columns on ultrawide screens */
-@media (min-width: 1400px) {
-  .grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-
-/* 4 columns is the default (no media query needed) */
-
 /* Card column spanning */
 .span2 {
   grid-column: span 2;
@@ -194,21 +177,14 @@
   display: none;
 }
 
-/* Responsive grid: 2 columns on medium screens */
+/* Responsive span collapse — grid columns are defined in CardGrid */
 @media (max-width: 1099px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .span3 {
     grid-column: span 2;
   }
 }
 
-/* On narrow screens, single column */
 @media (max-width: 700px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
   .span2,
   .span3 {
     grid-column: span 1;
