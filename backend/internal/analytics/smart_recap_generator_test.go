@@ -2,6 +2,7 @@ package analytics_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -59,20 +61,31 @@ func makeTestFileCollection(t *testing.T) *analytics.FileCollection {
 	return fc
 }
 
-func TestSmartRecapGenerator_QuotaIncrementFailurePreventsGeneration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+// generatorTestFixture bundles the common dependencies for SmartRecapGenerator tests.
+type generatorTestFixture struct {
+	env        *testutil.TestEnvironment
+	mockServer *httptest.Server
+	conn       *sql.DB
+	store      *analytics.Store
+	generator  *analytics.SmartRecapGenerator
+	user       *models.User
+	sessionID  string
+}
+
+// setupGeneratorTest creates the shared test fixture: test environment, mock Anthropic
+// server, user, session, analytics store, and generator. Caller provides email and
+// externalID to keep tests independent.
+func setupGeneratorTest(t *testing.T, email, externalID string) *generatorTestFixture {
+	t.Helper()
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 
 	mockServer := newMockAnthropicServer(t)
-	defer mockServer.Close()
+	t.Cleanup(mockServer.Close)
 
-	user := testutil.CreateTestUser(t, env, "quotafail@test.com", "QuotaFail User")
-	sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-quotafail")
-	ctx := context.Background()
+	user := testutil.CreateTestUser(t, env, email, "Test User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 	conn := env.DB.Conn()
 	store := analytics.NewStore(conn)
 
@@ -83,93 +96,34 @@ func TestSmartRecapGenerator_QuotaIncrementFailurePreventsGeneration(t *testing.
 		BaseURL:           mockServer.URL,
 	})
 
-	fc := makeTestFileCollection(t)
-	input := analytics.GenerateInput{
-		SessionID:      sessionID,
-		UserID:         user.ID,
-		LineCount:      1,
-		FileCollection: fc,
-		CardStats:      nil,
-	}
-
-	// Do NOT call recapquota.GetOrCreate — no quota row exists.
-	// This simulates a quota system failure where the row is missing.
-	result := generator.Generate(ctx, input, 60)
-
-	// Generation should fail because quota increment failed
-	if result.Error == nil {
-		t.Fatal("expected error when quota increment fails, got nil")
-	}
-	if result.Card != nil {
-		t.Error("expected no card when quota increment fails")
-	}
-
-	// Verify no real card was saved to the database.
-	// Note: AcquireSmartRecapLock creates a stub row (version=0, empty recap),
-	// so we check that no real card (version > 0) was written.
-	card, err := store.GetSmartRecapCard(ctx, sessionID)
-	if err != nil {
-		t.Fatalf("GetSmartRecapCard failed: %v", err)
-	}
-	if card != nil && card.Version != 0 {
-		t.Errorf("real card should NOT be saved when quota increment fails, got version=%d", card.Version)
-	}
-	if card != nil && card.Recap != "" {
-		t.Errorf("card recap should be empty (lock stub), got %q", card.Recap)
-	}
-
-	// Verify lock was cleared (another request can acquire it)
-	acquired, err := store.AcquireSmartRecapLock(ctx, sessionID, 60)
-	if err != nil {
-		t.Fatalf("AcquireSmartRecapLock failed: %v", err)
-	}
-	if !acquired {
-		t.Error("lock should be cleared after quota increment failure")
+	return &generatorTestFixture{
+		env:        env,
+		mockServer: mockServer,
+		conn:       conn,
+		store:      store,
+		generator:  generator,
+		user:       user,
+		sessionID:  sessionID,
 	}
 }
 
-func TestSmartRecapGenerator_QuotaIncrementSuccessAllowsGeneration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	env := testutil.SetupTestEnvironment(t)
-	env.CleanDB(t)
-
-	mockServer := newMockAnthropicServer(t)
-	defer mockServer.Close()
-
-	user := testutil.CreateTestUser(t, env, "quotaok@test.com", "QuotaOK User")
-	sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-quotaok")
-	ctx := context.Background()
-	conn := env.DB.Conn()
-	store := analytics.NewStore(conn)
-
-	generator := analytics.NewSmartRecapGenerator(store, conn, analytics.SmartRecapGeneratorConfig{
-		APIKey:            "test-key",
-		Model:             "test-model",
-		GenerationTimeout: 10 * time.Second,
-		BaseURL:           mockServer.URL,
-	})
-
-	// Create quota row first (normal flow)
-	_, err := recapquota.GetOrCreate(ctx, conn, user.ID)
-	if err != nil {
-		t.Fatalf("GetOrCreate failed: %v", err)
-	}
-
+// generateWithDefaults runs Generate with a standard single-line FileCollection and default settings.
+func (f *generatorTestFixture) generateWithDefaults(t *testing.T) *analytics.GenerateResult {
+	t.Helper()
 	fc := makeTestFileCollection(t)
 	input := analytics.GenerateInput{
-		SessionID:      sessionID,
-		UserID:         user.ID,
+		SessionID:      f.sessionID,
+		UserID:         f.user.ID,
 		LineCount:      1,
 		FileCollection: fc,
-		CardStats:      nil,
 	}
+	return f.generator.Generate(context.Background(), input, 60)
+}
 
-	result := generator.Generate(ctx, input, 60)
-
-	// Generation should succeed
+// requireSuccessfulGeneration asserts that the result has no error, returns a card,
+// and verifies the card was persisted to the database with the expected recap text.
+func (f *generatorTestFixture) requireSuccessfulGeneration(t *testing.T, result *analytics.GenerateResult) {
+	t.Helper()
 	if result.Error != nil {
 		t.Fatalf("expected no error, got: %v", result.Error)
 	}
@@ -181,7 +135,7 @@ func TestSmartRecapGenerator_QuotaIncrementSuccessAllowsGeneration(t *testing.T)
 	}
 
 	// Verify card was saved to the database
-	card, err := store.GetSmartRecapCard(ctx, sessionID)
+	card, err := f.store.GetSmartRecapCard(context.Background(), f.sessionID)
 	if err != nil {
 		t.Fatalf("GetSmartRecapCard failed: %v", err)
 	}
@@ -191,13 +145,77 @@ func TestSmartRecapGenerator_QuotaIncrementSuccessAllowsGeneration(t *testing.T)
 	if card.Recap != "Test recap content." {
 		t.Errorf("saved recap = %q, want %q", card.Recap, "Test recap content.")
 	}
+}
 
-	// Verify quota was incremented
-	count, err := recapquota.GetCount(ctx, conn, user.ID)
+// TestSmartRecapGenerator_NoQuotaRowSucceeds verifies that generation succeeds
+// even when no quota row exists for the user. Increment() now UPSERTs, so the
+// quota row is created automatically with count=1. This was the original bug:
+// the worker path used GetCount() (doesn't create quota row), and Increment()
+// failed for users without a row.
+func TestSmartRecapGenerator_NoQuotaRowSucceeds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	f := setupGeneratorTest(t, "noquota@test.com", "test-session-noquota")
+
+	// Do NOT call recapquota.GetOrCreate -- no quota row exists.
+	// Increment() should UPSERT and create the row automatically.
+	result := f.generateWithDefaults(t)
+
+	f.requireSuccessfulGeneration(t, result)
+
+	// Verify quota was auto-created with count=1
+	count, err := recapquota.GetCount(context.Background(), f.conn, f.user.ID)
 	if err != nil {
 		t.Fatalf("GetCount failed: %v", err)
 	}
 	if count != 1 {
 		t.Errorf("quota count = %d, want 1", count)
+	}
+}
+
+func TestSmartRecapGenerator_QuotaIncrementSuccessAllowsGeneration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	f := setupGeneratorTest(t, "quotaok@test.com", "test-session-quotaok")
+
+	// Create quota row first (normal flow)
+	_, err := recapquota.GetOrCreate(context.Background(), f.conn, f.user.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreate failed: %v", err)
+	}
+
+	result := f.generateWithDefaults(t)
+
+	f.requireSuccessfulGeneration(t, result)
+
+	// Verify quota was incremented
+	count, err := recapquota.GetCount(context.Background(), f.conn, f.user.ID)
+	if err != nil {
+		t.Fatalf("GetCount failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("quota count = %d, want 1", count)
+	}
+}
+
+func TestSmartRecapGenerator_ReturnsSuggestedTitle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	f := setupGeneratorTest(t, "title@test.com", "test-session-title")
+
+	result := f.generateWithDefaults(t)
+
+	if result.Error != nil {
+		t.Fatalf("expected no error, got: %v", result.Error)
+	}
+	// The mock response includes "suggested_session_title": "Test Session"
+	if result.SuggestedTitle != "Test Session" {
+		t.Errorf("SuggestedTitle = %q, want %q", result.SuggestedTitle, "Test Session")
 	}
 }

@@ -54,9 +54,9 @@ func GetOrCreateForMonth(ctx context.Context, conn *sql.DB, userID int64, month 
 	return &q, nil
 }
 
-// Increment bumps the compute count for a user. If the stored month is stale,
-// it atomically resets the count to 1 and updates the month. Uses the current UTC month.
-// Errors if no row exists for this user.
+// Increment bumps the compute count for a user. If no quota row exists, one is
+// created with count 1. If the stored month is stale, the count resets to 1.
+// Uses the current UTC month.
 func Increment(ctx context.Context, conn *sql.DB, userID int64) error {
 	return IncrementForMonth(ctx, conn, userID, CurrentMonth())
 }
@@ -64,23 +64,19 @@ func Increment(ctx context.Context, conn *sql.DB, userID int64) error {
 // IncrementForMonth is the same as Increment but with an explicit month parameter (for tests).
 func IncrementForMonth(ctx context.Context, conn *sql.DB, userID int64, month string) error {
 	query := `
-		UPDATE smart_recap_quota
-		SET compute_count = CASE
-				WHEN quota_month = $2 THEN compute_count + 1
+		INSERT INTO smart_recap_quota (user_id, compute_count, quota_month, last_compute_at)
+		VALUES ($1, 1, $2, NOW())
+		ON CONFLICT (user_id) DO UPDATE SET
+			compute_count = CASE
+				WHEN smart_recap_quota.quota_month = $2 THEN smart_recap_quota.compute_count + 1
 				ELSE 1 END,
 			quota_month = $2,
 			last_compute_at = NOW()
-		WHERE user_id = $1
 	`
 
-	result, err := conn.ExecContext(ctx, query, userID, month)
+	_, err := conn.ExecContext(ctx, query, userID, month)
 	if err != nil {
 		return fmt.Errorf("failed to increment quota: %w", err)
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return fmt.Errorf("no quota record found for user %d", userID)
 	}
 
 	return nil

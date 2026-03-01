@@ -2,13 +2,17 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/anthropic"
+	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -691,4 +695,125 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 			t.Errorf("suggested_session_title = %q, want %q", title, "Title from prior generation")
 		}
 	})
+}
+
+// TestSmartRecap_CacheMissTriggersGeneration is an E2E test that verifies the full
+// generation path through the API: cache miss → download transcript → generate via
+// SmartRecapGenerator → return card + suggested title + increment quota.
+func TestSmartRecap_CacheMissTriggersGeneration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Set up a mock Anthropic server
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := anthropic.MessagesResponse{
+			ID:         "msg_test",
+			Type:       "message",
+			Role:       "assistant",
+			StopReason: "end_turn",
+			Content: []anthropic.ContentBlock{
+				{
+					Type: "text",
+					Text: `"suggested_session_title": "Generated Title", "recap": "Generated recap.", "went_well": ["Good"], "went_bad": [], "human_suggestions": [], "environment_suggestions": [], "default_context_suggestions": []}`,
+				},
+			},
+			Usage: anthropic.Usage{
+				InputTokens:  200,
+				OutputTokens: 80,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	// Configure smart recap with the mock server
+	os.Setenv("SMART_RECAP_ENABLED", "true")
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	os.Setenv("SMART_RECAP_MODEL", "test-model")
+	os.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
+	os.Setenv("TEST_SMART_RECAP_BASE_URL", mockServer.URL)
+	defer func() {
+		os.Unsetenv("SMART_RECAP_ENABLED")
+		os.Unsetenv("ANTHROPIC_API_KEY")
+		os.Unsetenv("SMART_RECAP_MODEL")
+		os.Unsetenv("SMART_RECAP_QUOTA_LIMIT")
+		os.Unsetenv("TEST_SMART_RECAP_BASE_URL")
+	}()
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "gen@test.com", "Gen User")
+	sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-gen")
+
+	// Upload JSONL content (required for analytics computation and smart recap)
+	jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+	testutil.UploadTestChunk(t, env, user.ID, "test-session-gen", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+	// No pre-populated smart recap card → triggers generation
+
+	ts := setupTestServerWithEnv(t, env)
+	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+	resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	testutil.RequireStatus(t, resp, http.StatusOK)
+
+	var rawResult map[string]interface{}
+	testutil.ParseJSON(t, resp, &rawResult)
+
+	// Verify smart_recap card is present
+	cards, ok := rawResult["cards"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected cards map in response")
+	}
+	smartRecap, ok := cards["smart_recap"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected smart_recap card in response (generation should have succeeded)")
+	}
+
+	// Verify generated content
+	if smartRecap["recap"] != "Generated recap." {
+		t.Errorf("recap = %q, want %q", smartRecap["recap"], "Generated recap.")
+	}
+
+	// Verify suggested_session_title from generation
+	title, hasTitle := rawResult["suggested_session_title"].(string)
+	if !hasTitle {
+		t.Fatal("expected suggested_session_title in response")
+	}
+	if title != "Generated Title" {
+		t.Errorf("suggested_session_title = %q, want %q", title, "Generated Title")
+	}
+
+	// Verify quota was incremented
+	count, err := recapquota.GetCount(context.Background(), env.DB.Conn(), user.ID)
+	if err != nil {
+		t.Fatalf("GetCount failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("quota count = %d, want 1", count)
+	}
+
+	// Verify card was persisted in DB
+	store := analytics.NewStore(env.DB.Conn())
+	card, err := store.GetSmartRecapCard(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSmartRecapCard failed: %v", err)
+	}
+	if card == nil {
+		t.Fatal("expected smart recap card to be saved in DB")
+	}
+	if card.Recap != "Generated recap." {
+		t.Errorf("saved recap = %q, want %q", card.Recap, "Generated recap.")
+	}
 }
