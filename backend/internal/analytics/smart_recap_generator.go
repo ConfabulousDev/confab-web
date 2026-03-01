@@ -55,9 +55,10 @@ type GenerateInput struct {
 
 // GenerateResult contains the result of a generation attempt.
 type GenerateResult struct {
-	Card    *SmartRecapCardRecord
-	Skipped bool   // True if generation was skipped (lock held, etc.)
-	Error   error
+	Card           *SmartRecapCardRecord
+	SuggestedTitle string // Title from LLM, empty if not generated
+	Skipped        bool   // True if generation was skipped (lock held, etc.)
+	Error          error
 }
 
 // Generate creates a smart recap for the given session.
@@ -166,5 +167,5 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 		attribute.Int("generation.time_ms", result.GenerationTimeMs),
 	)
 
-	return &GenerateResult{Card: card}
+	return &GenerateResult{Card: card, SuggestedTitle: result.SuggestedSessionTitle}
 }

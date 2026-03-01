@@ -236,10 +236,18 @@ func TestIncrement_NoRecord(t *testing.T) {
 	ctx := context.Background()
 	conn := env.DB.Conn()
 
-	// Increment without creating first — should error
+	// Increment without creating first — should auto-create with count=1
 	err := recapquota.Increment(ctx, conn, user.ID)
-	if err == nil {
-		t.Error("expected error when incrementing non-existent quota")
+	if err != nil {
+		t.Fatalf("Increment failed: %v", err)
+	}
+
+	count, err := recapquota.GetCount(ctx, conn, user.ID)
+	if err != nil {
+		t.Fatalf("GetCount failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("count = %d, want 1", count)
 	}
 }
 

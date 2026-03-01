@@ -433,14 +433,15 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		return nil
 	}
 
-	// Check quota for session owner (GetCount returns 0 for stale/missing months)
-	computeCount, err := recapquota.GetCount(ctx, p.db, session.UserID)
+	// Ensure quota record exists and check limit (creates row if missing so
+	// the later Increment call in the generator never fails on a missing row).
+	quota, err := recapquota.GetOrCreate(ctx, p.db, session.UserID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if p.config.SmartRecapQuota > 0 && computeCount >= p.config.SmartRecapQuota {
+	if p.config.SmartRecapQuota > 0 && quota.ComputeCount >= p.config.SmartRecapQuota {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "quota_exceeded"))
 		return ErrQuotaExceeded
 	}
