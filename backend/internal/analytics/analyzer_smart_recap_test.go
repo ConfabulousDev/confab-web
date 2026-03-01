@@ -449,3 +449,95 @@ func TestPrepareTranscript_ToolResultsGetIDs(t *testing.T) {
 		t.Errorf("idMap[2] = %q, want %q", idMap[2], "u1")
 	}
 }
+
+func TestPrepareTranscript_SkillExpansionGetsID(t *testing.T) {
+	// Skill tool_use from assistant, then skill expansion (isMeta user message with sourceToolUseID)
+	jsonl := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"tool_use","id":"tu_skill","name":"Skill","input":{"skill":"commit"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}},"uuid":"a1","timestamp":"2025-01-01T00:00:00Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+{"type":"user","message":{"role":"user","content":"Expanded skill instructions here"},"uuid":"s1","timestamp":"2025-01-01T00:00:01Z","parentUuid":"a1","isSidechain":false,"isMeta":true,"sourceToolUseID":"tu_skill","userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	xml, idMap := PrepareTranscript(fc)
+
+	// Assistant gets id=1, skill expansion gets id=2
+	if !strings.Contains(xml, `<assistant id="1">`) {
+		t.Error("expected <assistant id=\"1\"> in transcript")
+	}
+	if !strings.Contains(xml, `<skill id="2"`) {
+		t.Errorf("expected <skill id=\"2\" ...> in transcript, got:\n%s", xml)
+	}
+	// Skill name should be resolved from the tool_use
+	if !strings.Contains(xml, `name="commit"`) {
+		t.Errorf("expected skill name=\"commit\" in transcript, got:\n%s", xml)
+	}
+
+	if idMap[1] != "a1" {
+		t.Errorf("idMap[1] = %q, want %q", idMap[1], "a1")
+	}
+	if idMap[2] != "s1" {
+		t.Errorf("idMap[2] = %q, want %q", idMap[2], "s1")
+	}
+}
+
+func TestPrepareTranscript_AssistantWithThinkingAndToolsGetsID(t *testing.T) {
+	// Assistant message with thinking + text + tool_use — should still get a single ID
+	jsonl := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"thinking","thinking":"Let me think about this..."},{"type":"text","text":"Here is my response"},{"type":"tool_use","id":"tu_1","name":"Read","input":{"path":"/test"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}},"uuid":"a1","timestamp":"2025-01-01T00:00:00Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	xml, idMap := PrepareTranscript(fc)
+
+	if !strings.Contains(xml, `<assistant id="1">`) {
+		t.Error("expected <assistant id=\"1\"> in transcript")
+	}
+	if !strings.Contains(xml, `<thinking>`) {
+		t.Error("expected <thinking> in transcript")
+	}
+	if !strings.Contains(xml, `<tools_called>Read</tools_called>`) {
+		t.Errorf("expected <tools_called>Read</tools_called> in transcript, got:\n%s", xml)
+	}
+
+	if idMap[1] != "a1" {
+		t.Errorf("idMap[1] = %q, want %q", idMap[1], "a1")
+	}
+	// Should only have 1 entry — all parts of the assistant message share one ID
+	if len(idMap) != 1 {
+		t.Errorf("idMap has %d entries, want 1", len(idMap))
+	}
+}
+
+func TestAnnotatedItem_UnmarshalJSON_NullMessageID(t *testing.T) {
+	// LLM could theoretically send null for message_id
+	var item AnnotatedItem
+	if err := json.Unmarshal([]byte(`{"text":"item","message_id":null}`), &item); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if item.Text != "item" {
+		t.Errorf("Text = %q, want %q", item.Text, "item")
+	}
+	if item.MessageID != "" {
+		t.Errorf("MessageID = %q, want empty (null should be cleared)", item.MessageID)
+	}
+}
+
+func TestAnnotatedItem_UnmarshalJSON_BoolMessageID(t *testing.T) {
+	// Unexpected type — should be cleared gracefully
+	var item AnnotatedItem
+	if err := json.Unmarshal([]byte(`{"text":"item","message_id":true}`), &item); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if item.Text != "item" {
+		t.Errorf("Text = %q, want %q", item.Text, "item")
+	}
+	if item.MessageID != "" {
+		t.Errorf("MessageID = %q, want empty (bool should be cleared)", item.MessageID)
+	}
+}
