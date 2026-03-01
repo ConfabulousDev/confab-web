@@ -27,25 +27,25 @@ func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
 		FastCostUSD:      decimal.Zero,
 	}
 
-	// Process all files - main and agents
+	// Process all files - main and agents, using deduplicated message groups
 	for _, file := range fc.AllFiles() {
-		for _, line := range file.Lines {
-			if !line.IsAssistantMessage() {
+		for _, group := range file.AssistantMessageGroups() {
+			if group.FinalUsage == nil {
 				continue
 			}
 
-			usage := line.Message.Usage
+			usage := group.FinalUsage
 			result.InputTokens += usage.InputTokens
 			result.OutputTokens += usage.OutputTokens
 			result.CacheCreationTokens += usage.CacheCreationInputTokens
 			result.CacheReadTokens += usage.CacheReadInputTokens
 
 			// Calculate cost with model-specific pricing (includes fast mode + server tools)
-			pricing := GetPricing(line.Message.Model)
+			pricing := GetPricing(group.Model)
 			cost := CalculateTotalCost(pricing, usage)
 			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
 
-			if usage.Speed == SpeedFast {
+			if group.IsFastMode {
 				result.FastTurns++
 				result.FastCostUSD = result.FastCostUSD.Add(cost)
 			}

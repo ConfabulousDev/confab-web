@@ -13,6 +13,10 @@ type TranscriptFile struct {
 	AgentID          string // Empty for main transcript, set for agent files
 	ValidationErrors []LineValidationError
 	TotalLines       int // Total lines processed (including invalid ones)
+
+	// Cached result of AssistantMessageGroups (computed on first call)
+	cachedGroups    []AssistantMessageGroup
+	groupsComputed  bool
 }
 
 // FileCollection contains all transcript data for a session.
@@ -195,6 +199,98 @@ func (tf *TranscriptFile) BuildTimestampMap() map[string]time.Time {
 		}
 	}
 	return m
+}
+
+// AssistantMessageGroup represents a deduplicated API response.
+// Multiple JSONL lines can share the same message.id (one per content block),
+// and the same message.id can reappear later via context replay.
+// This struct merges all occurrences into a single logical response.
+type AssistantMessageGroup struct {
+	MessageID  string      // API message ID (empty for lines without one)
+	FinalUsage *TokenUsage // Usage from the last occurrence (final output_tokens)
+	Model      string      // Model from the first occurrence
+	HasText    bool        // True if ANY line in the group has text content
+	HasToolUse bool        // True if ANY line in the group has tool_use
+	HasThinking bool       // True if ANY line in the group has thinking
+	IsFastMode bool        // True if any line has speed="fast"
+}
+
+// AssistantMessageGroups groups assistant lines by message.id and returns
+// deduplicated groups. Each group's FinalUsage comes from the last occurrence
+// of the message ID, and Model comes from the first occurrence.
+// Lines without a message ID get their own individual group.
+// Groups are returned in order of first occurrence.
+// The result is cached after the first call.
+func (tf *TranscriptFile) AssistantMessageGroups() []AssistantMessageGroup {
+	if tf.groupsComputed {
+		return tf.cachedGroups
+	}
+
+	// Map message ID → index in the result slice (for O(1) merges)
+	idToIndex := make(map[string]int)
+	var groups []AssistantMessageGroup
+
+	for _, line := range tf.Lines {
+		if line.Type != "assistant" || line.Message == nil {
+			continue
+		}
+
+		msgID := line.GetMessageID()
+
+		hasText := line.HasTextContent()
+		hasToolUse := line.HasToolUse()
+		hasThinking := line.HasThinking()
+		isFast := line.Message.Usage != nil && line.Message.Usage.Speed == SpeedFast
+
+		if msgID == "" {
+			// No message ID — create standalone group in order
+			g := AssistantMessageGroup{
+				Model:       line.GetModel(),
+				HasText:     hasText,
+				HasToolUse:  hasToolUse,
+				HasThinking: hasThinking,
+				IsFastMode:  isFast,
+			}
+			if line.Message.Usage != nil {
+				usage := *line.Message.Usage
+				g.FinalUsage = &usage
+			}
+			groups = append(groups, g)
+			continue
+		}
+
+		if idx, ok := idToIndex[msgID]; ok {
+			// Subsequent occurrence — merge flags, update usage (last wins)
+			groups[idx].HasText = groups[idx].HasText || hasText
+			groups[idx].HasToolUse = groups[idx].HasToolUse || hasToolUse
+			groups[idx].HasThinking = groups[idx].HasThinking || hasThinking
+			groups[idx].IsFastMode = groups[idx].IsFastMode || isFast
+			if line.Message.Usage != nil {
+				usage := *line.Message.Usage
+				groups[idx].FinalUsage = &usage
+			}
+		} else {
+			// First occurrence — append to result, record index
+			g := AssistantMessageGroup{
+				MessageID:   msgID,
+				Model:       line.GetModel(),
+				HasText:     hasText,
+				HasToolUse:  hasToolUse,
+				HasThinking: hasThinking,
+				IsFastMode:  isFast,
+			}
+			if line.Message.Usage != nil {
+				usage := *line.Message.Usage
+				g.FinalUsage = &usage
+			}
+			idToIndex[msgID] = len(groups)
+			groups = append(groups, g)
+		}
+	}
+
+	tf.cachedGroups = groups
+	tf.groupsComputed = true
+	return groups
 }
 
 // BuildToolUseIDToNameMap builds a map of tool_use ID -> tool name.

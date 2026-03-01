@@ -1,16 +1,6 @@
 import type { TranscriptLine } from '@/types';
 import { isAssistantMessage } from '@/types';
 
-interface TokenStats {
-  input: number;
-  output: number;
-  cacheCreated: number;
-  cacheRead: number;
-  webSearchRequests: number;
-  webFetchRequests: number;
-  codeExecutionRequests: number;
-}
-
 // Pricing per million tokens (5-minute cache pricing)
 // Source: https://www.anthropic.com/pricing
 interface ModelPricing {
@@ -85,36 +75,6 @@ function getPricing(modelName: string): ModelPricing {
 }
 
 /**
- * Calculate token stats by summing usage from all assistant messages
- */
-export function calculateTokenStats(messages: TranscriptLine[]): TokenStats {
-  const stats: TokenStats = {
-    input: 0,
-    output: 0,
-    cacheCreated: 0,
-    cacheRead: 0,
-    webSearchRequests: 0,
-    webFetchRequests: 0,
-    codeExecutionRequests: 0,
-  };
-
-  for (const message of messages) {
-    if (isAssistantMessage(message)) {
-      const usage = message.message.usage;
-      stats.input += usage.input_tokens;
-      stats.output += usage.output_tokens;
-      stats.cacheCreated += usage.cache_creation_input_tokens ?? 0;
-      stats.cacheRead += usage.cache_read_input_tokens ?? 0;
-      stats.webSearchRequests += usage.server_tool_use?.web_search_requests ?? 0;
-      stats.webFetchRequests += usage.server_tool_use?.web_fetch_requests ?? 0;
-      stats.codeExecutionRequests += usage.server_tool_use?.code_execution_requests ?? 0;
-    }
-  }
-
-  return stats;
-}
-
-/**
  * Calculate cost for a single message.
  * Returns cost in dollars (0 for non-assistant messages).
  */
@@ -146,18 +106,6 @@ export function calculateMessageCost(message: TranscriptLine): number {
   cost += (usage.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_COST_PER_REQUEST;
 
   return cost;
-}
-
-/**
- * Calculate estimated cost from messages
- * Returns cost in dollars
- */
-export function calculateEstimatedCost(messages: TranscriptLine[]): number {
-  let totalCost = 0;
-  for (const message of messages) {
-    totalCost += calculateMessageCost(message);
-  }
-  return totalCost;
 }
 
 /**

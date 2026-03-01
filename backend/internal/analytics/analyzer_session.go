@@ -41,9 +41,9 @@ func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
 	// Build timestamp map for compaction time calculation
 	timestampByUUID := fc.Main.BuildTimestampMap()
 
-	// Only process main transcript for session stats
+	// Count user messages, timestamps, and compaction events from raw lines
 	for _, line := range fc.Main.Lines {
-		// Count all messages
+		// Count all messages (raw line count)
 		result.TotalMessages++
 
 		// Count user messages and breakdown
@@ -54,29 +54,6 @@ func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
 				result.HumanPrompts++
 			} else if line.IsToolResultMessage() {
 				result.ToolResults++
-			}
-		}
-
-		// Count assistant messages and breakdown
-		if line.IsAssistantMessage() {
-			result.AssistantMessages++
-
-			// Track models used (exclude synthetic models)
-			if model := line.GetModel(); model != "" && model != "<synthetic>" {
-				modelsUsed[model] = true
-			}
-
-			// Categorize by content type
-			hasText := line.HasTextContent()
-			hasToolUse := line.HasToolUse()
-			hasThinking := line.HasThinking()
-
-			if hasText {
-				result.TextResponses++
-			} else if hasToolUse && !hasThinking {
-				result.ToolCalls++
-			} else if hasThinking && !hasToolUse {
-				result.ThinkingBlocks++
 			}
 		}
 
@@ -115,6 +92,29 @@ func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
 		}
 	}
 
+	// Count assistant messages using deduplicated groups (fixes over-counting
+	// from multi-line-per-response and context replay).
+	// Categories are non-exclusive: a response can have both text + tool_use.
+	for _, group := range fc.Main.AssistantMessageGroups() {
+		result.AssistantMessages++
+
+		// Track models used (exclude synthetic models)
+		if group.Model != "" && group.Model != "<synthetic>" {
+			modelsUsed[group.Model] = true
+		}
+
+		// Non-exclusive breakdown
+		if group.HasText {
+			result.TextResponses++
+		}
+		if group.HasToolUse {
+			result.ToolCalls++
+		}
+		if group.HasThinking {
+			result.ThinkingBlocks++
+		}
+	}
+
 	// Compute duration
 	if firstTimestamp != nil && lastTimestamp != nil && !firstTimestamp.Equal(*lastTimestamp) {
 		d := lastTimestamp.Sub(*firstTimestamp).Milliseconds()
@@ -123,9 +123,9 @@ func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
 
 	// Collect models from agent files (exclude synthetic models)
 	for _, agent := range fc.Agents {
-		for _, line := range agent.Lines {
-			if model := line.GetModel(); model != "" && model != "<synthetic>" {
-				modelsUsed[model] = true
+		for _, group := range agent.AssistantMessageGroups() {
+			if group.Model != "" && group.Model != "<synthetic>" {
+				modelsUsed[group.Model] = true
 			}
 		}
 	}

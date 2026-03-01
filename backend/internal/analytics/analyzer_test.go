@@ -225,29 +225,36 @@ func TestSessionAnalyzer_MessageBreakdown(t *testing.T) {
 		t.Errorf("AssistantMessages = %d, want 5", session.AssistantMessages)
 	}
 
-	// Message type breakdown
+	// Message type breakdown (non-exclusive: a response can be both text + tool_use)
 	if session.HumanPrompts != 2 {
 		t.Errorf("HumanPrompts = %d, want 2", session.HumanPrompts)
 	}
 	if session.ToolResults != 3 {
 		t.Errorf("ToolResults = %d, want 3", session.ToolResults)
 	}
+	// a1 has text+tool_use → counts in BOTH TextResponses and ToolCalls
+	// a2, a3 have tool_use only → ToolCalls
+	// a4 has thinking only → ThinkingBlocks
+	// a5 has text only → TextResponses
 	if session.TextResponses != 2 {
-		t.Errorf("TextResponses = %d, want 2", session.TextResponses)
+		t.Errorf("TextResponses = %d, want 2 (a1 text+tool, a5 text)", session.TextResponses)
 	}
-	if session.ToolCalls != 2 {
-		t.Errorf("ToolCalls = %d, want 2 (tool_use only, not text+tool_use)", session.ToolCalls)
+	if session.ToolCalls != 3 {
+		t.Errorf("ToolCalls = %d, want 3 (a1 text+tool, a2 tool, a3 tool)", session.ToolCalls)
 	}
 	if session.ThinkingBlocks != 1 {
 		t.Errorf("ThinkingBlocks = %d, want 1", session.ThinkingBlocks)
 	}
 
 	// Turns are in the ConversationResult
+	// UserTurns = human prompts
 	if conversation.UserTurns != 2 {
 		t.Errorf("UserTurns = %d, want 2 (should equal HumanPrompts)", conversation.UserTurns)
 	}
-	if conversation.AssistantTurns != 2 {
-		t.Errorf("AssistantTurns = %d, want 2 (should equal TextResponses)", conversation.AssistantTurns)
+	// AssistantTurns = user-prompt-triggered sequences that got at least one response
+	// u1 triggered a1..a5 → 1 turn; u5 ("Thanks!") has no response → 0
+	if conversation.AssistantTurns != 1 {
+		t.Errorf("AssistantTurns = %d, want 1 (only first prompt triggered responses)", conversation.AssistantTurns)
 	}
 }
 
@@ -1060,5 +1067,467 @@ func TestSkillsAnalyzer_NoSkillInvocations(t *testing.T) {
 	}
 	if len(result.SkillStats) != 0 {
 		t.Errorf("SkillStats length = %d, want 0", len(result.SkillStats))
+	}
+}
+
+// =============================================================================
+// Message ID deduplication tests
+// =============================================================================
+
+func TestAssistantMessageGroups_MultiLinePerResponse(t *testing.T) {
+	// Same message ID appears 3 times (thinking, text, tool_use) — one API response
+	// Output tokens grow incrementally: 10 → 50 → 80 (last is final)
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+		makeThinkingBlock("Let me think..."),
+	}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("Here's my response"),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
+			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	groups := fc.Main.AssistantMessageGroups()
+
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(groups))
+	}
+
+	g := groups[0]
+	if g.MessageID != "msg-001" {
+		t.Errorf("MessageID = %q, want msg-001", g.MessageID)
+	}
+	if g.Model != "claude-sonnet-4" {
+		t.Errorf("Model = %q, want claude-sonnet-4", g.Model)
+	}
+	if !g.HasThinking {
+		t.Error("HasThinking should be true")
+	}
+	if !g.HasText {
+		t.Error("HasText should be true")
+	}
+	if !g.HasToolUse {
+		t.Error("HasToolUse should be true")
+	}
+	if g.FinalUsage == nil {
+		t.Fatal("FinalUsage should not be nil")
+	}
+	// Should use the LAST line's output_tokens (80), not the sum
+	if g.FinalUsage.OutputTokens != 80 {
+		t.Errorf("FinalUsage.OutputTokens = %d, want 80 (last occurrence)", g.FinalUsage.OutputTokens)
+	}
+	if g.FinalUsage.InputTokens != 100 {
+		t.Errorf("FinalUsage.InputTokens = %d, want 100", g.FinalUsage.InputTokens)
+	}
+}
+
+func TestAssistantMessageGroups_ContextReplay(t *testing.T) {
+	// msg-001 appears, then msg-002, then msg-001 again (context replay).
+	// Replayed message has identical usage to original — shouldn't be double-counted.
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeTextBlock("First response"),
+	}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]interface{}{
+			makeTextBlock("Second response"),
+		}) + "\n" +
+		// Context replay of msg-001 (hundreds of lines later in practice)
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:03Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("First response"),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	groups := fc.Main.AssistantMessageGroups()
+
+	if len(groups) != 2 {
+		t.Fatalf("Expected 2 groups (msg-001 deduped), got %d", len(groups))
+	}
+
+	if groups[0].MessageID != "msg-001" {
+		t.Errorf("First group MessageID = %q, want msg-001", groups[0].MessageID)
+	}
+	if groups[1].MessageID != "msg-002" {
+		t.Errorf("Second group MessageID = %q, want msg-002", groups[1].MessageID)
+	}
+}
+
+func TestTokensAnalyzer_Dedup(t *testing.T) {
+	// Same message ID with 3 lines (incremental output_tokens: 10, 50, 80)
+	// Plus a distinct message
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 10, []map[string]interface{}{
+			makeThinkingBlock("thinking..."),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 80, []map[string]interface{}{
+			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		}) + "\n" +
+		// Second distinct message
+		makeAssistantMessageWithMsgID("a4", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", "msg-002", 200, 60, []map[string]interface{}{
+			makeTextBlock("another response"),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// msg-001: input=100, output=80 (final line)
+	// msg-002: input=200, output=60
+	// Total: 300 input, 140 output
+	// WITHOUT dedup it would be: 300+200=500 input, 10+50+80+60=200 output
+	if result.InputTokens != 300 {
+		t.Errorf("InputTokens = %d, want 300", result.InputTokens)
+	}
+	if result.OutputTokens != 140 {
+		t.Errorf("OutputTokens = %d, want 140 (80 final from msg-001 + 60 from msg-002)", result.OutputTokens)
+	}
+}
+
+func TestSessionAnalyzer_Dedup(t *testing.T) {
+	// 3 lines with same message ID → should count as 1 assistant message
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+			makeThinkingBlock("thinking..."),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
+			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	session, err := (&SessionAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("SessionAnalyzer failed: %v", err)
+	}
+
+	// Should count 1 assistant message (not 3)
+	if session.AssistantMessages != 1 {
+		t.Errorf("AssistantMessages = %d, want 1 (3 lines deduped to 1)", session.AssistantMessages)
+	}
+
+	// Non-exclusive breakdown: all content types present
+	if session.TextResponses != 1 {
+		t.Errorf("TextResponses = %d, want 1", session.TextResponses)
+	}
+	if session.ToolCalls != 1 {
+		t.Errorf("ToolCalls = %d, want 1", session.ToolCalls)
+	}
+	if session.ThinkingBlocks != 1 {
+		t.Errorf("ThinkingBlocks = %d, want 1", session.ThinkingBlocks)
+	}
+
+	// TotalMessages is still raw line count (user + 3 assistant lines = 4)
+	if session.TotalMessages != 4 {
+		t.Errorf("TotalMessages = %d, want 4 (raw line count)", session.TotalMessages)
+	}
+}
+
+func TestConversationAnalyzer_Dedup(t *testing.T) {
+	// User prompt → 3 assistant lines (same msg ID) → should be 1 assistant turn
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+			makeThinkingBlock("thinking..."),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
+			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		}) + "\n" +
+		makeUserMessage("u2", "2025-01-01T00:01:00Z", "thanks") + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&ConversationAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("ConversationAnalyzer failed: %v", err)
+	}
+
+	if result.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2", result.UserTurns)
+	}
+	// First user prompt triggered an assistant response → 1 assistant turn
+	// Second user prompt has no assistant response → no assistant turn
+	if result.AssistantTurns != 1 {
+		t.Errorf("AssistantTurns = %d, want 1 (user-prompt-triggered sequence)", result.AssistantTurns)
+	}
+}
+
+func TestConversationAnalyzer_ContextReplayDedup(t *testing.T) {
+	// msg-001 appears, then later replayed by context management
+	// Should still count as 1 assistant turn
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		// Context replay of msg-001
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:00:02Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]interface{}{
+			makeTextBlock("another response"),
+		}) + "\n" +
+		makeUserMessage("u2", "2025-01-01T00:01:00Z", "bye") + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&ConversationAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("ConversationAnalyzer failed: %v", err)
+	}
+
+	if result.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2", result.UserTurns)
+	}
+	// First user prompt triggered assistant responses → 1 assistant turn
+	if result.AssistantTurns != 1 {
+		t.Errorf("AssistantTurns = %d, want 1", result.AssistantTurns)
+	}
+}
+
+func TestConversationAnalyzer_CrossTurnContextReplay(t *testing.T) {
+	// msg-001 in turn 1, then replayed in turn 2 alongside new msg-002.
+	// Turn 2 should count as an assistant turn (has new msg-002),
+	// but msg-001 replay should not inflate the count.
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response 1"),
+		}) + "\n" +
+		makeUserMessage("u2", "2025-01-01T00:01:00Z", "continue") + "\n" +
+		// Context replay of msg-001 (re-logged by context management)
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response 1"),
+		}) + "\n" +
+		// Actual new response to u2
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:01:02Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]interface{}{
+			makeTextBlock("response 2"),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&ConversationAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("ConversationAnalyzer failed: %v", err)
+	}
+
+	if result.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2", result.UserTurns)
+	}
+	// Both turns got responses: u1→msg-001, u2→msg-002
+	if result.AssistantTurns != 2 {
+		t.Errorf("AssistantTurns = %d, want 2 (both turns had new responses)", result.AssistantTurns)
+	}
+}
+
+func TestConversationAnalyzer_CrossTurnReplayOnly(t *testing.T) {
+	// msg-001 in turn 1, then replayed in turn 2 with NO new response.
+	// Turn 2 should NOT count as an assistant turn.
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		makeUserMessage("u2", "2025-01-01T00:01:00Z", "thanks") + "\n" +
+		// Context replay of msg-001 only — no new assistant response
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&ConversationAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("ConversationAnalyzer failed: %v", err)
+	}
+
+	if result.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2", result.UserTurns)
+	}
+	// Only turn 1 had a new response. Turn 2 only has replay → not counted.
+	if result.AssistantTurns != 1 {
+		t.Errorf("AssistantTurns = %d, want 1 (turn 2 only has replay)", result.AssistantTurns)
+	}
+}
+
+func TestTokensAnalyzer_ContextReplayDedup(t *testing.T) {
+	// msg-001 appears twice (context replay). Tokens should not be double-counted.
+	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 500, 200, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		makeUserMessage("u2", "2025-01-01T00:01:00Z", "continue") + "\n" +
+		// Context replay of msg-001
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4-20241022", "msg-001", 500, 200, []map[string]interface{}{
+			makeTextBlock("response"),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:01:02Z", "claude-sonnet-4-20241022", "msg-002", 300, 100, []map[string]interface{}{
+			makeTextBlock("new response"),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// msg-001: input=500, output=200 (counted once despite replay)
+	// msg-002: input=300, output=100
+	// Total: 800 input, 300 output
+	// WITHOUT dedup: 1300 input, 500 output (2x from replay)
+	if result.InputTokens != 800 {
+		t.Errorf("InputTokens = %d, want 800 (replay not double-counted)", result.InputTokens)
+	}
+	if result.OutputTokens != 300 {
+		t.Errorf("OutputTokens = %d, want 300 (replay not double-counted)", result.OutputTokens)
+	}
+}
+
+func TestAssistantMessageGroups_NoMessageID(t *testing.T) {
+	// The validator requires message.id for assistant messages, so no-ID messages
+	// are dropped during parsing. However, AssistantMessageGroups() defensively
+	// handles this case with standalone groups. Test via direct struct construction
+	// to exercise this path.
+	tf := &TranscriptFile{
+		Lines: []*TranscriptLine{
+			{
+				Type: "assistant",
+				Message: &MessageContent{
+					// No ID field set — empty string
+					Model: "claude-sonnet-4",
+					Usage: &TokenUsage{InputTokens: 100, OutputTokens: 50},
+				},
+			},
+			{
+				Type: "assistant",
+				Message: &MessageContent{
+					ID:    "msg-001",
+					Model: "claude-sonnet-4",
+					Usage: &TokenUsage{InputTokens: 200, OutputTokens: 100},
+				},
+			},
+			{
+				Type: "assistant",
+				Message: &MessageContent{
+					// No ID field set — empty string
+					Model: "claude-sonnet-4",
+					Usage: &TokenUsage{InputTokens: 150, OutputTokens: 75},
+				},
+			},
+		},
+	}
+
+	groups := tf.AssistantMessageGroups()
+
+	// 3 groups: no-ID standalone, msg-001, no-ID standalone (interleaved in order)
+	if len(groups) != 3 {
+		t.Fatalf("Expected 3 groups, got %d", len(groups))
+	}
+
+	// First: no-ID standalone
+	if groups[0].MessageID != "" {
+		t.Errorf("Group 0 MessageID = %q, want empty", groups[0].MessageID)
+	}
+	if groups[0].FinalUsage.InputTokens != 100 {
+		t.Errorf("Group 0 InputTokens = %d, want 100", groups[0].FinalUsage.InputTokens)
+	}
+
+	// Second: msg-001
+	if groups[1].MessageID != "msg-001" {
+		t.Errorf("Group 1 MessageID = %q, want msg-001", groups[1].MessageID)
+	}
+
+	// Third: no-ID standalone
+	if groups[2].MessageID != "" {
+		t.Errorf("Group 2 MessageID = %q, want empty", groups[2].MessageID)
+	}
+	if groups[2].FinalUsage.InputTokens != 150 {
+		t.Errorf("Group 2 InputTokens = %d, want 150", groups[2].FinalUsage.InputTokens)
+	}
+}
+
+func TestAssistantMessageGroups_FastModeFlag(t *testing.T) {
+	// Only one of three lines has speed="fast". The group should have IsFastMode=true.
+	jsonl := makeAssistantMessageWithMsgIDAndSpeed("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+		makeThinkingBlock("thinking..."),
+	}, "") + "\n" +
+		makeAssistantMessageWithMsgIDAndSpeed("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeTextBlock("response"),
+		}, "fast") + "\n" +
+		makeAssistantMessageWithMsgIDAndSpeed("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
+			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		}, "") + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	groups := fc.Main.AssistantMessageGroups()
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(groups))
+	}
+	if !groups[0].IsFastMode {
+		t.Error("IsFastMode should be true (any line with speed=fast)")
+	}
+}
+
+func TestAssistantMessageGroups_CacheConsistency(t *testing.T) {
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeTextBlock("response"),
+	}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	groups1 := fc.Main.AssistantMessageGroups()
+	groups2 := fc.Main.AssistantMessageGroups()
+
+	if len(groups1) != len(groups2) {
+		t.Fatalf("Cache inconsistency: first call returned %d groups, second returned %d", len(groups1), len(groups2))
+	}
+	if len(groups1) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(groups1))
+	}
+	if groups1[0].MessageID != groups2[0].MessageID {
+		t.Error("Cache returned different MessageID")
 	}
 }

@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useState, useRef } from 'react';
 import type { TranscriptLine } from '@/types';
+import { isAssistantMessage } from '@/types';
 import { formatCost } from '@/utils/tokenStats';
 import { useSegmentLayout, type TimelineSegment } from './timelineSegments';
 import styles from './CostBar.module.css';
@@ -14,7 +15,7 @@ interface CostBarProps {
 
 export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSeek }: CostBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
-  const [hoveredSegment, setHoveredSegment] = useState<{ segment: TimelineSegment; cost: number } | null>(null);
+  const [hoveredSegment, setHoveredSegment] = useState<{ segmentIndex: number; cost: number } | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
   const { segments, heightPercents, totalSize, indicatorPosition } = useSegmentLayout(messages, selectedIndex);
@@ -30,13 +31,30 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
     });
   }, [segments, messageCosts]);
 
-  // Compute alpha values based on cost density (cost per message)
+  // Count unique assistant message IDs per segment for accurate density.
+  // Multiple JSONL lines share the same message.id (one per content block),
+  // and context replay re-logs the same message.id later.
+  const segmentUniqueMsgCounts = useMemo(() => {
+    return segments.map((seg) => {
+      const seen = new Set<string>();
+      for (let i = seg.startIndex; i <= seg.endIndex; i++) {
+        const msg = messages[i];
+        if (msg && isAssistantMessage(msg)) {
+          seen.add(msg.message.id);
+        }
+      }
+      return seen.size;
+    });
+  }, [segments, messages]);
+
+  // Compute alpha values based on cost density (cost per unique API call)
   // Intensity reflects how expensive each API call is, not total segment cost
   const segmentAlphas = useMemo(() => {
-    const densities = segments.map((seg, i) => {
+    const densities = segments.map((_, i) => {
       const cost = segmentCosts[i] ?? 0;
-      if (cost === 0 || seg.messageCount === 0) return 0;
-      return cost / seg.messageCount;
+      const uniqueCount = segmentUniqueMsgCounts[i] ?? 0;
+      if (cost === 0 || uniqueCount === 0) return 0;
+      return cost / uniqueCount;
     });
     const maxDensity = Math.max(...densities, 0);
     if (maxDensity === 0) return densities.map(() => 0);
@@ -45,7 +63,7 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
       if (density === 0) return 0;
       return 0.15 + (density / maxDensity) * 0.75;
     });
-  }, [segments, segmentCosts]);
+  }, [segments, segmentCosts, segmentUniqueMsgCounts]);
 
   const handleSegmentClick = useCallback(
     (segment: TimelineSegment) => {
@@ -55,12 +73,12 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
   );
 
   const handleSegmentHover = useCallback(
-    (segment: TimelineSegment | null, cost: number, event?: React.MouseEvent) => {
-      if (!segment) {
+    (segmentIndex: number | null, cost: number, event?: React.MouseEvent) => {
+      if (segmentIndex == null) {
         setHoveredSegment(null);
         return;
       }
-      setHoveredSegment({ segment, cost });
+      setHoveredSegment({ segmentIndex, cost });
       if (event && barRef.current) {
         const barRect = barRef.current.getBoundingClientRect();
         setTooltipPosition({ top: event.clientY, left: barRect.left });
@@ -89,8 +107,8 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
                 background: alpha > 0 ? `rgba(22, 163, 74, ${alpha})` : 'transparent',
               }}
               onClick={() => handleSegmentClick(segment)}
-              onMouseEnter={(e) => handleSegmentHover(segment, cost, e)}
-              onMouseMove={(e) => handleSegmentHover(segment, cost, e)}
+              onMouseEnter={(e) => handleSegmentHover(index, cost, e)}
+              onMouseMove={(e) => handleSegmentHover(index, cost, e)}
               onMouseLeave={() => handleSegmentHover(null, 0)}
             />
           );
@@ -99,29 +117,45 @@ export function CostBar({ messages, messageCosts, totalCost, selectedIndex, onSe
 
       <div className={styles.positionIndicator} style={{ top: `${indicatorPosition}%` }} />
 
-      {hoveredSegment && (() => {
-        const { segment, cost } = hoveredSegment;
-        const percent = totalCost > 0 ? ((cost / totalCost) * 100).toFixed(1) : '0';
-        const costPerMsg = segment.messageCount > 0 ? cost / segment.messageCount : 0;
+      {hoveredSegment && <CostTooltip
+        hoveredSegment={hoveredSegment}
+        segments={segments}
+        segmentUniqueMsgCounts={segmentUniqueMsgCounts}
+        totalCost={totalCost}
+        tooltipPosition={tooltipPosition}
+      />}
+    </div>
+  );
+}
 
-        return (
-          <div
-            className={styles.tooltip}
-            style={{ top: tooltipPosition.top, left: tooltipPosition.left }}
-          >
-            {cost > 0 ? (
-              <>
-                <div className={styles.tooltipTotal}>{formatCost(cost)} ({percent}%)</div>
-                <div className={styles.tooltipDensity}>
-                  {formatCost(costPerMsg)}/msg &times; {segment.messageCount}
-                </div>
-              </>
-            ) : (
-              'No cost'
-            )}
+function CostTooltip({ hoveredSegment, segments, segmentUniqueMsgCounts, totalCost, tooltipPosition }: {
+  hoveredSegment: { segmentIndex: number; cost: number };
+  segments: TimelineSegment[];
+  segmentUniqueMsgCounts: number[];
+  totalCost: number;
+  tooltipPosition: { top: number; left: number };
+}) {
+  const { segmentIndex, cost } = hoveredSegment;
+  const segment = segments[segmentIndex]!;
+  const percent = totalCost > 0 ? ((cost / totalCost) * 100).toFixed(1) : '0';
+  const uniqueCount = segmentUniqueMsgCounts[segmentIndex] ?? segment.messageCount;
+  const costPerMsg = uniqueCount > 0 ? cost / uniqueCount : 0;
+
+  return (
+    <div
+      className={styles.tooltip}
+      style={{ top: tooltipPosition.top, left: tooltipPosition.left }}
+    >
+      {cost > 0 ? (
+        <>
+          <div className={styles.tooltipTotal}>{formatCost(cost)} ({percent}%)</div>
+          <div className={styles.tooltipDensity}>
+            {formatCost(costPerMsg)}/msg &times; {uniqueCount}
           </div>
-        );
-      })()}
+        </>
+      ) : (
+        'No cost'
+      )}
     </div>
   );
 }
