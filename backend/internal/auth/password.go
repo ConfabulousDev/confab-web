@@ -66,6 +66,10 @@ func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerF
 			redirectWithError(w, r, "Password is required")
 			return
 		}
+		if len(password) > 1024 {
+			redirectWithError(w, r, "Password is too long")
+			return
+		}
 
 		// Check email domain restriction
 		if !validation.IsAllowedEmailDomain(email, allowedDomains) {

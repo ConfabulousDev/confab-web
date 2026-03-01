@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -1854,11 +1855,11 @@ func HandleDevicePage(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Logged in - show the code entry form
-		html := generateDevicePageHTML(prefilledCode)
+		// Logged in - show the code entry form (escape to prevent XSS)
+		pageHTML := generateDevicePageHTML(html.EscapeString(prefilledCode))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(html))
+		w.Write([]byte(pageHTML))
 	}
 }
 
