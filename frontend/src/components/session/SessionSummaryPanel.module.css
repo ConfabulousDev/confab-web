@@ -186,6 +186,7 @@
 }
 
 /* Collapse empty grid cells (e.g., SmartRecapCard returns null when disabled) */
+.spanFull:empty,
 .sizeCompact:empty,
 .sizeStandard:empty,
 .sizeTall:empty {
@@ -211,6 +212,12 @@
   .span2,
   .span3 {
     grid-column: span 1;
+  }
+  /* No row alignment needed in single column — let cards size to content */
+  .sizeCompact,
+  .sizeStandard,
+  .sizeTall {
+    min-height: 0;
   }
 }
 
