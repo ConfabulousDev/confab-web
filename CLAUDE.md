@@ -148,36 +148,27 @@ If commands fail with "command not found", run `npm install` first.
 
 ### Sharded Backend Tests (Faster)
 
-For faster test runs, shard by package using 9 parallel Bash tool calls:
+For faster test runs, shard by package using 5 parallel Bash tool calls:
 
 ```bash
-# Shard 1: db - session tests (~240s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "Session" -skip "AccessType|WithAccess|Sync|WebSession" ./internal/db/...
+# Shard 1: db package
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/...
 
-# Shard 2: db - session access tests (~120s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "AccessType|WithAccess" ./internal/db/...
-
-# Shard 3: db - sync/web session tests (~50s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "Sync|WebSession|ConnectWithRetry|Tsquery" ./internal/db/...
-
-# Shard 4: db - user/oauth/password tests (~85s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "User|OAuth|Password|SmartRecap" ./internal/db/...
-
-# Shard 5: db - auth-related tests (~110s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "APIKey|Device|Share|Web" ./internal/db/...
-
-# Shard 6: api package (~110s)
+# Shard 2: api package
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...
 
-# Shard 7: auth package (~40s)
+# Shard 3: auth package
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/...
 
-# Shard 8: analytics package (~230s)
+# Shard 4: analytics package
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/analytics/...
 
-# Shard 9: remaining packages (~15s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/storage/... ./internal/admin/... ./internal/anthropic/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
+# Shard 5: remaining packages
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test $(go list ./internal/... | grep -vE 'internal/(db|api|auth|analytics)')
 ```
+
+**Sharding rule:** Always shard by package, never by test name (`-run`/`-skip`).
+When a package is too slow, split it into sub-packages rather than adding name-based filters.
 
 Claude Code can run multiple Bash commands in parallel and aggregate results across all shards.
 

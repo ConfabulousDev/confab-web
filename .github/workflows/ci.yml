@@ -69,16 +69,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - shard: db-session
-            run: go test -timeout 15m -run "Session" -skip "AccessType|WithAccess|Sync|WebSession" ./internal/db/...
-          - shard: db-session-access
-            run: go test -timeout 15m -run "AccessType|WithAccess" ./internal/db/...
-          - shard: db-sync-web
-            run: go test -timeout 15m -run "Sync|WebSession|ConnectWithRetry|Tsquery" ./internal/db/...
-          - shard: db-user-oauth
-            run: go test -timeout 15m -run "User|OAuth|Password|SmartRecap" ./internal/db/...
-          - shard: db-auth
-            run: go test -timeout 15m -run "APIKey|Device|Share|Web" ./internal/db/...
+          # Each shard runs complete packages — no -run/-skip patterns.
+          # When a package gets too slow, split it into sub-packages.
+          - shard: db
+            run: go test -timeout 15m ./internal/db/...
           - shard: api
             run: go test -timeout 15m ./internal/api/...
           - shard: auth
@@ -86,7 +80,9 @@ jobs:
           - shard: analytics
             run: go test -timeout 15m ./internal/analytics/...
           - shard: other
-            run: go test -timeout 15m ./internal/storage/... ./internal/admin/... ./internal/anthropic/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
+            # Catch-all: runs every internal/ package not listed above.
+            # New packages are automatically included — no config changes needed.
+            run: go test -timeout 15m $(go list ./internal/... | grep -vE 'internal/(db|api|auth|analytics)')
 
     name: backend-integration (${{ matrix.shard }})
 
