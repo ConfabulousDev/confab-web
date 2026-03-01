@@ -15,6 +15,7 @@ import {
   TrendsTopSessionsCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
+import CardGrid from '@/components/CardGrid';
 import styles from './TrendsPage.module.css';
 
 function parseFiltersFromURL(searchParams: URLSearchParams): TrendsFiltersValue | null {
@@ -163,7 +164,7 @@ function TrendsPage() {
           )}
 
           {data && data.session_count > 0 && (
-            <div className={styles.cardsGrid}>
+            <CardGrid>
               <TrendsOverviewCard data={data.cards.overview} />
               <TrendsTokensCard data={data.cards.tokens} />
               <TrendsTopSessionsCard data={data.cards.top_sessions} />
@@ -171,7 +172,7 @@ function TrendsPage() {
               <TrendsToolsCard data={data.cards.tools} />
               <TrendsUtilizationCard data={data.cards.utilization} />
               <TrendsAgentsAndSkillsCard data={data.cards.agents_and_skills} />
-            </div>
+            </CardGrid>
           )}
         </div>
       </div>

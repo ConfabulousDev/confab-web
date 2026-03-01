@@ -10,6 +10,7 @@ import {
   TrendsAgentsAndSkillsCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
+import CardGrid from '@/components/CardGrid';
 import type { TrendsResponse } from '@/schemas/api';
 import styles from './TrendsPage.module.css';
 
@@ -66,14 +67,14 @@ function TrendsPagePresentational({
           )}
 
           {data && data.session_count > 0 && (
-            <div className={styles.cardsGrid}>
+            <CardGrid>
               <TrendsOverviewCard data={data.cards.overview} />
               <TrendsTokensCard data={data.cards.tokens} />
               <TrendsActivityCard data={data.cards.activity} />
               <TrendsToolsCard data={data.cards.tools} />
               <TrendsUtilizationCard data={data.cards.utilization} />
               <TrendsAgentsAndSkillsCard data={data.cards.agents_and_skills} />
-            </div>
+            </CardGrid>
           )}
         </div>
       </div>
