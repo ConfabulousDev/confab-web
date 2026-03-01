@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Confab (Go backend + React frontend)
 
 # Stage 1: Build Frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
