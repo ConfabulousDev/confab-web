@@ -154,47 +154,58 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
       );
     }
 
+    // Render a single card definition
+    const renderCard = (cardDef: (typeof orderedCards)[number]) => {
+      const CardComponent = cardDef.component;
+      const cardData = cards[cardDef.key] ?? null;
+      const cardError = cardErrors[cardDef.key];
+
+      // Skip rendering wrapper if card wouldn't render (avoids empty grid cells)
+      // But always render if there's an error (to show the error state)
+      if (!cardError && cardDef.shouldRender && !loading && !cardDef.shouldRender(cardData)) {
+        return null;
+      }
+
+      const spanClass = SPAN_CLASSES[String(cardDef.span)] ?? '';
+      const sizeClass = cardDef.size ? (SIZE_CLASSES[cardDef.size] ?? '') : '';
+
+      // Build additional props for specific cards
+      const extraProps: Record<string, unknown> = {};
+      if (cardDef.key === 'smart_recap') {
+        extraProps.sessionId = sessionId;
+        extraProps.missingReason = analytics?.smart_recap_missing_reason;
+        if (isOwner) {
+          // Only show quota to session owner (private info)
+          extraProps.quota = analytics?.smart_recap_quota;
+          // Provide refresh capability to owners
+          extraProps.onRefresh = handleRegenerateSmartRecap;
+          extraProps.isRefreshing = isRegenerating;
+        }
+      }
+
+      return (
+        <div key={cardDef.key} className={`${spanClass} ${sizeClass}`.trim()}>
+          <CardComponent
+            data={cardData}
+            loading={loading}
+            error={cardError}
+            {...extraProps}
+          />
+        </div>
+      );
+    };
+
     return (
       <>
-        {orderedCards.map((cardDef) => {
-          const CardComponent = cardDef.component;
-          const cardData = cards[cardDef.key] ?? null;
-          const cardError = cardErrors[cardDef.key];
-
-          // Skip rendering wrapper if card wouldn't render (avoids empty grid cells)
-          // But always render if there's an error (to show the error state)
-          if (!cardError && cardDef.shouldRender && !loading && !cardDef.shouldRender(cardData)) {
-            return null;
-          }
-
-          const spanClass = SPAN_CLASSES[String(cardDef.span)] ?? '';
-          const sizeClass = cardDef.size ? (SIZE_CLASSES[cardDef.size] ?? '') : '';
-
-          // Build additional props for specific cards
-          const extraProps: Record<string, unknown> = {};
-          if (cardDef.key === 'smart_recap') {
-            extraProps.sessionId = sessionId;
-            extraProps.missingReason = analytics?.smart_recap_missing_reason;
-            if (isOwner) {
-              // Only show quota to session owner (private info)
-              extraProps.quota = analytics?.smart_recap_quota;
-              // Provide refresh capability to owners
-              extraProps.onRefresh = handleRegenerateSmartRecap;
-              extraProps.isRefreshing = isRegenerating;
-            }
-          }
-
-          return (
-            <div key={cardDef.key} className={`${spanClass} ${sizeClass}`.trim()}>
-              <CardComponent
-                data={cardData}
-                loading={loading}
-                error={cardError}
-                {...extraProps}
-              />
-            </div>
-          );
-        })}
+        {orderedCards.map(renderCard)}
+        {/* GitHub Links - visibility controlled by toggle for owners */}
+        <GitHubLinksCard
+          sessionId={sessionId}
+          isOwner={isOwner}
+          initialLinks={initialGithubLinks}
+          forceShow={showGitHubCard}
+          onHasLinksChange={handleHasLinksChange}
+        />
       </>
     );
   };
@@ -247,15 +258,6 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
 
       <div className={styles.grid}>
         {renderAnalyticsCards()}
-
-        {/* GitHub Links - visibility controlled by toggle for owners */}
-        <GitHubLinksCard
-          sessionId={sessionId}
-          isOwner={isOwner}
-          initialLinks={initialGithubLinks}
-          forceShow={showGitHubCard}
-          onHasLinksChange={handleHasLinksChange}
-        />
       </div>
     </div>
   );
