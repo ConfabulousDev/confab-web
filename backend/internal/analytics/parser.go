@@ -36,10 +36,11 @@ type TranscriptLine struct {
 
 // MessageContent contains message details for user/assistant messages.
 type MessageContent struct {
-	Role    string      `json:"role,omitempty"`    // "user" or "assistant"
-	Model   string      `json:"model,omitempty"`   // Model ID (assistant only)
-	Usage   *TokenUsage `json:"usage,omitempty"`   // Token usage (assistant only)
-	Content interface{} `json:"content,omitempty"` // String or []ContentBlock
+	ID      string      `json:"id,omitempty"`      // API message ID (shared across content blocks)
+	Role    string      `json:"role,omitempty"`     // "user" or "assistant"
+	Model   string      `json:"model,omitempty"`    // Model ID (assistant only)
+	Usage   *TokenUsage `json:"usage,omitempty"`    // Token usage (assistant only)
+	Content interface{} `json:"content,omitempty"`  // String or []ContentBlock
 
 	// Assistant-specific fields
 	StopReason string `json:"stop_reason,omitempty"` // "end_turn", "tool_use", "max_tokens"
@@ -141,6 +142,15 @@ func (l *TranscriptLine) GetStopReason() string {
 		return ""
 	}
 	return l.Message.StopReason
+}
+
+// GetMessageID returns the API message ID for assistant messages.
+// Multiple transcript lines can share the same message ID (one per content block).
+func (l *TranscriptLine) GetMessageID() string {
+	if l.Message == nil {
+		return ""
+	}
+	return l.Message.ID
 }
 
 // GetModel returns the model ID for assistant messages.

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TranscriptLine } from '@/types';
+import type { TranscriptLine, AssistantMessage } from '@/types';
 import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { calculateMessageCost } from '@/utils/tokenStats';
@@ -119,15 +119,40 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
 
-  // Compute per-message cost map (allMessages index → $ cost) — only when cost mode is on
-  const messageCosts = useMemo(() => {
-    const map = new Map<number, number>();
-    if (!isCostMode) return map;
+  // Compute per-message cost map (allMessages index → $ cost) — only when cost mode is on.
+  // Deduplicates by message.id: multiple JSONL lines share the same message.id
+  // (one per content block), and context replay can re-log the same message.id later.
+  // Cost is assigned only at the first occurrence, using the final (last) usage values.
+  const { messageCosts, correctedUsageByIndex } = useMemo(() => {
+    const costMap = new Map<number, number>();
+    const usageMap = new Map<number, AssistantMessage['message']['usage']>();
+    if (!isCostMode) return { messageCosts: costMap, correctedUsageByIndex: usageMap };
+
+    // Pass 1: Build map of messageId → { firstIndex, lastIndex }
+    const messageIdInfo = new Map<string, { firstIndex: number; lastIndex: number }>();
     for (let i = 0; i < allMessages.length; i++) {
-      const cost = calculateMessageCost(allMessages[i]!);
-      if (cost > 0) map.set(i, cost);
+      const msg = allMessages[i]!;
+      if (!isAssistantMessage(msg)) continue;
+      const msgId = msg.message.id;
+      const existing = messageIdInfo.get(msgId);
+      if (!existing) {
+        messageIdInfo.set(msgId, { firstIndex: i, lastIndex: i });
+      } else {
+        existing.lastIndex = i;
+      }
     }
-    return map;
+
+    // Pass 2: Assign cost at firstIndex using usage from lastIndex
+    for (const [, info] of messageIdInfo) {
+      const finalMsg = allMessages[info.lastIndex]!;
+      if (!isAssistantMessage(finalMsg)) continue;
+      const cost = calculateMessageCost(finalMsg);
+      if (cost > 0) costMap.set(info.firstIndex, cost);
+      // Store corrected usage for tooltip display
+      usageMap.set(info.firstIndex, finalMsg.message.usage);
+    }
+
+    return { messageCosts: costMap, correctedUsageByIndex: usageMap };
   }, [allMessages, isCostMode]);
 
   const totalCost = useMemo(() => {
@@ -499,6 +524,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
                     roleLabel={getRoleLabel(item.message)}
                     isCostMode={isCostMode}
                     messageCost={isCostMode ? messageCosts.get(item.index) : undefined}
+                    correctedTokenUsage={isCostMode ? correctedUsageByIndex.get(item.index) : undefined}
                     onSkipToNext={nextOfSameRole.has(item.filteredIndex)
                       ? () => scrollToFilteredIndex(nextOfSameRole.get(item.filteredIndex)!)
                       : undefined}

@@ -25,7 +25,9 @@ type ConversationResult struct {
 //
 // Turn semantics:
 //   - UserTurns: Count of human prompts (user messages with string content)
-//   - AssistantTurns: Count of assistant messages with text content (visible responses)
+//   - AssistantTurns: Count of user-prompt-triggered sequences that received at
+//     least one assistant response (deduplicated by message.id to avoid
+//     over-counting from multi-line-per-response and context replay).
 //
 // Turn timing semantics:
 //   - Assistant Turn Duration: Time from user prompt to the last assistant message
@@ -45,11 +47,22 @@ func (a *ConversationAnalyzer) Analyze(fc *FileCollection) (*ConversationResult,
 	var lastAssistantTime *time.Time
 	var hadAssistantResponse bool
 
+	// Track seen message IDs for deduplication.
+	// NOTE: This mirrors the message-ID dedup logic in AssistantMessageGroups(),
+	// but is done inline here because we need to track per-turn state
+	// (hadAssistantResponse must reset at each user-turn boundary).
+	seenMessageIDs := make(map[string]bool)
+
 	// Only process main transcript for conversation flow
 	for _, line := range fc.Main.Lines {
 		// Handle human prompts (start of a new user turn)
 		if line.IsHumanMessage() {
 			result.UserTurns++
+
+			// If previous turn had assistant responses, count it as an assistant turn
+			if hadAssistantResponse {
+				result.AssistantTurns++
+			}
 
 			// Timing computation requires timestamp
 			ts, err := line.GetTimestamp()
@@ -85,14 +98,20 @@ func (a *ConversationAnalyzer) Analyze(fc *FileCollection) (*ConversationResult,
 			continue
 		}
 
-		// Handle assistant messages with text (visible responses = assistant turns)
-		if line.IsAssistantMessage() && line.HasTextContent() {
-			result.AssistantTurns++
-		}
+		// Handle assistant messages for timing and turn tracking.
+		// Deduplicate by message ID to avoid over-counting from
+		// multi-line-per-response and context replay.
+		if line.Type == "assistant" && line.Message != nil {
+			msgID := line.GetMessageID()
+			if msgID == "" || !seenMessageIDs[msgID] {
+				if msgID != "" {
+					seenMessageIDs[msgID] = true
+				}
+				// Only count unique assistant responses for hadAssistantResponse
+				hadAssistantResponse = true
+			}
 
-		// Handle all assistant messages for timing (including tool-only responses)
-		if line.IsAssistantMessage() {
-			hadAssistantResponse = true
+			// Always track timing from latest timestamp (even replays have timestamps)
 			if ts, err := line.GetTimestamp(); err == nil {
 				lastAssistantTime = &ts
 			}
@@ -100,6 +119,9 @@ func (a *ConversationAnalyzer) Analyze(fc *FileCollection) (*ConversationResult,
 	}
 
 	// Handle any unclosed assistant turn at end of session
+	if hadAssistantResponse {
+		result.AssistantTurns++
+	}
 	if lastHumanPromptTime != nil && lastAssistantTime != nil && hadAssistantResponse {
 		duration := lastAssistantTime.Sub(*lastHumanPromptTime).Milliseconds()
 		if duration >= 0 {

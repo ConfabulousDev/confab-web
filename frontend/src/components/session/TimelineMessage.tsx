@@ -23,6 +23,10 @@ interface TimelineMessageProps {
   roleLabel?: string;
   isCostMode?: boolean;
   messageCost?: number;
+  /** Corrected token usage from the final (last) line of a deduplicated message group.
+   *  Used for tooltip display when available, since the raw message.usage may have
+   *  intermediate output_tokens (not the final count). */
+  correctedTokenUsage?: TokenUsage;
 }
 
 /**
@@ -265,7 +269,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost }: TimelineMessageProps) {
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage }: TimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -278,6 +282,8 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
 
   // Get token usage for assistant messages
   const tokenUsage = isAssistantMessage(message) ? message.message.usage : undefined;
+  // Use corrected usage (from final line of deduplicated message group) when available
+  const displayUsage = correctedTokenUsage ?? tokenUsage;
 
   // Get model for assistant messages
   const model = isAssistantMessage(message) ? message.message.model : undefined;
@@ -325,20 +331,20 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
           {timestamp && <span className={styles.timestamp}>{formatTimestamp(timestamp)}</span>}
         </div>
         <div className={styles.headerRight}>
-          {tokenUsage && isCostMode && messageCost != null && (
+          {displayUsage && isCostMode && messageCost != null && (
             <span
               className={styles.costBadge}
-              title={buildCostTooltip(tokenUsage, messageCost)}
+              title={buildCostTooltip(displayUsage, messageCost)}
             >
               {formatCost(messageCost)}
               <span className={styles.costBadgeTokens}>
-                {formatTokenCount(tokenUsage.input_tokens)} in · {formatTokenCount(tokenUsage.output_tokens)} out
+                {formatTokenCount(displayUsage.input_tokens)} in · {formatTokenCount(displayUsage.output_tokens)} out
               </span>
-              {(tokenUsage.cache_creation_input_tokens || tokenUsage.cache_read_input_tokens) ? (
+              {(displayUsage.cache_creation_input_tokens || displayUsage.cache_read_input_tokens) ? (
                 <span className={styles.costBadgeCache}>
-                  {tokenUsage.cache_creation_input_tokens ? `${formatTokenCount(tokenUsage.cache_creation_input_tokens)} write` : null}
-                  {tokenUsage.cache_creation_input_tokens && tokenUsage.cache_read_input_tokens ? ' · ' : null}
-                  {tokenUsage.cache_read_input_tokens ? `${formatTokenCount(tokenUsage.cache_read_input_tokens)} hit` : null}
+                  {displayUsage.cache_creation_input_tokens ? `${formatTokenCount(displayUsage.cache_creation_input_tokens)} write` : null}
+                  {displayUsage.cache_creation_input_tokens && displayUsage.cache_read_input_tokens ? ' · ' : null}
+                  {displayUsage.cache_read_input_tokens ? `${formatTokenCount(displayUsage.cache_read_input_tokens)} hit` : null}
                 </span>
               ) : null}
             </span>

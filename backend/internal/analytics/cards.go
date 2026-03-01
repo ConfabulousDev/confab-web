@@ -8,11 +8,11 @@ import (
 
 // Card version constants - increment when compute logic changes
 const (
-	TokensCardVersion          = 2 // v2: added estimated_cost_usd (merged from cost card)
-	SessionCardVersion         = 4 // v4: moved turn counts to conversation card
+	TokensCardVersion          = 3 // v3: dedup by message.id (fixes multi-line + replay over-counting)
+	SessionCardVersion         = 5 // v5: dedup assistant counts by message.id, non-exclusive breakdown
 	ToolsCardVersion           = 2 // v2: per-tool success/error breakdown
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
-	ConversationCardVersion    = 2 // v2: added total durations and utilization
+	ConversationCardVersion    = 3 // v3: AssistantTurns = user-prompt-triggered sequences (deduped)
 	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
 	RedactionsCardVersion      = 2 // v2: filter out "TYPE" placeholder
 	SmartRecapCardVersion      = 1 // v1: initial AI-powered session recap

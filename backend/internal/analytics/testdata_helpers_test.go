@@ -163,6 +163,37 @@ func makeUserMessageWithToolUseResult(uuid, timestamp string, toolResults []map[
 	return string(b)
 }
 
+// makeAssistantMessageWithMsgID creates an assistant message with a specific API message ID.
+// Used to test deduplication of multi-line-per-response and context replay.
+func makeAssistantMessageWithMsgID(uuid, timestamp, model, msgID string, inputTokens, outputTokens int64, content []map[string]interface{}) string {
+	return makeAssistantMessageWithMsgIDAndSpeed(uuid, timestamp, model, msgID, inputTokens, outputTokens, content, "")
+}
+
+// makeAssistantMessageWithMsgIDAndSpeed creates an assistant message with a specific API message ID and speed setting.
+func makeAssistantMessageWithMsgIDAndSpeed(uuid, timestamp, model, msgID string, inputTokens, outputTokens int64, content []map[string]interface{}, speed string) string {
+	m := makeBaseFields(uuid, timestamp)
+	m["type"] = "assistant"
+	usage := map[string]interface{}{
+		"input_tokens":  float64(inputTokens),
+		"output_tokens": float64(outputTokens),
+	}
+	if speed != "" {
+		usage["speed"] = speed
+	}
+	m["message"] = map[string]interface{}{
+		"model":         model,
+		"id":            msgID,
+		"type":          "message",
+		"role":          "assistant",
+		"content":       content,
+		"stop_reason":   "end_turn",
+		"stop_sequence": nil,
+		"usage":         usage,
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
 // makeAssistantMessageWithStopReason creates an assistant message with stop_reason and stop_sequence.
 func makeAssistantMessageWithStopReason(uuid, timestamp, model string, inputTokens, outputTokens int64, content []map[string]interface{}, stopReason string) string {
 	m := makeBaseFields(uuid, timestamp)
