@@ -8,6 +8,11 @@
   gap: var(--spacing-md);
 }
 
+/* Prevent grid items from overflowing their column (grid default is min-width: auto) */
+.grid > * {
+  min-width: 0;
+}
+
 @media (min-width: 1400px) {
   .grid {
     grid-template-columns: repeat(5, 1fr);
