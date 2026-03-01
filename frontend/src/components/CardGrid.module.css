@@ -24,4 +24,9 @@
   .grid {
     grid-template-columns: 1fr;
   }
+
+  /* Single column — collapse all spanning so no child forces implicit columns */
+  .grid > * {
+    grid-column: span 1 !important;
+  }
 }
