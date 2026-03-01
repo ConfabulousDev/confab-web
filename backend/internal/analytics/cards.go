@@ -154,12 +154,12 @@ type SmartRecapCardRecord struct {
 	UpToLine   int64     `json:"up_to_line"`
 
 	// LLM-generated content
-	Recap                     string   `json:"recap"`
-	WentWell                  []string `json:"went_well"`
-	WentBad                   []string `json:"went_bad"`
-	HumanSuggestions          []string `json:"human_suggestions"`
-	EnvironmentSuggestions    []string `json:"environment_suggestions"`
-	DefaultContextSuggestions []string `json:"default_context_suggestions"`
+	Recap                     string          `json:"recap"`
+	WentWell                  []AnnotatedItem `json:"went_well"`
+	WentBad                   []AnnotatedItem `json:"went_bad"`
+	HumanSuggestions          []AnnotatedItem `json:"human_suggestions"`
+	EnvironmentSuggestions    []AnnotatedItem `json:"environment_suggestions"`
+	DefaultContextSuggestions []AnnotatedItem `json:"default_context_suggestions"`
 
 	// LLM metadata
 	ModelUsed        string `json:"model_used"`
@@ -283,14 +283,14 @@ type RedactionsCardData struct {
 
 // SmartRecapCardData is the API response format for the AI-generated smart recap card.
 type SmartRecapCardData struct {
-	Recap                     string   `json:"recap"`
-	WentWell                  []string `json:"went_well"`
-	WentBad                   []string `json:"went_bad"`
-	HumanSuggestions          []string `json:"human_suggestions"`
-	EnvironmentSuggestions    []string `json:"environment_suggestions"`
-	DefaultContextSuggestions []string `json:"default_context_suggestions"`
-	ComputedAt                string   `json:"computed_at"`
-	ModelUsed                 string   `json:"model_used"`
+	Recap                     string          `json:"recap"`
+	WentWell                  []AnnotatedItem `json:"went_well"`
+	WentBad                   []AnnotatedItem `json:"went_bad"`
+	HumanSuggestions          []AnnotatedItem `json:"human_suggestions"`
+	EnvironmentSuggestions    []AnnotatedItem `json:"environment_suggestions"`
+	DefaultContextSuggestions []AnnotatedItem `json:"default_context_suggestions"`
+	ComputedAt                string          `json:"computed_at"`
+	ModelUsed                 string          `json:"model_used"`
 }
 
 // SmartRecapQuotaInfo contains quota information for smart recap generation.

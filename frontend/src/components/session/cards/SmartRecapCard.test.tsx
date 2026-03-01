@@ -3,13 +3,16 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { SmartRecapCard } from './SmartRecapCard';
 import type { SmartRecapCardData, SmartRecapQuotaInfo } from '@/schemas/api';
 
+/** Shorthand to create an AnnotatedItem */
+const a = (text: string, message_id?: string) => ({ text, message_id });
+
 const mockData: SmartRecapCardData = {
   recap: 'The user refactored the auth module and fixed a login bug.',
-  went_well: ['Clean separation of concerns', 'Good test coverage'],
-  went_bad: ['Missed edge case in token refresh'],
-  human_suggestions: ['Add retry logic for network failures'],
-  environment_suggestions: ['Update Node.js to v20'],
-  default_context_suggestions: ['Add CLAUDE.md entry for auth patterns'],
+  went_well: [a('Clean separation of concerns'), a('Good test coverage', 'uuid-1')],
+  went_bad: [a('Missed edge case in token refresh', 'uuid-2')],
+  human_suggestions: [a('Add retry logic for network failures')],
+  environment_suggestions: [a('Update Node.js to v20')],
+  default_context_suggestions: [a('Add CLAUDE.md entry for auth patterns')],
   computed_at: '2024-01-15T10:30:00Z',
   model_used: 'claude-sonnet-4-20250514',
 };
@@ -164,5 +167,39 @@ describe('SmartRecapCard', () => {
     render(<SmartRecapCard data={mockData} loading={false} />);
 
     expect(screen.queryByRole('button', { name: 'Regenerate recap' })).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // Message reference link tests
+  // =========================================================================
+
+  it('renders message link for items with message_id when sessionId provided', () => {
+    render(<SmartRecapCard data={mockData} loading={false} sessionId="sess-123" />);
+
+    // Items with message_id should have links
+    const links = screen.getAllByRole('link', { name: 'View in transcript' });
+    expect(links.length).toBe(2); // uuid-1 (went_well) + uuid-2 (went_bad)
+
+    // Verify link href and target
+    expect(links[0]).toHaveAttribute('href', '/sessions/sess-123?tab=transcript&msg=uuid-1');
+    expect(links[0]).toHaveAttribute('target', '_blank');
+    expect(links[1]).toHaveAttribute('href', '/sessions/sess-123?tab=transcript&msg=uuid-2');
+  });
+
+  it('does not render message links when sessionId is not provided', () => {
+    render(<SmartRecapCard data={mockData} loading={false} />);
+
+    expect(screen.queryByRole('link', { name: 'View in transcript' })).not.toBeInTheDocument();
+  });
+
+  it('does not render message link for items without message_id', () => {
+    const dataWithNoRefs: SmartRecapCardData = {
+      ...mockData,
+      went_well: [a('No ref item 1'), a('No ref item 2')],
+      went_bad: [],
+    };
+    render(<SmartRecapCard data={dataWithNoRefs} loading={false} sessionId="sess-123" />);
+
+    expect(screen.queryByRole('link', { name: 'View in transcript' })).not.toBeInTheDocument();
   });
 });

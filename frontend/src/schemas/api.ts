@@ -277,14 +277,24 @@ const RedactionsCardDataSchema = z.object({
   redaction_counts: z.record(z.string(), z.number()), // Type -> count
 });
 
+// AnnotatedItem: a list item with optional message reference.
+// Backwards-compatible: accepts plain strings (legacy) or objects (new).
+const AnnotatedItemObjectSchema = z.object({ text: z.string(), message_id: z.string().optional() });
+const AnnotatedItemSchema = z
+  .union([
+    z.string().transform((s) => ({ text: s })),
+    AnnotatedItemObjectSchema,
+  ])
+  .pipe(AnnotatedItemObjectSchema);
+
 // Smart Recap card: AI-generated session analysis
 const SmartRecapCardDataSchema = z.object({
   recap: z.string(),
-  went_well: z.array(z.string()),
-  went_bad: z.array(z.string()),
-  human_suggestions: z.array(z.string()),
-  environment_suggestions: z.array(z.string()),
-  default_context_suggestions: z.array(z.string()),
+  went_well: z.array(AnnotatedItemSchema),
+  went_bad: z.array(AnnotatedItemSchema),
+  human_suggestions: z.array(AnnotatedItemSchema),
+  environment_suggestions: z.array(AnnotatedItemSchema),
+  default_context_suggestions: z.array(AnnotatedItemSchema),
   computed_at: z.string(),
   model_used: z.string(),
 });
@@ -471,6 +481,7 @@ export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
 export type AgentsAndSkillsCardData = z.infer<typeof AgentsAndSkillsCardDataSchema>;
 export type RedactionsCardData = z.infer<typeof RedactionsCardDataSchema>;
+export type AnnotatedItem = z.infer<typeof AnnotatedItemSchema>;
 export type SmartRecapCardData = z.infer<typeof SmartRecapCardDataSchema>;
 export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
