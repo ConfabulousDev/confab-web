@@ -30,6 +30,22 @@
   gap: 16px;
 }
 
+@media (max-width: 1099px) {
+  .cardsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .container {
+    padding: 0 1rem 1rem;
+  }
+
+  .cardsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .loading {
   display: flex;
   align-items: center;
