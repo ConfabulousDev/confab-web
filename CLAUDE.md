@@ -148,26 +148,35 @@ If commands fail with "command not found", run `npm install` first.
 
 ### Sharded Backend Tests (Faster)
 
-For faster test runs, shard by package using 6 parallel Bash tool calls:
+For faster test runs, shard by package using 9 parallel Bash tool calls:
 
 ```bash
-# Shard 1: db - session/sync tests (~140s, bottleneck)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "Session|Sync" ./internal/db/...
+# Shard 1: db - session tests (~240s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "Session" -skip "AccessType|WithAccess|Sync|WebSession" ./internal/db/...
 
-# Shard 2: db - user/oauth/password/quota tests (~85s)
+# Shard 2: db - session access tests (~120s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "AccessType|WithAccess" ./internal/db/...
+
+# Shard 3: db - sync/web session tests (~50s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "Sync|WebSession|ConnectWithRetry|Tsquery" ./internal/db/...
+
+# Shard 4: db - user/oauth/password tests (~85s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "User|OAuth|Password|SmartRecap" ./internal/db/...
 
-# Shard 3: db - auth-related tests (~110s)
+# Shard 5: db - auth-related tests (~110s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test -run "APIKey|Device|Share|Web" ./internal/db/...
 
-# Shard 4: api package (~110s)
+# Shard 6: api package (~110s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...
 
-# Shard 5: auth package (~40s)
+# Shard 7: auth package (~40s)
 DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/...
 
-# Shard 6: Everything else (~15s)
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/analytics/... ./internal/storage/... ./internal/admin/... ./internal/anthropic/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
+# Shard 8: analytics package (~230s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/analytics/...
+
+# Shard 9: remaining packages (~15s)
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/storage/... ./internal/admin/... ./internal/anthropic/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
 ```
 
 Claude Code can run multiple Bash commands in parallel and aggregate results across all shards.
