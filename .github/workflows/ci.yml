@@ -69,6 +69,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Each shard runs complete packages — no -run/-skip patterns.
+          # When a package gets too slow, split it into sub-packages.
           - shard: db-session
             run: go test -timeout 15m ./internal/db/session/...
           - shard: db-access
@@ -86,7 +88,9 @@ jobs:
           - shard: analytics
             run: go test -timeout 15m ./internal/analytics/...
           - shard: other
-            run: go test -timeout 15m ./internal/storage/... ./internal/admin/... ./internal/anthropic/... ./internal/clientip/... ./internal/email/... ./internal/ratelimit/... ./internal/validation/...
+            # Catch-all: runs every internal/ package not listed above.
+            # New packages are automatically included — no config changes needed.
+            run: go test -timeout 15m $(go list ./internal/... | grep -vE 'internal/(db|api|auth|analytics)')
 
     name: backend-integration (${{ matrix.shard }})
 
