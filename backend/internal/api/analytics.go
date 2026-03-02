@@ -180,6 +180,7 @@ func downloadAndBuildFileCollection(
 // Analytics are cached in the database and recomputed when stale.
 func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	analyticsStore := analytics.NewStore(database.Conn())
+	sessionStore := &dbsession.Store{DB: database}
 	smartRecapConfig := loadSmartRecapConfig()
 	smartRecapGenerator := analytics.NewSmartRecapGenerator(analyticsStore, database.Conn(), smartRecapConfig.generatorConfig())
 
@@ -248,8 +249,6 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			log.Error("Failed to get cached cards", "error", err, "session_id", sessionID)
 			// Continue to compute fresh analytics
 		}
-
-		sessionStore := &dbsession.Store{DB: database}
 
 		if cached.AllValid(totalLineCount) {
 			// Cache hit - return cached data
@@ -524,6 +523,7 @@ func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analyt
 // Returns 409 Conflict if generation is already in progress (lock held).
 func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	analyticsStore := analytics.NewStore(database.Conn())
+	sessionStore := &dbsession.Store{DB: database}
 	smartRecapConfig := loadSmartRecapConfig()
 	smartRecapGenerator := analytics.NewSmartRecapGenerator(analyticsStore, database.Conn(), smartRecapConfig.generatorConfig())
 
@@ -554,7 +554,6 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		defer cancel()
 
 		// Get session and verify ownership
-		sessionStore := &dbsession.Store{DB: database}
 		sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get session", "error", err, "session_id", sessionID)

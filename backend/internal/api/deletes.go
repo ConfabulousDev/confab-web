@@ -15,6 +15,8 @@ import (
 
 // HandleDeleteSession deletes an entire session and all associated S3 chunks
 func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
+	sessionStore := &dbsession.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -36,7 +38,6 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
-		sessionStore := &dbsession.Store{DB: database}
 		externalID, err := sessionStore.VerifySessionOwnership(dbCtx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {

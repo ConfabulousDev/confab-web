@@ -71,6 +71,9 @@ type CreateGitHubLinkRequest struct {
 
 // HandleCreateGitHubLink creates a new GitHub link for a session
 func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
+	sessionStore := &dbsession.Store{DB: database}
+	githubStore := &dbgithub.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -131,7 +134,6 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Verify user owns the session
-		sessionStore := &dbsession.Store{DB: database}
 		_, err = sessionStore.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
@@ -155,7 +157,6 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 			Source:    req.Source,
 		}
 
-		githubStore := &dbgithub.Store{DB: database}
 		createdLink, err := githubStore.CreateGitHubLink(ctx, link, true)
 		if err != nil {
 			log.Error("Failed to create GitHub link", "error", err, "session_id", sessionID)
@@ -175,6 +176,9 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 
 // HandleListGitHubLinks lists all GitHub links for a session
 func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
+	accessStore := &dbaccess.Store{DB: database}
+	githubStore := &dbgithub.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -197,7 +201,6 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 			viewerPtr = &viewerUserID
 		}
 
-		accessStore := &dbaccess.Store{DB: database}
 		accessInfo, err := accessStore.GetSessionAccessType(ctx, sessionID, viewerPtr)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
@@ -215,7 +218,6 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 		}
 
 		// Get GitHub links
-		githubStore := &dbgithub.Store{DB: database}
 		links, err := githubStore.GetGitHubLinksForSession(ctx, sessionID)
 		if err != nil {
 			log.Error("Failed to get GitHub links", "error", err, "session_id", sessionID)
@@ -236,6 +238,9 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 
 // HandleDeleteGitHubLink deletes a GitHub link
 func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
+	sessionStore := &dbsession.Store{DB: database}
+	githubStore := &dbgithub.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -265,7 +270,6 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Verify user owns the session
-		sessionStore := &dbsession.Store{DB: database}
 		_, err = sessionStore.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
@@ -278,7 +282,6 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 		}
 
 		// Verify the link belongs to this session
-		githubStore := &dbgithub.Store{DB: database}
 		link, err := githubStore.GetGitHubLinkByID(ctx, linkID)
 		if err != nil {
 			if errors.Is(err, db.ErrGitHubLinkNotFound) {

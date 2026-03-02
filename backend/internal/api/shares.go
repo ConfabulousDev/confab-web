@@ -45,6 +45,10 @@ type CreateShareResponse struct {
 
 // HandleCreateShare creates a new share for a session
 func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService, sharesEnabled bool) http.HandlerFunc {
+	userStore := &dbuser.Store{DB: database}
+	sessionStore := &dbsession.Store{DB: database}
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !sharesEnabled {
 			respondError(w, http.StatusForbidden, "Share creation is disabled by the administrator")
@@ -77,7 +81,6 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		// Get sharer info early so we can validate against self-invite
 		sharerCtx, sharerCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer sharerCancel()
-		userStore := &dbuser.Store{DB: database}
 		sharer, err := userStore.GetUserByID(sharerCtx, userID)
 		if err != nil {
 			log.Error("Failed to get sharer info", "error", err)
@@ -121,7 +124,6 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		defer cancel()
 
 		// Get session info for email (title)
-		sessionStore := &dbsession.Store{DB: database}
 		session, err := sessionStore.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
@@ -134,7 +136,6 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		}
 
 		// Create share in database
-		accessStore := &dbaccess.Store{DB: database}
 		share, err := accessStore.CreateShare(ctx, sessionID, userID, req.IsPublic, expiresAt, req.Recipients)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
@@ -225,6 +226,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 
 // HandleListShares lists all shares for a session
 func HandleListShares(database *db.DB) http.HandlerFunc {
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -247,7 +250,6 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get shares from database
-		accessStore := &dbaccess.Store{DB: database}
 		shares, err := accessStore.ListShares(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
@@ -272,6 +274,8 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 
 // HandleRevokeShare revokes a share by ID
 func HandleRevokeShare(database *db.DB) http.HandlerFunc {
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -295,7 +299,6 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Revoke share
-		accessStore := &dbaccess.Store{DB: database}
 		err = accessStore.RevokeShare(ctx, shareID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
@@ -316,6 +319,8 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 
 // HandleListAllUserShares lists all shares for the authenticated user across all sessions
 func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -331,7 +336,6 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get all shares from database
-		accessStore := &dbaccess.Store{DB: database}
 		shares, err := accessStore.ListAllUserShares(ctx, userID)
 		if err != nil {
 			log.Error("Failed to list all user shares", "error", err)

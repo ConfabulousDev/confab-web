@@ -7,7 +7,7 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-var tracer = otel.Tracer("confab/db/auth")
+var tracer = otel.Tracer("confab/db/dbauth")
 
 // Store provides authentication and authorization database operations.
 type Store struct {

@@ -31,6 +31,8 @@ type CreateAPIKeyResponse struct {
 
 // HandleCreateAPIKey creates a new API key for the authenticated user
 func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -70,7 +72,6 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Store in database
-		authStore := &dbauth.Store{DB: database}
 		keyID, createdAt, err := authStore.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
 		if err != nil {
 			if errors.Is(err, db.ErrAPIKeyLimitExceeded) {
@@ -101,6 +102,8 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 
 // HandleListAPIKeys lists all API keys for the authenticated user
 func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -116,7 +119,6 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get keys from database
-		authStore := &dbauth.Store{DB: database}
 		keys, err := authStore.ListAPIKeys(ctx, userID)
 		if err != nil {
 			log.Error("Failed to list API keys", "error", err)
@@ -138,6 +140,8 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 
 // HandleDeleteAPIKey deletes an API key
 func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -161,7 +165,6 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Delete key
-		authStore := &dbauth.Store{DB: database}
 		if err := authStore.DeleteAPIKey(ctx, userID, keyID); err != nil {
 			log.Error("Failed to delete API key", "error", err, "key_id", keyID)
 			respondError(w, http.StatusNotFound, "API key not found")

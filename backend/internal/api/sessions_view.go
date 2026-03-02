@@ -36,6 +36,8 @@ func parseCommaSeparated(value string) []string {
 // HandleListSessions lists all sessions visible to the authenticated user.
 // Supports server-side filtering, cursor-based pagination, and returns pre-materialized filter options.
 func HandleListSessions(database *db.DB) http.HandlerFunc {
+	sessionStore := &dbsession.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -66,7 +68,6 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get cursor-paginated sessions with filter options
-		sessionStore := &dbsession.Store{DB: database}
 		result, err := sessionStore.ListUserSessionsPaginated(ctx, userID, params)
 		if err != nil {
 			log.Error("Failed to list sessions", "error", err)
@@ -130,6 +131,8 @@ type SessionLookupResponse struct {
 // This is an authenticated endpoint - users can only look up their own sessions.
 // Supports both session cookie auth and API key auth (via SessionOrAPIKeyMiddleware).
 func HandleLookupSessionByExternalID(database *db.DB) http.HandlerFunc {
+	sessionStore := &dbsession.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -152,7 +155,6 @@ func HandleLookupSessionByExternalID(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Look up session
-		sessionStore := &dbsession.Store{DB: database}
 		sessionID, err := sessionStore.GetSessionIDByExternalID(ctx, externalID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
@@ -176,6 +178,8 @@ type UpdateSessionTitleRequest struct {
 
 // HandleUpdateSessionTitle updates the custom title for a session
 func HandleUpdateSessionTitle(database *db.DB) http.HandlerFunc {
+	sessionStore := &dbsession.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -211,7 +215,6 @@ func HandleUpdateSessionTitle(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Update the custom title
-		sessionStore := &dbsession.Store{DB: database}
 		err := sessionStore.UpdateSessionCustomTitle(ctx, sessionID, userID, req.CustomTitle)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
