@@ -80,7 +80,7 @@ jobs:
         id: list
         working-directory: backend
         run: |
-          packages=$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./internal/... | jq -Rnc '[inputs]')
+          packages=$(./scripts/list-test-packages.sh --json)
           echo "packages=$packages" >> "$GITHUB_OUTPUT"
           echo "Found $(echo "$packages" | jq length) testable packages"
 
