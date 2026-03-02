@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
@@ -65,7 +66,8 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get cursor-paginated sessions with filter options
-		result, err := database.ListUserSessionsPaginated(ctx, userID, params)
+		sessionStore := &dbsession.Store{DB: database}
+		result, err := sessionStore.ListUserSessionsPaginated(ctx, userID, params)
 		if err != nil {
 			log.Error("Failed to list sessions", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list sessions")
@@ -150,7 +152,8 @@ func HandleLookupSessionByExternalID(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Look up session
-		sessionID, err := database.GetSessionIDByExternalID(ctx, externalID, userID)
+		sessionStore := &dbsession.Store{DB: database}
+		sessionID, err := sessionStore.GetSessionIDByExternalID(ctx, externalID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -208,7 +211,8 @@ func HandleUpdateSessionTitle(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Update the custom title
-		err := database.UpdateSessionCustomTitle(ctx, sessionID, userID, req.CustomTitle)
+		sessionStore := &dbsession.Store{DB: database}
+		err := sessionStore.UpdateSessionCustomTitle(ctx, sessionID, userID, req.CustomTitle)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -224,7 +228,7 @@ func HandleUpdateSessionTitle(database *db.DB) http.HandlerFunc {
 		}
 
 		// Return the updated session
-		session, err := database.GetSessionDetail(ctx, sessionID, userID)
+		session, err := sessionStore.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
 			// Title was updated but failed to fetch - return success without body
 			w.WriteHeader(http.StatusNoContent)

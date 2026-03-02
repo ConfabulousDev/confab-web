@@ -10,6 +10,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -172,7 +173,8 @@ func TestAdminDeactivateUser_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusSeeOther)
 
 		// Verify user is now inactive
-		updatedUser, err := env.DB.GetUserByID(context.Background(), targetUser.ID)
+		userStore := &dbuser.Store{DB: env.DB}
+		updatedUser, err := userStore.GetUserByID(context.Background(), targetUser.ID)
 		if err != nil {
 			t.Fatalf("failed to get user: %v", err)
 		}
@@ -224,7 +226,8 @@ func TestAdminActivateUser_HTTP_Integration(t *testing.T) {
 		targetUser := testutil.CreateTestUser(t, env, "user@example.com", "Target User")
 
 		// Deactivate the target user first
-		if err := env.DB.UpdateUserStatus(context.Background(), targetUser.ID, models.UserStatusInactive); err != nil {
+		userStore := &dbuser.Store{DB: env.DB}
+		if err := userStore.UpdateUserStatus(context.Background(), targetUser.ID, models.UserStatusInactive); err != nil {
 			t.Fatalf("failed to deactivate user: %v", err)
 		}
 
@@ -245,7 +248,7 @@ func TestAdminActivateUser_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusSeeOther)
 
 		// Verify user is now active
-		updatedUser, err := env.DB.GetUserByID(context.Background(), targetUser.ID)
+		updatedUser, err := userStore.GetUserByID(context.Background(), targetUser.ID)
 		if err != nil {
 			t.Fatalf("failed to get user: %v", err)
 		}
@@ -298,7 +301,8 @@ func TestAdminDeleteUser_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusSeeOther)
 
 		// Verify user no longer exists
-		_, err = env.DB.GetUserByID(context.Background(), targetUser.ID)
+		userStore := &dbuser.Store{DB: env.DB}
+		_, err = userStore.GetUserByID(context.Background(), targetUser.ID)
 		if err == nil {
 			t.Error("expected error when getting deleted user")
 		}

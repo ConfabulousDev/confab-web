@@ -14,6 +14,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbevents "github.com/ConfabulousDev/confab-web/internal/db/events"
+	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -186,7 +189,8 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		Hostname:       hostname,
 		Username:       username,
 	}
-	sessionID, files, err := s.db.FindOrCreateSyncSession(ctx, userID, params)
+	sessionStore := &dbsession.Store{DB: s.db}
+	sessionID, files, err := sessionStore.FindOrCreateSyncSession(ctx, userID, params)
 	if err != nil {
 		log.Error("Failed to find/create sync session", "error", err, "user_id", userID, "external_id", req.ExternalID)
 		respondError(w, http.StatusInternalServerError, "Failed to initialize sync session")
@@ -281,7 +285,8 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer dbCancel()
 
-	externalID, err := s.db.VerifySessionOwnership(dbCtx, req.SessionID, userID)
+	sessionStore := &dbsession.Store{DB: s.db}
+	externalID, err := sessionStore.VerifySessionOwnership(dbCtx, req.SessionID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrSessionNotFound) {
 			respondError(w, http.StatusNotFound, "Session not found")
@@ -297,7 +302,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get current sync state to validate chunk continuity
-	syncState, err := s.db.GetSyncFileState(dbCtx, req.SessionID, req.FileName)
+	syncState, err := sessionStore.GetSyncFileState(dbCtx, req.SessionID, req.FileName)
 	expectedFirstLine := 1
 	if err == nil {
 		// File exists - next chunk must continue from where we left off
@@ -396,7 +401,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		firstUserMessage = req.Metadata.FirstUserMessage
 	}
 
-	if err := s.db.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, summary, firstUserMessage, gitInfo); err != nil {
+	if err := sessionStore.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, summary, firstUserMessage, gitInfo); err != nil {
 		log.Error("Failed to update sync state",
 			"error", err,
 			"session_id", req.SessionID,
@@ -410,9 +415,10 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 
 	// Create GitHub links extracted from pr-link transcript lines
 	// Errors here must not fail the chunk upload
+	githubStore := &dbgithub.Store{DB: s.db}
 	for _, link := range prLinks {
 		link.SessionID = req.SessionID
-		if _, err := s.db.CreateGitHubLink(updateCtx, link, false); err != nil {
+		if _, err := githubStore.CreateGitHubLink(updateCtx, link, false); err != nil {
 			log.Warn("Failed to create transcript pr-link",
 				"error", err,
 				"session_id", req.SessionID,
@@ -517,7 +523,8 @@ func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
 	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer dbCancel()
 
-	_, err := s.db.VerifySessionOwnership(dbCtx, req.SessionID, userID)
+	sessionStore := &dbsession.Store{DB: s.db}
+	_, err := sessionStore.VerifySessionOwnership(dbCtx, req.SessionID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrSessionNotFound) {
 			respondError(w, http.StatusNotFound, "Session not found")
@@ -533,7 +540,8 @@ func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert event
-	err = s.db.InsertSessionEvent(dbCtx, db.SessionEventParams{
+	eventsStore := &dbevents.Store{DB: s.db}
+	err = eventsStore.InsertSessionEvent(dbCtx, db.SessionEventParams{
 		SessionID:      req.SessionID,
 		EventType:      req.EventType,
 		EventTimestamp: req.Timestamp,
@@ -627,7 +635,8 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	isOwner := result.AccessInfo.AccessType == db.SessionAccessOwner
 
 	// Get the session's user_id and external_id for S3 path
-	sessionUserID, externalID, err := s.db.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+	sessionStore := &dbsession.Store{DB: s.db}
+	sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 	if err != nil {
 		log.Error("Failed to get session info", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to get session info")
@@ -676,11 +685,11 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	// Only do this when lineOffset == 0 (full read) to avoid extra DB calls on incremental fetches
 	if isOwner && lineOffset == 0 {
 		// Get current chunk_count from DB for comparison
-		syncState, err := s.db.GetSyncFileState(dbCtx, sessionID, fileName)
+		syncState, err := sessionStore.GetSyncFileState(dbCtx, sessionID, fileName)
 		if err == nil {
 			actualChunkCount := len(chunkKeys)
 			if syncState.ChunkCount == nil || *syncState.ChunkCount != actualChunkCount {
-				if err := s.db.UpdateSyncFileChunkCount(dbCtx, sessionID, fileName, actualChunkCount); err != nil {
+				if err := sessionStore.UpdateSyncFileChunkCount(dbCtx, sessionID, fileName, actualChunkCount); err != nil {
 					// Log but don't fail the read - this is best-effort healing
 					log.Warn("Failed to self-heal chunk count",
 						"error", err,
@@ -883,7 +892,8 @@ func (s *Server) handleUpdateSessionSummary(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
-	err := s.db.UpdateSessionSummary(ctx, externalID, userID, req.Summary)
+	sessionStore := &dbsession.Store{DB: s.db}
+	err := sessionStore.UpdateSessionSummary(ctx, externalID, userID, req.Summary)
 	if err != nil {
 		if errors.Is(err, db.ErrSessionNotFound) {
 			respondError(w, http.StatusNotFound, "Session not found")

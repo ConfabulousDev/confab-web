@@ -1,4 +1,4 @@
-package db_test
+package dbauth_test
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -28,13 +30,14 @@ func TestCreatePasswordUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	t.Run("creates user with password identity", func(t *testing.T) {
 		passwordHash := hashPassword(t, "testpassword")
 
-		user, err := env.DB.CreatePasswordUser(ctx, "test@example.com", passwordHash, false)
+		user, err := store.CreatePasswordUser(ctx, "test@example.com", passwordHash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
@@ -53,7 +56,7 @@ func TestCreatePasswordUser(t *testing.T) {
 	t.Run("sets name from email prefix", func(t *testing.T) {
 		passwordHash := hashPassword(t, "testpassword")
 
-		user, err := env.DB.CreatePasswordUser(ctx, "john.doe@example.com", passwordHash, false)
+		user, err := store.CreatePasswordUser(ctx, "john.doe@example.com", passwordHash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
@@ -66,12 +69,12 @@ func TestCreatePasswordUser(t *testing.T) {
 	t.Run("creates admin user when isAdmin is true", func(t *testing.T) {
 		passwordHash := hashPassword(t, "testpassword")
 
-		user, err := env.DB.CreatePasswordUser(ctx, "admin@example.com", passwordHash, true)
+		user, err := store.CreatePasswordUser(ctx, "admin@example.com", passwordHash, true)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
-		isAdmin, err := env.DB.IsUserAdmin(ctx, user.ID)
+		isAdmin, err := store.IsUserAdmin(ctx, user.ID)
 		if err != nil {
 			t.Fatalf("IsUserAdmin failed: %v", err)
 		}
@@ -84,12 +87,12 @@ func TestCreatePasswordUser(t *testing.T) {
 	t.Run("creates non-admin user when isAdmin is false", func(t *testing.T) {
 		passwordHash := hashPassword(t, "testpassword")
 
-		user, err := env.DB.CreatePasswordUser(ctx, "regular@example.com", passwordHash, false)
+		user, err := store.CreatePasswordUser(ctx, "regular@example.com", passwordHash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
-		isAdmin, err := env.DB.IsUserAdmin(ctx, user.ID)
+		isAdmin, err := store.IsUserAdmin(ctx, user.ID)
 		if err != nil {
 			t.Fatalf("IsUserAdmin failed: %v", err)
 		}
@@ -102,12 +105,12 @@ func TestCreatePasswordUser(t *testing.T) {
 	t.Run("fails for duplicate email", func(t *testing.T) {
 		passwordHash := hashPassword(t, "testpassword")
 
-		_, err := env.DB.CreatePasswordUser(ctx, "duplicate@example.com", passwordHash, false)
+		_, err := store.CreatePasswordUser(ctx, "duplicate@example.com", passwordHash, false)
 		if err != nil {
 			t.Fatalf("first CreatePasswordUser failed: %v", err)
 		}
 
-		_, err = env.DB.CreatePasswordUser(ctx, "duplicate@example.com", passwordHash, false)
+		_, err = store.CreatePasswordUser(ctx, "duplicate@example.com", passwordHash, false)
 		if err == nil {
 			t.Error("expected error for duplicate email")
 		}
@@ -118,7 +121,7 @@ func TestCreatePasswordUser(t *testing.T) {
 		// The actual share recipient logic is tested in share_test.go
 		passwordHash := hashPassword(t, "testpassword")
 
-		user, err := env.DB.CreatePasswordUser(ctx, "sharerecipient@example.com", passwordHash, false)
+		user, err := store.CreatePasswordUser(ctx, "sharerecipient@example.com", passwordHash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
@@ -138,19 +141,20 @@ func TestAuthenticatePassword(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create test user
 	password := "correctpassword"
 	passwordHash := hashPassword(t, password)
-	createdUser, err := env.DB.CreatePasswordUser(ctx, "auth@example.com", passwordHash, false)
+	createdUser, err := store.CreatePasswordUser(ctx, "auth@example.com", passwordHash, false)
 	if err != nil {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
 
 	t.Run("succeeds with correct password", func(t *testing.T) {
-		user, err := env.DB.AuthenticatePassword(ctx, "auth@example.com", password)
+		user, err := store.AuthenticatePassword(ctx, "auth@example.com", password)
 		if err != nil {
 			t.Fatalf("AuthenticatePassword failed: %v", err)
 		}
@@ -164,21 +168,21 @@ func TestAuthenticatePassword(t *testing.T) {
 	})
 
 	t.Run("fails with incorrect password", func(t *testing.T) {
-		_, err := env.DB.AuthenticatePassword(ctx, "auth@example.com", "wrongpassword")
+		_, err := store.AuthenticatePassword(ctx, "auth@example.com", "wrongpassword")
 		if err != db.ErrInvalidCredentials {
 			t.Errorf("expected ErrInvalidCredentials, got %v", err)
 		}
 	})
 
 	t.Run("fails for non-existent user", func(t *testing.T) {
-		_, err := env.DB.AuthenticatePassword(ctx, "nonexistent@example.com", password)
+		_, err := store.AuthenticatePassword(ctx, "nonexistent@example.com", password)
 		if err != db.ErrInvalidCredentials {
 			t.Errorf("expected ErrInvalidCredentials, got %v", err)
 		}
 	})
 
 	t.Run("fails with empty password", func(t *testing.T) {
-		_, err := env.DB.AuthenticatePassword(ctx, "auth@example.com", "")
+		_, err := store.AuthenticatePassword(ctx, "auth@example.com", "")
 		if err != db.ErrInvalidCredentials {
 			t.Errorf("expected ErrInvalidCredentials, got %v", err)
 		}
@@ -187,24 +191,24 @@ func TestAuthenticatePassword(t *testing.T) {
 	t.Run("resets failed attempts on success", func(t *testing.T) {
 		// Create a fresh user for this test
 		hash := hashPassword(t, "resettest")
-		_, err := env.DB.CreatePasswordUser(ctx, "reset@example.com", hash, false)
+		_, err := store.CreatePasswordUser(ctx, "reset@example.com", hash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
 		// Fail a few times
 		for i := 0; i < 3; i++ {
-			env.DB.AuthenticatePassword(ctx, "reset@example.com", "wrongpassword")
+			store.AuthenticatePassword(ctx, "reset@example.com", "wrongpassword")
 		}
 
 		// Succeed
-		_, err = env.DB.AuthenticatePassword(ctx, "reset@example.com", "resettest")
+		_, err = store.AuthenticatePassword(ctx, "reset@example.com", "resettest")
 		if err != nil {
 			t.Fatalf("AuthenticatePassword should succeed: %v", err)
 		}
 
 		// Fail again - should not immediately lock (attempts were reset)
-		_, err = env.DB.AuthenticatePassword(ctx, "reset@example.com", "wrongpassword")
+		_, err = store.AuthenticatePassword(ctx, "reset@example.com", "wrongpassword")
 		if err == db.ErrAccountLocked {
 			t.Error("account should not be locked after successful login reset")
 		}
@@ -219,22 +223,23 @@ func TestAuthenticatePasswordLockout(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create test user
 	password := "correctpassword"
 	passwordHash := hashPassword(t, password)
-	_, err := env.DB.CreatePasswordUser(ctx, "lockout@example.com", passwordHash, false)
+	_, err := store.CreatePasswordUser(ctx, "lockout@example.com", passwordHash, false)
 	if err != nil {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
 
 	t.Run("locks account after max failed attempts", func(t *testing.T) {
 		// Fail MaxFailedAttempts times
-		for i := 0; i < db.MaxFailedAttempts; i++ {
-			_, err := env.DB.AuthenticatePassword(ctx, "lockout@example.com", "wrongpassword")
-			if i < db.MaxFailedAttempts-1 {
+		for i := 0; i < dbauth.MaxFailedAttempts; i++ {
+			_, err := store.AuthenticatePassword(ctx, "lockout@example.com", "wrongpassword")
+			if i < dbauth.MaxFailedAttempts-1 {
 				if err != db.ErrInvalidCredentials {
 					t.Errorf("attempt %d: expected ErrInvalidCredentials, got %v", i+1, err)
 				}
@@ -250,18 +255,18 @@ func TestAuthenticatePasswordLockout(t *testing.T) {
 	t.Run("rejects login attempts when locked", func(t *testing.T) {
 		// Create another user for this test
 		hash := hashPassword(t, "lockeduser")
-		_, err := env.DB.CreatePasswordUser(ctx, "locked@example.com", hash, false)
+		_, err := store.CreatePasswordUser(ctx, "locked@example.com", hash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
 		// Lock the account
-		for i := 0; i < db.MaxFailedAttempts; i++ {
-			env.DB.AuthenticatePassword(ctx, "locked@example.com", "wrongpassword")
+		for i := 0; i < dbauth.MaxFailedAttempts; i++ {
+			store.AuthenticatePassword(ctx, "locked@example.com", "wrongpassword")
 		}
 
 		// Try with correct password - should still be locked
-		_, err = env.DB.AuthenticatePassword(ctx, "locked@example.com", "lockeduser")
+		_, err = store.AuthenticatePassword(ctx, "locked@example.com", "lockeduser")
 		if err != db.ErrAccountLocked {
 			t.Errorf("expected ErrAccountLocked even with correct password, got %v", err)
 		}
@@ -270,21 +275,21 @@ func TestAuthenticatePasswordLockout(t *testing.T) {
 	t.Run("increments failed attempts counter", func(t *testing.T) {
 		// Create user for this test
 		hash := hashPassword(t, "counter")
-		_, err := env.DB.CreatePasswordUser(ctx, "counter@example.com", hash, false)
+		_, err := store.CreatePasswordUser(ctx, "counter@example.com", hash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
 		// Fail 2 times
 		for i := 0; i < 2; i++ {
-			_, err := env.DB.AuthenticatePassword(ctx, "counter@example.com", "wrongpassword")
+			_, err := store.AuthenticatePassword(ctx, "counter@example.com", "wrongpassword")
 			if err != db.ErrInvalidCredentials {
 				t.Errorf("expected ErrInvalidCredentials, got %v", err)
 			}
 		}
 
 		// Should still be able to login (not locked yet)
-		_, err = env.DB.AuthenticatePassword(ctx, "counter@example.com", "counter")
+		_, err = store.AuthenticatePassword(ctx, "counter@example.com", "counter")
 		if err != nil {
 			t.Errorf("should still be able to login after 2 failures: %v", err)
 		}
@@ -299,25 +304,27 @@ func TestAuthenticatePasswordInactiveUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create and deactivate user
 	password := "testpassword"
 	passwordHash := hashPassword(t, password)
-	user, err := env.DB.CreatePasswordUser(ctx, "inactive@example.com", passwordHash, false)
+	user, err := store.CreatePasswordUser(ctx, "inactive@example.com", passwordHash, false)
 	if err != nil {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
 
 	// Deactivate the user
-	err = env.DB.UpdateUserStatus(ctx, user.ID, "inactive")
+	userStore := &dbuser.Store{DB: env.DB}
+	err = userStore.UpdateUserStatus(ctx, user.ID, "inactive")
 	if err != nil {
 		t.Fatalf("UpdateUserStatus failed: %v", err)
 	}
 
 	// Try to login
-	_, err = env.DB.AuthenticatePassword(ctx, "inactive@example.com", password)
+	_, err = store.AuthenticatePassword(ctx, "inactive@example.com", password)
 	if err != db.ErrInvalidCredentials {
 		t.Errorf("expected ErrInvalidCredentials for inactive user, got %v", err)
 	}
@@ -331,13 +338,14 @@ func TestUpdateUserPassword(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create test user
 	oldPassword := "oldpassword"
 	oldHash := hashPassword(t, oldPassword)
-	user, err := env.DB.CreatePasswordUser(ctx, "update@example.com", oldHash, false)
+	user, err := store.CreatePasswordUser(ctx, "update@example.com", oldHash, false)
 	if err != nil {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
@@ -346,19 +354,19 @@ func TestUpdateUserPassword(t *testing.T) {
 		newPassword := "newpassword123"
 		newHash := hashPassword(t, newPassword)
 
-		err := env.DB.UpdateUserPassword(ctx, user.ID, newHash)
+		err := store.UpdateUserPassword(ctx, user.ID, newHash)
 		if err != nil {
 			t.Fatalf("UpdateUserPassword failed: %v", err)
 		}
 
 		// Old password should fail
-		_, err = env.DB.AuthenticatePassword(ctx, "update@example.com", oldPassword)
+		_, err = store.AuthenticatePassword(ctx, "update@example.com", oldPassword)
 		if err != db.ErrInvalidCredentials {
 			t.Error("old password should no longer work")
 		}
 
 		// New password should work
-		_, err = env.DB.AuthenticatePassword(ctx, "update@example.com", newPassword)
+		_, err = store.AuthenticatePassword(ctx, "update@example.com", newPassword)
 		if err != nil {
 			t.Errorf("new password should work: %v", err)
 		}
@@ -367,25 +375,25 @@ func TestUpdateUserPassword(t *testing.T) {
 	t.Run("resets failed attempts and lockout", func(t *testing.T) {
 		// Create a locked user
 		hash := hashPassword(t, "lockedpwd")
-		lockedUser, err := env.DB.CreatePasswordUser(ctx, "lockedupdate@example.com", hash, false)
+		lockedUser, err := store.CreatePasswordUser(ctx, "lockedupdate@example.com", hash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
 		// Lock the account
-		for i := 0; i < db.MaxFailedAttempts; i++ {
-			env.DB.AuthenticatePassword(ctx, "lockedupdate@example.com", "wrongpassword")
+		for i := 0; i < dbauth.MaxFailedAttempts; i++ {
+			store.AuthenticatePassword(ctx, "lockedupdate@example.com", "wrongpassword")
 		}
 
 		// Update password
 		newHash := hashPassword(t, "newpwd123")
-		err = env.DB.UpdateUserPassword(ctx, lockedUser.ID, newHash)
+		err = store.UpdateUserPassword(ctx, lockedUser.ID, newHash)
 		if err != nil {
 			t.Fatalf("UpdateUserPassword failed: %v", err)
 		}
 
 		// Should be able to login now (lockout cleared)
-		_, err = env.DB.AuthenticatePassword(ctx, "lockedupdate@example.com", "newpwd123")
+		_, err = store.AuthenticatePassword(ctx, "lockedupdate@example.com", "newpwd123")
 		if err != nil {
 			t.Errorf("should be able to login after password reset: %v", err)
 		}
@@ -393,7 +401,7 @@ func TestUpdateUserPassword(t *testing.T) {
 
 	t.Run("fails for non-existent user", func(t *testing.T) {
 		newHash := hashPassword(t, "whatever")
-		err := env.DB.UpdateUserPassword(ctx, 99999, newHash)
+		err := store.UpdateUserPassword(ctx, 99999, newHash)
 		if err == nil {
 			t.Error("expected error for non-existent user")
 		}
@@ -401,13 +409,13 @@ func TestUpdateUserPassword(t *testing.T) {
 
 	t.Run("fails for user without password identity", func(t *testing.T) {
 		// Create an OAuth user (no password identity)
-		oauthUser, err := env.DB.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-only"))
+		oauthUser, err := store.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-only"))
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
 
 		newHash := hashPassword(t, "whatever")
-		err = env.DB.UpdateUserPassword(ctx, oauthUser.ID, newHash)
+		err = store.UpdateUserPassword(ctx, oauthUser.ID, newHash)
 		if err == nil {
 			t.Error("expected error for user without password identity")
 		}
@@ -422,18 +430,19 @@ func TestGetUserByEmail(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create test user
 	passwordHash := hashPassword(t, "testpassword")
-	createdUser, err := env.DB.CreatePasswordUser(ctx, "lookup@example.com", passwordHash, false)
+	createdUser, err := store.CreatePasswordUser(ctx, "lookup@example.com", passwordHash, false)
 	if err != nil {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
 
 	t.Run("finds existing user", func(t *testing.T) {
-		user, err := env.DB.GetUserByEmail(ctx, "lookup@example.com")
+		user, err := store.GetUserByEmail(ctx, "lookup@example.com")
 		if err != nil {
 			t.Fatalf("GetUserByEmail failed: %v", err)
 		}
@@ -447,7 +456,7 @@ func TestGetUserByEmail(t *testing.T) {
 	})
 
 	t.Run("returns ErrUserNotFound for non-existent user", func(t *testing.T) {
-		_, err := env.DB.GetUserByEmail(ctx, "nonexistent@example.com")
+		_, err := store.GetUserByEmail(ctx, "nonexistent@example.com")
 		if err != db.ErrUserNotFound {
 			t.Errorf("expected ErrUserNotFound, got %v", err)
 		}
@@ -456,7 +465,7 @@ func TestGetUserByEmail(t *testing.T) {
 	t.Run("email lookup is case sensitive", func(t *testing.T) {
 		// By design, emails are stored lowercase during creation
 		// but lookup should be exact match
-		_, err := env.DB.GetUserByEmail(ctx, "LOOKUP@example.com")
+		_, err := store.GetUserByEmail(ctx, "LOOKUP@example.com")
 		if err != db.ErrUserNotFound {
 			t.Error("email lookup should be case sensitive")
 		}
@@ -471,17 +480,18 @@ func TestIsUserAdmin(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	t.Run("returns true for admin user", func(t *testing.T) {
 		hash := hashPassword(t, "adminpwd")
-		adminUser, err := env.DB.CreatePasswordUser(ctx, "isadmin@example.com", hash, true)
+		adminUser, err := store.CreatePasswordUser(ctx, "isadmin@example.com", hash, true)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
-		isAdmin, err := env.DB.IsUserAdmin(ctx, adminUser.ID)
+		isAdmin, err := store.IsUserAdmin(ctx, adminUser.ID)
 		if err != nil {
 			t.Fatalf("IsUserAdmin failed: %v", err)
 		}
@@ -493,12 +503,12 @@ func TestIsUserAdmin(t *testing.T) {
 
 	t.Run("returns false for non-admin user", func(t *testing.T) {
 		hash := hashPassword(t, "regularpwd")
-		regularUser, err := env.DB.CreatePasswordUser(ctx, "notadmin@example.com", hash, false)
+		regularUser, err := store.CreatePasswordUser(ctx, "notadmin@example.com", hash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
 
-		isAdmin, err := env.DB.IsUserAdmin(ctx, regularUser.ID)
+		isAdmin, err := store.IsUserAdmin(ctx, regularUser.ID)
 		if err != nil {
 			t.Fatalf("IsUserAdmin failed: %v", err)
 		}
@@ -509,19 +519,19 @@ func TestIsUserAdmin(t *testing.T) {
 	})
 
 	t.Run("returns ErrUserNotFound for non-existent user", func(t *testing.T) {
-		_, err := env.DB.IsUserAdmin(ctx, 99999)
+		_, err := store.IsUserAdmin(ctx, 99999)
 		if err != db.ErrUserNotFound {
 			t.Errorf("expected ErrUserNotFound, got %v", err)
 		}
 	})
 
 	t.Run("returns false for OAuth user (default)", func(t *testing.T) {
-		oauthUser, err := env.DB.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-admin-check"))
+		oauthUser, err := store.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-admin-check"))
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
 
-		isAdmin, err := env.DB.IsUserAdmin(ctx, oauthUser.ID)
+		isAdmin, err := store.IsUserAdmin(ctx, oauthUser.ID)
 		if err != nil {
 			t.Fatalf("IsUserAdmin failed: %v", err)
 		}
@@ -540,6 +550,7 @@ func TestPasswordCredentialsTimestamps(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -547,7 +558,7 @@ func TestPasswordCredentialsTimestamps(t *testing.T) {
 		before := time.Now().Add(-time.Second)
 
 		hash := hashPassword(t, "timestamps")
-		user, err := env.DB.CreatePasswordUser(ctx, "timestamps@example.com", hash, false)
+		user, err := store.CreatePasswordUser(ctx, "timestamps@example.com", hash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}

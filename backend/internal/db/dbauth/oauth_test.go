@@ -1,9 +1,11 @@
-package db_test
+package dbauth_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -15,6 +17,7 @@ func TestFindOrCreateUserByOAuth_NewUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -28,7 +31,7 @@ func TestFindOrCreateUserByOAuth_NewUser(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user, err := store.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -79,6 +82,7 @@ func TestFindOrCreateUserByOAuth_ExistingIdentity(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -92,7 +96,7 @@ func TestFindOrCreateUserByOAuth_ExistingIdentity(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar1.png",
 	}
 
-	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("First FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -102,7 +106,7 @@ func TestFindOrCreateUserByOAuth_ExistingIdentity(t *testing.T) {
 	info.AvatarURL = "https://github.com/avatar2.png"
 	info.ProviderUsername = "newusername"
 
-	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("Second FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -113,7 +117,8 @@ func TestFindOrCreateUserByOAuth_ExistingIdentity(t *testing.T) {
 	}
 
 	// Verify profile was updated
-	updatedUser, err := env.DB.GetUserByID(ctx, user1.ID)
+	userStore := &dbuser.Store{DB: env.DB}
+	updatedUser, err := userStore.GetUserByID(ctx, user1.ID)
 	if err != nil {
 		t.Fatalf("GetUserByID failed: %v", err)
 	}
@@ -156,6 +161,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GitHubFirst(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -171,7 +177,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GitHubFirst(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	githubUser, err := env.DB.FindOrCreateUserByOAuth(ctx, githubInfo)
+	githubUser, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -186,7 +192,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GitHubFirst(t *testing.T) {
 		AvatarURL:        "https://google.com/avatar.png",
 	}
 
-	googleUser, err := env.DB.FindOrCreateUserByOAuth(ctx, googleInfo)
+	googleUser, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -232,6 +238,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GoogleFirst(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -247,7 +254,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GoogleFirst(t *testing.T) {
 		AvatarURL:        "https://google.com/avatar.png",
 	}
 
-	googleUser, err := env.DB.FindOrCreateUserByOAuth(ctx, googleInfo)
+	googleUser, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -262,7 +269,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GoogleFirst(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	githubUser, err := env.DB.FindOrCreateUserByOAuth(ctx, githubInfo)
+	githubUser, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -292,6 +299,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -307,7 +315,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, githubInfo)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -322,7 +330,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 		AvatarURL:        "https://google.com/avatar.png",
 	}
 
-	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, googleInfo)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -333,7 +341,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 	}
 
 	// Now login again with GitHub - should find via identity, not email
-	user3, err := env.DB.FindOrCreateUserByOAuth(ctx, githubInfo)
+	user3, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
 	if err != nil {
 		t.Fatalf("Second GitHub login failed: %v", err)
 	}
@@ -342,7 +350,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 	}
 
 	// Login with Google - should find via identity, not email
-	user4, err := env.DB.FindOrCreateUserByOAuth(ctx, googleInfo)
+	user4, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
 	if err != nil {
 		t.Fatalf("Second Google login failed: %v", err)
 	}
@@ -370,6 +378,7 @@ func TestFindOrCreateUserByOAuth_DifferentEmailsDifferentUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -383,7 +392,7 @@ func TestFindOrCreateUserByOAuth_DifferentEmailsDifferentUsers(t *testing.T) {
 		AvatarURL:        "https://github.com/user1.png",
 	}
 
-	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, user1Info)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, user1Info)
 	if err != nil {
 		t.Fatalf("User1 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -398,7 +407,7 @@ func TestFindOrCreateUserByOAuth_DifferentEmailsDifferentUsers(t *testing.T) {
 		AvatarURL:        "https://github.com/user2.png",
 	}
 
-	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, user2Info)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, user2Info)
 	if err != nil {
 		t.Fatalf("User2 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -425,6 +434,7 @@ func TestFindOrCreateUserByOAuth_SameProviderDifferentIDs(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -439,7 +449,7 @@ func TestFindOrCreateUserByOAuth_SameProviderDifferentIDs(t *testing.T) {
 		AvatarURL:        "https://github.com/account1.png",
 	}
 
-	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, account1)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, account1)
 	if err != nil {
 		t.Fatalf("Account1 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -453,7 +463,7 @@ func TestFindOrCreateUserByOAuth_SameProviderDifferentIDs(t *testing.T) {
 		AvatarURL:        "https://github.com/account2.png",
 	}
 
-	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, account2)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, account2)
 	if err != nil {
 		t.Fatalf("Account2 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -471,6 +481,7 @@ func TestFindOrCreateUserByOAuth_ProviderIDUniqueness(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -487,7 +498,7 @@ func TestFindOrCreateUserByOAuth_ProviderIDUniqueness(t *testing.T) {
 		AvatarURL:        "https://github.com/unique.png",
 	}
 
-	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, githubUser)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, githubUser)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -501,7 +512,7 @@ func TestFindOrCreateUserByOAuth_ProviderIDUniqueness(t *testing.T) {
 		AvatarURL:        "https://google.com/unique.png",
 	}
 
-	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, googleUser)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, googleUser)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}

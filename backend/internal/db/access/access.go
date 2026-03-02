@@ -1,4 +1,4 @@
-package db
+package access
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
@@ -16,7 +17,7 @@ import (
 // Checks in order of specificity: owner, recipient, system, public.
 // Returns the access type and the share ID (if applicable).
 // viewerUserID can be nil for unauthenticated users.
-func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewerUserID *int64) (*SessionAccessInfo, error) {
+func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, viewerUserID *int64) (*db.SessionAccessInfo, error) {
 	ctx, span := tracer.Start(ctx, "db.get_session_access_type",
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
 	defer span.End()
@@ -27,14 +28,14 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 
 	// First, check if session exists and get owner
 	var ownerUserID int64
-	err := db.conn.QueryRowContext(ctx,
+	err := s.conn().QueryRowContext(ctx,
 		`SELECT user_id FROM sessions WHERE id = $1`, sessionID).Scan(&ownerUserID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
+			return nil, db.ErrSessionNotFound
 		}
-		if isInvalidUUIDError(err) {
-			return nil, ErrSessionNotFound
+		if db.IsInvalidUUIDError(err) {
+			return nil, db.ErrSessionNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -44,13 +45,13 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 	// Check if viewer is the owner (most specific)
 	if viewerUserID != nil && *viewerUserID == ownerUserID {
 		span.SetAttributes(attribute.String("access.type", "owner"))
-		return &SessionAccessInfo{AccessType: SessionAccessOwner}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}, nil
 	}
 
 	// ShareAllSessions: any authenticated user gets system-level access (no share rows needed)
-	if db.ShareAllSessions && viewerUserID != nil {
+	if s.DB.ShareAllSessions && viewerUserID != nil {
 		span.SetAttributes(attribute.String("access.type", "system"))
-		return &SessionAccessInfo{AccessType: SessionAccessSystem}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessSystem}, nil
 	}
 
 	// Combined query checks all share types in one round-trip.
@@ -60,7 +61,7 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 	var shareID int64
 	var authMayHelp bool
 
-	err = db.conn.QueryRowContext(ctx, `
+	err = s.conn().QueryRowContext(ctx, `
 		SELECT
 			CASE
 				WHEN ssr.user_id IS NOT NULL THEN 'recipient'
@@ -89,7 +90,7 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 	if err == sql.ErrNoRows {
 		// No shares exist for this session
 		span.SetAttributes(attribute.String("access.type", "none"))
-		return &SessionAccessInfo{AccessType: SessionAccessNone, AuthMayHelp: false}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessNone, AuthMayHelp: false}, nil
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -101,22 +102,22 @@ func (db *DB) GetSessionAccessType(ctx context.Context, sessionID string, viewer
 
 	switch accessType {
 	case "recipient":
-		return &SessionAccessInfo{AccessType: SessionAccessRecipient, ShareID: &shareID}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessRecipient, ShareID: &shareID}, nil
 	case "system":
-		return &SessionAccessInfo{AccessType: SessionAccessSystem, ShareID: &shareID}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessSystem, ShareID: &shareID}, nil
 	case "public":
-		return &SessionAccessInfo{AccessType: SessionAccessPublic, ShareID: &shareID}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}, nil
 	default:
 		// "none" - has shares but viewer has no access
-		return &SessionAccessInfo{AccessType: SessionAccessNone, AuthMayHelp: authMayHelp}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessNone, AuthMayHelp: authMayHelp}, nil
 	}
 }
 
 // GetSessionDetailWithAccess returns session details for any user with access.
-// Unlike GetSessionDetail, this works for shared access (not just owners).
+// Unlike session.Store.GetSessionDetail, this works for shared access (not just owners).
 // Hostname and username are only returned for owners.
 // Updates last_accessed_at on the share if accessed via share.
-func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, viewerUserID *int64, accessInfo *SessionAccessInfo) (*SessionDetail, error) {
+func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string, viewerUserID *int64, accessInfo *db.SessionAccessInfo) (*db.SessionDetail, error) {
 	ctx, span := tracer.Start(ctx, "db.get_session_detail_with_access",
 		trace.WithAttributes(
 			attribute.String("session.id", sessionID),
@@ -128,7 +129,7 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	}
 
 	// Check owner's status to block access if deactivated
-	var session SessionDetail
+	var session db.SessionDetail
 	var gitInfoBytes []byte
 	var ownerStatus models.UserStatus
 	var hostname, username *string
@@ -140,7 +141,7 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 		JOIN users u ON s.user_id = u.id
 		WHERE s.id = $1
 	`
-	err := db.conn.QueryRowContext(ctx, sessionQuery, sessionID).Scan(
+	err := s.conn().QueryRowContext(ctx, sessionQuery, sessionID).Scan(
 		&session.ID,
 		&session.ExternalID,
 		&session.CustomTitle,
@@ -159,10 +160,10 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
+			return nil, db.ErrSessionNotFound
 		}
-		if isInvalidUUIDError(err) {
-			return nil, ErrSessionNotFound
+		if db.IsInvalidUUIDError(err) {
+			return nil, db.ErrSessionNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -171,14 +172,14 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 
 	// Check if session owner is deactivated
 	if ownerStatus == models.UserStatusInactive {
-		return nil, ErrOwnerInactive
+		return nil, db.ErrOwnerInactive
 	}
 
 	// Always include owner email
 	session.OwnerEmail = ownerEmail
 
 	// Only include PII fields for owners; redact for all shared access
-	if accessInfo.AccessType == SessionAccessOwner {
+	if accessInfo.AccessType == db.SessionAccessOwner {
 		session.Hostname = hostname
 		session.Username = username
 	} else {
@@ -187,16 +188,16 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	}
 
 	// Set IsOwner flag
-	isOwner := accessInfo.AccessType == SessionAccessOwner
+	isOwner := accessInfo.AccessType == db.SessionAccessOwner
 	session.IsOwner = &isOwner
 
 	// Unmarshal git_info and load sync files
-	if err := db.unmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
+	if err := db.UnmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	if err := db.loadSessionSyncFiles(ctx, &session); err != nil {
+	if err := db.LoadSessionSyncFiles(ctx, s.DB, &session); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
@@ -205,7 +206,7 @@ func (db *DB) GetSessionDetailWithAccess(ctx context.Context, sessionID string, 
 	// Update last_accessed_at on the share if accessed via share
 	// Non-critical analytics update; ignore errors to not fail the main operation
 	if accessInfo.ShareID != nil {
-		_, _ = db.conn.ExecContext(ctx,
+		_, _ = s.conn().ExecContext(ctx,
 			`UPDATE session_shares SET last_accessed_at = NOW() WHERE id = $1`,
 			*accessInfo.ShareID)
 	}

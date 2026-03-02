@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -298,7 +299,8 @@ func TestUpdateSessionTitle_HTTP_Integration(t *testing.T) {
 
 		// First set a custom title via database
 		customTitle := "Initial Title"
-		err := env.DB.UpdateSessionCustomTitle(env.Ctx, sessionID, user.ID, &customTitle)
+		sessionStore := &dbsession.Store{DB: env.DB}
+		err := sessionStore.UpdateSessionCustomTitle(env.Ctx, sessionID, user.ID, &customTitle)
 		if err != nil {
 			t.Fatalf("failed to set initial custom title: %v", err)
 		}

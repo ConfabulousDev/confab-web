@@ -1,4 +1,4 @@
-package db_test
+package session_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -23,6 +24,7 @@ func TestUpdateSyncFileState_BasicUpsert(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "sync@test.com", "Sync User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-id")
@@ -30,13 +32,13 @@ func TestUpdateSyncFileState_BasicUpsert(t *testing.T) {
 	ctx := context.Background()
 
 	// Create new sync file state
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (create) failed: %v", err)
 	}
 
 	// Verify state was created
-	state, err := env.DB.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
+	state, err := store.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
 	if err != nil {
 		t.Fatalf("GetSyncFileState failed: %v", err)
 	}
@@ -48,13 +50,13 @@ func TestUpdateSyncFileState_BasicUpsert(t *testing.T) {
 	}
 
 	// Update existing sync file state
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (update) failed: %v", err)
 	}
 
 	// Verify state was updated
-	state, err = env.DB.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
+	state, err = store.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
 	if err != nil {
 		t.Fatalf("GetSyncFileState failed: %v", err)
 	}
@@ -71,6 +73,7 @@ func TestUpdateSyncFileState_ChunkCountIncrement(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "chunk@test.com", "Chunk User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "chunk-session")
@@ -78,12 +81,12 @@ func TestUpdateSyncFileState_ChunkCountIncrement(t *testing.T) {
 	ctx := context.Background()
 
 	// First chunk upload - chunk_count should be 1
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (1) failed: %v", err)
 	}
 
-	state, err := env.DB.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
+	state, err := store.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
 	if err != nil {
 		t.Fatalf("GetSyncFileState failed: %v", err)
 	}
@@ -92,12 +95,12 @@ func TestUpdateSyncFileState_ChunkCountIncrement(t *testing.T) {
 	}
 
 	// Second chunk upload - chunk_count should be 2
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (2) failed: %v", err)
 	}
 
-	state, err = env.DB.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
+	state, err = store.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
 	if err != nil {
 		t.Fatalf("GetSyncFileState failed: %v", err)
 	}
@@ -106,12 +109,12 @@ func TestUpdateSyncFileState_ChunkCountIncrement(t *testing.T) {
 	}
 
 	// Third chunk upload - chunk_count should be 3
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 300, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 300, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (3) failed: %v", err)
 	}
 
-	state, err = env.DB.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
+	state, err = store.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
 	if err != nil {
 		t.Fatalf("GetSyncFileState failed: %v", err)
 	}
@@ -128,6 +131,7 @@ func TestUpdateSyncFileState_LastMessageAt(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "msgtime@test.com", "MsgTime User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "msgtime-session")
@@ -146,7 +150,7 @@ func TestUpdateSyncFileState_LastMessageAt(t *testing.T) {
 
 	// Set initial last_message_at (from NULL)
 	initialTime := time.Now().Add(-time.Hour).UTC()
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &initialTime, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &initialTime, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (initial) failed: %v", err)
 	}
@@ -163,7 +167,7 @@ func TestUpdateSyncFileState_LastMessageAt(t *testing.T) {
 
 	// Try to set older time - should NOT update
 	olderTime := time.Now().Add(-2 * time.Hour).UTC()
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, &olderTime, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, &olderTime, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (older) failed: %v", err)
 	}
@@ -184,7 +188,7 @@ func TestUpdateSyncFileState_LastMessageAt(t *testing.T) {
 
 	// Set newer time - SHOULD update
 	newerTime := time.Now().UTC()
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, &newerTime, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, &newerTime, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (newer) failed: %v", err)
 	}
@@ -207,6 +211,7 @@ func TestUpdateSyncFileState_Summary(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "summary@test.com", "Summary User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "summary-session")
@@ -215,7 +220,7 @@ func TestUpdateSyncFileState_Summary(t *testing.T) {
 
 	// Set initial summary
 	summary1 := "First summary"
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, &summary1, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, &summary1, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (summary1) failed: %v", err)
 	}
@@ -232,7 +237,7 @@ func TestUpdateSyncFileState_Summary(t *testing.T) {
 
 	// Update summary (last write wins)
 	summary2 := "Updated summary"
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, &summary2, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, &summary2, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (summary2) failed: %v", err)
 	}
@@ -248,7 +253,7 @@ func TestUpdateSyncFileState_Summary(t *testing.T) {
 
 	// Clear summary with empty string
 	emptyStr := ""
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, &emptyStr, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, &emptyStr, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (empty summary) failed: %v", err)
 	}
@@ -271,6 +276,7 @@ func TestUpdateSyncFileState_FirstUserMessage(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "firstmsg@test.com", "FirstMsg User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "firstmsg-session")
@@ -279,7 +285,7 @@ func TestUpdateSyncFileState_FirstUserMessage(t *testing.T) {
 
 	// Set initial first_user_message
 	msg1 := "First user message"
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, &msg1, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, &msg1, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (msg1) failed: %v", err)
 	}
@@ -296,7 +302,7 @@ func TestUpdateSyncFileState_FirstUserMessage(t *testing.T) {
 
 	// Try to update first_user_message (first write wins - should NOT update)
 	msg2 := "Second user message"
-	err = env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, nil, &msg2, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, nil, &msg2, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (msg2) failed: %v", err)
 	}
@@ -319,6 +325,7 @@ func TestUpdateSyncFileState_GitInfo(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "gitinfo@test.com", "GitInfo User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "gitinfo-session")
@@ -327,7 +334,7 @@ func TestUpdateSyncFileState_GitInfo(t *testing.T) {
 
 	// Set git_info
 	gitInfo := json.RawMessage(`{"repo_url": "https://github.com/example/repo", "branch": "main"}`)
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, gitInfo)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, gitInfo)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (gitinfo) failed: %v", err)
 	}
@@ -362,6 +369,7 @@ func TestUpdateSyncFileState_CombinedParameters(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "combined@test.com", "Combined User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "combined-session")
@@ -374,7 +382,7 @@ func TestUpdateSyncFileState_CombinedParameters(t *testing.T) {
 	firstMsg := "Combined first message"
 	gitInfo := json.RawMessage(`{"repo_url": "https://github.com/combined/repo", "branch": "develop"}`)
 
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &msgTime, &summary, &firstMsg, gitInfo)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &msgTime, &summary, &firstMsg, gitInfo)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (combined) failed: %v", err)
 	}
@@ -414,6 +422,7 @@ func TestUpdateSyncFileState_NoOptionalParameters(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "noopt@test.com", "NoOpt User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "noopt-session")
@@ -421,7 +430,7 @@ func TestUpdateSyncFileState_NoOptionalParameters(t *testing.T) {
 	ctx := context.Background()
 
 	// Update with no optional parameters
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (no opts) failed: %v", err)
 	}
@@ -445,13 +454,14 @@ func TestGetSyncFileState_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "notfound@test.com", "NotFound User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "notfound-session")
 
 	ctx := context.Background()
 
-	_, err := env.DB.GetSyncFileState(ctx, sessionID, "nonexistent.jsonl")
+	_, err := store.GetSyncFileState(ctx, sessionID, "nonexistent.jsonl")
 	if !errors.Is(err, db.ErrFileNotFound) {
 		t.Errorf("expected ErrFileNotFound, got %v", err)
 	}
@@ -465,6 +475,7 @@ func TestUpdateSyncFileChunkCount(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "chunkfix@test.com", "ChunkFix User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "chunkfix-session")
@@ -472,19 +483,19 @@ func TestUpdateSyncFileChunkCount(t *testing.T) {
 	ctx := context.Background()
 
 	// Create initial sync file state
-	err := env.DB.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState failed: %v", err)
 	}
 
 	// Self-heal chunk count to specific value
-	err = env.DB.UpdateSyncFileChunkCount(ctx, sessionID, "transcript.jsonl", 10)
+	err = store.UpdateSyncFileChunkCount(ctx, sessionID, "transcript.jsonl", 10)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileChunkCount failed: %v", err)
 	}
 
 	// Verify chunk count was updated
-	state, err := env.DB.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
+	state, err := store.GetSyncFileState(ctx, sessionID, "transcript.jsonl")
 	if err != nil {
 		t.Fatalf("GetSyncFileState failed: %v", err)
 	}
@@ -505,6 +516,7 @@ func TestFindOrCreateSyncSession_CreateNew(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "newsync@test.com", "NewSync User")
 
@@ -519,7 +531,7 @@ func TestFindOrCreateSyncSession_CreateNew(t *testing.T) {
 		Username:       "myuser",
 	}
 
-	sessionID, files, err := env.DB.FindOrCreateSyncSession(ctx, user.ID, params)
+	sessionID, files, err := store.FindOrCreateSyncSession(ctx, user.ID, params)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession failed: %v", err)
 	}
@@ -561,6 +573,7 @@ func TestFindOrCreateSyncSession_FindExisting(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "existsync@test.com", "ExistSync User")
 
@@ -573,23 +586,23 @@ func TestFindOrCreateSyncSession_FindExisting(t *testing.T) {
 		CWD:            "/home/user/project",
 	}
 
-	sessionID1, _, err := env.DB.FindOrCreateSyncSession(ctx, user.ID, params)
+	sessionID1, _, err := store.FindOrCreateSyncSession(ctx, user.ID, params)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (1) failed: %v", err)
 	}
 
 	// Add some sync files
-	err = env.DB.UpdateSyncFileState(ctx, sessionID1, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID1, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState failed: %v", err)
 	}
-	err = env.DB.UpdateSyncFileState(ctx, sessionID1, "todo.jsonl", "todo", 50, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID1, "todo.jsonl", "todo", 50, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState failed: %v", err)
 	}
 
 	// Find existing session
-	sessionID2, files, err := env.DB.FindOrCreateSyncSession(ctx, user.ID, params)
+	sessionID2, files, err := store.FindOrCreateSyncSession(ctx, user.ID, params)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (2) failed: %v", err)
 	}
@@ -616,6 +629,7 @@ func TestFindOrCreateSyncSession_UpdatesMetadata(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "updatemeta@test.com", "UpdateMeta User")
 
@@ -630,7 +644,7 @@ func TestFindOrCreateSyncSession_UpdatesMetadata(t *testing.T) {
 		Username:       "user1",
 	}
 
-	sessionID, _, err := env.DB.FindOrCreateSyncSession(ctx, user.ID, params1)
+	sessionID, _, err := store.FindOrCreateSyncSession(ctx, user.ID, params1)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (1) failed: %v", err)
 	}
@@ -645,7 +659,7 @@ func TestFindOrCreateSyncSession_UpdatesMetadata(t *testing.T) {
 		Username:       "user2",
 	}
 
-	_, _, err = env.DB.FindOrCreateSyncSession(ctx, user.ID, params2)
+	_, _, err = store.FindOrCreateSyncSession(ctx, user.ID, params2)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (2) failed: %v", err)
 	}
@@ -684,6 +698,7 @@ func TestFindOrCreateSyncSession_DifferentUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "user1@test.com", "User 1")
 	user2 := testutil.CreateTestUser(t, env, "user2@test.com", "User 2")
@@ -696,13 +711,13 @@ func TestFindOrCreateSyncSession_DifferentUsers(t *testing.T) {
 	}
 
 	// Create session for user1
-	sessionID1, _, err := env.DB.FindOrCreateSyncSession(ctx, user1.ID, params)
+	sessionID1, _, err := store.FindOrCreateSyncSession(ctx, user1.ID, params)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (user1) failed: %v", err)
 	}
 
 	// Create session for user2 (should be different session)
-	sessionID2, _, err := env.DB.FindOrCreateSyncSession(ctx, user2.ID, params)
+	sessionID2, _, err := store.FindOrCreateSyncSession(ctx, user2.ID, params)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (user2) failed: %v", err)
 	}
@@ -720,6 +735,7 @@ func TestFindOrCreateSyncSession_EmptyHostnameUsername(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "emptyhost@test.com", "EmptyHost User")
 
@@ -733,7 +749,7 @@ func TestFindOrCreateSyncSession_EmptyHostnameUsername(t *testing.T) {
 		Username:   "myuser",
 	}
 
-	sessionID, _, err := env.DB.FindOrCreateSyncSession(ctx, user.ID, params1)
+	sessionID, _, err := store.FindOrCreateSyncSession(ctx, user.ID, params1)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (1) failed: %v", err)
 	}
@@ -746,7 +762,7 @@ func TestFindOrCreateSyncSession_EmptyHostnameUsername(t *testing.T) {
 		Username:   "", // Empty
 	}
 
-	_, _, err = env.DB.FindOrCreateSyncSession(ctx, user.ID, params2)
+	_, _, err = store.FindOrCreateSyncSession(ctx, user.ID, params2)
 	if err != nil {
 		t.Fatalf("FindOrCreateSyncSession (2) failed: %v", err)
 	}
@@ -779,13 +795,14 @@ func TestGetSessionOwnerAndExternalID_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "owner@test.com", "Owner User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "test-external-id")
 
 	ctx := context.Background()
 
-	userID, externalID, err := env.DB.GetSessionOwnerAndExternalID(ctx, sessionID)
+	userID, externalID, err := store.GetSessionOwnerAndExternalID(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("GetSessionOwnerAndExternalID failed: %v", err)
 	}
@@ -805,10 +822,11 @@ func TestGetSessionOwnerAndExternalID_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	_, _, err := env.DB.GetSessionOwnerAndExternalID(ctx, "00000000-0000-0000-0000-000000000000")
+	_, _, err := store.GetSessionOwnerAndExternalID(ctx, "00000000-0000-0000-0000-000000000000")
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}

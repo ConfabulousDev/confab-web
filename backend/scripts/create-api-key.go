@@ -8,6 +8,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 )
 
 func main() {
@@ -37,7 +38,8 @@ func main() {
 	}
 
 	ctx := context.Background()
-	_, _, err = database.CreateAPIKeyWithReturn(ctx, userID, keyHash, name)
+	authStore := &dbauth.Store{DB: database}
+	_, _, err = authStore.CreateAPIKeyWithReturn(ctx, userID, keyHash, name)
 	if err != nil {
 		log.Fatalf("Failed to create API key: %v", err)
 	}

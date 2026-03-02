@@ -70,15 +70,15 @@ jobs:
       matrix:
         include:
           - shard: db-session
-            run: go test -timeout 15m -run "Session" -skip "AccessType|WithAccess|Sync|WebSession" ./internal/db/...
-          - shard: db-session-access
-            run: go test -timeout 15m -run "AccessType|WithAccess" ./internal/db/...
-          - shard: db-sync-web
-            run: go test -timeout 15m -run "Sync|WebSession|ConnectWithRetry|Tsquery" ./internal/db/...
-          - shard: db-user-oauth
-            run: go test -timeout 15m -run "User|OAuth|Password|SmartRecap" ./internal/db/...
+            run: go test -timeout 15m ./internal/db/session/...
+          - shard: db-access
+            run: go test -timeout 15m ./internal/db/access/...
           - shard: db-auth
-            run: go test -timeout 15m -run "APIKey|Device|Share|Web" ./internal/db/...
+            run: go test -timeout 15m ./internal/db/dbauth/...
+          - shard: db-user
+            run: go test -timeout 15m ./internal/db/user/...
+          - shard: db-root
+            run: go test -timeout 15m ./internal/db
           - shard: api
             run: go test -timeout 15m ./internal/api/...
           - shard: auth
@@ -140,3 +140,24 @@ jobs:
 
       - name: Smoke test - migration files present
         run: docker run --rm confab-test:latest ls /app/migrations/
+
+  ci-summary:
+    if: always()
+    needs: [frontend, backend-unit, backend-integration, docker-smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.frontend.result }}" != "success" ||
+                "${{ needs.backend-unit.result }}" != "success" ||
+                "${{ needs.backend-integration.result }}" != "success" ||
+                "${{ needs.docker-smoke-test.result }}" != "success" ]]; then
+            echo "One or more jobs failed:"
+            echo "  frontend: ${{ needs.frontend.result }}"
+            echo "  backend-unit: ${{ needs.backend-unit.result }}"
+            echo "  backend-integration: ${{ needs.backend-integration.result }}"
+            echo "  docker-smoke-test: ${{ needs.docker-smoke-test.result }}"
+            exit 1
+          fi
+          echo "All jobs passed!"

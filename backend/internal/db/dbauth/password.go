@@ -1,9 +1,8 @@
-package db
+package dbauth
 
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,13 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
-)
-
-// Password authentication errors
-var (
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrAccountLocked      = errors.New("account is temporarily locked")
 )
 
 // Password authentication constants
@@ -40,12 +34,12 @@ type PasswordCredentials struct {
 
 // AuthenticatePassword verifies email/password and returns the user if valid.
 // Handles account lockout after too many failed attempts.
-func (db *DB) AuthenticatePassword(ctx context.Context, email, password string) (*models.User, error) {
+func (s *Store) AuthenticatePassword(ctx context.Context, email, password string) (*models.User, error) {
 	ctx, span := tracer.Start(ctx, "db.authenticate_password",
 		trace.WithAttributes(attribute.String("email", email)))
 	defer span.End()
 
-	tx, err := db.conn.BeginTx(ctx, nil)
+	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -80,7 +74,7 @@ func (db *DB) AuthenticatePassword(ctx context.Context, email, password string) 
 	if err == sql.ErrNoRows {
 		// No such user - but use constant time to prevent timing attacks
 		bcrypt.CompareHashAndPassword([]byte("$2a$12$dummy.hash.to.prevent.timing.attacks."), []byte(password))
-		return nil, ErrInvalidCredentials
+		return nil, db.ErrInvalidCredentials
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -90,7 +84,7 @@ func (db *DB) AuthenticatePassword(ctx context.Context, email, password string) 
 
 	// Check if account is locked
 	if lockedUntil != nil && time.Now().Before(*lockedUntil) {
-		return nil, ErrAccountLocked
+		return nil, db.ErrAccountLocked
 	}
 
 	// Verify password
@@ -114,14 +108,14 @@ func (db *DB) AuthenticatePassword(ctx context.Context, email, password string) 
 		}
 
 		if newLockedUntil != nil {
-			return nil, ErrAccountLocked
+			return nil, db.ErrAccountLocked
 		}
-		return nil, ErrInvalidCredentials
+		return nil, db.ErrInvalidCredentials
 	}
 
 	// Check if user is inactive
 	if user.Status == models.UserStatusInactive {
-		return nil, ErrInvalidCredentials
+		return nil, db.ErrInvalidCredentials
 	}
 
 	// Success - reset failed attempts
@@ -141,12 +135,12 @@ func (db *DB) AuthenticatePassword(ctx context.Context, email, password string) 
 
 // CreatePasswordUser creates a new user with password authentication.
 // Creates entries in users, user_identities, and identity_passwords tables.
-func (db *DB) CreatePasswordUser(ctx context.Context, email, passwordHash string, isAdmin bool) (*models.User, error) {
+func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash string, isAdmin bool) (*models.User, error) {
 	ctx, span := tracer.Start(ctx, "db.create_password_user",
 		trace.WithAttributes(attribute.String("email", email), attribute.Bool("is_admin", isAdmin)))
 	defer span.End()
 
-	tx, err := db.conn.BeginTx(ctx, nil)
+	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -228,7 +222,7 @@ func (db *DB) CreatePasswordUser(ctx context.Context, email, passwordHash string
 }
 
 // UpdateUserPassword updates a user's password hash
-func (db *DB) UpdateUserPassword(ctx context.Context, userID int64, passwordHash string) error {
+func (s *Store) UpdateUserPassword(ctx context.Context, userID int64, passwordHash string) error {
 	ctx, span := tracer.Start(ctx, "db.update_user_password",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
@@ -240,7 +234,7 @@ func (db *DB) UpdateUserPassword(ctx context.Context, userID int64, passwordHash
 		WHERE p.identity_id = i.id AND i.user_id = $2 AND i.provider = 'password'
 	`
 
-	result, err := db.conn.ExecContext(ctx, query, passwordHash, userID)
+	result, err := s.conn().ExecContext(ctx, query, passwordHash, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -260,19 +254,19 @@ func (db *DB) UpdateUserPassword(ctx context.Context, userID int64, passwordHash
 }
 
 // GetUserByEmail retrieves a user by email address
-func (db *DB) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	ctx, span := tracer.Start(ctx, "db.get_user_by_email")
 	defer span.End()
 
 	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE email = $1`
 
 	var user models.User
-	err := db.conn.QueryRowContext(ctx, query, email).Scan(
+	err := s.conn().QueryRowContext(ctx, query, email).Scan(
 		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrUserNotFound
+			return nil, db.ErrUserNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -283,7 +277,7 @@ func (db *DB) GetUserByEmail(ctx context.Context, email string) (*models.User, e
 }
 
 // IsUserAdmin checks if a user has admin privileges
-func (db *DB) IsUserAdmin(ctx context.Context, userID int64) (bool, error) {
+func (s *Store) IsUserAdmin(ctx context.Context, userID int64) (bool, error) {
 	ctx, span := tracer.Start(ctx, "db.is_user_admin",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
@@ -291,10 +285,10 @@ func (db *DB) IsUserAdmin(ctx context.Context, userID int64) (bool, error) {
 	query := `SELECT is_admin FROM users WHERE id = $1`
 
 	var isAdmin bool
-	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&isAdmin)
+	err := s.conn().QueryRowContext(ctx, query, userID).Scan(&isAdmin)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return false, ErrUserNotFound
+			return false, db.ErrUserNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

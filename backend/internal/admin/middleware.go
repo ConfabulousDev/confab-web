@@ -5,6 +5,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 )
 
 // Middleware returns an HTTP middleware that requires super admin authentication.
@@ -20,7 +21,8 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 			}
 
 			// Get user email to check admin status
-			user, err := database.GetUserByID(r.Context(), userID)
+			userStore := &dbuser.Store{DB: database}
+			user, err := userStore.GetUserByID(r.Context(), userID)
 			if err != nil {
 				http.Error(w, "Failed to get user", http.StatusInternalServerError)
 				return

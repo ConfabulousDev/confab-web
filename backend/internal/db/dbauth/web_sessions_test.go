@@ -1,10 +1,11 @@
-package db_test
+package dbauth_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -16,19 +17,20 @@ func TestCreateWebSession(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "session@test.com", "Session User")
 
 	sessionID := "test_session_id_12345"
 	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 
-	err := env.DB.CreateWebSession(context.Background(), sessionID, user.ID, expiresAt)
+	err := store.CreateWebSession(context.Background(), sessionID, user.ID, expiresAt)
 	if err != nil {
 		t.Fatalf("CreateWebSession failed: %v", err)
 	}
 
 	// Verify session can be retrieved
-	session, err := env.DB.GetWebSession(context.Background(), sessionID)
+	session, err := store.GetWebSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -49,6 +51,7 @@ func TestGetWebSession_Valid(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "validsession@test.com", "Valid Session User")
 
@@ -57,7 +60,7 @@ func TestGetWebSession_Valid(t *testing.T) {
 
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
-	session, err := env.DB.GetWebSession(context.Background(), sessionID)
+	session, err := store.GetWebSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -75,6 +78,7 @@ func TestGetWebSession_Expired(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "expired@test.com", "Expired Session User")
 
@@ -84,7 +88,7 @@ func TestGetWebSession_Expired(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Try to get expired session
-	_, err := env.DB.GetWebSession(context.Background(), sessionID)
+	_, err := store.GetWebSession(context.Background(), sessionID)
 	if err == nil {
 		t.Error("expected error for expired session")
 	}
@@ -98,8 +102,9 @@ func TestGetWebSession_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
-	_, err := env.DB.GetWebSession(context.Background(), "nonexistent_session_id")
+	_, err := store.GetWebSession(context.Background(), "nonexistent_session_id")
 	if err == nil {
 		t.Error("expected error for non-existent session")
 	}
@@ -113,6 +118,7 @@ func TestDeleteWebSession(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "logout@test.com", "Logout User")
 
@@ -122,19 +128,19 @@ func TestDeleteWebSession(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Verify session exists
-	_, err := env.DB.GetWebSession(context.Background(), sessionID)
+	_, err := store.GetWebSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("session should exist before delete: %v", err)
 	}
 
 	// Delete session
-	err = env.DB.DeleteWebSession(context.Background(), sessionID)
+	err = store.DeleteWebSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("DeleteWebSession failed: %v", err)
 	}
 
 	// Verify session no longer exists
-	_, err = env.DB.GetWebSession(context.Background(), sessionID)
+	_, err = store.GetWebSession(context.Background(), sessionID)
 	if err == nil {
 		t.Error("session should not exist after delete")
 	}
@@ -148,9 +154,10 @@ func TestDeleteWebSession_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	// Deleting non-existent session should not error (idempotent)
-	err := env.DB.DeleteWebSession(context.Background(), "nonexistent_session")
+	err := store.DeleteWebSession(context.Background(), "nonexistent_session")
 	if err != nil {
 		t.Errorf("DeleteWebSession should not error for non-existent session: %v", err)
 	}
@@ -164,6 +171,7 @@ func TestWebSession_MultipleUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "user1@test.com", "User One")
 	user2 := testutil.CreateTestUser(t, env, "user2@test.com", "User Two")
@@ -176,7 +184,7 @@ func TestWebSession_MultipleUsers(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, session2, user2.ID, expiresAt)
 
 	// Verify each session returns the correct user
-	s1, err := env.DB.GetWebSession(context.Background(), session1)
+	s1, err := store.GetWebSession(context.Background(), session1)
 	if err != nil {
 		t.Fatalf("GetWebSession(session1) failed: %v", err)
 	}
@@ -184,7 +192,7 @@ func TestWebSession_MultipleUsers(t *testing.T) {
 		t.Errorf("session1 UserID = %d, want %d", s1.UserID, user1.ID)
 	}
 
-	s2, err := env.DB.GetWebSession(context.Background(), session2)
+	s2, err := store.GetWebSession(context.Background(), session2)
 	if err != nil {
 		t.Fatalf("GetWebSession(session2) failed: %v", err)
 	}
@@ -193,13 +201,13 @@ func TestWebSession_MultipleUsers(t *testing.T) {
 	}
 
 	// Deleting user1's session shouldn't affect user2's
-	err = env.DB.DeleteWebSession(context.Background(), session1)
+	err = store.DeleteWebSession(context.Background(), session1)
 	if err != nil {
 		t.Fatalf("DeleteWebSession failed: %v", err)
 	}
 
 	// user2's session should still work
-	s2Again, err := env.DB.GetWebSession(context.Background(), session2)
+	s2Again, err := store.GetWebSession(context.Background(), session2)
 	if err != nil {
 		t.Fatalf("user2's session should still work: %v", err)
 	}
@@ -216,6 +224,7 @@ func TestWebSession_ExpiryBoundary(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "boundary@test.com", "Boundary User")
 
@@ -226,7 +235,7 @@ func TestWebSession_ExpiryBoundary(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Should be valid immediately
-	_, err := env.DB.GetWebSession(context.Background(), sessionID)
+	_, err := store.GetWebSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("session should be valid immediately: %v", err)
 	}
@@ -235,7 +244,7 @@ func TestWebSession_ExpiryBoundary(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Should now be expired
-	_, err = env.DB.GetWebSession(context.Background(), sessionID)
+	_, err = store.GetWebSession(context.Background(), sessionID)
 	if err == nil {
 		t.Error("session should be expired after waiting")
 	}

@@ -1,4 +1,4 @@
-package db_test
+package session_test
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -23,6 +25,7 @@ func TestGetSessionDetail_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "detail@test.com", "Detail User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "detail-external-id")
@@ -33,7 +36,7 @@ func TestGetSessionDetail_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	detail, err := store.GetSessionDetail(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("GetSessionDetail failed: %v", err)
 	}
@@ -57,12 +60,13 @@ func TestGetSessionDetail_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "notfound@test.com", "NotFound User")
 
 	ctx := context.Background()
 
-	_, err := env.DB.GetSessionDetail(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
+	_, err := store.GetSessionDetail(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -76,12 +80,13 @@ func TestGetSessionDetail_InvalidUUID(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "invaliduuid@test.com", "InvalidUUID User")
 
 	ctx := context.Background()
 
-	_, err := env.DB.GetSessionDetail(ctx, "not-a-valid-uuid", user.ID)
+	_, err := store.GetSessionDetail(ctx, "not-a-valid-uuid", user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound for invalid UUID, got %v", err)
 	}
@@ -95,6 +100,7 @@ func TestGetSessionDetail_WrongUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	user2 := testutil.CreateTestUser(t, env, "other@test.com", "Other")
@@ -103,7 +109,7 @@ func TestGetSessionDetail_WrongUser(t *testing.T) {
 	ctx := context.Background()
 
 	// User2 tries to access User1's session
-	_, err := env.DB.GetSessionDetail(ctx, sessionID, user2.ID)
+	_, err := store.GetSessionDetail(ctx, sessionID, user2.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound when accessing another user's session, got %v", err)
 	}
@@ -117,6 +123,7 @@ func TestGetSessionDetail_ExcludesTodoFiles(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "todo@test.com", "Todo User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "todo-external-id")
@@ -128,7 +135,7 @@ func TestGetSessionDetail_ExcludesTodoFiles(t *testing.T) {
 
 	ctx := context.Background()
 
-	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	detail, err := store.GetSessionDetail(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("GetSessionDetail failed: %v", err)
 	}
@@ -158,6 +165,7 @@ func TestDeleteSessionFromDB_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "delete@test.com", "Delete User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "delete-external-id")
@@ -167,13 +175,13 @@ func TestDeleteSessionFromDB_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := env.DB.DeleteSessionFromDB(ctx, sessionID, user.ID)
+	err := store.DeleteSessionFromDB(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("DeleteSessionFromDB failed: %v", err)
 	}
 
 	// Verify session is gone
-	_, err = env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	_, err = store.GetSessionDetail(ctx, sessionID, user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound after deletion, got %v", err)
 	}
@@ -187,12 +195,13 @@ func TestDeleteSessionFromDB_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "notfound@test.com", "NotFound User")
 
 	ctx := context.Background()
 
-	err := env.DB.DeleteSessionFromDB(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
+	err := store.DeleteSessionFromDB(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -206,6 +215,7 @@ func TestDeleteSessionFromDB_WrongUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	user2 := testutil.CreateTestUser(t, env, "attacker@test.com", "Attacker")
@@ -214,13 +224,13 @@ func TestDeleteSessionFromDB_WrongUser(t *testing.T) {
 	ctx := context.Background()
 
 	// User2 tries to delete User1's session
-	err := env.DB.DeleteSessionFromDB(ctx, sessionID, user2.ID)
+	err := store.DeleteSessionFromDB(ctx, sessionID, user2.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound when deleting another user's session, got %v", err)
 	}
 
 	// Verify session still exists
-	_, err = env.DB.GetSessionDetail(ctx, sessionID, user1.ID)
+	_, err = store.GetSessionDetail(ctx, sessionID, user1.ID)
 	if err != nil {
 		t.Errorf("session should still exist: %v", err)
 	}
@@ -238,13 +248,14 @@ func TestVerifySessionOwnership_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "owner-external-id")
 
 	ctx := context.Background()
 
-	externalID, err := env.DB.VerifySessionOwnership(ctx, sessionID, user.ID)
+	externalID, err := store.VerifySessionOwnership(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("VerifySessionOwnership failed: %v", err)
 	}
@@ -261,12 +272,13 @@ func TestVerifySessionOwnership_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 
 	ctx := context.Background()
 
-	_, err := env.DB.VerifySessionOwnership(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
+	_, err := store.VerifySessionOwnership(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -280,6 +292,7 @@ func TestVerifySessionOwnership_Forbidden(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	user2 := testutil.CreateTestUser(t, env, "other@test.com", "Other")
@@ -288,7 +301,7 @@ func TestVerifySessionOwnership_Forbidden(t *testing.T) {
 	ctx := context.Background()
 
 	// User2 tries to verify ownership of User1's session
-	_, err := env.DB.VerifySessionOwnership(ctx, sessionID, user2.ID)
+	_, err := store.VerifySessionOwnership(ctx, sessionID, user2.ID)
 	if !errors.Is(err, db.ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
 	}
@@ -302,12 +315,13 @@ func TestVerifySessionOwnership_InvalidUUID(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 
 	ctx := context.Background()
 
-	_, err := env.DB.VerifySessionOwnership(ctx, "not-a-valid-uuid", user.ID)
+	_, err := store.VerifySessionOwnership(ctx, "not-a-valid-uuid", user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound for invalid UUID, got %v", err)
 	}
@@ -325,6 +339,7 @@ func TestUpdateSessionCustomTitle_SetTitle(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "title@test.com", "Title User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "title-external-id")
@@ -332,13 +347,13 @@ func TestUpdateSessionCustomTitle_SetTitle(t *testing.T) {
 	ctx := context.Background()
 
 	customTitle := "My Custom Title"
-	err := env.DB.UpdateSessionCustomTitle(ctx, sessionID, user.ID, &customTitle)
+	err := store.UpdateSessionCustomTitle(ctx, sessionID, user.ID, &customTitle)
 	if err != nil {
 		t.Fatalf("UpdateSessionCustomTitle failed: %v", err)
 	}
 
 	// Verify title was set
-	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	detail, err := store.GetSessionDetail(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("GetSessionDetail failed: %v", err)
 	}
@@ -355,6 +370,7 @@ func TestUpdateSessionCustomTitle_ClearTitle(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "cleartitle@test.com", "ClearTitle User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "clear-title-external-id")
@@ -363,19 +379,19 @@ func TestUpdateSessionCustomTitle_ClearTitle(t *testing.T) {
 
 	// Set a title first
 	customTitle := "Initial Title"
-	err := env.DB.UpdateSessionCustomTitle(ctx, sessionID, user.ID, &customTitle)
+	err := store.UpdateSessionCustomTitle(ctx, sessionID, user.ID, &customTitle)
 	if err != nil {
 		t.Fatalf("UpdateSessionCustomTitle (set) failed: %v", err)
 	}
 
 	// Clear the title
-	err = env.DB.UpdateSessionCustomTitle(ctx, sessionID, user.ID, nil)
+	err = store.UpdateSessionCustomTitle(ctx, sessionID, user.ID, nil)
 	if err != nil {
 		t.Fatalf("UpdateSessionCustomTitle (clear) failed: %v", err)
 	}
 
 	// Verify title was cleared
-	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	detail, err := store.GetSessionDetail(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("GetSessionDetail failed: %v", err)
 	}
@@ -392,13 +408,14 @@ func TestUpdateSessionCustomTitle_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "notfound@test.com", "NotFound User")
 
 	ctx := context.Background()
 
 	customTitle := "Title"
-	err := env.DB.UpdateSessionCustomTitle(ctx, "00000000-0000-0000-0000-000000000000", user.ID, &customTitle)
+	err := store.UpdateSessionCustomTitle(ctx, "00000000-0000-0000-0000-000000000000", user.ID, &customTitle)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -412,6 +429,7 @@ func TestUpdateSessionCustomTitle_Forbidden(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	user2 := testutil.CreateTestUser(t, env, "attacker@test.com", "Attacker")
@@ -420,7 +438,7 @@ func TestUpdateSessionCustomTitle_Forbidden(t *testing.T) {
 	ctx := context.Background()
 
 	customTitle := "Attacker's Title"
-	err := env.DB.UpdateSessionCustomTitle(ctx, sessionID, user2.ID, &customTitle)
+	err := store.UpdateSessionCustomTitle(ctx, sessionID, user2.ID, &customTitle)
 	if !errors.Is(err, db.ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
 	}
@@ -434,13 +452,14 @@ func TestUpdateSessionCustomTitle_InvalidUUID(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "invaliduuid@test.com", "InvalidUUID User")
 
 	ctx := context.Background()
 
 	customTitle := "Title"
-	err := env.DB.UpdateSessionCustomTitle(ctx, "not-a-valid-uuid", user.ID, &customTitle)
+	err := store.UpdateSessionCustomTitle(ctx, "not-a-valid-uuid", user.ID, &customTitle)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound for invalid UUID, got %v", err)
 	}
@@ -458,6 +477,7 @@ func TestUpdateSessionSuggestedTitle_SetTitle(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "suggested@test.com", "Suggested User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "suggested-external-id")
@@ -465,13 +485,13 @@ func TestUpdateSessionSuggestedTitle_SetTitle(t *testing.T) {
 	ctx := context.Background()
 
 	suggestedTitle := "Implement dark mode feature"
-	err := env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, suggestedTitle)
+	err := store.UpdateSessionSuggestedTitle(ctx, sessionID, suggestedTitle)
 	if err != nil {
 		t.Fatalf("UpdateSessionSuggestedTitle failed: %v", err)
 	}
 
 	// Verify title was set
-	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	detail, err := store.GetSessionDetail(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("GetSessionDetail failed: %v", err)
 	}
@@ -488,6 +508,7 @@ func TestUpdateSessionSuggestedTitle_EmptyDoesNotUpdate(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "empty@test.com", "Empty User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "empty-external-id")
@@ -496,19 +517,19 @@ func TestUpdateSessionSuggestedTitle_EmptyDoesNotUpdate(t *testing.T) {
 
 	// Set a title first
 	initialTitle := "Initial Title"
-	err := env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, initialTitle)
+	err := store.UpdateSessionSuggestedTitle(ctx, sessionID, initialTitle)
 	if err != nil {
 		t.Fatalf("UpdateSessionSuggestedTitle (initial) failed: %v", err)
 	}
 
 	// Calling with empty string should be a no-op
-	err = env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, "")
+	err = store.UpdateSessionSuggestedTitle(ctx, sessionID, "")
 	if err != nil {
 		t.Fatalf("UpdateSessionSuggestedTitle (empty) failed: %v", err)
 	}
 
 	// Verify original title is still there
-	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	detail, err := store.GetSessionDetail(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("GetSessionDetail failed: %v", err)
 	}
@@ -525,6 +546,7 @@ func TestUpdateSessionSuggestedTitle_VisibleInSessionList(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "listtest@test.com", "List Test User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "list-external-id")
@@ -532,13 +554,13 @@ func TestUpdateSessionSuggestedTitle_VisibleInSessionList(t *testing.T) {
 	ctx := context.Background()
 
 	suggestedTitle := "Debug OAuth login"
-	err := env.DB.UpdateSessionSuggestedTitle(ctx, sessionID, suggestedTitle)
+	err := store.UpdateSessionSuggestedTitle(ctx, sessionID, suggestedTitle)
 	if err != nil {
 		t.Fatalf("UpdateSessionSuggestedTitle failed: %v", err)
 	}
 
 	// Verify title appears in session list
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID)
+	sessions, err := store.ListUserSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -563,6 +585,7 @@ func TestUpdateSessionSummary_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "summary@test.com", "Summary User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "summary-external-id")
@@ -570,13 +593,13 @@ func TestUpdateSessionSummary_Success(t *testing.T) {
 	ctx := context.Background()
 
 	summary := "This is a test summary"
-	err := env.DB.UpdateSessionSummary(ctx, "summary-external-id", user.ID, summary)
+	err := store.UpdateSessionSummary(ctx, "summary-external-id", user.ID, summary)
 	if err != nil {
 		t.Fatalf("UpdateSessionSummary failed: %v", err)
 	}
 
 	// Verify summary was set
-	detail, err := env.DB.GetSessionDetail(ctx, sessionID, user.ID)
+	detail, err := store.GetSessionDetail(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("GetSessionDetail failed: %v", err)
 	}
@@ -593,12 +616,13 @@ func TestUpdateSessionSummary_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "notfound@test.com", "NotFound User")
 
 	ctx := context.Background()
 
-	err := env.DB.UpdateSessionSummary(ctx, "nonexistent-external-id", user.ID, "summary")
+	err := store.UpdateSessionSummary(ctx, "nonexistent-external-id", user.ID, "summary")
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -612,6 +636,7 @@ func TestUpdateSessionSummary_Forbidden(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	user2 := testutil.CreateTestUser(t, env, "attacker@test.com", "Attacker")
@@ -619,7 +644,7 @@ func TestUpdateSessionSummary_Forbidden(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := env.DB.UpdateSessionSummary(ctx, "owner-external-id", user2.ID, "attacker summary")
+	err := store.UpdateSessionSummary(ctx, "owner-external-id", user2.ID, "attacker summary")
 	if !errors.Is(err, db.ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
 	}
@@ -637,6 +662,7 @@ func TestListUserSessions_OwnedOnly(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "list@test.com", "List User")
 
@@ -647,7 +673,7 @@ func TestListUserSessions_OwnedOnly(t *testing.T) {
 
 	ctx := context.Background()
 
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID)
+	sessions, err := store.ListUserSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -674,12 +700,13 @@ func TestListUserSessions_Empty(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "empty@test.com", "Empty User")
 
 	ctx := context.Background()
 
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID)
+	sessions, err := store.ListUserSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -697,6 +724,7 @@ func TestListUserSessions_WithShared(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@test.com", "Recipient")
@@ -713,7 +741,7 @@ func TestListUserSessions_WithShared(t *testing.T) {
 	ctx := context.Background()
 
 	// List shared sessions view (includes owned for deduplication)
-	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID)
+	sessions, err := store.ListUserSessions(ctx, recipient.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -750,6 +778,7 @@ func TestListUserSessions_ExpiredShareExcluded(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@test.com", "Recipient")
@@ -764,7 +793,7 @@ func TestListUserSessions_ExpiredShareExcluded(t *testing.T) {
 	ctx := context.Background()
 
 	// List shared sessions - expired should be excluded
-	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID)
+	sessions, err := store.ListUserSessions(ctx, recipient.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -786,12 +815,13 @@ func TestGetUserByID_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	userStore := &dbuser.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "getuser@test.com", "Get User")
 
 	ctx := context.Background()
 
-	retrieved, err := env.DB.GetUserByID(ctx, user.ID)
+	retrieved, err := userStore.GetUserByID(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("GetUserByID failed: %v", err)
 	}
@@ -815,10 +845,11 @@ func TestGetUserByID_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	userStore := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	_, err := env.DB.GetUserByID(ctx, 99999)
+	_, err := userStore.GetUserByID(ctx, 99999)
 	if !errors.Is(err, db.ErrUserNotFound) {
 		t.Errorf("expected ErrUserNotFound, got %v", err)
 	}
@@ -836,6 +867,7 @@ func TestListUserSessions_IncludesGitHubPRs(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "pr@test.com", "PR User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "session-with-prs")
@@ -847,7 +879,7 @@ func TestListUserSessions_IncludesGitHubPRs(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // Ensure different created_at times
 	testutil.CreateTestGitHubLink(t, env, sessionID, "pull_request", "123")
 
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID)
+	sessions, err := store.ListUserSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -878,13 +910,14 @@ func TestListUserSessions_GitHubPRsEmpty(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "noprs@test.com", "No PRs User")
 	testutil.CreateTestSession(t, env, user.ID, "session-no-prs")
 
 	ctx := context.Background()
 
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID)
+	sessions, err := store.ListUserSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -906,6 +939,7 @@ func TestListUserSessions_GitHubPRsExcludesCommits(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "mixed@test.com", "Mixed Links User")
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "session-mixed-links")
@@ -916,7 +950,7 @@ func TestListUserSessions_GitHubPRsExcludesCommits(t *testing.T) {
 	testutil.CreateTestGitHubLink(t, env, sessionID, "pull_request", "42")
 	testutil.CreateTestGitHubLink(t, env, sessionID, "commit", "abc123def")
 
-	sessions, err := env.DB.ListUserSessions(ctx, user.ID)
+	sessions, err := store.ListUserSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -942,6 +976,7 @@ func TestListUserSessions_GitHubPRsSharedView(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@test.com", "Recipient")
@@ -957,7 +992,7 @@ func TestListUserSessions_GitHubPRsSharedView(t *testing.T) {
 	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@test.com"})
 
 	// List from recipient's shared view
-	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID)
+	sessions, err := store.ListUserSessions(ctx, recipient.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -996,6 +1031,7 @@ func TestListUserSessions_ShareAllSessions_SharedView(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	// Enable ShareAllSessions
 	env.DB.ShareAllSessions = true
@@ -1013,7 +1049,7 @@ func TestListUserSessions_ShareAllSessions_SharedView(t *testing.T) {
 
 	ctx := context.Background()
 
-	sessions, err := env.DB.ListUserSessions(ctx, viewer.ID)
+	sessions, err := store.ListUserSessions(ctx, viewer.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -1054,6 +1090,7 @@ func TestListUserSessions_ShareAllSessions_PrivateShareTakesPrecedence(t *testin
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	// Enable ShareAllSessions
 	env.DB.ShareAllSessions = true
@@ -1068,7 +1105,7 @@ func TestListUserSessions_ShareAllSessions_PrivateShareTakesPrecedence(t *testin
 
 	ctx := context.Background()
 
-	sessions, err := env.DB.ListUserSessions(ctx, recipient.ID)
+	sessions, err := store.ListUserSessions(ctx, recipient.ID)
 	if err != nil {
 		t.Fatalf("ListUserSessions failed: %v", err)
 	}
@@ -1104,6 +1141,7 @@ func TestListUserSessionsPaginated_NoFilters(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1120,7 +1158,7 @@ func TestListUserSessionsPaginated_NoFilters(t *testing.T) {
 	ctx := context.Background()
 
 	// Page 1: should get 50 sessions with has_more=true
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("Page 1 failed: %v", err)
 	}
@@ -1138,7 +1176,7 @@ func TestListUserSessionsPaginated_NoFilters(t *testing.T) {
 	}
 
 	// Page 2 via cursor: should get 10 sessions with has_more=false
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Cursor: result.NextCursor, PageSize: 50})
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Cursor: result.NextCursor, PageSize: 50})
 	if err != nil {
 		t.Fatalf("Page 2 failed: %v", err)
 	}
@@ -1161,6 +1199,7 @@ func TestListUserSessionsPaginated_RepoFilter(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1190,7 +1229,7 @@ func TestListUserSessionsPaginated_RepoFilter(t *testing.T) {
 	ctx := context.Background()
 
 	// Filter by repo-a
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Repos: []string{"org/repo-a"},
 	})
 	if err != nil {
@@ -1218,6 +1257,7 @@ func TestListUserSessionsPaginated_BranchFilter(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1242,7 +1282,7 @@ func TestListUserSessionsPaginated_BranchFilter(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Branches: []string{"main"},
 	})
 	if err != nil {
@@ -1261,6 +1301,7 @@ func TestListUserSessionsPaginated_OwnerFilter(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1284,7 +1325,7 @@ func TestListUserSessionsPaginated_OwnerFilter(t *testing.T) {
 	ctx := context.Background()
 
 	// Alice views sessions, filter by Alice only (her own)
-	result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
 		Owners: []string{"alice@test.com"},
 	})
 	if err != nil {
@@ -1300,7 +1341,7 @@ func TestListUserSessionsPaginated_OwnerFilter(t *testing.T) {
 	}
 
 	// Alice views sessions, filter by Bob
-	result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
+	result, err = store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
 		Owners: []string{"bob@test.com"},
 	})
 	if err != nil {
@@ -1324,6 +1365,7 @@ func TestListUserSessionsPaginated_PRFilter(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1347,7 +1389,7 @@ func TestListUserSessionsPaginated_PRFilter(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		PRs: []string{"123"},
 	})
 	if err != nil {
@@ -1366,6 +1408,7 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1394,7 +1437,7 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 
 	// Search for "auth" - should match session 1 and session 2 via FTS
 	q := "auth"
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q,
 	})
 	if err != nil {
@@ -1406,7 +1449,7 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 
 	// Search for commit SHA prefix (fallback path, no FTS match needed)
 	q2 := "abc123"
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q2,
 	})
 	if err != nil {
@@ -1425,6 +1468,7 @@ func TestListUserSessionsPaginated_FTSPrefixAndMultiWord(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1445,7 +1489,7 @@ func TestListUserSessionsPaginated_FTSPrefixAndMultiWord(t *testing.T) {
 
 	// Prefix match: "authen" should match "authentication"
 	q := "authen"
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q,
 	})
 	if err != nil {
@@ -1457,7 +1501,7 @@ func TestListUserSessionsPaginated_FTSPrefixAndMultiWord(t *testing.T) {
 
 	// Multi-word: "auth flow" should match session 1 (AND semantics)
 	q2 := "auth flow"
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q2,
 	})
 	if err != nil {
@@ -1469,7 +1513,7 @@ func TestListUserSessionsPaginated_FTSPrefixAndMultiWord(t *testing.T) {
 
 	// Multi-word no match: "auth database" should match nothing (AND means both must be present)
 	q3 := "auth database"
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q3,
 	})
 	if err != nil {
@@ -1481,7 +1525,7 @@ func TestListUserSessionsPaginated_FTSPrefixAndMultiWord(t *testing.T) {
 
 	// No match at all
 	q4 := "kubernetes"
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Query: &q4,
 	})
 	if err != nil {
@@ -1501,6 +1545,7 @@ func TestListUserSessionsPaginated_UnindexedSessionsInUnfilteredResults(t *testi
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1521,7 +1566,7 @@ func TestListUserSessionsPaginated_UnindexedSessionsInUnfilteredResults(t *testi
 	ctx := context.Background()
 
 	// Without query filter, both sessions should appear
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{})
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{})
 	if err != nil {
 		t.Fatalf("Unfiltered list failed: %v", err)
 	}
@@ -1538,6 +1583,7 @@ func TestListUserSessionsPaginated_MultipleFilters(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1569,7 +1615,7 @@ func TestListUserSessionsPaginated_MultipleFilters(t *testing.T) {
 	ctx := context.Background()
 
 	// Alice filters: repo-a + main + alice → should get 2
-	result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{
 		Repos:    []string{"org/repo-a"},
 		Branches: []string{"main"},
 		Owners:   []string{"alice@multi.com"},
@@ -1590,6 +1636,7 @@ func TestListUserSessionsPaginated_FilterOptions(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1620,7 +1667,7 @@ func TestListUserSessionsPaginated_FilterOptions(t *testing.T) {
 	ctx := context.Background()
 
 	// Filter by repo=frontend → filter_options should still show ALL repos (pre-materialized)
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Repos: []string{"org/frontend"},
 	})
 	if err != nil {
@@ -1651,6 +1698,7 @@ func TestListUserSessionsPaginated_EmptySessionsExcluded(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1674,7 +1722,7 @@ func TestListUserSessionsPaginated_EmptySessionsExcluded(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{})
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{})
 	if err != nil {
 		t.Fatalf("Empty sessions test failed: %v", err)
 	}
@@ -1694,6 +1742,7 @@ func TestListUserSessionsPaginated_CursorBeyondResults(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1710,7 +1759,7 @@ func TestListUserSessionsPaginated_CursorBeyondResults(t *testing.T) {
 	ctx := context.Background()
 
 	// First fetch all sessions
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("First fetch failed: %v", err)
 	}
@@ -1733,6 +1782,7 @@ func TestListUserSessionsPaginated_MultiSelect(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -1760,7 +1810,7 @@ func TestListUserSessionsPaginated_MultiSelect(t *testing.T) {
 	ctx := context.Background()
 
 	// Multi-select: filter by alpha AND beta repos (OR within dimension)
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Repos: []string{"org/alpha", "org/beta"},
 	})
 	if err != nil {
@@ -1784,6 +1834,7 @@ func TestListUserSessionsPaginated_NonShareAll_OwnedOnly(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	// ShareAllSessions is false by default — UNION ALL path
 	alice := testutil.CreateTestUser(t, env, "alice@nonshare.com", "Alice")
@@ -1807,7 +1858,7 @@ func TestListUserSessionsPaginated_NonShareAll_OwnedOnly(t *testing.T) {
 	ctx := context.Background()
 
 	// Alice should only see her own 3 sessions
-	result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+	result, err := store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("NonShareAll query failed: %v", err)
 	}
@@ -1821,7 +1872,7 @@ func TestListUserSessionsPaginated_NonShareAll_OwnedOnly(t *testing.T) {
 	}
 
 	// Bob should only see his own 2 sessions
-	result, err = env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+	result, err = store.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("NonShareAll query for Bob failed: %v", err)
 	}
@@ -1839,6 +1890,7 @@ func TestListUserSessionsPaginated_NonShareAll_WithPrivateShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	alice := testutil.CreateTestUser(t, env, "alice@share.com", "Alice")
 	bob := testutil.CreateTestUser(t, env, "bob@share.com", "Bob")
@@ -1862,7 +1914,7 @@ func TestListUserSessionsPaginated_NonShareAll_WithPrivateShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Bob sees his own 1 session + 1 shared by Alice = 2 total
-	result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+	result, err := store.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("NonShareAll with share failed: %v", err)
 	}
@@ -1891,7 +1943,7 @@ func TestListUserSessionsPaginated_NonShareAll_WithPrivateShare(t *testing.T) {
 	}
 
 	// Alice still sees only her own 2 sessions (she didn't receive any shares)
-	result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+	result, err = store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("NonShareAll query for Alice failed: %v", err)
 	}
@@ -1911,6 +1963,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("Isolation", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		alice := testutil.CreateTestUser(t, env, "alice@scoped.com", "Alice")
 		bob := testutil.CreateTestUser(t, env, "bob@scoped.com", "Bob")
@@ -1929,7 +1982,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		ctx := context.Background()
 
 		// Alice should only see her own values
-		result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -1944,7 +1997,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		}
 
 		// Bob should only see his own values
-		result, err = env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		result, err = store.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query for Bob failed: %v", err)
 		}
@@ -1964,6 +2017,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("PrivateShare", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		alice := testutil.CreateTestUser(t, env, "alice@ps.com", "Alice")
 		bob := testutil.CreateTestUser(t, env, "bob@ps.com", "Bob")
@@ -1985,7 +2039,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		ctx := context.Background()
 
 		// Bob should now see both repos, branches, and owners
-		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -2000,7 +2054,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		}
 
 		// Alice should still only see her own (she has no shares inbound)
-		result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		result, err = store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query for Alice failed: %v", err)
 		}
@@ -2016,6 +2070,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("SystemShare", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		alice := testutil.CreateTestUser(t, env, "alice@sys.com", "Alice")
 		bob := testutil.CreateTestUser(t, env, "bob@sys.com", "Bob")
@@ -2038,7 +2093,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		ctx := context.Background()
 
 		// Bob should see both his own repo AND the system-shared repo
-		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -2054,7 +2109,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		}
 
 		// Alice sees her own + system-shared (which she owns, so still 1 repo)
-		result, err = env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		result, err = store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query for Alice failed: %v", err)
 		}
@@ -2067,6 +2122,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("ExpiredSharesExcluded", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		alice := testutil.CreateTestUser(t, env, "alice@exp.com", "Alice")
 		bob := testutil.CreateTestUser(t, env, "bob@exp.com", "Bob")
@@ -2089,7 +2145,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		ctx := context.Background()
 
 		// Bob should NOT see Alice's repo (share is expired)
-		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -2105,6 +2161,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("ExpiredSystemShareExcluded", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		alice := testutil.CreateTestUser(t, env, "alice@expsys.com", "Alice")
 		bob := testutil.CreateTestUser(t, env, "bob@expsys.com", "Bob")
@@ -2127,7 +2184,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		ctx := context.Background()
 
 		// Bob should NOT see Alice's repo (system share is expired)
-		result, err := env.DB.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, bob.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -2140,6 +2197,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("NoGitInfo", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		user := testutil.CreateTestUser(t, env, "user@nogit.com", "User")
 
@@ -2155,7 +2213,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 
 		ctx := context.Background()
 
-		result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -2177,12 +2235,13 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("NoSessions", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		user := testutil.CreateTestUser(t, env, "empty@nosessions.com", "Empty User")
 
 		ctx := context.Background()
 
-		result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -2201,6 +2260,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 	t.Run("Deduplication", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		env.CleanDB(t)
+		store := &dbsession.Store{DB: env.DB}
 
 		alice := testutil.CreateTestUser(t, env, "alice@dedup.com", "Alice")
 
@@ -2215,7 +2275,7 @@ func TestListUserSessionsPaginated_NonShareAll_FilterOptionsScoped(t *testing.T)
 		ctx := context.Background()
 
 		// Alice owns the session AND it's system-shared — should still see repo only once
-		result, err := env.DB.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
+		result, err := store.ListUserSessionsPaginated(ctx, alice.ID, db.SessionListParams{PageSize: 50})
 		if err != nil {
 			t.Fatalf("query failed: %v", err)
 		}
@@ -2236,6 +2296,7 @@ func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "filter@nonshare.com", "Filter User")
 
@@ -2258,7 +2319,7 @@ func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 	ctx := context.Background()
 
 	// Filter by repo
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Repos: []string{"org/frontend"},
 	})
 	if err != nil {
@@ -2269,7 +2330,7 @@ func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 	}
 
 	// Filter by branch
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{
 		Branches: []string{"develop"},
 	})
 	if err != nil {
@@ -2280,7 +2341,7 @@ func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 	}
 
 	// No filters — should see all 5
-	result, err = env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("NonShareAll no filter failed: %v", err)
 	}
@@ -2302,6 +2363,7 @@ func TestListUserSessionsPaginated_EstimatedCostUSD(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
 
 	env.DB.ShareAllSessions = true
 	defer func() { env.DB.ShareAllSessions = false }()
@@ -2329,7 +2391,7 @@ func TestListUserSessionsPaginated_EstimatedCostUSD(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result, err := env.DB.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
 	if err != nil {
 		t.Fatalf("ListUserSessionsPaginated failed: %v", err)
 	}

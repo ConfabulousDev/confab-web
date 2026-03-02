@@ -7,6 +7,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -283,7 +284,8 @@ func TestSystemShare_HTTP_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create system share using database function directly
-		share, err := env.DB.CreateSystemShare(env.Ctx, sessionID, nil)
+		accessStore := &dbaccess.Store{DB: env.DB}
+		share, err := accessStore.CreateSystemShare(env.Ctx, sessionID, nil)
 		if err != nil {
 			t.Fatalf("failed to create system share: %v", err)
 		}
@@ -315,7 +317,8 @@ func TestSystemShare_HTTP_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create system share
-		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, nil)
+		accessStore := &dbaccess.Store{DB: env.DB}
+		_, err := accessStore.CreateSystemShare(env.Ctx, sessionID, nil)
 		if err != nil {
 			t.Fatalf("failed to create system share: %v", err)
 		}
@@ -324,7 +327,7 @@ func TestSystemShare_HTTP_Integration(t *testing.T) {
 		otherUser := testutil.CreateTestUser(t, env, "other@example.com", "Other User")
 
 		// Other user should be able to access via canonical access
-		accessInfo, err := env.DB.GetSessionAccessType(env.Ctx, sessionID, &otherUser.ID)
+		accessInfo, err := accessStore.GetSessionAccessType(env.Ctx, sessionID, &otherUser.ID)
 		if err != nil {
 			t.Fatalf("authenticated user should be able to access system share: %v", err)
 		}
@@ -341,13 +344,14 @@ func TestSystemShare_HTTP_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create system share
-		_, err := env.DB.CreateSystemShare(env.Ctx, sessionID, nil)
+		accessStore := &dbaccess.Store{DB: env.DB}
+		_, err := accessStore.CreateSystemShare(env.Ctx, sessionID, nil)
 		if err != nil {
 			t.Fatalf("failed to create system share: %v", err)
 		}
 
 		// Unauthenticated access should fail
-		accessInfo, err := env.DB.GetSessionAccessType(env.Ctx, sessionID, nil)
+		accessInfo, err := accessStore.GetSessionAccessType(env.Ctx, sessionID, nil)
 		if err != nil {
 			t.Fatalf("GetSessionAccessType failed: %v", err)
 		}

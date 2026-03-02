@@ -1,4 +1,4 @@
-package db_test
+package dbauth_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -32,19 +33,20 @@ func TestCreateDeviceCode(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	deviceCode := makeDeviceCode("create_device_code")
 	userCode := "ABCD-1234"
 	keyName := "My CLI"
 	expiresAt := time.Now().UTC().Add(15 * time.Minute)
 
-	err := env.DB.CreateDeviceCode(context.Background(), deviceCode, userCode, keyName, expiresAt)
+	err := store.CreateDeviceCode(context.Background(), deviceCode, userCode, keyName, expiresAt)
 	if err != nil {
 		t.Fatalf("CreateDeviceCode failed: %v", err)
 	}
 
 	// Verify it can be retrieved
-	dc, err := env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	dc, err := store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if err != nil {
 		t.Fatalf("GetDeviceCodeByDeviceCode failed: %v", err)
 	}
@@ -74,6 +76,7 @@ func TestGetDeviceCodeByUserCode(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	deviceCode := makeDeviceCode("user_lookup_device_code")
 	userCode := "WXYZ-5678"
@@ -81,7 +84,7 @@ func TestGetDeviceCodeByUserCode(t *testing.T) {
 
 	testutil.CreateTestDeviceCode(t, env, deviceCode, userCode, "Test Key", expiresAt)
 
-	dc, err := env.DB.GetDeviceCodeByUserCode(context.Background(), userCode)
+	dc, err := store.GetDeviceCodeByUserCode(context.Background(), userCode)
 	if err != nil {
 		t.Fatalf("GetDeviceCodeByUserCode failed: %v", err)
 	}
@@ -99,6 +102,7 @@ func TestGetDeviceCodeByUserCode_Expired(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	deviceCode := makeDeviceCode("expired_device_code")
 	userCode := "EXPR-1234"
@@ -106,7 +110,7 @@ func TestGetDeviceCodeByUserCode_Expired(t *testing.T) {
 
 	testutil.CreateTestDeviceCode(t, env, deviceCode, userCode, "Expired Key", expiresAt)
 
-	_, err := env.DB.GetDeviceCodeByUserCode(context.Background(), userCode)
+	_, err := store.GetDeviceCodeByUserCode(context.Background(), userCode)
 	if err == nil {
 		t.Error("expected error for expired device code")
 	}
@@ -123,8 +127,9 @@ func TestGetDeviceCodeByUserCode_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
-	_, err := env.DB.GetDeviceCodeByUserCode(context.Background(), "NONEXIST-")
+	_, err := store.GetDeviceCodeByUserCode(context.Background(), "NONEXIST-")
 	if err == nil {
 		t.Error("expected error for non-existent code")
 	}
@@ -141,6 +146,7 @@ func TestGetDeviceCodeByDeviceCode(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	deviceCode := makeDeviceCode("poll_device_code")
 	userCode := "POLL-9999"
@@ -148,7 +154,7 @@ func TestGetDeviceCodeByDeviceCode(t *testing.T) {
 
 	testutil.CreateTestDeviceCode(t, env, deviceCode, userCode, "Poll Key", expiresAt)
 
-	dc, err := env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	dc, err := store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if err != nil {
 		t.Fatalf("GetDeviceCodeByDeviceCode failed: %v", err)
 	}
@@ -166,8 +172,9 @@ func TestGetDeviceCodeByDeviceCode_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
-	_, err := env.DB.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("nonexistent"))
+	_, err := store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("nonexistent"))
 	if err == nil {
 		t.Error("expected error for non-existent code")
 	}
@@ -184,6 +191,7 @@ func TestAuthorizeDeviceCode(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "authorize@test.com", "Authorize User")
 
@@ -194,13 +202,13 @@ func TestAuthorizeDeviceCode(t *testing.T) {
 	testutil.CreateTestDeviceCode(t, env, deviceCode, userCode, "Auth Key", expiresAt)
 
 	// Authorize the code
-	err := env.DB.AuthorizeDeviceCode(context.Background(), userCode, user.ID)
+	err := store.AuthorizeDeviceCode(context.Background(), userCode, user.ID)
 	if err != nil {
 		t.Fatalf("AuthorizeDeviceCode failed: %v", err)
 	}
 
 	// Verify authorization
-	dc, err := env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	dc, err := store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if err != nil {
 		t.Fatalf("GetDeviceCodeByDeviceCode failed: %v", err)
 	}
@@ -224,6 +232,7 @@ func TestAuthorizeDeviceCode_Expired(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "expired_auth@test.com", "Expired Auth User")
 
@@ -233,7 +242,7 @@ func TestAuthorizeDeviceCode_Expired(t *testing.T) {
 
 	testutil.CreateTestDeviceCode(t, env, deviceCode, userCode, "Expired Key", expiresAt)
 
-	err := env.DB.AuthorizeDeviceCode(context.Background(), userCode, user.ID)
+	err := store.AuthorizeDeviceCode(context.Background(), userCode, user.ID)
 	if err == nil {
 		t.Error("expected error for expired device code")
 	}
@@ -250,6 +259,7 @@ func TestAuthorizeDeviceCode_AlreadyAuthorized(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "user1@test.com", "User One")
 	user2 := testutil.CreateTestUser(t, env, "user2@test.com", "User Two")
@@ -261,13 +271,13 @@ func TestAuthorizeDeviceCode_AlreadyAuthorized(t *testing.T) {
 	testutil.CreateTestDeviceCode(t, env, deviceCode, userCode, "Auth Key", expiresAt)
 
 	// First authorization
-	err := env.DB.AuthorizeDeviceCode(context.Background(), userCode, user1.ID)
+	err := store.AuthorizeDeviceCode(context.Background(), userCode, user1.ID)
 	if err != nil {
 		t.Fatalf("first AuthorizeDeviceCode failed: %v", err)
 	}
 
 	// Second authorization should fail
-	err = env.DB.AuthorizeDeviceCode(context.Background(), userCode, user2.ID)
+	err = store.AuthorizeDeviceCode(context.Background(), userCode, user2.ID)
 	if err == nil {
 		t.Error("expected error for already authorized code")
 	}
@@ -276,7 +286,7 @@ func TestAuthorizeDeviceCode_AlreadyAuthorized(t *testing.T) {
 	}
 
 	// Verify original user still authorized
-	dc, _ := env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	dc, _ := store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if dc.UserID == nil || *dc.UserID != user1.ID {
 		t.Error("original authorization should be preserved")
 	}
@@ -290,10 +300,11 @@ func TestAuthorizeDeviceCode_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "notfound@test.com", "Not Found User")
 
-	err := env.DB.AuthorizeDeviceCode(context.Background(), "NONEXI-ST", user.ID)
+	err := store.AuthorizeDeviceCode(context.Background(), "NONEXI-ST", user.ID)
 	if err == nil {
 		t.Error("expected error for non-existent code")
 	}
@@ -310,6 +321,7 @@ func TestDeleteDeviceCode(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	deviceCode := makeDeviceCode("delete_device_code")
 	userCode := "DELT-1234"
@@ -318,13 +330,13 @@ func TestDeleteDeviceCode(t *testing.T) {
 	testutil.CreateTestDeviceCode(t, env, deviceCode, userCode, "Delete Key", expiresAt)
 
 	// Delete the code
-	err := env.DB.DeleteDeviceCode(context.Background(), deviceCode)
+	err := store.DeleteDeviceCode(context.Background(), deviceCode)
 	if err != nil {
 		t.Fatalf("DeleteDeviceCode failed: %v", err)
 	}
 
 	// Verify it's gone
-	_, err = env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if err != db.ErrDeviceCodeNotFound {
 		t.Errorf("expected ErrDeviceCodeNotFound after delete, got %v", err)
 	}
@@ -338,6 +350,7 @@ func TestCleanupExpiredDeviceCodes(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	// Create some expired codes
 	testutil.CreateTestDeviceCode(t, env, makeDeviceCode("expired1"), "EXP1-1111",
@@ -352,7 +365,7 @@ func TestCleanupExpiredDeviceCodes(t *testing.T) {
 		"Valid 2", time.Now().UTC().Add(2*time.Hour))
 
 	// Cleanup expired codes
-	deleted, err := env.DB.CleanupExpiredDeviceCodes(context.Background())
+	deleted, err := store.CleanupExpiredDeviceCodes(context.Background())
 	if err != nil {
 		t.Fatalf("CleanupExpiredDeviceCodes failed: %v", err)
 	}
@@ -362,23 +375,23 @@ func TestCleanupExpiredDeviceCodes(t *testing.T) {
 	}
 
 	// Verify expired codes are gone
-	_, err = env.DB.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("expired1"))
+	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("expired1"))
 	if err != db.ErrDeviceCodeNotFound {
 		t.Error("expired1 should be deleted")
 	}
 
-	_, err = env.DB.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("expired2"))
+	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("expired2"))
 	if err != db.ErrDeviceCodeNotFound {
 		t.Error("expired2 should be deleted")
 	}
 
 	// Verify valid codes still exist
-	_, err = env.DB.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("valid1"))
+	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("valid1"))
 	if err != nil {
 		t.Errorf("valid1 should still exist: %v", err)
 	}
 
-	_, err = env.DB.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("valid2"))
+	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("valid2"))
 	if err != nil {
 		t.Errorf("valid2 should still exist: %v", err)
 	}
@@ -392,6 +405,7 @@ func TestDeviceCodeFlow_CompleteScenario(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "flow@test.com", "Flow User")
 
@@ -401,13 +415,13 @@ func TestDeviceCodeFlow_CompleteScenario(t *testing.T) {
 	keyName := "Flow CLI Key"
 	expiresAt := time.Now().UTC().Add(15 * time.Minute)
 
-	err := env.DB.CreateDeviceCode(context.Background(), deviceCode, userCode, keyName, expiresAt)
+	err := store.CreateDeviceCode(context.Background(), deviceCode, userCode, keyName, expiresAt)
 	if err != nil {
 		t.Fatalf("Step 1 - CreateDeviceCode failed: %v", err)
 	}
 
 	// Step 2: CLI polls - should get "authorization_pending"
-	dc, err := env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	dc, err := store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if err != nil {
 		t.Fatalf("Step 2 - GetDeviceCodeByDeviceCode failed: %v", err)
 	}
@@ -416,19 +430,19 @@ func TestDeviceCodeFlow_CompleteScenario(t *testing.T) {
 	}
 
 	// Step 3: User enters code on web - web looks up by user code
-	_, err = env.DB.GetDeviceCodeByUserCode(context.Background(), userCode)
+	_, err = store.GetDeviceCodeByUserCode(context.Background(), userCode)
 	if err != nil {
 		t.Fatalf("Step 3 - GetDeviceCodeByUserCode failed: %v", err)
 	}
 
 	// Step 4: User authorizes
-	err = env.DB.AuthorizeDeviceCode(context.Background(), userCode, user.ID)
+	err = store.AuthorizeDeviceCode(context.Background(), userCode, user.ID)
 	if err != nil {
 		t.Fatalf("Step 4 - AuthorizeDeviceCode failed: %v", err)
 	}
 
 	// Step 5: CLI polls again - should now be authorized
-	dc, err = env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	dc, err = store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if err != nil {
 		t.Fatalf("Step 5 - GetDeviceCodeByDeviceCode failed: %v", err)
 	}
@@ -443,13 +457,13 @@ func TestDeviceCodeFlow_CompleteScenario(t *testing.T) {
 	}
 
 	// Step 6: CLI deletes device code after exchanging for API key
-	err = env.DB.DeleteDeviceCode(context.Background(), deviceCode)
+	err = store.DeleteDeviceCode(context.Background(), deviceCode)
 	if err != nil {
 		t.Fatalf("Step 6 - DeleteDeviceCode failed: %v", err)
 	}
 
 	// Verify device code is gone
-	_, err = env.DB.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
+	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), deviceCode)
 	if err != db.ErrDeviceCodeNotFound {
 		t.Error("Step 6 - device code should be deleted after exchange")
 	}

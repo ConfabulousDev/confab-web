@@ -14,6 +14,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
@@ -60,7 +63,9 @@ func (h *Handlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
-	users, err := h.DB.ListAllUsers(ctx)
+	userStore := &dbuser.Store{DB: h.DB}
+
+	users, err := userStore.ListAllUsers(ctx)
 	if err != nil {
 		log.Error("Failed to list users", "error", err)
 		http.Error(w, "Failed to list users", http.StatusInternalServerError)
@@ -440,13 +445,15 @@ func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
+	userStore := &dbuser.Store{DB: h.DB}
+
 	// Get target user email for audit log before modifying
 	var targetEmail string
-	if targetUser, err := h.DB.GetUserByID(ctx, userID); err == nil {
+	if targetUser, err := userStore.GetUserByID(ctx, userID); err == nil {
 		targetEmail = targetUser.Email
 	}
 
-	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusInactive); err != nil {
+	if err := userStore.UpdateUserStatus(ctx, userID, models.UserStatusInactive); err != nil {
 		log.Error("Failed to deactivate user", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+deactivate+user", http.StatusSeeOther)
 		return
@@ -474,13 +481,15 @@ func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
+	userStore := &dbuser.Store{DB: h.DB}
+
 	// Get target user email for audit log before modifying
 	var targetEmail string
-	if targetUser, err := h.DB.GetUserByID(ctx, userID); err == nil {
+	if targetUser, err := userStore.GetUserByID(ctx, userID); err == nil {
 		targetEmail = targetUser.Email
 	}
 
-	if err := h.DB.UpdateUserStatus(ctx, userID, models.UserStatusActive); err != nil {
+	if err := userStore.UpdateUserStatus(ctx, userID, models.UserStatusActive); err != nil {
 		log.Error("Failed to activate user", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+activate+user", http.StatusSeeOther)
 		return
@@ -509,14 +518,16 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 
+	userStore := &dbuser.Store{DB: h.DB}
+
 	// Get target user email for audit log BEFORE deletion
 	var targetEmail string
-	if targetUser, err := h.DB.GetUserByID(ctx, userID); err == nil {
+	if targetUser, err := userStore.GetUserByID(ctx, userID); err == nil {
 		targetEmail = targetUser.Email
 	}
 
 	// Step 1: Get all session IDs for S3 cleanup
-	sessionIDs, err := h.DB.GetUserSessionIDs(ctx, userID)
+	sessionIDs, err := userStore.GetUserSessionIDs(ctx, userID)
 	if err != nil {
 		log.Error("Failed to get user sessions for deletion", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+get+user+sessions", http.StatusSeeOther)
@@ -533,7 +544,7 @@ func (h *Handlers) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 3: Delete user from database (CASCADE handles related records)
-	if err := h.DB.DeleteUser(ctx, userID); err != nil {
+	if err := userStore.DeleteUser(ctx, userID); err != nil {
 		log.Error("Failed to delete user from database", "error", err, "user_id", userID)
 		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+delete+user", http.StatusSeeOther)
 		return
@@ -798,7 +809,8 @@ func (h *Handlers) HandleCreateSystemShareForm(w http.ResponseWriter, r *http.Re
 	defer cancel()
 
 	// Create system share
-	share, err := h.DB.CreateSystemShare(ctx, sessionID, nil)
+	accessStore := &dbaccess.Store{DB: h.DB}
+	share, err := accessStore.CreateSystemShare(ctx, sessionID, nil)
 	if err != nil {
 		if err == db.ErrSessionNotFound {
 			http.Redirect(w, r, AdminPathPrefix+"/system-shares?error=Session+not+found", http.StatusSeeOther)
@@ -1035,7 +1047,8 @@ func (h *Handlers) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user
-	user, err := h.DB.CreatePasswordUser(ctx, email, string(passwordHash), isAdmin)
+	authStore := &dbauth.Store{DB: h.DB}
+	user, err := authStore.CreatePasswordUser(ctx, email, string(passwordHash), isAdmin)
 	if err != nil {
 		log.Error("Failed to create user", "error", err, "email", email)
 		if strings.Contains(err.Error(), "already exists") {

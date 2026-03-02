@@ -1,4 +1,4 @@
-package db_test
+package access_test
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/access"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -21,13 +23,14 @@ func TestGetSessionAccessType_Owner(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	ctx := context.Background()
 
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &owner.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -48,6 +51,7 @@ func TestGetSessionAccessType_PublicShare_Unauthenticated(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -58,7 +62,7 @@ func TestGetSessionAccessType_PublicShare_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated access (nil viewerUserID)
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -79,6 +83,7 @@ func TestGetSessionAccessType_PublicShare_Authenticated(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
@@ -90,7 +95,7 @@ func TestGetSessionAccessType_PublicShare_Authenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Authenticated non-owner should get public access (not owner access)
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -111,6 +116,7 @@ func TestGetSessionAccessType_SystemShare_Authenticated(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
@@ -122,7 +128,7 @@ func TestGetSessionAccessType_SystemShare_Authenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Any authenticated user should get system access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -143,6 +149,7 @@ func TestGetSessionAccessType_SystemShare_Unauthenticated(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -153,7 +160,7 @@ func TestGetSessionAccessType_SystemShare_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated should get no access (system shares require auth)
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -171,6 +178,7 @@ func TestGetSessionAccessType_RecipientShare_Authorized(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -182,7 +190,7 @@ func TestGetSessionAccessType_RecipientShare_Authorized(t *testing.T) {
 	ctx := context.Background()
 
 	// Recipient should get recipient access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -203,6 +211,7 @@ func TestGetSessionAccessType_RecipientShare_NotAuthorized(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -215,7 +224,7 @@ func TestGetSessionAccessType_RecipientShare_NotAuthorized(t *testing.T) {
 	ctx := context.Background()
 
 	// Non-recipient should get no access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &nonRecipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &nonRecipient.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -225,7 +234,7 @@ func TestGetSessionAccessType_RecipientShare_NotAuthorized(t *testing.T) {
 	}
 
 	// Verify actual recipient still has access
-	accessInfo, err = env.DB.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err = store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -242,6 +251,7 @@ func TestGetSessionAccessType_RecipientShare_Unauthenticated(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -253,7 +263,7 @@ func TestGetSessionAccessType_RecipientShare_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated should get no access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -271,6 +281,7 @@ func TestGetSessionAccessType_NoAccess(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	stranger := testutil.CreateTestUser(t, env, "stranger@example.com", "Stranger")
@@ -280,7 +291,7 @@ func TestGetSessionAccessType_NoAccess(t *testing.T) {
 	ctx := context.Background()
 
 	// Stranger should get no access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &stranger.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &stranger.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -298,13 +309,14 @@ func TestGetSessionAccessType_SessionNotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
 
 	ctx := context.Background()
 
 	// Non-existent session should return ErrSessionNotFound
-	_, err := env.DB.GetSessionAccessType(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID)
+	_, err := store.GetSessionAccessType(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID)
 	if err != db.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -318,13 +330,14 @@ func TestGetSessionAccessType_InvalidUUID(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
 
 	ctx := context.Background()
 
 	// Invalid UUID should return ErrSessionNotFound
-	_, err := env.DB.GetSessionAccessType(ctx, "not-a-uuid", &viewer.ID)
+	_, err := store.GetSessionAccessType(ctx, "not-a-uuid", &viewer.ID)
 	if err != db.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -338,6 +351,7 @@ func TestGetSessionAccessType_ExpiredPublicShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -349,7 +363,7 @@ func TestGetSessionAccessType_ExpiredPublicShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Expired share should not grant access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -367,6 +381,7 @@ func TestGetSessionAccessType_ExpiredSystemShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
@@ -379,7 +394,7 @@ func TestGetSessionAccessType_ExpiredSystemShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Expired share should not grant access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -397,6 +412,7 @@ func TestGetSessionAccessType_ExpiredRecipientShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -409,7 +425,7 @@ func TestGetSessionAccessType_ExpiredRecipientShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Expired share should not grant access even to recipient
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -427,6 +443,7 @@ func TestGetSessionAccessType_AccessPrecedence(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -437,7 +454,7 @@ func TestGetSessionAccessType_AccessPrecedence(t *testing.T) {
 	ctx := context.Background()
 
 	// Owner should get owner access, not public access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &owner.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -455,6 +472,7 @@ func TestGetSessionAccessType_MultipleShares(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -470,7 +488,7 @@ func TestGetSessionAccessType_MultipleShares(t *testing.T) {
 	ctx := context.Background()
 
 	// Recipient should get access through the valid private share, not the expired public one
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -489,6 +507,7 @@ func TestGetSessionAccessType_SystemTakesPrecedenceOverPublic(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
@@ -502,7 +521,7 @@ func TestGetSessionAccessType_SystemTakesPrecedenceOverPublic(t *testing.T) {
 	ctx := context.Background()
 
 	// Should get system access (more specific than public)
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -523,6 +542,7 @@ func TestGetSessionAccessType_RecipientTakesPrecedenceOverSystem(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -536,7 +556,7 @@ func TestGetSessionAccessType_RecipientTakesPrecedenceOverSystem(t *testing.T) {
 	ctx := context.Background()
 
 	// Should get recipient access (more specific than system)
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -561,6 +581,7 @@ func TestGetSessionDetailWithAccess_Owner(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -568,7 +589,7 @@ func TestGetSessionDetailWithAccess_Owner(t *testing.T) {
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}
-	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -590,6 +611,7 @@ func TestGetSessionDetailWithAccess_SharedAccess(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
@@ -607,7 +629,7 @@ func TestGetSessionDetailWithAccess_SharedAccess(t *testing.T) {
 
 	shareID := int64(1)
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -641,13 +663,15 @@ func TestGetSessionDetailWithAccess_InactiveOwner(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Deactivate owner
-	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")
+	userStore := &dbuser.Store{DB: env.DB}
+	err := userStore.UpdateUserStatus(context.Background(), owner.ID, "inactive")
 	if err != nil {
 		t.Fatalf("failed to deactivate owner: %v", err)
 	}
@@ -656,7 +680,7 @@ func TestGetSessionDetailWithAccess_InactiveOwner(t *testing.T) {
 
 	shareID := int64(1)
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	_, err = env.DB.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	_, err = store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
 	if err != db.ErrOwnerInactive {
 		t.Errorf("expected ErrOwnerInactive, got %v", err)
 	}
@@ -670,6 +694,7 @@ func TestGetSessionDetailWithAccess_UpdatesLastAccessedAt(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
@@ -692,7 +717,7 @@ func TestGetSessionDetailWithAccess_UpdatesLastAccessedAt(t *testing.T) {
 
 	// Access the session
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	_, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	_, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -716,13 +741,14 @@ func TestGetSessionDetailWithAccess_SessionNotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
 
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic}
-	_, err := env.DB.GetSessionDetailWithAccess(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID, accessInfo)
+	_, err := store.GetSessionDetailWithAccess(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID, accessInfo)
 	if err != db.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -741,6 +767,7 @@ func TestGetSessionAccessType_AuthMayHelp_RecipientShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -752,7 +779,7 @@ func TestGetSessionAccessType_AuthMayHelp_RecipientShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=true
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -774,6 +801,7 @@ func TestGetSessionAccessType_AuthMayHelp_SystemShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -784,7 +812,7 @@ func TestGetSessionAccessType_AuthMayHelp_SystemShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=true
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -806,6 +834,7 @@ func TestGetSessionAccessType_AuthMayHelp_NoShares(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -813,7 +842,7 @@ func TestGetSessionAccessType_AuthMayHelp_NoShares(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=false (no shares exist)
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -835,6 +864,7 @@ func TestGetSessionAccessType_AuthMayHelp_OnlyPublicShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -845,7 +875,7 @@ func TestGetSessionAccessType_AuthMayHelp_OnlyPublicShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get public access (not "no access")
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -865,6 +895,7 @@ func TestGetSessionAccessType_AuthMayHelp_AuthenticatedNoAccess(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	otherUser := testutil.CreateTestUser(t, env, "other@example.com", "Other")
@@ -877,7 +908,7 @@ func TestGetSessionAccessType_AuthMayHelp_AuthenticatedNoAccess(t *testing.T) {
 	ctx := context.Background()
 
 	// Authenticated user (not the recipient) should get AuthMayHelp=false
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &otherUser.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &otherUser.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -899,6 +930,7 @@ func TestGetSessionAccessType_AuthMayHelp_ExpiredShare(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -911,7 +943,7 @@ func TestGetSessionAccessType_AuthMayHelp_ExpiredShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=false (share is expired)
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -936,6 +968,7 @@ func TestGetSessionDetailWithAccess_OwnerNoSharedByEmail(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -943,7 +976,7 @@ func TestGetSessionDetailWithAccess_OwnerNoSharedByEmail(t *testing.T) {
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}
-	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -964,6 +997,7 @@ func TestGetSessionDetailWithAccess_PublicShareHasSharedByEmail(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
@@ -975,7 +1009,7 @@ func TestGetSessionDetailWithAccess_PublicShareHasSharedByEmail(t *testing.T) {
 
 	// Unauthenticated access via public share
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, nil, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, nil, accessInfo)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -999,6 +1033,7 @@ func TestGetSessionDetailWithAccess_SystemShareHasSharedByEmail(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	viewer := testutil.CreateTestUser(t, env, "viewer@example.com", "Viewer")
@@ -1010,7 +1045,7 @@ func TestGetSessionDetailWithAccess_SystemShareHasSharedByEmail(t *testing.T) {
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessSystem, ShareID: &shareID}
-	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -1034,6 +1069,7 @@ func TestGetSessionDetailWithAccess_RecipientShareHasSharedByEmail(t *testing.T)
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
@@ -1045,7 +1081,7 @@ func TestGetSessionDetailWithAccess_RecipientShareHasSharedByEmail(t *testing.T)
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessRecipient, ShareID: &shareID}
-	session, err := env.DB.GetSessionDetailWithAccess(ctx, sessionID, &recipient.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &recipient.ID, accessInfo)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -1074,6 +1110,7 @@ func TestGetSessionAccessType_ShareAllSessions_Authenticated(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	// Enable ShareAllSessions
 	env.DB.ShareAllSessions = true
@@ -1086,7 +1123,7 @@ func TestGetSessionAccessType_ShareAllSessions_Authenticated(t *testing.T) {
 
 	ctx := context.Background()
 
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1109,6 +1146,7 @@ func TestGetSessionAccessType_ShareAllSessions_Unauthenticated(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	// Enable ShareAllSessions
 	env.DB.ShareAllSessions = true
@@ -1120,7 +1158,7 @@ func TestGetSessionAccessType_ShareAllSessions_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated (nil viewerUserID) should still get no access
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1139,6 +1177,7 @@ func TestGetSessionAccessType_ShareAllSessions_OwnerStillOwner(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	// Enable ShareAllSessions
 	env.DB.ShareAllSessions = true
@@ -1149,7 +1188,7 @@ func TestGetSessionAccessType_ShareAllSessions_OwnerStillOwner(t *testing.T) {
 
 	ctx := context.Background()
 
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &owner.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1168,6 +1207,7 @@ func TestGetSessionAccessType_ShareAllSessions_Disabled(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	// ShareAllSessions is false by default
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
@@ -1177,7 +1217,7 @@ func TestGetSessionAccessType_ShareAllSessions_Disabled(t *testing.T) {
 
 	ctx := context.Background()
 
-	accessInfo, err := env.DB.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}

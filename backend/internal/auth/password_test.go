@@ -12,6 +12,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -147,6 +148,7 @@ func TestHandlePasswordLogin(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -158,7 +160,7 @@ func TestHandlePasswordLogin(t *testing.T) {
 	}
 
 	testEmail := "logintest@example.com"
-	_, err = env.DB.CreatePasswordUser(ctx, testEmail, passwordHash, false)
+	_, err = authStore.CreatePasswordUser(ctx, testEmail, passwordHash, false)
 	if err != nil {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
@@ -316,6 +318,7 @@ func TestBootstrapAdmin(t *testing.T) {
 	t.Run("creates admin when no users exist", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -331,7 +334,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		}
 
 		// Verify user was created
-		user, err := env.DB.GetUserByEmail(ctx, "admin@example.com")
+		user, err := authStore.GetUserByEmail(ctx, "admin@example.com")
 		if err != nil {
 			t.Fatalf("GetUserByEmail failed: %v", err)
 		}
@@ -341,7 +344,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		}
 
 		// Verify user is admin
-		isAdmin, err := env.DB.IsUserAdmin(ctx, user.ID)
+		isAdmin, err := authStore.IsUserAdmin(ctx, user.ID)
 		if err != nil {
 			t.Fatalf("IsUserAdmin failed: %v", err)
 		}
@@ -350,7 +353,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		}
 
 		// Verify password works
-		authUser, err := env.DB.AuthenticatePassword(ctx, "admin@example.com", "adminpassword123")
+		authUser, err := authStore.AuthenticatePassword(ctx, "admin@example.com", "adminpassword123")
 		if err != nil {
 			t.Fatalf("AuthenticatePassword failed: %v", err)
 		}
@@ -362,12 +365,13 @@ func TestBootstrapAdmin(t *testing.T) {
 	t.Run("skips when users already exist", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
 		// Create an existing user
 		hash, _ := auth.HashPassword("existing")
-		_, err := env.DB.CreatePasswordUser(ctx, "existing@example.com", hash, false)
+		_, err := authStore.CreatePasswordUser(ctx, "existing@example.com", hash, false)
 		if err != nil {
 			t.Fatalf("CreatePasswordUser failed: %v", err)
 		}
@@ -384,7 +388,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		}
 
 		// Verify admin was NOT created
-		_, err = env.DB.GetUserByEmail(ctx, "admin@example.com")
+		_, err = authStore.GetUserByEmail(ctx, "admin@example.com")
 		if err != db.ErrUserNotFound {
 			t.Error("admin user should not be created when users already exist")
 		}
@@ -459,6 +463,7 @@ func TestBootstrapAdmin(t *testing.T) {
 	t.Run("normalizes email to lowercase", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -473,7 +478,7 @@ func TestBootstrapAdmin(t *testing.T) {
 		}
 
 		// Should find user with lowercase email
-		user, err := env.DB.GetUserByEmail(ctx, "admin@example.com")
+		user, err := authStore.GetUserByEmail(ctx, "admin@example.com")
 		if err != nil {
 			t.Fatalf("GetUserByEmail failed: %v", err)
 		}
@@ -491,25 +496,26 @@ func TestPasswordAuthenticationTiming(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create a test user
 	password := "testpassword123"
 	hash, _ := auth.HashPassword(password)
-	_, err := env.DB.CreatePasswordUser(ctx, "timing@example.com", hash, false)
+	_, err := authStore.CreatePasswordUser(ctx, "timing@example.com", hash, false)
 	if err != nil {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
 
 	// Measure time for valid user with wrong password
 	start1 := time.Now()
-	_, _ = env.DB.AuthenticatePassword(ctx, "timing@example.com", "wrongpassword")
+	_, _ = authStore.AuthenticatePassword(ctx, "timing@example.com", "wrongpassword")
 	duration1 := time.Since(start1)
 
 	// Measure time for non-existent user
 	start2 := time.Now()
-	_, _ = env.DB.AuthenticatePassword(ctx, "nonexistent@example.com", "anypassword")
+	_, _ = authStore.AuthenticatePassword(ctx, "nonexistent@example.com", "anypassword")
 	duration2 := time.Since(start2)
 
 	// Both should take similar time (within 100ms tolerance)

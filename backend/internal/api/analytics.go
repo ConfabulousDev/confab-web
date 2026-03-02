@@ -13,6 +13,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -248,6 +249,8 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			// Continue to compute fresh analytics
 		}
 
+		sessionStore := &dbsession.Store{DB: database}
+
 		if cached.AllValid(totalLineCount) {
 			// Cache hit - return cached data
 			response := cached.ToResponse()
@@ -255,7 +258,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			// Handle smart recap (if enabled) even for cached responses
 			if smartRecapConfig.Enabled {
 				// Get session owner ID for quota lookup
-				sessionUserID, externalID, err := database.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+				sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 				if err == nil {
 					attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
 						database:       database,
@@ -284,7 +287,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		// Cache miss or stale - need to recompute
 		// Get the session's user_id and external_id for S3 path
-		sessionUserID, externalID, err := database.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+		sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get session info", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to get session info")
@@ -551,7 +554,8 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		defer cancel()
 
 		// Get session and verify ownership
-		sessionUserID, externalID, err := database.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+		sessionStore := &dbsession.Store{DB: database}
+		sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get session", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusNotFound, "Session not found")
@@ -564,7 +568,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Get session files and compute total line count
-		session, err := database.GetSessionDetail(dbCtx, sessionID, userID)
+		session, err := sessionStore.GetSessionDetail(dbCtx, sessionID, userID)
 		if err != nil {
 			log.Error("Failed to get session detail", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to get session")
@@ -668,7 +672,8 @@ func downloadTranscriptForSmartRecap(
 	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
 
-	session, err := database.GetSessionDetail(dbCtx, sessionID, sessionUserID)
+	sessionStore := &dbsession.Store{DB: database}
+	session, err := sessionStore.GetSessionDetail(dbCtx, sessionID, sessionUserID)
 	if err != nil {
 		log.Error("Failed to get session for smart recap", "error", err, "session_id", sessionID)
 		return nil

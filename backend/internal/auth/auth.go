@@ -11,6 +11,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
@@ -93,8 +94,10 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 	rawKey := parts[1]
 	keyHash := HashAPIKey(rawKey)
 
+	authStore := &dbauth.Store{DB: database}
+
 	// Validate key in database
-	userID, keyID, userEmail, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
+	userID, keyID, userEmail, userStatus, err := authStore.ValidateAPIKey(r.Context(), keyHash)
 	if err != nil {
 		log := logger.Ctx(r.Context())
 		log.Warn("API key validation failed",
@@ -115,7 +118,7 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 
 	// Update last used timestamp (fire and forget)
 	go func() {
-		if err := database.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
+		if err := authStore.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
 			logger.Warn("Failed to update API key last used", "error", err, "key_id", keyID)
 		}
 	}()
@@ -127,6 +130,7 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 // If allowedDomains is non-empty, the user's email domain must match.
 // Use TryAPIKeyAuth for optional authentication.
 func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
+	authStore := &dbauth.Store{DB: database}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -146,7 +150,7 @@ func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) 
 			keyHash := HashAPIKey(rawKey)
 
 			// Validate key in database
-			userID, keyID, userEmail, userStatus, err := database.ValidateAPIKey(r.Context(), keyHash)
+			userID, keyID, userEmail, userStatus, err := authStore.ValidateAPIKey(r.Context(), keyHash)
 			if err != nil {
 				log := logger.Ctx(r.Context())
 				log.Warn("API key validation failed",
@@ -175,7 +179,7 @@ func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) 
 
 			// Update last used timestamp (fire and forget)
 			go func() {
-				if err := database.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
+				if err := authStore.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
 					logger.Warn("Failed to update API key last used", "error", err, "key_id", keyID)
 				}
 			}()

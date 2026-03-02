@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
@@ -69,7 +70,8 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Store in database
-		keyID, createdAt, err := database.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
+		authStore := &dbauth.Store{DB: database}
+		keyID, createdAt, err := authStore.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
 		if err != nil {
 			if errors.Is(err, db.ErrAPIKeyLimitExceeded) {
 				respondError(w, http.StatusConflict, "API key limit reached. Please delete some existing keys before creating new ones.")
@@ -114,7 +116,8 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get keys from database
-		keys, err := database.ListAPIKeys(ctx, userID)
+		authStore := &dbauth.Store{DB: database}
+		keys, err := authStore.ListAPIKeys(ctx, userID)
 		if err != nil {
 			log.Error("Failed to list API keys", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list API keys")
@@ -158,7 +161,8 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Delete key
-		if err := database.DeleteAPIKey(ctx, userID, keyID); err != nil {
+		authStore := &dbauth.Store{DB: database}
+		if err := authStore.DeleteAPIKey(ctx, userID, keyID); err != nil {
 			log.Error("Failed to delete API key", "error", err, "key_id", keyID)
 			respondError(w, http.StatusNotFound, "API key not found")
 			return

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -549,7 +550,8 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Set suggested title in DB (simulates prior smart recap generation)
-		err := env.DB.UpdateSessionSuggestedTitle(context.Background(), sessionID, "AI-generated session title")
+		sessionStore := &dbsession.Store{DB: env.DB}
+		err := sessionStore.UpdateSessionSuggestedTitle(context.Background(), sessionID, "AI-generated session title")
 		if err != nil {
 			t.Fatalf("Failed to set suggested title: %v", err)
 		}
@@ -661,7 +663,8 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 		}
 
 		// Set suggested title in DB (from prior generation)
-		err = env.DB.UpdateSessionSuggestedTitle(context.Background(), sessionID, "Title from prior generation")
+		sessionStore := &dbsession.Store{DB: env.DB}
+		err = sessionStore.UpdateSessionSuggestedTitle(context.Background(), sessionID, "Title from prior generation")
 		if err != nil {
 			t.Fatalf("Failed to set suggested title: %v", err)
 		}

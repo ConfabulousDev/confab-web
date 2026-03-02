@@ -6,6 +6,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
@@ -38,7 +39,8 @@ func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details 
 
 	// Get admin email for readable logs
 	var adminEmail string
-	adminUser, err := database.GetUserByID(ctx, adminUserID)
+	userStore := &dbuser.Store{DB: database}
+	adminUser, err := userStore.GetUserByID(ctx, adminUserID)
 	if err != nil {
 		adminEmail = "unknown"
 		log.Warn("Failed to get admin user for audit log", "error", err, "admin_user_id", adminUserID)

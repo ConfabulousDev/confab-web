@@ -1,4 +1,4 @@
-package db
+package events
 
 import (
 	"context"
@@ -7,10 +7,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ConfabulousDev/confab-web/internal/db"
 )
 
 // InsertSessionEvent inserts a new event into the session_events table
-func (db *DB) InsertSessionEvent(ctx context.Context, params SessionEventParams) error {
+func (s *Store) InsertSessionEvent(ctx context.Context, params db.SessionEventParams) error {
 	ctx, span := tracer.Start(ctx, "db.insert_session_event",
 		trace.WithAttributes(
 			attribute.String("session.id", params.SessionID),
@@ -22,7 +24,7 @@ func (db *DB) InsertSessionEvent(ctx context.Context, params SessionEventParams)
 		INSERT INTO session_events (session_id, event_type, event_timestamp, payload)
 		VALUES ($1, $2, $3, $4)
 	`
-	_, err := db.conn.ExecContext(ctx, query, params.SessionID, params.EventType, params.EventTimestamp, params.Payload)
+	_, err := s.conn().ExecContext(ctx, query, params.SessionID, params.EventType, params.EventTimestamp, params.Payload)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

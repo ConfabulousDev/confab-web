@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -344,7 +345,8 @@ func TestHandleGetSession_InactiveOwnerBlocksAccess(t *testing.T) {
 	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
 
 	// Deactivate owner
-	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")
+	userStore := &dbuser.Store{DB: env.DB}
+	err := userStore.UpdateUserStatus(context.Background(), owner.ID, "inactive")
 	if err != nil {
 		t.Fatalf("failed to deactivate owner: %v", err)
 	}
@@ -951,7 +953,8 @@ func TestHandleGetSession_InactiveOwnerBlocksOwnerAccess(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
 
 	// Deactivate owner
-	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")
+	userStore := &dbuser.Store{DB: env.DB}
+	err := userStore.UpdateUserStatus(context.Background(), owner.ID, "inactive")
 	if err != nil {
 		t.Fatalf("failed to deactivate owner: %v", err)
 	}
@@ -1094,7 +1097,8 @@ func TestHandleGetSession_APIKeyInactiveUserDenied(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, owner.ID, keyHash, "test-key")
 
 	// Deactivate owner
-	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")
+	userStore := &dbuser.Store{DB: env.DB}
+	err := userStore.UpdateUserStatus(context.Background(), owner.ID, "inactive")
 	if err != nil {
 		t.Fatalf("failed to deactivate owner: %v", err)
 	}
@@ -1138,7 +1142,8 @@ func TestHandleGetSession_InactiveOwnerBlocksAllAccess(t *testing.T) {
 	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
 	// Deactivate owner
-	err := env.DB.UpdateUserStatus(context.Background(), owner.ID, "inactive")
+	userStore := &dbuser.Store{DB: env.DB}
+	err := userStore.UpdateUserStatus(context.Background(), owner.ID, "inactive")
 	if err != nil {
 		t.Fatalf("failed to deactivate owner: %v", err)
 	}

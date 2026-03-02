@@ -7,6 +7,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
@@ -51,7 +52,8 @@ func CheckCanonicalAccess(
 	}
 
 	// Step 2: Determine access type based on ownership and shares
-	accessInfo, err := database.GetSessionAccessType(ctx, sessionID, result.ViewerUserID)
+	accessStore := &dbaccess.Store{DB: database}
+	accessInfo, err := accessStore.GetSessionAccessType(ctx, sessionID, result.ViewerUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +65,7 @@ func CheckCanonicalAccess(
 	}
 
 	// Step 4: Get session with privacy filtering based on access type
-	session, err := database.GetSessionDetailWithAccess(ctx, sessionID, result.ViewerUserID, accessInfo)
+	session, err := accessStore.GetSessionDetailWithAccess(ctx, sessionID, result.ViewerUserID, accessInfo)
 	if err != nil {
 		return nil, err
 	}

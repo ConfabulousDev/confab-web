@@ -1,4 +1,4 @@
-package db
+package github
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
@@ -16,7 +17,7 @@ import (
 // On conflict (same session, link_type, owner, repo, ref), it updates source and url.
 // When overwriteTitle is true, the new title always wins.
 // When overwriteTitle is false, the existing title is preserved if non-null (fill-only).
-func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink, overwriteTitle bool) (*models.GitHubLink, error) {
+func (s *Store) CreateGitHubLink(ctx context.Context, link *models.GitHubLink, overwriteTitle bool) (*models.GitHubLink, error) {
 	ctx, span := tracer.Start(ctx, "db.create_github_link",
 		trace.WithAttributes(
 			attribute.String("session.id", link.SessionID),
@@ -34,7 +35,7 @@ func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink, ove
 			title = CASE WHEN $9 THEN EXCLUDED.title ELSE COALESCE(session_github_links.title, EXCLUDED.title) END
 		RETURNING id, created_at
 	`
-	err := db.conn.QueryRowContext(ctx, query,
+	err := s.conn().QueryRowContext(ctx, query,
 		link.SessionID,
 		link.LinkType,
 		link.URL,
@@ -57,7 +58,7 @@ func (db *DB) CreateGitHubLink(ctx context.Context, link *models.GitHubLink, ove
 }
 
 // GetGitHubLinksForSession returns all GitHub links for a session.
-func (db *DB) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([]models.GitHubLink, error) {
+func (s *Store) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([]models.GitHubLink, error) {
 	ctx, span := tracer.Start(ctx, "db.get_github_links_for_session",
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
 	defer span.End()
@@ -68,10 +69,10 @@ func (db *DB) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([
 		WHERE session_id = $1
 		ORDER BY created_at DESC
 	`
-	rows, err := db.conn.QueryContext(ctx, query, sessionID)
+	rows, err := s.conn().QueryContext(ctx, query, sessionID)
 	if err != nil {
-		if isInvalidUUIDError(err) {
-			return nil, ErrSessionNotFound
+		if db.IsInvalidUUIDError(err) {
+			return nil, db.ErrSessionNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -113,13 +114,13 @@ func (db *DB) GetGitHubLinksForSession(ctx context.Context, sessionID string) ([
 }
 
 // DeleteGitHubLink deletes a GitHub link by ID.
-// Returns ErrGitHubLinkNotFound if link doesn't exist.
-func (db *DB) DeleteGitHubLink(ctx context.Context, linkID int64) error {
+// Returns db.ErrGitHubLinkNotFound if link doesn't exist.
+func (s *Store) DeleteGitHubLink(ctx context.Context, linkID int64) error {
 	ctx, span := tracer.Start(ctx, "db.delete_github_link",
 		trace.WithAttributes(attribute.Int64("link.id", linkID)))
 	defer span.End()
 
-	result, err := db.conn.ExecContext(ctx,
+	result, err := s.conn().ExecContext(ctx,
 		`DELETE FROM session_github_links WHERE id = $1`,
 		linkID,
 	)
@@ -136,15 +137,15 @@ func (db *DB) DeleteGitHubLink(ctx context.Context, linkID int64) error {
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return ErrGitHubLinkNotFound
+		return db.ErrGitHubLinkNotFound
 	}
 
 	return nil
 }
 
 // GetGitHubLinkByID returns a GitHub link by ID.
-// Returns ErrGitHubLinkNotFound if link doesn't exist.
-func (db *DB) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitHubLink, error) {
+// Returns db.ErrGitHubLinkNotFound if link doesn't exist.
+func (s *Store) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitHubLink, error) {
 	ctx, span := tracer.Start(ctx, "db.get_github_link_by_id",
 		trace.WithAttributes(attribute.Int64("link.id", linkID)))
 	defer span.End()
@@ -155,7 +156,7 @@ func (db *DB) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitH
 		WHERE id = $1
 	`
 	var link models.GitHubLink
-	err := db.conn.QueryRowContext(ctx, query, linkID).Scan(
+	err := s.conn().QueryRowContext(ctx, query, linkID).Scan(
 		&link.ID,
 		&link.SessionID,
 		&link.LinkType,
@@ -169,7 +170,7 @@ func (db *DB) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.GitH
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrGitHubLinkNotFound
+			return nil, db.ErrGitHubLinkNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

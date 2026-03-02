@@ -12,6 +12,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -248,7 +249,8 @@ func TestListSessionsWithSystemShares(t *testing.T) {
 	})
 
 	// Create a system share for admin's session
-	_, err := env.DB.CreateSystemShare(ctx, adminSessionPK, nil)
+	accessStore := &dbaccess.Store{DB: env.DB}
+	_, err := accessStore.CreateSystemShare(ctx, adminSessionPK, nil)
 	if err != nil {
 		t.Fatalf("Failed to create system share: %v", err)
 	}

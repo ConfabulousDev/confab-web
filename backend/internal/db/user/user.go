@@ -1,4 +1,4 @@
-package db
+package user
 
 import (
 	"context"
@@ -9,11 +9,12 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // GetUserByID retrieves a user by ID
-func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
+func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
 	ctx, span := tracer.Start(ctx, "db.get_user_by_id",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
@@ -21,7 +22,7 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
-	err := db.conn.QueryRowContext(ctx, query, userID).Scan(
+	err := s.conn().QueryRowContext(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Name,
@@ -32,7 +33,7 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrUserNotFound
+			return nil, db.ErrUserNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -43,13 +44,13 @@ func (db *DB) GetUserByID(ctx context.Context, userID int64) (*models.User, erro
 }
 
 // CountUsers returns the total number of users in the system
-func (db *DB) CountUsers(ctx context.Context) (int, error) {
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	ctx, span := tracer.Start(ctx, "db.count_users")
 	defer span.End()
 
 	query := `SELECT COUNT(*) FROM users`
 	var count int
-	err := db.conn.QueryRowContext(ctx, query).Scan(&count)
+	err := s.conn().QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -60,13 +61,13 @@ func (db *DB) CountUsers(ctx context.Context) (int, error) {
 }
 
 // UserExistsByEmail checks if a user exists with the given email
-func (db *DB) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
+func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
 	ctx, span := tracer.Start(ctx, "db.user_exists_by_email")
 	defer span.End()
 
 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`
 	var exists bool
-	err := db.conn.QueryRowContext(ctx, query, email).Scan(&exists)
+	err := s.conn().QueryRowContext(ctx, query, email).Scan(&exists)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -77,7 +78,7 @@ func (db *DB) UserExistsByEmail(ctx context.Context, email string) (bool, error)
 }
 
 // ListAllUsers returns all users in the system with stats, ordered by ID
-func (db *DB) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error) {
+func (s *Store) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error) {
 	ctx, span := tracer.Start(ctx, "db.list_all_users")
 	defer span.End()
 
@@ -94,7 +95,7 @@ func (db *DB) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error)
 		GROUP BY u.id
 		ORDER BY u.id`
 
-	rows, err := db.conn.QueryContext(ctx, query)
+	rows, err := s.conn().QueryContext(ctx, query)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -136,7 +137,7 @@ func (db *DB) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error)
 }
 
 // UpdateUserStatus updates the status of a user (active/inactive)
-func (db *DB) UpdateUserStatus(ctx context.Context, userID int64, status models.UserStatus) error {
+func (s *Store) UpdateUserStatus(ctx context.Context, userID int64, status models.UserStatus) error {
 	ctx, span := tracer.Start(ctx, "db.update_user_status",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -146,7 +147,7 @@ func (db *DB) UpdateUserStatus(ctx context.Context, userID int64, status models.
 
 	query := `UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2`
 
-	result, err := db.conn.ExecContext(ctx, query, status, userID)
+	result, err := s.conn().ExecContext(ctx, query, status, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -161,7 +162,7 @@ func (db *DB) UpdateUserStatus(ctx context.Context, userID int64, status models.
 	}
 
 	if rowsAffected == 0 {
-		return ErrUserNotFound
+		return db.ErrUserNotFound
 	}
 
 	return nil
@@ -169,14 +170,14 @@ func (db *DB) UpdateUserStatus(ctx context.Context, userID int64, status models.
 
 // DeleteUser permanently deletes a user and all associated data (via CASCADE)
 // Note: S3 objects must be deleted separately before calling this function
-func (db *DB) DeleteUser(ctx context.Context, userID int64) error {
+func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
 	ctx, span := tracer.Start(ctx, "db.delete_user",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	query := `DELETE FROM users WHERE id = $1`
 
-	result, err := db.conn.ExecContext(ctx, query, userID)
+	result, err := s.conn().ExecContext(ctx, query, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -191,21 +192,21 @@ func (db *DB) DeleteUser(ctx context.Context, userID int64) error {
 	}
 
 	if rowsAffected == 0 {
-		return ErrUserNotFound
+		return db.ErrUserNotFound
 	}
 
 	return nil
 }
 
 // HasOwnSessions checks if a user has any sessions they own
-func (db *DB) HasOwnSessions(ctx context.Context, userID int64) (bool, error) {
+func (s *Store) HasOwnSessions(ctx context.Context, userID int64) (bool, error) {
 	ctx, span := tracer.Start(ctx, "db.has_own_sessions",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	query := `SELECT EXISTS(SELECT 1 FROM sessions WHERE user_id = $1)`
 	var exists bool
-	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&exists)
+	err := s.conn().QueryRowContext(ctx, query, userID).Scan(&exists)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -216,14 +217,14 @@ func (db *DB) HasOwnSessions(ctx context.Context, userID int64) (bool, error) {
 }
 
 // HasAPIKeys checks if a user has any API keys
-func (db *DB) HasAPIKeys(ctx context.Context, userID int64) (bool, error) {
+func (s *Store) HasAPIKeys(ctx context.Context, userID int64) (bool, error) {
 	ctx, span := tracer.Start(ctx, "db.has_api_keys",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	query := `SELECT EXISTS(SELECT 1 FROM api_keys WHERE user_id = $1)`
 	var exists bool
-	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&exists)
+	err := s.conn().QueryRowContext(ctx, query, userID).Scan(&exists)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -235,14 +236,14 @@ func (db *DB) HasAPIKeys(ctx context.Context, userID int64) (bool, error) {
 
 // GetUserSessionIDs returns all session IDs (UUIDs) for a user
 // Used for S3 cleanup before user deletion
-func (db *DB) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, error) {
+func (s *Store) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, error) {
 	ctx, span := tracer.Start(ctx, "db.get_user_session_ids",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	query := `SELECT id FROM sessions WHERE user_id = $1`
 
-	rows, err := db.conn.QueryContext(ctx, query, userID)
+	rows, err := s.conn().QueryContext(ctx, query, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

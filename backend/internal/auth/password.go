@@ -13,6 +13,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
@@ -44,6 +46,7 @@ func CheckPassword(hash, password string) bool {
 
 // HandlePasswordLogin handles POST /auth/password/login
 func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		log := logger.Ctx(ctx)
@@ -79,7 +82,7 @@ func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerF
 		}
 
 		// Attempt login
-		user, err := database.AuthenticatePassword(ctx, email, password)
+		user, err := authStore.AuthenticatePassword(ctx, email, password)
 		if err != nil {
 			if errors.Is(err, db.ErrAccountLocked) {
 				log.Warn("Login attempt on locked account", "email", email)
@@ -106,7 +109,7 @@ func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerF
 		}
 
 		expiresAt := time.Now().UTC().Add(SessionDuration)
-		if err := database.CreateWebSession(ctx, sessionID, user.ID, expiresAt); err != nil {
+		if err := authStore.CreateWebSession(ctx, sessionID, user.ID, expiresAt); err != nil {
 			http.Error(w, "Failed to save session", http.StatusInternalServerError)
 			return
 		}
@@ -165,9 +168,11 @@ func redirectWithError(w http.ResponseWriter, r *http.Request, message string) {
 // Only runs if no users exist in the database
 func BootstrapAdmin(ctx context.Context, database *db.DB, allowedDomains []string) error {
 	log := logger.Ctx(ctx)
+	userStore := &dbuser.Store{DB: database}
+	authStore := &dbauth.Store{DB: database}
 
 	// Check if any users exist
-	count, err := database.CountUsers(ctx)
+	count, err := userStore.CountUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to count users: %w", err)
 	}
@@ -213,7 +218,7 @@ func BootstrapAdmin(ctx context.Context, database *db.DB, allowedDomains []strin
 	}
 
 	// Create admin user with password identity
-	user, err := database.CreatePasswordUser(ctx, email, passwordHash, true /* isAdmin */)
+	user, err := authStore.CreatePasswordUser(ctx, email, passwordHash, true /* isAdmin */)
 	if err != nil {
 		return fmt.Errorf("failed to create admin user: %w", err)
 	}
