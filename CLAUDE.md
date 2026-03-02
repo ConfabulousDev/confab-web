@@ -148,39 +148,18 @@ If commands fail with "command not found", run `npm install` first.
 
 ### Sharded Backend Tests (Faster)
 
-For faster test runs, shard by package using 9 parallel Bash tool calls:
+For faster test runs, discover all testable packages and run them in parallel Bash tool calls:
 
 ```bash
-# Shard 1: db/session package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/session/...
+# Discover all packages with tests, then run one Bash call per package:
+cd backend && go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./internal/...
 
-# Shard 2: db/access package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/access/...
-
-# Shard 3: db/dbauth package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/dbauth/...
-
-# Shard 4: db/user package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/user/...
-
-# Shard 5: db root package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db
-
-# Shard 6: api package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...
-
-# Shard 7: auth package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/...
-
-# Shard 8: analytics package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/analytics/...
-
-# Shard 9: remaining packages
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test $(go list ./internal/... | grep -vE 'internal/(db|api|auth|analytics)')
+# Each shard is just: DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test <package>
 ```
 
 **Sharding rule:** Always shard by package, never by test name (`-run`/`-skip`).
 When a package is too slow, split it into sub-packages rather than adding name-based filters.
+CI discovers testable packages dynamically — no config changes needed when adding packages.
 
 Claude Code can run multiple Bash commands in parallel and aggregate results across all shards.
 
