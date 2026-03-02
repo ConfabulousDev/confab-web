@@ -1,10 +1,12 @@
-package db_test
+package user_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -17,10 +19,11 @@ func TestListAllUsers_EmptyDatabase(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	users, err := env.DB.ListAllUsers(ctx)
+	users, err := store.ListAllUsers(ctx)
 	if err != nil {
 		t.Fatalf("ListAllUsers failed: %v", err)
 	}
@@ -38,6 +41,8 @@ func TestListAllUsers_WithUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -49,13 +54,13 @@ func TestListAllUsers_WithUsers(t *testing.T) {
 	}
 
 	for _, info := range oauthUsers {
-		_, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed for %s: %v", info.Email, err)
 		}
 	}
 
-	users, err := env.DB.ListAllUsers(ctx)
+	users, err := store.ListAllUsers(ctx)
 	if err != nil {
 		t.Fatalf("ListAllUsers failed: %v", err)
 	}
@@ -80,6 +85,8 @@ func TestListAllUsers_IncludesInactiveUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -90,19 +97,19 @@ func TestListAllUsers_IncludesInactiveUsers(t *testing.T) {
 		Email:      "inactive-list@example.com",
 		Name:       "Inactive List User",
 	}
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
 	// Deactivate the user
-	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	err = store.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus failed: %v", err)
 	}
 
 	// List should still include inactive user
-	users, err := env.DB.ListAllUsers(ctx)
+	users, err := store.ListAllUsers(ctx)
 	if err != nil {
 		t.Fatalf("ListAllUsers failed: %v", err)
 	}
@@ -124,6 +131,8 @@ func TestUpdateUserStatus_Deactivate(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -134,7 +143,7 @@ func TestUpdateUserStatus_Deactivate(t *testing.T) {
 		Email:      "deactivate@example.com",
 		Name:       "Deactivate User",
 	}
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -145,13 +154,13 @@ func TestUpdateUserStatus_Deactivate(t *testing.T) {
 	}
 
 	// Deactivate the user
-	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	err = store.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus failed: %v", err)
 	}
 
 	// Verify status changed
-	updatedUser, err := env.DB.GetUserByID(ctx, user.ID)
+	updatedUser, err := store.GetUserByID(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("GetUserByID failed: %v", err)
 	}
@@ -169,6 +178,8 @@ func TestUpdateUserStatus_Reactivate(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -179,25 +190,25 @@ func TestUpdateUserStatus_Reactivate(t *testing.T) {
 		Email:      "reactivate@example.com",
 		Name:       "Reactivate User",
 	}
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
 	// Deactivate first
-	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	err = store.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus (deactivate) failed: %v", err)
 	}
 
 	// Reactivate
-	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusActive)
+	err = store.UpdateUserStatus(ctx, user.ID, models.UserStatusActive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus (reactivate) failed: %v", err)
 	}
 
 	// Verify status changed back
-	updatedUser, err := env.DB.GetUserByID(ctx, user.ID)
+	updatedUser, err := store.GetUserByID(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("GetUserByID failed: %v", err)
 	}
@@ -215,10 +226,11 @@ func TestUpdateUserStatus_NonExistentUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	err := env.DB.UpdateUserStatus(ctx, 99999, models.UserStatusInactive)
+	err := store.UpdateUserStatus(ctx, 99999, models.UserStatusInactive)
 	if err != db.ErrUserNotFound {
 		t.Errorf("expected ErrUserNotFound, got %v", err)
 	}
@@ -232,6 +244,8 @@ func TestDeleteUser_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -242,19 +256,19 @@ func TestDeleteUser_Success(t *testing.T) {
 		Email:      "delete@example.com",
 		Name:       "Delete User",
 	}
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
 	// Delete the user
-	err = env.DB.DeleteUser(ctx, user.ID)
+	err = store.DeleteUser(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("DeleteUser failed: %v", err)
 	}
 
 	// Verify user no longer exists
-	_, err = env.DB.GetUserByID(ctx, user.ID)
+	_, err = store.GetUserByID(ctx, user.ID)
 	if err != db.ErrUserNotFound {
 		t.Errorf("expected ErrUserNotFound after deletion, got %v", err)
 	}
@@ -268,6 +282,8 @@ func TestDeleteUser_CascadesAPIKeys(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -276,7 +292,7 @@ func TestDeleteUser_CascadesAPIKeys(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, "testhash123", "test-key")
 
 	// Verify API key exists
-	keys, err := env.DB.ListAPIKeys(ctx, user.ID)
+	keys, err := authStore.ListAPIKeys(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListAPIKeys failed: %v", err)
 	}
@@ -285,13 +301,13 @@ func TestDeleteUser_CascadesAPIKeys(t *testing.T) {
 	}
 
 	// Delete the user
-	err = env.DB.DeleteUser(ctx, user.ID)
+	err = store.DeleteUser(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("DeleteUser failed: %v", err)
 	}
 
 	// API keys should be gone (cascade delete)
-	keys, err = env.DB.ListAPIKeys(ctx, user.ID)
+	keys, err = authStore.ListAPIKeys(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("ListAPIKeys failed: %v", err)
 	}
@@ -308,10 +324,11 @@ func TestDeleteUser_NonExistentUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	err := env.DB.DeleteUser(ctx, 99999)
+	err := store.DeleteUser(ctx, 99999)
 	if err != db.ErrUserNotFound {
 		t.Errorf("expected ErrUserNotFound, got %v", err)
 	}
@@ -325,6 +342,8 @@ func TestGetUserSessionIDs_NoSessions(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -335,12 +354,12 @@ func TestGetUserSessionIDs_NoSessions(t *testing.T) {
 		Email:      "no-sessions@example.com",
 		Name:       "No Sessions User",
 	}
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
-	sessionIDs, err := env.DB.GetUserSessionIDs(ctx, user.ID)
+	sessionIDs, err := store.GetUserSessionIDs(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("GetUserSessionIDs failed: %v", err)
 	}
@@ -358,6 +377,7 @@ func TestGetUserSessionIDs_WithSessions(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -368,7 +388,7 @@ func TestGetUserSessionIDs_WithSessions(t *testing.T) {
 	sessionID1 := testutil.CreateTestSession(t, env, user.ID, "external-1")
 	sessionID2 := testutil.CreateTestSession(t, env, user.ID, "external-2")
 
-	sessionIDs, err := env.DB.GetUserSessionIDs(ctx, user.ID)
+	sessionIDs, err := store.GetUserSessionIDs(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("GetUserSessionIDs failed: %v", err)
 	}
@@ -394,6 +414,7 @@ func TestDeleteUser_CascadesSessions(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -402,7 +423,7 @@ func TestDeleteUser_CascadesSessions(t *testing.T) {
 	testutil.CreateTestSession(t, env, user.ID, "external-cascade")
 
 	// Verify session exists
-	sessionIDs, err := env.DB.GetUserSessionIDs(ctx, user.ID)
+	sessionIDs, err := store.GetUserSessionIDs(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("GetUserSessionIDs failed: %v", err)
 	}
@@ -411,13 +432,13 @@ func TestDeleteUser_CascadesSessions(t *testing.T) {
 	}
 
 	// Delete the user
-	err = env.DB.DeleteUser(ctx, user.ID)
+	err = store.DeleteUser(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("DeleteUser failed: %v", err)
 	}
 
 	// Sessions should be gone (cascade delete)
-	sessionIDs, err = env.DB.GetUserSessionIDs(ctx, user.ID)
+	sessionIDs, err = store.GetUserSessionIDs(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("GetUserSessionIDs failed: %v", err)
 	}

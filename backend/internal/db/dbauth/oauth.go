@@ -1,4 +1,4 @@
-package db
+package dbauth
 
 import (
 	"context"
@@ -15,12 +15,12 @@ import (
 // FindOrCreateUserByOAuth finds or creates a user by OAuth provider identity.
 // It handles account linking: if an identity doesn't exist but the email matches
 // an existing user, it links the new identity to that user.
-func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUserInfo) (*models.User, error) {
+func (s *Store) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUserInfo) (*models.User, error) {
 	ctx, span := tracer.Start(ctx, "db.find_or_create_user_by_oauth",
 		trace.WithAttributes(attribute.String("oauth.provider", string(info.Provider))))
 	defer span.End()
 
-	tx, err := db.conn.BeginTx(ctx, nil)
+	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -124,7 +124,6 @@ func (db *DB) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUser
 	}
 
 	// Resolve pending share recipients for the new user
-	// This links any shares that were created with this user's email before they signed up
 	resolvePendingSQL := `UPDATE session_share_recipients SET user_id = $1 WHERE LOWER(email) = LOWER($2) AND user_id IS NULL`
 	if _, err = tx.ExecContext(ctx, resolvePendingSQL, user.ID, info.Email); err != nil {
 		return nil, fmt.Errorf("failed to resolve pending share recipients: %w", err)

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
@@ -32,7 +33,8 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Get user from database
-	user, err := s.db.GetUserByID(ctx, userID)
+	userStore := &dbuser.Store{DB: s.db}
+	user, err := userStore.GetUserByID(ctx, userID)
 	if err != nil {
 		log.Error("Failed to get user", "error", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get user")
@@ -40,14 +42,14 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check onboarding status
-	hasOwnSessions, err := s.db.HasOwnSessions(ctx, userID)
+	hasOwnSessions, err := userStore.HasOwnSessions(ctx, userID)
 	if err != nil {
 		log.Error("Failed to check user sessions", "error", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get user")
 		return
 	}
 
-	hasAPIKeys, err := s.db.HasAPIKeys(ctx, userID)
+	hasAPIKeys, err := userStore.HasAPIKeys(ctx, userID)
 	if err != nil {
 		log.Error("Failed to check user API keys", "error", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get user")

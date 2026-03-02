@@ -1,9 +1,11 @@
-package db_test
+package user_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -16,10 +18,11 @@ func TestCountUsers_EmptyDatabase(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	count, err := env.DB.CountUsers(ctx)
+	count, err := store.CountUsers(ctx)
 	if err != nil {
 		t.Fatalf("CountUsers failed: %v", err)
 	}
@@ -37,6 +40,8 @@ func TestCountUsers_WithUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -48,13 +53,13 @@ func TestCountUsers_WithUsers(t *testing.T) {
 	}
 
 	for _, info := range users {
-		_, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed for %s: %v", info.Email, err)
 		}
 	}
 
-	count, err := env.DB.CountUsers(ctx)
+	count, err := store.CountUsers(ctx)
 	if err != nil {
 		t.Fatalf("CountUsers failed: %v", err)
 	}
@@ -72,6 +77,8 @@ func TestCountUsers_AccountLinkingDoesNotDoubleCount(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -82,7 +89,7 @@ func TestCountUsers_AccountLinkingDoesNotDoubleCount(t *testing.T) {
 		Email:      "linked@example.com",
 		Name:       "Linked User",
 	}
-	_, err := env.DB.FindOrCreateUserByOAuth(ctx, githubInfo)
+	_, err := authStore.FindOrCreateUserByOAuth(ctx, githubInfo)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth (GitHub) failed: %v", err)
 	}
@@ -94,12 +101,12 @@ func TestCountUsers_AccountLinkingDoesNotDoubleCount(t *testing.T) {
 		Email:      "linked@example.com",
 		Name:       "Linked User",
 	}
-	_, err = env.DB.FindOrCreateUserByOAuth(ctx, googleInfo)
+	_, err = authStore.FindOrCreateUserByOAuth(ctx, googleInfo)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth (Google) failed: %v", err)
 	}
 
-	count, err := env.DB.CountUsers(ctx)
+	count, err := store.CountUsers(ctx)
 	if err != nil {
 		t.Fatalf("CountUsers failed: %v", err)
 	}
@@ -118,10 +125,11 @@ func TestUserExistsByEmail_NonExistent(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	exists, err := env.DB.UserExistsByEmail(ctx, "nonexistent@example.com")
+	exists, err := store.UserExistsByEmail(ctx, "nonexistent@example.com")
 	if err != nil {
 		t.Fatalf("UserExistsByEmail failed: %v", err)
 	}
@@ -139,6 +147,8 @@ func TestUserExistsByEmail_Exists(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -149,12 +159,12 @@ func TestUserExistsByEmail_Exists(t *testing.T) {
 		Email:      "exists@example.com",
 		Name:       "Existing User",
 	}
-	_, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
-	exists, err := env.DB.UserExistsByEmail(ctx, "exists@example.com")
+	exists, err := store.UserExistsByEmail(ctx, "exists@example.com")
 	if err != nil {
 		t.Fatalf("UserExistsByEmail failed: %v", err)
 	}
@@ -175,6 +185,8 @@ func TestUserExistsByEmail_EmailsStoredLowercase(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -185,7 +197,7 @@ func TestUserExistsByEmail_EmailsStoredLowercase(t *testing.T) {
 		Email:      "testuser@example.com",
 		Name:       "Case Test User",
 	}
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -196,7 +208,7 @@ func TestUserExistsByEmail_EmailsStoredLowercase(t *testing.T) {
 	}
 
 	// Check with exact case - should find the user
-	exists, err := env.DB.UserExistsByEmail(ctx, "testuser@example.com")
+	exists, err := store.UserExistsByEmail(ctx, "testuser@example.com")
 	if err != nil {
 		t.Fatalf("UserExistsByEmail failed: %v", err)
 	}
@@ -213,10 +225,11 @@ func TestUserExistsByEmail_EmptyEmail(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	exists, err := env.DB.UserExistsByEmail(ctx, "")
+	exists, err := store.UserExistsByEmail(ctx, "")
 	if err != nil {
 		t.Fatalf("UserExistsByEmail failed: %v", err)
 	}
@@ -234,6 +247,8 @@ func TestUserExistsByEmail_MultipleUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -245,7 +260,7 @@ func TestUserExistsByEmail_MultipleUsers(t *testing.T) {
 	}
 
 	for _, info := range users {
-		_, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
@@ -253,7 +268,7 @@ func TestUserExistsByEmail_MultipleUsers(t *testing.T) {
 
 	// Check each user exists
 	for _, info := range users {
-		exists, err := env.DB.UserExistsByEmail(ctx, info.Email)
+		exists, err := store.UserExistsByEmail(ctx, info.Email)
 		if err != nil {
 			t.Fatalf("UserExistsByEmail failed for %s: %v", info.Email, err)
 		}
@@ -263,7 +278,7 @@ func TestUserExistsByEmail_MultipleUsers(t *testing.T) {
 	}
 
 	// Check non-existent user
-	exists, err := env.DB.UserExistsByEmail(ctx, "notinlist@example.com")
+	exists, err := store.UserExistsByEmail(ctx, "notinlist@example.com")
 	if err != nil {
 		t.Fatalf("UserExistsByEmail failed: %v", err)
 	}
@@ -280,10 +295,12 @@ func TestHasOwnSessions_NoSessions(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-no-sessions",
 		Email:      "nosessions@example.com",
@@ -293,7 +310,7 @@ func TestHasOwnSessions_NoSessions(t *testing.T) {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
-	has, err := env.DB.HasOwnSessions(ctx, user.ID)
+	has, err := store.HasOwnSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("HasOwnSessions failed: %v", err)
 	}
@@ -310,10 +327,12 @@ func TestHasOwnSessions_WithSessions(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-with-sessions",
 		Email:      "withsessions@example.com",
@@ -326,7 +345,7 @@ func TestHasOwnSessions_WithSessions(t *testing.T) {
 	// Create a session for this user
 	testutil.CreateTestSession(t, env, user.ID, "ext-session-1")
 
-	has, err := env.DB.HasOwnSessions(ctx, user.ID)
+	has, err := store.HasOwnSessions(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("HasOwnSessions failed: %v", err)
 	}
@@ -343,10 +362,12 @@ func TestHasOwnSessions_OtherUserSessions(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user1, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-user1",
 		Email:      "user1-sessions@example.com",
@@ -356,7 +377,7 @@ func TestHasOwnSessions_OtherUserSessions(t *testing.T) {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
-	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user2, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-user2",
 		Email:      "user2-sessions@example.com",
@@ -370,7 +391,7 @@ func TestHasOwnSessions_OtherUserSessions(t *testing.T) {
 	testutil.CreateTestSession(t, env, user1.ID, "ext-session-other")
 
 	// user2 should not have sessions
-	has, err := env.DB.HasOwnSessions(ctx, user2.ID)
+	has, err := store.HasOwnSessions(ctx, user2.ID)
 	if err != nil {
 		t.Fatalf("HasOwnSessions failed: %v", err)
 	}
@@ -387,10 +408,12 @@ func TestHasAPIKeys_NoKeys(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-no-keys",
 		Email:      "nokeys@example.com",
@@ -400,7 +423,7 @@ func TestHasAPIKeys_NoKeys(t *testing.T) {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
-	has, err := env.DB.HasAPIKeys(ctx, user.ID)
+	has, err := store.HasAPIKeys(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("HasAPIKeys failed: %v", err)
 	}
@@ -417,10 +440,12 @@ func TestHasAPIKeys_WithKeys(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	user, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-with-keys",
 		Email:      "withkeys@example.com",
@@ -433,7 +458,7 @@ func TestHasAPIKeys_WithKeys(t *testing.T) {
 	// Create an API key for this user
 	testutil.CreateTestAPIKey(t, env, user.ID, "test-key-hash", "Test Key")
 
-	has, err := env.DB.HasAPIKeys(ctx, user.ID)
+	has, err := store.HasAPIKeys(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("HasAPIKeys failed: %v", err)
 	}
@@ -450,10 +475,12 @@ func TestHasAPIKeys_OtherUserKeys(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
-	user1, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user1, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-key-user1",
 		Email:      "user1-keys@example.com",
@@ -463,7 +490,7 @@ func TestHasAPIKeys_OtherUserKeys(t *testing.T) {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
 
-	user2, err := env.DB.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
+	user2, err := authStore.FindOrCreateUserByOAuth(ctx, models.OAuthUserInfo{
 		Provider:   models.ProviderGitHub,
 		ProviderID: "gh-key-user2",
 		Email:      "user2-keys@example.com",
@@ -477,7 +504,7 @@ func TestHasAPIKeys_OtherUserKeys(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user1.ID, "test-key-hash-other", "Test Key")
 
 	// user2 should not have API keys
-	has, err := env.DB.HasAPIKeys(ctx, user2.ID)
+	has, err := store.HasAPIKeys(ctx, user2.ID)
 	if err != nil {
 		t.Fatalf("HasAPIKeys failed: %v", err)
 	}

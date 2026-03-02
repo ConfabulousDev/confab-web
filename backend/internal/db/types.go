@@ -8,6 +8,9 @@ import (
 // MaxAPIKeysPerUser is the maximum number of API keys a user can have
 const MaxAPIKeysPerUser = 500
 
+// DefaultPageSize is the number of sessions per page in paginated results.
+const DefaultPageSize = 50
+
 // MaxCustomTitleLength is the maximum length of a custom session title
 const MaxCustomTitleLength = 255
 

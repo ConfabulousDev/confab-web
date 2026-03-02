@@ -1,4 +1,4 @@
-package db
+package dbauth
 
 import (
 	"context"
@@ -14,13 +14,13 @@ import (
 )
 
 // CreateWebSession creates a new web session for a user
-func (db *DB) CreateWebSession(ctx context.Context, sessionID string, userID int64, expiresAt time.Time) error {
+func (s *Store) CreateWebSession(ctx context.Context, sessionID string, userID int64, expiresAt time.Time) error {
 	ctx, span := tracer.Start(ctx, "db.create_web_session",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	query := `INSERT INTO web_sessions (id, user_id, created_at, expires_at) VALUES ($1, $2, NOW(), $3)`
-	_, err := db.conn.ExecContext(ctx, query, sessionID, userID, expiresAt)
+	_, err := s.conn().ExecContext(ctx, query, sessionID, userID, expiresAt)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -30,7 +30,7 @@ func (db *DB) CreateWebSession(ctx context.Context, sessionID string, userID int
 }
 
 // GetWebSession retrieves a web session by ID and validates it's not expired
-func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebSession, error) {
+func (s *Store) GetWebSession(ctx context.Context, sessionID string) (*models.WebSession, error) {
 	ctx, span := tracer.Start(ctx, "db.get_web_session")
 	defer span.End()
 
@@ -42,7 +42,7 @@ func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebS
 	`
 
 	var session models.WebSession
-	err := db.conn.QueryRowContext(ctx, query, sessionID).Scan(
+	err := s.conn().QueryRowContext(ctx, query, sessionID).Scan(
 		&session.ID,
 		&session.UserID,
 		&session.UserEmail,
@@ -65,12 +65,12 @@ func (db *DB) GetWebSession(ctx context.Context, sessionID string) (*models.WebS
 }
 
 // DeleteWebSession deletes a web session (logout)
-func (db *DB) DeleteWebSession(ctx context.Context, sessionID string) error {
+func (s *Store) DeleteWebSession(ctx context.Context, sessionID string) error {
 	ctx, span := tracer.Start(ctx, "db.delete_web_session")
 	defer span.End()
 
 	query := `DELETE FROM web_sessions WHERE id = $1`
-	_, err := db.conn.ExecContext(ctx, query, sessionID)
+	_, err := s.conn().ExecContext(ctx, query, sessionID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

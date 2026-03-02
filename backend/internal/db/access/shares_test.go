@@ -1,4 +1,4 @@
-package db_test
+package access_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -21,13 +22,14 @@ func TestCreateShare_PublicSuccess(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "share-external-id")
 
 	ctx := context.Background()
 
-	share, err := env.DB.CreateShare(ctx, sessionID, owner.ID, true, nil, nil)
+	share, err := store.CreateShare(ctx, sessionID, owner.ID, true, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateShare failed: %v", err)
 	}
@@ -48,6 +50,7 @@ func TestCreateShare_PrivateWithRecipients(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient") // Create user so lookup works
@@ -56,7 +59,7 @@ func TestCreateShare_PrivateWithRecipients(t *testing.T) {
 	ctx := context.Background()
 	recipients := []string{"recipient@example.com"}
 
-	share, err := env.DB.CreateShare(ctx, sessionID, owner.ID, false, nil, recipients)
+	share, err := store.CreateShare(ctx, sessionID, owner.ID, false, nil, recipients)
 	if err != nil {
 		t.Fatalf("CreateShare failed: %v", err)
 	}
@@ -80,12 +83,13 @@ func TestCreateShare_SessionNotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 
 	ctx := context.Background()
 
-	_, err := env.DB.CreateShare(ctx, "00000000-0000-0000-0000-000000000000", owner.ID, true, nil, nil)
+	_, err := store.CreateShare(ctx, "00000000-0000-0000-0000-000000000000", owner.ID, true, nil, nil)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -99,6 +103,7 @@ func TestCreateShare_WrongOwner(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	attacker := testutil.CreateTestUser(t, env, "attacker@example.com", "Attacker")
@@ -107,7 +112,7 @@ func TestCreateShare_WrongOwner(t *testing.T) {
 	ctx := context.Background()
 
 	// Attacker tries to create share for owner's session
-	_, err := env.DB.CreateShare(ctx, sessionID, attacker.ID, true, nil, nil)
+	_, err := store.CreateShare(ctx, sessionID, attacker.ID, true, nil, nil)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound (security), got %v", err)
 	}
@@ -125,6 +130,7 @@ func TestListShares_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "list-shares-session")
@@ -135,7 +141,7 @@ func TestListShares_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	shares, err := env.DB.ListShares(ctx, sessionID, owner.ID)
+	shares, err := store.ListShares(ctx, sessionID, owner.ID)
 	if err != nil {
 		t.Fatalf("ListShares failed: %v", err)
 	}
@@ -153,12 +159,13 @@ func TestListShares_SessionNotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 
 	ctx := context.Background()
 
-	_, err := env.DB.ListShares(ctx, "00000000-0000-0000-0000-000000000000", owner.ID)
+	_, err := store.ListShares(ctx, "00000000-0000-0000-0000-000000000000", owner.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -172,6 +179,7 @@ func TestListShares_WrongOwner(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	attacker := testutil.CreateTestUser(t, env, "attacker@example.com", "Attacker")
@@ -180,7 +188,7 @@ func TestListShares_WrongOwner(t *testing.T) {
 	ctx := context.Background()
 
 	// Attacker tries to list owner's shares
-	_, err := env.DB.ListShares(ctx, sessionID, attacker.ID)
+	_, err := store.ListShares(ctx, sessionID, attacker.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound (security), got %v", err)
 	}
@@ -198,6 +206,7 @@ func TestRevokeShare_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	sessionID := testutil.CreateTestSession(t, env, owner.ID, "revoke-session")
@@ -206,13 +215,13 @@ func TestRevokeShare_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := env.DB.RevokeShare(ctx, shareID, owner.ID)
+	err := store.RevokeShare(ctx, shareID, owner.ID)
 	if err != nil {
 		t.Fatalf("RevokeShare failed: %v", err)
 	}
 
 	// Verify share is gone
-	shares, err := env.DB.ListShares(ctx, sessionID, owner.ID)
+	shares, err := store.ListShares(ctx, sessionID, owner.ID)
 	if err != nil {
 		t.Fatalf("ListShares failed: %v", err)
 	}
@@ -229,6 +238,7 @@ func TestRevokeShare_Unauthorized(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	attacker := testutil.CreateTestUser(t, env, "attacker@example.com", "Attacker")
@@ -239,13 +249,13 @@ func TestRevokeShare_Unauthorized(t *testing.T) {
 	ctx := context.Background()
 
 	// Attacker tries to revoke owner's share
-	err := env.DB.RevokeShare(ctx, shareID, attacker.ID)
+	err := store.RevokeShare(ctx, shareID, attacker.ID)
 	if !errors.Is(err, db.ErrUnauthorized) {
 		t.Errorf("expected ErrUnauthorized, got %v", err)
 	}
 
 	// Verify share still exists
-	shares, err := env.DB.ListShares(ctx, sessionID, owner.ID)
+	shares, err := store.ListShares(ctx, sessionID, owner.ID)
 	if err != nil {
 		t.Fatalf("ListShares failed: %v", err)
 	}
@@ -262,12 +272,13 @@ func TestRevokeShare_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 
 	ctx := context.Background()
 
-	err := env.DB.RevokeShare(ctx, 99999, owner.ID)
+	err := store.RevokeShare(ctx, 99999, owner.ID)
 	if !errors.Is(err, db.ErrUnauthorized) {
 		// Returns unauthorized for security (doesn't reveal if share exists)
 		t.Errorf("expected ErrUnauthorized, got %v", err)
@@ -286,6 +297,7 @@ func TestListAllUserShares_Success(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	session1 := testutil.CreateTestSession(t, env, owner.ID, "session-1")
@@ -297,7 +309,7 @@ func TestListAllUserShares_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	shares, err := env.DB.ListAllUserShares(ctx, owner.ID)
+	shares, err := store.ListAllUserShares(ctx, owner.ID)
 	if err != nil {
 		t.Fatalf("ListAllUserShares failed: %v", err)
 	}
@@ -315,13 +327,14 @@ func TestListAllUserShares_Empty(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
 
 	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 	testutil.CreateTestSession(t, env, owner.ID, "no-shares-session")
 
 	ctx := context.Background()
 
-	shares, err := env.DB.ListAllUserShares(ctx, owner.ID)
+	shares, err := store.ListAllUserShares(ctx, owner.ID)
 	if err != nil {
 		t.Fatalf("ListAllUserShares failed: %v", err)
 	}

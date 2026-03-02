@@ -8,12 +8,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
 // HandleDeleteSession deletes an entire session and all associated S3 chunks
 func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
+	sessionStore := &dbsession.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -35,7 +38,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
-		externalID, err := database.VerifySessionOwnership(dbCtx, sessionID, userID)
+		externalID, err := sessionStore.VerifySessionOwnership(dbCtx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -68,7 +71,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx2, dbCancel2 := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel2()
 
-		if err := database.DeleteSessionFromDB(dbCtx2, sessionID, userID); err != nil {
+		if err := sessionStore.DeleteSessionFromDB(dbCtx2, sessionID, userID); err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
 				return

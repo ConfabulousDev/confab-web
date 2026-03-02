@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
@@ -263,6 +265,7 @@ func HandleGitHubLogin(config *OAuthConfig) http.HandlerFunc {
 // is intentional and acceptable - the handlers are kept separate for clarity, easier
 // debugging, and to allow provider-specific customization without complex abstractions.
 func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -362,7 +365,7 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			Name:             displayName,
 			AvatarURL:        user.AvatarURL,
 		}
-		dbUser, err := database.FindOrCreateUserByOAuth(ctx, oauthInfo)
+		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo)
 		if err != nil {
 			log.Error("Failed to create/find user in database", "error", err, "github_id", oauthInfo.ProviderID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
@@ -377,7 +380,7 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		}
 
 		expiresAt := time.Now().UTC().Add(SessionDuration)
-		if err := database.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
+		if err := authStore.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
 			http.Error(w, "Failed to save session", http.StatusInternalServerError)
 			return
 		}
@@ -401,6 +404,7 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 
 // HandleLogout logs out the user
 func HandleLogout(database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		log := logger.Ctx(ctx)
@@ -412,7 +416,7 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 		clearCookie(w, SessionCookieName)
 
 		if err == nil {
-			if err := database.DeleteWebSession(ctx, cookie.Value); err != nil {
+			if err := authStore.DeleteWebSession(ctx, cookie.Value); err != nil {
 				log.Warn("Failed to delete web session from database", "error", err)
 			}
 		}
@@ -454,7 +458,8 @@ func TrySessionAuth(r *http.Request, database *db.DB) *sessionAuthResult {
 		return nil
 	}
 
-	session, err := database.GetWebSession(r.Context(), cookie.Value)
+	authStore := &dbauth.Store{DB: database}
+	session, err := authStore.GetWebSession(r.Context(), cookie.Value)
 	if err != nil {
 		return nil
 	}
@@ -802,6 +807,7 @@ func HandleGoogleLogin(config *OAuthConfig) http.HandlerFunc {
 // is intentional and acceptable - the handlers are kept separate for clarity, easier
 // debugging, and to allow provider-specific customization without complex abstractions.
 func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -898,7 +904,7 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			Name:       user.Name,
 			AvatarURL:  user.Picture,
 		}
-		dbUser, err := database.FindOrCreateUserByOAuth(ctx, oauthInfo)
+		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo)
 		if err != nil {
 			log.Error("Failed to create/find user in database", "error", err, "google_id", user.ID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
@@ -913,7 +919,7 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		}
 
 		expiresAt := time.Now().UTC().Add(SessionDuration)
-		if err := database.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
+		if err := authStore.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
 			http.Error(w, "Failed to save session", http.StatusInternalServerError)
 			return
 		}
@@ -1194,6 +1200,7 @@ func HandleOIDCLogin(config *OAuthConfig) http.HandlerFunc {
 
 // HandleOIDCCallback handles the OAuth callback from the OIDC provider
 func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1314,7 +1321,7 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 			Name:       user.Name,
 			AvatarURL:  user.Picture,
 		}
-		dbUser, err := database.FindOrCreateUserByOAuth(ctx, oauthInfo)
+		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo)
 		if err != nil {
 			log.Error("Failed to create/find user in database", "error", err, "oidc_sub", user.Sub)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
@@ -1329,7 +1336,7 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 		}
 
 		expiresAt := time.Now().UTC().Add(SessionDuration)
-		if err := database.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
+		if err := authStore.CreateWebSession(ctx, sessionID, dbUser.ID, expiresAt); err != nil {
 			http.Error(w, "Failed to save session", http.StatusInternalServerError)
 			return
 		}
@@ -1436,6 +1443,7 @@ func generateRandomString(length int) (string, error) {
 
 // HandleCLIAuthorize handles CLI API key generation flow
 func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1462,7 +1470,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		}
 
 		// Validate session
-		session, err := database.GetWebSession(ctx, cookie.Value)
+		session, err := authStore.GetWebSession(ctx, cookie.Value)
 		if err != nil {
 			// Session is invalid or expired - clear the stale cookie and redirect to login
 			clearCookie(w, SessionCookieName)
@@ -1527,7 +1535,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 
 		// Replace existing API key with same name, or create new one
 		// This prevents unbounded key growth when re-authenticating from the same machine
-		keyID, createdAt, err := database.ReplaceAPIKey(ctx, session.UserID, keyHash, keyName)
+		keyID, createdAt, err := authStore.ReplaceAPIKey(ctx, session.UserID, keyHash, keyName)
 		if err != nil {
 			if err == db.ErrAPIKeyLimitExceeded {
 				// Redirect to callback with error that CLI can handle
@@ -1645,6 +1653,7 @@ func generateDeviceCode() (string, error) {
 // HandleDeviceCode initiates a device code flow
 // POST /auth/device/code
 func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1683,7 +1692,7 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 		expiresAt := time.Now().UTC().Add(DeviceCodeExpiry)
 
 		// Store in database
-		if err := database.CreateDeviceCode(ctx, deviceCode, userCode, req.KeyName, expiresAt); err != nil {
+		if err := authStore.CreateDeviceCode(ctx, deviceCode, userCode, req.KeyName, expiresAt); err != nil {
 			log.Error("Failed to store device code", "error", err)
 			http.Error(w, "Failed to create device code", http.StatusInternalServerError)
 			return
@@ -1708,6 +1717,8 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 // HandleDeviceToken exchanges a device code for an API key
 // POST /auth/device/token
 func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
+	userStore := &dbuser.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1729,7 +1740,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 		}
 
 		// Look up device code
-		dc, err := database.GetDeviceCodeByDeviceCode(ctx, req.DeviceCode)
+		dc, err := authStore.GetDeviceCodeByDeviceCode(ctx, req.DeviceCode)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			if err == db.ErrDeviceCodeNotFound {
@@ -1744,7 +1755,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 
 		// Check if expired
 		if time.Now().UTC().After(dc.ExpiresAt) {
-			database.DeleteDeviceCode(ctx, req.DeviceCode)
+			authStore.DeleteDeviceCode(ctx, req.DeviceCode)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "expired_token"})
@@ -1762,7 +1773,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 
 		// Check email domain restriction on the authorized user
 		if len(allowedDomains) > 0 {
-			user, err := database.GetUserByID(ctx, *dc.UserID)
+			user, err := userStore.GetUserByID(ctx, *dc.UserID)
 			if err != nil {
 				log.Error("Failed to get user for domain check", "error", err, "user_id", *dc.UserID)
 				w.Header().Set("Content-Type", "application/json")
@@ -1772,7 +1783,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 			}
 			if !validation.IsAllowedEmailDomain(user.Email, allowedDomains) {
 				log.Warn("Email domain not permitted in device flow", "email", user.Email, "user_id", *dc.UserID)
-				database.DeleteDeviceCode(ctx, req.DeviceCode)
+				authStore.DeleteDeviceCode(ctx, req.DeviceCode)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "access_denied"})
@@ -1792,7 +1803,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 
 		// Replace existing API key with same name, or create new one
 		// This prevents unbounded key growth when re-authenticating from the same machine
-		keyID, createdAt, err := database.ReplaceAPIKey(ctx, *dc.UserID, keyHash, dc.KeyName)
+		keyID, createdAt, err := authStore.ReplaceAPIKey(ctx, *dc.UserID, keyHash, dc.KeyName)
 		if err != nil {
 			if err == db.ErrAPIKeyLimitExceeded {
 				log.Warn("API key limit exceeded during device flow", "user_id", *dc.UserID)
@@ -1815,7 +1826,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 			"created_at", createdAt)
 
 		// Delete the device code (one-time use)
-		database.DeleteDeviceCode(ctx, req.DeviceCode)
+		authStore.DeleteDeviceCode(ctx, req.DeviceCode)
 
 		// Return the API key
 		w.Header().Set("Content-Type", "application/json")
@@ -1829,6 +1840,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 // HandleDevicePage serves the device verification page
 // GET /auth/device
 func HandleDevicePage(database *db.DB) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get pre-filled code from query param
 		prefilledCode := r.URL.Query().Get("code")
@@ -1838,7 +1850,7 @@ func HandleDevicePage(database *db.DB) http.HandlerFunc {
 		loggedIn := err == nil && cookie.Value != ""
 
 		if loggedIn {
-			_, err := database.GetWebSession(r.Context(), cookie.Value)
+			_, err := authStore.GetWebSession(r.Context(), cookie.Value)
 			if err != nil {
 				loggedIn = false
 			}
@@ -1866,6 +1878,7 @@ func HandleDevicePage(database *db.DB) http.HandlerFunc {
 // HandleDeviceVerify handles the form submission to verify a device code
 // POST /device/verify
 func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFunc {
+	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1891,7 +1904,7 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 			return
 		}
 
-		session, err := database.GetWebSession(ctx, cookie.Value)
+		session, err := authStore.GetWebSession(ctx, cookie.Value)
 		if err != nil {
 			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
 			return
@@ -1917,7 +1930,7 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		}
 
 		// Validate and authorize
-		err = database.AuthorizeDeviceCode(ctx, userCode, session.UserID)
+		err = authStore.AuthorizeDeviceCode(ctx, userCode, session.UserID)
 		if err != nil {
 			log.Warn("Device code authorization failed", "error", err, "user_code", userCode)
 			// Show error page
@@ -2200,8 +2213,10 @@ func CanUserLogin(ctx context.Context, database *db.DB, email string) (bool, err
 		return false, nil
 	}
 
+	userStore := &dbuser.Store{DB: database}
+
 	// Check if user already exists - returning users always allowed
-	exists, err := database.UserExistsByEmail(ctx, email)
+	exists, err := userStore.UserExistsByEmail(ctx, email)
 	if err != nil {
 		log.Warn("Failed to check if user exists", "email", email, "error", err)
 		return false, err
@@ -2221,7 +2236,7 @@ func CanUserLogin(ctx context.Context, database *db.DB, email string) (bool, err
 		}
 	}
 
-	currentUsers, err := database.CountUsers(ctx)
+	currentUsers, err := userStore.CountUsers(ctx)
 	if err != nil {
 		log.Warn("Failed to count users", "error", err)
 		return false, err

@@ -34,4 +34,8 @@ var (
 
 	// GitHub link errors
 	ErrGitHubLinkNotFound = errors.New("github link not found")
+
+	// Password authentication errors
+	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrAccountLocked      = errors.New("account is temporarily locked")
 )

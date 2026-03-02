@@ -1,4 +1,4 @@
-package db
+package access
 
 import (
 	"context"
@@ -10,12 +10,14 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ConfabulousDev/confab-web/internal/db"
 )
 
 // CreateShare creates a new share link for a session (by UUID primary key)
 // isPublic: true for public shares (anyone with link), false for recipient-only shares
 // recipientEmails: email addresses to grant access (ignored if isPublic)
-func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*SessionShare, error) {
+func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*db.SessionShare, error) {
 	ctx, span := tracer.Start(ctx, "db.create_share",
 		trace.WithAttributes(
 			attribute.String("session.id", sessionID),
@@ -24,7 +26,7 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, i
 		))
 	defer span.End()
 
-	tx, err := db.conn.BeginTx(ctx, nil)
+	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -39,10 +41,10 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, i
 		sessionID, userID).Scan(&externalID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
+			return nil, db.ErrSessionNotFound
 		}
-		if isInvalidUUIDError(err) {
-			return nil, ErrSessionNotFound
+		if db.IsInvalidUUIDError(err) {
+			return nil, db.ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
@@ -52,7 +54,7 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, i
 	          VALUES ($1, $2)
 	          RETURNING id, created_at`
 
-	var share SessionShare
+	var share db.SessionShare
 	share.SessionID = sessionID
 	share.ExternalID = externalID
 	share.IsPublic = isPublic
@@ -138,12 +140,12 @@ func (db *DB) CreateShare(ctx context.Context, sessionID string, userID int64, i
 
 // CreateSystemShare creates a system-wide share for a session (admin only, no ownership check)
 // System shares are accessible to any authenticated user
-func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt *time.Time) (*SessionShare, error) {
+func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expiresAt *time.Time) (*db.SessionShare, error) {
 	ctx, span := tracer.Start(ctx, "db.create_system_share",
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
 	defer span.End()
 
-	tx, err := db.conn.BeginTx(ctx, nil)
+	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -158,10 +160,10 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 		sessionID).Scan(&externalID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
+			return nil, db.ErrSessionNotFound
 		}
-		if isInvalidUUIDError(err) {
-			return nil, ErrSessionNotFound
+		if db.IsInvalidUUIDError(err) {
+			return nil, db.ErrSessionNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -169,7 +171,7 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 	}
 
 	// Insert share
-	var share SessionShare
+	var share db.SessionShare
 	share.SessionID = sessionID
 	share.ExternalID = externalID
 	share.IsPublic = false // System shares are not public (require auth)
@@ -207,7 +209,7 @@ func (db *DB) CreateSystemShare(ctx context.Context, sessionID string, expiresAt
 }
 
 // ListShares returns all shares for a session (by UUID primary key)
-func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([]SessionShare, error) {
+func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) ([]db.SessionShare, error) {
 	ctx, span := tracer.Start(ctx, "db.list_shares",
 		trace.WithAttributes(
 			attribute.String("session.id", sessionID),
@@ -217,15 +219,15 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 
 	// Verify session exists for this user and get external_id for display
 	var externalID string
-	err := db.conn.QueryRowContext(ctx,
+	err := s.conn().QueryRowContext(ctx,
 		`SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`,
 		sessionID, userID).Scan(&externalID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrSessionNotFound
+			return nil, db.ErrSessionNotFound
 		}
-		if isInvalidUUIDError(err) {
-			return nil, ErrSessionNotFound
+		if db.IsInvalidUUIDError(err) {
+			return nil, db.ErrSessionNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -240,15 +242,15 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 	          WHERE ss.session_id = $1
 	          ORDER BY ss.created_at DESC`
 
-	rows, err := db.conn.QueryContext(ctx, query, sessionID)
+	rows, err := s.conn().QueryContext(ctx, query, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list shares: %w", err)
 	}
 	defer rows.Close()
 
-	shares := make([]SessionShare, 0)
+	shares := make([]db.SessionShare, 0)
 	for rows.Next() {
-		var share SessionShare
+		var share db.SessionShare
 		err := rows.Scan(&share.ID, &share.SessionID,
 			&share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt, &share.IsPublic)
 		if err != nil {
@@ -258,7 +260,7 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 
 		// Get recipients for non-public shares
 		if !share.IsPublic {
-			emails, err := db.loadShareRecipients(ctx, share.ID)
+			emails, err := s.loadShareRecipients(ctx, share.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -276,7 +278,7 @@ func (db *DB) ListShares(ctx context.Context, sessionID string, userID int64) ([
 }
 
 // ListAllUserShares returns all shares for a user across all sessions
-func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithSessionInfo, error) {
+func (s *Store) ListAllUserShares(ctx context.Context, userID int64) ([]db.ShareWithSessionInfo, error) {
 	ctx, span := tracer.Start(ctx, "db.list_all_user_shares",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
@@ -295,15 +297,15 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 		ORDER BY ss.created_at DESC
 	`
 
-	rows, err := db.conn.QueryContext(ctx, query, userID)
+	rows, err := s.conn().QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list shares: %w", err)
 	}
 	defer rows.Close()
 
-	shares := make([]ShareWithSessionInfo, 0)
+	shares := make([]db.ShareWithSessionInfo, 0)
 	for rows.Next() {
-		var share ShareWithSessionInfo
+		var share db.ShareWithSessionInfo
 		err := rows.Scan(
 			&share.ID, &share.SessionID, &share.ExternalID,
 			&share.IsPublic, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
@@ -315,7 +317,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 
 		// Get recipients for non-public shares
 		if !share.IsPublic {
-			emails, err := db.loadShareRecipients(ctx, share.ID)
+			emails, err := s.loadShareRecipients(ctx, share.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -333,7 +335,7 @@ func (db *DB) ListAllUserShares(ctx context.Context, userID int64) ([]ShareWithS
 }
 
 // RevokeShare deletes a share by ID
-func (db *DB) RevokeShare(ctx context.Context, shareID int64, userID int64) error {
+func (s *Store) RevokeShare(ctx context.Context, shareID int64, userID int64) error {
 	ctx, span := tracer.Start(ctx, "db.revoke_share",
 		trace.WithAttributes(
 			attribute.Int64("share.id", shareID),
@@ -342,7 +344,7 @@ func (db *DB) RevokeShare(ctx context.Context, shareID int64, userID int64) erro
 	defer span.End()
 
 	// Verify ownership via session and delete
-	result, err := db.conn.ExecContext(ctx,
+	result, err := s.conn().ExecContext(ctx,
 		`DELETE FROM session_shares ss
 		 USING sessions s
 		 WHERE ss.session_id = s.id AND ss.id = $1 AND s.user_id = $2`,
@@ -356,15 +358,15 @@ func (db *DB) RevokeShare(ctx context.Context, shareID int64, userID int64) erro
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		// Could be either not found or unauthorized - keeping combined error for security
-		return ErrUnauthorized
+		return db.ErrUnauthorized
 	}
 
 	return nil
 }
 
 // loadShareRecipients loads the recipient emails for a share
-func (db *DB) loadShareRecipients(ctx context.Context, shareID int64) ([]string, error) {
-	rows, err := db.conn.QueryContext(ctx,
+func (s *Store) loadShareRecipients(ctx context.Context, shareID int64) ([]string, error) {
+	rows, err := s.conn().QueryContext(ctx,
 		`SELECT email FROM session_share_recipients WHERE share_id = $1 ORDER BY email`,
 		shareID)
 	if err != nil {

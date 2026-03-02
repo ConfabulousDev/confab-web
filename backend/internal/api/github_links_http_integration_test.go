@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
+	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -292,6 +294,7 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		// Create some links directly in DB
+		githubStore := &dbgithub.Store{DB: env.DB}
 		title1 := "First PR"
 		link1 := &models.GitHubLink{
 			SessionID: sessionID,
@@ -303,7 +306,7 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 			Title:     &title1,
 			Source:    models.GitHubLinkSourceManual,
 		}
-		_, err := env.DB.CreateGitHubLink(env.Ctx, link1, true)
+		_, err := githubStore.CreateGitHubLink(env.Ctx, link1, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -317,7 +320,7 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 			Ref:       "abc123",
 			Source:    models.GitHubLinkSourceCLIHook,
 		}
-		_, err = env.DB.CreateGitHubLink(env.Ctx, link2, true)
+		_, err = githubStore.CreateGitHubLink(env.Ctx, link2, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -353,12 +356,14 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create public share
-		_, err := env.DB.CreateShare(env.Ctx, sessionID, owner.ID, true, nil, nil)
+		accessStore := &dbaccess.Store{DB: env.DB}
+		_, err := accessStore.CreateShare(env.Ctx, sessionID, owner.ID, true, nil, nil)
 		if err != nil {
 			t.Fatalf("failed to create share: %v", err)
 		}
 
 		// Create a link
+		githubStore := &dbgithub.Store{DB: env.DB}
 		link := &models.GitHubLink{
 			SessionID: sessionID,
 			LinkType:  models.GitHubLinkTypePullRequest,
@@ -368,7 +373,7 @@ func TestListGitHubLinks_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		_, err = env.DB.CreateGitHubLink(env.Ctx, link, true)
+		_, err = githubStore.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -467,6 +472,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, externalID)
 
 		// Create a link
+		githubStore := &dbgithub.Store{DB: env.DB}
 		link := &models.GitHubLink{
 			SessionID: sessionID,
 			LinkType:  models.GitHubLinkTypePullRequest,
@@ -476,7 +482,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link, true)
+		createdLink, err := githubStore.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -535,6 +541,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 		sessionID2 := testutil.CreateTestSession(t, env, user.ID, "session-2")
 
 		// Create a link on session 1
+		githubStore := &dbgithub.Store{DB: env.DB}
 		link := &models.GitHubLink{
 			SessionID: sessionID1,
 			LinkType:  models.GitHubLinkTypePullRequest,
@@ -544,7 +551,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link, true)
+		createdLink, err := githubStore.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}
@@ -572,6 +579,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 		sessionID := testutil.CreateTestSession(t, env, owner.ID, externalID)
 
 		// Create a link
+		githubStore := &dbgithub.Store{DB: env.DB}
 		link := &models.GitHubLink{
 			SessionID: sessionID,
 			LinkType:  models.GitHubLinkTypePullRequest,
@@ -581,7 +589,7 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 			Ref:       "1",
 			Source:    models.GitHubLinkSourceManual,
 		}
-		createdLink, err := env.DB.CreateGitHubLink(env.Ctx, link, true)
+		createdLink, err := githubStore.CreateGitHubLink(env.Ctx, link, true)
 		if err != nil {
 			t.Fatalf("failed to create link: %v", err)
 		}

@@ -148,29 +148,21 @@ If commands fail with "command not found", run `npm install` first.
 
 ### Sharded Backend Tests (Faster)
 
-For faster test runs, shard by package using 5 parallel Bash tool calls:
+Use `scripts/list-test-packages.sh` to discover all testable packages, then run one parallel Bash tool call per package:
 
 ```bash
-# Shard 1: db package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/db/...
+# List all packages with tests (one per line):
+cd backend && ./scripts/list-test-packages.sh
 
-# Shard 2: api package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...
-
-# Shard 3: auth package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/auth/...
-
-# Shard 4: analytics package
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/analytics/...
-
-# Shard 5: remaining packages
-DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test $(go list ./internal/... | grep -vE 'internal/(db|api|auth|analytics)')
+# Run each package as a separate parallel Bash call:
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test <package>
 ```
+
+**How to shard:** Run `./scripts/list-test-packages.sh`, then launch one parallel Bash tool call per package with `DOCKER_HOST=... go test <package>`. This is the same discovery CI uses.
 
 **Sharding rule:** Always shard by package, never by test name (`-run`/`-skip`).
 When a package is too slow, split it into sub-packages rather than adding name-based filters.
-
-Claude Code can run multiple Bash commands in parallel and aggregate results across all shards.
+CI discovers testable packages dynamically — no config changes needed when adding packages.
 
 Note: CLI is in a separate repo: https://github.com/ConfabulousDev/confab
 

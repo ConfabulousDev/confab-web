@@ -61,30 +61,40 @@ jobs:
         working-directory: backend
         run: go test -short -timeout 15m ./...
 
+  discover-packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      packages: ${{ steps.list.outputs.packages }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.4"
+          cache-dependency-path: backend/go.sum
+
+      - name: Discover testable packages
+        id: list
+        working-directory: backend
+        run: |
+          packages=$(./scripts/list-test-packages.sh --json)
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+          echo "Found $(echo "$packages" | jq length) testable packages"
+
   backend-integration:
+    needs: discover-packages
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Each shard runs complete packages — no -run/-skip patterns.
-          # When a package gets too slow, split it into sub-packages.
-          - shard: db
-            run: go test -timeout 15m ./internal/db/...
-          - shard: api
-            run: go test -timeout 15m ./internal/api/...
-          - shard: auth
-            run: go test -timeout 15m ./internal/auth/...
-          - shard: analytics
-            run: go test -timeout 15m ./internal/analytics/...
-          - shard: other
-            # Catch-all: runs every internal/ package not listed above.
-            # New packages are automatically included — no config changes needed.
-            run: go test -timeout 15m $(go list ./internal/... | grep -vE 'internal/(db|api|auth|analytics)')
+        package: ${{ fromJSON(needs.discover-packages.outputs.packages) }}
 
-    name: backend-integration (${{ matrix.shard }})
+    name: backend-integration (${{ matrix.package }})
 
     steps:
       - name: Checkout
@@ -98,7 +108,7 @@ jobs:
 
       - name: Integration tests
         working-directory: backend
-        run: ${{ matrix.run }}
+        run: go test -timeout 15m ${{ matrix.package }}
 
   docker-smoke-test:
     runs-on: ubuntu-latest
@@ -136,3 +146,26 @@ jobs:
 
       - name: Smoke test - migration files present
         run: docker run --rm confab-test:latest ls /app/migrations/
+
+  ci-summary:
+    if: always()
+    needs: [frontend, backend-unit, discover-packages, backend-integration, docker-smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.frontend.result }}" != "success" ||
+                "${{ needs.backend-unit.result }}" != "success" ||
+                "${{ needs.discover-packages.result }}" != "success" ||
+                "${{ needs.backend-integration.result }}" != "success" ||
+                "${{ needs.docker-smoke-test.result }}" != "success" ]]; then
+            echo "One or more jobs failed:"
+            echo "  frontend: ${{ needs.frontend.result }}"
+            echo "  backend-unit: ${{ needs.backend-unit.result }}"
+            echo "  discover-packages: ${{ needs.discover-packages.result }}"
+            echo "  backend-integration: ${{ needs.backend-integration.result }}"
+            echo "  docker-smoke-test: ${{ needs.docker-smoke-test.result }}"
+            exit 1
+          fi
+          echo "All jobs passed!"

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -66,6 +68,7 @@ func TestCanUserLogin(t *testing.T) {
 	t.Run("allows existing user even at cap", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -77,7 +80,7 @@ func TestCanUserLogin(t *testing.T) {
 			Name:       "Existing User",
 			AvatarURL:  "https://example.com/avatar.png",
 		}
-		_, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
@@ -98,6 +101,7 @@ func TestCanUserLogin(t *testing.T) {
 	t.Run("rejects new user when cap reached", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -109,7 +113,7 @@ func TestCanUserLogin(t *testing.T) {
 			Name:       "Cap User",
 			AvatarURL:  "https://example.com/avatar.png",
 		}
-		_, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
@@ -191,6 +195,7 @@ func TestCanUserLogin(t *testing.T) {
 	t.Run("allows exactly cap number of users", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 		os.Setenv("MAX_USERS", "3")
@@ -215,7 +220,7 @@ func TestCanUserLogin(t *testing.T) {
 				Email:      email,
 				Name:       fmt.Sprintf("User %d", i),
 			}
-			_, err = env.DB.FindOrCreateUserByOAuth(ctx, info)
+			_, err = authStore.FindOrCreateUserByOAuth(ctx, info)
 			if err != nil {
 				t.Fatalf("FindOrCreateUserByOAuth failed for user %d: %v", i, err)
 			}
@@ -311,6 +316,7 @@ func TestCanUserLogin(t *testing.T) {
 	t.Run("linked accounts count as single user for cap", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 		os.Setenv("MAX_USERS", "1")
@@ -322,7 +328,7 @@ func TestCanUserLogin(t *testing.T) {
 			Email:      "linked@example.com",
 			Name:       "Linked User",
 		}
-		_, err := env.DB.FindOrCreateUserByOAuth(ctx, githubInfo)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, githubInfo)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth (GitHub) failed: %v", err)
 		}
@@ -334,7 +340,7 @@ func TestCanUserLogin(t *testing.T) {
 			Email:      "linked@example.com",
 			Name:       "Linked User",
 		}
-		_, err = env.DB.FindOrCreateUserByOAuth(ctx, googleInfo)
+		_, err = authStore.FindOrCreateUserByOAuth(ctx, googleInfo)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth (Google) failed: %v", err)
 		}
@@ -391,6 +397,7 @@ func TestValidateAPIKey_ActiveUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -405,7 +412,7 @@ func TestValidateAPIKey_ActiveUser(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key - should succeed with active status
-	userID, _, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	userID, _, _, userStatus, err := authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -425,12 +432,14 @@ func TestValidateAPIKey_InactiveUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
+	userStore := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create a user and deactivate them
 	user := testutil.CreateTestUser(t, env, "inactive@example.com", "Inactive User")
-	err := env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	err := userStore.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus failed: %v", err)
 	}
@@ -443,7 +452,7 @@ func TestValidateAPIKey_InactiveUser(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key - should return inactive status
-	userID, _, _, userStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	userID, _, _, userStatus, err := authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -463,6 +472,7 @@ func TestGetWebSession_ActiveUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -475,7 +485,7 @@ func TestGetWebSession_ActiveUser(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Get the session - should succeed with active status
-	session, err := env.DB.GetWebSession(ctx, sessionID)
+	session, err := authStore.GetWebSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -495,12 +505,14 @@ func TestGetWebSession_InactiveUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
+	userStore := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
 	// Create a user and deactivate them
 	user := testutil.CreateTestUser(t, env, "inactive-web@example.com", "Inactive Web User")
-	err := env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	err := userStore.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus failed: %v", err)
 	}
@@ -511,7 +523,7 @@ func TestGetWebSession_InactiveUser(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Get the session - should return inactive status
-	session, err := env.DB.GetWebSession(ctx, sessionID)
+	session, err := authStore.GetWebSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -531,6 +543,8 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
+	userStore := &dbuser.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -548,7 +562,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Step 1: Verify user starts as active
-	_, _, _, apiStatus, err := env.DB.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, err := authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -556,7 +570,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 		t.Errorf("initial API key status = %s, want %s", apiStatus, models.UserStatusActive)
 	}
 
-	webSession, err := env.DB.GetWebSession(ctx, sessionID)
+	webSession, err := authStore.GetWebSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -565,13 +579,13 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	}
 
 	// Step 2: Deactivate user
-	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+	err = userStore.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus (deactivate) failed: %v", err)
 	}
 
 	// Verify both auth methods return inactive
-	_, _, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, err = authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey after deactivation failed: %v", err)
 	}
@@ -579,7 +593,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 		t.Errorf("deactivated API key status = %s, want %s", apiStatus, models.UserStatusInactive)
 	}
 
-	webSession, err = env.DB.GetWebSession(ctx, sessionID)
+	webSession, err = authStore.GetWebSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("GetWebSession after deactivation failed: %v", err)
 	}
@@ -588,13 +602,13 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	}
 
 	// Step 3: Reactivate user
-	err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusActive)
+	err = userStore.UpdateUserStatus(ctx, user.ID, models.UserStatusActive)
 	if err != nil {
 		t.Fatalf("UpdateUserStatus (reactivate) failed: %v", err)
 	}
 
 	// Verify both auth methods return active again
-	_, _, _, apiStatus, err = env.DB.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, err = authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey after reactivation failed: %v", err)
 	}
@@ -602,7 +616,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 		t.Errorf("reactivated API key status = %s, want %s", apiStatus, models.UserStatusActive)
 	}
 
-	webSession, err = env.DB.GetWebSession(ctx, sessionID)
+	webSession, err = authStore.GetWebSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("GetWebSession after reactivation failed: %v", err)
 	}
@@ -620,6 +634,7 @@ func TestCanUserLogin_EmailNormalization(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
 
 	ctx := context.Background()
 
@@ -641,7 +656,7 @@ func TestCanUserLogin_EmailNormalization(t *testing.T) {
 		Email:      "user@example.com", // lowercase
 		Name:       "Test User",
 	}
-	_, err := env.DB.FindOrCreateUserByOAuth(ctx, info)
+	_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -674,6 +689,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 	t.Run("valid API key grants access", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -686,7 +702,7 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 			t.Fatalf("GenerateAPIKey failed: %v", err)
 		}
 
-		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		_, _, err = authStore.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
 		if err != nil {
 			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
 		}
@@ -739,6 +755,8 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 	t.Run("inactive user returns 403", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
+		userStore := &dbuser.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -751,13 +769,13 @@ func TestAPIKeyMiddleware_Integration(t *testing.T) {
 			t.Fatalf("GenerateAPIKey failed: %v", err)
 		}
 
-		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		_, _, err = authStore.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
 		if err != nil {
 			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
 		}
 
 		// Deactivate the user
-		err = env.DB.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
+		err = userStore.UpdateUserStatus(ctx, user.ID, models.UserStatusInactive)
 		if err != nil {
 			t.Fatalf("SetUserStatus failed: %v", err)
 		}
@@ -791,6 +809,7 @@ func TestEmailDomainRestriction_APIKey(t *testing.T) {
 	t.Run("API key with matching domain succeeds", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -799,7 +818,7 @@ func TestEmailDomainRestriction_APIKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateAPIKey failed: %v", err)
 		}
-		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		_, _, err = authStore.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
 		if err != nil {
 			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
 		}
@@ -822,6 +841,7 @@ func TestEmailDomainRestriction_APIKey(t *testing.T) {
 	t.Run("API key with non-matching domain returns 403", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -830,7 +850,7 @@ func TestEmailDomainRestriction_APIKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateAPIKey failed: %v", err)
 		}
-		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		_, _, err = authStore.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
 		if err != nil {
 			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
 		}
@@ -857,6 +877,7 @@ func TestEmailDomainRestriction_APIKey(t *testing.T) {
 	t.Run("empty allowed domains permits all", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -865,7 +886,7 @@ func TestEmailDomainRestriction_APIKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateAPIKey failed: %v", err)
 		}
-		_, _, err = env.DB.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
+		_, _, err = authStore.CreateAPIKeyWithReturn(ctx, user.ID, keyHash, "test-key")
 		if err != nil {
 			t.Fatalf("CreateAPIKeyWithReturn failed: %v", err)
 		}
@@ -976,6 +997,7 @@ func TestEmailDomainRestriction_Bootstrap(t *testing.T) {
 	t.Run("bootstrap succeeds when domain matches", func(t *testing.T) {
 		env := testutil.SetupTestEnvironment(t)
 		defer env.Cleanup(t)
+		authStore := &dbauth.Store{DB: env.DB}
 
 		ctx := context.Background()
 
@@ -990,7 +1012,7 @@ func TestEmailDomainRestriction_Bootstrap(t *testing.T) {
 		}
 
 		// Verify user was created
-		user, err := env.DB.GetUserByEmail(ctx, "admin@company.com")
+		user, err := authStore.GetUserByEmail(ctx, "admin@company.com")
 		if err != nil {
 			t.Fatalf("GetUserByEmail failed: %v", err)
 		}

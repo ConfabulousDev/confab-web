@@ -14,6 +14,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/email"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
@@ -42,6 +45,10 @@ type CreateShareResponse struct {
 
 // HandleCreateShare creates a new share for a session
 func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService, sharesEnabled bool) http.HandlerFunc {
+	userStore := &dbuser.Store{DB: database}
+	sessionStore := &dbsession.Store{DB: database}
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !sharesEnabled {
 			respondError(w, http.StatusForbidden, "Share creation is disabled by the administrator")
@@ -74,7 +81,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		// Get sharer info early so we can validate against self-invite
 		sharerCtx, sharerCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer sharerCancel()
-		sharer, err := database.GetUserByID(sharerCtx, userID)
+		sharer, err := userStore.GetUserByID(sharerCtx, userID)
 		if err != nil {
 			log.Error("Failed to get sharer info", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to get user info")
@@ -117,7 +124,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		defer cancel()
 
 		// Get session info for email (title)
-		session, err := database.GetSessionDetail(ctx, sessionID, userID)
+		session, err := sessionStore.GetSessionDetail(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -129,7 +136,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		}
 
 		// Create share in database
-		share, err := database.CreateShare(ctx, sessionID, userID, req.IsPublic, expiresAt, req.Recipients)
+		share, err := accessStore.CreateShare(ctx, sessionID, userID, req.IsPublic, expiresAt, req.Recipients)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -219,6 +226,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 
 // HandleListShares lists all shares for a session
 func HandleListShares(database *db.DB) http.HandlerFunc {
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -241,7 +250,7 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get shares from database
-		shares, err := database.ListShares(ctx, sessionID, userID)
+		shares, err := accessStore.ListShares(ctx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -265,6 +274,8 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 
 // HandleRevokeShare revokes a share by ID
 func HandleRevokeShare(database *db.DB) http.HandlerFunc {
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -288,7 +299,7 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Revoke share
-		err = database.RevokeShare(ctx, shareID, userID)
+		err = accessStore.RevokeShare(ctx, shareID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrUnauthorized) {
 				respondError(w, http.StatusNotFound, "Share not found or unauthorized")
@@ -308,6 +319,8 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 
 // HandleListAllUserShares lists all shares for the authenticated user across all sessions
 func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
+	accessStore := &dbaccess.Store{DB: database}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
@@ -323,7 +336,7 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 		defer cancel()
 
 		// Get all shares from database
-		shares, err := database.ListAllUserShares(ctx, userID)
+		shares, err := accessStore.ListAllUserShares(ctx, userID)
 		if err != nil {
 			log.Error("Failed to list all user shares", "error", err)
 			respondError(w, http.StatusInternalServerError, "Failed to list shares")

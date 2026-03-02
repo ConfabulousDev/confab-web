@@ -20,6 +20,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/email"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/ratelimit"
@@ -570,7 +571,8 @@ func (s *Server) handleValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user details
-	user, err := s.db.GetUserByID(ctx, userID)
+	userStore := &dbuser.Store{DB: s.db}
+	user, err := userStore.GetUserByID(ctx, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to get user details")
 		return

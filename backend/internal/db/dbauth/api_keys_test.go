@@ -1,4 +1,4 @@
-package db_test
+package dbauth_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -19,6 +20,7 @@ func TestValidateAPIKey_ValidKey(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	// Create a test user
 	user := testutil.CreateTestUser(t, env, "apikey@test.com", "API Key Test User")
@@ -32,7 +34,7 @@ func TestValidateAPIKey_ValidKey(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key
-	userID, keyID, _, userStatus, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
+	userID, keyID, _, userStatus, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -62,9 +64,10 @@ func TestValidateAPIKey_InvalidKey(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	// Try to validate a non-existent key
-	_, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), "nonexistent_hash_12345")
+	_, _, _, _, err := store.ValidateAPIKey(context.Background(), "nonexistent_hash_12345")
 	if err == nil {
 		t.Error("expected error for invalid API key")
 	}
@@ -78,6 +81,7 @@ func TestValidateAPIKey_MultipleKeys(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	// Create two users
 	user1 := testutil.CreateTestUser(t, env, "user1@test.com", "User One")
@@ -91,7 +95,7 @@ func TestValidateAPIKey_MultipleKeys(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user2.ID, keyHash2, "User2 Key")
 
 	// Validate each key returns correct user
-	userID1, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash1)
+	userID1, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash1)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user1 failed: %v", err)
 	}
@@ -99,7 +103,7 @@ func TestValidateAPIKey_MultipleKeys(t *testing.T) {
 		t.Errorf("key1 returned userID = %d, want %d", userID1, user1.ID)
 	}
 
-	userID2, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash2)
+	userID2, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user2 failed: %v", err)
 	}
@@ -116,6 +120,7 @@ func TestCreateAPIKeyWithReturn(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "createkey@test.com", "Create Key User")
 
@@ -123,7 +128,7 @@ func TestCreateAPIKeyWithReturn(t *testing.T) {
 	keyName := "My New Key"
 
 	before := time.Now().Add(-time.Second)
-	keyID, createdAt, err := env.DB.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, keyName)
+	keyID, createdAt, err := store.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, keyName)
 	after := time.Now().Add(time.Second)
 
 	if err != nil {
@@ -139,7 +144,7 @@ func TestCreateAPIKeyWithReturn(t *testing.T) {
 	}
 
 	// Verify key can be validated
-	userID, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -156,6 +161,7 @@ func TestListAPIKeys(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "listkeys@test.com", "List Keys User")
 
@@ -171,7 +177,7 @@ func TestListAPIKeys(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash3, "Key 3")
 
 	// List keys
-	keys, err := env.DB.ListAPIKeys(context.Background(), user.ID)
+	keys, err := store.ListAPIKeys(context.Background(), user.ID)
 	if err != nil {
 		t.Fatalf("ListAPIKeys failed: %v", err)
 	}
@@ -201,10 +207,11 @@ func TestListAPIKeys_Empty(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "nokeys@test.com", "No Keys User")
 
-	keys, err := env.DB.ListAPIKeys(context.Background(), user.ID)
+	keys, err := store.ListAPIKeys(context.Background(), user.ID)
 	if err != nil {
 		t.Fatalf("ListAPIKeys failed: %v", err)
 	}
@@ -222,6 +229,7 @@ func TestDeleteAPIKey(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "deletekey@test.com", "Delete Key User")
 
@@ -229,13 +237,13 @@ func TestDeleteAPIKey(t *testing.T) {
 	keyID := testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Key to Delete")
 
 	// Delete the key
-	err := env.DB.DeleteAPIKey(context.Background(), user.ID, keyID)
+	err := store.DeleteAPIKey(context.Background(), user.ID, keyID)
 	if err != nil {
 		t.Fatalf("DeleteAPIKey failed: %v", err)
 	}
 
 	// Verify key no longer works
-	_, _, _, _, err = env.DB.ValidateAPIKey(context.Background(), keyHash)
+	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash)
 	if err == nil {
 		t.Error("expected error after key deletion")
 	}
@@ -249,6 +257,7 @@ func TestDeleteAPIKey_WrongUser(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "owner@test.com", "Key Owner")
 	user2 := testutil.CreateTestUser(t, env, "attacker@test.com", "Attacker")
@@ -257,13 +266,13 @@ func TestDeleteAPIKey_WrongUser(t *testing.T) {
 	keyID := testutil.CreateTestAPIKey(t, env, user1.ID, keyHash, "Owner's Key")
 
 	// User2 tries to delete User1's key
-	err := env.DB.DeleteAPIKey(context.Background(), user2.ID, keyID)
+	err := store.DeleteAPIKey(context.Background(), user2.ID, keyID)
 	if err == nil {
 		t.Error("expected error when deleting another user's key")
 	}
 
 	// Verify key still works
-	userID, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("key should still be valid: %v", err)
 	}
@@ -280,10 +289,11 @@ func TestDeleteAPIKey_NotFound(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "notfound@test.com", "Not Found User")
 
-	err := env.DB.DeleteAPIKey(context.Background(), user.ID, 99999)
+	err := store.DeleteAPIKey(context.Background(), user.ID, 99999)
 	if err == nil {
 		t.Error("expected error for non-existent key")
 	}
@@ -301,6 +311,7 @@ func TestReplaceAPIKey_NewKey(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "replace@test.com", "Replace Key User")
 
@@ -308,7 +319,7 @@ func TestReplaceAPIKey_NewKey(t *testing.T) {
 	keyName := "MacBook-Pro (Confab CLI)"
 
 	before := time.Now().Add(-time.Second)
-	keyID, createdAt, err := env.DB.ReplaceAPIKey(context.Background(), user.ID, keyHash, keyName)
+	keyID, createdAt, err := store.ReplaceAPIKey(context.Background(), user.ID, keyHash, keyName)
 	after := time.Now().Add(time.Second)
 
 	if err != nil {
@@ -324,7 +335,7 @@ func TestReplaceAPIKey_NewKey(t *testing.T) {
 	}
 
 	// Verify key can be validated
-	userID, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -341,20 +352,21 @@ func TestReplaceAPIKey_ReplacesExisting(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "replace@test.com", "Replace Key User")
 	keyName := "MacBook-Pro (Confab CLI)"
 
 	// Create first key
 	_, keyHash1, _ := auth.GenerateAPIKey()
-	keyID1, _, err := env.DB.ReplaceAPIKey(context.Background(), user.ID, keyHash1, keyName)
+	keyID1, _, err := store.ReplaceAPIKey(context.Background(), user.ID, keyHash1, keyName)
 	if err != nil {
 		t.Fatalf("first ReplaceAPIKey failed: %v", err)
 	}
 
 	// Replace with second key
 	_, keyHash2, _ := auth.GenerateAPIKey()
-	keyID2, _, err := env.DB.ReplaceAPIKey(context.Background(), user.ID, keyHash2, keyName)
+	keyID2, _, err := store.ReplaceAPIKey(context.Background(), user.ID, keyHash2, keyName)
 	if err != nil {
 		t.Fatalf("second ReplaceAPIKey failed: %v", err)
 	}
@@ -365,13 +377,13 @@ func TestReplaceAPIKey_ReplacesExisting(t *testing.T) {
 	}
 
 	// Old key should no longer work
-	_, _, _, _, err = env.DB.ValidateAPIKey(context.Background(), keyHash1)
+	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash1)
 	if err == nil {
 		t.Error("expected old key to be invalid after replace")
 	}
 
 	// New key should work
-	userID, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash2)
+	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Fatalf("new key validation failed: %v", err)
 	}
@@ -380,7 +392,7 @@ func TestReplaceAPIKey_ReplacesExisting(t *testing.T) {
 	}
 
 	// Should only have one key with that name
-	keys, err := env.DB.ListAPIKeys(context.Background(), user.ID)
+	keys, err := store.ListAPIKeys(context.Background(), user.ID)
 	if err != nil {
 		t.Fatalf("ListAPIKeys failed: %v", err)
 	}
@@ -400,35 +412,36 @@ func TestReplaceAPIKey_DifferentNames(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "replace@test.com", "Replace Key User")
 
 	// Create first key
 	_, keyHash1, _ := auth.GenerateAPIKey()
-	_, _, err := env.DB.ReplaceAPIKey(context.Background(), user.ID, keyHash1, "MacBook-Pro (Confab CLI)")
+	_, _, err := store.ReplaceAPIKey(context.Background(), user.ID, keyHash1, "MacBook-Pro (Confab CLI)")
 	if err != nil {
 		t.Fatalf("first ReplaceAPIKey failed: %v", err)
 	}
 
 	// Create second key with different name
 	_, keyHash2, _ := auth.GenerateAPIKey()
-	_, _, err = env.DB.ReplaceAPIKey(context.Background(), user.ID, keyHash2, "iMac (Confab CLI)")
+	_, _, err = store.ReplaceAPIKey(context.Background(), user.ID, keyHash2, "iMac (Confab CLI)")
 	if err != nil {
 		t.Fatalf("second ReplaceAPIKey failed: %v", err)
 	}
 
 	// Both keys should work
-	_, _, _, _, err = env.DB.ValidateAPIKey(context.Background(), keyHash1)
+	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash1)
 	if err != nil {
 		t.Error("expected first key to still be valid")
 	}
-	_, _, _, _, err = env.DB.ValidateAPIKey(context.Background(), keyHash2)
+	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Error("expected second key to be valid")
 	}
 
 	// Should have two keys
-	keys, err := env.DB.ListAPIKeys(context.Background(), user.ID)
+	keys, err := store.ListAPIKeys(context.Background(), user.ID)
 	if err != nil {
 		t.Fatalf("ListAPIKeys failed: %v", err)
 	}
@@ -448,13 +461,14 @@ func TestReplaceAPIKey_RespectsLimitForNewKeys(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "limit@test.com", "Limit User")
 
 	// Create keys up to the limit (using CreateAPIKeyWithReturn to bypass replace)
 	for i := 0; i < db.MaxAPIKeysPerUser; i++ {
 		_, keyHash, _ := auth.GenerateAPIKey()
-		_, _, err := env.DB.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, "Key "+string(rune('A'+i%26))+string(rune('0'+i/26)))
+		_, _, err := store.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, "Key "+string(rune('A'+i%26))+string(rune('0'+i/26)))
 		if err != nil {
 			t.Fatalf("failed to create key %d: %v", i, err)
 		}
@@ -462,7 +476,7 @@ func TestReplaceAPIKey_RespectsLimitForNewKeys(t *testing.T) {
 
 	// Now try to create a new key with a new name - should fail
 	_, keyHash, _ := auth.GenerateAPIKey()
-	_, _, err := env.DB.ReplaceAPIKey(context.Background(), user.ID, keyHash, "New Key")
+	_, _, err := store.ReplaceAPIKey(context.Background(), user.ID, keyHash, "New Key")
 	if err == nil {
 		t.Error("expected ErrAPIKeyLimitExceeded")
 	}
@@ -479,13 +493,14 @@ func TestReplaceAPIKey_AllowsReplaceAtLimit(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user := testutil.CreateTestUser(t, env, "limit@test.com", "Limit User")
 
 	// Create keys up to the limit
 	for i := 0; i < db.MaxAPIKeysPerUser; i++ {
 		_, keyHash, _ := auth.GenerateAPIKey()
-		_, _, err := env.DB.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, "Key "+string(rune('A'+i%26))+string(rune('0'+i/26)))
+		_, _, err := store.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, "Key "+string(rune('A'+i%26))+string(rune('0'+i/26)))
 		if err != nil {
 			t.Fatalf("failed to create key %d: %v", i, err)
 		}
@@ -493,13 +508,13 @@ func TestReplaceAPIKey_AllowsReplaceAtLimit(t *testing.T) {
 
 	// Replace an existing key - should succeed even at the limit
 	_, keyHash, _ := auth.GenerateAPIKey()
-	_, _, err := env.DB.ReplaceAPIKey(context.Background(), user.ID, keyHash, "Key A0")
+	_, _, err := store.ReplaceAPIKey(context.Background(), user.ID, keyHash, "Key A0")
 	if err != nil {
 		t.Errorf("ReplaceAPIKey should succeed when replacing existing key at limit: %v", err)
 	}
 
 	// Verify we still have exactly MaxAPIKeysPerUser keys
-	count, err := env.DB.CountAPIKeys(context.Background(), user.ID)
+	count, err := store.CountAPIKeys(context.Background(), user.ID)
 	if err != nil {
 		t.Fatalf("CountAPIKeys failed: %v", err)
 	}
@@ -516,6 +531,7 @@ func TestReplaceAPIKey_DifferentUsers(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
+	store := &dbauth.Store{DB: env.DB}
 
 	user1 := testutil.CreateTestUser(t, env, "user1@test.com", "User One")
 	user2 := testutil.CreateTestUser(t, env, "user2@test.com", "User Two")
@@ -523,20 +539,20 @@ func TestReplaceAPIKey_DifferentUsers(t *testing.T) {
 
 	// Create key for user1
 	_, keyHash1, _ := auth.GenerateAPIKey()
-	_, _, err := env.DB.ReplaceAPIKey(context.Background(), user1.ID, keyHash1, keyName)
+	_, _, err := store.ReplaceAPIKey(context.Background(), user1.ID, keyHash1, keyName)
 	if err != nil {
 		t.Fatalf("ReplaceAPIKey for user1 failed: %v", err)
 	}
 
 	// Create key for user2 with same name
 	_, keyHash2, _ := auth.GenerateAPIKey()
-	_, _, err = env.DB.ReplaceAPIKey(context.Background(), user2.ID, keyHash2, keyName)
+	_, _, err = store.ReplaceAPIKey(context.Background(), user2.ID, keyHash2, keyName)
 	if err != nil {
 		t.Fatalf("ReplaceAPIKey for user2 failed: %v", err)
 	}
 
 	// Both keys should work and return correct users
-	userID1, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash1)
+	userID1, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash1)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user1 failed: %v", err)
 	}
@@ -544,7 +560,7 @@ func TestReplaceAPIKey_DifferentUsers(t *testing.T) {
 		t.Errorf("key1 returned userID = %d, want %d", userID1, user1.ID)
 	}
 
-	userID2, _, _, _, err := env.DB.ValidateAPIKey(context.Background(), keyHash2)
+	userID2, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user2 failed: %v", err)
 	}

@@ -1,4 +1,4 @@
-package db
+package dbauth
 
 import (
 	"context"
@@ -10,11 +10,12 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // ValidateAPIKey checks if an API key is valid and returns the associated user ID, key ID, user email, and user status
-func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userEmail string, userStatus models.UserStatus, err error) {
+func (s *Store) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userEmail string, userStatus models.UserStatus, err error) {
 	ctx, span := tracer.Start(ctx, "db.validate_api_key")
 	defer span.End()
 
@@ -25,10 +26,9 @@ func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64,
 		WHERE ak.key_hash = $1
 	`
 
-	err = db.conn.QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userEmail, &userStatus)
+	err = s.conn().QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userEmail, &userStatus)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// Don't record as error - invalid key is expected behavior
 			return 0, 0, "", "", fmt.Errorf("invalid API key")
 		}
 		span.RecordError(err)
@@ -41,13 +41,13 @@ func (db *DB) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64,
 }
 
 // UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key
-func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
+func (s *Store) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
 	ctx, span := tracer.Start(ctx, "db.update_api_key_last_used",
 		trace.WithAttributes(attribute.Int64("key.id", keyID)))
 	defer span.End()
 
 	query := `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`
-	_, err := db.conn.ExecContext(ctx, query, keyID)
+	_, err := s.conn().ExecContext(ctx, query, keyID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -57,14 +57,14 @@ func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
 }
 
 // CountAPIKeys returns the number of API keys for a user
-func (db *DB) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
+func (s *Store) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
 	ctx, span := tracer.Start(ctx, "db.count_api_keys",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	query := `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`
 	var count int
-	err := db.conn.QueryRowContext(ctx, query, userID).Scan(&count)
+	err := s.conn().QueryRowContext(ctx, query, userID).Scan(&count)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -75,31 +75,31 @@ func (db *DB) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
 }
 
 // CreateAPIKeyWithReturn creates a new API key and returns the key ID and created_at
-// Returns ErrAPIKeyLimitExceeded if the user already has MaxAPIKeysPerUser keys
-func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
+// Returns db.ErrAPIKeyLimitExceeded if the user already has db.MaxAPIKeysPerUser keys
+func (s *Store) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
 	ctx, span := tracer.Start(ctx, "db.create_api_key",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	// Check if user has reached the limit
-	count, err := db.CountAPIKeys(ctx, userID)
+	count, err := s.CountAPIKeys(ctx, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, time.Time{}, err
 	}
-	if count >= MaxAPIKeysPerUser {
-		return 0, time.Time{}, ErrAPIKeyLimitExceeded
+	if count >= db.MaxAPIKeysPerUser {
+		return 0, time.Time{}, db.ErrAPIKeyLimitExceeded
 	}
 
 	query := `INSERT INTO api_keys (user_id, key_hash, name) VALUES ($1, $2, $3) RETURNING id, created_at`
 
 	var keyID int64
 	var createdAt time.Time
-	err = db.conn.QueryRowContext(ctx, query, userID, keyHash, name).Scan(&keyID, &createdAt)
+	err = s.conn().QueryRowContext(ctx, query, userID, keyHash, name).Scan(&keyID, &createdAt)
 	if err != nil {
-		if isUniqueViolation(err) {
-			return 0, time.Time{}, ErrAPIKeyNameExists
+		if db.IsUniqueViolation(err) {
+			return 0, time.Time{}, db.ErrAPIKeyNameExists
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -111,14 +111,14 @@ func (db *DB) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash,
 }
 
 // ListAPIKeys returns all API keys for a user (without hashes)
-func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
+func (s *Store) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
 	ctx, span := tracer.Start(ctx, "db.list_api_keys",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
 	query := `SELECT id, user_id, name, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`
 
-	rows, err := db.conn.QueryContext(ctx, query, userID)
+	rows, err := s.conn().QueryContext(ctx, query, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -142,7 +142,7 @@ func (db *DB) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, e
 }
 
 // DeleteAPIKey deletes an API key
-func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
+func (s *Store) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 	ctx, span := tracer.Start(ctx, "db.delete_api_key",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -152,7 +152,7 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 
 	query := `DELETE FROM api_keys WHERE id = $1 AND user_id = $2`
 
-	result, err := db.conn.ExecContext(ctx, query, keyID, userID)
+	result, err := s.conn().ExecContext(ctx, query, keyID, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -161,7 +161,7 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return ErrAPIKeyNotFound
+		return db.ErrAPIKeyNotFound
 	}
 
 	return nil
@@ -169,14 +169,14 @@ func (db *DB) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 
 // ReplaceAPIKey atomically replaces an existing API key with the same name, or creates a new one.
 // If a key with the same name exists for the user, it is deleted and a new key is created.
-// If no key with the same name exists, a new key is created (subject to MaxAPIKeysPerUser limit).
+// If no key with the same name exists, a new key is created (subject to db.MaxAPIKeysPerUser limit).
 // Returns the new key ID and created_at timestamp.
-func (db *DB) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
+func (s *Store) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
 	ctx, span := tracer.Start(ctx, "db.replace_api_key",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
-	tx, err := db.conn.BeginTx(ctx, nil)
+	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -204,8 +204,8 @@ func (db *DB) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name str
 		if err != nil {
 			return 0, time.Time{}, fmt.Errorf("failed to count API keys: %w", err)
 		}
-		if count >= MaxAPIKeysPerUser {
-			return 0, time.Time{}, ErrAPIKeyLimitExceeded
+		if count >= db.MaxAPIKeysPerUser {
+			return 0, time.Time{}, db.ErrAPIKeyLimitExceeded
 		}
 	}
 

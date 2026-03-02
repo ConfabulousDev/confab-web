@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
@@ -3341,6 +3342,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 		}
 
 		// Step 2: cli_hook creates same link with real title → should overwrite
+		githubStore := &dbgithub.Store{DB: env.DB}
 		realTitle := "Fix critical login bug"
 		cliLink := &models.GitHubLink{
 			SessionID: sessionID,
@@ -3352,7 +3354,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 			Title:     &realTitle,
 			Source:    models.GitHubLinkSourceCLIHook,
 		}
-		_, err = env.DB.CreateGitHubLink(env.Ctx, cliLink, true)
+		_, err = githubStore.CreateGitHubLink(env.Ctx, cliLink, true)
 		if err != nil {
 			t.Fatalf("failed to upsert cli_hook link: %v", err)
 		}
