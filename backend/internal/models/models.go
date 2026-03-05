@@ -183,3 +183,59 @@ type CreateGitHubLinkRequest struct {
 	Title    *string          `json:"title,omitempty"`
 	Source   GitHubLinkSource `json:"source"`
 }
+
+// Learning status constants
+type LearningStatus string
+
+const (
+	LearningStatusDraft     LearningStatus = "draft"
+	LearningStatusConfirmed LearningStatus = "confirmed"
+	LearningStatusExported  LearningStatus = "exported"
+	LearningStatusArchived  LearningStatus = "archived"
+)
+
+// Learning source constants
+type LearningSource string
+
+const (
+	LearningSourceManualSession LearningSource = "manual_session"
+	LearningSourceManualReview  LearningSource = "manual_review"
+	LearningSourceAIExtracted   LearningSource = "ai_extracted"
+)
+
+// Learning represents a reusable knowledge artifact extracted from sessions
+type Learning struct {
+	ID               string         `json:"id"`
+	UserID           int64          `json:"user_id"`
+	Title            string         `json:"title"`
+	Body             string         `json:"body"`
+	Tags             []string       `json:"tags"`
+	Status           LearningStatus `json:"status"`
+	Source           LearningSource `json:"source"`
+	SessionIDs       []string       `json:"session_ids"`
+	TranscriptRange  interface{}    `json:"transcript_range,omitempty"`
+	ConfluencePageID *string        `json:"confluence_page_id,omitempty"`
+	ExportedAt       *time.Time     `json:"exported_at,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	// Enriched fields (not stored, populated by queries)
+	OwnerEmail string `json:"owner_email,omitempty"`
+}
+
+// CreateLearningRequest is the API request to create a learning
+type CreateLearningRequest struct {
+	Title           string         `json:"title"`
+	Body            string         `json:"body"`
+	Tags            []string       `json:"tags"`
+	Source          LearningSource `json:"source"`
+	SessionIDs      []string       `json:"session_ids"`
+	TranscriptRange interface{}    `json:"transcript_range,omitempty"`
+}
+
+// UpdateLearningRequest is the API request to update a learning
+type UpdateLearningRequest struct {
+	Title  *string         `json:"title,omitempty"`
+	Body   *string         `json:"body,omitempty"`
+	Tags   []string        `json:"tags,omitempty"`
+	Status *LearningStatus `json:"status,omitempty"`
+}
