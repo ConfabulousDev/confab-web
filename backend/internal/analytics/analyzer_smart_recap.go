@@ -115,13 +115,17 @@ func NewSmartRecapAnalyzer(client *anthropic.Client, model string, cfg SmartReca
 // Analyze generates a smart recap for the given transcript and analytics stats.
 // cardStats contains the computed analytics cards (tokens, session, conversation, etc.)
 // which are included in the prompt for additional context.
-func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, cardStats map[string]interface{}) (*SmartRecapResult, error) {
+func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, cardStats map[string]interface{}) (*SmartRecapResult, error) {
 	ctx, span := tracer.Start(ctx, "analytics.smart_recap.analyze",
 		trace.WithAttributes(attribute.String("llm.model", a.model)))
 	defer span.End()
 
-	// Prepare the transcript for the LLM
-	transcript, idMap := PrepareTranscript(fc)
+	// Use pre-built transcript if provided (streaming path), otherwise build from FileCollection
+	transcript := input.Transcript
+	idMap := input.IDMap
+	if transcript == "" && input.FileCollection != nil {
+		transcript, idMap = PrepareTranscript(input.FileCollection)
+	}
 	if transcript == "" {
 		err := fmt.Errorf("no content to analyze")
 		span.RecordError(err)
@@ -222,34 +226,24 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, fc *FileCollection, ca
 // PrepareTranscript converts the file collection into an XML format suitable for LLM analysis.
 // Returns the XML string and a mapping from sequential integer IDs to message UUIDs.
 func PrepareTranscript(fc *FileCollection) (string, map[int]string) {
+	return PrepareTranscriptFromFiles(fc.AllFiles())
+}
+
+// PrepareTranscriptFromFiles converts transcript files into XML format for LLM analysis.
+// Tool IDs are file-local, so each file is processed in a single pass: build toolNameMap
+// while formatting lines. This allows incremental processing without holding all files in memory.
+func PrepareTranscriptFromFiles(files []*TranscriptFile) (string, map[int]string) {
 	var sb strings.Builder
-	idMap := make(map[int]string) // sequential integer -> message UUID
+	idMap := make(map[int]string)
 	counter := 0
 
-	// Build a map of tool_use_id -> tool_name for resolving tool results and skill expansions
-	// For Skill tool uses, we store the skill name (from input.skill) instead of "Skill"
-	toolNameMap := make(map[string]string)
-	for _, file := range fc.AllFiles() {
-		for _, line := range file.Lines {
-			if line.IsAssistantMessage() {
-				for _, tool := range line.GetToolUses() {
-					if tool.ID != "" {
-						// For Skill tools, extract the actual skill name from input
-						if tool.Name == "Skill" {
-							if skillName, ok := tool.Input["skill"].(string); ok && skillName != "" {
-								toolNameMap[tool.ID] = skillName
-								continue
-							}
-						}
-						toolNameMap[tool.ID] = tool.Name
-					}
-				}
-			}
-		}
-	}
-
 	sb.WriteString("<transcript>\n")
-	for _, file := range fc.AllFiles() {
+	for _, file := range files {
+		// Build tool name map for this file and format lines in a single pass.
+		// First pass: collect tool names (needed for tool_result resolution).
+		toolNameMap := buildToolNameMap(file)
+
+		// Second pass: format lines.
 		for _, line := range file.Lines {
 			formatted, newCounter := formatLine(line, toolNameMap, counter, idMap)
 			counter = newCounter
@@ -262,6 +256,64 @@ func PrepareTranscript(fc *FileCollection) (string, map[int]string) {
 	sb.WriteString("</transcript>")
 
 	return sb.String(), idMap
+}
+
+// buildToolNameMap builds a tool_use_id -> tool_name map for a single file.
+func buildToolNameMap(file *TranscriptFile) map[string]string {
+	m := make(map[string]string)
+	for _, line := range file.Lines {
+		if line.IsAssistantMessage() {
+			for _, tool := range line.GetToolUses() {
+				if tool.ID != "" {
+					if tool.Name == "Skill" {
+						if skillName, ok := tool.Input["skill"].(string); ok && skillName != "" {
+							m[tool.ID] = skillName
+							continue
+						}
+					}
+					m[tool.ID] = tool.Name
+				}
+			}
+		}
+	}
+	return m
+}
+
+// TranscriptBuilder accumulates transcript XML incrementally across multiple files.
+// Use ProcessFile for each transcript file, then call Finish to get the result.
+type TranscriptBuilder struct {
+	sb      strings.Builder
+	idMap   map[int]string
+	counter int
+	files   int // number of files processed
+}
+
+// ProcessFile adds all lines from a transcript file to the builder.
+func (b *TranscriptBuilder) ProcessFile(file *TranscriptFile) {
+	if b.files == 0 {
+		b.idMap = make(map[int]string)
+		b.sb.WriteString("<transcript>\n")
+	}
+	b.files++
+
+	toolNameMap := buildToolNameMap(file)
+	for _, line := range file.Lines {
+		formatted, newCounter := formatLine(line, toolNameMap, b.counter, b.idMap)
+		b.counter = newCounter
+		if formatted != "" {
+			b.sb.WriteString(formatted)
+			b.sb.WriteString("\n")
+		}
+	}
+}
+
+// Finish closes the transcript tag and returns the XML string + ID map.
+func (b *TranscriptBuilder) Finish() (string, map[int]string) {
+	if b.files == 0 {
+		return "", nil
+	}
+	b.sb.WriteString("</transcript>")
+	return b.sb.String(), b.idMap
 }
 
 // PrepareStats formats the computed analytics cards as XML for the LLM.

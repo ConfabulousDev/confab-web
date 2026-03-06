@@ -45,12 +45,16 @@ func NewSmartRecapGenerator(store *Store, db *sql.DB, config SmartRecapGenerator
 }
 
 // GenerateInput contains all the information needed to generate a smart recap.
+// Provide either FileCollection (convenience) or Transcript+IDMap (streaming).
+// If Transcript is set, FileCollection is not used for transcript preparation.
 type GenerateInput struct {
-	SessionID    string
-	UserID       int64
-	LineCount    int64
-	FileCollection *FileCollection
-	CardStats    map[string]interface{}
+	SessionID      string
+	UserID         int64
+	LineCount      int64
+	FileCollection *FileCollection           // used when all files are in memory
+	Transcript     string                    // pre-built XML transcript (streaming path)
+	IDMap          map[int]string            // sequential ID -> UUID map (streaming path)
+	CardStats      map[string]interface{}
 }
 
 // GenerateResult contains the result of a generation attempt.
@@ -99,7 +103,7 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 
 	genCtx, genCancel := context.WithTimeout(ctx, g.config.GenerationTimeout)
 	defer genCancel()
-	result, err := analyzer.Analyze(genCtx, input.FileCollection, input.CardStats)
+	result, err := analyzer.Analyze(genCtx, input, input.CardStats)
 
 	if err != nil {
 		span.RecordError(err)

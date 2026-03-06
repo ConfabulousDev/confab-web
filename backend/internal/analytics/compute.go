@@ -2,27 +2,18 @@ package analytics
 
 import (
 	"context"
+	"io"
+	"log/slog"
 
 	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// runAnalyzer executes an analyzer function within a traced span.
-func runAnalyzer[T any](ctx context.Context, name string, fn func() (*T, error)) (*T, error) {
-	_, span := tracer.Start(ctx, "analytics.analyze_"+name,
-		trace.WithAttributes(attribute.String("analyzer.name", name)))
-	defer span.End()
-
-	result, err := fn()
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
-	}
-	return result, nil
-}
+// AgentProvider yields the next parsed agent file, or io.EOF when done.
+// Each call downloads and parses one agent file. The returned TranscriptFile
+// may be discarded after all FileProcessors have seen it.
+type AgentProvider func(ctx context.Context) (*TranscriptFile, error)
 
 // ComputeResult contains the computed analytics from JSONL content.
 // This struct aggregates results from all analyzers.
@@ -100,6 +91,9 @@ type ComputeResult struct {
 
 	// Per-card computation errors (graceful degradation)
 	CardErrors map[string]string
+
+	// Streaming stats
+	SkippedAgentFiles int // Number of agent files skipped (cap exceeded, download errors)
 }
 
 // ComputeFromJSONL computes analytics from JSONL content.
@@ -115,166 +109,163 @@ func ComputeFromJSONL(ctx context.Context, content []byte) (*ComputeResult, erro
 }
 
 // ComputeFromFileCollection computes analytics from a FileCollection.
-// This is the main entry point that runs all analyzers.
-// Uses collect-errors pattern: individual card failures don't fail the whole computation.
+// Delegates to ComputeStreaming with an adapter that yields agents from the in-memory collection.
 func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*ComputeResult, error) {
-	ctx, span := tracer.Start(ctx, "analytics.compute",
+	idx := 0
+	agentProvider := func(_ context.Context) (*TranscriptFile, error) {
+		if idx >= len(fc.Agents) {
+			return nil, io.EOF
+		}
+		agent := fc.Agents[idx]
+		idx++
+		return agent, nil
+	}
+
+	return ComputeStreaming(ctx, fc.Main, agentProvider)
+}
+
+// ComputeStreaming computes analytics by streaming agent files one at a time through all analyzers.
+// The main file is processed first, then each agent file from the provider is processed and discarded.
+// Peak memory: O(main) + O(largest single agent) instead of O(all agents).
+// Uses collect-errors pattern: individual card failures don't fail the whole computation.
+func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider AgentProvider) (*ComputeResult, error) {
+	ctx, span := tracer.Start(ctx, "analytics.compute_streaming",
 		trace.WithAttributes(
-			attribute.Int("file.count", 1+len(fc.Agents)),
-			attribute.Int64("main.lines", int64(len(fc.Main.Lines))),
+			attribute.Int64("main.lines", int64(len(main.Lines))),
 		))
 	defer span.End()
 
-	cardErrors := make(map[string]string)
+	// Initialize all analyzers
+	tokensAnalyzer := &TokensAnalyzer{}
+	sessionAnalyzer := &SessionAnalyzer{}
+	toolsAnalyzer := &ToolsAnalyzer{}
+	codeActivityAnalyzer := &CodeActivityAnalyzer{}
+	conversationAnalyzer := &ConversationAnalyzer{}
+	agentsAnalyzer := &AgentsAnalyzer{}
+	skillsAnalyzer := &SkillsAnalyzer{}
+	redactionsAnalyzer := &RedactionsAnalyzer{}
 
-	// Run all analyzers with individual spans, collecting errors instead of returning early
-	tokens, err := runAnalyzer(ctx, "tokens", func() (*TokensResult, error) {
-		return (&TokensAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		cardErrors["tokens"] = err.Error()
+	processors := []FileProcessor{
+		tokensAnalyzer,
+		sessionAnalyzer,
+		toolsAnalyzer,
+		codeActivityAnalyzer,
+		conversationAnalyzer,
+		agentsAnalyzer,
+		skillsAnalyzer,
+		redactionsAnalyzer,
 	}
 
-	session, err := runAnalyzer(ctx, "session", func() (*SessionResult, error) {
-		return (&SessionAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		cardErrors["session"] = err.Error()
+	// Phase 1: Process main file through all analyzers
+	for _, p := range processors {
+		p.ProcessFile(main, true)
 	}
 
-	tools, err := runAnalyzer(ctx, "tools", func() (*ToolsResult, error) {
-		return (&ToolsAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		cardErrors["tools"] = err.Error()
-	}
+	// Phase 2: Stream agent files one at a time
+	agentFilesSeen := make(map[string]bool)
+	skippedAgentFiles := 0
+	validationErrorCount := len(main.ValidationErrors)
 
-	codeActivity, err := runAnalyzer(ctx, "code_activity", func() (*CodeActivityResult, error) {
-		return (&CodeActivityAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		cardErrors["code_activity"] = err.Error()
-	}
+	for {
+		agent, err := agentProvider(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			slog.Warn("agent provider error, skipping agent", "error", err)
+			skippedAgentFiles++
+			continue
+		}
 
-	conversation, err := runAnalyzer(ctx, "conversation", func() (*ConversationResult, error) {
-		return (&ConversationAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		cardErrors["conversation"] = err.Error()
-	}
+		validationErrorCount += len(agent.ValidationErrors)
+		if agent.AgentID != "" {
+			agentFilesSeen[agent.AgentID] = true
+		}
 
-	agents, err := runAnalyzer(ctx, "agents", func() (*AgentsResult, error) {
-		return (&AgentsAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		cardErrors["agents_and_skills"] = err.Error()
-	}
-
-	skills, err := runAnalyzer(ctx, "skills", func() (*SkillsResult, error) {
-		return (&SkillsAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		// Append to existing error if agents also failed
-		if existing, ok := cardErrors["agents_and_skills"]; ok {
-			cardErrors["agents_and_skills"] = existing + "; " + err.Error()
-		} else {
-			cardErrors["agents_and_skills"] = err.Error()
+		for _, p := range processors {
+			p.ProcessFile(agent, false)
 		}
 	}
 
-	redactions, err := runAnalyzer(ctx, "redactions", func() (*RedactionsResult, error) {
-		return (&RedactionsAnalyzer{}).Analyze(fc)
-	})
-	if err != nil {
-		cardErrors["redactions"] = err.Error()
+	// Phase 3: Finalize all analyzers
+	for _, p := range processors {
+		p.Finalize(func(agentID string) bool { return agentFilesSeen[agentID] })
 	}
 
-	// Build result with nil-safe field access
-	result := &ComputeResult{
-		// Validation stats (always available from file collection)
-		ValidationErrorCount: fc.ValidationErrorCount(),
-		// Per-card errors (only populated if non-empty)
-		CardErrors: cardErrors,
-	}
+	span.SetAttributes(
+		attribute.Int("agent_files.processed", len(agentFilesSeen)),
+		attribute.Int("agent_files.skipped", skippedAgentFiles),
+	)
 
-	// Token and cost stats
-	if tokens != nil {
-		result.InputTokens = tokens.InputTokens
-		result.OutputTokens = tokens.OutputTokens
-		result.CacheCreationTokens = tokens.CacheCreationTokens
-		result.CacheReadTokens = tokens.CacheReadTokens
-		result.EstimatedCostUSD = tokens.EstimatedCostUSD
-		result.FastTurns = tokens.FastTurns
-		result.FastCostUSD = tokens.FastCostUSD
-	}
+	// Build result from analyzer outputs
+	tokens := tokensAnalyzer.Result()
+	session := sessionAnalyzer.Result()
+	tools := toolsAnalyzer.Result()
+	codeActivity := codeActivityAnalyzer.Result()
+	conversation := conversationAnalyzer.Result()
+	agents := agentsAnalyzer.Result()
+	skills := skillsAnalyzer.Result()
+	redactions := redactionsAnalyzer.Result()
 
-	// Session stats (message counts, breakdown, metadata, compaction)
-	if session != nil {
-		result.TotalMessages = session.TotalMessages
-		result.UserMessages = session.UserMessages
-		result.AssistantMessages = session.AssistantMessages
-		result.HumanPrompts = session.HumanPrompts
-		result.ToolResults = session.ToolResults
-		result.TextResponses = session.TextResponses
-		result.ToolCalls = session.ToolCalls
-		result.ThinkingBlocks = session.ThinkingBlocks
-		result.DurationMs = session.DurationMs
-		result.ModelsUsed = session.ModelsUsed
-		result.CompactionAuto = session.CompactionAuto
-		result.CompactionManual = session.CompactionManual
-		result.CompactionAvgTimeMs = session.CompactionAvgTimeMs
-	}
+	return &ComputeResult{
+		// Tokens and cost
+		InputTokens:         tokens.InputTokens,
+		OutputTokens:        tokens.OutputTokens,
+		CacheCreationTokens: tokens.CacheCreationTokens,
+		CacheReadTokens:     tokens.CacheReadTokens,
+		EstimatedCostUSD:    tokens.EstimatedCostUSD,
+		FastTurns:           tokens.FastTurns,
+		FastCostUSD:         tokens.FastCostUSD,
 
-	// Tools stats
-	if tools != nil {
-		result.TotalToolCalls = tools.TotalCalls
-		result.ToolStats = tools.ToolStats
-		result.ToolErrorCount = tools.ErrorCount
-	}
+		// Session
+		TotalMessages:      session.TotalMessages,
+		UserMessages:       session.UserMessages,
+		AssistantMessages:  session.AssistantMessages,
+		HumanPrompts:       session.HumanPrompts,
+		ToolResults:        session.ToolResults,
+		TextResponses:      session.TextResponses,
+		ToolCalls:          session.ToolCalls,
+		ThinkingBlocks:     session.ThinkingBlocks,
+		DurationMs:         session.DurationMs,
+		ModelsUsed:         session.ModelsUsed,
+		CompactionAuto:     session.CompactionAuto,
+		CompactionManual:   session.CompactionManual,
+		CompactionAvgTimeMs: session.CompactionAvgTimeMs,
 
-	// Code activity stats
-	if codeActivity != nil {
-		result.FilesRead = codeActivity.FilesRead
-		result.FilesModified = codeActivity.FilesModified
-		result.LinesAdded = codeActivity.LinesAdded
-		result.LinesRemoved = codeActivity.LinesRemoved
-		result.SearchCount = codeActivity.SearchCount
-		result.LanguageBreakdown = codeActivity.LanguageBreakdown
-	}
+		// Tools
+		TotalToolCalls: tools.TotalCalls,
+		ToolStats:      tools.ToolStats,
+		ToolErrorCount: tools.ErrorCount,
 
-	// Conversation stats (turns from conversation analyzer, not session)
-	if conversation != nil {
-		result.UserTurns = conversation.UserTurns
-		result.AssistantTurns = conversation.AssistantTurns
-		result.AvgAssistantTurnMs = conversation.AvgAssistantTurnMs
-		result.AvgUserThinkingMs = conversation.AvgUserThinkingMs
-		result.TotalAssistantDurationMs = conversation.TotalAssistantDurationMs
-		result.TotalUserDurationMs = conversation.TotalUserDurationMs
-		result.AssistantUtilizationPct = conversation.AssistantUtilizationPct
-	}
+		// Code activity
+		FilesRead:         codeActivity.FilesRead,
+		FilesModified:     codeActivity.FilesModified,
+		LinesAdded:        codeActivity.LinesAdded,
+		LinesRemoved:      codeActivity.LinesRemoved,
+		SearchCount:       codeActivity.SearchCount,
+		LanguageBreakdown: codeActivity.LanguageBreakdown,
 
-	// Agent stats
-	if agents != nil {
-		result.TotalAgentInvocations = agents.TotalInvocations
-		result.AgentStats = agents.AgentStats
-	}
+		// Conversation
+		UserTurns:                conversation.UserTurns,
+		AssistantTurns:           conversation.AssistantTurns,
+		AvgAssistantTurnMs:       conversation.AvgAssistantTurnMs,
+		AvgUserThinkingMs:        conversation.AvgUserThinkingMs,
+		TotalAssistantDurationMs: conversation.TotalAssistantDurationMs,
+		TotalUserDurationMs:      conversation.TotalUserDurationMs,
+		AssistantUtilizationPct:  conversation.AssistantUtilizationPct,
 
-	// Skill stats
-	if skills != nil {
-		result.TotalSkillInvocations = skills.TotalInvocations
-		result.SkillStats = skills.SkillStats
-	}
+		// Agents and skills
+		TotalAgentInvocations: agents.TotalInvocations,
+		AgentStats:            agents.AgentStats,
+		TotalSkillInvocations: skills.TotalInvocations,
+		SkillStats:            skills.SkillStats,
 
-	// Redaction stats
-	if redactions != nil {
-		result.TotalRedactions = redactions.TotalRedactions
-		result.RedactionCounts = redactions.RedactionCounts
-	}
+		// Redactions
+		TotalRedactions: redactions.TotalRedactions,
+		RedactionCounts: redactions.RedactionCounts,
 
-	// Record any errors at span level for observability
-	if len(cardErrors) > 0 {
-		span.SetAttributes(attribute.Int("card_errors.count", len(cardErrors)))
-	}
-
-	return result, nil
+		// Metadata
+		ValidationErrorCount: validationErrorCount,
+		SkippedAgentFiles:    skippedAgentFiles,
+	}, nil
 }

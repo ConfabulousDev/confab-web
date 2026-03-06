@@ -8,25 +8,29 @@ type SkillsResult struct {
 
 // SkillsAnalyzer extracts skill usage metrics from transcripts.
 // It tracks invocations of the Skill tool by skill name and their outcomes.
-type SkillsAnalyzer struct{}
+// Main-only: skill invocations are tracked in the main transcript.
+type SkillsAnalyzer struct {
+	result               SkillsResult
+	toolUseIDToSkillName map[string]string
+}
 
-// Analyze processes the file collection and returns skill metrics.
-func (a *SkillsAnalyzer) Analyze(fc *FileCollection) (*SkillsResult, error) {
-	result := &SkillsResult{
-		SkillStats: make(map[string]*SkillStats),
+// ProcessFile accumulates skill metrics from a single file.
+// Only the main transcript is processed.
+func (a *SkillsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
+	if !isMain {
+		return
 	}
 
-	// Only process main transcript - skill invocations are tracked there
-	// Build a map of tool_use_id -> skill name for Skill tools
-	toolUseIDToSkillName := make(map[string]string)
+	a.result.SkillStats = make(map[string]*SkillStats)
+	a.toolUseIDToSkillName = make(map[string]string)
 
-	for _, line := range fc.Main.Lines {
+	for _, line := range file.Lines {
 		// Find Skill tool_use blocks and extract skill name
 		if line.IsAssistantMessage() {
 			for _, tool := range line.GetToolUses() {
 				if tool.Name == "Skill" && tool.ID != "" {
 					if skillName, ok := tool.Input["skill"].(string); ok && skillName != "" {
-						toolUseIDToSkillName[tool.ID] = skillName
+						a.toolUseIDToSkillName[tool.ID] = skillName
 					}
 				}
 			}
@@ -36,23 +40,20 @@ func (a *SkillsAnalyzer) Analyze(fc *FileCollection) (*SkillsResult, error) {
 		if line.IsToolResultMessage() {
 			for _, block := range line.GetContentBlocks() {
 				if block.Type == "tool_result" && block.ToolUseID != "" {
-					// Look up the skill name from the tool_use_id
-					skillName := toolUseIDToSkillName[block.ToolUseID]
+					skillName := a.toolUseIDToSkillName[block.ToolUseID]
 					if skillName == "" {
-						// Not a Skill tool result, skip
 						continue
 					}
 
-					// Initialize stats if needed
-					if result.SkillStats[skillName] == nil {
-						result.SkillStats[skillName] = &SkillStats{}
+					if a.result.SkillStats[skillName] == nil {
+						a.result.SkillStats[skillName] = &SkillStats{}
 					}
 
-					result.TotalInvocations++
+					a.result.TotalInvocations++
 					if block.IsError {
-						result.SkillStats[skillName].Errors++
+						a.result.SkillStats[skillName].Errors++
 					} else {
-						result.SkillStats[skillName].Success++
+						a.result.SkillStats[skillName].Success++
 					}
 				}
 			}
@@ -60,18 +61,30 @@ func (a *SkillsAnalyzer) Analyze(fc *FileCollection) (*SkillsResult, error) {
 	}
 
 	// Second pass: detect command-expansion skill invocations
-	// These are user messages with <command-name>/skillname</command-name> in content
-	for _, line := range fc.Main.Lines {
+	for _, line := range file.Lines {
 		skillName := line.GetCommandExpansionSkillName()
 		if skillName == "" {
 			continue
 		}
-		if result.SkillStats[skillName] == nil {
-			result.SkillStats[skillName] = &SkillStats{}
+		if a.result.SkillStats[skillName] == nil {
+			a.result.SkillStats[skillName] = &SkillStats{}
 		}
-		result.TotalInvocations++
-		result.SkillStats[skillName].Success++ // Command expansions are always success
+		a.result.TotalInvocations++
+		a.result.SkillStats[skillName].Success++
 	}
+}
 
-	return result, nil
+// Finalize is a no-op for skills (main-only analyzer).
+func (a *SkillsAnalyzer) Finalize(hasAgentFile func(string) bool) {}
+
+// Result returns the accumulated skill metrics.
+func (a *SkillsAnalyzer) Result() *SkillsResult {
+	return &a.result
+}
+
+// Analyze processes the file collection and returns skill metrics.
+func (a *SkillsAnalyzer) Analyze(fc *FileCollection) (*SkillsResult, error) {
+	a.ProcessFile(fc.Main, true)
+	a.Finalize(fc.HasAgentFile)
+	return a.Result(), nil
 }

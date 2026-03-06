@@ -8,34 +8,36 @@ type AgentsResult struct {
 
 // AgentsAnalyzer extracts agent/Task usage metrics from transcripts.
 // It tracks invocations of the Task tool by subagent_type and their outcomes.
-type AgentsAnalyzer struct{}
+// Main-only: agent invocations are tracked in the main transcript.
+type AgentsAnalyzer struct {
+	result              AgentsResult
+	toolUseIDToAgentType map[string]string
+}
 
-// Analyze processes the file collection and returns agent metrics.
-func (a *AgentsAnalyzer) Analyze(fc *FileCollection) (*AgentsResult, error) {
-	result := &AgentsResult{
-		AgentStats: make(map[string]*AgentStats),
+// ProcessFile accumulates agent metrics from a single file.
+// Only the main transcript is processed.
+func (a *AgentsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
+	if !isMain {
+		return
 	}
 
-	// Only process main transcript - agent invocations are tracked there
-	// Build a map of tool_use_id -> subagent_type for Task tools
-	toolUseIDToAgentType := make(map[string]string)
+	a.result.AgentStats = make(map[string]*AgentStats)
+	a.toolUseIDToAgentType = make(map[string]string)
 
-	for _, line := range fc.Main.Lines {
+	for _, line := range file.Lines {
 		// Find Task tool_use blocks and extract subagent_type
 		if line.IsAssistantMessage() {
 			for _, tool := range line.GetToolUses() {
 				if tool.Name == "Task" && tool.ID != "" {
 					if subagentType, ok := tool.Input["subagent_type"].(string); ok && subagentType != "" {
-						toolUseIDToAgentType[tool.ID] = subagentType
+						a.toolUseIDToAgentType[tool.ID] = subagentType
 					}
 				}
 			}
 		}
 
 		// Find tool_result messages with agentId in top-level toolUseResult
-		// The toolUseResult is on the TranscriptLine, not inside content blocks
 		if line.IsToolResultMessage() && line.ToolUseResult != nil && line.ToolUseResult.AgentID != "" {
-			// Find the tool_use_id from the content block to look up the agent type
 			var toolUseID string
 			var isError bool
 			for _, block := range line.GetContentBlocks() {
@@ -46,26 +48,36 @@ func (a *AgentsAnalyzer) Analyze(fc *FileCollection) (*AgentsResult, error) {
 				}
 			}
 
-			// Look up the agent type from the tool_use_id
-			agentType := toolUseIDToAgentType[toolUseID]
+			agentType := a.toolUseIDToAgentType[toolUseID]
 			if agentType == "" {
-				// Fallback: use "unknown" if we can't find the type
 				agentType = "unknown"
 			}
 
-			// Initialize stats if needed
-			if result.AgentStats[agentType] == nil {
-				result.AgentStats[agentType] = &AgentStats{}
+			if a.result.AgentStats[agentType] == nil {
+				a.result.AgentStats[agentType] = &AgentStats{}
 			}
 
-			result.TotalInvocations++
+			a.result.TotalInvocations++
 			if isError {
-				result.AgentStats[agentType].Errors++
+				a.result.AgentStats[agentType].Errors++
 			} else {
-				result.AgentStats[agentType].Success++
+				a.result.AgentStats[agentType].Success++
 			}
 		}
 	}
+}
 
-	return result, nil
+// Finalize is a no-op for agents (main-only analyzer).
+func (a *AgentsAnalyzer) Finalize(hasAgentFile func(string) bool) {}
+
+// Result returns the accumulated agent metrics.
+func (a *AgentsAnalyzer) Result() *AgentsResult {
+	return &a.result
+}
+
+// Analyze processes the file collection and returns agent metrics.
+func (a *AgentsAnalyzer) Analyze(fc *FileCollection) (*AgentsResult, error) {
+	a.ProcessFile(fc.Main, true)
+	a.Finalize(fc.HasAgentFile)
+	return a.Result(), nil
 }

@@ -37,6 +37,12 @@ func (c *SearchIndexContent) CombinedText() string {
 // ExtractSearchContent builds the search index content for a session.
 // It queries metadata and recap from the DB, and extracts user messages from the file collection.
 func ExtractSearchContent(ctx context.Context, db *sql.DB, sessionID string, fc *FileCollection) (*SearchIndexContent, error) {
+	return ExtractSearchContentWithUserMessages(ctx, db, sessionID, ExtractUserMessagesText(fc))
+}
+
+// ExtractSearchContentWithUserMessages builds search index content with pre-extracted user messages.
+// Use this when user messages were extracted via streaming (UserMessagesBuilder).
+func ExtractSearchContentWithUserMessages(ctx context.Context, db *sql.DB, sessionID string, userMessagesText string) (*SearchIndexContent, error) {
 	content := &SearchIndexContent{}
 
 	// Weight A: metadata from sessions table
@@ -55,7 +61,7 @@ func ExtractSearchContent(ctx context.Context, db *sql.DB, sessionID string, fc 
 	content.RecapText = recapText
 
 	// Weight C: user messages from transcript
-	content.UserMessagesText = ExtractUserMessagesText(fc)
+	content.UserMessagesText = userMessagesText
 
 	return content, nil
 }
@@ -206,51 +212,69 @@ func ExtractUserMessagesText(fc *FileCollection) string {
 		return ""
 	}
 
-	var b strings.Builder
-	totalBytes := 0
-
+	var umb UserMessagesBuilder
 	for _, tf := range fc.AllFiles() {
-		for _, line := range tf.Lines {
-			if !line.IsHumanMessage() {
-				continue
-			}
-			if line.IsSkillExpansionMessage() {
-				continue
-			}
-			if line.IsCommandExpansionMessage() {
-				continue
-			}
+		umb.ProcessFile(tf)
+	}
+	return umb.Finish()
+}
 
-			text := getStringContent(line)
-			if text == "" {
-				continue
-			}
+// UserMessagesBuilder accumulates user message text incrementally across files.
+// Use ProcessFile for each transcript file, then call Finish to get the result.
+type UserMessagesBuilder struct {
+	b          strings.Builder
+	totalBytes int
+	full       bool // true once maxUserMessagesBytes reached
+}
 
-			if totalBytes+len(text)+1 > maxUserMessagesBytes {
-				// Truncate: add what fits
-				remaining := maxUserMessagesBytes - totalBytes
-				if remaining > 1 && b.Len() > 0 {
-					b.WriteByte('\n')
-					remaining--
-				}
-				if remaining > 0 {
-					// Back up to a valid UTF-8 boundary
-					for remaining > 0 && !utf8.RuneStart(text[remaining]) {
-						remaining--
-					}
-					b.WriteString(text[:remaining])
-				}
-				return b.String()
-			}
-
-			if b.Len() > 0 {
-				b.WriteByte('\n')
-				totalBytes++
-			}
-			b.WriteString(text)
-			totalBytes += len(text)
-		}
+// ProcessFile adds human messages from a transcript file.
+func (u *UserMessagesBuilder) ProcessFile(tf *TranscriptFile) {
+	if u.full {
+		return
 	}
 
-	return b.String()
+	for _, line := range tf.Lines {
+		if !line.IsHumanMessage() {
+			continue
+		}
+		if line.IsSkillExpansionMessage() {
+			continue
+		}
+		if line.IsCommandExpansionMessage() {
+			continue
+		}
+
+		text := getStringContent(line)
+		if text == "" {
+			continue
+		}
+
+		if u.totalBytes+len(text)+1 > maxUserMessagesBytes {
+			remaining := maxUserMessagesBytes - u.totalBytes
+			if remaining > 1 && u.b.Len() > 0 {
+				u.b.WriteByte('\n')
+				remaining--
+			}
+			if remaining > 0 {
+				for remaining > 0 && !utf8.RuneStart(text[remaining]) {
+					remaining--
+				}
+				u.b.WriteString(text[:remaining])
+			}
+			u.full = true
+			return
+		}
+
+		if u.b.Len() > 0 {
+			u.b.WriteByte('\n')
+			u.totalBytes++
+		}
+		u.b.WriteString(text)
+		u.totalBytes += len(text)
+	}
+}
+
+// Finish returns the accumulated user messages text.
+func (u *UserMessagesBuilder) Finish() string {
+	return u.b.String()
 }

@@ -18,67 +18,84 @@ type TokensResult struct {
 // TokensAnalyzer extracts token usage and cost metrics from transcripts.
 // It processes all files (main + agents) for accurate model-specific pricing.
 // Falls back to toolUseResult.usage for agents without files.
-type TokensAnalyzer struct{}
+type TokensAnalyzer struct {
+	result   TokensResult
+	mainFile *TranscriptFile
+}
 
-// Analyze processes the file collection and returns token metrics.
-func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
-	result := &TokensResult{
-		EstimatedCostUSD: decimal.Zero,
-		FastCostUSD:      decimal.Zero,
+// ProcessFile accumulates token counts from a single file.
+func (a *TokensAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
+	if isMain {
+		a.mainFile = file
+		a.result.EstimatedCostUSD = decimal.Zero
+		a.result.FastCostUSD = decimal.Zero
 	}
 
-	// Process all files - main and agents, using deduplicated message groups
-	for _, file := range fc.AllFiles() {
-		for _, group := range file.AssistantMessageGroups() {
-			if group.FinalUsage == nil {
-				continue
-			}
+	for _, group := range file.AssistantMessageGroups() {
+		if group.FinalUsage == nil {
+			continue
+		}
 
-			usage := group.FinalUsage
-			result.InputTokens += usage.InputTokens
-			result.OutputTokens += usage.OutputTokens
-			result.CacheCreationTokens += usage.CacheCreationInputTokens
-			result.CacheReadTokens += usage.CacheReadInputTokens
+		usage := group.FinalUsage
+		a.result.InputTokens += usage.InputTokens
+		a.result.OutputTokens += usage.OutputTokens
+		a.result.CacheCreationTokens += usage.CacheCreationInputTokens
+		a.result.CacheReadTokens += usage.CacheReadInputTokens
 
-			// Calculate cost with model-specific pricing (includes fast mode + server tools)
-			pricing := GetPricing(group.Model)
-			cost := CalculateTotalCost(pricing, usage)
-			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
+		pricing := GetPricing(group.Model)
+		cost := CalculateTotalCost(pricing, usage)
+		a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
 
-			if group.IsFastMode {
-				result.FastTurns++
-				result.FastCostUSD = result.FastCostUSD.Add(cost)
-			}
+		if group.IsFastMode {
+			a.result.FastTurns++
+			a.result.FastCostUSD = a.result.FastCostUSD.Add(cost)
 		}
 	}
+}
 
-	// Fallback: count tokens from toolUseResult for agents we don't have files for
-	for _, line := range fc.Main.Lines {
+// Finalize runs fallback logic for agents without files.
+func (a *TokensAnalyzer) Finalize(hasAgentFile func(string) bool) {
+	if a.mainFile == nil {
+		return
+	}
+	for _, line := range a.mainFile.Lines {
 		for _, agentResult := range line.GetAgentResults() {
-			if fc.HasAgentFile(agentResult.AgentID) {
-				continue // Already counted from agent file
+			if hasAgentFile(agentResult.AgentID) {
+				continue
 			}
 			if agentResult.Usage == nil {
 				continue
 			}
 
 			usage := agentResult.Usage
-			result.InputTokens += usage.InputTokens
-			result.OutputTokens += usage.OutputTokens
-			result.CacheCreationTokens += usage.CacheCreationInputTokens
-			result.CacheReadTokens += usage.CacheReadInputTokens
+			a.result.InputTokens += usage.InputTokens
+			a.result.OutputTokens += usage.OutputTokens
+			a.result.CacheCreationTokens += usage.CacheCreationInputTokens
+			a.result.CacheReadTokens += usage.CacheReadInputTokens
 
-			// Agent usage doesn't include model info, so we use default pricing
 			pricing := GetPricing("")
 			cost := CalculateTotalCost(pricing, usage)
-			result.EstimatedCostUSD = result.EstimatedCostUSD.Add(cost)
+			a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
 
 			if usage.Speed == SpeedFast {
-				result.FastTurns++
-				result.FastCostUSD = result.FastCostUSD.Add(cost)
+				a.result.FastTurns++
+				a.result.FastCostUSD = a.result.FastCostUSD.Add(cost)
 			}
 		}
 	}
+}
 
-	return result, nil
+// Result returns the accumulated token metrics.
+func (a *TokensAnalyzer) Result() *TokensResult {
+	return &a.result
+}
+
+// Analyze processes the file collection and returns token metrics.
+func (a *TokensAnalyzer) Analyze(fc *FileCollection) (*TokensResult, error) {
+	a.ProcessFile(fc.Main, true)
+	for _, agent := range fc.Agents {
+		a.ProcessFile(agent, false)
+	}
+	a.Finalize(fc.HasAgentFile)
+	return a.Result(), nil
 }
