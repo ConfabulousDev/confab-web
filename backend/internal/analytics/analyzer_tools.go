@@ -15,72 +15,84 @@ type ToolsResult struct {
 
 // ToolsAnalyzer extracts tool usage metrics from transcripts.
 // It processes all files (main + agents) to get complete tool breakdown.
-type ToolsAnalyzer struct{}
+type ToolsAnalyzer struct {
+	result   ToolsResult
+	mainFile *TranscriptFile
+}
 
-// Analyze processes the file collection and returns tool metrics.
-func (a *ToolsAnalyzer) Analyze(fc *FileCollection) (*ToolsResult, error) {
-	result := &ToolsResult{
-		ToolStats: make(map[string]*ToolStats),
+// ProcessFile accumulates tool metrics from a single file.
+func (a *ToolsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
+	if isMain {
+		a.mainFile = file
+		a.result.ToolStats = make(map[string]*ToolStats)
 	}
 
-	// Process all files - main and agents
-	for _, file := range fc.AllFiles() {
-		a.processFile(file, fc, result)
+	toolIDToName := file.BuildToolUseIDToNameMap()
+
+	for _, line := range file.Lines {
+		if line.IsAssistantMessage() {
+			for _, tool := range line.GetToolUses() {
+				a.result.TotalCalls++
+				if tool.Name != "" {
+					if a.result.ToolStats[tool.Name] == nil {
+						a.result.ToolStats[tool.Name] = &ToolStats{}
+					}
+					a.result.ToolStats[tool.Name].Success++
+				}
+			}
+		}
+
+		if line.IsUserMessage() {
+			for _, block := range line.GetContentBlocks() {
+				if block.Type == "tool_result" && block.IsError {
+					a.result.ErrorCount++
+					if toolName := toolIDToName[block.ToolUseID]; toolName != "" {
+						if a.result.ToolStats[toolName] == nil {
+							a.result.ToolStats[toolName] = &ToolStats{}
+						}
+						a.result.ToolStats[toolName].Success--
+						a.result.ToolStats[toolName].Errors++
+					}
+				}
+			}
+		}
+	}
+}
+
+// Finalize runs fallback logic for agents without files.
+func (a *ToolsAnalyzer) Finalize(hasAgentFile func(string) bool) {
+	// Fallback: count tool calls from subagent results when we don't have the file
+	if a.mainFile != nil {
+		for _, line := range a.mainFile.Lines {
+			if line.IsUserMessage() {
+				for _, agentResult := range line.GetAgentResults() {
+					if !hasAgentFile(agentResult.AgentID) {
+						a.result.TotalCalls += agentResult.TotalToolUseCount
+					}
+				}
+			}
+		}
 	}
 
-	// Ensure no negative success counts (in case of data inconsistency)
-	for _, stats := range result.ToolStats {
+	// Ensure no negative success counts
+	for _, stats := range a.result.ToolStats {
 		if stats.Success < 0 {
 			stats.Success = 0
 		}
 	}
-
-	return result, nil
 }
 
-// processFile processes a single transcript file for tool metrics.
-func (a *ToolsAnalyzer) processFile(file *TranscriptFile, fc *FileCollection, result *ToolsResult) {
-	// Build tool ID -> name map for this file
-	toolIDToName := file.BuildToolUseIDToNameMap()
+// Result returns the accumulated tool metrics.
+func (a *ToolsAnalyzer) Result() *ToolsResult {
+	return &a.result
+}
 
-	for _, line := range file.Lines {
-		// Count tool uses from assistant messages
-		if line.IsAssistantMessage() {
-			for _, tool := range line.GetToolUses() {
-				result.TotalCalls++
-				if tool.Name != "" {
-					if result.ToolStats[tool.Name] == nil {
-						result.ToolStats[tool.Name] = &ToolStats{}
-					}
-					result.ToolStats[tool.Name].Success++
-				}
-			}
-		}
-
-		// Count tool errors from user messages (tool_result blocks)
-		if line.IsUserMessage() {
-			for _, block := range line.GetContentBlocks() {
-				if block.Type == "tool_result" && block.IsError {
-					result.ErrorCount++
-					// Look up the tool name from the ID
-					if toolName := toolIDToName[block.ToolUseID]; toolName != "" {
-						if result.ToolStats[toolName] == nil {
-							result.ToolStats[toolName] = &ToolStats{}
-						}
-						// Move from success to error
-						result.ToolStats[toolName].Success--
-						result.ToolStats[toolName].Errors++
-					}
-				}
-			}
-
-			// Count tool calls from subagent/Task results (fallback only)
-			// Only use toolUseResult.totalToolUseCount when we don't have the agent file
-			for _, agentResult := range line.GetAgentResults() {
-				if !fc.HasAgentFile(agentResult.AgentID) {
-					result.TotalCalls += agentResult.TotalToolUseCount
-				}
-			}
-		}
+// Analyze processes the file collection and returns tool metrics.
+func (a *ToolsAnalyzer) Analyze(fc *FileCollection) (*ToolsResult, error) {
+	a.ProcessFile(fc.Main, true)
+	for _, agent := range fc.Agents {
+		a.ProcessFile(agent, false)
 	}
+	a.Finalize(fc.HasAgentFile)
+	return a.Result(), nil
 }

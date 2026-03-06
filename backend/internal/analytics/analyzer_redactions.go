@@ -23,57 +23,68 @@ type RedactionsResult struct {
 // If memory becomes an issue, consider a two-phase approach: run raw-bytes
 // analyzers first, then parse into structs and discard raw bytes before
 // running struct-based analyzers.
-type RedactionsAnalyzer struct{}
+type RedactionsAnalyzer struct {
+	result RedactionsResult
+}
+
+// ProcessFile accumulates redaction counts from a single file.
+func (a *RedactionsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
+	if isMain {
+		a.result.RedactionCounts = make(map[string]int)
+	}
+
+	for _, line := range file.Lines {
+		if line.RawData != nil {
+			a.walkValue(line.RawData)
+		}
+	}
+}
+
+// Finalize is a no-op for redactions.
+func (a *RedactionsAnalyzer) Finalize(hasAgentFile func(string) bool) {}
+
+// Result returns the accumulated redaction metrics.
+func (a *RedactionsAnalyzer) Result() *RedactionsResult {
+	return &a.result
+}
 
 // Analyze processes the file collection and returns redaction counts.
 func (a *RedactionsAnalyzer) Analyze(fc *FileCollection) (*RedactionsResult, error) {
-	result := &RedactionsResult{
-		RedactionCounts: make(map[string]int),
+	a.ProcessFile(fc.Main, true)
+	for _, agent := range fc.Agents {
+		a.ProcessFile(agent, false)
 	}
-
-	// Process all files - main and agents
-	for _, file := range fc.AllFiles() {
-		for _, line := range file.Lines {
-			if line.RawData != nil {
-				a.walkValue(line.RawData, result)
-			}
-		}
-	}
-
-	return result, nil
+	a.Finalize(fc.HasAgentFile)
+	return a.Result(), nil
 }
 
 // walkValue recursively walks a JSON value and counts redaction markers in strings.
-// This mirrors the CLI's redactValueWithFieldContext pattern.
-func (a *RedactionsAnalyzer) walkValue(v interface{}, result *RedactionsResult) {
+func (a *RedactionsAnalyzer) walkValue(v interface{}) {
 	switch val := v.(type) {
 	case string:
-		a.countRedactionsInString(val, result)
+		a.countRedactionsInString(val)
 	case map[string]interface{}:
 		for _, v := range val {
-			a.walkValue(v, result)
+			a.walkValue(v)
 		}
 	case []interface{}:
 		for _, v := range val {
-			a.walkValue(v, result)
+			a.walkValue(v)
 		}
-	// Numbers, bools, nil - nothing to scan
 	}
 }
 
-// countRedactionsInString finds all [REDACTED:TYPE] markers in a string
-// and updates the counts.
-func (a *RedactionsAnalyzer) countRedactionsInString(s string, result *RedactionsResult) {
+// countRedactionsInString finds all [REDACTED:TYPE] markers in a string.
+func (a *RedactionsAnalyzer) countRedactionsInString(s string) {
 	matches := redactionPattern.FindAllStringSubmatch(s, -1)
 	for _, match := range matches {
 		if len(match) >= 2 {
 			redactionType := match[1]
-			// Skip "TYPE" - it's a documentation placeholder, not a real category
 			if redactionType == "TYPE" {
 				continue
 			}
-			result.RedactionCounts[redactionType]++
-			result.TotalRedactions++
+			a.result.RedactionCounts[redactionType]++
+			a.result.TotalRedactions++
 		}
 	}
 }

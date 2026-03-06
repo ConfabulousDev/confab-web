@@ -37,6 +37,11 @@ var (
 // At 100 lines per chunk, this allows for 3 million lines per file.
 const MaxChunksPerFile = 30000
 
+// MaxAgentFiles is the maximum number of agent files to download per session.
+// This is an OOM safety cap — sessions with more agents than this will have
+// the excess agents skipped (with fallback token counting from toolUseResult).
+const MaxAgentFiles = 200
+
 // S3Config holds S3/MinIO configuration
 type S3Config struct {
 	Endpoint        string

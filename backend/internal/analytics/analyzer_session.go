@@ -28,123 +28,126 @@ type SessionResult struct {
 
 // SessionAnalyzer extracts session-level metrics from transcripts.
 // It processes main transcript for session stats, and all files for models.
-type SessionAnalyzer struct{}
+type SessionAnalyzer struct {
+	result          SessionResult
+	modelsUsed      map[string]bool
+	firstTimestamp  *time.Time
+	lastTimestamp   *time.Time
+	compactionTimes []int64
+}
 
-// Analyze processes the file collection and returns session metrics.
-func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
-	result := &SessionResult{}
-	modelsUsed := make(map[string]bool)
+// ProcessFile accumulates session metrics from a single file.
+func (a *SessionAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
+	if isMain {
+		a.modelsUsed = make(map[string]bool)
+		a.processMainFile(file)
+	}
 
-	var firstTimestamp, lastTimestamp *time.Time
-	var compactionTimes []int64
+	// Collect models from all files
+	for _, group := range file.AssistantMessageGroups() {
+		if group.Model != "" && group.Model != "<synthetic>" {
+			a.modelsUsed[group.Model] = true
+		}
+	}
+}
 
-	// Build timestamp map for compaction time calculation
-	timestampByUUID := fc.Main.BuildTimestampMap()
+// processMainFile handles main-transcript-specific logic.
+func (a *SessionAnalyzer) processMainFile(file *TranscriptFile) {
+	timestampByUUID := file.BuildTimestampMap()
 
-	// Count user messages, timestamps, and compaction events from raw lines
-	for _, line := range fc.Main.Lines {
-		// Count all messages (raw line count)
-		result.TotalMessages++
+	for _, line := range file.Lines {
+		a.result.TotalMessages++
 
-		// Count user messages and breakdown
 		if line.IsUserMessage() {
-			result.UserMessages++
-
+			a.result.UserMessages++
 			if line.IsHumanMessage() {
-				result.HumanPrompts++
+				a.result.HumanPrompts++
 			} else if line.IsToolResultMessage() {
-				result.ToolResults++
+				a.result.ToolResults++
 			}
 		}
 
-		// Track first and last timestamps for duration
 		ts, err := line.GetTimestamp()
 		if err == nil {
-			if firstTimestamp == nil || ts.Before(*firstTimestamp) {
-				firstTimestamp = &ts
+			if a.firstTimestamp == nil || ts.Before(*a.firstTimestamp) {
+				a.firstTimestamp = &ts
 			}
-			if lastTimestamp == nil || ts.After(*lastTimestamp) {
-				lastTimestamp = &ts
+			if a.lastTimestamp == nil || ts.After(*a.lastTimestamp) {
+				a.lastTimestamp = &ts
 			}
 		}
 
-		// Process compaction events
 		if line.IsCompactBoundary() && line.CompactMetadata != nil {
 			switch line.CompactMetadata.Trigger {
 			case "auto":
-				result.CompactionAuto++
-
-				// Calculate compaction time only for auto compactions
+				a.result.CompactionAuto++
 				if line.LogicalParentUUID != "" {
 					if parentTime, ok := timestampByUUID[line.LogicalParentUUID]; ok {
 						if compactTime, err := line.GetTimestamp(); err == nil {
 							delta := compactTime.Sub(parentTime).Milliseconds()
 							if delta >= 0 {
-								compactionTimes = append(compactionTimes, delta)
+								a.compactionTimes = append(a.compactionTimes, delta)
 							}
 						}
 					}
 				}
-
 			case "manual":
-				result.CompactionManual++
+				a.result.CompactionManual++
 			}
 		}
 	}
 
-	// Count assistant messages using deduplicated groups (fixes over-counting
-	// from multi-line-per-response and context replay).
-	// Categories are non-exclusive: a response can have both text + tool_use.
-	for _, group := range fc.Main.AssistantMessageGroups() {
-		result.AssistantMessages++
-
-		// Track models used (exclude synthetic models)
-		if group.Model != "" && group.Model != "<synthetic>" {
-			modelsUsed[group.Model] = true
-		}
-
-		// Non-exclusive breakdown
+	// Count assistant messages using deduplicated groups
+	for _, group := range file.AssistantMessageGroups() {
+		a.result.AssistantMessages++
 		if group.HasText {
-			result.TextResponses++
+			a.result.TextResponses++
 		}
 		if group.HasToolUse {
-			result.ToolCalls++
+			a.result.ToolCalls++
 		}
 		if group.HasThinking {
-			result.ThinkingBlocks++
+			a.result.ThinkingBlocks++
 		}
 	}
+}
 
+// Finalize computes derived metrics.
+func (a *SessionAnalyzer) Finalize(hasAgentFile func(string) bool) {
 	// Compute duration
-	if firstTimestamp != nil && lastTimestamp != nil && !firstTimestamp.Equal(*lastTimestamp) {
-		d := lastTimestamp.Sub(*firstTimestamp).Milliseconds()
-		result.DurationMs = &d
-	}
-
-	// Collect models from agent files (exclude synthetic models)
-	for _, agent := range fc.Agents {
-		for _, group := range agent.AssistantMessageGroups() {
-			if group.Model != "" && group.Model != "<synthetic>" {
-				modelsUsed[group.Model] = true
-			}
-		}
+	if a.firstTimestamp != nil && a.lastTimestamp != nil && !a.firstTimestamp.Equal(*a.lastTimestamp) {
+		d := a.lastTimestamp.Sub(*a.firstTimestamp).Milliseconds()
+		a.result.DurationMs = &d
 	}
 
 	// Compute models list
-	result.ModelsUsed = make([]string, 0, len(modelsUsed))
-	for m := range modelsUsed {
-		result.ModelsUsed = append(result.ModelsUsed, m)
+	a.result.ModelsUsed = make([]string, 0, len(a.modelsUsed))
+	for m := range a.modelsUsed {
+		a.result.ModelsUsed = append(a.result.ModelsUsed, m)
 	}
 
 	// Compute average compaction time
-	if len(compactionTimes) > 0 {
+	if len(a.compactionTimes) > 0 {
 		var sum int64
-		for _, t := range compactionTimes {
+		for _, t := range a.compactionTimes {
 			sum += t
 		}
-		avg := int(sum / int64(len(compactionTimes)))
-		result.CompactionAvgTimeMs = &avg
+		avg := int(sum / int64(len(a.compactionTimes)))
+		a.result.CompactionAvgTimeMs = &avg
 	}
+}
 
-	return result, nil
+// Result returns the accumulated session metrics.
+func (a *SessionAnalyzer) Result() *SessionResult {
+	return &a.result
+}
+
+// Analyze processes the file collection and returns session metrics.
+func (a *SessionAnalyzer) Analyze(fc *FileCollection) (*SessionResult, error) {
+	a.ProcessFile(fc.Main, true)
+	for _, agent := range fc.Agents {
+		a.ProcessFile(agent, false)
+	}
+	a.Finalize(fc.HasAgentFile)
+	return a.Result(), nil
 }

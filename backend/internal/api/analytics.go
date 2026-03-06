@@ -129,6 +129,7 @@ func classifySessionFiles(files []db.SyncFileDetail) *classifiedFiles {
 
 // downloadAndBuildFileCollection downloads the transcript and agent chunks from storage
 // and assembles them into a FileCollection. Returns nil on failure (errors are logged).
+// Agents are capped at storage.MaxAgentFiles to prevent OOM.
 func downloadAndBuildFileCollection(
 	ctx context.Context,
 	store *storage.S3Storage,
@@ -147,7 +148,12 @@ func downloadAndBuildFileCollection(
 	}
 
 	agentContents := make(map[string][]byte)
-	for _, af := range files.agents {
+	agentsCapped := false
+	for i, af := range files.agents {
+		if i >= storage.MaxAgentFiles {
+			agentsCapped = true
+			break
+		}
 		agentID := analytics.ExtractAgentID(af.FileName)
 		if agentID == "" {
 			continue
@@ -160,6 +166,12 @@ func downloadAndBuildFileCollection(
 		if content != nil {
 			agentContents[agentID] = content
 		}
+	}
+	if agentsCapped {
+		log.Warn("Agent file cap reached, skipping remaining agents",
+			"cap", storage.MaxAgentFiles,
+			"total", len(files.agents),
+		)
 	}
 
 	fc, err := analytics.NewFileCollectionWithAgents(mainContent, agentContents)
@@ -659,6 +671,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 }
 
 // downloadTranscriptForSmartRecap downloads the transcript files and creates a FileCollection.
+// Agent files are capped at storage.MaxAgentFiles.
 func downloadTranscriptForSmartRecap(
 	ctx context.Context,
 	database *db.DB,

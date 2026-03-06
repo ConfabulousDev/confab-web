@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
@@ -284,6 +285,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 
 // PrecomputeRegularCards computes only the regular analytics cards for a session.
 // Smart recap is handled separately via PrecomputeSmartRecapOnly with its own staleness thresholds.
+// Agent files are streamed one at a time to avoid O(all agents) memory usage.
 func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.regular_cards",
 		trace.WithAttributes(
@@ -293,25 +295,29 @@ func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleS
 		))
 	defer span.End()
 
-	// Download transcript and agent files
-	fc, err := p.downloadTranscript(ctx, session)
+	// Download and parse main transcript
+	main, agentInfos, err := p.downloadMainAndListAgents(ctx, session)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if fc == nil {
-		// No transcript data - nothing to compute
+	if main == nil {
 		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
 
-	// Compute standard cards
-	computed, err := ComputeFromFileCollection(ctx, fc)
+	// Compute standard cards via streaming
+	agentProvider := p.newAgentProvider(session, agentInfos)
+	computed, err := ComputeStreaming(ctx, main, agentProvider)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
+	}
+
+	if computed.SkippedAgentFiles > 0 {
+		span.SetAttributes(attribute.Int("agent_files.skipped", computed.SkippedAgentFiles))
 	}
 
 	// Convert to Cards and upsert
@@ -326,15 +332,40 @@ func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleS
 	return nil
 }
 
-// downloadTranscript downloads the transcript and agent files for a session.
-func (p *Precomputer) downloadTranscript(ctx context.Context, session StaleSession) (*FileCollection, error) {
-	ctx, span := tracer.Start(ctx, "precompute.download_transcript",
+// newAgentProvider creates an AgentProvider that streams agent files from storage.
+func (p *Precomputer) newAgentProvider(session StaleSession, agentInfos []AgentFileInfo) AgentProvider {
+	download := func(ctx context.Context, fileName string) ([]byte, error) {
+		return p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, fileName)
+	}
+	return NewAgentProvider(agentInfos, download, storage.MaxAgentFiles)
+}
+
+// drainAgentProvider reads all files from an AgentProvider, calling fn for each.
+// Errors from the provider are silently skipped (the provider already logs them).
+func drainAgentProvider(ctx context.Context, provider AgentProvider, fn func(*TranscriptFile)) {
+	for {
+		agent, err := provider(ctx)
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			continue
+		}
+		fn(agent)
+	}
+}
+
+// downloadMainAndListAgents downloads the main transcript and returns agent file metadata.
+// The main file is parsed immediately; agent files are NOT downloaded (use NewAgentProvider to stream them).
+// Returns nil main if no transcript data exists.
+func (p *Precomputer) downloadMainAndListAgents(ctx context.Context, session StaleSession) (*TranscriptFile, []AgentFileInfo, error) {
+	ctx, span := tracer.Start(ctx, "precompute.download_main_and_list_agents",
 		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
 	defer span.End()
 
 	// Get sync files for this session
 	filesQuery := `
-		SELECT file_name, file_type, last_synced_line
+		SELECT file_name, file_type
 		FROM sync_files
 		WHERE session_id = $1 AND file_type IN ('transcript', 'agent')
 	`
@@ -342,79 +373,61 @@ func (p *Precomputer) downloadTranscript(ctx context.Context, session StaleSessi
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
-	type syncFile struct {
-		FileName       string
-		FileType       string
-		LastSyncedLine int
-	}
-	var files []syncFile
+	var mainFileName string
+	var agentInfos []AgentFileInfo
 	for rows.Next() {
-		var f syncFile
-		if err := rows.Scan(&f.FileName, &f.FileType, &f.LastSyncedLine); err != nil {
+		var fileName, fileType string
+		if err := rows.Scan(&fileName, &fileType); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			return nil, err
+			return nil, nil, err
 		}
-		files = append(files, f)
+		switch fileType {
+		case "transcript":
+			mainFileName = fileName
+		case "agent":
+			agentID := ExtractAgentID(fileName)
+			if agentID != "" {
+				agentInfos = append(agentInfos, AgentFileInfo{FileName: fileName, AgentID: agentID})
+			}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
-	// Find main transcript and agent files
-	var mainFile *syncFile
-	var agentFiles []syncFile
-	for i := range files {
-		switch files[i].FileType {
-		case "transcript":
-			mainFile = &files[i]
-		case "agent":
-			agentFiles = append(agentFiles, files[i])
-		}
+	if mainFileName == "" {
+		return nil, nil, nil
 	}
 
-	if mainFile == nil {
-		return nil, nil
-	}
-
-	// Download main transcript using the robust chunk merge from storage package
-	mainContent, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, mainFile.FileName)
+	// Download and parse main transcript
+	mainContent, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, mainFileName)
 	if err != nil || mainContent == nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	// Download agent files
-	agentContents := make(map[string][]byte)
-	for _, af := range agentFiles {
-		agentID := ExtractAgentID(af.FileName)
-		if agentID == "" {
-			continue
-		}
-		content, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, af.FileName)
-		if err != nil || content == nil {
-			continue
-		}
-		agentContents[agentID] = content
-	}
-
-	// Build FileCollection
-	fc, err := NewFileCollectionWithAgents(mainContent, agentContents)
+	main, err := parseTranscriptFile(mainContent, "")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return fc, nil
+	span.SetAttributes(
+		attribute.Int("agent_files.count", len(agentInfos)),
+		attribute.Int64("main.lines", int64(len(main.Lines))),
+	)
+
+	return main, agentInfos, nil
 }
 
 // precomputeSmartRecap handles smart recap generation with line count and quota checks.
 // Returns an error if smart recap generation fails. Returns nil if skipped (up-to-date, quota exceeded, lock held).
-func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSession, fc *FileCollection, cardStats map[string]interface{}) error {
+func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSession, input GenerateInput) error {
 	ctx, span := tracer.Start(ctx, "precompute.smart_recap",
 		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
 	defer span.End()
@@ -447,13 +460,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 	}
 
 	// Use the shared generator for the actual generation (handles lock, LLM call, save, quota increment)
-	result := p.smartRecapGenerator.Generate(ctx, GenerateInput{
-		SessionID:      session.SessionID,
-		UserID:         session.UserID,
-		LineCount:      session.TotalLines,
-		FileCollection: fc,
-		CardStats:      cardStats,
-	}, p.config.LockTimeoutSeconds)
+	result := p.smartRecapGenerator.Generate(ctx, input, p.config.LockTimeoutSeconds)
 
 	if result.Skipped {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "lock_held"))
@@ -730,6 +737,7 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 
 // BuildSearchIndexOnly builds the search index for a session.
 // Downloads transcript, extracts content, queries recap timestamp, and upserts the index.
+// Agent files are streamed one at a time using UserMessagesBuilder.
 func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.build_search_index",
 		trace.WithAttributes(
@@ -738,16 +746,28 @@ func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSes
 		))
 	defer span.End()
 
-	// Download transcript
-	fc, err := p.downloadTranscript(ctx, session)
+	// Download main transcript and list agents
+	main, agentInfos, err := p.downloadMainAndListAgents(ctx, session)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	if main == nil {
+		span.SetAttributes(attribute.Bool("session.empty", true))
+		return nil
+	}
 
-	// Extract search content (metadata + recap + user messages)
-	content, err := ExtractSearchContent(ctx, p.db, session.SessionID, fc)
+	// Stream agents through UserMessagesBuilder
+	var umb UserMessagesBuilder
+	umb.ProcessFile(main)
+
+	drainAgentProvider(ctx, p.newAgentProvider(session, agentInfos), func(agent *TranscriptFile) {
+		umb.ProcessFile(agent)
+	})
+
+	// Extract metadata + recap from DB, user messages from streaming
+	content, err := ExtractSearchContentWithUserMessages(ctx, p.db, session.SessionID, umb.Finish())
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -790,7 +810,7 @@ func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSes
 
 // PrecomputeSmartRecapOnly computes only the smart recap for a session.
 // Use this when regular cards are already up-to-date but smart recap is stale.
-// It downloads the transcript, fetches existing card stats from DB, and generates smart recap.
+// Downloads main transcript, streams agents through TranscriptBuilder, then generates smart recap.
 func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.smart_recap_only",
 		trace.WithAttributes(
@@ -805,17 +825,26 @@ func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session Stal
 		return nil
 	}
 
-	// Download transcript (needed for smart recap generation)
-	fc, err := p.downloadTranscript(ctx, session)
+	// Download main transcript and list agents
+	main, agentInfos, err := p.downloadMainAndListAgents(ctx, session)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if fc == nil {
+	if main == nil {
 		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
+
+	// Stream agents through TranscriptBuilder
+	var tb TranscriptBuilder
+	tb.ProcessFile(main)
+
+	drainAgentProvider(ctx, p.newAgentProvider(session, agentInfos), func(agent *TranscriptFile) {
+		tb.ProcessFile(agent)
+	})
+	transcript, idMap := tb.Finish()
 
 	// Fetch existing card stats from DB (regular cards are already up-to-date)
 	cards, err := p.analyticsStore.GetCards(ctx, session.SessionID)
@@ -825,14 +854,20 @@ func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session Stal
 		return err
 	}
 
-	// Convert to card stats map for smart recap
 	var cardStats map[string]interface{}
 	if cards != nil {
 		cardStats = cards.ToResponse().Cards
 	}
 
-	// Generate smart recap (handles staleness check, quota, lock, etc.)
-	if err := p.precomputeSmartRecap(ctx, session, fc, cardStats); err != nil {
+	// Generate smart recap with pre-built transcript
+	if err := p.precomputeSmartRecap(ctx, session, GenerateInput{
+		SessionID:  session.SessionID,
+		UserID:     session.UserID,
+		LineCount:  session.TotalLines,
+		Transcript: transcript,
+		IDMap:      idMap,
+		CardStats:  cardStats,
+	}); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
