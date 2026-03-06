@@ -317,6 +317,9 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Session metadata update (by external_id for CLI convenience)
 			r.Patch("/sessions/{external_id}/summary", withMaxBody(MaxBodyM, s.handleUpdateSessionSummary))
+
+			// Learnings (CLI access)
+			r.Post("/learnings", withMaxBody(MaxBodyM, s.handleCreateLearning))
 		})
 
 		// Protected routes for web dashboard (require web session)
@@ -364,6 +367,13 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Client error reporting (for frontend observability)
 			r.Post("/client-errors", withMaxBody(MaxBodyM, ratelimit.HandlerFunc(s.clientErrorLimiter, HandleReportClientErrors())))
+
+			// Learnings
+			r.Get("/learnings", withMaxBody(MaxBodyXS, s.handleListLearnings))
+			r.Post("/learnings", withMaxBody(MaxBodyM, s.handleCreateLearning))
+			r.Get("/learnings/{id}", withMaxBody(MaxBodyXS, s.handleGetLearning))
+			r.Patch("/learnings/{id}", withMaxBody(MaxBodyM, s.handleUpdateLearning))
+			r.Delete("/learnings/{id}", withMaxBody(MaxBodyXS, s.handleDeleteLearning))
 		})
 
 		// Session lookup by external_id - requires auth (session cookie OR API key)
