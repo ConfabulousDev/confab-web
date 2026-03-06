@@ -49,6 +49,16 @@ func (db *DB) CreateLearning(ctx context.Context, userID int64, req *models.Crea
 		}
 	}
 
+	// Normalize nil slices to empty — PostgreSQL NOT NULL columns reject NULL arrays.
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	sessionIDs := req.SessionIDs
+	if sessionIDs == nil {
+		sessionIDs = []string{}
+	}
+
 	query := `
 		INSERT INTO learnings (user_id, title, body, tags, source, session_ids, transcript_range)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -65,9 +75,9 @@ func (db *DB) CreateLearning(ctx context.Context, userID int64, req *models.Crea
 		userID,
 		req.Title,
 		req.Body,
-		pq.Array(req.Tags),
+		pq.Array(tags),
 		string(req.Source),
-		pq.Array(req.SessionIDs),
+		pq.Array(sessionIDs),
 		transcriptRangeJSON,
 	).Scan(
 		&l.ID, &l.UserID, &l.Title, &l.Body,
@@ -85,7 +95,10 @@ func (db *DB) CreateLearning(ctx context.Context, userID int64, req *models.Crea
 	l.SessionIDs = []string(sessionIDsArr)
 	if transcriptRangeRaw != nil {
 		var tr interface{}
-		if err := json.Unmarshal(transcriptRangeRaw, &tr); err == nil {
+		if err := json.Unmarshal(transcriptRangeRaw, &tr); err != nil {
+			// Log but don't fail — transcript_range is supplementary data
+			span.RecordError(err)
+		} else {
 			l.TranscriptRange = tr
 		}
 	}
@@ -237,7 +250,10 @@ func (db *DB) GetLearning(ctx context.Context, learningID string, userID int64) 
 	l.SessionIDs = []string(sessionIDsArr)
 	if transcriptRangeRaw != nil {
 		var tr interface{}
-		if err := json.Unmarshal(transcriptRangeRaw, &tr); err == nil {
+		if err := json.Unmarshal(transcriptRangeRaw, &tr); err != nil {
+			// Log but don't fail — transcript_range is supplementary data
+			span.RecordError(err)
+		} else {
 			l.TranscriptRange = tr
 		}
 	}
@@ -246,6 +262,8 @@ func (db *DB) GetLearning(ctx context.Context, learningID string, userID int64) 
 }
 
 // UpdateLearning dynamically updates a learning's fields and returns the updated row.
+// NOTE: OwnerEmail is NOT populated in the returned Learning because the UPDATE
+// does not join the users table. Callers needing OwnerEmail should call GetLearning afterward.
 func (db *DB) UpdateLearning(ctx context.Context, learningID string, userID int64, req *models.UpdateLearningRequest) (*models.Learning, error) {
 	ctx, span := tracer.Start(ctx, "db.update_learning",
 		trace.WithAttributes(
@@ -320,7 +338,10 @@ func (db *DB) UpdateLearning(ctx context.Context, learningID string, userID int6
 	l.SessionIDs = []string(sessionIDsArr)
 	if transcriptRangeRaw != nil {
 		var tr interface{}
-		if err := json.Unmarshal(transcriptRangeRaw, &tr); err == nil {
+		if err := json.Unmarshal(transcriptRangeRaw, &tr); err != nil {
+			// Log but don't fail — transcript_range is supplementary data
+			span.RecordError(err)
+		} else {
 			l.TranscriptRange = tr
 		}
 	}
