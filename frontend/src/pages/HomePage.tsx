@@ -8,15 +8,15 @@ import styles from './HomePage.module.css';
 
 function HomePage() {
   useDocumentTitle('Confabulous');
-  const { user, loading } = useAuth();
+  const { user, loading, serverError } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect logged-in users to sessions
+  // Redirect logged-in users to sessions (skip if server is down)
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && !serverError) {
       navigate(user.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions', { replace: true });
     }
-  }, [loading, user, navigate]);
+  }, [loading, user, serverError, navigate]);
 
   // Show nothing while loading or redirecting
   if (loading || user) {
