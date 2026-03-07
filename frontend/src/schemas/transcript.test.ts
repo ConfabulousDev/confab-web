@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { UserMessage } from './transcript';
+import type { UserMessage, UnknownBlock, UnknownMessage } from './transcript';
 import {
   isCommandExpansionMessage,
   getCommandExpansionSkillName,
@@ -234,7 +234,7 @@ describe('Forward-compatibility: unknown content block types', () => {
   });
 
   it('isUnknownBlock returns true for unknown types', () => {
-    const block: import('./transcript').UnknownBlock = { type: 'citations' };
+    const block: UnknownBlock = { type: 'citations' };
     expect(isUnknownBlock(block)).toBe(true);
   });
 
@@ -280,15 +280,15 @@ describe('Forward-compatibility: unknown message types', () => {
   });
 
   it('isUnknownMessage returns true for unknown types', () => {
-    const msg: import('./transcript').UnknownMessage = { type: 'agent-handoff' };
+    const msg: UnknownMessage = { type: 'agent-handoff' };
     expect(isUnknownMessage(msg)).toBe(true);
   });
 
   it('isUnknownMessage returns false for known types', () => {
-    const user: import('./transcript').UnknownMessage = { type: 'user' };
-    const assistant: import('./transcript').UnknownMessage = { type: 'assistant' };
-    const system: import('./transcript').UnknownMessage = { type: 'system' };
-    const prLink: import('./transcript').UnknownMessage = { type: 'pr-link' };
+    const user: UnknownMessage = { type: 'user' };
+    const assistant: UnknownMessage = { type: 'assistant' };
+    const system: UnknownMessage = { type: 'system' };
+    const prLink: UnknownMessage = { type: 'pr-link' };
     expect(isUnknownMessage(user)).toBe(false);
     expect(isUnknownMessage(assistant)).toBe(false);
     expect(isUnknownMessage(system)).toBe(false);

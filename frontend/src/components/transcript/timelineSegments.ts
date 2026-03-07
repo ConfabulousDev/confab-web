@@ -24,7 +24,7 @@ function isHumanPrompt(line: TranscriptLine): boolean {
  * Compute timeline segments from transcript messages.
  * Each segment represents contiguous time for one speaker.
  */
-export function computeSegments(messages: TranscriptLine[]): TimelineSegment[] {
+function computeSegments(messages: TranscriptLine[]): TimelineSegment[] {
   const segments: TimelineSegment[] = [];
 
   let lastHumanPromptTime: Date | null = null;
@@ -136,7 +136,7 @@ const MESSAGE_WEIGHT = 0.4;
 const MS_PER_MESSAGE = 10000;
 const MIN_SEGMENT_PERCENT = 2;
 
-export interface SegmentLayout {
+interface SegmentLayout {
   segments: TimelineSegment[];
   /** Visual height percentage for each segment (normalized to sum to 100) */
   heightPercents: number[];

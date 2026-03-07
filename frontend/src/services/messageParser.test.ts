@@ -4,7 +4,7 @@ import {
   extractTextContent,
   getRoleLabel,
 } from './messageParser';
-import type { UserMessage, AssistantMessage, PRLinkMessage, ContentBlock } from '@/types';
+import type { UserMessage, AssistantMessage, PRLinkMessage, ContentBlock, UnknownMessage } from '@/types';
 
 describe('messageParser', () => {
   describe('parseMessage', () => {
@@ -131,7 +131,7 @@ describe('messageParser', () => {
   describe('parseMessage with unknown message type', () => {
     it('should return role "unknown" for unrecognized message types', () => {
       // Simulate an unknown message type that passed Zod validation via catch-all
-      const unknownMessage: import('@/types').UnknownMessage = {
+      const unknownMessage: UnknownMessage = {
         type: 'agent-handoff',
         fromAgent: 'agent-1',
         toAgent: 'agent-2',
@@ -147,7 +147,7 @@ describe('messageParser', () => {
     });
 
     it('should extract timestamp from unknown message if available', () => {
-      const unknownMessage: import('@/types').UnknownMessage = {
+      const unknownMessage: UnknownMessage = {
         type: 'future-type',
         timestamp: '2025-06-15T12:00:00Z',
       };
