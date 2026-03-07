@@ -50,6 +50,7 @@ describe('useAuth', () => {
     expect(result.current.user).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.serverError).toBe(false);
   });
 
   it('returns user data when authenticated', async () => {
@@ -72,6 +73,7 @@ describe('useAuth', () => {
     expect(result.current.user).toEqual(mockUser);
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.error).toBeNull();
+    expect(result.current.serverError).toBe(false);
   });
 
   it('returns null error for AuthenticationError (not logged in)', async () => {
@@ -88,22 +90,30 @@ describe('useAuth', () => {
     expect(result.current.user).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.error).toBeNull(); // Auth errors are not shown as errors
+    expect(result.current.serverError).toBe(false); // 401 is not a server error
   });
 
   it('returns error message for other errors', async () => {
-    vi.mocked(authAPI.me).mockRejectedValue(new Error('Network error'));
+    vi.useFakeTimers();
+    try {
+      vi.mocked(authAPI.me).mockRejectedValue(new Error('Network error'));
 
-    const { result } = renderHook(() => useAuth(), {
-      wrapper: createWrapper(),
-    });
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: createWrapper(),
+      });
 
-    await waitFor(() => {
+      // useAuth retries non-auth errors twice with exponential backoff (1s, 2s)
+      // Advance past all retries
+      await vi.advanceTimersByTimeAsync(10_000);
+
       expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.user).toBeNull();
-    expect(result.current.isAuthenticated).toBe(false);
-    expect(result.current.error).toBe('Network error');
+      expect(result.current.user).toBeNull();
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(result.current.error).toBe('Network error');
+      expect(result.current.serverError).toBe(true); // Non-auth error = server error
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('provides refetch function', async () => {
