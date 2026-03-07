@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { TranscriptLine } from '@/types';
 import { parseMessage, extractTextContent } from '@/services/messageParser';
 
-export interface TranscriptSearchResult {
+interface TranscriptSearchResult {
   isOpen: boolean;
   query: string;
   /** The debounced query used for inline text highlighting (300ms debounce) */

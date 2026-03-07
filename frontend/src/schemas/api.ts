@@ -494,7 +494,6 @@ export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
 export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
 export type TrendsTopSessionsCard = z.infer<typeof TrendsTopSessionsCardSchema>;
-export type TopSessionItem = z.infer<typeof TopSessionItemSchema>;
 export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
 export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 
@@ -527,7 +526,6 @@ export const OrgAnalyticsResponseSchema = z.object({
   users: z.array(OrgUserAnalyticsSchema),
 });
 
-export type OrgUserInfo = z.infer<typeof OrgUserInfoSchema>;
 export type OrgUserAnalytics = z.infer<typeof OrgUserAnalyticsSchema>;
 export type OrgAnalyticsResponse = z.infer<typeof OrgAnalyticsResponseSchema>;
 

@@ -24,7 +24,7 @@ export function getDefaultDateRange(): DateRange {
 }
 
 /** Infer a human-readable label for a date range, falling back to "start - end". */
-export function getDateRangeLabel(startDate: string, endDate: string): string {
+function getDateRangeLabel(startDate: string, endDate: string): string {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = formatLocalDate(today);
@@ -40,6 +40,50 @@ export function getDateRangeLabel(startDate: string, endDate: string): string {
   }
 
   return `${startDate} - ${endDate}`;
+}
+
+/** Get the Monday of the week containing the given date. */
+function getStartOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
+/** Get the first day of the month containing the given date. */
+function getStartOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+/** Standard date range presets for filter dropdowns. */
+export function getDatePresets(): DateRange[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const startOfThisWeek = getStartOfWeek(today);
+  const startOfLastWeek = new Date(startOfThisWeek);
+  startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
+  const endOfLastWeek = new Date(startOfThisWeek);
+  endOfLastWeek.setDate(endOfLastWeek.getDate() - 1);
+
+  const startOfThisMonth = getStartOfMonth(today);
+  const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+
+  const last30Days = new Date(today);
+  last30Days.setDate(last30Days.getDate() - 29);
+
+  const last90Days = new Date(today);
+  last90Days.setDate(last90Days.getDate() - 89);
+
+  return [
+    { startDate: formatLocalDate(startOfThisWeek), endDate: formatLocalDate(today), label: 'This Week' },
+    { startDate: formatLocalDate(startOfLastWeek), endDate: formatLocalDate(endOfLastWeek), label: 'Last Week' },
+    { startDate: formatLocalDate(startOfThisMonth), endDate: formatLocalDate(today), label: 'This Month' },
+    { startDate: formatLocalDate(startOfLastMonth), endDate: formatLocalDate(endOfLastMonth), label: 'Last Month' },
+    { startDate: formatLocalDate(last30Days), endDate: formatLocalDate(today), label: 'Last 30 Days' },
+    { startDate: formatLocalDate(last90Days), endDate: formatLocalDate(today), label: 'Last 90 Days' },
+  ];
 }
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
