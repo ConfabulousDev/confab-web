@@ -35,7 +35,6 @@ type ConversationResult struct {
 //   - User Thinking Time: Time from the last assistant message to the next user prompt.
 type ConversationAnalyzer struct {
 	result ConversationResult
-	computed bool
 }
 
 // ProcessFile processes a single file. Only the main file is used.
