@@ -8,10 +8,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"go.opentelemetry.io/otel"
 )
-
-var tracer = otel.Tracer("confab/db")
 
 // DB wraps a PostgreSQL database connection
 type DB struct {

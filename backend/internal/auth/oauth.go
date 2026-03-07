@@ -634,7 +634,10 @@ func exchangeGitHubCode(code string, config *OAuthConfig) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading GitHub token response: %w", err)
+	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -957,7 +960,10 @@ func exchangeGoogleCode(code string, config *OAuthConfig) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading Google token response: %w", err)
+	}
 
 	var result struct {
 		AccessToken string `json:"access_token"`
@@ -1374,7 +1380,10 @@ func exchangeOIDCCode(code string, config *OAuthConfig, endpoints *OIDCEndpoints
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading OIDC token response: %w", err)
+	}
 
 	var result struct {
 		AccessToken string `json:"access_token"`
