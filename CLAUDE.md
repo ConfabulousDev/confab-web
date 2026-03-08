@@ -4,6 +4,10 @@
 
 Backend API is documented in `backend/API.md`. **Keep this file up to date** when modifying API endpoints, request/response schemas, or authentication.
 
+## Documentation Maintenance
+
+When changing code, update the corresponding package/module README. Key things to keep current: file lists, exported API descriptions, invariants, dependency lists, and extension checklists. If a change spans multiple packages, also check the index READMEs (`backend/internal/README.md`, `frontend/src/README.md`) and `CLAUDE.md`. Documentation that contradicts the code is worse than no documentation.
+
 ## Development Process
 
 **Follow this workflow for all implementation tasks:**
