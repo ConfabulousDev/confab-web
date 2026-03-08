@@ -82,6 +82,23 @@ Configuration is simple — everything is controlled through environment variabl
 
 The official SaaS instance lives at [confabulous.dev](https://confabulous.dev), hosted on a Fly.io / Neon.tech stack. See [`deploy-to-fly.sh`](deploy-to-fly.sh) and [`fly.toml`](fly.toml) for details.
 
+## Developer Docs
+
+### Project Guides
+
+- [`CLAUDE.md`](CLAUDE.md) -- Development workflow, testing, coding conventions
+- [`CONFIGURATION.md`](CONFIGURATION.md) -- Full environment variable reference
+- [`SELF-HOSTING.md`](SELF-HOSTING.md) -- Deployment, HTTPS, auth setup, production hardening
+
+### Backend
+
+- [`backend/API.md`](backend/API.md) -- REST API reference (endpoints, request/response schemas, auth)
+- [`backend/internal/README.md`](backend/internal/README.md) -- Package index, dependency map, data flow, layering rules
+
+### Frontend
+
+- [`frontend/src/README.md`](frontend/src/README.md) -- Module index, data flow, architectural patterns
+
 ## Dev Setup
 
 ```bash
