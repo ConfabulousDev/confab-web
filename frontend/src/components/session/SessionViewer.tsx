@@ -1,9 +1,12 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { SessionDetail, TranscriptLine } from '@/types';
-import { isAssistantMessage } from '@/types';
-import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
-import { useVisibility } from '@/hooks/useVisibility';
-import { computeSessionMeta } from '@/utils/sessionMeta';
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import type { SessionDetail, TranscriptLine } from "@/types";
+import { isAssistantMessage } from "@/types";
+import {
+  fetchParsedTranscript,
+  fetchNewTranscriptMessages,
+} from "@/services/transcriptService";
+import { useVisibility } from "@/hooks/useVisibility";
+import { computeSessionMeta } from "@/utils/sessionMeta";
 import {
   countHierarchicalCategories,
   messageMatchesFilter,
@@ -12,13 +15,14 @@ import {
   type UserSubcategory,
   type AssistantSubcategory,
   type FilterState,
-} from './messageCategories';
-import SessionHeader from './SessionHeader';
-import MessageTimeline from './MessageTimeline';
-import SessionSummaryPanel from './SessionSummaryPanel';
-import styles from './SessionViewer.module.css';
+} from "./messageCategories";
+import SessionHeader from "./SessionHeader";
+import MessageTimeline from "./MessageTimeline";
+import SessionSummaryPanel from "./SessionSummaryPanel";
+import ExtractLearningModal from "./ExtractLearningModal";
+import styles from "./SessionViewer.module.css";
 
-export type ViewTab = 'summary' | 'transcript';
+export type ViewTab = "summary" | "transcript";
 
 // Polling interval for new transcript messages (15 seconds)
 const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
@@ -39,19 +43,34 @@ interface SessionViewerProps {
   /** For Storybook: pass messages directly instead of fetching from API */
   initialMessages?: TranscriptLine[];
   /** For Storybook: pass analytics directly instead of fetching from API */
-  initialAnalytics?: import('@/services/api').SessionAnalytics;
+  initialAnalytics?: import("@/services/api").SessionAnalytics;
   /** For Storybook: pass GitHub links directly instead of fetching from API */
-  initialGithubLinks?: import('@/services/api').GitHubLink[];
+  initialGithubLinks?: import("@/services/api").GitHubLink[];
 }
 
-function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, activeTab: controlledTab, onTabChange, targetMessageUuid, initialMessages, initialAnalytics, initialGithubLinks }: SessionViewerProps) {
+function SessionViewer({
+  session,
+  onShare,
+  onDelete,
+  onSessionUpdate,
+  isOwner = true,
+  isShared = false,
+  activeTab: controlledTab,
+  onTabChange,
+  targetMessageUuid,
+  initialMessages,
+  initialAnalytics,
+  initialGithubLinks,
+}: SessionViewerProps) {
   // Support both controlled and uncontrolled modes
-  const [uncontrolledTab, setUncontrolledTab] = useState<ViewTab>('summary');
+  const [uncontrolledTab, setUncontrolledTab] = useState<ViewTab>("summary");
   const activeTab = controlledTab ?? uncontrolledTab;
   const setActiveTab = onTabChange ?? setUncontrolledTab;
   const [loading, setLoading] = useState(!initialMessages);
   const [error, setError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<TranscriptLine[]>(initialMessages ?? []);
+  const [messages, setMessages] = useState<TranscriptLine[]>(
+    initialMessages ?? [],
+  );
 
   // Track the current line count for incremental fetching
   const lineCountRef = useRef(0);
@@ -62,15 +81,31 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   // Cost mode toggle
   const [isCostMode, setIsCostMode] = useState(false);
 
+  // Extract Learning modal state
+  const [showExtractModal, setShowExtractModal] = useState(false);
+  const [extractSelectedText, setExtractSelectedText] = useState<string>("");
+
+  const handleExtractLearning = useCallback(() => {
+    const selection = window.getSelection()?.toString() ?? "";
+    setExtractSelectedText(selection);
+    setShowExtractModal(true);
+  }, []);
+
   // Filter state - hierarchical visibility for subcategories
-  const [filterState, setFilterState] = useState<FilterState>(DEFAULT_FILTER_STATE);
+  const [filterState, setFilterState] =
+    useState<FilterState>(DEFAULT_FILTER_STATE);
 
   // Compute hierarchical category counts
-  const categoryCounts = useMemo(() => countHierarchicalCategories(messages), [messages]);
+  const categoryCounts = useMemo(
+    () => countHierarchicalCategories(messages),
+    [messages],
+  );
 
   // Filter messages based on filter state
   const filteredMessages = useMemo(() => {
-    return messages.filter((message) => messageMatchesFilter(message, filterState));
+    return messages.filter((message) =>
+      messageMatchesFilter(message, filterState),
+    );
   }, [messages, filterState]);
 
   // When a deep-link target exists but is hidden by the active filter, reset
@@ -80,20 +115,20 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     if (!targetMessageUuid || messages.length === 0) return;
 
     const targetMessage = messages.find(
-      (m) => 'uuid' in m && m.uuid === targetMessageUuid
+      (m) => "uuid" in m && m.uuid === targetMessageUuid,
     );
     if (!targetMessage) return;
     if (messageMatchesFilter(targetMessage, filterState)) return;
 
     setFilterState({
       ...DEFAULT_FILTER_STATE,
-      system: targetMessage.type === 'system',
+      system: targetMessage.type === "system",
     });
   }, [targetMessageUuid, messages, filterState]);
 
   // Get transcript file info
   const transcriptFile = useMemo(() => {
-    return session.files.find((f) => f.file_type === 'transcript');
+    return session.files.find((f) => f.file_type === "transcript");
   }, [session.files]);
 
   const transcriptFileName = transcriptFile?.file_name;
@@ -112,18 +147,22 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
     try {
       if (!transcriptFileName) {
-        throw new Error('No transcript file found');
+        throw new Error("No transcript file found");
       }
 
       // Skip cache on initial load to ensure fresh data when navigating to a session
-      const parsed = await fetchParsedTranscript(session.id, transcriptFileName, true);
+      const parsed = await fetchParsedTranscript(
+        session.id,
+        transcriptFileName,
+        true,
+      );
       setMessages(parsed.messages);
       // Use totalLines (not messages.length) to track line_offset accurately
       // This accounts for parse errors and ensures we don't re-fetch lines
       lineCountRef.current = parsed.totalLines;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load transcript');
-      console.error('Failed to load transcript:', e);
+      setError(e instanceof Error ? e.message : "Failed to load transcript");
+      console.error("Failed to load transcript:", e);
     } finally {
       setLoading(false);
     }
@@ -131,17 +170,23 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
   // Poll for new messages when visible (skip if initialMessages provided for Storybook)
   useEffect(() => {
-    if (initialMessages !== undefined || !isVisible || loading || !transcriptFileName) {
+    if (
+      initialMessages !== undefined ||
+      !isVisible ||
+      loading ||
+      !transcriptFileName
+    ) {
       return;
     }
 
     const pollForNewMessages = async () => {
       try {
-        const { newMessages, newTotalLineCount } = await fetchNewTranscriptMessages(
-          session.id,
-          transcriptFileName,
-          lineCountRef.current
-        );
+        const { newMessages, newTotalLineCount } =
+          await fetchNewTranscriptMessages(
+            session.id,
+            transcriptFileName,
+            lineCountRef.current,
+          );
 
         if (newMessages.length > 0) {
           setMessages((prev) => [...prev, ...newMessages]);
@@ -149,12 +194,15 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
         }
       } catch (e) {
         // Don't show error for polling failures - just log
-        console.warn('Failed to poll for new messages:', e);
+        console.warn("Failed to poll for new messages:", e);
       }
     };
 
     // Set up polling interval
-    const intervalId = setInterval(pollForNewMessages, TRANSCRIPT_POLL_INTERVAL_MS);
+    const intervalId = setInterval(
+      pollForNewMessages,
+      TRANSCRIPT_POLL_INTERVAL_MS,
+    );
 
     // Cleanup
     return () => {
@@ -168,14 +216,26 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   const toggleCategory = useCallback((category: MessageCategory) => {
     setFilterState((prev) => {
       const next = { ...prev };
-      if (category === 'user') {
+      if (category === "user") {
         // Toggle all user subcategories
-        const allVisible = prev.user.prompt && prev.user['tool-result'] && prev.user.skill;
-        next.user = { prompt: !allVisible, 'tool-result': !allVisible, skill: !allVisible };
-      } else if (category === 'assistant') {
+        const allVisible =
+          prev.user.prompt && prev.user["tool-result"] && prev.user.skill;
+        next.user = {
+          prompt: !allVisible,
+          "tool-result": !allVisible,
+          skill: !allVisible,
+        };
+      } else if (category === "assistant") {
         // Toggle all assistant subcategories
-        const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
-        next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
+        const allVisible =
+          prev.assistant.text &&
+          prev.assistant["tool-use"] &&
+          prev.assistant.thinking;
+        next.assistant = {
+          text: !allVisible,
+          "tool-use": !allVisible,
+          thinking: !allVisible,
+        };
       } else {
         // Flat category - simple toggle
         next[category] = !prev[category];
@@ -193,31 +253,40 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   }, []);
 
   // Toggle an assistant subcategory's visibility
-  const toggleAssistantSubcategory = useCallback((subcategory: AssistantSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
-    }));
-  }, []);
+  const toggleAssistantSubcategory = useCallback(
+    (subcategory: AssistantSubcategory) => {
+      setFilterState((prev) => ({
+        ...prev,
+        assistant: {
+          ...prev.assistant,
+          [subcategory]: !prev.assistant[subcategory],
+        },
+      }));
+    },
+    [],
+  );
 
   // Track the last successfully applied suggested title to avoid duplicate updates
   const lastAppliedSuggestedTitleRef = useRef<string | null>(null);
 
   // Handle suggested title change from analytics
-  const handleSuggestedTitleChange = useCallback((title: string) => {
-    // Skip if we already applied this title
-    if (title === lastAppliedSuggestedTitleRef.current) {
-      return;
-    }
+  const handleSuggestedTitleChange = useCallback(
+    (title: string) => {
+      // Skip if we already applied this title
+      if (title === lastAppliedSuggestedTitleRef.current) {
+        return;
+      }
 
-    if (onSessionUpdate && session) {
-      onSessionUpdate({
-        ...session,
-        suggested_session_title: title,
-      });
-      lastAppliedSuggestedTitleRef.current = title;
-    }
-  }, [session, onSessionUpdate]);
+      if (onSessionUpdate && session) {
+        onSessionUpdate({
+          ...session,
+          suggested_session_title: title,
+        });
+        lastAppliedSuggestedTitleRef.current = title;
+      }
+    },
+    [session, onSessionUpdate],
+  );
 
   // Compute session metadata for header
   const sessionMeta = useMemo(() => {
@@ -239,9 +308,20 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
       <div className={styles.mainContent}>
         <SessionHeader
           sessionId={session.id}
-          title={session.custom_title ?? session.suggested_session_title ?? session.summary ?? session.first_user_message ?? undefined}
+          title={
+            session.custom_title ??
+            session.suggested_session_title ??
+            session.summary ??
+            session.first_user_message ??
+            undefined
+          }
           hasCustomTitle={!!session.custom_title}
-          autoTitle={session.suggested_session_title ?? session.summary ?? session.first_user_message ?? undefined}
+          autoTitle={
+            session.suggested_session_title ??
+            session.summary ??
+            session.first_user_message ??
+            undefined
+          }
           externalId={session.external_id}
           ownerEmail={session.owner_email}
           model={sessionMeta.model}
@@ -254,34 +334,53 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           isOwner={isOwner}
           isShared={isShared}
           sharedByEmail={session.shared_by_email}
-          isCostMode={activeTab === 'transcript' ? isCostMode : undefined}
-          onToggleCostMode={activeTab === 'transcript' ? toggleCostMode : undefined}
-          categoryCounts={activeTab === 'transcript' ? categoryCounts : undefined}
-          filterState={activeTab === 'transcript' ? filterState : undefined}
-          onToggleCategory={activeTab === 'transcript' ? toggleCategory : undefined}
-          onToggleUserSubcategory={activeTab === 'transcript' ? toggleUserSubcategory : undefined}
-          onToggleAssistantSubcategory={activeTab === 'transcript' ? toggleAssistantSubcategory : undefined}
+          isCostMode={activeTab === "transcript" ? isCostMode : undefined}
+          onToggleCostMode={
+            activeTab === "transcript" ? toggleCostMode : undefined
+          }
+          categoryCounts={
+            activeTab === "transcript" ? categoryCounts : undefined
+          }
+          filterState={activeTab === "transcript" ? filterState : undefined}
+          onToggleCategory={
+            activeTab === "transcript" ? toggleCategory : undefined
+          }
+          onToggleUserSubcategory={
+            activeTab === "transcript" ? toggleUserSubcategory : undefined
+          }
+          onToggleAssistantSubcategory={
+            activeTab === "transcript" ? toggleAssistantSubcategory : undefined
+          }
         />
 
         {/* Tabs */}
         <div className={styles.tabs}>
           <button
-            className={`${styles.tab} ${activeTab === 'summary' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('summary')}
+            className={`${styles.tab} ${activeTab === "summary" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("summary")}
           >
             Summary
           </button>
           <button
-            className={`${styles.tab} ${activeTab === 'transcript' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('transcript')}
+            className={`${styles.tab} ${activeTab === "transcript" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("transcript")}
           >
             Transcript
           </button>
+          {activeTab === "transcript" && (
+            <button
+              className={styles.extractLearningBtn}
+              onClick={handleExtractLearning}
+              title="Extract a learning from this transcript"
+            >
+              Extract Learning
+            </button>
+          )}
         </div>
 
         {/* Tab Content */}
         <div className={styles.tabContent}>
-          {activeTab === 'summary' ? (
+          {activeTab === "summary" ? (
             <SessionSummaryPanel
               sessionId={session.id}
               isOwner={isOwner}
@@ -310,6 +409,13 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           )}
         </div>
       </div>
+
+      <ExtractLearningModal
+        isOpen={showExtractModal}
+        onClose={() => setShowExtractModal(false)}
+        sessionId={session.id}
+        selectedText={extractSelectedText}
+      />
     </div>
   );
 }
