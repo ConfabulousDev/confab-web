@@ -1,7 +1,7 @@
 // Centralized API client with error handling, interceptors, and Zod validation
 // All API responses are validated at runtime to ensure type safety
-import { z } from 'zod';
-import { shouldSkip401Redirect } from '@/utils/sessionErrors';
+import { z } from "zod";
+import { shouldSkip401Redirect } from "@/utils/sessionErrors";
 import {
   SessionDetailSchema,
   SessionListResponseSchema,
@@ -15,6 +15,8 @@ import {
   SessionAnalyticsSchema,
   TrendsResponseSchema,
   OrgAnalyticsResponseSchema,
+  LearningSchema,
+  LearningListResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -28,17 +30,19 @@ import {
   type SessionListResponse,
   type TrendsResponse,
   type OrgAnalyticsResponse,
-} from '@/schemas/api';
+  type Learning,
+  type LearningListResponse,
+} from "@/schemas/api";
 
 // Re-export types for consumers
-export type { GitHubLink, SessionAnalytics } from '@/schemas/api';
+export type { GitHubLink, SessionAnalytics } from "@/schemas/api";
 
 /**
  * Handles authentication failures by redirecting to home.
  * Call this when a 401 response is received.
  */
 function handleAuthFailure(): void {
-  window.location.href = '/';
+  window.location.href = "/";
 }
 
 export class APIError extends Error {
@@ -46,11 +50,16 @@ export class APIError extends Error {
   statusText: string;
   data?: unknown;
 
-  constructor(message: string, status: number, statusText: string, data?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    statusText: string,
+    data?: unknown,
+  ) {
     // Extract backend error message if available (format: {"error": "message"})
     const backendMessage = extractErrorMessage(data);
     super(backendMessage || message);
-    this.name = 'APIError';
+    this.name = "APIError";
     this.status = status;
     this.statusText = statusText;
     this.data = data;
@@ -63,9 +72,9 @@ export class APIError extends Error {
 function isErrorResponse(data: unknown): data is { error: string } {
   return (
     data !== null &&
-    typeof data === 'object' &&
-    'error' in data &&
-    typeof data.error === 'string'
+    typeof data === "object" &&
+    "error" in data &&
+    typeof data.error === "string"
   );
 }
 
@@ -83,18 +92,18 @@ function extractErrorMessage(data: unknown): string | null {
 export class NetworkError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'NetworkError';
+    this.name = "NetworkError";
   }
 }
 
 export class AuthenticationError extends APIError {
-  constructor(message = 'Authentication required') {
-    super(message, 401, 'Unauthorized');
-    this.name = 'AuthenticationError';
+  constructor(message = "Authentication required") {
+    super(message, 401, "Unauthorized");
+    this.name = "AuthenticationError";
   }
 }
 
-interface RequestOptions extends Omit<RequestInit, 'body'> {
+interface RequestOptions extends Omit<RequestInit, "body"> {
   skipAuth?: boolean;
   body?: unknown;
 }
@@ -102,11 +111,14 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
 class APIClient {
   private baseURL: string;
 
-  constructor(baseURL = '/api/v1') {
+  constructor(baseURL = "/api/v1") {
     this.baseURL = baseURL;
   }
 
-  private async handleResponse(response: Response, endpoint: string): Promise<unknown> {
+  private async handleResponse(
+    response: Response,
+    endpoint: string,
+  ): Promise<unknown> {
     // Handle authentication errors
     if (response.status === 401) {
       // Some endpoints handle 401 gracefully (e.g., showing login prompt)
@@ -125,17 +137,22 @@ class APIClient {
         errorData = await response.text();
       }
 
-      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+      throw new APIError(
+        `Request failed: ${response.statusText}`,
+        response.status,
+        response.statusText,
+        errorData,
+      );
     }
 
     // Handle empty responses
-    const contentType = response.headers.get('content-type');
+    const contentType = response.headers.get("content-type");
     if (!contentType) {
       return undefined;
     }
 
     // Parse JSON responses
-    if (contentType.includes('application/json')) {
+    if (contentType.includes("application/json")) {
       return response.json();
     }
 
@@ -147,19 +164,28 @@ class APIClient {
    * Make an HTTP request and return the raw response.
    * Callers must validate/narrow the response type.
    */
-  private async requestRaw(endpoint: string, options: RequestOptions = {}): Promise<unknown> {
+  private async requestRaw(
+    endpoint: string,
+    options: RequestOptions = {},
+  ): Promise<unknown> {
     const { skipAuth, body: requestBody, ...fetchOptions } = options;
 
-    const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
+    const url = endpoint.startsWith("http")
+      ? endpoint
+      : `${this.baseURL}${endpoint}`;
 
     const headers = new Headers(fetchOptions.headers);
 
     // Add JSON content type and stringify if body is an object
     let body: BodyInit | undefined;
-    if (requestBody !== undefined && requestBody !== null && typeof requestBody === 'object') {
-      headers.set('Content-Type', 'application/json');
+    if (
+      requestBody !== undefined &&
+      requestBody !== null &&
+      typeof requestBody === "object"
+    ) {
+      headers.set("Content-Type", "application/json");
       body = JSON.stringify(requestBody);
-    } else if (typeof requestBody === 'string') {
+    } else if (typeof requestBody === "string") {
       body = requestBody;
     }
 
@@ -167,7 +193,7 @@ class APIClient {
       ...fetchOptions,
       headers,
       body,
-      credentials: skipAuth ? 'omit' : 'include',
+      credentials: skipAuth ? "omit" : "include",
     };
 
     try {
@@ -180,7 +206,9 @@ class APIClient {
 
       // Network or other errors
       if (error instanceof TypeError) {
-        throw new NetworkError('Network request failed. Please check your connection.');
+        throw new NetworkError(
+          "Network request failed. Please check your connection.",
+        );
       }
 
       throw error;
@@ -191,15 +219,18 @@ class APIClient {
    * DELETE request that returns void
    */
   async deleteVoid(endpoint: string, options?: RequestOptions): Promise<void> {
-    await this.requestRaw(endpoint, { ...options, method: 'DELETE' });
+    await this.requestRaw(endpoint, { ...options, method: "DELETE" });
   }
 
   /**
    * GET request that returns string (for file content, etc.)
    */
   async getString(endpoint: string, options?: RequestOptions): Promise<string> {
-    const result = await this.requestRaw(endpoint, { ...options, method: 'GET' });
-    if (typeof result !== 'string') {
+    const result = await this.requestRaw(endpoint, {
+      ...options,
+      method: "GET",
+    });
+    if (typeof result !== "string") {
       throw new Error(`Expected string response from ${endpoint}`);
     }
     return result;
@@ -210,8 +241,12 @@ class APIClient {
    * @param endpoint - API endpoint
    * @param schema - Zod schema to validate response
    */
-  async getValidated<T>(endpoint: string, schema: z.ZodType<T>, options?: RequestOptions): Promise<T> {
-    const data = await this.requestRaw(endpoint, { ...options, method: 'GET' });
+  async getValidated<T>(
+    endpoint: string,
+    schema: z.ZodType<T>,
+    options?: RequestOptions,
+  ): Promise<T> {
+    const data = await this.requestRaw(endpoint, { ...options, method: "GET" });
     return validateResponse(schema, data, endpoint);
   }
 
@@ -225,11 +260,11 @@ class APIClient {
     endpoint: string,
     schema: z.ZodType<T>,
     data?: unknown,
-    options?: RequestOptions
+    options?: RequestOptions,
   ): Promise<T> {
     const response = await this.requestRaw(endpoint, {
       ...options,
-      method: 'POST',
+      method: "POST",
       body: data,
     });
     return validateResponse(schema, response, endpoint);
@@ -245,16 +280,15 @@ class APIClient {
     endpoint: string,
     schema: z.ZodType<T>,
     data?: unknown,
-    options?: RequestOptions
+    options?: RequestOptions,
   ): Promise<T> {
     const response = await this.requestRaw(endpoint, {
       ...options,
-      method: 'PATCH',
+      method: "PATCH",
       body: data,
     });
     return validateResponse(schema, response, endpoint);
   }
-
 }
 
 // Singleton instance
@@ -265,7 +299,7 @@ const api = new APIClient();
 
 export const sessionsAPI = {
   list: (params?: Record<string, string>): Promise<SessionListResponse> => {
-    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    const query = params ? "?" + new URLSearchParams(params).toString() : "";
     return api.getValidated(`/sessions${query}`, SessionListResponseSchema);
   },
 
@@ -278,8 +312,13 @@ export const sessionsAPI = {
    * @param sessionId - The session UUID
    * @param customTitle - The new title (max 255 chars) or null to clear
    */
-  updateTitle: (sessionId: string, customTitle: string | null): Promise<SessionDetail> =>
-    api.patchValidated(`/sessions/${sessionId}/title`, SessionDetailSchema, { custom_title: customTitle }),
+  updateTitle: (
+    sessionId: string,
+    customTitle: string | null,
+  ): Promise<SessionDetail> =>
+    api.patchValidated(`/sessions/${sessionId}/title`, SessionDetailSchema, {
+      custom_title: customTitle,
+    }),
 
   getShares: (sessionId: string): Promise<SessionShare[]> =>
     api.getValidated(`/sessions/${sessionId}/shares`, SessionShareListSchema),
@@ -290,15 +329,20 @@ export const sessionsAPI = {
       is_public: boolean;
       recipients?: string[];
       expires_in_days?: number | null;
-    }
+    },
   ): Promise<CreateShareResponse> =>
-    api.postValidated(`/sessions/${sessionId}/share`, CreateShareResponseSchema, data),
+    api.postValidated(
+      `/sessions/${sessionId}/share`,
+      CreateShareResponseSchema,
+      data,
+    ),
 
-  revokeShare: (shareId: number): Promise<void> => api.deleteVoid(`/shares/${shareId}`),
+  revokeShare: (shareId: number): Promise<void> =>
+    api.deleteVoid(`/shares/${shareId}`),
 };
 
 export const authAPI = {
-  me: (): Promise<User> => api.getValidated('/me', UserSchema),
+  me: (): Promise<User> => api.getValidated("/me", UserSchema),
 };
 
 /**
@@ -315,7 +359,11 @@ export const syncFilesAPI = {
    * @param fileName - Name of the file (e.g., "transcript.jsonl")
    * @param lineOffset - Optional: Return only lines after this line number (for incremental fetching)
    */
-  getContent: (sessionId: string, fileName: string, lineOffset?: number): Promise<string> => {
+  getContent: (
+    sessionId: string,
+    fileName: string,
+    lineOffset?: number,
+  ): Promise<string> => {
     let url = `/sessions/${encodeURIComponent(sessionId)}/sync/file?file_name=${encodeURIComponent(fileName)}`;
     if (lineOffset !== undefined && lineOffset > 0) {
       url += `&line_offset=${lineOffset}`;
@@ -325,16 +373,17 @@ export const syncFilesAPI = {
 };
 
 export const keysAPI = {
-  list: (): Promise<APIKey[]> => api.getValidated('/keys', APIKeyListSchema),
+  list: (): Promise<APIKey[]> => api.getValidated("/keys", APIKeyListSchema),
 
   create: (name: string): Promise<CreateAPIKeyResponse> =>
-    api.postValidated('/keys', CreateAPIKeyResponseSchema, { name }),
+    api.postValidated("/keys", CreateAPIKeyResponseSchema, { name }),
 
   delete: (keyId: number): Promise<void> => api.deleteVoid(`/keys/${keyId}`),
 };
 
 export const sharesAPI = {
-  list: (): Promise<SessionShare[]> => api.getValidated('/shares', SessionShareListSchema),
+  list: (): Promise<SessionShare[]> =>
+    api.getValidated("/shares", SessionShareListSchema),
 };
 
 export const githubLinksAPI = {
@@ -343,7 +392,10 @@ export const githubLinksAPI = {
    * Works for any user with session access (owner, shared, public).
    */
   list: (sessionId: string): Promise<GitHubLinksResponse> =>
-    api.getValidated(`/sessions/${sessionId}/github-links`, GitHubLinksResponseSchema),
+    api.getValidated(
+      `/sessions/${sessionId}/github-links`,
+      GitHubLinksResponseSchema,
+    ),
 
   /**
    * Create a new GitHub link for a session.
@@ -354,10 +406,14 @@ export const githubLinksAPI = {
     data: {
       url: string;
       title?: string;
-      source: 'cli_hook' | 'manual';
-    }
+      source: "cli_hook" | "manual";
+    },
   ): Promise<GitHubLink> =>
-    api.postValidated(`/sessions/${sessionId}/github-links`, GitHubLinkSchema, data),
+    api.postValidated(
+      `/sessions/${sessionId}/github-links`,
+      GitHubLinkSchema,
+      data,
+    ),
 
   /**
    * Delete a GitHub link.
@@ -378,23 +434,26 @@ export const analyticsAPI = {
    *                   If provided and >= current line count, returns null (304 Not Modified).
    * @returns SessionAnalytics or null if no new data available
    */
-  get: async (sessionId: string, asOfLine?: number): Promise<SessionAnalytics | null> => {
+  get: async (
+    sessionId: string,
+    asOfLine?: number,
+  ): Promise<SessionAnalytics | null> => {
     let url = `/sessions/${sessionId}/analytics`;
     const hasCacheBustingParam = asOfLine !== undefined && asOfLine > 0;
     if (hasCacheBustingParam) {
       url += `?as_of_line=${asOfLine}`;
     }
 
-    const fullUrl = `${api['baseURL']}${url}`;
+    const fullUrl = `${api["baseURL"]}${url}`;
 
     // Special case: need to handle 304 before fetchRaw's error checking,
     // and need custom cache control headers
     const response = await fetch(fullUrl, {
-      method: 'GET',
-      credentials: 'include',
+      method: "GET",
+      credentials: "include",
       // Bypass browser cache when not using as_of_line param (e.g., during Smart Recap generation)
       // This ensures we get fresh data instead of a cached "generating" response
-      ...(hasCacheBustingParam ? {} : { cache: 'no-store' as const }),
+      ...(hasCacheBustingParam ? {} : { cache: "no-store" as const }),
     });
 
     // Handle 304 Not Modified - no new data (before shared error handling)
@@ -414,7 +473,12 @@ export const analyticsAPI = {
       } catch {
         errorData = await response.text();
       }
-      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+      throw new APIError(
+        `Request failed: ${response.statusText}`,
+        response.status,
+        response.statusText,
+        errorData,
+      );
     }
 
     const data = await response.json();
@@ -428,11 +492,13 @@ export const analyticsAPI = {
    * @param sessionId - The session UUID
    * @returns SessionAnalytics with the smart_recap in "generating" state
    */
-  regenerateSmartRecap: async (sessionId: string): Promise<SessionAnalytics> => {
+  regenerateSmartRecap: async (
+    sessionId: string,
+  ): Promise<SessionAnalytics> => {
     const url = `/sessions/${sessionId}/analytics/smart-recap/regenerate`;
     const response = await fetchRaw(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
     });
     const data = await response.json();
     return validateResponse(SessionAnalyticsSchema, data, url);
@@ -445,8 +511,8 @@ export const analyticsAPI = {
  * Used by endpoints that need custom fetch behavior (e.g., 304 handling, cache headers).
  */
 async function fetchRaw(url: string, init: RequestInit): Promise<Response> {
-  const fullUrl = `${api['baseURL']}${url}`;
-  const response = await fetch(fullUrl, { credentials: 'include', ...init });
+  const fullUrl = `${api["baseURL"]}${url}`;
+  const response = await fetch(fullUrl, { credentials: "include", ...init });
 
   if (response.status === 401) {
     handleAuthFailure();
@@ -473,7 +539,7 @@ async function fetchRaw(url: string, init: RequestInit): Promise<Response> {
 
 export interface TrendsParams {
   startDate?: string; // YYYY-MM-DD (local date)
-  endDate?: string;   // YYYY-MM-DD (local date, inclusive)
+  endDate?: string; // YYYY-MM-DD (local date, inclusive)
   repos?: string[];
   includeNoRepo?: boolean;
 }
@@ -498,24 +564,27 @@ export const trendsAPI = {
     const searchParams = new URLSearchParams();
     // Convert date strings to epoch seconds for correct timezone handling
     if (params.startDate) {
-      searchParams.set('start_ts', String(localDateToEpoch(params.startDate)));
+      searchParams.set("start_ts", String(localDateToEpoch(params.startDate)));
     }
     if (params.endDate) {
       // end_ts is exclusive: midnight of the day AFTER the selected end date
-      searchParams.set('end_ts', String(localDateToEpoch(params.endDate) + 86400));
+      searchParams.set(
+        "end_ts",
+        String(localDateToEpoch(params.endDate) + 86400),
+      );
     }
     // Always send timezone offset for correct daily grouping
-    searchParams.set('tz_offset', String(new Date().getTimezoneOffset()));
+    searchParams.set("tz_offset", String(new Date().getTimezoneOffset()));
     if (params.repos && params.repos.length > 0) {
-      searchParams.set('repos', params.repos.join(','));
+      searchParams.set("repos", params.repos.join(","));
     }
     if (params.includeNoRepo !== undefined) {
-      searchParams.set('include_no_repo', String(params.includeNoRepo));
+      searchParams.set("include_no_repo", String(params.includeNoRepo));
     }
 
     const queryString = searchParams.toString();
-    const url = `/trends${queryString ? `?${queryString}` : ''}`;
-    const response = await fetchRaw(url, { method: 'GET' });
+    const url = `/trends${queryString ? `?${queryString}` : ""}`;
+    const response = await fetchRaw(url, { method: "GET" });
     const data = await response.json();
     return validateResponse(TrendsResponseSchema, data, url);
   },
@@ -523,24 +592,63 @@ export const trendsAPI = {
 
 export interface OrgAnalyticsParams {
   startDate?: string; // YYYY-MM-DD (local date)
-  endDate?: string;   // YYYY-MM-DD (local date, inclusive)
+  endDate?: string; // YYYY-MM-DD (local date, inclusive)
 }
 
 export const orgAnalyticsAPI = {
-  get: async (params: OrgAnalyticsParams = {}): Promise<OrgAnalyticsResponse> => {
+  get: async (
+    params: OrgAnalyticsParams = {},
+  ): Promise<OrgAnalyticsResponse> => {
     const searchParams = new URLSearchParams();
     if (params.startDate) {
-      searchParams.set('start_ts', String(localDateToEpoch(params.startDate)));
+      searchParams.set("start_ts", String(localDateToEpoch(params.startDate)));
     }
     if (params.endDate) {
-      searchParams.set('end_ts', String(localDateToEpoch(params.endDate) + 86400));
+      searchParams.set(
+        "end_ts",
+        String(localDateToEpoch(params.endDate) + 86400),
+      );
     }
-    searchParams.set('tz_offset', String(new Date().getTimezoneOffset()));
+    searchParams.set("tz_offset", String(new Date().getTimezoneOffset()));
 
     const queryString = searchParams.toString();
-    const url = `/org/analytics${queryString ? `?${queryString}` : ''}`;
-    const response = await fetchRaw(url, { method: 'GET' });
+    const url = `/org/analytics${queryString ? `?${queryString}` : ""}`;
+    const response = await fetchRaw(url, { method: "GET" });
     const data = await response.json();
     return validateResponse(OrgAnalyticsResponseSchema, data, url);
   },
+};
+
+export const learningsAPI = {
+  list: (params?: Record<string, string>): Promise<LearningListResponse> => {
+    const query = params ? "?" + new URLSearchParams(params).toString() : "";
+    return api.getValidated(`/learnings${query}`, LearningListResponseSchema);
+  },
+
+  get: (learningId: string): Promise<Learning> =>
+    api.getValidated(`/learnings/${learningId}`, LearningSchema),
+
+  create: (data: {
+    title: string;
+    body: string;
+    tags: string[];
+    source: string;
+    session_ids?: string[];
+    transcript_range?: unknown;
+  }): Promise<Learning> =>
+    api.postValidated("/learnings", LearningSchema, data),
+
+  update: (
+    learningId: string,
+    data: {
+      title?: string;
+      body?: string;
+      tags?: string[];
+      status?: string;
+    },
+  ): Promise<Learning> =>
+    api.patchValidated(`/learnings/${learningId}`, LearningSchema, data),
+
+  delete: (learningId: string): Promise<void> =>
+    api.deleteVoid(`/learnings/${learningId}`),
 };

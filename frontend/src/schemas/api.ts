@@ -1,6 +1,6 @@
 // Zod schemas for API response validation
 // Validates all data received from backend APIs
-import { z } from 'zod';
+import { z } from "zod";
 
 // ============================================================================
 // Common Schemas
@@ -45,7 +45,12 @@ const SessionSchema = z.object({
   github_commits: z.array(z.string()).nullable().optional(), // Linked GitHub commit SHAs (latest first)
   estimated_cost_usd: z.string().nullable().optional(), // Estimated API cost from analytics
   is_owner: z.boolean(),
-  access_type: z.enum(['owner', 'private_share', 'public_share', 'system_share']),
+  access_type: z.enum([
+    "owner",
+    "private_share",
+    "public_share",
+    "system_share",
+  ]),
   shared_by_email: z.string().nullable().optional(),
   owner_email: z.string(),
 });
@@ -59,7 +64,7 @@ const SessionFilterOptionsSchema = z.object({
 export const SessionListResponseSchema = z.object({
   sessions: z.array(SessionSchema),
   has_more: z.boolean(),
-  next_cursor: z.string().optional().default(''),
+  next_cursor: z.string().optional().default(""),
   page_size: z.number(),
   filter_options: SessionFilterOptionsSchema,
 });
@@ -139,7 +144,7 @@ export const CreateShareResponseSchema = z.object({
 // GitHub Link Schemas
 // ============================================================================
 
-const GitHubLinkTypeSchema = z.enum(['commit', 'pull_request']);
+const GitHubLinkTypeSchema = z.enum(["commit", "pull_request"]);
 const GitHubLinkSourceSchema = z.string(); // forward-compatible: backend may add new sources
 
 export const GitHubLinkSchema = z.object({
@@ -279,7 +284,10 @@ const RedactionsCardDataSchema = z.object({
 
 // AnnotatedItem: a list item with optional message reference.
 // Backwards-compatible: accepts plain strings (legacy) or objects (new).
-const AnnotatedItemObjectSchema = z.object({ text: z.string(), message_id: z.string().optional() });
+const AnnotatedItemObjectSchema = z.object({
+  text: z.string(),
+  message_id: z.string().optional(),
+});
 const AnnotatedItemSchema = z
   .union([
     z.string().transform((s) => ({ text: s })),
@@ -335,7 +343,10 @@ export const SessionAnalyticsSchema = z.object({
   // Smart recap quota (only present if feature is enabled, owner only)
   smart_recap_quota: SmartRecapQuotaInfoSchema.optional().nullable(),
   // Why smart recap data is missing: "quota_exceeded" (owner) or "unavailable" (non-owner)
-  smart_recap_missing_reason: z.enum(['quota_exceeded', 'unavailable']).optional().nullable(),
+  smart_recap_missing_reason: z
+    .enum(["quota_exceeded", "unavailable"])
+    .optional()
+    .nullable(),
   // Suggested session title from Smart Recap (if generated)
   suggested_session_title: z.string().nullable().optional(),
 });
@@ -346,7 +357,7 @@ export const SessionAnalyticsSchema = z.object({
 
 const DateRangeSchema = z.object({
   start_date: z.string(), // YYYY-MM-DD
-  end_date: z.string(),   // YYYY-MM-DD
+  end_date: z.string(), // YYYY-MM-DD
 });
 
 const TrendsOverviewCardSchema = z.object({
@@ -359,7 +370,7 @@ const TrendsOverviewCardSchema = z.object({
 });
 
 const DailyCostPointSchema = z.object({
-  date: z.string(),     // YYYY-MM-DD
+  date: z.string(), // YYYY-MM-DD
   cost_usd: z.string(), // Decimal as string
 });
 
@@ -373,7 +384,7 @@ const TrendsTokensCardSchema = z.object({
 });
 
 const DailySessionCountSchema = z.object({
-  date: z.string(),         // YYYY-MM-DD
+  date: z.string(), // YYYY-MM-DD
   session_count: z.number(),
 });
 
@@ -479,7 +490,9 @@ export type SessionCardData = z.infer<typeof SessionCardDataSchema>;
 export type ToolsCardData = z.infer<typeof ToolsCardDataSchema>;
 export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
-export type AgentsAndSkillsCardData = z.infer<typeof AgentsAndSkillsCardDataSchema>;
+export type AgentsAndSkillsCardData = z.infer<
+  typeof AgentsAndSkillsCardDataSchema
+>;
 export type RedactionsCardData = z.infer<typeof RedactionsCardDataSchema>;
 export type AnnotatedItem = z.infer<typeof AnnotatedItemSchema>;
 export type SmartRecapCardData = z.infer<typeof SmartRecapCardDataSchema>;
@@ -492,7 +505,9 @@ export type TrendsTokensCard = z.infer<typeof TrendsTokensCardSchema>;
 export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
-export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
+export type TrendsAgentsAndSkillsCard = z.infer<
+  typeof TrendsAgentsAndSkillsCardSchema
+>;
 export type TrendsTopSessionsCard = z.infer<typeof TrendsTopSessionsCardSchema>;
 export type TopSessionItem = z.infer<typeof TopSessionItemSchema>;
 export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
@@ -532,6 +547,36 @@ export type OrgUserAnalytics = z.infer<typeof OrgUserAnalyticsSchema>;
 export type OrgAnalyticsResponse = z.infer<typeof OrgAnalyticsResponseSchema>;
 
 // ============================================================================
+// Learning Schemas
+// ============================================================================
+
+export const LearningSchema = z.object({
+  id: z.string(),
+  user_id: z.number(),
+  title: z.string(),
+  body: z.string(),
+  tags: z.array(z.string()),
+  status: z.enum(["draft", "confirmed", "exported", "archived"]),
+  source: z.enum(["manual_session", "manual_review", "ai_extracted"]),
+  session_ids: z.array(z.string()),
+  transcript_range: z.unknown().nullable().optional(),
+  confluence_page_id: z.string().nullable().optional(),
+  exported_at: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  owner_email: z.string().optional(),
+});
+
+export type Learning = z.infer<typeof LearningSchema>;
+
+export const LearningListResponseSchema = z.object({
+  learnings: z.array(LearningSchema),
+  counts: z.record(z.string(), z.number()),
+});
+
+export type LearningListResponse = z.infer<typeof LearningListResponseSchema>;
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 
@@ -539,10 +584,17 @@ export type OrgAnalyticsResponse = z.infer<typeof OrgAnalyticsResponseSchema>;
  * Validate API response data against a schema.
  * Throws ZodError with detailed messages on failure.
  */
-export function validateResponse<T>(schema: z.ZodType<T>, data: unknown, endpoint: string): T {
+export function validateResponse<T>(
+  schema: z.ZodType<T>,
+  data: unknown,
+  endpoint: string,
+): T {
   const result = schema.safeParse(data);
   if (!result.success) {
-    console.error(`API validation failed for ${endpoint}:`, result.error.issues);
+    console.error(
+      `API validation failed for ${endpoint}:`,
+      result.error.issues,
+    );
     throw new APIValidationError(endpoint, result.error);
   }
   return result.data;
@@ -556,9 +608,11 @@ class APIValidationError extends Error {
   zodError: z.ZodError;
 
   constructor(endpoint: string, zodError: z.ZodError) {
-    const issues = zodError.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+    const issues = zodError.issues
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ");
     super(`Invalid API response from ${endpoint}: ${issues}`);
-    this.name = 'APIValidationError';
+    this.name = "APIValidationError";
     this.endpoint = endpoint;
     this.zodError = zodError;
   }

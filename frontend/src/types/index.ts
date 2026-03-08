@@ -7,7 +7,9 @@ export type {
   Session,
   SessionDetail,
   SessionShare,
-} from '@/schemas/api';
+  Learning,
+  LearningListResponse,
+} from "@/schemas/api";
 
 // Re-export transcript types from schemas (these are validated at runtime)
 export type {
@@ -20,7 +22,7 @@ export type {
   AssistantMessage,
   SystemMessage,
   PRLinkMessage,
-} from '@/schemas/transcript';
+} from "@/schemas/transcript";
 
 // Re-export type guards
 export {
@@ -38,7 +40,7 @@ export {
   isQueueOperationMessage,
   isPRLinkMessage,
   isUnknownMessage,
-} from '@/schemas/transcript';
+} from "@/schemas/transcript";
 
 // Re-export utility functions
 export {
@@ -50,4 +52,4 @@ export {
   getCommandExpansionSkillName,
   stripCommandExpansionTags,
   warnIfKnownTypeCaughtByCatchall,
-} from '@/schemas/transcript';
+} from "@/schemas/transcript";
