@@ -342,61 +342,6 @@ func TestDeleteDeviceCode(t *testing.T) {
 	}
 }
 
-// TestCleanupExpiredDeviceCodes tests cleanup of expired codes
-func TestCleanupExpiredDeviceCodes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	env := testutil.SetupTestEnvironment(t)
-	env.CleanDB(t)
-	store := &dbauth.Store{DB: env.DB}
-
-	// Create some expired codes
-	testutil.CreateTestDeviceCode(t, env, makeDeviceCode("expired1"), "EXP1-1111",
-		"Expired 1", time.Now().UTC().Add(-time.Hour))
-	testutil.CreateTestDeviceCode(t, env, makeDeviceCode("expired2"), "EXP2-2222",
-		"Expired 2", time.Now().UTC().Add(-2*time.Hour))
-
-	// Create some valid codes
-	testutil.CreateTestDeviceCode(t, env, makeDeviceCode("valid1"), "VLD1-1111",
-		"Valid 1", time.Now().UTC().Add(time.Hour))
-	testutil.CreateTestDeviceCode(t, env, makeDeviceCode("valid2"), "VLD2-2222",
-		"Valid 2", time.Now().UTC().Add(2*time.Hour))
-
-	// Cleanup expired codes
-	deleted, err := store.CleanupExpiredDeviceCodes(context.Background())
-	if err != nil {
-		t.Fatalf("CleanupExpiredDeviceCodes failed: %v", err)
-	}
-
-	if deleted != 2 {
-		t.Errorf("deleted = %d, want 2", deleted)
-	}
-
-	// Verify expired codes are gone
-	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("expired1"))
-	if err != db.ErrDeviceCodeNotFound {
-		t.Error("expired1 should be deleted")
-	}
-
-	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("expired2"))
-	if err != db.ErrDeviceCodeNotFound {
-		t.Error("expired2 should be deleted")
-	}
-
-	// Verify valid codes still exist
-	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("valid1"))
-	if err != nil {
-		t.Errorf("valid1 should still exist: %v", err)
-	}
-
-	_, err = store.GetDeviceCodeByDeviceCode(context.Background(), makeDeviceCode("valid2"))
-	if err != nil {
-		t.Errorf("valid2 should still exist: %v", err)
-	}
-}
-
 // TestDeviceCodeFlow_CompleteScenario tests the full device code authorization flow
 func TestDeviceCodeFlow_CompleteScenario(t *testing.T) {
 	if testing.Short() {

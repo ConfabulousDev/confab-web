@@ -2,9 +2,41 @@ package email
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
+
+// mockService is a mock implementation for testing
+type mockService struct {
+	SentEmails []ShareInvitationParams
+	ShouldFail bool
+	FailError  error
+}
+
+func newMockService() *mockService {
+	return &mockService{
+		SentEmails: []ShareInvitationParams{},
+	}
+}
+
+func (m *mockService) SendShareInvitation(ctx context.Context, params ShareInvitationParams) error {
+	if m.ShouldFail {
+		if m.FailError != nil {
+			return m.FailError
+		}
+		return fmt.Errorf("mock email service failure")
+	}
+	m.SentEmails = append(m.SentEmails, params)
+	return nil
+}
+
+func (m *mockService) reset() {
+	m.SentEmails = []ShareInvitationParams{}
+	m.ShouldFail = false
+	m.FailError = nil
+}
 
 func TestRateLimiter(t *testing.T) {
 	t.Run("allows requests under limit", func(t *testing.T) {
@@ -86,7 +118,7 @@ func TestRateLimiter(t *testing.T) {
 
 func TestRateLimitedService(t *testing.T) {
 	t.Run("sends email when under rate limit", func(t *testing.T) {
-		mock := NewMockService()
+		mock := newMockService()
 		service := NewRateLimitedService(mock, 10)
 
 		params := ShareInvitationParams{
@@ -108,7 +140,7 @@ func TestRateLimitedService(t *testing.T) {
 	})
 
 	t.Run("returns error when rate limited", func(t *testing.T) {
-		mock := NewMockService()
+		mock := newMockService()
 		service := NewRateLimitedService(mock, 2)
 
 		params := ShareInvitationParams{
@@ -140,7 +172,7 @@ func TestRateLimitedService(t *testing.T) {
 	})
 
 	t.Run("CheckRateLimit returns error when limit exceeded", func(t *testing.T) {
-		mock := NewMockService()
+		mock := newMockService()
 		service := NewRateLimitedService(mock, 5)
 
 		// Check if we can send 3 emails (should succeed)
@@ -159,7 +191,7 @@ func TestRateLimitedService(t *testing.T) {
 
 func TestMockService(t *testing.T) {
 	t.Run("records sent emails", func(t *testing.T) {
-		mock := NewMockService()
+		mock := newMockService()
 
 		params1 := ShareInvitationParams{
 			ToEmail:     "user1@example.com",
@@ -187,7 +219,7 @@ func TestMockService(t *testing.T) {
 	})
 
 	t.Run("fails when ShouldFail is set", func(t *testing.T) {
-		mock := NewMockService()
+		mock := newMockService()
 		mock.ShouldFail = true
 
 		params := ShareInvitationParams{
@@ -201,11 +233,11 @@ func TestMockService(t *testing.T) {
 	})
 
 	t.Run("Reset clears state", func(t *testing.T) {
-		mock := NewMockService()
+		mock := newMockService()
 		mock.ShouldFail = true
 		mock.SentEmails = append(mock.SentEmails, ShareInvitationParams{})
 
-		mock.Reset()
+		mock.reset()
 
 		if mock.ShouldFail {
 			t.Error("ShouldFail should be false after Reset")
@@ -230,19 +262,19 @@ func TestRenderTextTemplate(t *testing.T) {
 
 		result := renderTextTemplate(params, frontendURL)
 
-		if !contains(result, "Alice") {
+		if !strings.Contains(result, "Alice") {
 			t.Error("expected sharer name in template")
 		}
-		if !contains(result, "alice@example.com") {
+		if !strings.Contains(result, "alice@example.com") {
 			t.Error("expected sharer email in template")
 		}
-		if !contains(result, "My Test Session") {
+		if !strings.Contains(result, "My Test Session") {
 			t.Error("expected session title in template")
 		}
-		if !contains(result, "https://example.com/share/abc123") {
+		if !strings.Contains(result, "https://example.com/share/abc123") {
 			t.Error("expected share URL in template")
 		}
-		if !contains(result, "https://example.com/unsubscribe") {
+		if !strings.Contains(result, "https://example.com/unsubscribe") {
 			t.Error("expected unsubscribe URL in template")
 		}
 	})
@@ -260,7 +292,7 @@ func TestRenderTextTemplate(t *testing.T) {
 
 		result := renderTextTemplate(params, frontendURL)
 
-		if !contains(result, "December 25, 2025") {
+		if !strings.Contains(result, "December 25, 2025") {
 			t.Error("expected expiration date in template")
 		}
 	})
@@ -276,7 +308,7 @@ func TestRenderTextTemplate(t *testing.T) {
 
 		result := renderTextTemplate(params, frontendURL)
 
-		if !contains(result, "Untitled Session") {
+		if !strings.Contains(result, "Untitled Session") {
 			t.Error("expected 'Untitled Session' when title is empty")
 		}
 	})
@@ -299,19 +331,19 @@ func TestRenderHTMLTemplate(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if !contains(result, "<!DOCTYPE html>") {
+		if !strings.Contains(result, "<!DOCTYPE html>") {
 			t.Error("expected DOCTYPE in HTML template")
 		}
-		if !contains(result, "Alice") {
+		if !strings.Contains(result, "Alice") {
 			t.Error("expected sharer name in HTML template")
 		}
-		if !contains(result, "My Test Session") {
+		if !strings.Contains(result, "My Test Session") {
 			t.Error("expected session title in HTML template")
 		}
-		if !contains(result, "https://example.com/share/abc123") {
+		if !strings.Contains(result, "https://example.com/share/abc123") {
 			t.Error("expected share URL in HTML template")
 		}
-		if !contains(result, "https://example.com/unsubscribe") {
+		if !strings.Contains(result, "https://example.com/unsubscribe") {
 			t.Error("expected unsubscribe URL in HTML template")
 		}
 	})
@@ -332,21 +364,9 @@ func TestRenderHTMLTemplate(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if !contains(result, "December 25, 2025") {
+		if !strings.Contains(result, "December 25, 2025") {
 			t.Error("expected expiration date in HTML template")
 		}
 	})
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

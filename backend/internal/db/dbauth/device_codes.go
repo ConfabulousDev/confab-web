@@ -114,19 +114,3 @@ func (s *Store) DeleteDeviceCode(ctx context.Context, deviceCode string) error {
 	return nil
 }
 
-// CleanupExpiredDeviceCodes removes expired device codes
-func (s *Store) CleanupExpiredDeviceCodes(ctx context.Context) (int64, error) {
-	ctx, span := tracer.Start(ctx, "db.cleanup_expired_device_codes")
-	defer span.End()
-
-	query := `DELETE FROM device_codes WHERE expires_at < NOW()`
-	result, err := s.conn().ExecContext(ctx, query)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return 0, fmt.Errorf("failed to cleanup expired device codes: %w", err)
-	}
-	rows, _ := result.RowsAffected()
-	span.SetAttributes(attribute.Int64("codes.deleted", rows))
-	return rows, nil
-}

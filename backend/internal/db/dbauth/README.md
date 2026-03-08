@@ -11,7 +11,7 @@ Authentication and authorization database operations: OAuth identity management,
 | `password.go` | `AuthenticatePassword`, `CreatePasswordUser`, `UpdateUserPassword`, `GetUserByEmail`, `IsUserAdmin`. Includes bcrypt verification, account lockout after failed attempts, and timing-attack mitigation. |
 | `web_sessions.go` | `CreateWebSession`, `GetWebSession`, `DeleteWebSession` -- browser session management with expiration |
 | `api_keys.go` | `ValidateAPIKey`, `CreateAPIKeyWithReturn`, `ReplaceAPIKey`, `ListAPIKeys`, `DeleteAPIKey`, `CountAPIKeys`, `UpdateAPIKeyLastUsed` -- API key lifecycle with per-user limits |
-| `device_codes.go` | `CreateDeviceCode`, `GetDeviceCodeByUserCode`, `GetDeviceCodeByDeviceCode`, `AuthorizeDeviceCode`, `DeleteDeviceCode`, `CleanupExpiredDeviceCodes` -- OAuth device code flow for CLI authentication |
+| `device_codes.go` | `CreateDeviceCode`, `GetDeviceCodeByUserCode`, `GetDeviceCodeByDeviceCode`, `AuthorizeDeviceCode`, `DeleteDeviceCode` -- OAuth device code flow for CLI authentication |
 
 ## Key API
 

@@ -40,13 +40,6 @@ func WithBaseURL(url string) ClientOption {
 	}
 }
 
-// WithTimeout sets a custom HTTP timeout.
-func WithTimeout(d time.Duration) ClientOption {
-	return func(c *Client) {
-		c.httpClient.Timeout = d
-	}
-}
-
 // NewClient creates a new Anthropic API client.
 func NewClient(apiKey string, opts ...ClientOption) *Client {
 	c := &Client{
