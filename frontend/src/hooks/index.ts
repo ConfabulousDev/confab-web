@@ -1,15 +1,21 @@
 // Export hooks that are imported through this barrel
-export { useAppConfig } from './useAppConfig';
-export { useAuth } from './useAuth';
-export { useSessionsFetch } from './useSessionsFetch';
-export { useDocumentTitle } from './useDocumentTitle';
-export { useCopyToClipboard } from './useCopyToClipboard';
-export { useSuccessMessage } from './useSuccessMessage';
-export { useShareDialog } from './useShareDialog';
-export { useLoadSession } from './useLoadSession';
-export { useSessionFilters } from './useSessionFilters';
-export { useDropdown } from './useDropdown';
-export { useVisibility } from './useVisibility';
-export { useTrends } from './useTrends';
-export { useOrgAnalytics } from './useOrgAnalytics';
-export { useTranscriptSearch } from './useTranscriptSearch';
+export { useAppConfig } from "./useAppConfig";
+export { useAuth } from "./useAuth";
+export { useSessionsFetch } from "./useSessionsFetch";
+export { useDocumentTitle } from "./useDocumentTitle";
+export { useCopyToClipboard } from "./useCopyToClipboard";
+export { useSuccessMessage } from "./useSuccessMessage";
+export { useShareDialog } from "./useShareDialog";
+export { useLoadSession } from "./useLoadSession";
+export { useSessionFilters } from "./useSessionFilters";
+export { useDropdown } from "./useDropdown";
+export { useVisibility } from "./useVisibility";
+export { useTrends } from "./useTrends";
+export { useOrgAnalytics } from "./useOrgAnalytics";
+export { useTranscriptSearch } from "./useTranscriptSearch";
+export {
+  useLearnings,
+  useCreateLearning,
+  useUpdateLearning,
+  useDeleteLearning,
+} from "./useLearnings";

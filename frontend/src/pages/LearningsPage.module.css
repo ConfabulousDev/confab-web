@@ -1,0 +1,296 @@
+/* ABOUTME: CSS module for the Learnings page */
+/* ABOUTME: Styles for learning cards, filters, status tabs, and action buttons */
+
+.pageWrapper { composes: pageWrapper from './pageLayout.module.css'; }
+.mainContent { composes: mainContent from './pageLayout.module.css'; }
+.container { composes: container from './pageLayout.module.css'; }
+.card { composes: card from './pageLayout.module.css'; }
+.loading, .empty { composes: loading from './pageLayout.module.css'; }
+
+/* Header toolbar */
+.toolbar {
+  background: var(--color-bg-primary);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-sm) var(--spacing-md);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.toolbarTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.pageTitle {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.stats {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.statCount {
+  font-weight: var(--font-semibold);
+  color: var(--color-text-secondary);
+}
+
+/* Filters bar */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 180px;
+  max-width: 300px;
+  padding: 6px var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.statusTabs {
+  display: flex;
+  gap: 2px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.tab {
+  padding: 4px var(--spacing-sm);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-hover);
+}
+
+.tab.active {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-weight: var(--font-medium);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Learning cards list */
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.learningCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border-light);
+  transition: background var(--transition-fast);
+}
+
+.learningCard:last-child {
+  border-bottom: none;
+}
+
+.learningCard:hover {
+  background: var(--color-bg-hover);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.cardTitle {
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-text-primary);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.body {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  margin: 0;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.source {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.date {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+/* Status chips */
+.statusChip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.statusDraft {
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  color: var(--color-warning);
+}
+
+.statusConfirmed {
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
+  color: var(--color-success);
+}
+
+.statusExported {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
+}
+
+.statusArchived {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+}
+
+/* Action buttons */
+.actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+.actionBtn {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.actionBtn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
+.actionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.confirmBtn:hover {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.archiveBtn:hover {
+  color: var(--color-text-muted);
+}
+
+.deleteBtn:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .toolbar {
+    padding: var(--spacing-sm);
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .searchInput {
+    max-width: none;
+  }
+
+  .cardHeader {
+    flex-direction: column;
+  }
+
+  .actions {
+    align-self: flex-end;
+  }
+
+  .date {
+    margin-left: 0;
+  }
+}

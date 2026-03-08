@@ -1,20 +1,21 @@
-import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
-import App from './App';
-import ProtectedRoute from '@/components/ProtectedRoute';
-import { useAppConfig } from '@/hooks/useAppConfig';
+import { lazy, Suspense, type ReactNode } from "react";
+import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
+import App from "./App";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAppConfig } from "@/hooks/useAppConfig";
 
 // Lazy load pages for code splitting
-const HomePage = lazy(() => import('@/pages/HomePage'));
-const SessionsPage = lazy(() => import('@/pages/SessionsPage'));
-const SessionDetailPage = lazy(() => import('@/pages/SessionDetailPage'));
-const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
-const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
-const TrendsPage = lazy(() => import('@/pages/TrendsPage'));
-const OrgPage = lazy(() => import('@/pages/OrgPage'));
-const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
-const PoliciesPage = lazy(() => import('@/pages/PoliciesPage'));
-const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const HomePage = lazy(() => import("@/pages/HomePage"));
+const SessionsPage = lazy(() => import("@/pages/SessionsPage"));
+const SessionDetailPage = lazy(() => import("@/pages/SessionDetailPage"));
+const APIKeysPage = lazy(() => import("@/pages/APIKeysPage"));
+const ShareLinksPage = lazy(() => import("@/pages/ShareLinksPage"));
+const TrendsPage = lazy(() => import("@/pages/TrendsPage"));
+const OrgPage = lazy(() => import("@/pages/OrgPage"));
+const LearningsPage = lazy(() => import("@/pages/LearningsPage"));
+const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
+const PoliciesPage = lazy(() => import("@/pages/PoliciesPage"));
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
 
 /** Redirect old /sessions/:id/shared/:token URLs to canonical /sessions/:id (CF-132) */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -29,7 +30,7 @@ function RedirectToCanonicalSession() {
 // eslint-disable-next-line react-refresh/only-export-components
 function RedirectToTerms() {
   window.location.href =
-    'https://app.termly.io/policy-viewer/policy.html?policyUUID=69001385-5934-4a9f-9ade-ca93873b3e6c';
+    "https://app.termly.io/policy-viewer/policy.html?policyUUID=69001385-5934-4a9f-9ade-ca93873b3e6c";
   return null;
 }
 
@@ -37,7 +38,7 @@ function RedirectToTerms() {
 // eslint-disable-next-line react-refresh/only-export-components
 function RedirectToPrivacy() {
   window.location.href =
-    'https://app.termly.io/policy-viewer/policy.html?policyUUID=7366762a-c58a-4a7a-9cf0-f39620707a60';
+    "https://app.termly.io/policy-viewer/policy.html?policyUUID=7366762a-c58a-4a7a-9cf0-f39620707a60";
   return null;
 }
 
@@ -55,7 +56,16 @@ function OrgAnalyticsRoute({ children }: { children: ReactNode }) {
   const { orgAnalyticsEnabled } = useAppConfig();
   if (!orgAnalyticsEnabled) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          color: "var(--color-text-secondary)",
+          fontSize: "14px",
+        }}
+      >
         Feature not enabled. Contact your administrator.
       </div>
     );
@@ -65,28 +75,71 @@ function OrgAnalyticsRoute({ children }: { children: ReactNode }) {
 
 /** Wrap a page component with Suspense and optional ProtectedRoute */
 function page(component: ReactNode, isProtected = false) {
-  const wrapped = isProtected ? <ProtectedRoute>{component}</ProtectedRoute> : component;
+  const wrapped = isProtected ? (
+    <ProtectedRoute>{component}</ProtectedRoute>
+  ) : (
+    component
+  );
   return <Suspense fallback={null}>{wrapped}</Suspense>;
 }
 
 export const router = createBrowserRouter([
   {
-    path: '/',
+    path: "/",
     element: <App />,
     children: [
       { index: true, element: page(<HomePage />) },
-      { path: 'sessions', element: page(<SessionsPage />, true) },
-      { path: 'trends', element: page(<TrendsPage />, true) },
-      { path: 'org', element: page(<OrgAnalyticsRoute><OrgPage /></OrgAnalyticsRoute>, true) },
-      { path: 'sessions/:id', element: page(<SessionDetailPage />) },
-      { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },
-      { path: 'keys', element: page(<APIKeysPage />, true) },
-      { path: 'shares', element: page(<ShareLinksPage />, true) },
-      { path: 'terms', element: <Suspense fallback={null}><SaasRoute><RedirectToTerms /></SaasRoute></Suspense> },
-      { path: 'privacy', element: <Suspense fallback={null}><SaasRoute><RedirectToPrivacy /></SaasRoute></Suspense> },
-      { path: 'login', element: page(<LoginPage />) },
-      { path: 'policies', element: <Suspense fallback={null}><SaasRoute><PoliciesPage /></SaasRoute></Suspense> },
-      { path: '*', element: page(<NotFoundPage />) },
+      { path: "sessions", element: page(<SessionsPage />, true) },
+      { path: "trends", element: page(<TrendsPage />, true) },
+      {
+        path: "org",
+        element: page(
+          <OrgAnalyticsRoute>
+            <OrgPage />
+          </OrgAnalyticsRoute>,
+          true,
+        ),
+      },
+      { path: "learnings", element: page(<LearningsPage />, true) },
+      { path: "sessions/:id", element: page(<SessionDetailPage />) },
+      {
+        path: "sessions/:sessionId/shared/:token",
+        element: <RedirectToCanonicalSession />,
+      },
+      { path: "keys", element: page(<APIKeysPage />, true) },
+      { path: "shares", element: page(<ShareLinksPage />, true) },
+      {
+        path: "terms",
+        element: (
+          <Suspense fallback={null}>
+            <SaasRoute>
+              <RedirectToTerms />
+            </SaasRoute>
+          </Suspense>
+        ),
+      },
+      {
+        path: "privacy",
+        element: (
+          <Suspense fallback={null}>
+            <SaasRoute>
+              <RedirectToPrivacy />
+            </SaasRoute>
+          </Suspense>
+        ),
+      },
+      { path: "login", element: page(<LoginPage />) },
+      {
+        path: "policies",
+        element: (
+          <Suspense fallback={null}>
+            <SaasRoute>
+              <PoliciesPage />
+            </SaasRoute>
+          </Suspense>
+        ),
+      },
+      { path: "*", element: page(<NotFoundPage />) },
     ],
   },
 ]);

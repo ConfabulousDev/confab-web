@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
-import { useAppConfig } from '@/hooks/useAppConfig';
-import ThemeToggle from './ThemeToggle';
-import styles from './Header.module.css';
+import { useState, useRef, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useAppConfig } from "@/hooks/useAppConfig";
+import ThemeToggle from "./ThemeToggle";
+import styles from "./Header.module.css";
 
 function Header() {
   const { user, isAuthenticated } = useAuth();
@@ -20,27 +20,33 @@ function Header() {
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target;
-      if (menuRef.current && target instanceof Node && !menuRef.current.contains(target)) {
+      if (
+        menuRef.current &&
+        target instanceof Node &&
+        !menuRef.current.contains(target)
+      ) {
         setMenuOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleLogout = () => {
-    window.location.href = '/auth/logout';
+    window.location.href = "/auth/logout";
   };
 
   const navigate = useNavigate();
   const handleLogin = () => {
-    navigate('/login');
+    navigate("/login");
   };
 
   if (!isAuthenticated) {
     return (
       <header className={styles.header}>
-        <Link to="/" className={styles.logo}>Confabulous</Link>
+        <Link to="/" className={styles.logo}>
+          Confabulous
+        </Link>
         <div className={styles.actions}>
           <ThemeToggle />
         </div>
@@ -55,12 +61,32 @@ function Header() {
 
   return (
     <header className={styles.header}>
-      <Link to="/" className={styles.logo}>Confabulous</Link>
+      <Link to="/" className={styles.logo}>
+        Confabulous
+      </Link>
 
       <nav className={styles.nav}>
-        <Link to={user?.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions'} className={styles.navLink}>Sessions</Link>
-        <Link to="/trends" className={styles.navLink}>Personal Trends</Link>
-        {orgAnalyticsEnabled && <Link to="/org" className={styles.navLink}>Organization</Link>}
+        <Link
+          to={
+            user?.email
+              ? `/sessions?owner=${encodeURIComponent(user.email)}`
+              : "/sessions"
+          }
+          className={styles.navLink}
+        >
+          Sessions
+        </Link>
+        <Link to="/trends" className={styles.navLink}>
+          Personal Trends
+        </Link>
+        <Link to="/learnings" className={styles.navLink}>
+          Learnings
+        </Link>
+        {orgAnalyticsEnabled && (
+          <Link to="/org" className={styles.navLink}>
+            Organization
+          </Link>
+        )}
       </nav>
 
       <div className={styles.actions}>
@@ -76,13 +102,13 @@ function Header() {
           {user?.avatar_url && !avatarError ? (
             <img
               src={user.avatar_url}
-              alt={user.name || 'User'}
+              alt={user.name || "User"}
               className={styles.avatar}
               onError={() => setAvatarError(true)}
             />
           ) : (
             <div className={styles.avatarPlaceholder}>
-              {user?.name?.charAt(0) || user?.email?.charAt(0) || '?'}
+              {user?.name?.charAt(0) || user?.email?.charAt(0) || "?"}
             </div>
           )}
         </button>
@@ -91,14 +117,24 @@ function Header() {
           <div className={styles.dropdown}>
             <div className={styles.userInfo}>
               {user?.name && <div className={styles.userName}>{user.name}</div>}
-              {user?.email && <div className={styles.userEmail}>{user.email}</div>}
+              {user?.email && (
+                <div className={styles.userEmail}>{user.email}</div>
+              )}
             </div>
             <div className={styles.dropdownDivider} />
-            <Link to="/keys" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
+            <Link
+              to="/keys"
+              className={styles.dropdownItem}
+              onClick={() => setMenuOpen(false)}
+            >
               API Keys
             </Link>
             {sharesEnabled && (
-              <Link to="/shares" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
+              <Link
+                to="/shares"
+                className={styles.dropdownItem}
+                onClick={() => setMenuOpen(false)}
+              >
                 Shares
               </Link>
             )}
