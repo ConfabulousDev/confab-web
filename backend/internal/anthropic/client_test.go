@@ -183,13 +183,6 @@ func TestCreateMessage(t *testing.T) {
 }
 
 func TestClientOptions(t *testing.T) {
-	t.Run("WithTimeout", func(t *testing.T) {
-		client := NewClient("test-key", WithTimeout(5*time.Second))
-		if client.httpClient.Timeout != 5*time.Second {
-			t.Errorf("expected timeout to be 5s, got %v", client.httpClient.Timeout)
-		}
-	})
-
 	t.Run("WithBaseURL", func(t *testing.T) {
 		client := NewClient("test-key", WithBaseURL("https://custom.api.com"))
 		if client.baseURL != "https://custom.api.com" {

@@ -12,15 +12,11 @@ const (
 
 // Field size limits (must match DB VARCHAR constraints in migration 000010, 000011)
 const (
-	MaxAvatarURLLength        = 4096 // users.avatar_url
 	MaxExternalIDLength       = 512  // sessions.external_id
 	MaxSummaryLength          = 2048 // sessions.summary
 	MaxFirstUserMessageLength = 8192 // sessions.first_user_message
 	MaxCWDLength              = 8192 // sessions.cwd, runs.cwd
 	MaxTranscriptPathLength   = 8192 // sessions.transcript_path, runs.transcript_path
-	MaxRunReasonLength        = 2048 // runs.reason
-	MaxFilePathLength         = 8192 // files.file_path
-	MaxS3KeyLength            = 2048 // files.s3_key
 	MaxSyncFileNameLength     = 512  // sync_files.file_name
 	MaxHostnameLength         = 255  // sessions.hostname
 	MaxUsernameLength         = 255  // sessions.username
@@ -108,32 +104,3 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
-// TODO(2026-Q2): Remove truncation helpers when grace period ends
-
-// TruncateSyncFileName truncates a sync file name to the maximum allowed length
-func TruncateSyncFileName(s string) string {
-	return truncateString(s, MaxSyncFileNameLength)
-}
-
-// TruncateSummary truncates a summary to the maximum allowed length
-func TruncateSummary(s string) string {
-	return truncateString(s, MaxSummaryLength)
-}
-
-// TruncateFirstUserMessage truncates a first user message to the maximum allowed length
-func TruncateFirstUserMessage(s string) string {
-	return truncateString(s, MaxFirstUserMessageLength)
-}
-
-// truncateString truncates a string to maxLen bytes, ensuring valid UTF-8
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	// Truncate to maxLen bytes, but ensure we don't cut a UTF-8 character in half
-	truncated := s[:maxLen]
-	for len(truncated) > 0 && !utf8.ValidString(truncated) {
-		truncated = truncated[:len(truncated)-1]
-	}
-	return truncated
-}

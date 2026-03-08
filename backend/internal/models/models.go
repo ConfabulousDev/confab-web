@@ -38,16 +38,6 @@ const (
 	ProviderOIDC   OAuthProvider = "oidc"
 )
 
-// UserIdentity represents an OAuth identity linked to a user
-type UserIdentity struct {
-	ID               int64         `json:"id"`
-	UserID           int64         `json:"user_id"`
-	Provider         OAuthProvider `json:"provider"`
-	ProviderID       string        `json:"provider_id"`
-	ProviderUsername *string       `json:"provider_username,omitempty"`
-	CreatedAt        time.Time     `json:"created_at"`
-}
-
 // OAuthUserInfo contains user info fetched from an OAuth provider
 type OAuthUserInfo struct {
 	Provider         OAuthProvider
@@ -76,41 +66,6 @@ type APIKey struct {
 	Name       string     `json:"name"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-}
-
-// Session represents a session in Confab
-type Session struct {
-	ID               string    `json:"id"`          // UUID primary key
-	ExternalID       string    `json:"external_id"` // External system's session ID
-	UserID           int64     `json:"user_id"`
-	FirstSeen        time.Time `json:"first_seen"`
-	CustomTitle      *string   `json:"custom_title,omitempty"`      // User-set title override (max 255 chars)
-	Summary          *string   `json:"summary,omitempty"`
-	FirstUserMessage *string   `json:"first_user_message,omitempty"`
-	SessionType      string    `json:"session_type"`
-}
-
-// Run represents a single execution/resumption of a session
-type Run struct {
-	ID             int64     `json:"id"`
-	SessionID      string    `json:"session_id"` // UUID references sessions.id
-	UserID         int64     `json:"user_id"`
-	TranscriptPath string    `json:"transcript_path"`
-	CWD            string    `json:"cwd"`
-	Reason         string    `json:"reason"`
-	EndTimestamp   time.Time `json:"end_timestamp"`
-	S3Uploaded     bool      `json:"s3_uploaded"`
-}
-
-// File represents a session file (transcript, agent sidechain, or todos)
-type File struct {
-	ID           int64      `json:"id"`
-	RunID        int64      `json:"run_id"`
-	FilePath     string     `json:"file_path"`
-	FileType     string     `json:"file_type"` // "transcript", "agent", or "todo"
-	SizeBytes    int64      `json:"size_bytes"`
-	S3Key        *string    `json:"s3_key,omitempty"`
-	S3UploadedAt *time.Time `json:"s3_uploaded_at,omitempty"`
 }
 
 // SaveSessionRequest is the API request for saving a session

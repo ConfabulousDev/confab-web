@@ -143,18 +143,3 @@ func (l *InMemoryRateLimiter) Stop() {
 	close(l.stopCleanup)
 }
 
-// Stats returns statistics about the rate limiter
-func (l *InMemoryRateLimiter) Stats() map[string]interface{} {
-	var count int
-	l.limiters.Range(func(key, value interface{}) bool {
-		count++
-		return true
-	})
-
-	return map[string]interface{}{
-		"type":            "in-memory",
-		"active_limiters": count,
-		"rate_per_second": float64(l.rate),
-		"burst":           l.burst,
-	}
-}

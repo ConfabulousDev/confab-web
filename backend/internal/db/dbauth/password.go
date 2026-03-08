@@ -21,17 +21,6 @@ const (
 	LockoutDuration   = 15 * time.Minute
 )
 
-// PasswordCredentials represents a password identity's credentials
-type PasswordCredentials struct {
-	ID             int64
-	IdentityID     int64
-	PasswordHash   string
-	FailedAttempts int
-	LockedUntil    *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-}
-
 // AuthenticatePassword verifies email/password and returns the user if valid.
 // Handles account lockout after too many failed attempts.
 func (s *Store) AuthenticatePassword(ctx context.Context, email, password string) (*models.User, error) {

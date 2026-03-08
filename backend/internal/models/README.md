@@ -16,16 +16,9 @@ Shared domain types used across the backend. This is a leaf package with no inte
 - **`UserStatus`** -- String enum: `"active"` or `"inactive"`.
 - **`AdminUserStats`** -- Embeds `User` with session count, last API key usage, and last login timestamps. Used by the admin UI.
 - **`OAuthProvider`** -- String enum: `"github"`, `"google"`, `"oidc"`.
-- **`UserIdentity`** -- An OAuth identity linked to a user (provider, provider ID, optional username).
 - **`OAuthUserInfo`** -- User info fetched from an OAuth provider during login.
 - **`WebSession`** -- Browser session for OAuth-authenticated users. Includes `UserEmail` and `UserStatus` fields (not serialized to JSON) for tracing and auth checks.
 - **`APIKey`** -- An API key record. `KeyHash` is tagged `json:"-"` to prevent exposure.
-
-### Session domain
-
-- **`Session`** -- A Claude Code session with UUID primary key, external ID, user ID, optional `CustomTitle`/`Summary`/`FirstUserMessage`, and session type.
-- **`Run`** -- A single execution/resumption of a session with transcript path, working directory, reason, end timestamp, and S3 upload flag.
-- **`File`** -- A session file (transcript, agent sidechain, or todo) with optional S3 key and upload timestamp.
 
 ### API types
 

@@ -345,35 +345,3 @@ const htmlTemplate = `<!DOCTYPE html>
 </body>
 </html>`
 
-// MockService is a mock implementation for testing
-type MockService struct {
-	SentEmails []ShareInvitationParams
-	ShouldFail bool
-	FailError  error
-}
-
-// NewMockService creates a new mock email service
-func NewMockService() *MockService {
-	return &MockService{
-		SentEmails: []ShareInvitationParams{},
-	}
-}
-
-// SendShareInvitation records the email params for testing
-func (m *MockService) SendShareInvitation(ctx context.Context, params ShareInvitationParams) error {
-	if m.ShouldFail {
-		if m.FailError != nil {
-			return m.FailError
-		}
-		return fmt.Errorf("mock email service failure")
-	}
-	m.SentEmails = append(m.SentEmails, params)
-	return nil
-}
-
-// Reset clears all recorded emails
-func (m *MockService) Reset() {
-	m.SentEmails = []ShareInvitationParams{}
-	m.ShouldFail = false
-	m.FailError = nil
-}

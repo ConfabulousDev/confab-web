@@ -25,7 +25,6 @@ HTTP client for the Anthropic Messages API with OpenTelemetry tracing.
 
 - **`NewClient(apiKey string, opts ...ClientOption) *Client`** -- Creates a client. Default timeout is 60 seconds, default base URL is `https://api.anthropic.com`.
 - **`WithBaseURL(url string) ClientOption`** -- Overrides the base URL (useful for testing).
-- **`WithTimeout(d time.Duration) ClientOption`** -- Overrides the HTTP timeout.
 - **`(*Client).CreateMessage(ctx, *MessagesRequest) (*MessagesResponse, error)`** -- Sends a message and returns the response. Returns `*APIError` for HTTP 4xx/5xx responses when the body can be parsed; returns a plain error otherwise.
 - **`(*MessagesResponse).GetTextContent() string`** -- Concatenates all text content blocks into a single string.
 

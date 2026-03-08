@@ -7,7 +7,7 @@ S3/MinIO object storage client for session file chunks: upload, download, list, 
 | File | Role |
 |------|------|
 | `s3.go` | `S3Storage` struct, `NewS3Storage` constructor, core operations (`Download`, `Delete`), chunk operations (`UploadChunk`, `ListChunks`, `DeleteAllSessionChunks`), error classification (`classifyStorageError`), sentinel errors, and safety constants (`MaxChunksPerFile`, `MaxAgentFiles`) |
-| `chunks.go` | Chunk processing: `ParseChunkKey`, `DownloadAndMergeChunks`, `DownloadChunks` (parallel with bounded concurrency), `MergeChunks` (line-based dedup with overlap handling), `MergeChunksSimple` (concatenation), `ChunksOverlap`, and internal helpers (`splitLines`, `ChunkInfo` type) |
+| `chunks.go` | Chunk processing: `ParseChunkKey`, `DownloadAndMergeChunks`, `DownloadChunks` (parallel with bounded concurrency), `MergeChunks` (line-based dedup with overlap handling), and internal helpers (`splitLines`, `ChunkInfo` type) |
 
 ## Key Types
 
@@ -23,7 +23,6 @@ S3/MinIO object storage client for session file chunks: upload, download, list, 
 - **`DownloadAndMergeChunks(ctx, userID, externalID, fileName)`** -- Convenience method: lists chunks, downloads in parallel, merges with overlap handling. Returns nil for files with no chunks.
 - **`DownloadChunks(ctx, chunkKeys)`** -- Downloads chunks in parallel with bounded concurrency (`maxParallelDownloads = 10`). Skips unparseable keys with a warning.
 - **`MergeChunks(chunks)`** -- Merges chunks into a single byte slice using line-indexed array. Handles overlapping line ranges (last write wins). Logs warnings for conflicting content on overlaps and for large merges (> 1M lines).
-- **`MergeChunksSimple(chunks)`** -- Simple concatenation for guaranteed-sequential, non-overlapping chunks.
 - **`DeleteAllSessionChunks(ctx, userID, externalID)`** -- Deletes all chunks under a session's prefix. Used for session deletion.
 - **`ParseChunkKey(key)`** -- Extracts first/last line numbers from a chunk S3 key.
 
@@ -52,7 +51,7 @@ S3/MinIO object storage client for session file chunks: upload, download, list, 
 
 ## Testing
 
-- Unit tests: `chunks_test.go` (ParseChunkKey, MergeChunks, MergeChunksSimple, ChunksOverlap)
+- Unit tests: `chunks_test.go` (ParseChunkKey, MergeChunks)
 - Integration tests: `s3_test.go` (upload, download, list, delete against a containerized MinIO instance)
 
 ## Dependencies
