@@ -29,8 +29,8 @@ echo "Commit: $COMMIT_HASH ($(git log -1 --format='%s' 2>/dev/null || echo 'unkn
 echo ""
 
 # Check for required tools
-if ! command -v fly &> /dev/null; then
-    echo "Error: fly CLI not found. Install with: brew install flyctl"
+if ! command -v flyctl &> /dev/null; then
+    echo "Error: flyctl not found. Install with: brew install flyctl"
     exit 1
 fi
 
@@ -61,7 +61,7 @@ migrate -database "$PRODUCTION_DATABASE_URL" -path internal/db/migrations versio
 echo ""
 echo "Deploying to Fly.io..."
 cd "$SCRIPT_DIR"
-fly deploy
+flyctl deploy
 
 echo ""
 echo "=== Deployment complete ==="
@@ -69,7 +69,7 @@ echo "=== Deployment complete ==="
 if [ -z "$CI" ]; then
     echo ""
     echo "Useful commands:"
-    echo "  fly logs          # View logs"
-    echo "  fly status        # Check status"
-    echo "  fly open          # Open in browser"
+    echo "  flyctl logs          # View logs"
+    echo "  flyctl status        # Check status"
+    echo "  flyctl open          # Open in browser"
 fi
