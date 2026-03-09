@@ -210,6 +210,86 @@ Content-Type: application/json
 
 ---
 
+## External API Endpoints (API Key Auth)
+
+Machine-consumable endpoints for external tooling (local AI, scripts, integrations). These use API key authentication and have a dedicated rate limiter (30 req/s, burst 60).
+
+### Condensed Transcript (by UUID)
+
+Returns a condensed, AI-readable transcript for a session. Uses the canonical access model — owner, recipient share, system share, and public share all grant access.
+
+```
+GET /api/v1/sessions/{id}/condensed-transcript
+Authorization: Bearer <api_key>
+```
+
+**Query Parameters:**
+| Parameter  | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `max_chars` | int  | No       | Maximum character limit for the transcript. Truncates from the beginning, keeping the end (resolution) of the session. Preserves complete XML element boundaries. |
+
+**Response:**
+```json
+{
+  "metadata": {
+    "session_id": "uuid",
+    "external_id": "cli-session-id",
+    "title": "Session title",
+    "repo": "org/repo",
+    "branch": "main",
+    "first_seen": "2025-01-01T00:00:00Z",
+    "last_sync_at": "2025-01-01T01:00:00Z",
+    "total_lines": 500,
+    "estimated_cost_usd": 0.42,
+    "smart_recap": {
+      "recap": "Summary of the session...",
+      "went_well": ["Efficient debugging"],
+      "went_bad": ["Missed edge case"],
+      "human_suggestions": ["Add more tests"],
+      "environment_suggestions": [],
+      "default_context_suggestions": [],
+      "computed_at": "2025-01-01T01:05:00Z"
+    },
+    "analytics": { }
+  },
+  "transcript": "<transcript>\n<user id=\"1\">\nHello\n</user>\n<assistant id=\"2\">\nHi there!\n</assistant>\n</transcript>"
+}
+```
+
+**Access rules:** Follows the canonical access model (CF-132). Owner always has access. Recipient shares, system shares, and public shares also grant access. The `SHARE_ALL_SESSIONS` env var (on-prem) is respected.
+
+**Error responses:**
+- `400` — Invalid `max_chars` value
+- `401` — Missing or invalid API key
+- `404` — Session not found or no access
+- `404` — No transcript available (session has no sync files)
+
+---
+
+### Condensed Transcript (by External ID)
+
+Same as above, but looks up the session by `external_id` instead of UUID. Only the session owner can use this lookup.
+
+```
+GET /api/v1/sessions/condensed-transcript?external_id=xxx
+Authorization: Bearer <api_key>
+```
+
+**Query Parameters:**
+| Parameter     | Type   | Required | Description |
+|--------------|--------|----------|-------------|
+| `external_id` | string | Yes      | The CLI session ID (external_id) |
+| `max_chars`   | int    | No       | Same as UUID endpoint |
+
+**Response:** Same as UUID endpoint above.
+
+**Error responses:**
+- `400` — Missing `external_id` query parameter
+- `401` — Missing or invalid API key
+- `404` — Session not found for this user
+
+---
+
 ## Web Endpoints (Session Auth)
 
 All web endpoints require a valid session cookie (`confab_session`). CSRF protection is handled automatically by the server via Fetch metadata headers (`Sec-Fetch-Site`, `Origin`).
@@ -1260,8 +1340,10 @@ Common HTTP status codes:
 | Auth endpoints | 1 req/sec | 30 |
 | Upload endpoints | 2.78 req/sec (10k/hour) | 2000 |
 | Validation | 0.5 req/sec | 10 |
+| External API | 30 req/sec | 60 |
 
 Upload rate limiting is per-user (not per-IP) to support backfill scenarios.
+External API rate limiting is per-user (keyed by authenticated user ID).
 
 ---
 

@@ -233,6 +233,7 @@ func PrepareTranscript(fc *FileCollection) (string, map[int]string) {
 // Tool IDs are file-local, so each file is processed in a single pass: build toolNameMap
 // while formatting lines. This allows incremental processing without holding all files in memory.
 func PrepareTranscriptFromFiles(files []*TranscriptFile) (string, map[int]string) {
+	config := DefaultFormatConfig()
 	var sb strings.Builder
 	idMap := make(map[int]string)
 	counter := 0
@@ -245,7 +246,7 @@ func PrepareTranscriptFromFiles(files []*TranscriptFile) (string, map[int]string
 
 		// Second pass: format lines.
 		for _, line := range file.Lines {
-			formatted, newCounter := formatLine(line, toolNameMap, counter, idMap)
+			formatted, newCounter := formatLine(line, toolNameMap, counter, idMap, config)
 			counter = newCounter
 			if formatted != "" {
 				sb.WriteString(formatted)
@@ -279,13 +280,51 @@ func buildToolNameMap(file *TranscriptFile) map[string]string {
 	return m
 }
 
+// FormatConfig controls truncation limits for transcript XML formatting.
+// A limit of 0 means unlimited (no truncation).
+type FormatConfig struct {
+	MaxUserChars      int // Max chars for user messages (default: 2000)
+	MaxAssistantChars int // Max chars for assistant text responses (default: 3000)
+	MaxThinkingChars  int // Max chars for thinking blocks (default: 2000)
+	MaxSkillChars     int // Max chars for skill expansion content (default: 1500)
+}
+
+// DefaultFormatConfig returns the default truncation limits used by smart recap.
+func DefaultFormatConfig() FormatConfig {
+	return FormatConfig{
+		MaxUserChars:      2000,
+		MaxAssistantChars: 3000,
+		MaxThinkingChars:  2000,
+		MaxSkillChars:     1500,
+	}
+}
+
+// UnlimitedFormatConfig returns a config with no truncation limits.
+func UnlimitedFormatConfig() FormatConfig {
+	return FormatConfig{}
+}
+
+// truncate applies the configured limit. If limit is 0, no truncation.
+func (c FormatConfig) truncate(s string, limit int) string {
+	if limit > 0 && len(s) > limit {
+		return s[:limit] + "... [truncated]"
+	}
+	return s
+}
+
 // TranscriptBuilder accumulates transcript XML incrementally across multiple files.
 // Use ProcessFile for each transcript file, then call Finish to get the result.
 type TranscriptBuilder struct {
 	sb      strings.Builder
 	idMap   map[int]string
 	counter int
-	files   int // number of files processed
+	files   int          // number of files processed
+	config  FormatConfig // truncation limits
+}
+
+// NewTranscriptBuilder creates a TranscriptBuilder with the given format config.
+func NewTranscriptBuilder(config FormatConfig) *TranscriptBuilder {
+	return &TranscriptBuilder{config: config}
 }
 
 // ProcessFile adds all lines from a transcript file to the builder.
@@ -298,7 +337,7 @@ func (b *TranscriptBuilder) ProcessFile(file *TranscriptFile) {
 
 	toolNameMap := buildToolNameMap(file)
 	for _, line := range file.Lines {
-		formatted, newCounter := formatLine(line, toolNameMap, b.counter, b.idMap)
+		formatted, newCounter := formatLine(line, toolNameMap, b.counter, b.idMap, b.config)
 		b.counter = newCounter
 		if formatted != "" {
 			b.sb.WriteString(formatted)
@@ -440,12 +479,12 @@ func PrepareStats(cardStats map[string]interface{}) string {
 
 // formatLine converts a transcript line to XML format for the LLM.
 // Returns the formatted string and the updated counter.
-func formatLine(line *TranscriptLine, toolNameMap map[string]string, counter int, idMap map[int]string) (string, int) {
+func formatLine(line *TranscriptLine, toolNameMap map[string]string, counter int, idMap map[int]string, config FormatConfig) (string, int) {
 	switch line.Type {
 	case "user":
-		return formatUserLine(line, toolNameMap, counter, idMap)
+		return formatUserLine(line, toolNameMap, counter, idMap, config)
 	case "assistant":
-		return formatAssistantLine(line, counter, idMap)
+		return formatAssistantLine(line, counter, idMap, config)
 	default:
 		return "", counter
 	}
@@ -453,7 +492,7 @@ func formatLine(line *TranscriptLine, toolNameMap map[string]string, counter int
 
 // formatUserLine formats a user message for the LLM in XML format.
 // Returns the formatted string and the updated counter.
-func formatUserLine(line *TranscriptLine, toolNameMap map[string]string, counter int, idMap map[int]string) (string, int) {
+func formatUserLine(line *TranscriptLine, toolNameMap map[string]string, counter int, idMap map[int]string, config FormatConfig) (string, int) {
 	// Check for skill expansion messages first (isMeta: true with sourceToolUseID)
 	if line.IsSkillExpansionMessage() {
 		content := getStringContent(line)
@@ -462,10 +501,7 @@ func formatUserLine(line *TranscriptLine, toolNameMap map[string]string, counter
 			if line.UUID != "" {
 				idMap[counter] = line.UUID
 			}
-			// Truncate skill content (can be lengthy)
-			if len(content) > 1500 {
-				content = content[:1500] + "... [truncated]"
-			}
+			content = config.truncate(content, config.MaxSkillChars)
 			// Get skill name from the linked tool_use if available
 			skillName := ""
 			if line.SourceToolUseID != "" {
@@ -488,10 +524,7 @@ func formatUserLine(line *TranscriptLine, toolNameMap map[string]string, counter
 			if line.UUID != "" {
 				idMap[counter] = line.UUID
 			}
-			// Truncate very long user messages
-			if len(content) > 2000 {
-				content = content[:2000] + "... [truncated]"
-			}
+			content = config.truncate(content, config.MaxUserChars)
 			return fmt.Sprintf("<user id=\"%d\">\n%s\n</user>", counter, content), counter
 		}
 	}
@@ -521,7 +554,7 @@ func formatUserLine(line *TranscriptLine, toolNameMap map[string]string, counter
 
 // formatAssistantLine formats an assistant message for the LLM in XML format.
 // Returns the formatted string and the updated counter.
-func formatAssistantLine(line *TranscriptLine, counter int, idMap map[int]string) (string, int) {
+func formatAssistantLine(line *TranscriptLine, counter int, idMap map[int]string, config FormatConfig) (string, int) {
 	if !line.IsAssistantMessage() {
 		return "", counter
 	}
@@ -531,20 +564,14 @@ func formatAssistantLine(line *TranscriptLine, counter int, idMap map[int]string
 	// Get thinking content (shown by default in UI)
 	thinkingContent := getAssistantThinkingContent(line)
 	if thinkingContent != "" {
-		// Truncate thinking (can be very long)
-		if len(thinkingContent) > 2000 {
-			thinkingContent = thinkingContent[:2000] + "... [truncated]"
-		}
+		thinkingContent = config.truncate(thinkingContent, config.MaxThinkingChars)
 		innerParts = append(innerParts, fmt.Sprintf("<thinking>%s</thinking>", thinkingContent))
 	}
 
 	// Get text content
 	textContent := getAssistantTextContent(line)
 	if textContent != "" {
-		// Truncate very long responses
-		if len(textContent) > 3000 {
-			textContent = textContent[:3000] + "... [truncated]"
-		}
+		textContent = config.truncate(textContent, config.MaxAssistantChars)
 		innerParts = append(innerParts, textContent)
 	}
 
