@@ -87,6 +87,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 	}
 	confluenceClient := confluence.NewClient(confluence.Config{
 		BaseURL:      os.Getenv("CONFLUENCE_BASE_URL"),
+		AuthEmail:    os.Getenv("CONFLUENCE_AUTH_EMAIL"),
 		AuthToken:    os.Getenv("CONFLUENCE_AUTH_TOKEN"),
 		SpaceKey:     os.Getenv("CONFLUENCE_SPACE_KEY"),
 		ParentPageID: os.Getenv("CONFLUENCE_PARENT_PAGE_ID"),

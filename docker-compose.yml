@@ -80,11 +80,14 @@ services:
       ADMIN_BOOTSTRAP_PASSWORD: localdevpassword
       SUPER_ADMIN_EMAILS: admin@local.dev
       INSECURE_DEV_MODE: "true"
-      # SaaS branding (off by default for self-hosted)
-      # ENABLE_SAAS_FOOTER: "true"
-      # ENABLE_SAAS_TERMLY: "true"
-      # Email disabled (not set)
-      # Smart recap disabled (ANTHROPIC_API_KEY not set)
+      # Confluence export (from .env)
+      CONFLUENCE_BASE_URL: ${CONFLUENCE_BASE_URL:-}
+      CONFLUENCE_AUTH_EMAIL: ${CONFLUENCE_AUTH_EMAIL:-}
+      CONFLUENCE_AUTH_TOKEN: ${CONFLUENCE_AUTH_TOKEN:-}
+      CONFLUENCE_SPACE_KEY: ${CONFLUENCE_SPACE_KEY:-}
+      CONFLUENCE_PARENT_PAGE_ID: ${CONFLUENCE_PARENT_PAGE_ID:-}
+      # Smart recaps + learning extraction (from .env)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
   worker:
     build: .
@@ -103,7 +106,8 @@ services:
       BUCKET_NAME: confab
       WORKER_POLL_INTERVAL: 1m
       WORKER_MAX_SESSIONS: "10"
-      # Smart recap disabled (ANTHROPIC_API_KEY not set)
+      # Smart recaps + learning extraction (from .env)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
 volumes:
   postgres_data:

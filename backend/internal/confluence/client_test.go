@@ -4,6 +4,7 @@ package confluence_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,7 +17,7 @@ import (
 
 func TestCreatePage_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/wiki/rest/api/content" {
+		if r.URL.Path != "/rest/api/content" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		if r.Method != http.MethodPost {
@@ -36,6 +37,7 @@ func TestCreatePage_Success(t *testing.T) {
 
 	client := confluence.NewClient(confluence.Config{
 		BaseURL:      server.URL,
+		AuthEmail:    "test@example.com",
 		AuthToken:    "test-token",
 		SpaceKey:     "ENG",
 		ParentPageID: "99",
@@ -69,6 +71,7 @@ func TestCreatePage_AuthTokenSent(t *testing.T) {
 
 	client := confluence.NewClient(confluence.Config{
 		BaseURL:   server.URL,
+		AuthEmail: "user@example.com",
 		AuthToken: "my-secret-token",
 		SpaceKey:  "TEAM",
 	})
@@ -78,7 +81,7 @@ func TestCreatePage_AuthTokenSent(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := "Bearer my-secret-token"
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte("user@example.com:my-secret-token"))
 	if receivedAuth != expected {
 		t.Errorf("expected Authorization %q, got %q", expected, receivedAuth)
 	}
@@ -101,6 +104,7 @@ func TestCreatePage_RequestPayload(t *testing.T) {
 
 	client := confluence.NewClient(confluence.Config{
 		BaseURL:      server.URL,
+		AuthEmail:    "test@example.com",
 		AuthToken:    "tok",
 		SpaceKey:     "DEV",
 		ParentPageID: "42",
@@ -162,6 +166,7 @@ func TestCreatePage_ErrorResponse(t *testing.T) {
 
 			client := confluence.NewClient(confluence.Config{
 				BaseURL:   server.URL,
+				AuthEmail: "test@example.com",
 				AuthToken: "tok",
 				SpaceKey:  "X",
 			})
@@ -183,10 +188,11 @@ func TestIsConfigured(t *testing.T) {
 		cfg      confluence.Config
 		expected bool
 	}{
-		{"fully configured", confluence.Config{BaseURL: "https://c.example.com", AuthToken: "tok"}, true},
-		{"missing token", confluence.Config{BaseURL: "https://c.example.com"}, false},
-		{"missing base URL", confluence.Config{AuthToken: "tok"}, false},
-		{"both empty", confluence.Config{}, false},
+		{"fully configured", confluence.Config{BaseURL: "https://c.example.com", AuthEmail: "u@e.com", AuthToken: "tok"}, true},
+		{"missing token", confluence.Config{BaseURL: "https://c.example.com", AuthEmail: "u@e.com"}, false},
+		{"missing email", confluence.Config{BaseURL: "https://c.example.com", AuthToken: "tok"}, false},
+		{"missing base URL", confluence.Config{AuthEmail: "u@e.com", AuthToken: "tok"}, false},
+		{"all empty", confluence.Config{}, false},
 	}
 
 	for _, tt := range tests {
@@ -296,6 +302,7 @@ func TestCreatePage_NoParentPage(t *testing.T) {
 	// No ParentPageID set
 	client := confluence.NewClient(confluence.Config{
 		BaseURL:   server.URL,
+		AuthEmail: "test@example.com",
 		AuthToken: "tok",
 		SpaceKey:  "X",
 	})

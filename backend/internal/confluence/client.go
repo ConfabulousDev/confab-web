@@ -1,10 +1,11 @@
 // ABOUTME: Confluence REST API v1 client for creating pages from learning artifacts.
-// ABOUTME: Provides markdown-to-storage-format conversion and Bearer token authentication.
+// ABOUTME: Provides markdown-to-storage-format conversion and Basic auth for Atlassian Cloud.
 package confluence
 
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,8 +24,9 @@ var tracer = otel.Tracer("confab/confluence")
 
 // Config holds the settings needed to connect to a Confluence instance.
 type Config struct {
-	BaseURL      string // e.g. "https://confluence.example.com"
-	AuthToken    string // Personal access token or API token
+	BaseURL      string // e.g. "https://abvv-fgtb.atlassian.net/wiki"
+	AuthEmail    string // Atlassian account email for Basic auth
+	AuthToken    string // Atlassian API token (used with email for Basic auth)
 	SpaceKey     string // Confluence space key (e.g. "ENG")
 	ParentPageID string // Optional parent page ID to nest under
 }
@@ -38,6 +40,7 @@ type PageResult struct {
 // Client is a Confluence REST API v1 client.
 type Client struct {
 	baseURL      string
+	authEmail    string
 	authToken    string
 	spaceKey     string
 	parentPageID string
@@ -48,6 +51,7 @@ type Client struct {
 func NewClient(cfg Config) *Client {
 	return &Client{
 		baseURL:      strings.TrimRight(cfg.BaseURL, "/"),
+		authEmail:    cfg.AuthEmail,
 		authToken:    cfg.AuthToken,
 		spaceKey:     cfg.SpaceKey,
 		parentPageID: cfg.ParentPageID,
@@ -57,9 +61,9 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
-// IsConfigured returns true if the minimum required fields (BaseURL and AuthToken) are set.
+// IsConfigured returns true if the minimum required fields are set.
 func (c *Client) IsConfigured() bool {
-	return c.baseURL != "" && c.authToken != ""
+	return c.baseURL != "" && c.authEmail != "" && c.authToken != ""
 }
 
 // CreatePage creates a draft page in Confluence with the given title, markdown body, and labels.
@@ -120,7 +124,7 @@ func (c *Client) CreatePage(ctx context.Context, title string, bodyMarkdown stri
 		return nil, fmt.Errorf("confluence: failed to marshal request: %w", err)
 	}
 
-	url := c.baseURL + "/wiki/rest/api/content"
+	url := c.baseURL + "/rest/api/content"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		span.RecordError(err)
@@ -128,7 +132,9 @@ func (c *Client) CreatePage(ctx context.Context, title string, bodyMarkdown stri
 		return nil, fmt.Errorf("confluence: failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.authToken)
+	// Atlassian Cloud requires Basic auth: base64(email:api_token)
+	creds := base64.StdEncoding.EncodeToString([]byte(c.authEmail + ":" + c.authToken))
+	req.Header.Set("Authorization", "Basic "+creds)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
