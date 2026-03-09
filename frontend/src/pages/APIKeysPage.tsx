@@ -12,44 +12,10 @@ import LoadingSkeleton from '@/components/LoadingSkeleton';
 import ErrorDisplay from '@/components/ErrorDisplay';
 import Button from '@/components/Button';
 import Alert from '@/components/Alert';
+import { KeyIcon, ActiveIcon, AlertCircleIcon, ClockIcon } from '@/components/icons';
 import styles from './APIKeysPage.module.css';
 
 const MAX_API_KEYS = 500;
-
-// SVG Icons
-const AllIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-  </svg>
-);
-
-const ActiveIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-    <polyline points="22 4 12 14.01 9 11.01" />
-  </svg>
-);
-
-const UnusedIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="12" />
-    <line x1="12" y1="16" x2="12.01" y2="16" />
-  </svg>
-);
-
-const KeyIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-  </svg>
-);
-
-const ClockIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
-  </svg>
-);
 
 type FilterType = 'all' | 'active' | 'unused';
 
@@ -138,7 +104,7 @@ function APIKeysPage() {
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       >
         <SidebarItem
-          icon={AllIcon}
+          icon={KeyIcon}
           label="All Keys"
           count={counts.all}
           active={filter === 'all'}
@@ -155,7 +121,7 @@ function APIKeysPage() {
           disabled={counts.active === 0}
         />
         <SidebarItem
-          icon={UnusedIcon}
+          icon={<AlertCircleIcon size={16} />}
           label="Never Used"
           count={counts.unused}
           active={filter === 'unused'}

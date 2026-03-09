@@ -158,11 +158,11 @@ export function SmartRecapCard({
       {/* What didn't go well */}
       {data.went_bad.length > 0 && (
         <>
-          <SectionHeader label="Needs Improvement" icon={AlertCircleIcon} />
+          <SectionHeader label="Needs Improvement" icon={<AlertCircleIcon size={12} />} />
           <ul className={styles.list}>
             {data.went_bad.map((item, i) => (
               <li key={i} className={styles.listItemWarning}>
-                <span className={styles.listIcon}>{AlertCircleIcon}</span>
+                <span className={styles.listIcon}><AlertCircleIcon size={12} /></span>
                 <span>{item.text}</span>
                 <MessageLink item={item} sessionId={sessionId} />
               </li>
