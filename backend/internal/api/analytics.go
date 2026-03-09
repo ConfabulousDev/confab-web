@@ -206,7 +206,7 @@ func downloadAndBuildTranscript(
 		return "", nil
 	}
 
-	var tb analytics.TranscriptBuilder
+	tb := analytics.NewTranscriptBuilder(analytics.DefaultFormatConfig())
 	tb.ProcessFile(mainTF)
 
 	download := newAPIAgentDownloader(store, sessionUserID, externalID)
@@ -362,7 +362,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		provider := analytics.NewAgentProvider(agentInfos, download, storage.MaxAgentFiles)
 
 		// If smart recap enabled, tee agent files through TranscriptBuilder
-		var tb analytics.TranscriptBuilder
+		tb := analytics.NewTranscriptBuilder(analytics.DefaultFormatConfig())
 		var buildingTranscript bool
 		if smartRecapConfig.Enabled {
 			buildingTranscript = true

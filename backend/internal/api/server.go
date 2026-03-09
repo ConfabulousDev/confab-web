@@ -72,6 +72,7 @@ type Server struct {
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
 	validationLimiter   ratelimit.RateLimiter     // Moderate limiter for API key validation
 	clientErrorLimiter  ratelimit.RateLimiter     // Limiter for client error reporting
+	externalReadLimiter ratelimit.RateLimiter     // Limiter for external API read endpoints
 }
 
 // NewServer creates a new API server
@@ -106,6 +107,9 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		// Client error reporting: 0.5 req/sec, burst of 5
 		// Low limit for fire-and-forget error reports from frontend
 		clientErrorLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 5),
+		// External API: 30 req/sec, burst of 60 per user
+		// Generous read-only limit for machine consumers (agents, CLI, scripts)
+		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60),
 	}
 }
 
@@ -389,6 +393,17 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions/{id}/analytics", withMaxBody(MaxBodyXS, HandleGetSessionAnalytics(s.db, s.storage)))
 			// GitHub links - list (viewable by anyone with session access)
 			r.Get("/sessions/{id}/github-links", withMaxBody(MaxBodyXS, HandleListGitHubLinks(s.db)))
+		})
+
+		// External API routes (API key auth, dedicated rate limiter)
+		// For machine consumers: AI agents, CLI, REST clients
+		// Uses canonical access model (CF-132) for session access control
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireAPIKey(s.db, s.oauthConfig.AllowedEmailDomains))
+			r.Use(ratelimit.MiddlewareWithKey(s.externalReadLimiter, ratelimit.UserKeyFunc(auth.GetUserIDContextKey())))
+
+			r.Get("/sessions/{id}/condensed-transcript", withMaxBody(MaxBodyXS, s.handleCondensedTranscript))
+			r.Get("/sessions/condensed-transcript", withMaxBody(MaxBodyXS, s.handleCondensedTranscriptByExternalID))
 		})
 
 	})

@@ -838,7 +838,7 @@ func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session Stal
 	}
 
 	// Stream agents through TranscriptBuilder
-	var tb TranscriptBuilder
+	tb := NewTranscriptBuilder(DefaultFormatConfig())
 	tb.ProcessFile(main)
 
 	drainAgentProvider(ctx, p.newAgentProvider(session, agentInfos), func(agent *TranscriptFile) {
