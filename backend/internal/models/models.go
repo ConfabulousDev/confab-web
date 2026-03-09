@@ -234,8 +234,9 @@ type CreateLearningRequest struct {
 
 // UpdateLearningRequest is the API request to update a learning
 type UpdateLearningRequest struct {
-	Title  *string         `json:"title,omitempty"`
-	Body   *string         `json:"body,omitempty"`
-	Tags   []string        `json:"tags,omitempty"`
-	Status *LearningStatus `json:"status,omitempty"`
+	Title            *string         `json:"title,omitempty"`
+	Body             *string         `json:"body,omitempty"`
+	Tags             []string        `json:"tags,omitempty"`
+	Status           *LearningStatus `json:"status,omitempty"`
+	ConfluencePageID *string         `json:"confluence_page_id,omitempty"`
 }

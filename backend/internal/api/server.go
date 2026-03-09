@@ -36,6 +36,10 @@ const (
 	// StorageTimeout is the maximum duration for storage operations (uploads/downloads)
 	// Longer timeout to accommodate large file transfers (up to 50MB per file)
 	StorageTimeout = 30 * time.Second
+
+	// ConfluenceTimeout is the maximum duration for Confluence API calls
+	// Separate from StorageTimeout to allow independent tuning of external API calls
+	ConfluenceTimeout = 30 * time.Second
 )
 
 // Request body size limits (t-shirt sizes)

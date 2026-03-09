@@ -59,8 +59,8 @@ func (s *Server) handleExportLearning(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create the page in Confluence (use a longer timeout for the external call)
-	exportCtx, exportCancel := context.WithTimeout(r.Context(), StorageTimeout)
+	// Create the page in Confluence (use a dedicated timeout for the external call)
+	exportCtx, exportCancel := context.WithTimeout(r.Context(), ConfluenceTimeout)
 	defer exportCancel()
 
 	pageResult, err := s.confluenceClient.CreatePage(exportCtx, learning.Title, learning.Body, learning.Tags)
@@ -72,13 +72,15 @@ func (s *Server) handleExportLearning(w http.ResponseWriter, r *http.Request) {
 
 	log.Info("Confluence page created", "learning_id", learningID, "page_id", pageResult.PageID)
 
-	// Update the learning: set status to exported and store the page ID
+	// Atomically update the learning: set status to exported AND store the page ID
+	// in a single DB call to prevent data loss if the process crashes between writes.
 	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer dbCancel()
 
 	exportedStatus := models.LearningStatusExported
 	updated, err := s.db.UpdateLearning(dbCtx, learningID, userID, &models.UpdateLearningRequest{
-		Status: &exportedStatus,
+		Status:           &exportedStatus,
+		ConfluencePageID: &pageResult.PageID,
 	})
 	if err != nil {
 		// The page was created in Confluence but we failed to update locally.
@@ -89,19 +91,5 @@ func (s *Server) handleExportLearning(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set the confluence_page_id on the learning record
-	if err := s.db.SetLearningConfluencePageID(dbCtx, learningID, userID, pageResult.PageID); err != nil {
-		log.Error("Failed to set confluence_page_id", "error", err, "learning_id", learningID)
-		// Non-fatal: status is already exported, page was created
-	}
-
-	// Re-read to get the updated confluence_page_id in the response
-	final, err := s.db.GetLearning(dbCtx, learningID, userID)
-	if err != nil {
-		// Fall back to the update result if re-read fails
-		log.Warn("Failed to re-read learning after export, using update result", "error", err)
-		final = updated
-	}
-
-	respondJSON(w, http.StatusOK, final)
+	respondJSON(w, http.StatusOK, updated)
 }

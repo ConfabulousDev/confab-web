@@ -305,6 +305,11 @@ func (db *DB) UpdateLearning(ctx context.Context, learningID string, userID int6
 			nextIdx++
 		}
 	}
+	if req.ConfluencePageID != nil {
+		setClauses = append(setClauses, fmt.Sprintf("confluence_page_id = $%d", nextIdx))
+		args = append(args, *req.ConfluencePageID)
+		nextIdx++
+	}
 
 	query := fmt.Sprintf(`
 		UPDATE learnings
@@ -417,37 +422,3 @@ func (db *DB) CountLearningsByStatus(ctx context.Context, userID int64) (map[str
 	return counts, nil
 }
 
-// SetLearningConfluencePageID sets the confluence_page_id on a learning record.
-// This is called after a successful Confluence export to store the remote page reference.
-func (db *DB) SetLearningConfluencePageID(ctx context.Context, learningID string, userID int64, pageID string) error {
-	ctx, span := tracer.Start(ctx, "db.set_learning_confluence_page_id",
-		trace.WithAttributes(
-			attribute.String("learning.id", learningID),
-			attribute.Int64("user.id", userID),
-			attribute.String("confluence.page_id", pageID),
-		))
-	defer span.End()
-
-	query := `
-		UPDATE learnings
-		SET confluence_page_id = $3, updated_at = NOW()
-		WHERE id = $1 AND user_id = $2
-	`
-	result, err := db.conn.ExecContext(ctx, query, learningID, userID, pageID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to set confluence_page_id")
-		return fmt.Errorf("failed to set confluence_page_id: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		span.RecordError(err)
-		return fmt.Errorf("failed to check rows affected: %w", err)
-	}
-	if rows == 0 {
-		return ErrLearningNotFound
-	}
-
-	return nil
-}
