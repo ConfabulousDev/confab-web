@@ -19,6 +19,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/clientip"
+	"github.com/ConfabulousDev/confab-web/internal/confluence"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/email"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -66,6 +67,7 @@ type Server struct {
 	saasFooterEnabled bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
 	saasTermlyEnabled    bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
 	orgAnalyticsEnabled  bool                      // When true, org-wide analytics view is enabled (ENABLE_ORG_ANALYTICS=true)
+	confluenceClient     *confluence.Client        // Confluence API client for exporting learnings (may be unconfigured)
 	globalLimiter        ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -79,13 +81,21 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 	if supportEmail == "" {
 		supportEmail = "support@example.com"
 	}
+	confluenceClient := confluence.NewClient(confluence.Config{
+		BaseURL:      os.Getenv("CONFLUENCE_BASE_URL"),
+		AuthToken:    os.Getenv("CONFLUENCE_AUTH_TOKEN"),
+		SpaceKey:     os.Getenv("CONFLUENCE_SPACE_KEY"),
+		ParentPageID: os.Getenv("CONFLUENCE_PARENT_PAGE_ID"),
+	})
+
 	return &Server{
-		db:             database,
-		storage:        store,
-		oauthConfig:    oauthConfig,
-		emailService:   emailService,
-		frontendURL:    os.Getenv("FRONTEND_URL"),
-		supportEmail:   supportEmail,
+		db:               database,
+		storage:          store,
+		oauthConfig:      oauthConfig,
+		emailService:     emailService,
+		frontendURL:      os.Getenv("FRONTEND_URL"),
+		supportEmail:     supportEmail,
+		confluenceClient: confluenceClient,
 		sharesEnabled:     os.Getenv("ENABLE_SHARE_CREATION") == "true",
 		saasFooterEnabled: os.Getenv("ENABLE_SAAS_FOOTER") == "true",
 		saasTermlyEnabled:   os.Getenv("ENABLE_SAAS_TERMLY") == "true",
@@ -374,6 +384,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/learnings/{id}", withMaxBody(MaxBodyXS, s.handleGetLearning))
 			r.Patch("/learnings/{id}", withMaxBody(MaxBodyM, s.handleUpdateLearning))
 			r.Delete("/learnings/{id}", withMaxBody(MaxBodyXS, s.handleDeleteLearning))
+			r.Post("/learnings/{id}/export", withMaxBody(MaxBodyXS, s.handleExportLearning))
 		})
 
 		// Session lookup by external_id - requires auth (session cookie OR API key)
