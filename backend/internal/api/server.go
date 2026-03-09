@@ -332,9 +332,6 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Session metadata update (by external_id for CLI convenience)
 			r.Patch("/sessions/{external_id}/summary", withMaxBody(MaxBodyM, s.handleUpdateSessionSummary))
-
-			// Learnings (CLI access)
-			r.Post("/learnings", withMaxBody(MaxBodyM, s.handleCreateLearning))
 		})
 
 		// Protected routes for web dashboard (require web session)
@@ -383,7 +380,14 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Client error reporting (for frontend observability)
 			r.Post("/client-errors", withMaxBody(MaxBodyM, ratelimit.HandlerFunc(s.clientErrorLimiter, HandleReportClientErrors())))
 
-			// Learnings
+		})
+
+		// Learnings — accessible from both web (session cookie) and CLI (API key)
+		// CSRF enforced only for session cookie auth, skipped for API key auth
+		r.Group(func(r chi.Router) {
+			r.Use(csrfWhenSession(csrfMiddleware))
+			r.Use(auth.RequireSessionOrAPIKey(s.db, s.oauthConfig.AllowedEmailDomains))
+
 			r.Get("/learnings", withMaxBody(MaxBodyXS, s.handleListLearnings))
 			r.Post("/learnings", withMaxBody(MaxBodyM, s.handleCreateLearning))
 			r.Get("/learnings/{id}", withMaxBody(MaxBodyXS, s.handleGetLearning))
