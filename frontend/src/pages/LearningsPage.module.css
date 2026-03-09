@@ -258,6 +258,11 @@
   color: var(--color-success);
 }
 
+.exportBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
 .archiveBtn:hover {
   color: var(--color-text-muted);
 }

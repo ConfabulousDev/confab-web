@@ -6,6 +6,7 @@ import {
   useLearnings,
   useUpdateLearning,
   useDeleteLearning,
+  useExportLearning,
 } from "@/hooks/useLearnings";
 import { RelativeTime } from "@/components/RelativeTime";
 import Alert from "@/components/Alert";
@@ -64,6 +65,7 @@ function LearningsPage() {
   const { data, isLoading, error } = useLearnings(apiFilters);
   const updateLearning = useUpdateLearning();
   const deleteLearning = useDeleteLearning();
+  const exportLearning = useExportLearning();
 
   const learnings = data?.learnings ?? [];
   const counts = data?.counts ?? {};
@@ -155,6 +157,17 @@ function LearningsPage() {
                             disabled={updateLearning.isPending}
                           >
                             Confirm
+                          </button>
+                        )}
+                        {learning.status === "confirmed" && (
+                          <button
+                            className={`${styles.actionBtn} ${styles.exportBtn}`}
+                            onClick={() => exportLearning.mutate(learning.id)}
+                            disabled={exportLearning.isPending}
+                          >
+                            {exportLearning.isPending
+                              ? "Exporting..."
+                              : "Export to Confluence"}
                           </button>
                         )}
                         {learning.status !== "archived" && (

@@ -651,4 +651,7 @@ export const learningsAPI = {
 
   delete: (learningId: string): Promise<void> =>
     api.deleteVoid(`/learnings/${learningId}`),
+
+  export: (learningId: string): Promise<Learning> =>
+    api.postValidated(`/learnings/${learningId}/export`, LearningSchema),
 };
