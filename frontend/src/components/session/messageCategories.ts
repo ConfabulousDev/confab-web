@@ -162,10 +162,10 @@ function hasDisplayableContent(message: TranscriptLine): boolean {
   if (isAssistantMessage(message)) {
     const content = message.message.content;
     if (content.length === 0) return false;
-    // Has displayable content if any block is non-text (tool_use, thinking)
-    // or is a text block with non-whitespace content
+    // Has displayable content if any block has non-empty content
     return content.some((block) => {
       if (isTextBlock(block)) return block.text.trim().length > 0;
+      if (isThinkingBlock(block)) return block.thinking.trim().length > 0;
       return true;
     });
   }
