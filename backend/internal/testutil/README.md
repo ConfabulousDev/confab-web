@@ -59,6 +59,7 @@ go test ./internal/api/... -v -run "TestSyncInit_HTTP_Integration/creates_new"
    - `CreateTestAPIKeyWithToken()` - Create API key and return raw token
    - `CreateTestWebSessionWithToken()` - Create web session and return token
    - `CreateTestSyncFile()` - Insert sync file into database
+   - `CreateTestTIL()` - Insert TIL into database
    - `ParseJSON()` - Decode JSON response
    - `RequireStatus()` - Check HTTP status code
 

@@ -18,7 +18,8 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `user.go` | `GET /api/v1/me` -- returns authenticated user info with onboarding status (`has_own_sessions`, `has_api_keys`) |
 | `deletes.go` | `DELETE /api/v1/sessions/{id}` -- deletes session from S3 and database (owner-only) |
 | `github_links.go` | GitHub link CRUD: `POST /api/v1/sessions/{id}/github-links`, `GET /api/v1/sessions/{id}/github-links`, `DELETE /api/v1/sessions/{id}/github-links/{linkID}`. Also contains `ParseGitHubURL` and `extractPRLinkFromLine` for transcript-based PR link extraction |
-| `access.go` | `CheckCanonicalAccess` and `RespondCanonicalAccessError` -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, and GitHub links endpoints |
+| `tils.go` | TIL endpoints: `POST /api/v1/sessions/{id}/tils`, `GET /api/v1/sessions/{id}/tils`, `GET /api/v1/tils`, `PATCH /api/v1/tils/{tilID}`, `DELETE /api/v1/tils/{tilID}` |
+| `access.go` | `CheckCanonicalAccess`, `RequireCanonicalRead`, and `RespondCanonicalAccessError` -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, GitHub links, and TIL endpoints |
 | `auth_config.go` | `GET /api/v1/auth/config` -- public endpoint returning enabled auth providers and feature flags |
 | `client_errors.go` | `POST /api/v1/client-errors` -- accepts frontend error reports for server-side logging/observability |
 | `compression.go` | `decompressMiddleware` -- handles zstd decompression of request bodies from CLI uploads |

@@ -34,6 +34,7 @@ A singleton `APIClient` class that wraps `fetch` with:
 | `analyticsAPI` | `get`, `regenerateSmartRecap` | Session analytics with 304 support |
 | `trendsAPI` | `get` | Aggregated trends with epoch-based date params |
 | `orgAnalyticsAPI` | `get` | Organization-level analytics |
+| `tilsAPI` | `list`, `listForSession`, `create`, `update`, `delete` | TIL management |
 
 #### Error classes
 

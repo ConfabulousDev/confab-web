@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { SessionDetail, TranscriptLine } from '@/types';
 import { isAssistantMessage } from '@/types';
 import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
+import { tilsAPI, type TIL } from '@/services/api';
 import { useVisibility } from '@/hooks/useVisibility';
 import { computeSessionMeta } from '@/utils/sessionMeta';
 import {
@@ -61,6 +62,24 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
   // Cost mode toggle
   const [isCostMode, setIsCostMode] = useState(false);
+
+  // TILs for this session (fetched once on mount)
+  const [sessionTILs, setSessionTILs] = useState<Map<string, TIL[]>>(new Map());
+  useEffect(() => {
+    setSessionTILs(new Map()); // Clear stale badges when navigating between sessions
+    tilsAPI.listForSession(session.id).then((response) => {
+      const map = new Map<string, TIL[]>();
+      for (const til of response.tils) {
+        if (!til.message_uuid) continue;
+        const existing = map.get(til.message_uuid) ?? [];
+        existing.push(til);
+        map.set(til.message_uuid, existing);
+      }
+      setSessionTILs(map);
+    }).catch(() => {
+      // Non-critical — TIL markers simply won't appear
+    });
+  }, [session.id]);
 
   // Filter state - hierarchical visibility for subcategories
   const [filterState, setFilterState] = useState<FilterState>(DEFAULT_FILTER_STATE);
@@ -304,6 +323,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
                   targetMessageUuid={targetMessageUuid}
                   sessionId={session.id}
                   isCostMode={isCostMode}
+                  tilsByMessageUuid={sessionTILs}
                 />
               )}
             </div>

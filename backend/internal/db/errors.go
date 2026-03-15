@@ -38,4 +38,7 @@ var (
 	// Password authentication errors
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrAccountLocked      = errors.New("account is temporarily locked")
+
+	// TIL errors
+	ErrTILNotFound = errors.New("TIL not found")
 )

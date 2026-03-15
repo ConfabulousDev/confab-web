@@ -793,6 +793,151 @@ Requires session ownership (web session auth only, no API key).
 
 ---
 
+### TILs (Today I Learned)
+
+#### List TILs
+
+```
+GET /api/v1/tils
+```
+
+Lists TILs visible to the authenticated user. Supports the same filter dimensions as the session list: owner, repo, branch, and full-text search. Uses the three-CTE visibility pattern (owned sessions, private shares, system shares).
+
+**Auth:** Session cookie
+
+**Query Parameters:**
+| Parameter | Type   | Description |
+|-----------|--------|-------------|
+| `q`       | string | Full-text search on title and summary |
+| `owner`   | string | Comma-separated owner emails |
+| `repo`    | string | Comma-separated git repo names (org/repo format) |
+| `branch`  | string | Comma-separated branch names |
+| `cursor`  | string | Pagination cursor |
+| `page_size` | number | Results per page (default 50, max 100) |
+
+**Response:** `200 OK`
+```json
+{
+  "tils": [
+    {
+      "id": 1,
+      "title": "Go channels for concurrency",
+      "summary": "Learned that Go channels are...",
+      "session_id": "uuid",
+      "message_uuid": "msg-uuid-123",
+      "created_at": "2026-03-14T10:00:00Z",
+      "session_title": "Working on API endpoints",
+      "git_repo": "org/repo",
+      "git_branch": "main",
+      "owner_email": "user@example.com",
+      "is_owner": true,
+      "access_type": "owner"
+    }
+  ],
+  "has_more": false,
+  "next_cursor": "",
+  "page_size": 50,
+  "filter_options": {
+    "repos": ["org/repo"],
+    "branches": ["main"],
+    "owners": ["user@example.com"]
+  }
+}
+```
+
+#### Get TIL
+
+```
+GET /api/v1/tils/{id}
+```
+
+**Auth:** Session cookie
+
+**Response:** `200 OK` — TIL object
+
+**Errors:**
+- `404` - TIL not found
+
+#### Delete TIL
+
+```
+DELETE /api/v1/tils/{id}
+```
+
+Deletes a TIL. Only the TIL owner can delete.
+
+**Auth:** Session cookie
+
+**Response:** `204 No Content`
+
+**Errors:**
+- `404` - TIL not found or not owner (uniform 404 to avoid existence leak)
+
+#### Create TIL (CLI)
+
+```
+POST /api/v1/tils
+```
+
+Creates a new TIL. Called by the CLI (`confab til` / `/til`).
+
+**Auth:** API key
+
+**Request Body:**
+```json
+{
+  "title": "Go channels for concurrency",
+  "summary": "Learned that Go channels are a first-class concurrency primitive...",
+  "session_id": "<backend UUID>",
+  "message_uuid": "<transcript message UUID>"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | Yes | TIL title (max 500 chars) |
+| `summary` | string | Yes | TIL summary (max 10000 chars) |
+| `session_id` | string | Yes | Backend session UUID (must be owned by caller) |
+| `message_uuid` | string | No | UUID of the transcript message this TIL is anchored to |
+
+**Response:** `201 Created` — Created TIL object
+
+**Errors:**
+- `400` - Missing/invalid fields
+- `404` - Session not found or not owned
+
+#### List Session TILs
+
+```
+GET /api/v1/sessions/{id}/tils
+```
+
+Returns all TILs for a session. Uses canonical access model (CF-132) — anyone who can view the session transcript can see its TIL markers.
+
+**Auth:** Optional (canonical access)
+
+**Response:** `200 OK`
+```json
+{
+  "tils": [
+    {
+      "id": 1,
+      "title": "...",
+      "summary": "...",
+      "session_id": "uuid",
+      "message_uuid": "msg-uuid",
+      "created_at": "2026-03-14T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+- `401` - Sign in to view (if auth may help)
+- `404` - Session not found or no access
+
+---
+
 ### Personal Trends (Aggregated Analytics)
 
 #### Get Trends

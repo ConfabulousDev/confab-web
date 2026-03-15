@@ -15,6 +15,8 @@ import {
   SessionAnalyticsSchema,
   TrendsResponseSchema,
   OrgAnalyticsResponseSchema,
+  TILListResponseSchema,
+  SessionTILsResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -28,10 +30,12 @@ import {
   type SessionListResponse,
   type TrendsResponse,
   type OrgAnalyticsResponse,
+  type TILListResponse,
+  type SessionTILsResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
-export type { GitHubLink, SessionAnalytics } from '@/schemas/api';
+export type { GitHubLink, SessionAnalytics, TIL, TILWithSession, TILListResponse, SessionTILsResponse } from '@/schemas/api';
 
 /**
  * Handles authentication failures by redirecting to home.
@@ -365,6 +369,18 @@ export const githubLinksAPI = {
    */
   delete: (sessionId: string, linkId: number): Promise<void> =>
     api.deleteVoid(`/sessions/${sessionId}/github-links/${linkId}`),
+};
+
+export const tilsAPI = {
+  list: (params?: Record<string, string>): Promise<TILListResponse> => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return api.getValidated(`/tils${query}`, TILListResponseSchema);
+  },
+
+  delete: (id: number): Promise<void> => api.deleteVoid(`/tils/${id}`),
+
+  listForSession: (sessionId: string): Promise<SessionTILsResponse> =>
+    api.getValidated(`/sessions/${sessionId}/tils`, SessionTILsResponseSchema),
 };
 
 export const analyticsAPI = {

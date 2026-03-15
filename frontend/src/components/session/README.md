@@ -14,6 +14,7 @@ Session viewer components for displaying session details, transcript timeline, a
 | `TranscriptSearchBar.tsx` | Cmd+F search bar with match count and prev/next navigation |
 | `FilterDropdown.tsx` | Hierarchical dropdown for filtering messages by category/subcategory |
 | `GitHubLinksCard.tsx` | Card displaying linked GitHub PRs and commits |
+| `TILBadge.tsx` | Badge indicating a session has associated TIL entries |
 | `GitInfoMeta.tsx` | Git branch/commit metadata display in session header |
 | `MetaItem.tsx` | Small metadata item (icon + label + value) used in header |
 | `messageCategories.ts` | Message categorization logic, filter state types, and filter matching |

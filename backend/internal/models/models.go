@@ -52,8 +52,8 @@ type OAuthUserInfo struct {
 type WebSession struct {
 	ID         string     `json:"id"`
 	UserID     int64      `json:"user_id"`
-	UserEmail  string     `json:"-"` // For tracing, not serialized
-	UserStatus UserStatus `json:"-"` // For auth check, not serialized
+	UserEmail  string     `json:"-"` // Used for request tracing — never serialized to prevent leaking session-to-email mapping
+	UserStatus UserStatus `json:"-"` // Used for auth middleware status check — never serialized to prevent leaking account state
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
 }
@@ -62,7 +62,7 @@ type WebSession struct {
 type APIKey struct {
 	ID         int64      `json:"id"`
 	UserID     int64      `json:"user_id"`
-	KeyHash    string     `json:"-"` // Never expose the hash
+	KeyHash    string     `json:"-"` // Used for key verification — never serialized to prevent exposing credential material
 	Name       string     `json:"name"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
@@ -137,4 +137,15 @@ type CreateGitHubLinkRequest struct {
 	URL      string           `json:"url"`
 	Title    *string          `json:"title,omitempty"`
 	Source   GitHubLinkSource `json:"source"`
+}
+
+// TIL represents a "Today I Learned" note linked to a session transcript position
+type TIL struct {
+	ID          int64     `json:"id"`
+	Title       string    `json:"title"`
+	Summary     string    `json:"summary"`
+	SessionID   string    `json:"session_id"`
+	MessageUUID *string   `json:"message_uuid,omitempty"`
+	OwnerID     int64     `json:"-"` // Used for ownership authorization checks — never serialized to prevent leaking internal user IDs
+	CreatedAt   time.Time `json:"created_at"`
 }

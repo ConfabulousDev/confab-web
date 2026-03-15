@@ -8,7 +8,7 @@ Core database connection, shared types, sentinel errors, and helper functions fo
 |------|------|
 | `db.go` | `DB` struct wrapping `*sql.DB`, `Connect`/`ConnectWithRetry` constructors, connection pool tuning, `Close`, and escape-hatch methods (`Exec`, `QueryRow`, `Conn`) |
 | `types.go` | Shared domain types used across sub-packages: `SessionListItem`, `SessionDetail`, `SyncFileDetail`, `SessionListParams`, `SessionListResult`, `SessionFilterOptions`, `SessionShare`, `ShareWithSessionInfo`, `DeviceCode`, `SyncFileState`, `SyncSessionParams`, `SessionEventParams`, `SessionAccessType`/`SessionAccessInfo`, plus constants (`MaxAPIKeysPerUser`, `DefaultPageSize`, `MaxCustomTitleLength`) |
-| `errors.go` | Sentinel errors for type-safe error checking with `errors.Is()`: session (`ErrSessionNotFound`, `ErrUnauthorized`), share (`ErrShareNotFound`, `ErrShareExpired`, `ErrForbidden`), file (`ErrFileNotFound`), user (`ErrUserNotFound`, `ErrOwnerInactive`), API key (`ErrAPIKeyNotFound`, `ErrAPIKeyLimitExceeded`, `ErrAPIKeyNameExists`), rate limit (`ErrRateLimitExceeded`), device code (`ErrDeviceCodeNotFound`), GitHub link (`ErrGitHubLinkNotFound`), password auth (`ErrInvalidCredentials`, `ErrAccountLocked`) |
+| `errors.go` | Sentinel errors for type-safe error checking with `errors.Is()`: session (`ErrSessionNotFound`, `ErrUnauthorized`), share (`ErrShareNotFound`, `ErrShareExpired`, `ErrForbidden`), file (`ErrFileNotFound`), user (`ErrUserNotFound`, `ErrOwnerInactive`), API key (`ErrAPIKeyNotFound`, `ErrAPIKeyLimitExceeded`, `ErrAPIKeyNameExists`), rate limit (`ErrRateLimitExceeded`), device code (`ErrDeviceCodeNotFound`), GitHub link (`ErrGitHubLinkNotFound`), TIL (`ErrTILNotFound`), password auth (`ErrInvalidCredentials`, `ErrAccountLocked`) |
 | `helpers.go` | Shared helper functions exported for sub-packages: `IsInvalidUUIDError`, `IsUniqueViolation`, `ExtractRepoName`, `UnmarshalSessionGitInfo`, `LoadSessionSyncFiles` |
 
 ## Sub-Package Index
@@ -20,6 +20,7 @@ Core database connection, shared types, sentinel errors, and helper functions fo
 | `db/dbauth` | (none needed) | OAuth, password auth, web sessions, API keys, device codes |
 | `db/user` | `dbuser` | User CRUD, admin operations |
 | `db/github` | `dbgithub` | GitHub link CRUD |
+| `db/til` | `dbtil` | TIL CRUD |
 | `db/events` | `dbevents` | Session event insertion |
 
 All sub-packages follow the same `Store` struct pattern:
