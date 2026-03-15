@@ -103,6 +103,58 @@ describe('messageCategories', () => {
       expect(messageMatchesFilter(userMessage, DEFAULT_FILTER_STATE)).toBe(true);
     });
 
+    it('hides assistant messages with only empty thinking blocks', () => {
+      const emptyThinkingMessage = parseLine({
+        type: 'assistant',
+        uuid: 'asst-uuid-empty',
+        timestamp: '2026-02-22T08:00:00Z',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/test',
+        sessionId: 'session-123',
+        version: '1.0.0',
+        requestId: 'req-1',
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          id: 'msg-empty',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'thinking', thinking: '', signature: 'abc123' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+      });
+      expect(messageMatchesFilter(emptyThinkingMessage, DEFAULT_FILTER_STATE)).toBe(false);
+    });
+
+    it('shows assistant messages with non-empty thinking blocks', () => {
+      const thinkingMessage = parseLine({
+        type: 'assistant',
+        uuid: 'asst-uuid-thinking',
+        timestamp: '2026-02-22T08:00:00Z',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/test',
+        sessionId: 'session-123',
+        version: '1.0.0',
+        requestId: 'req-1',
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          id: 'msg-thinking',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'thinking', thinking: 'Let me analyze this...', signature: 'abc123' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+      });
+      expect(messageMatchesFilter(thinkingMessage, DEFAULT_FILTER_STATE)).toBe(true);
+    });
+
     it('shows assistant messages with DEFAULT_FILTER_STATE (deep-link targets visible after reset)', () => {
       const assistantMessage = parseLine({
         type: 'assistant',

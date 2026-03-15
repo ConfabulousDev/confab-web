@@ -88,6 +88,8 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
 
   if (isThinkingBlock(block)) {
     const thinkingText = stripAnsi(block.thinking);
+    // Empty thinking blocks (signature-only, no actual content) are protocol artifacts
+    if (!thinkingText.trim()) return null;
     return (
       <div className={styles.thinkingBlock}>
         <div className={styles.thinkingHeader}>

@@ -254,6 +254,16 @@ This seems straightforward - I'll start by reading the main CSS file.`,
   },
 };
 
+// Empty thinking block (signature-only, should render nothing)
+export const EmptyThinkingBlock: Story = {
+  args: {
+    block: {
+      type: 'thinking',
+      thinking: '',
+    },
+  },
+};
+
 // Combined realistic example
 export const RealisticToolSequence: Story = {
   render: () => {
