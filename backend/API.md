@@ -290,6 +290,64 @@ Authorization: Bearer <api_key>
 
 ---
 
+### TIL Export
+
+Returns a paginated list of TILs visible to the authenticated user, enriched with session URLs for external consumption. Designed for machine consumers that sync TILs to downstream systems (Confluence, Notion, wikis, etc.).
+
+```
+GET /api/v1/tils/export
+Authorization: Bearer <api_key>
+```
+
+**Query Parameters:**
+| Parameter   | Type   | Required | Description |
+|------------|--------|----------|-------------|
+| `owner`     | string | No       | Filter by TIL owner email. If omitted, returns all visible TILs. |
+| `from`      | string | No       | Start of date range, inclusive (RFC 3339, e.g. `2026-03-01T00:00:00Z`) |
+| `to`        | string | No       | End of date range, exclusive (RFC 3339, e.g. `2026-03-16T00:00:00Z`) |
+| `page_size` | int    | No       | Results per page. Default 100, max 500. |
+| `cursor`    | string | No       | Pagination cursor from previous response's `next_cursor`. |
+
+**Date range semantics:** Semi-open interval `[from, to)` — `from` is inclusive, `to` is exclusive. Both must be valid RFC 3339 timestamps if provided.
+
+**Response:**
+```json
+{
+  "tils": [
+    {
+      "id": 42,
+      "title": "Go's context.AfterFunc simplifies cleanup",
+      "summary": "Learned that context.AfterFunc (Go 1.21+) ...",
+      "created_at": "2026-03-14T18:30:00Z",
+      "session_id": "abc-123",
+      "session_title": "Refactor auth middleware",
+      "session_url": "https://confab.example.com/sessions/abc-123",
+      "transcript_deep_link": "https://confab.example.com/sessions/abc-123?msg=uuid-456",
+      "git_repo": "org/repo",
+      "git_branch": "main",
+      "owner_email": "dev@example.com"
+    }
+  ],
+  "has_more": false,
+  "next_cursor": "",
+  "page_size": 100,
+  "count": 1
+}
+```
+
+**URL fields:**
+- `session_url` — Full URL to the session in the Confab web UI
+- `transcript_deep_link` — URL to the session with a `?msg=` anchor if the TIL has a `message_uuid`, otherwise same as `session_url`
+
+**Access rules:** Uses the same visibility model as the frontend TIL list. The caller sees TILs on sessions they own, sessions shared with them (private shares), and sessions with system shares. TILs on unshared sessions owned by other users are excluded.
+
+**Error responses:**
+- `400` — Invalid `from` or `to` (not valid RFC 3339)
+- `400` — Invalid `page_size` (not a positive integer, or exceeds 500)
+- `401` — Missing or invalid API key
+
+---
+
 ## Web Endpoints (Session Auth)
 
 All web endpoints require a valid session cookie (`confab_session`). CSRF protection is handled automatically by the server via Fetch metadata headers (`Sec-Fetch-Site`, `Origin`).

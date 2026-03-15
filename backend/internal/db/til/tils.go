@@ -20,12 +20,15 @@ import (
 
 // ListParams contains parameters for listing TILs.
 type ListParams struct {
-	Query    string   // full-text search on title || summary
-	Owners   []string // filter by session owner email(s)
-	Repos    []string // filter by session git_repo
-	Branches []string // filter by session git_branch
-	Cursor   string   // compound cursor (created_at|id)
-	PageSize int      // default 50, max 100
+	Query       string     // full-text search on title || summary
+	Owners      []string   // filter by session owner email(s)
+	Repos       []string   // filter by session git_repo
+	Branches    []string   // filter by session git_branch
+	Cursor      string     // compound cursor (created_at|id)
+	PageSize    int        // default 50, max 100 (or MaxPageSize if set)
+	MaxPageSize int        // override max page size (0 = use default of 100)
+	From        *time.Time // inclusive lower bound on created_at
+	To          *time.Time // exclusive upper bound on created_at
 }
 
 // TILWithSession extends TIL with session context for list display.
@@ -199,11 +202,15 @@ func (s *Store) List(ctx context.Context, userID int64, params ListParams) (*Lis
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
+	maxPageSize := params.MaxPageSize
+	if maxPageSize <= 0 {
+		maxPageSize = 100
+	}
 	if params.PageSize <= 0 {
 		params.PageSize = 50
 	}
-	if params.PageSize > 100 {
-		params.PageSize = 100
+	if params.PageSize > maxPageSize {
+		params.PageSize = maxPageSize
 	}
 
 	filterOpts, err := s.queryFilterOptions(ctx, userID)
@@ -302,8 +309,6 @@ const tilSelectCols = `
 				u.email as owner_email`
 
 func buildTILFilters(pb *paramBuilder, params ListParams) (commonFilters, ownedOwnerFilter, sharedOwnerFilter string) {
-	commonFilters = ""
-
 	if len(params.Repos) > 0 {
 		p := pb.addArray(params.Repos)
 		commonFilters += "\n\t\t\t\tAND " + repoExtractExpr + " = ANY(" + p + ")"
@@ -323,6 +328,14 @@ func buildTILFilters(pb *paramBuilder, params ListParams) (commonFilters, ownedO
 			tsqueryParam := pb.add(tsquery)
 			commonFilters += "\n\t\t\t\tAND to_tsvector('english', t.title || ' ' || t.summary) @@ to_tsquery('english', " + tsqueryParam + ")"
 		}
+	}
+	if params.From != nil {
+		p := pb.add(*params.From)
+		commonFilters += "\n\t\t\t\tAND t.created_at >= " + p
+	}
+	if params.To != nil {
+		p := pb.add(*params.To)
+		commonFilters += "\n\t\t\t\tAND t.created_at < " + p
 	}
 	return
 }

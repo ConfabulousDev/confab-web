@@ -414,6 +414,7 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			r.Get("/sessions/{id}/condensed-transcript", withMaxBody(MaxBodyXS, s.handleCondensedTranscript))
 			r.Get("/sessions/condensed-transcript", withMaxBody(MaxBodyXS, s.handleCondensedTranscriptByExternalID))
+			r.Get("/tils/export", withMaxBody(MaxBodyXS, s.handleExportTILs))
 		})
 
 	})

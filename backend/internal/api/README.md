@@ -19,6 +19,7 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `deletes.go` | `DELETE /api/v1/sessions/{id}` -- deletes session from S3 and database (owner-only) |
 | `github_links.go` | GitHub link CRUD: `POST /api/v1/sessions/{id}/github-links`, `GET /api/v1/sessions/{id}/github-links`, `DELETE /api/v1/sessions/{id}/github-links/{linkID}`. Also contains `ParseGitHubURL` and `extractPRLinkFromLine` for transcript-based PR link extraction |
 | `tils.go` | TIL endpoints: `POST /api/v1/sessions/{id}/tils`, `GET /api/v1/sessions/{id}/tils`, `GET /api/v1/tils`, `PATCH /api/v1/tils/{tilID}`, `DELETE /api/v1/tils/{tilID}` |
+| `til_export.go` | TIL export endpoint: `GET /api/v1/tils/export` (external API, API key auth). Returns paginated TILs enriched with session URLs and transcript deep links for machine consumers |
 | `access.go` | `CheckCanonicalAccess`, `RequireCanonicalRead`, and `RespondCanonicalAccessError` -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, GitHub links, and TIL endpoints |
 | `auth_config.go` | `GET /api/v1/auth/config` -- public endpoint returning enabled auth providers and feature flags |
 | `client_errors.go` | `POST /api/v1/client-errors` -- accepts frontend error reports for server-side logging/observability |
@@ -53,6 +54,7 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
    - `csrfMiddleware` + `auth.RequireSession` group -- for web dashboard endpoints
    - `csrfWhenSession` + `auth.RequireSessionOrAPIKey` group -- for endpoints used by both CLI and web
    - `auth.OptionalAuth` group -- for endpoints supporting unauthenticated access (public shares)
+   - External API group (`auth.RequireAPIKey` + `externalReadLimiter`) -- for machine-consumable endpoints (condensed transcript, TIL export)
 
 4. **Wrap with `withMaxBody`** using the appropriate size constant (`MaxBodyXS` through `MaxBodyXL`).
 
