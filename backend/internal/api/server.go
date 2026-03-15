@@ -338,7 +338,9 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Trends - aggregated analytics across sessions
 			r.Get("/trends", withMaxBody(MaxBodyXS, HandleGetTrends(s.db)))
 
-			// Organization analytics (requires ENABLE_ORG_ANALYTICS=true)
+			// Organization analytics (requires ENABLE_ORG_ANALYTICS=true).
+			// WARNING: exposes all users' names, emails, session counts, and costs
+			// to any authenticated user. Only enable for trusted-team deployments.
 			if s.orgAnalyticsEnabled {
 				r.Get("/org/analytics", withMaxBody(MaxBodyXS, HandleGetOrgAnalytics(s.db)))
 			}

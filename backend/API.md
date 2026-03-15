@@ -1147,7 +1147,9 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 GET /api/v1/org/analytics?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>
 ```
 
-Returns per-user aggregated analytics across all sessions in the organization. Requires `ENABLE_ORG_ANALYTICS=true` environment variable. Available to any authenticated user when enabled.
+Returns per-user aggregated analytics across all sessions in the organization. Requires `ENABLE_ORG_ANALYTICS=true` environment variable.
+
+**Privacy implications:** When enabled, **any authenticated user** can view every other user's name, email, session count, cost, and time breakdowns. This is designed for trusted-team deployments where full visibility is acceptable. There is no role-based restriction — all users see the same data. If you need to limit visibility to admins only, do not enable this feature. If `ALLOWED_EMAIL_DOMAINS` is configured, access is implicitly scoped to users within the allowed domains.
 
 **Query Parameters:**
 | Parameter | Type | Required | Default | Description |
@@ -1499,6 +1501,7 @@ Returns the list of enabled authentication providers. No authentication required
 | `features.shares_enabled` | bool | Whether share creation is enabled (`true` when `ENABLE_SHARE_CREATION=true`) |
 | `features.saas_footer_enabled` | bool | Whether the SaaS footer is shown (`true` when `ENABLE_SAAS_FOOTER=true`) |
 | `features.saas_termly_enabled` | bool | Whether Termly cookie consent is enabled (`true` when `ENABLE_SAAS_TERMLY=true`) |
+| `features.org_analytics_enabled` | bool | Whether org-wide analytics is enabled (`true` when `ENABLE_ORG_ANALYTICS=true`). See [Organization Analytics](#organization-analytics) for privacy implications |
 | `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |
 
 Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.
