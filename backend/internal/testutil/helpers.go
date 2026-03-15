@@ -458,6 +458,27 @@ func CreateTestSessionFull(t *testing.T, env *TestEnvironment, userID int64, ext
 	return sessionID
 }
 
+// CreateTestTIL creates a TIL in the database for testing.
+// Returns the TIL ID.
+func CreateTestTIL(t *testing.T, env *TestEnvironment, ownerID int64, sessionID, title, summary string, messageUUID *string) int64 {
+	t.Helper()
+
+	query := `
+		INSERT INTO tils (title, summary, session_id, message_uuid, owner_id)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+	`
+
+	var id int64
+	row := env.DB.QueryRow(env.Ctx, query, title, summary, sessionID, messageUUID, ownerID)
+	err := row.Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to create test TIL: %v", err)
+	}
+
+	return id
+}
+
 // CreateTestSearchIndex inserts a search index row with a weighted tsvector for testing.
 // The text is indexed with weight 'A' for simplicity.
 func CreateTestSearchIndex(t *testing.T, env *TestEnvironment, sessionID string, text string, indexedUpToLine int64) {

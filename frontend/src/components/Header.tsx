@@ -60,6 +60,7 @@ function Header() {
       <nav className={styles.nav}>
         <Link to={user?.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions'} className={styles.navLink}>Sessions</Link>
         <Link to="/trends" className={styles.navLink}>Personal Trends</Link>
+        <Link to="/tils" className={styles.navLink}>TILs</Link>
         {orgAnalyticsEnabled && <Link to="/org" className={styles.navLink}>Organization</Link>}
       </nav>
 

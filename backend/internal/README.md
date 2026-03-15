@@ -20,6 +20,7 @@ Internal packages for the Confab backend server. All packages live under
 | `db/github` | GitHub link CRUD | Changing GitHub integration storage |
 | `db/migrations` | Embedded SQL migration files | Adding schema changes (new tables, columns, indexes) |
 | `db/session` | Session CRUD, list/paginate, sync, full-text search | Changing session queries, filters, pagination |
+| `db/til` | TIL CRUD | Changing TIL storage or queries |
 | `db/user` | User CRUD, admin user listing | Changing user schema, adding user fields |
 | `email` | Email service interface + Resend implementation (share invitations) | Adding email types, changing email provider |
 | `logger` | Structured JSON logging (slog), request-scoped context logger | Changing log format, adding log fields |
@@ -55,6 +56,7 @@ have no internal dependencies.
   db/events  ├─→ db (root only; sub-packages do NOT import each other)
   db/github  │
   db/session │
+  db/til     │
   db/user    ┘
 
   Leaf packages (zero internal deps):
@@ -74,6 +76,7 @@ dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 dbaccess   "github.com/ConfabulousDev/confab-web/internal/db/access"
 dbuser     "github.com/ConfabulousDev/confab-web/internal/db/user"
 dbgithub   "github.com/ConfabulousDev/confab-web/internal/db/github"
+dbtil      "github.com/ConfabulousDev/confab-web/internal/db/til"
 dbevents   "github.com/ConfabulousDev/confab-web/internal/db/events"
 // dbauth has no alias — package name is already "dbauth"
 ```
@@ -138,7 +141,7 @@ Client (browser / CLI)
 1. **`api` and `admin`** are the top-level HTTP layers. They may import any other package.
 2. **`auth`** handles authentication concerns. It imports `db`, `db/dbauth`, `db/user`, `models`, `clientip`, `logger`, `validation`.
 3. **`analytics`** handles computation. It imports `storage`, `anthropic`, `recapquota` but NOT `api` or `auth`.
-4. **`db` sub-packages** (`access`, `dbauth`, `events`, `github`, `session`, `user`) depend only on `db` root (for the `DB` struct and shared types). They do NOT import each other.
+4. **`db` sub-packages** (`access`, `dbauth`, `events`, `github`, `session`, `til`, `user`) depend only on `db` root (for the `DB` struct and shared types). They do NOT import each other.
 5. **Leaf packages** (`logger`, `clientip`, `validation`, `models`, `anthropic`, `recapquota`, `email`, `storage`) have zero internal dependencies. `ratelimit` has minimal deps (`clientip`, `logger`). None of these may import `api`, `auth`, `admin`, or `analytics`.
 6. **`testutil`** is test-only infrastructure. Production code must not import it.
 7. **No circular imports.** If two packages need to share a type, put it in `db/types.go` or `models/models.go`.

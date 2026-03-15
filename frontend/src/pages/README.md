@@ -13,6 +13,7 @@ Page-level components corresponding to routes. All pages are lazy-loaded for cod
 | `OrgPage.tsx` | Organization-level analytics with per-user table |
 | `APIKeysPage.tsx` | API key management (create, list, delete) |
 | `ShareLinksPage.tsx` | List and manage active share links |
+| `TILsPage.tsx` | TIL list with create/edit/delete for user's "Today I Learned" entries |
 | `LoginPage.tsx` | OAuth login page with provider selection |
 | `PoliciesPage.tsx` | Legal policies page (SaaS mode only) |
 | `NotFoundPage.tsx` | 404 page |
@@ -37,6 +38,7 @@ const SessionsPage = lazy(() => import('@/pages/SessionsPage'));
 | `/org` | `OrgPage` | Yes | Protected + org analytics feature flag |
 | `/keys` | `APIKeysPage` | Yes | Protected route |
 | `/shares` | `ShareLinksPage` | Yes | Protected route |
+| `/tils` | `TILsPage` | Yes | Protected route |
 | `/login` | `LoginPage` | No | |
 | `/policies` | `PoliciesPage` | No | SaaS mode only |
 | `/terms` | Redirect | No | External Termly redirect, SaaS only |

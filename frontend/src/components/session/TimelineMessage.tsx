@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
+import type { TIL } from '@/schemas/api';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
+import TILBadge from './TILBadge';
 import { formatCost, formatTokenCount, WEB_SEARCH_COST_PER_REQUEST } from '@/utils/tokenStats';
 import { getRoleLabel } from './messageCategories';
 import styles from './TimelineMessage.module.css';
@@ -27,6 +29,8 @@ interface TimelineMessageProps {
    *  Used for tooltip display when available, since the raw message.usage may have
    *  intermediate output_tokens (not the final count). */
   correctedTokenUsage?: TokenUsage;
+  /** TILs anchored to this message */
+  tils?: TIL[];
 }
 
 /**
@@ -220,7 +224,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage }: TimelineMessageProps) {
+function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage, tils }: TimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -279,6 +283,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
           <span className={styles.role}>{roleLabel}</span>
           {agentId && <span className={styles.agentBadge}>{agentId}</span>}
           {skillName && <span className={styles.skillBadge}>/{skillName}</span>}
+          {tils && tils.length > 0 && <TILBadge tils={tils} />}
           {timestamp && <span className={styles.timestamp}>{formatTimestamp(timestamp)}</span>}
         </div>
         <div className={styles.headerRight}>

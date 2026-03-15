@@ -74,6 +74,26 @@ func CheckCanonicalAccess(
 	return result, nil
 }
 
+// RequireCanonicalRead checks canonical session access and writes the appropriate error response.
+// Returns the access result if access was granted, or nil if an error response was already written.
+// This is the standard pattern for read endpoints that follow session access — use this instead
+// of manually calling CheckCanonicalAccess + RespondCanonicalAccessError + AccessNone check.
+func RequireCanonicalRead(ctx context.Context, w http.ResponseWriter, database *db.DB, sessionID string) *CanonicalAccessResult {
+	result, err := CheckCanonicalAccess(ctx, database, sessionID)
+	if RespondCanonicalAccessError(ctx, w, err, sessionID) {
+		return nil
+	}
+	if result.AccessInfo.AccessType == db.SessionAccessNone {
+		if result.AccessInfo.AuthMayHelp {
+			respondError(w, http.StatusUnauthorized, "Sign in to view this session")
+		} else {
+			respondError(w, http.StatusNotFound, "Session not found")
+		}
+		return nil
+	}
+	return result
+}
+
 // RespondCanonicalAccessError writes the appropriate HTTP error response for access control failures.
 // This handles the common error cases: not found, owner inactive, and internal errors.
 // Returns true if an error response was written, false if no error occurred.

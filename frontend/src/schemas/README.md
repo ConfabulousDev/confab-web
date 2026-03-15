@@ -37,6 +37,10 @@ All types are inferred from Zod schemas via `z.infer<>`:
 - `OrgAnalyticsResponse` -- Per-user analytics with date range
 - `OrgUserAnalytics` -- Individual user metrics
 
+**TIL types:**
+- `TIL` -- A "Today I Learned" entry (id, session_id, title, body, timestamps)
+- `TILListResponse` -- List of TILs
+
 **Other types:**
 - `User` -- Current user (email, name, avatar)
 - `SessionShare`, `APIKey`, `GitHubLink`, `GitInfo`

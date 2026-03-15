@@ -33,6 +33,10 @@ Shared domain types used across the backend. This is a leaf package with no inte
 - **`GitHubLink`** -- A link between a session and a GitHub artifact (commit or PR).
 - **`CreateGitHubLinkRequest`** -- API request for creating a GitHub link.
 
+### TILs
+
+- **`TIL`** -- A "Today I Learned" entry linked to a session, with title, body, and timestamps.
+
 ## How to Extend
 
 ### Adding a new domain type

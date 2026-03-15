@@ -1,6 +1,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine, AssistantMessage } from '@/types';
+import type { TIL } from '@/schemas/api';
 import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { calculateMessageCost } from '@/utils/tokenStats';
@@ -22,6 +23,7 @@ interface MessageTimelineProps {
   targetMessageUuid?: string; // Deep-link target message UUID
   sessionId?: string; // Session ID for copy-link URLs
   isCostMode?: boolean; // When true, show cost heatmap and per-message cost badges
+  tilsByMessageUuid?: Map<string, TIL[]>; // TILs keyed by message UUID
 }
 
 // Item types for virtual list
@@ -107,7 +109,7 @@ function retryOnAnimationFrame(
   attempt(0);
 }
 
-function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode }: MessageTimelineProps) {
+function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, tilsByMessageUuid }: MessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -525,6 +527,9 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
                     isCostMode={isCostMode}
                     messageCost={isCostMode ? messageCosts.get(item.index) : undefined}
                     correctedTokenUsage={isCostMode ? correctedUsageByIndex.get(item.index) : undefined}
+                    tils={tilsByMessageUuid && 'uuid' in item.message && typeof item.message.uuid === 'string'
+                      ? tilsByMessageUuid.get(item.message.uuid)
+                      : undefined}
                     onSkipToNext={nextOfSameRole.has(item.filteredIndex)
                       ? () => scrollToFilteredIndex(nextOfSameRole.get(item.filteredIndex)!)
                       : undefined}
