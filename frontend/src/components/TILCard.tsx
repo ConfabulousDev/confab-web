@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, type MouseEvent, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useCallback, type MouseEvent } from 'react';
 import type { TILWithSession } from '@/schemas/api';
 import { RelativeTime } from '@/components/RelativeTime';
 import Chip from '@/components/Chip';
@@ -33,18 +33,12 @@ export default function TILCard({ til, onNavigate, onDelete }: TILCardProps) {
       setTouched(true);
       if (touchTimer.current) clearTimeout(touchTimer.current);
       touchTimer.current = setTimeout(() => setTouched(false), 3000);
-      return;
     }
-    if (!menuOpen) {
-      onNavigate();
-    }
-  }, [menuOpen, onNavigate, touched, til.is_owner]);
+  }, [touched, til.is_owner]);
 
-  const handleCardKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onNavigate();
-    }
+  const handleSessionClick = useCallback((e: MouseEvent) => {
+    e.stopPropagation();
+    onNavigate();
   }, [onNavigate]);
 
   const handleMenuToggle = useCallback((e: MouseEvent) => {
@@ -79,13 +73,7 @@ export default function TILCard({ til, onNavigate, onDelete }: TILCardProps) {
   ].filter(Boolean).join(' ');
 
   return (
-    <div
-      className={cardClass}
-      onClick={handleCardClick}
-      onKeyDown={handleCardKeyDown}
-      role="button"
-      tabIndex={0}
-    >
+    <div className={cardClass} onClick={handleCardClick}>
       <div className={styles.header}>
         <div className={styles.title}>{til.title}</div>
         <div className={styles.corner} ref={menuRef}>
@@ -122,7 +110,9 @@ export default function TILCard({ til, onNavigate, onDelete }: TILCardProps) {
 
       <div className={styles.chipRow}>
         {til.session_title && (
-          <Chip icon={null} variant="neutral">{til.session_title}</Chip>
+          <span className={styles.sessionLink} onClick={handleSessionClick}>
+            <Chip icon={null} variant="purple">{til.session_title}</Chip>
+          </span>
         )}
         <Chip icon={PersonIcon} variant="neutral" copyValue={til.owner_email}>
           {til.owner_email}

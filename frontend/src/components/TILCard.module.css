@@ -6,16 +6,9 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   padding: var(--spacing-md);
-  cursor: pointer;
-  transition: box-shadow var(--transition-base), border-color var(--transition-base);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
-}
-
-.card:hover {
-  box-shadow: var(--shadow-card-hover);
-  border-color: var(--color-border-dark);
 }
 
 /* Header: title left, timestamp/menu right */
@@ -153,11 +146,18 @@
   line-height: var(--leading-normal);
 }
 
-/* Chips row */
+/* Chips row — separated from body */
 .chipRow {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: var(--spacing-sm);
+}
+
+/* Session title chip — clickable, navigates to transcript */
+.sessionLink {
+  cursor: pointer;
 }
 
 @media (hover: none) {
