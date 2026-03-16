@@ -92,6 +92,19 @@ export const MinimalMetadata: Story = {
   },
 };
 
+export const LongChipValues: Story = {
+  args: {
+    til: {
+      ...baseTIL,
+      id: 7,
+      session_title: 'Refactoring the authentication middleware to support OAuth2 PKCE flow',
+      owner_email: 'alexandra.richardson@engineering.confab.dev',
+      git_repo: 'confabulous-monorepo-infrastructure',
+      git_branch: 'feature/oauth2-pkce-token-exchange-implementation',
+    },
+  },
+};
+
 export const RecentlyCreated: Story = {
   args: {
     til: {
