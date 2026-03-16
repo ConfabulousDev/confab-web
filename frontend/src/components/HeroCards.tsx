@@ -7,6 +7,7 @@ import QuickstartModal from './QuickstartModal';
 import ReviewModal from './ReviewModal';
 import ShareModal from './ShareModal';
 import SmartRecapModal from './SmartRecapModal';
+import TILModal from './TILModal';
 import styles from './HeroCards.module.css';
 
 interface HeroCard {
@@ -43,6 +44,12 @@ const cards: HeroCard[] = [
     description: 'Connect sessions to pull requests for full context on code changes.',
   },
   {
+    id: 'til',
+    icon: '💡',
+    title: 'Today I Learned',
+    description: 'Capture insights and learnings from your sessions. Search, filter, and share with your team.',
+  },
+  {
     id: 'analysis',
     icon: '📊',
     title: 'Analysis',
@@ -68,7 +75,7 @@ const cards: HeroCard[] = [
   },
 ];
 
-const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share', 'self-hosted'];
+const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share', 'self-hosted', 'til'];
 
 function HeroCards() {
   const [smartRecapOpen, setSmartRecapOpen] = useState(false);
@@ -79,6 +86,7 @@ function HeroCards() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [selfHostedOpen, setSelfHostedOpen] = useState(false);
+  const [tilOpen, setTilOpen] = useState(false);
 
   const handleCardClick = (cardId: string) => {
     if (cardId === 'smart-recap') {
@@ -97,6 +105,8 @@ function HeroCards() {
       setShareOpen(true);
     } else if (cardId === 'self-hosted') {
       setSelfHostedOpen(true);
+    } else if (cardId === 'til') {
+      setTilOpen(true);
     }
   };
 
@@ -160,6 +170,10 @@ function HeroCards() {
       <SelfHostedModal
         isOpen={selfHostedOpen}
         onClose={() => setSelfHostedOpen(false)}
+      />
+      <TILModal
+        isOpen={tilOpen}
+        onClose={() => setTilOpen(false)}
       />
     </div>
   );
