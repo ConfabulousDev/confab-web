@@ -1,27 +1,10 @@
+import FeatureItem from './FeatureItem';
 import Modal from './Modal';
 import styles from './SelfHostedModal.module.css';
 
 interface SelfHostedModalProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface FeatureItemProps {
-  icon: string;
-  title: string;
-  description: string;
-}
-
-function FeatureItem({ icon, title, description }: FeatureItemProps) {
-  return (
-    <div className={styles.featureItem}>
-      <span className={styles.featureIcon}>{icon}</span>
-      <div className={styles.featureContent}>
-        <span className={styles.featureTitle}>{title}</span>
-        <span className={styles.featureDescription}>{description}</span>
-      </div>
-    </div>
-  );
 }
 
 function SelfHostedModal({ isOpen, onClose }: SelfHostedModalProps) {
