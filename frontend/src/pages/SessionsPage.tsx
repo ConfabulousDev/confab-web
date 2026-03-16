@@ -5,6 +5,7 @@ import { formatDuration } from '@/utils';
 import { formatCost } from '@/utils/tokenStats';
 import { getRepoWebURL } from '@/utils/git';
 import { RelativeTime } from '@/components/RelativeTime';
+import PageHeader from '@/components/PageHeader';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
@@ -47,15 +48,9 @@ function SessionsPage() {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.mainContent}>
-        <header className={styles.toolbar}>
-          <div className={styles.toolbarTop}>
-            <span className={styles.sessionCount}>
-              {loading && sessions.length > 0 ? (
-                <span className={styles.loadingIndicator}>Updating...</span>
-              ) : (
-                'Sessions'
-              )}
-            </span>
+        <PageHeader
+          leftContent={<h1 className={styles.title}>Sessions</h1>}
+          actions={
             <div className={styles.toolbarActions}>
               <Pagination
                 hasMore={hasMore}
@@ -73,8 +68,9 @@ function SessionsPage() {
                 {RefreshIcon}
               </button>
             </div>
-          </div>
-
+          }
+        />
+        <div className={styles.filterBar}>
           <FilterChipsBar
             filters={{ repos, branches, owners, query }}
             filterOptions={filterOptions}
@@ -85,7 +81,7 @@ function SessionsPage() {
             onQueryChange={setQuery}
             onClearAll={clearAll}
           />
-        </header>
+        </div>
 
         <div ref={containerRef} className={styles.container}>
           <ScrollNavButtons scrollRef={containerRef} />

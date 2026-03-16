@@ -17,7 +17,7 @@ Page-level components corresponding to routes. All pages are lazy-loaded for cod
 | `LoginPage.tsx` | OAuth login page with provider selection |
 | `PoliciesPage.tsx` | Legal policies page (SaaS mode only) |
 | `NotFoundPage.tsx` | 404 page |
-| `pageLayout.module.css` | Shared page layout styles |
+| `pageLayout.module.css` | Shared page layout styles (layout, page title, refresh button, toolbar actions, filter bar) |
 
 ## Routing
 
@@ -92,6 +92,7 @@ The most complex page. It:
 
 - All pages are default exports (required for `React.lazy()`)
 - Pages compose components from `@/components/` -- they should not contain complex rendering logic
+- All top-level pages use `PageHeader` for the page heading (`<h1>` at 1.25rem/600 weight via shared `.pageTitle`)
 - Page-specific styles use CSS Modules; shared layout styles are in `pageLayout.module.css`
 - `useDocumentTitle()` is called in each page to set the browser tab title
 - Protected pages use `useAuth()` to check authentication state

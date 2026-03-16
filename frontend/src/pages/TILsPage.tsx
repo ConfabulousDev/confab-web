@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTILsFetch, useAuth, useDocumentTitle, useSessionFilters, useColumnCount, distributeToColumns } from '@/hooks';
 import type { TILWithSession } from '@/schemas/api';
+import PageHeader from '@/components/PageHeader';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
@@ -45,15 +46,9 @@ function TILsPage() {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.mainContent}>
-        <header className={styles.toolbar}>
-          <div className={styles.toolbarTop}>
-            <span className={styles.pageTitle}>
-              {loading && tils.length > 0 ? (
-                <span className={styles.loadingIndicator}>Updating...</span>
-              ) : (
-                'TILs'
-              )}
-            </span>
+        <PageHeader
+          leftContent={<h1 className={styles.title}>TILs</h1>}
+          actions={
             <div className={styles.toolbarActions}>
               <Pagination
                 hasMore={hasMore}
@@ -71,8 +66,9 @@ function TILsPage() {
                 {RefreshIcon}
               </button>
             </div>
-          </div>
-
+          }
+        />
+        <div className={styles.filterBar}>
           <FilterChipsBar
             filters={{ repos, branches, owners, query }}
             filterOptions={filterOptions}
@@ -83,7 +79,7 @@ function TILsPage() {
             onQueryChange={setQuery}
             onClearAll={clearAll}
           />
-        </header>
+        </div>
 
         <div ref={containerRef} className={styles.container}>
           <ScrollNavButtons scrollRef={containerRef} />
