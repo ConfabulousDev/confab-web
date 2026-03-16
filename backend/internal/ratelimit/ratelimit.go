@@ -57,7 +57,6 @@ func NewInMemoryRateLimiter(rps float64, burst int) *InMemoryRateLimiter {
 		stopCleanup:     make(chan struct{}),
 	}
 
-	// Start cleanup goroutine
 	go limiter.cleanup()
 
 	return limiter
@@ -71,33 +70,25 @@ func (l *InMemoryRateLimiter) Allow(ctx context.Context, key string) bool {
 // AllowN checks if N requests are allowed
 func (l *InMemoryRateLimiter) AllowN(ctx context.Context, key string, n int) bool {
 	limiter := l.getLimiter(key)
-
-	// Update last access time
-	l.lastAccess.Store(key, time.Now().UTC())
-
-	return limiter.AllowN(time.Now().UTC(), n)
+	now := time.Now().UTC()
+	l.lastAccess.Store(key, now)
+	return limiter.AllowN(now, n)
 }
 
 // getLimiter gets or creates a rate limiter for the given key
 func (l *InMemoryRateLimiter) getLimiter(key string) *rate.Limiter {
-	// Try to load existing limiter
-	if limiter, exists := l.limiters.Load(key); exists {
-		return limiter.(*rate.Limiter)
+	// Fast path: limiter already exists
+	if v, ok := l.limiters.Load(key); ok {
+		return v.(*rate.Limiter)
 	}
 
-	// Create new limiter
+	// Slow path: create and race to store
 	limiter := rate.NewLimiter(l.rate, l.burst)
-
-	// Store it (may race with another goroutine, that's OK)
 	actual, loaded := l.limiters.LoadOrStore(key, limiter)
 	if loaded {
-		// Another goroutine created it first, use that one
 		return actual.(*rate.Limiter)
 	}
-
-	// We created it, store last access time
 	l.lastAccess.Store(key, time.Now().UTC())
-
 	return limiter
 }
 
@@ -121,25 +112,20 @@ func (l *InMemoryRateLimiter) cleanupOldLimiters() {
 	cutoff := time.Now().UTC().Add(-l.maxAge)
 	var keysToDelete []string
 
-	// Find old limiters
 	l.lastAccess.Range(func(key, value interface{}) bool {
-		lastTime := value.(time.Time)
-		if lastTime.Before(cutoff) {
+		if value.(time.Time).Before(cutoff) {
 			keysToDelete = append(keysToDelete, key.(string))
 		}
 		return true
 	})
 
-	// Delete them
 	for _, key := range keysToDelete {
 		l.limiters.Delete(key)
 		l.lastAccess.Delete(key)
 	}
-
 }
 
 // Stop stops the cleanup goroutine
 func (l *InMemoryRateLimiter) Stop() {
 	close(l.stopCleanup)
 }
-

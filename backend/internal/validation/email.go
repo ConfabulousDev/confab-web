@@ -21,11 +21,11 @@ func IsAllowedEmailDomain(email string, allowedDomains []string) bool {
 		return true
 	}
 
-	parts := strings.SplitN(email, "@", 2)
-	if len(parts) != 2 {
+	_, domainPart, ok := strings.Cut(email, "@")
+	if !ok {
 		return false
 	}
-	domain := strings.ToLower(parts[1])
+	domain := strings.ToLower(domainPart)
 
 	for _, allowed := range allowedDomains {
 		if domain == allowed {
@@ -63,24 +63,15 @@ func NormalizeEmail(email string) string {
 func IsValidEmail(email string) bool {
 	email = strings.TrimSpace(email)
 
-	// Basic length checks
 	if len(email) == 0 || len(email) > 254 {
 		return false
 	}
 
-	// Check format with regex (requires domain with TLD)
 	if !emailRegex.MatchString(email) {
 		return false
 	}
 
-	// Additional check: no consecutive dots in local part
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 {
-		return false
-	}
-	if strings.Contains(parts[0], "..") {
-		return false
-	}
-
-	return true
+	// Reject consecutive dots in local part (not caught by regex)
+	localPart, _, _ := strings.Cut(email, "@")
+	return !strings.Contains(localPart, "..")
 }

@@ -44,6 +44,13 @@ func (pb *paramBuilder) addArray(vals []string) string {
 	return pb.add(pq.Array(vals))
 }
 
+func nonNilSlice(ss []string) []string {
+	if ss == nil {
+		return []string{}
+	}
+	return ss
+}
+
 // lowercaseSlice returns a new slice with all strings lowercased.
 func lowercaseSlice(ss []string) []string {
 	result := make([]string, len(ss))
@@ -69,6 +76,18 @@ func (s *Store) ListUserSessions(ctx context.Context, userID int64) ([]db.Sessio
 	}
 	defer rows.Close()
 
+	sessions, err := scanSessionListItems(rows)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
+	return sessions, nil
+}
+
+func scanSessionListItems(rows *sql.Rows) ([]db.SessionListItem, error) {
 	sessions := make([]db.SessionListItem, 0)
 	for rows.Next() {
 		var session db.SessionListItem
@@ -83,11 +102,8 @@ func (s *Store) ListUserSessions(ctx context.Context, userID int64) ([]db.Sessio
 			&githubPRs, &githubCommits, &session.EstimatedCostUSD,
 			&session.IsOwner, &session.AccessType, &session.SharedByEmail, &session.OwnerEmail,
 		); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
-
 		if gitRepoURL != nil && *gitRepoURL != "" {
 			session.GitRepo = db.ExtractRepoName(*gitRepoURL)
 			session.GitRepoURL = gitRepoURL
@@ -98,161 +114,80 @@ func (s *Store) ListUserSessions(ctx context.Context, userID int64) ([]db.Sessio
 		if len(githubCommits) > 0 {
 			session.GitHubCommits = []string(githubCommits)
 		}
-
 		sessions = append(sessions, session)
 	}
-
 	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("error iterating sessions: %w", err)
 	}
-
-	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
 	return sessions, nil
 }
 
 // buildSharedWithMeQuery returns the SQL for the SharedWithMe view.
 func (s *Store) buildSharedWithMeQuery() string {
-	systemSharedCTE := `
-			system_shared_sessions AS (
-				SELECT DISTINCT ON (s.id)
-					s.id, s.external_id, s.first_seen,
-					COALESCE(sf_stats.file_count, 0) as file_count,
-					s.last_message_at, s.custom_title, s.suggested_session_title,
-					s.summary, s.first_user_message, s.session_type,
-					COALESCE(sf_stats.total_lines, 0) as total_lines,
-					s.git_info->>'repo_url' as git_repo_url,
-					s.git_info->>'branch' as git_branch,
-					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
-					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
-					sct.estimated_cost_usd,
-					false as is_owner, 'system_share' as access_type,
-					u.email as shared_by_email, u.email as owner_email
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_system sss ON sh.id = sss.share_id
-				JOIN users u ON s.user_id = u.id
-				LEFT JOIN (
-					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-					FROM sync_files GROUP BY session_id
-				) sf_stats ON s.id = sf_stats.session_id
-				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
-				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
-				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				  AND s.user_id != $1
-				ORDER BY s.id, sh.created_at DESC
-			)`
-
+	var systemSharedCTE string
 	if s.DB.ShareAllSessions {
 		systemSharedCTE = `
-			system_shared_sessions AS (
-				SELECT DISTINCT ON (s.id)
-					s.id, s.external_id, s.first_seen,
-					COALESCE(sf_stats.file_count, 0) as file_count,
-					s.last_message_at, s.custom_title, s.suggested_session_title,
-					s.summary, s.first_user_message, s.session_type,
-					COALESCE(sf_stats.total_lines, 0) as total_lines,
-					s.git_info->>'repo_url' as git_repo_url,
-					s.git_info->>'branch' as git_branch,
-					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
-					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
-					sct.estimated_cost_usd,
-					false as is_owner, 'system_share' as access_type,
-					u.email as shared_by_email, u.email as owner_email
-				FROM sessions s
-				JOIN users u ON s.user_id = u.id
-				LEFT JOIN (
-					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-					FROM sync_files GROUP BY session_id
-				) sf_stats ON s.id = sf_stats.session_id
-				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
-				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
-				WHERE s.user_id != $1
-				ORDER BY s.id
-			)`
+		system_shared_sessions AS (
+			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
+				false as is_owner, 'system_share' as access_type,
+				u.email as shared_by_email, u.email as owner_email
+			FROM sessions s
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			WHERE s.user_id != $1
+			ORDER BY s.id
+		)`
+	} else {
+		systemSharedCTE = `
+		system_shared_sessions AS (
+			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
+				false as is_owner, 'system_share' as access_type,
+				u.email as shared_by_email, u.email as owner_email
+			FROM sessions s
+			JOIN session_shares sh ON s.id = sh.session_id
+			JOIN session_share_system sss ON sh.id = sss.share_id
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
+			  AND s.user_id != $1
+			ORDER BY s.id, sh.created_at DESC
+		)`
 	}
 
 	return `
-			WITH
-			github_pr_refs AS (
-				SELECT session_id, array_agg(ref ORDER BY created_at) as prs
-				FROM session_github_links WHERE link_type = 'pull_request' GROUP BY session_id
-			),
-			github_commit_refs AS (
-				SELECT session_id, array_agg(ref ORDER BY created_at DESC) as commits
-				FROM session_github_links WHERE link_type = 'commit' GROUP BY session_id
-			),
-			owned_sessions AS (
-				SELECT
-					s.id, s.external_id, s.first_seen,
-					COALESCE(sf_stats.file_count, 0) as file_count,
-					s.last_message_at, s.custom_title, s.suggested_session_title,
-					s.summary, s.first_user_message, s.session_type,
-					COALESCE(sf_stats.total_lines, 0) as total_lines,
-					s.git_info->>'repo_url' as git_repo_url,
-					s.git_info->>'branch' as git_branch,
-					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
-					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
-					sct.estimated_cost_usd,
-					true as is_owner, 'owner' as access_type,
-					NULL::text as shared_by_email, u.email as owner_email
-				FROM sessions s
-				JOIN users u ON s.user_id = u.id
-				LEFT JOIN (
-					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-					FROM sync_files GROUP BY session_id
-				) sf_stats ON s.id = sf_stats.session_id
-				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
-				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
-				WHERE s.user_id = $1
-			),
-			shared_sessions AS (
-				SELECT DISTINCT ON (s.id)
-					s.id, s.external_id, s.first_seen,
-					COALESCE(sf_stats.file_count, 0) as file_count,
-					s.last_message_at, s.custom_title, s.suggested_session_title,
-					s.summary, s.first_user_message, s.session_type,
-					COALESCE(sf_stats.total_lines, 0) as total_lines,
-					s.git_info->>'repo_url' as git_repo_url,
-					s.git_info->>'branch' as git_branch,
-					COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
-					COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
-					sct.estimated_cost_usd,
-					false as is_owner, 'private_share' as access_type,
-					u.email as shared_by_email, u.email as owner_email
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_recipients sr ON sh.id = sr.share_id
-				JOIN users u ON s.user_id = u.id
-				LEFT JOIN (
-					SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-					FROM sync_files GROUP BY session_id
-				) sf_stats ON s.id = sf_stats.session_id
-				LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-				LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
-				LEFT JOIN session_card_tokens sct ON s.id = sct.session_id
-				WHERE sr.user_id = $1
-				  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				  AND s.user_id != $1
-				ORDER BY s.id, sh.created_at DESC
-			),` + systemSharedCTE + `
-			SELECT * FROM (
-				SELECT DISTINCT ON (id) * FROM (
-					SELECT * FROM owned_sessions
-					UNION ALL SELECT * FROM shared_sessions
-					UNION ALL SELECT * FROM system_shared_sessions
-				) combined
-				ORDER BY id, CASE access_type
-					WHEN 'owner' THEN 1 WHEN 'private_share' THEN 2
-					WHEN 'system_share' THEN 3 ELSE 4
-				END
-			) deduped
-			ORDER BY COALESCE(last_message_at, first_seen) DESC
-		`
+		WITH` + githubRefCTEs + `,
+		owned_sessions AS (
+			SELECT` + sessionSelectCols + `,
+				true as is_owner, 'owner' as access_type,
+				NULL::text as shared_by_email, u.email as owner_email
+			FROM sessions s
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			WHERE s.user_id = $1
+		),
+		shared_sessions AS (
+			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
+				false as is_owner, 'private_share' as access_type,
+				u.email as shared_by_email, u.email as owner_email
+			FROM sessions s
+			JOIN session_shares sh ON s.id = sh.session_id
+			JOIN session_share_recipients sr ON sh.id = sr.share_id
+			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
+			WHERE sr.user_id = $1
+			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
+			  AND s.user_id != $1
+			ORDER BY s.id, sh.created_at DESC
+		),` + systemSharedCTE + `
+		SELECT * FROM (
+			SELECT DISTINCT ON (id) * FROM (
+				SELECT * FROM owned_sessions
+				UNION ALL SELECT * FROM shared_sessions
+				UNION ALL SELECT * FROM system_shared_sessions
+			) combined
+			ORDER BY id, CASE access_type
+				WHEN 'owner' THEN 1 WHEN 'private_share' THEN 2
+				WHEN 'system_share' THEN 3 ELSE 4
+			END
+		) deduped
+		ORDER BY COALESCE(last_message_at, first_seen) DESC
+	`
 }
 
 // ListUserSessionsPaginated returns filtered, cursor-paginated sessions with pre-materialized filter options.
@@ -355,8 +290,6 @@ func (s *Store) queryFilterOptionsGlobal(ctx context.Context) (db.SessionFilterO
 }
 
 func (s *Store) queryFilterOptionsScoped(ctx context.Context, userID int64) (db.SessionFilterOptions, error) {
-	opts := db.SessionFilterOptions{Repos: make([]string, 0), Branches: make([]string, 0), Owners: make([]string, 0)}
-
 	query := `
 		WITH visible AS (
 			SELECT id, user_id, git_info FROM sessions WHERE user_id = $1
@@ -388,18 +321,13 @@ func (s *Store) queryFilterOptionsScoped(ctx context.Context, userID int64) (db.
 	var repos, branches, owners []string
 	err := s.conn().QueryRowContext(ctx, query, userID).Scan(pq.Array(&repos), pq.Array(&branches), pq.Array(&owners))
 	if err != nil {
-		return opts, fmt.Errorf("failed to query scoped filter options: %w", err)
+		return db.SessionFilterOptions{}, fmt.Errorf("failed to query scoped filter options: %w", err)
 	}
-	if repos != nil {
-		opts.Repos = repos
-	}
-	if branches != nil {
-		opts.Branches = branches
-	}
-	if owners != nil {
-		opts.Owners = owners
-	}
-	return opts, nil
+	return db.SessionFilterOptions{
+		Repos:    nonNilSlice(repos),
+		Branches: nonNilSlice(branches),
+		Owners:   nonNilSlice(owners),
+	}, nil
 }
 
 func encodeCursor(t time.Time, id string) string {
@@ -627,36 +555,9 @@ func (s *Store) queryPaginatedSessions(ctx context.Context, userID int64, params
 	}
 	defer rows.Close()
 
-	sessions := make([]db.SessionListItem, 0)
-	for rows.Next() {
-		var session db.SessionListItem
-		var gitRepoURL *string
-		var githubPRs pq.StringArray
-		var githubCommits pq.StringArray
-		if err := rows.Scan(
-			&session.ID, &session.ExternalID, &session.FirstSeen,
-			&session.FileCount, &session.LastSyncTime, &session.CustomTitle,
-			&session.SuggestedSessionTitle, &session.Summary, &session.FirstUserMessage,
-			&session.SessionType, &session.TotalLines, &gitRepoURL, &session.GitBranch,
-			&githubPRs, &githubCommits, &session.EstimatedCostUSD,
-			&session.IsOwner, &session.AccessType, &session.SharedByEmail, &session.OwnerEmail,
-		); err != nil {
-			return nil, false, "", fmt.Errorf("failed to scan session: %w", err)
-		}
-		if gitRepoURL != nil && *gitRepoURL != "" {
-			session.GitRepo = db.ExtractRepoName(*gitRepoURL)
-			session.GitRepoURL = gitRepoURL
-		}
-		if len(githubPRs) > 0 {
-			session.GitHubPRs = []string(githubPRs)
-		}
-		if len(githubCommits) > 0 {
-			session.GitHubCommits = []string(githubCommits)
-		}
-		sessions = append(sessions, session)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, false, "", fmt.Errorf("error iterating sessions: %w", err)
+	sessions, err := scanSessionListItems(rows)
+	if err != nil {
+		return nil, false, "", err
 	}
 
 	hasMore := len(sessions) > params.PageSize
@@ -701,10 +602,7 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 		&session.LastSyncAt, &session.Hostname, &session.Username, &session.OwnerEmail,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, db.ErrSessionNotFound
-		}
-		if db.IsInvalidUUIDError(err) {
+		if err == sql.ErrNoRows || db.IsInvalidUUIDError(err) {
 			return nil, db.ErrSessionNotFound
 		}
 		span.RecordError(err)
@@ -735,16 +633,7 @@ func (s *Store) DeleteSessionFromDB(ctx context.Context, sessionID string, userI
 		))
 	defer span.End()
 
-	tx, err := s.conn().BeginTx(ctx, nil)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	deleteSessionQuery := `DELETE FROM sessions WHERE id = $1 AND user_id = $2`
-	result, err := tx.ExecContext(ctx, deleteSessionQuery, sessionID, userID)
+	result, err := s.conn().ExecContext(ctx, `DELETE FROM sessions WHERE id = $1 AND user_id = $2`, sessionID, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -754,12 +643,6 @@ func (s *Store) DeleteSessionFromDB(ctx context.Context, sessionID string, userI
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return db.ErrSessionNotFound
-	}
-
-	if err := tx.Commit(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil

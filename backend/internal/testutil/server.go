@@ -32,7 +32,7 @@ func StartTestServer(t *testing.T, env *TestEnvironment, handler http.Handler) *
 	t.Helper()
 
 	// Set up required environment variables for the server
-	setEnvForTest(t, "INSECURE_DEV_MODE", "true") // Allow non-HTTPS cookies in tests
+	SetEnvForTest(t, "INSECURE_DEV_MODE", "true") // Allow non-HTTPS cookies in tests
 
 	// Listen on a random available port
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -103,18 +103,12 @@ func waitForServer(url string, timeout time.Duration) error {
 	return fmt.Errorf("server not ready after %v", timeout)
 }
 
-// setEnvForTest sets an environment variable and restores it after the test
-func setEnvForTest(t *testing.T, key, value string) {
+// SetEnvForTest sets an environment variable and restores it after the test.
+func SetEnvForTest(t *testing.T, key, value string) {
 	t.Helper()
 	old := os.Getenv(key)
 	os.Setenv(key, value)
 	t.Cleanup(func() {
 		os.Setenv(key, old)
 	})
-}
-
-// SetEnvForTest sets an environment variable and restores it after the test.
-// This is exported for use by test files that need to configure environment.
-func SetEnvForTest(t *testing.T, key, value string) {
-	setEnvForTest(t, key, value)
 }

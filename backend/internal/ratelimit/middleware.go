@@ -8,21 +8,22 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
+// denyRequest logs and sends a 429 response
+func denyRequest(w http.ResponseWriter, r *http.Request, key string) {
+	logger.Ctx(r.Context()).Warn("rate limit exceeded", "key", key, "path", r.URL.Path)
+	http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+}
+
 // Middleware creates an HTTP middleware that applies rate limiting
 // Uses clientip.FromRequest for IP extraction (set by clientip.Middleware)
 func Middleware(limiter RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get composite rate limit key from context (set by clientip.Middleware)
 			key := clientip.FromRequest(r).RateLimitKey
-
-			// Check rate limit
 			if !limiter.Allow(r.Context(), key) {
-				logger.Ctx(r.Context()).Warn("rate limit exceeded", "key", key, "path", r.URL.Path)
-				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				denyRequest(w, r, key)
 				return
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -33,20 +34,14 @@ func Middleware(limiter RateLimiter) func(http.Handler) http.Handler {
 func MiddlewareWithKey(limiter RateLimiter, keyFunc func(*http.Request) string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get custom key
 			key := keyFunc(r)
 			if key == "" {
-				// Fallback to IP if key function returns empty
 				key = clientip.FromRequest(r).RateLimitKey
 			}
-
-			// Check rate limit
 			if !limiter.Allow(r.Context(), key) {
-				logger.Ctx(r.Context()).Warn("rate limit exceeded", "key", key, "path", r.URL.Path)
-				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				denyRequest(w, r, key)
 				return
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -57,13 +52,10 @@ func MiddlewareWithKey(limiter RateLimiter, keyFunc func(*http.Request) string) 
 func HandlerFunc(limiter RateLimiter, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := clientip.FromRequest(r).RateLimitKey
-
 		if !limiter.Allow(r.Context(), key) {
-			logger.Ctx(r.Context()).Warn("rate limit exceeded", "key", key, "path", r.URL.Path)
-			http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+			denyRequest(w, r, key)
 			return
 		}
-
 		handler(w, r)
 	}
 }

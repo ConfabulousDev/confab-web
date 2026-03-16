@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -270,7 +271,7 @@ func lowercaseSlice(ss []string) []string {
 }
 
 func encodeCursor(t time.Time, id int64) string {
-	raw := t.Format(time.RFC3339Nano) + "|" + fmt.Sprintf("%d", id)
+	raw := t.Format(time.RFC3339Nano) + "|" + strconv.FormatInt(id, 10)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -287,8 +288,8 @@ func decodeCursor(cursor string) (time.Time, int64, error) {
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("invalid cursor time: %w", err)
 	}
-	var id int64
-	if _, err := fmt.Sscanf(parts[1], "%d", &id); err != nil {
+	id, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("invalid cursor id: %w", err)
 	}
 	return t, id, nil

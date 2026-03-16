@@ -159,45 +159,35 @@ func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fi
 		return fmt.Errorf("failed to update sync file state: %w", err)
 	}
 
-	if lastMessageAt != nil || summary != nil || firstUserMessage != nil || len(gitInfo) > 0 {
-		sessionQuery := `UPDATE sessions SET last_sync_at = NOW()`
-		args := []interface{}{sessionID}
-		argIdx := 2
+	sessionQuery := `UPDATE sessions SET last_sync_at = NOW()`
+	args := []interface{}{sessionID}
+	argIdx := 2
 
-		if lastMessageAt != nil {
-			sessionQuery += fmt.Sprintf(", last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < $%d THEN $%d ELSE last_message_at END", argIdx, argIdx)
-			args = append(args, lastMessageAt)
-			argIdx++
-		}
-		if summary != nil {
-			sessionQuery += fmt.Sprintf(", summary = $%d", argIdx)
-			args = append(args, *summary)
-			argIdx++
-		}
-		if firstUserMessage != nil {
-			sessionQuery += fmt.Sprintf(", first_user_message = COALESCE(first_user_message, $%d)", argIdx)
-			args = append(args, *firstUserMessage)
-			argIdx++
-		}
-		if len(gitInfo) > 0 {
-			sessionQuery += fmt.Sprintf(", git_info = $%d", argIdx)
-			args = append(args, gitInfo)
-		}
-		sessionQuery += " WHERE id = $1"
-		_, err = tx.ExecContext(ctx, sessionQuery, args...)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("failed to update session metadata: %w", err)
-		}
-	} else {
-		sessionQuery := `UPDATE sessions SET last_sync_at = NOW() WHERE id = $1`
-		_, err = tx.ExecContext(ctx, sessionQuery, sessionID)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("failed to update session last_sync_at: %w", err)
-		}
+	if lastMessageAt != nil {
+		sessionQuery += fmt.Sprintf(", last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < $%d THEN $%d ELSE last_message_at END", argIdx, argIdx)
+		args = append(args, lastMessageAt)
+		argIdx++
+	}
+	if summary != nil {
+		sessionQuery += fmt.Sprintf(", summary = $%d", argIdx)
+		args = append(args, *summary)
+		argIdx++
+	}
+	if firstUserMessage != nil {
+		sessionQuery += fmt.Sprintf(", first_user_message = COALESCE(first_user_message, $%d)", argIdx)
+		args = append(args, *firstUserMessage)
+		argIdx++
+	}
+	if len(gitInfo) > 0 {
+		sessionQuery += fmt.Sprintf(", git_info = $%d", argIdx)
+		args = append(args, gitInfo)
+	}
+	sessionQuery += " WHERE id = $1"
+	_, err = tx.ExecContext(ctx, sessionQuery, args...)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("failed to update session metadata: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {

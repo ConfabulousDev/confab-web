@@ -144,6 +144,54 @@ func oauthHTTPClient() *http.Client {
 	}
 }
 
+// setOAuthLoginCookies sets the standard pre-login cookies (CSRF state, post-login redirect,
+// expected email) that all OAuth login handlers need. Returns the state token and whether
+// a valid email hint was provided.
+func setOAuthLoginCookies(w http.ResponseWriter, r *http.Request) (state string, validEmail bool, expectedEmail string, err error) {
+	state, err = generateRandomString(32)
+	if err != nil {
+		return "", false, "", err
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   300, // 5 minutes
+		HttpOnly: true,
+		Secure:   cookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "post_login_redirect",
+			Value:    redirectAfter,
+			Path:     "/",
+			MaxAge:   300,
+			HttpOnly: true,
+			Secure:   cookieSecure(),
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	expectedEmail = r.URL.Query().Get("email")
+	validEmail = expectedEmail != "" && validation.IsValidEmail(expectedEmail)
+	if validEmail {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "expected_email",
+			Value:    expectedEmail,
+			Path:     "/",
+			MaxAge:   300,
+			HttpOnly: true,
+			Secure:   cookieSecure(),
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	return state, validEmail, expectedEmail, nil
+}
+
 // OAuthConfig holds OAuth configuration for all providers
 type OAuthConfig struct {
 	// Password authentication
@@ -195,54 +243,12 @@ type GitHubEmail struct {
 // HandleGitHubLogin initiates GitHub OAuth flow
 func HandleGitHubLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Generate random state for CSRF protection
-		state, err := generateRandomString(32)
+		state, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
 		if err != nil {
 			http.Error(w, "Failed to generate state", http.StatusInternalServerError)
 			return
 		}
 
-		// Store state in cookie for validation
-		http.SetCookie(w, &http.Cookie{
-			Name:     "oauth_state",
-			Value:    state,
-			Path:     "/",
-			MaxAge:   300, // 5 minutes
-			HttpOnly: true,
-			Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
-			SameSite: http.SameSiteLaxMode,
-		})
-
-		// Store post-login redirect URL if provided (e.g., from /device page)
-		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
-			http.SetCookie(w, &http.Cookie{
-				Name:     "post_login_redirect",
-				Value:    redirectAfter,
-				Path:     "/",
-				MaxAge:   300, // 5 minutes
-				HttpOnly: true,
-				Secure:   cookieSecure(),
-				SameSite: http.SameSiteLaxMode,
-			})
-		}
-
-		// Store expected email if provided (for share link login flow)
-		// Only store and use valid email addresses
-		expectedEmail := r.URL.Query().Get("email")
-		validEmail := expectedEmail != "" && validation.IsValidEmail(expectedEmail)
-		if validEmail {
-			http.SetCookie(w, &http.Cookie{
-				Name:     "expected_email",
-				Value:    expectedEmail,
-				Path:     "/",
-				MaxAge:   300, // 5 minutes
-				HttpOnly: true,
-				Secure:   cookieSecure(),
-				SameSite: http.SameSiteLaxMode,
-			})
-		}
-
-		// Redirect to GitHub
 		// Scope: read:user gets profile info, user:email gets email
 		authURL := fmt.Sprintf(
 			"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&state=%s&scope=read:user user:email",
@@ -251,7 +257,6 @@ func HandleGitHubLogin(config *OAuthConfig) http.HandlerFunc {
 			state,
 		)
 
-		// Add login hint if valid email is provided (pre-fills GitHub username/email field)
 		if validEmail {
 			authURL += "&login=" + url.QueryEscape(expectedEmail)
 		}
@@ -269,6 +274,7 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
+		frontendURL := os.Getenv("FRONTEND_URL")
 
 		// Validate state to prevent CSRF
 		stateCookie, err := r.Cookie("oauth_state")
@@ -291,7 +297,6 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		accessToken, err := exchangeGitHubCode(code, config)
 		if err != nil {
 			log.Error("Failed to exchange GitHub code", "error", err)
-			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s/login?error=github_error&error_description=%s",
 				frontendURL,
 				url.QueryEscape("Failed to complete GitHub authentication. Please try again."))
@@ -303,7 +308,6 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		user, err := getGitHubUser(accessToken)
 		if err != nil {
 			log.Error("Failed to get GitHub user", "error", err)
-			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s/login?error=github_error&error_description=%s",
 				frontendURL,
 				url.QueryEscape("Failed to retrieve user information from GitHub. Please try again."))
@@ -321,7 +325,6 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		// Check email domain restriction
 		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
 			log.Warn("Email domain not permitted", "email", user.Email, "provider", "github")
-			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
 				frontendURL,
 				url.QueryEscape("Your email domain is not permitted. Contact your administrator."))
@@ -333,7 +336,6 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		allowed, err := CanUserLogin(ctx, database, user.Email)
 		if err != nil {
 			log.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
-			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s/login?error=server_error&error_description=%s",
 				frontendURL,
 				url.QueryEscape("An error occurred. Please try again later."))
@@ -342,7 +344,6 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		}
 		if !allowed {
 			log.Warn("User cap reached, login denied", "email", user.Email)
-			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
 				frontendURL,
 				url.QueryEscape("This application has reached its user limit. Please contact the administrator."))
@@ -398,7 +399,7 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 
 		// Handle email mismatch check and post-login redirect
 		expectedEmail, emailMismatch := checkExpectedEmailMismatch(w, r, user.Email, "github")
-		handlePostLoginRedirect(w, r, os.Getenv("FRONTEND_URL"), user.Email, expectedEmail, emailMismatch)
+		handlePostLoginRedirect(w, r, frontendURL, user.Email, expectedEmail, emailMismatch)
 	}
 }
 
@@ -563,70 +564,60 @@ func RequireSessionOrAPIKey(database *db.DB, allowedDomains []string) func(http.
 func OptionalAuth(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var userID int64
+			var userEmail string
+			var authAPIKey, authSession bool
+
 			// Try API key first, then session cookie
 			if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
-				if !validation.IsAllowedEmailDomain(apiKeyAuth.userEmail, allowedDomains) {
-					http.Error(w, "Email domain not permitted", http.StatusForbidden)
+				userID = apiKeyAuth.userID
+				userEmail = apiKeyAuth.userEmail
+				authAPIKey = true
+			} else if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
+				userID = sessionAuth.userID
+				userEmail = sessionAuth.userEmail
+				authSession = true
+			} else {
+				// No auth - when domain restrictions are in place, require authentication
+				// to prevent anonymous access to public shares on on-prem instances
+				if len(allowedDomains) > 0 {
+					http.Error(w, "Authentication required", http.StatusUnauthorized)
 					return
 				}
-				setLogUserID(w, apiKeyAuth.userID)
-				log := logger.Ctx(r.Context()).With("user_id", apiKeyAuth.userID)
-				ctx := logger.WithLogger(r.Context(), log)
-				enrichSpanWithUser(ctx, apiKeyAuth.userID, apiKeyAuth.userEmail, true, false)
-				ctx = context.WithValue(ctx, userIDContextKey, apiKeyAuth.userID)
-				next.ServeHTTP(w, r.WithContext(ctx))
+				// No auth and no domain restrictions - continue without user ID in context
+				next.ServeHTTP(w, r)
 				return
 			}
 
-			if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
-				if !validation.IsAllowedEmailDomain(sessionAuth.userEmail, allowedDomains) {
-					http.Error(w, "Email domain not permitted", http.StatusForbidden)
-					return
-				}
-				setLogUserID(w, sessionAuth.userID)
-				log := logger.Ctx(r.Context()).With("user_id", sessionAuth.userID)
-				ctx := logger.WithLogger(r.Context(), log)
-				enrichSpanWithUser(ctx, sessionAuth.userID, sessionAuth.userEmail, false, true)
-				ctx = context.WithValue(ctx, userIDContextKey, sessionAuth.userID)
-				next.ServeHTTP(w, r.WithContext(ctx))
+			if !validation.IsAllowedEmailDomain(userEmail, allowedDomains) {
+				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}
 
-			// No auth - when domain restrictions are in place, require authentication
-			// to prevent anonymous access to public shares on on-prem instances
-			if len(allowedDomains) > 0 {
-				http.Error(w, "Authentication required", http.StatusUnauthorized)
-				return
-			}
-
-			// No auth and no domain restrictions - continue without user ID in context
-			next.ServeHTTP(w, r)
+			setLogUserID(w, userID)
+			log := logger.Ctx(r.Context()).With("user_id", userID)
+			ctx := logger.WithLogger(r.Context(), log)
+			enrichSpanWithUser(ctx, userID, userEmail, authAPIKey, authSession)
+			ctx = context.WithValue(ctx, userIDContextKey, userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
 // exchangeGitHubCode exchanges authorization code for access token
 func exchangeGitHubCode(code string, config *OAuthConfig) (string, error) {
-	data := map[string]string{
-		"client_id":     config.GitHubClientID,
-		"client_secret": config.GitHubClientSecret,
-		"code":          code,
-		"redirect_uri":  config.GitHubRedirectURL,
+	data := url.Values{
+		"client_id":     {config.GitHubClientID},
+		"client_secret": {config.GitHubClientSecret},
+		"code":          {code},
+		"redirect_uri":  {config.GitHubRedirectURL},
 	}
 
-	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", nil)
+	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token?"+data.Encode(), nil)
 	if err != nil {
 		return "", err
 	}
-
 	req.Header.Set("Accept", "application/json")
-
-	// Build query string
-	q := req.URL.Query()
-	for k, v := range data {
-		q.Add(k, v)
-	}
-	req.URL.RawQuery = q.Encode()
 
 	resp, err := oauthHTTPClient().Do(req)
 	if err != nil {
@@ -639,17 +630,18 @@ func exchangeGitHubCode(code string, config *OAuthConfig) (string, error) {
 		return "", fmt.Errorf("reading GitHub token response: %w", err)
 	}
 
-	var result map[string]interface{}
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", err
 	}
 
-	token, ok := result["access_token"].(string)
-	if !ok {
+	if result.AccessToken == "" {
 		return "", fmt.Errorf("no access token in response")
 	}
 
-	return token, nil
+	return result.AccessToken, nil
 }
 
 // getGitHubUser fetches user info from GitHub
@@ -740,54 +732,12 @@ type GoogleUser struct {
 // HandleGoogleLogin initiates Google OAuth flow
 func HandleGoogleLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Generate random state for CSRF protection
-		state, err := generateRandomString(32)
+		state, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
 		if err != nil {
 			http.Error(w, "Failed to generate state", http.StatusInternalServerError)
 			return
 		}
 
-		// Store state in cookie for validation
-		http.SetCookie(w, &http.Cookie{
-			Name:     "oauth_state",
-			Value:    state,
-			Path:     "/",
-			MaxAge:   300, // 5 minutes
-			HttpOnly: true,
-			Secure:   cookieSecure(),
-			SameSite: http.SameSiteLaxMode,
-		})
-
-		// Store post-login redirect URL if provided (e.g., from /device page)
-		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
-			http.SetCookie(w, &http.Cookie{
-				Name:     "post_login_redirect",
-				Value:    redirectAfter,
-				Path:     "/",
-				MaxAge:   300, // 5 minutes
-				HttpOnly: true,
-				Secure:   cookieSecure(),
-				SameSite: http.SameSiteLaxMode,
-			})
-		}
-
-		// Store expected email if provided (for share link login flow)
-		// Only store and use valid email addresses
-		expectedEmail := r.URL.Query().Get("email")
-		validEmail := expectedEmail != "" && validation.IsValidEmail(expectedEmail)
-		if validEmail {
-			http.SetCookie(w, &http.Cookie{
-				Name:     "expected_email",
-				Value:    expectedEmail,
-				Path:     "/",
-				MaxAge:   300, // 5 minutes
-				HttpOnly: true,
-				Secure:   cookieSecure(),
-				SameSite: http.SameSiteLaxMode,
-			})
-		}
-
-		// Redirect to Google
 		authURL := fmt.Sprintf(
 			"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&state=%s&scope=%s",
 			url.QueryEscape(config.GoogleClientID),
@@ -796,7 +746,6 @@ func HandleGoogleLogin(config *OAuthConfig) http.HandlerFunc {
 			url.QueryEscape("openid email profile"),
 		)
 
-		// Add login hint if valid email is provided (pre-fills Google email field)
 		if validEmail {
 			authURL += "&login_hint=" + url.QueryEscape(expectedEmail)
 		}
@@ -1139,53 +1088,12 @@ func HandleOIDCLogin(config *OAuthConfig) http.HandlerFunc {
 			return
 		}
 
-		// Generate random state for CSRF protection
-		state, err := generateRandomString(32)
+		state, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
 		if err != nil {
 			http.Error(w, "Failed to generate state", http.StatusInternalServerError)
 			return
 		}
 
-		// Store state in cookie for validation
-		http.SetCookie(w, &http.Cookie{
-			Name:     "oauth_state",
-			Value:    state,
-			Path:     "/",
-			MaxAge:   300, // 5 minutes
-			HttpOnly: true,
-			Secure:   cookieSecure(),
-			SameSite: http.SameSiteLaxMode,
-		})
-
-		// Store post-login redirect URL if provided
-		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
-			http.SetCookie(w, &http.Cookie{
-				Name:     "post_login_redirect",
-				Value:    redirectAfter,
-				Path:     "/",
-				MaxAge:   300,
-				HttpOnly: true,
-				Secure:   cookieSecure(),
-				SameSite: http.SameSiteLaxMode,
-			})
-		}
-
-		// Store expected email if provided (for share link login flow)
-		expectedEmail := r.URL.Query().Get("email")
-		validEmail := expectedEmail != "" && validation.IsValidEmail(expectedEmail)
-		if validEmail {
-			http.SetCookie(w, &http.Cookie{
-				Name:     "expected_email",
-				Value:    expectedEmail,
-				Path:     "/",
-				MaxAge:   300,
-				HttpOnly: true,
-				Secure:   cookieSecure(),
-				SameSite: http.SameSiteLaxMode,
-			})
-		}
-
-		// Build authorization URL
 		authURL := fmt.Sprintf(
 			"%s?client_id=%s&redirect_uri=%s&response_type=code&state=%s&scope=%s",
 			endpoints.AuthorizationEndpoint,
@@ -1723,6 +1631,13 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 	}
 }
 
+// writeDeviceTokenError writes a JSON error response for the device token endpoint.
+func writeDeviceTokenError(w http.ResponseWriter, statusCode int, errorCode string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(DeviceTokenResponse{Error: errorCode})
+}
+
 // HandleDeviceToken exchanges a device code for an API key
 // POST /auth/device/token
 func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFunc {
@@ -1735,29 +1650,22 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 		// Parse request
 		var req DeviceTokenRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "invalid_request"})
+			writeDeviceTokenError(w, http.StatusBadRequest, "invalid_request")
 			return
 		}
 
 		if req.DeviceCode == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "invalid_request"})
+			writeDeviceTokenError(w, http.StatusBadRequest, "invalid_request")
 			return
 		}
 
 		// Look up device code
 		dc, err := authStore.GetDeviceCodeByDeviceCode(ctx, req.DeviceCode)
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
 			if err == db.ErrDeviceCodeNotFound {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "invalid_grant"})
+				writeDeviceTokenError(w, http.StatusBadRequest, "invalid_grant")
 			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+				writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
 			}
 			return
 		}
@@ -1765,18 +1673,13 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 		// Check if expired
 		if time.Now().UTC().After(dc.ExpiresAt) {
 			authStore.DeleteDeviceCode(ctx, req.DeviceCode)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "expired_token"})
+			writeDeviceTokenError(w, http.StatusBadRequest, "expired_token")
 			return
 		}
 
 		// Check if authorized
 		if dc.AuthorizedAt == nil || dc.UserID == nil {
-			// Not yet authorized - tell client to keep polling
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "authorization_pending"})
+			writeDeviceTokenError(w, http.StatusBadRequest, "authorization_pending")
 			return
 		}
 
@@ -1785,17 +1688,13 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 			user, err := userStore.GetUserByID(ctx, *dc.UserID)
 			if err != nil {
 				log.Error("Failed to get user for domain check", "error", err, "user_id", *dc.UserID)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+				writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
 				return
 			}
 			if !validation.IsAllowedEmailDomain(user.Email, allowedDomains) {
 				log.Warn("Email domain not permitted in device flow", "email", user.Email, "user_id", *dc.UserID)
 				authStore.DeleteDeviceCode(ctx, req.DeviceCode)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "access_denied"})
+				writeDeviceTokenError(w, http.StatusForbidden, "access_denied")
 				return
 			}
 		}
@@ -1804,9 +1703,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 		apiKey, keyHash, err := GenerateAPIKey()
 		if err != nil {
 			log.Error("Failed to generate API key", "error", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+			writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
 			return
 		}
 
@@ -1816,15 +1713,11 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 		if err != nil {
 			if err == db.ErrAPIKeyLimitExceeded {
 				log.Warn("API key limit exceeded during device flow", "user_id", *dc.UserID)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusConflict)
-				json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "api_key_limit_exceeded"})
+				writeDeviceTokenError(w, http.StatusConflict, "api_key_limit_exceeded")
 				return
 			}
 			log.Error("Failed to create API key", "error", err, "user_id", *dc.UserID)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(DeviceTokenResponse{Error: "server_error"})
+			writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
 			return
 		}
 
@@ -2064,20 +1957,18 @@ func generateDevicePageHTML(prefilledCode string) string {
 // generateDeviceResultHTML generates the HTML for the device authorization result page.
 // NOTE: Inline HTML is intentional - see comment on generateDevicePageHTML.
 func generateDeviceResultHTML(success bool, message string) string {
-	icon := "✗"
-	iconColor := "#dc2626"
+	var icon, iconColor, title, homeLink string
 	if success {
 		icon = "✓"
 		iconColor = "#16a34a"
-	}
-
-	// Add link to frontend on success
-	homeLink := ""
-	if success {
-		frontendURL := os.Getenv("FRONTEND_URL")
-		if frontendURL != "" {
+		title = "Success!"
+		if frontendURL := os.Getenv("FRONTEND_URL"); frontendURL != "" {
 			homeLink = fmt.Sprintf(`<a href="%s" class="home-link">Go to Confab</a>`, frontendURL)
 		}
+	} else {
+		icon = "✗"
+		iconColor = "#dc2626"
+		title = "Error"
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html>
@@ -2149,12 +2040,7 @@ func generateDeviceResultHTML(success bool, message string) string {
         %s
     </div>
 </body>
-</html>`, iconColor, icon, func() string {
-		if success {
-			return "Success!"
-		}
-		return "Error"
-	}(), message, homeLink)
+</html>`, iconColor, icon, title, message, homeLink)
 }
 
 // isLocalhostURL checks if URL is localhost

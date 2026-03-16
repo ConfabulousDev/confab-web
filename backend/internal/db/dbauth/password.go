@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -155,15 +156,7 @@ func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash stri
 		RETURNING id, email, name, avatar_url, status, created_at, updated_at
 	`
 	// Use email prefix as default name
-	name := email
-	if atIdx := len(email); atIdx > 0 {
-		for i, c := range email {
-			if c == '@' {
-				name = email[:i]
-				break
-			}
-		}
-	}
+	name, _, _ := strings.Cut(email, "@")
 
 	err = tx.QueryRowContext(ctx, insertUserSQL, email, name, isAdmin).Scan(
 		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,

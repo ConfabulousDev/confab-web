@@ -339,8 +339,7 @@ func (w *Worker) processSessions(
 // loadWorkerConfig loads worker configuration from environment variables.
 func loadWorkerConfig() WorkerConfig {
 	config := WorkerConfig{
-		PollInterval: 30 * time.Minute, // Default: 30 minutes
-		DryRun:       false,            // Default: actually precompute
+		PollInterval: 30 * time.Minute,
 	}
 
 	if interval := os.Getenv("WORKER_POLL_INTERVAL"); interval != "" {
@@ -410,12 +409,10 @@ func loadS3Config() storage.S3Config {
 // loadPrecomputeConfig loads smart recap configuration from environment variables.
 func loadPrecomputeConfig() analytics.PrecomputeConfig {
 	config := analytics.PrecomputeConfig{
-		SmartRecapEnabled:      os.Getenv("SMART_RECAP_ENABLED") == "true",
-		AnthropicAPIKey:        os.Getenv("ANTHROPIC_API_KEY"),
-		SmartRecapModel:        os.Getenv("SMART_RECAP_MODEL"),
-		LockTimeoutSeconds:     60,
-		RegularCardsThresholds: analytics.DefaultRegularCardsThresholds(),
-		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
+		SmartRecapEnabled:  os.Getenv("SMART_RECAP_ENABLED") == "true",
+		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
+		SmartRecapModel:    os.Getenv("SMART_RECAP_MODEL"),
+		LockTimeoutSeconds: 60,
 	}
 
 	// Parse quota limit: positive integer = cap, 0 or omitted = unlimited

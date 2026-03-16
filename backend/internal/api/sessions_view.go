@@ -90,31 +90,17 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 // the session cookie if present, but doesn't require it.
 func HandleGetSession(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Note: No log := here since this handler doesn't have logging calls
-		// Get session ID from URL (UUID)
 		sessionID := chi.URLParam(r, "id")
 		if sessionID == "" {
 			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
-		// Create context with timeout for database operation
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Check canonical access (CF-132 unified access model)
-		result, err := CheckCanonicalAccess(ctx, database, sessionID)
-		if RespondCanonicalAccessError(ctx, w, err, sessionID) {
-			return
-		}
-
-		// Handle no access - check AuthMayHelp to decide 401 vs 404
-		if result.AccessInfo.AccessType == db.SessionAccessNone {
-			if result.AccessInfo.AuthMayHelp {
-				respondError(w, http.StatusUnauthorized, "Sign in to view this session")
-				return
-			}
-			respondError(w, http.StatusNotFound, "Session not found")
+		result := RequireCanonicalRead(ctx, w, database, sessionID)
+		if result == nil {
 			return
 		}
 

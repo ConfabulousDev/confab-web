@@ -191,9 +191,8 @@ func loadConfig() Config {
 	var oauthConfig auth.OAuthConfig
 
 	// Password authentication (optional)
-	passwordEnabled := os.Getenv("AUTH_PASSWORD_ENABLED") == "true"
-	oauthConfig.PasswordEnabled = passwordEnabled
-	if passwordEnabled {
+	oauthConfig.PasswordEnabled = os.Getenv("AUTH_PASSWORD_ENABLED") == "true"
+	if oauthConfig.PasswordEnabled {
 		logger.Info("password authentication enabled")
 	}
 
@@ -256,7 +255,7 @@ func loadConfig() Config {
 	}
 
 	// Require at least one authentication method
-	if !passwordEnabled && !oauthConfig.GitHubEnabled && !oauthConfig.GoogleEnabled && !oauthConfig.OIDCEnabled {
+	if !oauthConfig.PasswordEnabled && !oauthConfig.GitHubEnabled && !oauthConfig.GoogleEnabled && !oauthConfig.OIDCEnabled {
 		logger.Fatal("no authentication method configured",
 			"hint", "set AUTH_PASSWORD_ENABLED=true, or configure GitHub OAuth (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL), or configure Google OAuth, or configure OIDC (OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL)")
 	}
@@ -270,27 +269,6 @@ func loadConfig() Config {
 		logger.Fatal("invalid env var", "var", "CSRF_SECRET_KEY", "error", "must be at least 32 characters")
 	}
 
-	// Validate required S3/storage configuration
-	s3Endpoint := os.Getenv("S3_ENDPOINT")
-	if s3Endpoint == "" {
-		logger.Fatal("missing required env var", "var", "S3_ENDPOINT")
-	}
-
-	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
-	if awsAccessKeyID == "" {
-		logger.Fatal("missing required env var", "var", "AWS_ACCESS_KEY_ID")
-	}
-
-	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-	if awsSecretAccessKey == "" {
-		logger.Fatal("missing required env var", "var", "AWS_SECRET_ACCESS_KEY")
-	}
-
-	bucketName := os.Getenv("BUCKET_NAME")
-	if bucketName == "" {
-		logger.Fatal("missing required env var", "var", "BUCKET_NAME")
-	}
-
 	// Validate required database configuration
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -298,13 +276,10 @@ func loadConfig() Config {
 	}
 
 	// Validate required frontend configuration
-	frontendURL := os.Getenv("FRONTEND_URL")
-	if frontendURL == "" {
+	if os.Getenv("FRONTEND_URL") == "" {
 		logger.Fatal("missing required env var", "var", "FRONTEND_URL")
 	}
-
-	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
-	if allowedOrigins == "" {
+	if os.Getenv("ALLOWED_ORIGINS") == "" {
 		logger.Fatal("missing required env var", "var", "ALLOWED_ORIGINS", "hint", "comma-separated list of allowed origins")
 	}
 
@@ -329,14 +304,8 @@ func loadConfig() Config {
 		DatabaseURL:  databaseURL,
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
-		S3Config: storage.S3Config{
-			Endpoint:        s3Endpoint,
-			AccessKeyID:     awsAccessKeyID,
-			SecretAccessKey: awsSecretAccessKey,
-			BucketName:      bucketName,
-			UseSSL:          os.Getenv("S3_USE_SSL") != "false", // Default true
-		},
-		OAuthConfig: &oauthConfig,
+		S3Config:     loadS3Config(),
+		OAuthConfig:  &oauthConfig,
 		EmailConfig: EmailConfig{
 			Enabled:          emailEnabled,
 			APIKey:           resendAPIKey,

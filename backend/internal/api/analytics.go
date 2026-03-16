@@ -242,30 +242,17 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
-		// Get session ID from URL (UUID)
 		sessionID := chi.URLParam(r, "id")
 		if sessionID == "" {
 			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
-		// Create context with timeout for database operation
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
-		// Check canonical access (CF-132 unified access model)
-		result, err := CheckCanonicalAccess(dbCtx, database, sessionID)
-		if RespondCanonicalAccessError(dbCtx, w, err, sessionID) {
-			return
-		}
-
-		// Handle no access - check AuthMayHelp to decide 401 vs 404
-		if result.AccessInfo.AccessType == db.SessionAccessNone {
-			if result.AccessInfo.AuthMayHelp {
-				respondError(w, http.StatusUnauthorized, "Sign in to view this session")
-				return
-			}
-			respondError(w, http.StatusNotFound, "Session not found")
+		result := RequireCanonicalRead(dbCtx, w, database, sessionID)
+		if result == nil {
 			return
 		}
 

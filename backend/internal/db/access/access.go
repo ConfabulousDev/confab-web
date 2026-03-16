@@ -90,7 +90,7 @@ func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, view
 	if err == sql.ErrNoRows {
 		// No shares exist for this session
 		span.SetAttributes(attribute.String("access.type", "none"))
-		return &db.SessionAccessInfo{AccessType: db.SessionAccessNone, AuthMayHelp: false}, nil
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessNone}, nil
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -179,17 +179,15 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 	session.OwnerEmail = ownerEmail
 
 	// Only include PII fields for owners; redact for all shared access
-	if accessInfo.AccessType == db.SessionAccessOwner {
+	isOwner := accessInfo.AccessType == db.SessionAccessOwner
+	session.IsOwner = &isOwner
+	if isOwner {
 		session.Hostname = hostname
 		session.Username = username
 	} else {
 		session.RedactForSharing()
 		session.SharedByEmail = &ownerEmail
 	}
-
-	// Set IsOwner flag
-	isOwner := accessInfo.AccessType == db.SessionAccessOwner
-	session.IsOwner = &isOwner
 
 	// Unmarshal git_info and load sync files
 	if err := db.UnmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {

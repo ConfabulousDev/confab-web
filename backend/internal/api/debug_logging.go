@@ -95,7 +95,7 @@ func (w *responseCapture) Write(b []byte) (int, error) {
 			w.body.Write(b[:remaining])
 			w.truncated = true
 		}
-	} else if w.body.Len() >= w.maxSize {
+	} else {
 		w.truncated = true
 	}
 

@@ -64,66 +64,45 @@ func FromRequest(r *http.Request) Info {
 	return FromContext(r.Context())
 }
 
+// trustedHeaders lists IP headers in priority order (highest first).
+// Each header contains a single trusted IP set by an edge proxy or reverse proxy.
+var trustedHeaders = []string{
+	"Fly-Client-IP",     // Fly.io edge proxy
+	"CF-Connecting-IP",  // Cloudflare
+	"True-Client-IP",    // Akamai/Cloudflare Enterprise
+	"X-Real-IP",         // nginx reverse proxy
+}
+
 // extract pulls IPs from all known headers and computes Primary + RateLimitKey
 func extract(r *http.Request) Info {
-	// Collect all IPs for composite rate limit key
 	allIPs := make(map[string]bool)
 
-	// RemoteAddr - ALWAYS TRUSTED (actual TCP connection)
 	remoteIP := extractIPFromAddr(r.RemoteAddr)
 	if remoteIP != "" {
 		allIPs[remoteIP] = true
 	}
 
-	// Primary IP - use first trusted header found (priority order)
 	var primary string
 
-	// 1. Fly-Client-IP - TRUSTED on Fly.io (set by edge proxy)
-	if ip := strings.TrimSpace(r.Header.Get("Fly-Client-IP")); ip != "" {
-		allIPs[ip] = true
-		if primary == "" {
-			primary = ip
-		}
-	}
-
-	// 2. CF-Connecting-IP - TRUSTED on Cloudflare
-	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
-		allIPs[ip] = true
-		if primary == "" {
-			primary = ip
-		}
-	}
-
-	// 3. True-Client-IP - TRUSTED on Akamai/Cloudflare Enterprise
-	if ip := strings.TrimSpace(r.Header.Get("True-Client-IP")); ip != "" {
-		allIPs[ip] = true
-		if primary == "" {
-			primary = ip
-		}
-	}
-
-	// 4. X-Real-IP - TRUSTED when behind nginx/similar reverse proxies
-	if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); ip != "" {
-		allIPs[ip] = true
-		if primary == "" {
-			primary = ip
-		}
-	}
-
-	// 5. X-Forwarded-For - PARTIALLY TRUSTED (first IP only)
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		parts := strings.Split(forwarded, ",")
-		if len(parts) > 0 {
-			if ip := strings.TrimSpace(parts[0]); ip != "" {
-				allIPs[ip] = true
-				if primary == "" {
-					primary = ip
-				}
+	for _, header := range trustedHeaders {
+		if ip := strings.TrimSpace(r.Header.Get(header)); ip != "" {
+			allIPs[ip] = true
+			if primary == "" {
+				primary = ip
 			}
 		}
 	}
 
-	// 6. Fallback to RemoteAddr if no headers found
+	// X-Forwarded-For - only first IP is partially trusted
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		if ip := strings.TrimSpace(strings.Split(forwarded, ",")[0]); ip != "" {
+			allIPs[ip] = true
+			if primary == "" {
+				primary = ip
+			}
+		}
+	}
+
 	if primary == "" {
 		primary = remoteIP
 	}
@@ -160,9 +139,7 @@ func extractIPFromAddr(addr string) string {
 
 	// Check for IPv4:port (exactly one colon)
 	if strings.Count(addr, ":") == 1 {
-		if idx := strings.LastIndex(addr, ":"); idx != -1 {
-			return addr[:idx]
-		}
+		return addr[:strings.LastIndex(addr, ":")]
 	}
 
 	// Plain IP (IPv4 or IPv6 without port)
