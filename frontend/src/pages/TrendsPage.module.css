@@ -12,11 +12,7 @@
   overflow: hidden;
 }
 
-.title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0;
-}
+.title { composes: pageTitle from './pageLayout.module.css'; }
 
 .container {
   flex: 1;

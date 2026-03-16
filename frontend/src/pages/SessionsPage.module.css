@@ -1,74 +1,14 @@
 .pageWrapper { composes: pageWrapper from './pageLayout.module.css'; }
 .mainContent { composes: mainContent from './pageLayout.module.css'; }
 
-/* Unified toolbar header */
-.toolbar {
-  background: var(--color-bg-primary);
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--spacing-sm) var(--spacing-md);
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.toolbarTop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
-.toolbarActions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.sessionCount {
-  font-size: var(--font-sm);
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-}
-
-.loadingIndicator {
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.refreshBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-primary);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.refreshBtn:hover {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-dark);
-}
-
-.refreshBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.refreshBtn svg {
-  display: block;
-}
+.title { composes: pageTitle from './pageLayout.module.css'; }
+.refreshBtn { composes: refreshBtn from './pageLayout.module.css'; }
+.toolbarActions { composes: toolbarActions from './pageLayout.module.css'; }
+.filterBar { composes: filterBar from './pageLayout.module.css'; }
 
 .container { composes: container from './pageLayout.module.css'; }
 .card { composes: card from './pageLayout.module.css'; }
-.loading, .empty { composes: loading from './pageLayout.module.css'; }
+.loading { composes: loading from './pageLayout.module.css'; }
 
 /* Table styles */
 .sessionsTable {
@@ -203,14 +143,6 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .container {
-    padding: var(--spacing-md);
-  }
-
-  .toolbar {
-    padding: var(--spacing-sm);
-  }
-
   .costHeader,
   .costCell {
     display: none;
