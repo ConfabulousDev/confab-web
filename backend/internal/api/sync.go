@@ -665,10 +665,10 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	}
 
 	// List all chunks for this file
-	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
-	defer storageCancel()
+	listCtx, listCancel := context.WithTimeout(r.Context(), StorageTimeout)
+	defer listCancel()
 
-	chunkKeys, err := s.storage.ListChunks(storageCtx, sessionUserID, externalID, fileName)
+	chunkKeys, err := s.storage.ListChunks(listCtx, sessionUserID, externalID, fileName)
 	if err != nil {
 		log.Error("Failed to list chunks", "error", err, "session_id", sessionID, "file_name", fileName)
 		respondStorageError(w, err, "Failed to list chunks")
@@ -733,8 +733,23 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Download chunks and parse their line ranges
-	chunks, err := s.storage.DownloadChunks(storageCtx, chunkKeys)
+	// Download chunks and parse their line ranges.
+	// Scale the timeout for large sessions: 10 parallel downloads at ~100ms each
+	// means ~100ms amortized per chunk. Use 500ms/chunk for headroom, capped at 5 min.
+	downloadTimeout := StorageTimeout + time.Duration(len(chunkKeys))*500*time.Millisecond
+	if downloadTimeout > 5*time.Minute {
+		downloadTimeout = 5 * time.Minute
+	}
+	// Extend the HTTP write deadline so the server doesn't kill the connection
+	// before the download+merge+write completes for large sessions.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Now().Add(downloadTimeout)); err != nil {
+		log.Warn("Failed to extend write deadline", "error", err)
+	}
+	downloadCtx, downloadCancel := context.WithTimeout(r.Context(), downloadTimeout)
+	defer downloadCancel()
+
+	chunks, err := s.storage.DownloadChunks(downloadCtx, chunkKeys)
 	if err != nil {
 		respondStorageError(w, err, "Failed to download file chunk")
 		return

@@ -84,6 +84,34 @@ function extractErrorMessage(data: unknown): string | null {
   return null;
 }
 
+/**
+ * Read an error response body, attempting to parse as JSON.
+ * Reads body as text first to avoid the "body stream already read" bug
+ * that occurs when response.json() fails and response.text() is attempted.
+ */
+async function parseErrorBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Read an error response and throw an APIError.
+ * Shared by all fetch paths to ensure consistent error handling.
+ */
+async function throwResponseError(response: Response): Promise<never> {
+  const errorData = await parseErrorBody(response);
+  throw new APIError(
+    `Request failed: ${response.statusText}`,
+    response.status,
+    response.statusText,
+    errorData,
+  );
+}
+
 export class NetworkError extends Error {
   constructor(message: string) {
     super(message);
@@ -122,14 +150,7 @@ class APIClient {
 
     // Handle other HTTP errors
     if (!response.ok) {
-      let errorData: unknown;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = await response.text();
-      }
-
-      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+      await throwResponseError(response);
     }
 
     // Handle empty responses
@@ -424,13 +445,7 @@ export const analyticsAPI = {
     }
 
     if (!response.ok) {
-      let errorData: unknown;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = await response.text();
-      }
-      throw new APIError(`Request failed: ${response.statusText}`, response.status, response.statusText, errorData);
+      await throwResponseError(response);
     }
 
     const data = await response.json();
@@ -470,18 +485,7 @@ async function fetchRaw(url: string, init: RequestInit): Promise<Response> {
   }
 
   if (!response.ok) {
-    let errorData: unknown;
-    try {
-      errorData = await response.json();
-    } catch {
-      errorData = await response.text();
-    }
-    throw new APIError(
-      `Request failed: ${response.statusText}`,
-      response.status,
-      response.statusText,
-      errorData,
-    );
+    await throwResponseError(response);
   }
 
   return response;

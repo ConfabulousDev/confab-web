@@ -154,7 +154,7 @@ describe('fetchRaw (via trendsAPI.get)', () => {
       ok: false,
       status: 500,
       statusText: 'Internal Server Error',
-      json: () => Promise.resolve({ error: 'server broke' }),
+      text: () => Promise.resolve(JSON.stringify({ error: 'server broke' })),
     }));
 
     try {
