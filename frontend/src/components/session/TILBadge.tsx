@@ -21,7 +21,7 @@ export default function TILBadge({ tils }: TILBadgeProps) {
   const label = tils.length === 1 ? 'TIL' : `TIL (${tils.length})`;
 
   return (
-    <div className={styles.container} ref={containerRef}>
+    <div className={styles.container} ref={containerRef} {...(isOpen ? { 'data-popover-open': '' } : {})}>
       <button
         className={styles.badge}
         onClick={(e) => {
