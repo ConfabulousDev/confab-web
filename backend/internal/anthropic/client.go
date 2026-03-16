@@ -55,6 +55,12 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	return c
 }
 
+func spanError(span trace.Span, err error) error {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+	return err
+}
+
 // CreateMessage sends a message to the Anthropic API and returns the response.
 func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*MessagesResponse, error) {
 	ctx, span := tracer.Start(ctx, "anthropic.create_message",
@@ -66,16 +72,12 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, spanError(span, fmt.Errorf("failed to marshal request: %w", err))
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, spanError(span, fmt.Errorf("failed to create request: %w", err))
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -84,9 +86,7 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, spanError(span, fmt.Errorf("failed to send request: %w", err))
 	}
 	defer resp.Body.Close()
 
@@ -94,9 +94,7 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, spanError(span, fmt.Errorf("failed to read response: %w", err))
 	}
 
 	if resp.StatusCode >= 400 {
@@ -107,19 +105,14 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 			return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
 		}
 		apiErr.StatusCode = resp.StatusCode
-		span.RecordError(&apiErr)
-		span.SetStatus(codes.Error, apiErr.Error())
-		return nil, &apiErr
+		return nil, spanError(span, &apiErr)
 	}
 
 	var messagesResp MessagesResponse
 	if err := json.Unmarshal(respBody, &messagesResp); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		return nil, spanError(span, fmt.Errorf("failed to unmarshal response: %w", err))
 	}
 
-	// Record token usage
 	span.SetAttributes(
 		attribute.Int("llm.tokens.input", messagesResp.Usage.InputTokens),
 		attribute.Int("llm.tokens.output", messagesResp.Usage.OutputTokens),

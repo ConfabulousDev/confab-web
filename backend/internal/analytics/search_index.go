@@ -118,7 +118,7 @@ func extractRecapText(ctx context.Context, db *sql.DB, sessionID string) (string
 		return "", err
 	}
 
-	parts := make([]string, 0)
+	var parts []string
 	if recap.Valid && recap.String != "" {
 		parts = append(parts, recap.String)
 	}

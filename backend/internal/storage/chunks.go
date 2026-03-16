@@ -46,9 +46,6 @@ type chunkResult struct {
 // Returns (firstLine, lastLine, ok).
 func ParseChunkKey(key string) (int, int, bool) {
 	parts := strings.Split(key, "/")
-	if len(parts) == 0 {
-		return 0, 0, false
-	}
 	filename := parts[len(parts)-1]
 	if !strings.HasPrefix(filename, "chunk_") || !strings.HasSuffix(filename, ".jsonl") {
 		return 0, 0, false
@@ -132,16 +129,15 @@ func (s *S3Storage) DownloadChunks(ctx context.Context, chunkKeys []string) ([]C
 		key       string
 		firstLine int
 		lastLine  int
-		index     int
 	}
 	validKeys := make([]keyInfo, 0, len(chunkKeys))
-	for i, key := range chunkKeys {
+	for _, key := range chunkKeys {
 		firstLine, lastLine, ok := ParseChunkKey(key)
 		if !ok {
 			span.AddEvent("skipped_unparseable_key", trace.WithAttributes(attribute.String("key", key)))
 			continue
 		}
-		validKeys = append(validKeys, keyInfo{key: key, firstLine: firstLine, lastLine: lastLine, index: i})
+		validKeys = append(validKeys, keyInfo{key: key, firstLine: firstLine, lastLine: lastLine})
 	}
 
 	if len(validKeys) == 0 {

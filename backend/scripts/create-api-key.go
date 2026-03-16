@@ -12,7 +12,6 @@ import (
 )
 
 func main() {
-	// Connect to database
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://confab:confab@localhost:5432/confab?sslmode=disable"
@@ -24,13 +23,11 @@ func main() {
 	}
 	defer database.Close()
 
-	// Generate API key
 	rawKey, keyHash, err := auth.GenerateAPIKey()
 	if err != nil {
 		log.Fatalf("Failed to generate API key: %v", err)
 	}
 
-	// Create API key for default user (ID=1)
 	userID := int64(1)
 	name := "default-cli-key"
 	if len(os.Args) > 1 {

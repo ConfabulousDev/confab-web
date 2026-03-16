@@ -109,13 +109,8 @@ func (a *CodeActivityAnalyzer) Analyze(fc *FileCollection) (*CodeActivityResult,
 
 // getFilePath extracts the file_path from tool input.
 func getFilePath(input map[string]interface{}) string {
-	if input == nil {
-		return ""
-	}
-	if path, ok := input["file_path"].(string); ok {
-		return path
-	}
-	return ""
+	path, _ := input["file_path"].(string)
+	return path
 }
 
 // trackExtension records the file extension for language breakdown.

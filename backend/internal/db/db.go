@@ -47,7 +47,7 @@ func Connect(dsn string) (*DB, error) {
 // It retries until the context is cancelled or a connection is established.
 // Backoff schedule: 1s, 2s, 4s, 8s, 16s, 32s, then capped at 60s.
 func ConnectWithRetry(ctx context.Context, dsn string) (*DB, error) {
-	delay := 1 * time.Second
+	delay := time.Second
 	const maxDelay = 60 * time.Second
 
 	for {

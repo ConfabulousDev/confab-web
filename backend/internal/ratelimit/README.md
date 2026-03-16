@@ -23,7 +23,6 @@ In-memory token-bucket rate limiter with HTTP middleware for per-IP and per-user
 - **`(*InMemoryRateLimiter).Allow(ctx, key) bool`** -- Checks if one request is allowed for the given key.
 - **`(*InMemoryRateLimiter).AllowN(ctx, key, n) bool`** -- Checks if `n` requests are allowed.
 - **`(*InMemoryRateLimiter).Stop()`** -- Stops the background cleanup goroutine.
-- **`(*InMemoryRateLimiter).Stats() map[string]interface{}`** -- Returns diagnostic info: active limiter count, rate, burst, and type.
 
 ### Middleware
 

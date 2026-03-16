@@ -7,12 +7,13 @@ import (
 	"strings"
 )
 
+// htmlTagRegex matches HTML tags for sanitization
+var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
+
 // sanitizeTitleText removes HTML tags and decodes HTML entities
 // Note: We don't HTML-escape here because React automatically escapes text content.
 // Double-escaping would cause &gt; to display literally instead of as >
 func sanitizeTitleText(input string) string {
-	// Remove all HTML tags using regex
-	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
 	cleaned := htmlTagRegex.ReplaceAllString(input, "")
 
 	// Decode HTML entities (e.g., &lt; -> <, &gt; -> >)

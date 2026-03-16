@@ -434,42 +434,15 @@ func (h *Handlers) buildStatusToggleForm(user models.User) string {
 
 // HandleDeactivateUser sets a user's status to inactive
 func (h *Handlers) HandleDeactivateUser(w http.ResponseWriter, r *http.Request) {
-	log := logger.Ctx(r.Context())
-
-	userID, err := parseUserID(r)
-	if err != nil {
-		http.Redirect(w, r, AdminPathPrefix+"/users?error=Invalid+user+ID", http.StatusSeeOther)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer cancel()
-
-	userStore := &dbuser.Store{DB: h.DB}
-
-	// Get target user email for audit log before modifying
-	var targetEmail string
-	if targetUser, err := userStore.GetUserByID(ctx, userID); err == nil {
-		targetEmail = targetUser.Email
-	}
-
-	if err := userStore.UpdateUserStatus(ctx, userID, models.UserStatusInactive); err != nil {
-		log.Error("Failed to deactivate user", "error", err, "user_id", userID)
-		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+deactivate+user", http.StatusSeeOther)
-		return
-	}
-
-	// Audit log with full context
-	AuditLogFromRequest(r, h.DB, ActionUserDeactivate, map[string]interface{}{
-		"target_user_id":    userID,
-		"target_user_email": targetEmail,
-	})
-
-	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+deactivated", userID), http.StatusSeeOther)
+	h.handleSetUserStatus(w, r, models.UserStatusInactive, ActionUserDeactivate, "deactivate")
 }
 
 // HandleActivateUser sets a user's status to active
 func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
+	h.handleSetUserStatus(w, r, models.UserStatusActive, ActionUserActivate, "activate")
+}
+
+func (h *Handlers) handleSetUserStatus(w http.ResponseWriter, r *http.Request, status models.UserStatus, action AdminAction, verb string) {
 	log := logger.Ctx(r.Context())
 
 	userID, err := parseUserID(r)
@@ -483,25 +456,23 @@ func (h *Handlers) HandleActivateUser(w http.ResponseWriter, r *http.Request) {
 
 	userStore := &dbuser.Store{DB: h.DB}
 
-	// Get target user email for audit log before modifying
 	var targetEmail string
 	if targetUser, err := userStore.GetUserByID(ctx, userID); err == nil {
 		targetEmail = targetUser.Email
 	}
 
-	if err := userStore.UpdateUserStatus(ctx, userID, models.UserStatusActive); err != nil {
-		log.Error("Failed to activate user", "error", err, "user_id", userID)
-		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+activate+user", http.StatusSeeOther)
+	if err := userStore.UpdateUserStatus(ctx, userID, status); err != nil {
+		log.Error("Failed to "+verb+" user", "error", err, "user_id", userID)
+		http.Redirect(w, r, AdminPathPrefix+"/users?error=Failed+to+"+verb+"+user", http.StatusSeeOther)
 		return
 	}
 
-	// Audit log with full context
-	AuditLogFromRequest(r, h.DB, ActionUserActivate, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, action, map[string]interface{}{
 		"target_user_id":    userID,
 		"target_user_email": targetEmail,
 	})
 
-	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+activated", userID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf(AdminPathPrefix+"/users?message=User+%d+"+verb+"d", userID), http.StatusSeeOther)
 }
 
 // HandleDeleteUser permanently deletes a user and all their data

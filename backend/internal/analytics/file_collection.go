@@ -236,56 +236,43 @@ func (tf *TranscriptFile) AssistantMessageGroups() []AssistantMessageGroup {
 		}
 
 		msgID := line.GetMessageID()
-
 		hasText := line.HasTextContent()
 		hasToolUse := line.HasToolUse()
 		hasThinking := line.HasThinking()
 		isFast := line.Message.Usage != nil && line.Message.Usage.Speed == SpeedFast
 
-		if msgID == "" {
-			// No message ID — create standalone group in order
-			g := AssistantMessageGroup{
-				Model:       line.GetModel(),
-				HasText:     hasText,
-				HasToolUse:  hasToolUse,
-				HasThinking: hasThinking,
-				IsFastMode:  isFast,
+		// Subsequent occurrence of known ID — merge flags, update usage (last wins)
+		if msgID != "" {
+			if idx, ok := idToIndex[msgID]; ok {
+				groups[idx].HasText = groups[idx].HasText || hasText
+				groups[idx].HasToolUse = groups[idx].HasToolUse || hasToolUse
+				groups[idx].HasThinking = groups[idx].HasThinking || hasThinking
+				groups[idx].IsFastMode = groups[idx].IsFastMode || isFast
+				if line.Message.Usage != nil {
+					usage := *line.Message.Usage
+					groups[idx].FinalUsage = &usage
+				}
+				continue
 			}
-			if line.Message.Usage != nil {
-				usage := *line.Message.Usage
-				g.FinalUsage = &usage
-			}
-			groups = append(groups, g)
-			continue
 		}
 
-		if idx, ok := idToIndex[msgID]; ok {
-			// Subsequent occurrence — merge flags, update usage (last wins)
-			groups[idx].HasText = groups[idx].HasText || hasText
-			groups[idx].HasToolUse = groups[idx].HasToolUse || hasToolUse
-			groups[idx].HasThinking = groups[idx].HasThinking || hasThinking
-			groups[idx].IsFastMode = groups[idx].IsFastMode || isFast
-			if line.Message.Usage != nil {
-				usage := *line.Message.Usage
-				groups[idx].FinalUsage = &usage
-			}
-		} else {
-			// First occurrence — append to result, record index
-			g := AssistantMessageGroup{
-				MessageID:   msgID,
-				Model:       line.GetModel(),
-				HasText:     hasText,
-				HasToolUse:  hasToolUse,
-				HasThinking: hasThinking,
-				IsFastMode:  isFast,
-			}
-			if line.Message.Usage != nil {
-				usage := *line.Message.Usage
-				g.FinalUsage = &usage
-			}
-			idToIndex[msgID] = len(groups)
-			groups = append(groups, g)
+		// New group — standalone (no ID) or first occurrence of an ID
+		g := AssistantMessageGroup{
+			MessageID:   msgID,
+			Model:       line.GetModel(),
+			HasText:     hasText,
+			HasToolUse:  hasToolUse,
+			HasThinking: hasThinking,
+			IsFastMode:  isFast,
 		}
+		if line.Message.Usage != nil {
+			usage := *line.Message.Usage
+			g.FinalUsage = &usage
+		}
+		if msgID != "" {
+			idToIndex[msgID] = len(groups)
+		}
+		groups = append(groups, g)
 	}
 
 	tf.cachedGroups = groups

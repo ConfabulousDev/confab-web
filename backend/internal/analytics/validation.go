@@ -942,11 +942,7 @@ func FormatValidationErrors(errors []LineValidationError, maxErrors int) string 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Transcript validation errors (%d total):\n", len(errors)))
 
-	count := len(errors)
-	if count > maxErrors {
-		count = maxErrors
-	}
-
+	count := min(len(errors), maxErrors)
 	for i := 0; i < count; i++ {
 		err := errors[i]
 		sb.WriteString(fmt.Sprintf("  Line %d (type=%s):\n", err.Line, err.MessageType))

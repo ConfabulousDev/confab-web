@@ -1,8 +1,6 @@
 package analytics
 
-import (
-	"regexp"
-)
+import "regexp"
 
 // redactionPattern matches [REDACTED:TYPE] markers in strings.
 // TYPE is captured in group 1 (must start with uppercase letter, then uppercase letters, digits, and underscores).
@@ -64,12 +62,12 @@ func (a *RedactionsAnalyzer) walkValue(v interface{}) {
 	case string:
 		a.countRedactionsInString(val)
 	case map[string]interface{}:
-		for _, v := range val {
-			a.walkValue(v)
+		for _, elem := range val {
+			a.walkValue(elem)
 		}
 	case []interface{}:
-		for _, v := range val {
-			a.walkValue(v)
+		for _, elem := range val {
+			a.walkValue(elem)
 		}
 	}
 }

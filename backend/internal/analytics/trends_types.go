@@ -1,8 +1,6 @@
 package analytics
 
-import (
-	"time"
-)
+import "time"
 
 // =============================================================================
 // Request types

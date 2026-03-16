@@ -1210,10 +1210,8 @@ func (s *Store) UpsertSmartRecapCard(ctx context.Context, record *SmartRecapCard
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return err
 	}
-
-	return nil
+	return err
 }
 
 // AcquireSmartRecapLock attempts to acquire the computing lock for a smart recap.
@@ -1324,10 +1322,8 @@ func (s *Store) UpsertSearchIndex(ctx context.Context, record *SearchIndexRecord
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return err
 	}
-
-	return nil
+	return err
 }
 
 // GetSearchIndex retrieves the search index record for a session.

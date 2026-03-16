@@ -146,10 +146,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		Ctx:               ctx,
 	}
 
-	// Register cleanup to run when test finishes
-	t.Cleanup(func() {
-		env.Cleanup(t)
-	})
+	t.Cleanup(func() { env.Cleanup(t) })
 
 	t.Log("Test environment ready!")
 	return env
@@ -203,10 +200,9 @@ func (e *TestEnvironment) CleanDB(t *testing.T) {
 		"users",
 	}
 
-	ctx := context.Background()
 	for _, table := range tables {
 		query := fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table)
-		if _, err := e.DB.Exec(ctx, query); err != nil {
+		if _, err := e.DB.Exec(e.Ctx, query); err != nil {
 			t.Fatalf("Failed to truncate table %s: %v", table, err)
 		}
 	}

@@ -74,11 +74,9 @@ func IncrementForMonth(ctx context.Context, conn *sql.DB, userID int64, month st
 			last_compute_at = NOW()
 	`
 
-	_, err := conn.ExecContext(ctx, query, userID, month)
-	if err != nil {
+	if _, err := conn.ExecContext(ctx, query, userID, month); err != nil {
 		return fmt.Errorf("failed to increment quota: %w", err)
 	}
-
 	return nil
 }
 
@@ -183,39 +181,42 @@ type Totals struct {
 
 // GetTotals retrieves aggregate totals for smart recap usage.
 func GetTotals(ctx context.Context, conn *sql.DB) (*Totals, error) {
-	totals := &Totals{}
-
-	nonEmptyQuery := `
-		SELECT COUNT(*) FROM (
-			SELECT session_id
-			FROM sync_files
-			WHERE file_type IN ('transcript', 'agent')
-			GROUP BY session_id
-			HAVING SUM(last_synced_line) > 0
-		) AS non_empty
-	`
-	if err := conn.QueryRowContext(ctx, nonEmptyQuery).Scan(&totals.TotalNonEmptySessions); err != nil {
-		return nil, fmt.Errorf("failed to count non-empty sessions: %w", err)
-	}
-
-	cacheQuery := `SELECT COUNT(*) FROM session_card_smart_recap`
-	if err := conn.QueryRowContext(ctx, cacheQuery).Scan(&totals.TotalSessionsWithCache); err != nil {
-		return nil, fmt.Errorf("failed to count sessions with cache: %w", err)
-	}
-
-	quotaQuery := `
+	query := `
+		WITH non_empty AS (
+			SELECT COUNT(*) AS cnt FROM (
+				SELECT session_id
+				FROM sync_files
+				WHERE file_type IN ('transcript', 'agent')
+				GROUP BY session_id
+				HAVING SUM(last_synced_line) > 0
+			) AS ne
+		),
+		cache_count AS (
+			SELECT COUNT(*) AS cnt FROM session_card_smart_recap
+		),
+		quota_totals AS (
+			SELECT
+				COALESCE(SUM(compute_count), 0) AS computations,
+				COUNT(*) AS users
+			FROM smart_recap_quota
+			WHERE quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
+		)
 		SELECT
-			COALESCE(SUM(compute_count), 0),
-			COUNT(*)
-		FROM smart_recap_quota
-		WHERE quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
+			(SELECT cnt FROM non_empty),
+			(SELECT cnt FROM cache_count),
+			(SELECT computations FROM quota_totals),
+			(SELECT users FROM quota_totals)
 	`
-	if err := conn.QueryRowContext(ctx, quotaQuery).Scan(
+
+	totals := &Totals{}
+	err := conn.QueryRowContext(ctx, query).Scan(
+		&totals.TotalNonEmptySessions,
+		&totals.TotalSessionsWithCache,
 		&totals.TotalComputationsThisMonth,
 		&totals.TotalUsersWithActivity,
-	); err != nil {
-		return nil, fmt.Errorf("failed to get quota totals: %w", err)
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recap totals: %w", err)
 	}
-
 	return totals, nil
 }

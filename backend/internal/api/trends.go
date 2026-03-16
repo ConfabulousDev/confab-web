@@ -15,6 +15,62 @@ import (
 // maxTrendsRangeSeconds is the maximum allowed date range for trends queries (90 days).
 const maxTrendsRangeSeconds = 90 * 24 * 60 * 60
 
+// dateRangeParams holds parsed and validated date range query parameters.
+type dateRangeParams struct {
+	StartTS  int64
+	EndTS    int64
+	TZOffset int
+}
+
+// parseDateRangeParams parses start_ts, end_ts, and tz_offset from query parameters.
+// Returns nil and writes an error response if parsing or validation fails.
+func parseDateRangeParams(w http.ResponseWriter, r *http.Request) *dateRangeParams {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	p := &dateRangeParams{
+		StartTS: today.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:   today.Add(24 * time.Hour).Unix(),
+	}
+
+	if tsStr := r.URL.Query().Get("start_ts"); tsStr != "" {
+		ts, err := strconv.ParseInt(tsStr, 10, 64)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid start_ts")
+			return nil
+		}
+		p.StartTS = ts
+	}
+
+	if tsStr := r.URL.Query().Get("end_ts"); tsStr != "" {
+		ts, err := strconv.ParseInt(tsStr, 10, 64)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid end_ts")
+			return nil
+		}
+		p.EndTS = ts
+	}
+
+	if offsetStr := r.URL.Query().Get("tz_offset"); offsetStr != "" {
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "Invalid tz_offset")
+			return nil
+		}
+		p.TZOffset = offset
+	}
+
+	if p.EndTS <= p.StartTS {
+		respondError(w, http.StatusBadRequest, "end_ts must be after start_ts")
+		return nil
+	}
+	if p.EndTS-p.StartTS > maxTrendsRangeSeconds {
+		respondError(w, http.StatusBadRequest, "Date range cannot exceed 90 days")
+		return nil
+	}
+
+	return p
+}
+
 // HandleGetTrends returns aggregated analytics across sessions for the authenticated user.
 // Supports filtering by date range and repos.
 //
@@ -30,57 +86,14 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
-		// Get authenticated user ID (already validated by RequireSession middleware)
 		userID, ok := auth.GetUserID(r.Context())
 		if !ok {
 			respondError(w, http.StatusUnauthorized, "Authentication required")
 			return
 		}
 
-		// Default: last 7 days in UTC
-		now := time.Now().UTC()
-		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-		startTS := today.Add(-7 * 24 * time.Hour).Unix()
-		endTS := today.Add(24 * time.Hour).Unix()
-		tzOffset := 0
-
-		// Parse start_ts
-		if tsStr := r.URL.Query().Get("start_ts"); tsStr != "" {
-			ts, err := strconv.ParseInt(tsStr, 10, 64)
-			if err != nil {
-				respondError(w, http.StatusBadRequest, "Invalid start_ts")
-				return
-			}
-			startTS = ts
-		}
-
-		// Parse end_ts
-		if tsStr := r.URL.Query().Get("end_ts"); tsStr != "" {
-			ts, err := strconv.ParseInt(tsStr, 10, 64)
-			if err != nil {
-				respondError(w, http.StatusBadRequest, "Invalid end_ts")
-				return
-			}
-			endTS = ts
-		}
-
-		// Parse tz_offset (minutes, matching JS getTimezoneOffset convention)
-		if offsetStr := r.URL.Query().Get("tz_offset"); offsetStr != "" {
-			offset, err := strconv.Atoi(offsetStr)
-			if err != nil {
-				respondError(w, http.StatusBadRequest, "Invalid tz_offset")
-				return
-			}
-			tzOffset = offset
-		}
-
-		// Validate
-		if endTS <= startTS {
-			respondError(w, http.StatusBadRequest, "end_ts must be after start_ts")
-			return
-		}
-		if endTS-startTS > maxTrendsRangeSeconds {
-			respondError(w, http.StatusBadRequest, "Date range cannot exceed 90 days")
+		dr := parseDateRangeParams(w, r)
+		if dr == nil {
 			return
 		}
 
@@ -100,16 +113,14 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			includeNoRepo = includeStr == "true" || includeStr == "1"
 		}
 
-		// Build request
 		req := analytics.TrendsRequest{
-			StartTS:       startTS,
-			EndTS:         endTS,
-			TZOffset:      tzOffset,
+			StartTS:       dr.StartTS,
+			EndTS:         dr.EndTS,
+			TZOffset:      dr.TZOffset,
 			Repos:         repos,
 			IncludeNoRepo: includeNoRepo,
 		}
 
-		// Get trends data
 		response, err := analyticsStore.GetTrends(r.Context(), userID, req)
 		if err != nil {
 			log.Error("Failed to get trends", "error", err, "user_id", userID)

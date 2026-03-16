@@ -5,11 +5,6 @@ import (
 	"unicode/utf8"
 )
 
-// Validation limits for URL parameters
-const (
-	MinExternalIDLength = 1 // Min external ID length
-)
-
 // Field size limits (must match DB VARCHAR constraints in migration 000010, 000011)
 const (
 	MaxExternalIDLength       = 512  // sessions.external_id
@@ -20,6 +15,7 @@ const (
 	MaxSyncFileNameLength     = 512  // sync_files.file_name
 	MaxHostnameLength         = 255  // sessions.hostname
 	MaxUsernameLength         = 255  // sessions.username
+	MaxAPIKeyNameLength       = 255  // api_keys.name
 )
 
 // ValidateExternalID validates an external ID from URL parameters
@@ -28,8 +24,8 @@ func ValidateExternalID(externalID string) error {
 	if externalID == "" {
 		return fmt.Errorf("external_id is required")
 	}
-	if len(externalID) < MinExternalIDLength || len(externalID) > MaxExternalIDLength {
-		return fmt.Errorf("external_id must be between %d and %d characters", MinExternalIDLength, MaxExternalIDLength)
+	if len(externalID) > MaxExternalIDLength {
+		return fmt.Errorf("external_id exceeds maximum length of %d characters", MaxExternalIDLength)
 	}
 	if !utf8.ValidString(externalID) {
 		return fmt.Errorf("external_id must be valid UTF-8")
@@ -76,9 +72,6 @@ func ValidateFirstUserMessage(msg string) error {
 	}
 	return nil
 }
-
-// MaxAPIKeyNameLength is the maximum length for API key names
-const MaxAPIKeyNameLength = 255
 
 // ValidateAPIKeyName validates an API key name
 func ValidateAPIKeyName(name string) error {

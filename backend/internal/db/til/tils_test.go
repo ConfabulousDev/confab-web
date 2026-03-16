@@ -181,7 +181,7 @@ func TestListForSession(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if tils != nil && len(tils) != 0 {
+		if len(tils) != 0 {
 			t.Errorf("expected empty result, got %d TILs", len(tils))
 		}
 	})
@@ -225,7 +225,7 @@ func TestList(t *testing.T) {
 		if til.GitRepo == nil || *til.GitRepo != "org/repo" {
 			t.Errorf("expected git repo 'org/repo', got %v", til.GitRepo)
 		}
-		if til.IsOwner != true {
+		if !til.IsOwner {
 			t.Error("expected is_owner to be true")
 		}
 		if til.AccessType != "owner" {

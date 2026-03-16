@@ -6,7 +6,7 @@ Shared domain types used across the backend. This is a leaf package with no inte
 
 | File | Role |
 |------|------|
-| `models.go` | All domain model structs, enums, and API request/response types |
+| `models.go` | All domain model structs, enums, and request/response types |
 
 ## Key Types
 
@@ -20,18 +20,11 @@ Shared domain types used across the backend. This is a leaf package with no inte
 - **`WebSession`** -- Browser session for OAuth-authenticated users. Includes `UserEmail` and `UserStatus` fields (not serialized to JSON) for tracing and auth checks.
 - **`APIKey`** -- An API key record. `KeyHash` is tagged `json:"-"` to prevent exposure.
 
-### API types
-
-- **`SaveSessionRequest`** -- API request for saving a session, including files as `FileUpload` entries, optional summary/first user message/session type, and a required `LastActivity` timestamp.
-- **`FileUpload`** -- A file to upload with path, type, size, and content (`[]byte`, base64-encoded in JSON).
-- **`SaveSessionResponse`** -- API response with success flag, session UUID, external ID, run ID, session URL, and optional message.
-
 ### GitHub integration
 
 - **`GitHubLinkType`** -- String enum: `"commit"` or `"pull_request"`.
 - **`GitHubLinkSource`** -- String enum: `"cli_hook"`, `"manual"`, `"transcript"`.
 - **`GitHubLink`** -- A link between a session and a GitHub artifact (commit or PR).
-- **`CreateGitHubLinkRequest`** -- API request for creating a GitHub link.
 
 ### TILs
 

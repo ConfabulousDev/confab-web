@@ -324,19 +324,6 @@ func (l *TranscriptLine) HasToolUse() bool {
 	return false
 }
 
-// GetAgentUsage returns token usage from subagent/Task tool results.
-// This extracts usage data from toolUseResult blocks that have agentId.
-// Returns nil if no agent usage is found.
-func (l *TranscriptLine) GetAgentUsage() []*TokenUsage {
-	var usages []*TokenUsage
-	for _, result := range l.GetAgentResults() {
-		if result.Usage != nil {
-			usages = append(usages, result.Usage)
-		}
-	}
-	return usages
-}
-
 // GetAgentResults returns the ToolUseResult if this is an agent result message.
 // The toolUseResult is on the TranscriptLine level, not inside content blocks.
 // Returns nil if no agent result is found.

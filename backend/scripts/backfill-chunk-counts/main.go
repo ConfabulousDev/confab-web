@@ -38,31 +38,11 @@ func main() {
 	batchSize := flag.Int("batch", 100, "Batch size for processing")
 	flag.Parse()
 
-	// Load config from environment
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		log.Fatal("DATABASE_URL is required")
-	}
-
-	s3Endpoint := os.Getenv("S3_ENDPOINT")
-	if s3Endpoint == "" {
-		log.Fatal("S3_ENDPOINT is required")
-	}
-
-	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-	if accessKey == "" {
-		log.Fatal("AWS_ACCESS_KEY_ID is required")
-	}
-
-	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-	if secretKey == "" {
-		log.Fatal("AWS_SECRET_ACCESS_KEY is required")
-	}
-
-	bucketName := os.Getenv("BUCKET_NAME")
-	if bucketName == "" {
-		log.Fatal("BUCKET_NAME is required")
-	}
+	dbURL := requireEnv("DATABASE_URL")
+	s3Endpoint := requireEnv("S3_ENDPOINT")
+	accessKey := requireEnv("AWS_ACCESS_KEY_ID")
+	secretKey := requireEnv("AWS_SECRET_ACCESS_KEY")
+	bucketName := requireEnv("BUCKET_NAME")
 
 	useSSL := os.Getenv("S3_USE_SSL") != "false"
 
@@ -102,6 +82,7 @@ func main() {
 	totalProcessed := 0
 	totalUpdated := 0
 	totalErrors := 0
+	updateQuery := `UPDATE sync_files SET chunk_count = $1, updated_at = NOW() WHERE session_id = $2 AND file_name = $3`
 
 	for {
 		rows, err := db.QueryContext(ctx, query, *batchSize)
@@ -129,7 +110,6 @@ func main() {
 		for _, f := range files {
 			totalProcessed++
 
-			// Count chunks in S3
 			prefix := fmt.Sprintf("%d/claude-code/%s/chunks/%s/", f.userID, f.externalID, f.fileName)
 			chunkCount := 0
 
@@ -149,17 +129,17 @@ func main() {
 
 			if *dryRun {
 				log.Printf("[DRY-RUN] Would set chunk_count=%d for session=%s file=%s", chunkCount, f.sessionID, f.fileName)
-			} else {
-				updateQuery := `UPDATE sync_files SET chunk_count = $1, updated_at = NOW() WHERE session_id = $2 AND file_name = $3`
-				_, err := db.ExecContext(ctx, updateQuery, chunkCount, f.sessionID, f.fileName)
-				if err != nil {
-					log.Printf("Error updating session=%s file=%s: %v", f.sessionID, f.fileName, err)
-					totalErrors++
-					continue
-				}
-				totalUpdated++
-				log.Printf("Updated session=%s file=%s chunk_count=%d", f.sessionID, f.fileName, chunkCount)
+				continue
 			}
+
+			_, err := db.ExecContext(ctx, updateQuery, chunkCount, f.sessionID, f.fileName)
+			if err != nil {
+				log.Printf("Error updating session=%s file=%s: %v", f.sessionID, f.fileName, err)
+				totalErrors++
+				continue
+			}
+			totalUpdated++
+			log.Printf("Updated session=%s file=%s chunk_count=%d", f.sessionID, f.fileName, chunkCount)
 		}
 
 		// Small delay to avoid overwhelming the systems
@@ -175,4 +155,12 @@ func main() {
 		log.Printf("  Updated: %d", totalUpdated)
 	}
 	log.Printf("  Errors: %d", totalErrors)
+}
+
+func requireEnv(key string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		log.Fatalf("%s is required", key)
+	}
+	return val
 }

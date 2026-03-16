@@ -10,9 +10,7 @@ var (
 	ErrUnauthorized    = errors.New("unauthorized")
 
 	// Share errors
-	ErrShareNotFound = errors.New("share not found")
-	ErrShareExpired  = errors.New("share expired")
-	ErrForbidden     = errors.New("forbidden")
+	ErrForbidden = errors.New("forbidden")
 
 	// File errors
 	ErrFileNotFound = errors.New("file not found")
@@ -25,9 +23,6 @@ var (
 	ErrAPIKeyNotFound      = errors.New("API key not found")
 	ErrAPIKeyLimitExceeded = errors.New("API key limit exceeded")
 	ErrAPIKeyNameExists    = errors.New("API key with this name already exists")
-
-	// Rate limiting errors
-	ErrRateLimitExceeded = errors.New("weekly upload limit exceeded")
 
 	// Device code errors
 	ErrDeviceCodeNotFound = errors.New("device code not found or expired")

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,15 +19,13 @@ import (
 func AuthenticatedRequest(t *testing.T, method, url string, body interface{}, userID int64) *http.Request {
 	t.Helper()
 
-	var bodyReader *bytes.Reader
+	var bodyReader io.Reader
 	if body != nil {
 		bodyJSON, err := json.Marshal(body)
 		if err != nil {
 			t.Fatalf("failed to marshal request body: %v", err)
 		}
 		bodyReader = bytes.NewReader(bodyJSON)
-	} else {
-		bodyReader = bytes.NewReader([]byte{})
 	}
 
 	req := httptest.NewRequest(method, url, bodyReader)
@@ -59,7 +58,6 @@ func AssertStatus(t *testing.T, w *httptest.ResponseRecorder, expected int) {
 func CreateTestUser(t *testing.T, env *TestEnvironment, email, name string) *models.User {
 	t.Helper()
 
-	// Create user
 	userQuery := `
 		INSERT INTO users (email, name, avatar_url, status, created_at, updated_at)
 		VALUES ($1, $2, $3, 'active', NOW(), NOW())
@@ -154,13 +152,10 @@ func CreateTestSyncFile(t *testing.T, env *TestEnvironment, sessionID string, fi
 	}
 }
 
-// CreateTestShare creates a share in the database for testing
-// sessionID is the UUID primary key of the session
-// isPublic: true creates a public share (anyone with link), false creates a recipient-only share
-func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, isPublic bool, expiresAt *time.Time, recipients []string) int64 {
+// createTestShareRow inserts a session_shares row and returns its ID.
+func createTestShareRow(t *testing.T, env *TestEnvironment, sessionID string, expiresAt *time.Time) int64 {
 	t.Helper()
 
-	// Insert share
 	query := `
 		INSERT INTO session_shares (session_id, expires_at, created_at)
 		VALUES ($1, $2, NOW())
@@ -168,13 +163,22 @@ func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, isPub
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, expiresAt)
-	err := row.Scan(&id)
+	err := env.DB.QueryRow(env.Ctx, query, sessionID, expiresAt).Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test share: %v", err)
 	}
 
-	// Add public flag if public share
+	return id
+}
+
+// CreateTestShare creates a share in the database for testing
+// sessionID is the UUID primary key of the session
+// isPublic: true creates a public share (anyone with link), false creates a recipient-only share
+func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, isPublic bool, expiresAt *time.Time, recipients []string) int64 {
+	t.Helper()
+
+	id := createTestShareRow(t, env, sessionID, expiresAt)
+
 	if isPublic {
 		_, err := env.DB.Exec(env.Ctx,
 			"INSERT INTO session_share_public (share_id) VALUES ($1)",
@@ -184,14 +188,11 @@ func CreateTestShare(t *testing.T, env *TestEnvironment, sessionID string, isPub
 		}
 	}
 
-	// Add recipients if non-public share
 	if !isPublic && len(recipients) > 0 {
 		for _, email := range recipients {
-			// Try to resolve user_id from email
 			var userID *int64
-			row := env.DB.QueryRow(env.Ctx, "SELECT id FROM users WHERE LOWER(email) = LOWER($1)", email)
 			var uid int64
-			if err := row.Scan(&uid); err == nil {
+			if err := env.DB.QueryRow(env.Ctx, "SELECT id FROM users WHERE LOWER(email) = LOWER($1)", email).Scan(&uid); err == nil {
 				userID = &uid
 			}
 
@@ -227,14 +228,10 @@ func CreateTestAPIKey(t *testing.T, env *TestEnvironment, userID int64, keyHash,
 	return id
 }
 
-
-// CreateTestDeviceCode creates a device code in the database for testing
-// Note: expiresAt should be in UTC for consistent behavior with PostgreSQL NOW()
+// CreateTestDeviceCode creates a device code in the database for testing.
+// expiresAt should be in UTC for consistent behavior with PostgreSQL NOW().
 func CreateTestDeviceCode(t *testing.T, env *TestEnvironment, deviceCode, userCode, keyName string, expiresAt time.Time) int64 {
 	t.Helper()
-
-	// Ensure time is in UTC for consistency with PostgreSQL
-	expiresAtUTC := expiresAt.UTC()
 
 	query := `
 		INSERT INTO device_codes (device_code, user_code, key_name, expires_at, created_at)
@@ -243,7 +240,7 @@ func CreateTestDeviceCode(t *testing.T, env *TestEnvironment, deviceCode, userCo
 	`
 
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, deviceCode, userCode, keyName, expiresAtUTC)
+	row := env.DB.QueryRow(env.Ctx, query, deviceCode, userCode, keyName, expiresAt.UTC())
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test device code: %v", err)
@@ -278,27 +275,14 @@ func CreateTestWebSession(t *testing.T, env *TestEnvironment, sessionID string, 
 	}
 }
 
-// CreateTestSystemShare creates a system share in the database for testing
-// System shares are accessible to all authenticated users
+// CreateTestSystemShare creates a system share in the database for testing.
+// System shares are accessible to all authenticated users.
 func CreateTestSystemShare(t *testing.T, env *TestEnvironment, sessionID string, expiresAt *time.Time) int64 {
 	t.Helper()
 
-	// Insert share
-	query := `
-		INSERT INTO session_shares (session_id, expires_at, created_at)
-		VALUES ($1, $2, NOW())
-		RETURNING id
-	`
+	id := createTestShareRow(t, env, sessionID, expiresAt)
 
-	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, sessionID, expiresAt)
-	err := row.Scan(&id)
-	if err != nil {
-		t.Fatalf("failed to create test share: %v", err)
-	}
-
-	// Add system share flag
-	_, err = env.DB.Exec(env.Ctx,
+	_, err := env.DB.Exec(env.Ctx,
 		"INSERT INTO session_share_system (share_id) VALUES ($1)",
 		id)
 	if err != nil {
@@ -349,16 +333,9 @@ func UploadTestChunk(t *testing.T, env *TestEnvironment, userID int64, externalI
 func UploadTestTranscript(t *testing.T, env *TestEnvironment, userID int64, externalID, fileName string, data []byte) {
 	t.Helper()
 
-	// Count lines in data
-	lineCount := 1
-	for _, b := range data {
-		if b == '\n' {
-			lineCount++
-		}
-	}
-	// Adjust for trailing newline
-	if len(data) > 0 && data[len(data)-1] == '\n' {
-		lineCount--
+	lineCount := bytes.Count(data, []byte{'\n'})
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		lineCount++
 	}
 
 	_, err := env.Storage.UploadChunk(env.Ctx, userID, externalID, fileName, 1, lineCount, data)
@@ -505,4 +482,3 @@ func CreateTestSearchIndex(t *testing.T, env *TestEnvironment, sessionID string,
 		t.Fatalf("failed to create test search index: %v", err)
 	}
 }
-

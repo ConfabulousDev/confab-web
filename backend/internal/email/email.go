@@ -72,21 +72,17 @@ func (s *RateLimitedService) CheckRateLimit(userID int64, count int) error {
 // within email provider quotas.
 type EmailRateLimiter struct {
 	mu      sync.Mutex
-	records map[int64]*rateLimitRecord
-}
-
-type rateLimitRecord struct {
-	timestamps []time.Time
+	records map[int64][]time.Time
 }
 
 // NewEmailRateLimiter creates a new email rate limiter
 func NewEmailRateLimiter() *EmailRateLimiter {
 	return &EmailRateLimiter{
-		records: make(map[int64]*rateLimitRecord),
+		records: make(map[int64][]time.Time),
 	}
 }
 
-// Allow checks if a single email can be sent and records it if so
+// Allow checks if a single email can be sent
 func (l *EmailRateLimiter) Allow(userID int64, limitPerHour int) bool {
 	return l.AllowN(userID, limitPerHour, 1)
 }
@@ -96,26 +92,17 @@ func (l *EmailRateLimiter) AllowN(userID int64, limitPerHour int, n int) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := time.Now()
-	oneHourAgo := now.Add(-time.Hour)
+	oneHourAgo := time.Now().Add(-time.Hour)
 
-	record, exists := l.records[userID]
-	if !exists {
-		record = &rateLimitRecord{timestamps: []time.Time{}}
-		l.records[userID] = record
-	}
-
-	// Clean up old timestamps
 	var valid []time.Time
-	for _, ts := range record.timestamps {
+	for _, ts := range l.records[userID] {
 		if ts.After(oneHourAgo) {
 			valid = append(valid, ts)
 		}
 	}
-	record.timestamps = valid
+	l.records[userID] = valid
 
-	// Check if we can send n more emails
-	return len(record.timestamps)+n <= limitPerHour
+	return len(valid)+n <= limitPerHour
 }
 
 // Record records that an email was sent
@@ -123,12 +110,7 @@ func (l *EmailRateLimiter) Record(userID int64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	record, exists := l.records[userID]
-	if !exists {
-		record = &rateLimitRecord{timestamps: []time.Time{}}
-		l.records[userID] = record
-	}
-	record.timestamps = append(record.timestamps, time.Now())
+	l.records[userID] = append(l.records[userID], time.Now())
 }
 
 // ResendService implements Service using the Resend API
@@ -201,7 +183,7 @@ func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInv
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		var errResp map[string]interface{}
+		var errResp map[string]any
 		json.NewDecoder(resp.Body).Decode(&errResp)
 		return fmt.Errorf("resend API error (status %d): %v", resp.StatusCode, errResp)
 	}
@@ -209,13 +191,10 @@ func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInv
 	return nil
 }
 
+var shareInvitationTmpl = template.Must(template.New("share_invitation").Parse(htmlTemplate))
+
 // renderHTMLTemplate renders the HTML email template
 func renderHTMLTemplate(params ShareInvitationParams, frontendURL string) (string, error) {
-	tmpl, err := template.New("share_invitation").Parse(htmlTemplate)
-	if err != nil {
-		return "", err
-	}
-
 	data := templateData{
 		SharerName:     params.SharerName,
 		SharerEmail:    params.SharerEmail,
@@ -225,12 +204,11 @@ func renderHTMLTemplate(params ShareInvitationParams, frontendURL string) (strin
 	}
 
 	if params.ExpiresAt != nil {
-		formatted := params.ExpiresAt.Format("January 2, 2006")
-		data.ExpiresAt = &formatted
+		data.ExpiresAt = params.ExpiresAt.Format("January 2, 2006")
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
+	if err := shareInvitationTmpl.Execute(&buf, data); err != nil {
 		return "", err
 	}
 
@@ -268,7 +246,7 @@ type templateData struct {
 	SharerEmail    string
 	SessionTitle   string
 	ShareURL       string
-	ExpiresAt      *string
+	ExpiresAt      string
 	UnsubscribeURL string
 }
 

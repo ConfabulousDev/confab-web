@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -85,7 +86,7 @@ func (s *Server) handleCondensedTranscriptByExternalID(w http.ResponseWriter, r 
 	sessionStore := &dbsession.Store{DB: s.db}
 	sessionID, err := sessionStore.GetSessionIDByExternalID(ctx, externalID, userID)
 	if err != nil {
-		if err == db.ErrSessionNotFound {
+		if errors.Is(err, db.ErrSessionNotFound) {
 			respondError(w, http.StatusNotFound, "Session not found")
 			return
 		}
@@ -112,21 +113,11 @@ func (s *Server) serveCondensedTranscript(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Check canonical access (CF-132 unified access model)
 	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer dbCancel()
 
-	result, err := CheckCanonicalAccess(dbCtx, s.db, sessionID)
-	if RespondCanonicalAccessError(dbCtx, w, err, sessionID) {
-		return
-	}
-
-	if result.AccessInfo.AccessType == db.SessionAccessNone {
-		if result.AccessInfo.AuthMayHelp {
-			respondError(w, http.StatusUnauthorized, "Sign in to view this session")
-			return
-		}
-		respondError(w, http.StatusNotFound, "Session not found")
+	result := RequireCanonicalRead(dbCtx, w, s.db, sessionID)
+	if result == nil {
 		return
 	}
 
