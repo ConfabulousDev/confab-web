@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type MouseEvent } from 'react';
+import { useState, useRef, useEffect, type ReactNode, type MouseEvent } from 'react';
 import styles from './Chip.module.css';
 
 type ChipVariant = 'neutral' | 'blue' | 'green' | 'purple';
@@ -13,6 +13,15 @@ interface ChipProps {
 
 function Chip({ children, icon, variant = 'neutral', copyValue, linkUrl }: ChipProps) {
   const [copied, setCopied] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (el) {
+      setIsTruncated(el.scrollWidth > el.clientWidth);
+    }
+  }, [children]);
 
   const isClickable = !!(copyValue || linkUrl);
 
@@ -30,14 +39,22 @@ function Chip({ children, icon, variant = 'neutral', copyValue, linkUrl }: ChipP
       }
     : undefined;
 
+  const className = [
+    styles.chip,
+    styles[variant],
+    isClickable && styles.clickable,
+    linkUrl && styles.linkable,
+  ].filter(Boolean).join(' ');
+
   return (
     <span
-      className={[styles.chip, styles[variant], isClickable && styles.clickable, linkUrl && styles.linkable].filter(Boolean).join(' ')}
+      className={className}
       onClick={handleClick}
+      title={isTruncated && typeof children === 'string' ? children : undefined}
     >
       {icon && <span className={styles.icon}>{icon}</span>}
       <span className={styles.textWrapper}>
-        <span className={`${styles.text} ${copied ? styles.hidden : ''}`}>{children}</span>
+        <span ref={textRef} className={`${styles.text} ${copied ? styles.hidden : ''}`}>{children}</span>
         {copyValue && !linkUrl && (
           <span className={`${styles.copiedText} ${copied ? '' : styles.hidden}`}>
             copied!

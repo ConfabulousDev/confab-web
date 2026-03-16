@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import Chip from './Chip';
 import { RepoIcon, BranchIcon, ComputerIcon, UserIcon, PRIcon, CommitIcon } from './icons';
 
@@ -65,6 +65,13 @@ export const LongText: Story = {
     variant: 'green',
     icon: ComputerIcon,
   },
+  decorators: [
+    (Story) => (
+      <div style={{ maxWidth: 150 }}>
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export const AllVariants: Story = {
