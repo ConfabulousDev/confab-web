@@ -75,3 +75,10 @@
   background: var(--color-bg-secondary);
   border-radius: var(--radius-md);
 }
+
+/* Lift virtual item z-index when a TIL popover is open.
+   Each virtual item uses transform (creating a stacking context),
+   so the popover's z-index can't escape without this. */
+:global([data-index]:has([data-popover-open])) {
+  z-index: 1;
+}
