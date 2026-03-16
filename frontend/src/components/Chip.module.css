@@ -10,6 +10,8 @@
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
   line-height: 1.4;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .icon {
@@ -25,10 +27,13 @@
 
 .textWrapper {
   position: relative;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .text {
-  /* No truncation by default */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .copiedText {
