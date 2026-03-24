@@ -29,7 +29,7 @@ function SessionsPage() {
   const {
     repos, branches, owners, query,
     toggleRepo, toggleBranch, toggleOwner,
-    setQuery, clearAll,
+    setQuery, clearAll, commitHistory,
   } = useSessionFilters();
 
   const { sessions, hasMore, filterOptions, loading, error, refetch, goNext, goPrev, canGoPrev } = useSessionsFetch({
@@ -80,6 +80,7 @@ function SessionsPage() {
             onToggleOwner={toggleOwner}
             onQueryChange={setQuery}
             onClearAll={clearAll}
+            onCommitHistory={commitHistory}
           />
         </div>
 

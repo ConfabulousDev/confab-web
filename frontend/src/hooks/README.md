@@ -8,7 +8,10 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 |------|------|
 | `useAuth.ts` | Authentication state via React Query (`/me` endpoint) |
 | `useSessionsFetch.ts` | Paginated session list with server-side filtering and debounced search |
-| `useSessionFilters.ts` | URL-synced filter state (repos, branches, owners, query) |
+| `useURLFilters.ts` | Generic URL-synced filter state hook (string, string[], boolean, dateRange fields) |
+| `useURLFilters.test.ts` | Tests for `useURLFilters` |
+| `useSessionFilters.ts` | URL-synced session filter state (repos, branches, owners, query) via `useURLFilters` |
+| `useTranscriptFilters.ts` | URL-synced transcript message category filters via `useURLFilters` |
 | `useLoadSession.ts` | Single session loading with typed error categories |
 | `useAnalyticsPolling.ts` | Session analytics polling with conditional 304 support |
 | `useSmartPolling.ts` | Generic smart polling with visibility/activity awareness |
@@ -48,7 +51,9 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 
 | Hook | Signature | Description |
 |------|-----------|-------------|
-| `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes filter state (repos, branches, owners, query) to URL search params. |
+| `useURLFilters` | `<T>(config) => URLFiltersResult<T>` | Generic URL filter persistence. Supports string, string[], boolean, and dateRange fields. Provides `setFilter`, `setAll`, `toggleArrayValue`, `clearAll`, and `commitHistory`. |
+| `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, query) to URL search params via `useURLFilters`. |
+| `useTranscriptFilters` | `() => TranscriptFiltersResult` | Reads/writes transcript message category visibility to URL `hide` param via `useURLFilters`. Provides toggle helpers for categories and subcategories. |
 | `useTranscriptSearch` | `(messages) => TranscriptSearchResult` | Builds a lowercased search index, debounces query (150ms search, 300ms highlight), provides match navigation. |
 | `useShareDialog` | `({ sessionId, userEmail?, onShareCreated? }) => UseShareDialogReturn` | Full share dialog state: form fields, email validation (Zod), create/revoke API calls. |
 | `useDropdown` | `<T extends HTMLElement>() => UseDropdownReturn<T>` | Open/close state with click-outside detection and Escape key. |
@@ -96,7 +101,7 @@ const { data, state, refetch, loading, error } = useSmartPolling(fetchFn, {
 ## Design Decisions
 
 - **React Query for auth only**: `useAuth` uses `@tanstack/react-query` for its caching and retry semantics. Other hooks use manual state management because they need custom polling behavior (visibility-aware, conditional 304) that doesn't fit React Query's model well.
-- **URL-synced filters**: `useSessionFilters` writes to `URLSearchParams` so filter state survives page refreshes and can be shared via URL.
+- **URL-synced filters**: `useURLFilters` is the generic engine for URL filter persistence. `useSessionFilters` and `useTranscriptFilters` are thin wrappers that define field configs. Pages like `TrendsPage` and `OrgPage` use `useURLFilters` directly.
 - **Adaptive relative time intervals**: `useRelativeTime` adjusts its update frequency based on timestamp age to avoid unnecessary renders for old timestamps while keeping recent ones fresh.
 
 ## Testing
@@ -108,11 +113,12 @@ Most hooks have co-located test files:
 - `useTranscriptSearch.test.ts`, `useRelativeTime.test.ts`
 - `useVisibility.test.ts`, `useUserActivity.test.ts`
 - `useServerRecovery.test.tsx`
+- `useURLFilters.test.ts`
 
 ## Dependencies
 
 - `react` (hooks API)
-- `react-router-dom` (`useSearchParams` in `useSessionFilters`, `useSuccessMessage`)
+- `react-router-dom` (`useSearchParams` in `useURLFilters`, `useSuccessMessage`)
 - `@tanstack/react-query` (`useAuth`, `useServerRecovery`)
 - `@/services/api` (API client methods)
 - `@/schemas/api` (response types)

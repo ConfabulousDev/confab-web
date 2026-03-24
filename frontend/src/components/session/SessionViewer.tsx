@@ -4,15 +4,12 @@ import { isAssistantMessage } from '@/types';
 import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
 import { tilsAPI, type TIL } from '@/services/api';
 import { useVisibility } from '@/hooks/useVisibility';
+import { useTranscriptFilters } from '@/hooks/useTranscriptFilters';
 import { computeSessionMeta } from '@/utils/sessionMeta';
 import {
   countHierarchicalCategories,
   messageMatchesFilter,
   DEFAULT_FILTER_STATE,
-  type MessageCategory,
-  type UserSubcategory,
-  type AssistantSubcategory,
-  type FilterState,
 } from './messageCategories';
 import SessionHeader from './SessionHeader';
 import MessageTimeline from './MessageTimeline';
@@ -81,8 +78,11 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     });
   }, [session.id]);
 
-  // Filter state - hierarchical visibility for subcategories
-  const [filterState, setFilterState] = useState<FilterState>(DEFAULT_FILTER_STATE);
+  // Filter state - synced to URL via ?hide= param
+  const {
+    filterState, setFilterState,
+    toggleCategory, toggleUserSubcategory, toggleAssistantSubcategory,
+  } = useTranscriptFilters();
 
   // Compute hierarchical category counts
   const categoryCounts = useMemo(() => countHierarchicalCategories(messages), [messages]);
@@ -107,8 +107,8 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     setFilterState({
       ...DEFAULT_FILTER_STATE,
       system: targetMessage.type === 'system',
-    });
-  }, [targetMessageUuid, messages, filterState]);
+    }, { replace: true });
+  }, [targetMessageUuid, messages, filterState, setFilterState]);
 
   // Get transcript file info
   const transcriptFile = useMemo(() => {
@@ -182,42 +182,6 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   }, [initialMessages, isVisible, loading, session.id, transcriptFileName]);
 
   const toggleCostMode = useCallback(() => setIsCostMode((prev) => !prev), []);
-
-  // Toggle a top-level category's visibility (toggles all subcategories for hierarchical cats)
-  const toggleCategory = useCallback((category: MessageCategory) => {
-    setFilterState((prev) => {
-      const next = { ...prev };
-      if (category === 'user') {
-        // Toggle all user subcategories
-        const allVisible = prev.user.prompt && prev.user['tool-result'] && prev.user.skill;
-        next.user = { prompt: !allVisible, 'tool-result': !allVisible, skill: !allVisible };
-      } else if (category === 'assistant') {
-        // Toggle all assistant subcategories
-        const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
-        next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
-      } else {
-        // Flat category - simple toggle
-        next[category] = !prev[category];
-      }
-      return next;
-    });
-  }, []);
-
-  // Toggle a user subcategory's visibility
-  const toggleUserSubcategory = useCallback((subcategory: UserSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
-    }));
-  }, []);
-
-  // Toggle an assistant subcategory's visibility
-  const toggleAssistantSubcategory = useCallback((subcategory: AssistantSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
-    }));
-  }, []);
 
   // Track the last successfully applied suggested title to avoid duplicate updates
   const lastAppliedSuggestedTitleRef = useRef<string | null>(null);

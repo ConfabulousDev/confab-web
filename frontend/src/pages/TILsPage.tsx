@@ -18,7 +18,7 @@ function TILsPage() {
   const {
     repos, branches, owners, query,
     toggleRepo, toggleBranch, toggleOwner,
-    setQuery, clearAll,
+    setQuery, clearAll, commitHistory,
   } = useSessionFilters();
 
   const { tils, hasMore, filterOptions, loading, error, refetch, goNext, goPrev, canGoPrev, deleteTIL } = useTILsFetch({
@@ -78,6 +78,7 @@ function TILsPage() {
             onToggleOwner={toggleOwner}
             onQueryChange={setQuery}
             onClearAll={clearAll}
+            onCommitHistory={commitHistory}
           />
         </div>
 

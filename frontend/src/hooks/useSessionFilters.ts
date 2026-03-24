@@ -1,5 +1,5 @@
-import { useSearchParams } from 'react-router-dom';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
+import { useURLFilters, type URLFiltersConfig } from './useURLFilters';
 
 export interface SessionFilters {
   repos: string[];
@@ -14,85 +14,39 @@ interface SessionFiltersActions {
   toggleOwner: (value: string) => void;
   setQuery: (value: string) => void;
   clearAll: () => void;
+  commitHistory: () => void;
 }
 
-function parseCommaSeparated(value: string | null): string[] {
-  if (!value) return [];
-  return value.split(',').filter(Boolean);
-}
-
-function joinOrEmpty(values: string[]): string | null {
-  return values.length > 0 ? values.join(',') : null;
-}
+const SESSION_FILTERS_CONFIG: URLFiltersConfig = {
+  repos: { type: 'string[]', default: [], paramName: 'repo' },
+  branches: { type: 'string[]', default: [], paramName: 'branch' },
+  owners: { type: 'string[]', default: [], paramName: 'owner' },
+  query: { type: 'string', default: '', paramName: 'q' },
+};
 
 export function useSessionFilters(): SessionFilters & SessionFiltersActions {
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const filters = useMemo<SessionFilters>(() => {
-    return {
-      repos: parseCommaSeparated(searchParams.get('repo')),
-      branches: parseCommaSeparated(searchParams.get('branch')),
-      owners: parseCommaSeparated(searchParams.get('owner')),
-      query: searchParams.get('q') || '',
-    };
-  }, [searchParams]);
-
-  const updateParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          for (const [key, value] of Object.entries(updates)) {
-            if (value === null || value === '') {
-              next.delete(key);
-            } else {
-              next.set(key, value);
-            }
-          }
-          return next;
-        },
-        { replace: true }
-      );
-    },
-    [setSearchParams]
-  );
-
-  const toggleParam = useCallback(
-    (paramKey: string, value: string) => {
-      const current = parseCommaSeparated(searchParams.get(paramKey));
-      const next = current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value];
-      updateParams({ [paramKey]: joinOrEmpty(next) });
-    },
-    [searchParams, updateParams]
-  );
+  const { filters, toggleArrayValue, setFilter, clearAll, commitHistory } =
+    useURLFilters<SessionFilters>(SESSION_FILTERS_CONFIG);
 
   const toggleRepo = useCallback(
-    (value: string) => toggleParam('repo', value),
-    [toggleParam]
+    (value: string) => toggleArrayValue('repos', value),
+    [toggleArrayValue],
   );
 
   const toggleBranch = useCallback(
-    (value: string) => toggleParam('branch', value),
-    [toggleParam]
+    (value: string) => toggleArrayValue('branches', value),
+    [toggleArrayValue],
   );
 
   const toggleOwner = useCallback(
-    (value: string) => toggleParam('owner', value),
-    [toggleParam]
+    (value: string) => toggleArrayValue('owners', value),
+    [toggleArrayValue],
   );
 
   const setQuery = useCallback(
-    (value: string) => {
-      updateParams({ q: value || null });
-    },
-    [updateParams]
+    (value: string) => setFilter('query', value, { replace: true }),
+    [setFilter],
   );
-
-  const clearAll = useCallback(() => {
-    setSearchParams({}, { replace: true });
-  }, [setSearchParams]);
 
   return {
     ...filters,
@@ -101,5 +55,6 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     toggleOwner,
     setQuery,
     clearAll,
+    commitHistory,
   };
 }

@@ -100,7 +100,7 @@ The most complex page. It:
 ## Design Decisions
 
 - **Lazy loading**: Every page is code-split via `React.lazy()` to keep the initial bundle small. The `Suspense` fallback is `null` (no loading spinner) for instant perceived navigation.
-- **URL-synced filters**: `SessionsPage` and `TrendsPage` store filter state in URL search params so filters survive page refreshes and can be bookmarked/shared.
+- **URL-synced filters**: `SessionsPage`, `TrendsPage`, and `OrgPage` store filter state in URL search params via `useURLFilters`/`useSessionFilters` so filters survive page refreshes and can be bookmarked/shared.
 - **Unified session access**: `SessionDetailPage` doesn't distinguish between owner/shared/public access upfront. It fetches the session and lets the backend return the appropriate data or error (401/403/404/410).
 
 ## Testing

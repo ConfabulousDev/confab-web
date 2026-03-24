@@ -18,6 +18,7 @@ interface FilterChipsBarProps {
   onToggleOwner: (value: string) => void;
   onQueryChange: (value: string) => void;
   onClearAll: () => void;
+  onCommitHistory?: () => void;
 }
 
 interface DimensionDropdownProps {
@@ -113,6 +114,7 @@ function FilterChipsBar({
   onToggleOwner,
   onQueryChange,
   onClearAll,
+  onCommitHistory,
 }: FilterChipsBarProps) {
   // Debounce search: keep local state responsive, defer URL/API update
   const [localQuery, setLocalQuery] = useState(filters.query);
@@ -155,6 +157,7 @@ function FilterChipsBar({
             placeholder="Search sessions..."
             value={localQuery}
             onChange={(e) => handleQueryChange(e.target.value)}
+            onBlur={onCommitHistory}
           />
         </div>
         <div className={styles.dimensionButtons}>

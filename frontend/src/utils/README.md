@@ -67,6 +67,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `getDefaultDateRange` | `() => DateRange` | Returns "Last 7 Days" ending today |
+| `getDateRangeLabel` | `(startDate, endDate) => string` | Infer a human-readable label for a date range, falling back to "start - end" |
 | `getDatePresets` | `() => DateRange[]` | Standard presets: This Week, Last Week, This Month, Last Month, Last 30/90 Days |
 | `parseDateRangeFromURL` | `(searchParams) => DateRange \| null` | Parse `start` and `end` params from URL |
 

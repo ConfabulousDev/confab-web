@@ -24,7 +24,7 @@ export function getDefaultDateRange(): DateRange {
 }
 
 /** Infer a human-readable label for a date range, falling back to "start - end". */
-function getDateRangeLabel(startDate: string, endDate: string): string {
+export function getDateRangeLabel(startDate: string, endDate: string): string {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = formatLocalDate(today);

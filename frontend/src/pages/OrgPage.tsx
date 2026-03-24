@@ -1,50 +1,34 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useDocumentTitle, useOrgAnalytics } from '@/hooks';
-import { getDefaultDateRange, parseDateRangeFromURL } from '@/utils';
+import { useCallback } from 'react';
+import { useDocumentTitle, useOrgAnalytics, useURLFilters } from '@/hooks';
+import type { URLFiltersConfig } from '@/hooks';
+import { getDefaultDateRange } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import OrgFilters, { type OrgFiltersValue } from '@/components/org/OrgFilters';
 import OrgTable from '@/components/org/OrgTable';
 import Alert from '@/components/Alert';
 import styles from './OrgPage.module.css';
 
-function parseFiltersFromURL(searchParams: URLSearchParams): OrgFiltersValue {
-  const dateRange = parseDateRangeFromURL(searchParams);
-  return { dateRange: dateRange ?? getDefaultDateRange() };
-}
-
-function serializeFiltersToURL(filters: OrgFiltersValue): URLSearchParams {
-  const params = new URLSearchParams();
-  params.set('start', filters.dateRange.startDate);
-  params.set('end', filters.dateRange.endDate);
-  return params;
-}
-
 function OrgPage() {
   useDocumentTitle('Organization');
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [filters, setFilters] = useState<OrgFiltersValue>(() =>
-    parseFiltersFromURL(searchParams),
-  );
+  const config: URLFiltersConfig = {
+    dateRange: { type: 'dateRange', default: getDefaultDateRange(), paramName: { start: 'start', end: 'end' } },
+  };
+
+  const { filters, setFilter } = useURLFilters<OrgFiltersValue>(config);
 
   const { data, loading, error, refetch } = useOrgAnalytics({
     startDate: filters.dateRange.startDate,
     endDate: filters.dateRange.endDate,
   });
 
-  useEffect(() => {
-    const newParams = serializeFiltersToURL(filters);
-    setSearchParams(newParams, { replace: true });
-  }, [filters, setSearchParams]);
-
   const handleFilterChange = useCallback((newFilters: OrgFiltersValue) => {
-    setFilters(newFilters);
+    setFilter('dateRange', newFilters.dateRange);
     refetch({
       startDate: newFilters.dateRange.startDate,
       endDate: newFilters.dateRange.endDate,
     });
-  }, [refetch]);
+  }, [setFilter, refetch]);
 
   const showEmpty = !loading && data && data.users.every(u => u.session_count === 0);
   const hasData = !loading && data && data.users.length > 0 && !showEmpty;
