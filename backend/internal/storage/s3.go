@@ -274,3 +274,35 @@ func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, ex
 
 	return nil
 }
+
+// DeleteAllUserData deletes all S3 objects for a user (prefix: {userID}/).
+func (s *S3Storage) DeleteAllUserData(ctx context.Context, userID int64) error {
+	ctx, span := tracer.Start(ctx, "storage.delete_all_user_data",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	prefix := fmt.Sprintf("%d/", userID)
+
+	var deletedCount int
+	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+
+	for obj := range objectCh {
+		if obj.Err != nil {
+			span.RecordError(obj.Err)
+			span.SetStatus(codes.Error, obj.Err.Error())
+			return classifyStorageError(obj.Err, "list user objects")
+		}
+		if err := s.Delete(ctx, obj.Key); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("failed to delete object %s: %w", obj.Key, err)
+		}
+		deletedCount++
+	}
+
+	span.SetAttributes(attribute.Int("objects.deleted", deletedCount))
+	return nil
+}

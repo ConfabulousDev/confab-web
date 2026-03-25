@@ -235,7 +235,6 @@ func (s *Store) HasAPIKeys(ctx context.Context, userID int64) (bool, error) {
 }
 
 // GetUserSessionIDs returns all session IDs (UUIDs) for a user
-// Used for S3 cleanup before user deletion
 func (s *Store) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, error) {
 	ctx, span := tracer.Start(ctx, "db.get_user_session_ids",
 		trace.WithAttributes(attribute.Int64("user.id", userID)))

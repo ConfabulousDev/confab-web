@@ -294,20 +294,11 @@ func (h *Handlers) HandleDeleteUserAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionIDs, err := userStore.GetUserSessionIDs(ctx, userID)
-	if err != nil {
-		log.Error("Failed to get user sessions for deletion", "error", err, "user_id", userID)
-		httputil.RespondError(w, http.StatusInternalServerError, "Failed to get user sessions")
+	// Delete all S3 objects for this user (prefix: {userID}/) before DB deletion
+	if err := h.Storage.DeleteAllUserData(ctx, userID); err != nil {
+		log.Error("Failed to delete S3 data for user", "error", err, "user_id", userID)
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to delete storage")
 		return
-	}
-
-	// Delete S3 objects before DB records so failures can be retried
-	for _, sessionID := range sessionIDs {
-		if err := h.Storage.DeleteAllSessionChunks(ctx, userID, sessionID); err != nil {
-			log.Error("Failed to delete S3 objects for session", "error", err, "user_id", userID, "session_id", sessionID)
-			httputil.RespondError(w, http.StatusInternalServerError, "Failed to delete storage")
-			return
-		}
 	}
 
 	if err := userStore.DeleteUser(ctx, userID); err != nil {
@@ -319,7 +310,6 @@ func (h *Handlers) HandleDeleteUserAPI(w http.ResponseWriter, r *http.Request) {
 	AuditLogFromRequest(r, h.DB, ActionUserDelete, map[string]interface{}{
 		"target_user_id":    userID,
 		"target_user_email": targetUser.Email,
-		"sessions_deleted":  len(sessionIDs),
 	})
 
 	w.WriteHeader(http.StatusNoContent)
