@@ -398,13 +398,34 @@ func TestAdminDeleteUserAPI(t *testing.T) {
 
 	env := testutil.SetupTestEnvironment(t)
 
-	t.Run("deletes user and returns 204", func(t *testing.T) {
+	t.Run("deletes user DB and S3 data, preserves other users", func(t *testing.T) {
 		env.CleanDB(t)
 
 		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
 		target := testutil.CreateTestUser(t, env, "target@example.com", "Target")
+		bystander := testutil.CreateTestUser(t, env, "bystander@example.com", "Bystander")
 		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
 
+		// Create sessions with S3 data for target user
+		targetSession1 := testutil.CreateTestSessionFull(t, env, target.ID, "target-ext-1", testutil.TestSessionFullOpts{})
+		_ = testutil.CreateTestSessionFull(t, env, target.ID, "target-ext-2", testutil.TestSessionFullOpts{})
+
+		// Upload S3 chunks for target
+		transcript := testutil.MinimalTranscript()
+		testutil.UploadTestChunk(t, env, target.ID, "target-ext-1", "transcript.jsonl", 1, 3, transcript)
+		testutil.UploadTestChunk(t, env, target.ID, "target-ext-2", "transcript.jsonl", 1, 3, transcript)
+
+		// Create session with S3 data for bystander (must survive)
+		_ = testutil.CreateTestSessionFull(t, env, bystander.ID, "bystander-ext-1", testutil.TestSessionFullOpts{})
+		testutil.UploadTestChunk(t, env, bystander.ID, "bystander-ext-1", "transcript.jsonl", 1, 3, transcript)
+
+		// Verify S3 data exists before deletion
+		targetS3Key := fmt.Sprintf("%d/claude-code/target-ext-1/chunks/transcript.jsonl/chunk_00000001_00000003.jsonl", target.ID)
+		bystanderS3Key := fmt.Sprintf("%d/claude-code/bystander-ext-1/chunks/transcript.jsonl/chunk_00000001_00000003.jsonl", bystander.ID)
+		testutil.VerifyFileInS3(t, env, targetS3Key)
+		testutil.VerifyFileInS3(t, env, bystanderS3Key)
+
+		// Delete target user
 		ts := setupTestServer(t, env)
 		client := adminClient(t, env, ts, adminUser.ID)
 
@@ -414,14 +435,53 @@ func TestAdminDeleteUserAPI(t *testing.T) {
 		}
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusNoContent {
-			t.Errorf("expected 204, got %d", resp.StatusCode)
+			t.Fatalf("expected 204, got %d", resp.StatusCode)
 		}
 
-		// Verify user is gone from DB
+		// Verify target user gone from DB
 		userStore := &dbuser.Store{DB: env.DB}
 		_, err = userStore.GetUserByID(env.Ctx, target.ID)
 		if err == nil {
-			t.Error("expected user to be deleted from DB")
+			t.Error("expected target user to be deleted from DB")
+		}
+
+		// Verify target sessions gone from DB (CASCADE)
+		ids, err := userStore.GetUserSessionIDs(env.Ctx, target.ID)
+		if err != nil {
+			t.Fatalf("GetUserSessionIDs failed: %v", err)
+		}
+		if len(ids) != 0 {
+			t.Errorf("expected 0 sessions for deleted user, got %d", len(ids))
+		}
+
+		// Verify target S3 data is deleted
+		_, err = env.Storage.Download(env.Ctx, targetS3Key)
+		if err == nil {
+			t.Error("expected target S3 data to be deleted")
+		}
+
+		// Verify bystander is untouched — DB and S3
+		bystanderUser, err := userStore.GetUserByID(env.Ctx, bystander.ID)
+		if err != nil {
+			t.Fatalf("bystander user should still exist: %v", err)
+		}
+		if bystanderUser.Email != "bystander@example.com" {
+			t.Errorf("expected bystander email, got %s", bystanderUser.Email)
+		}
+
+		bystanderData := testutil.VerifyFileInS3(t, env, bystanderS3Key)
+		if len(bystanderData) == 0 {
+			t.Error("expected bystander S3 data to still exist")
+		}
+
+		// Verify bystander session still in DB
+		_ = targetSession1 // used above for S3 key construction
+		bystanderIDs, err := userStore.GetUserSessionIDs(env.Ctx, bystander.ID)
+		if err != nil {
+			t.Fatalf("bystander GetUserSessionIDs failed: %v", err)
+		}
+		if len(bystanderIDs) != 1 {
+			t.Errorf("expected 1 session for bystander, got %d", len(bystanderIDs))
 		}
 	})
 
