@@ -1,6 +1,6 @@
 # admin
 
-Server-rendered admin UI and middleware for super-admin user management.
+Admin API handlers, middleware, and audit logging for super-admin user management.
 
 ## Files
 
@@ -8,15 +8,18 @@ Server-rendered admin UI and middleware for super-admin user management.
 |------|------|
 | `admin.go` | `IsSuperAdmin` check against the `SUPER_ADMIN_EMAILS` env var |
 | `admin_test.go` | Unit tests for `IsSuperAdmin` |
-| `admin_http_integration_test.go` | Integration tests for admin HTTP handlers |
+| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, delete, and system shares |
+| `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
-| `handlers.go` | HTTP handlers for user list, create, activate/deactivate, delete, and system shares |
+| `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
 | `middleware.go` | Chi middleware that gates routes to super admins only |
 
 ## Key Types
 
 - **`Handlers`** -- Dependency holder (DB, Storage, config flags) for all admin HTTP handlers.
 - **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`) used as audit log keys.
+- **`AdminUserListResponse`**, **`AdminUserJSON`**, **`AdminTotals`** -- JSON response types for the user list endpoint.
+- **`SystemSharesResponse`**, **`SystemShareJSON`** -- JSON response types for system shares.
 
 ## Key API
 
@@ -29,39 +32,37 @@ Server-rendered admin UI and middleware for super-admin user management.
 
 | Method | Route pattern | Description |
 |--------|--------------|-------------|
-| `HandleListUsers` | `GET /admin/users` | Renders user table with recap stats |
-| `HandleDeactivateUser` | `POST /admin/users/{id}/deactivate` | Sets user status to inactive |
-| `HandleActivateUser` | `POST /admin/users/{id}/activate` | Sets user status to active |
-| `HandleDeleteUser` | `POST /admin/users/{id}/delete` | Deletes user, their S3 objects, then DB record |
-| `HandleCreateUserPage` | `GET /admin/users/new` | Renders password-user creation form |
-| `HandleCreateUser` | `POST /admin/users/create` | Creates a password-authenticated user |
-| `HandleSystemSharePage` | `GET /admin/system-shares` | Renders system share creation form |
-| `HandleCreateSystemShareForm` | `POST /admin/system-shares` | Creates a system-wide share for a session. Takes an extra `frontendURL string` parameter beyond the standard `(w, r)` |
+| `HandleListUsersAPI` | `GET /api/v1/admin/users` | Returns JSON user list with recap stats and totals |
+| `HandleCreateUserAPI` | `POST /api/v1/admin/users` | Creates a password-authenticated user (when password auth enabled) |
+| `HandleDeactivateUserAPI` | `POST /api/v1/admin/users/{id}/deactivate` | Sets user status to inactive |
+| `HandleActivateUserAPI` | `POST /api/v1/admin/users/{id}/activate` | Sets user status to active |
+| `HandleDeleteUserAPI` | `DELETE /api/v1/admin/users/{id}` | Deletes user, their S3 objects, then DB record. Returns closure capturing storage |
+| `HandleListSystemSharesAPI` | `GET /api/v1/admin/system-shares` | Returns all system-wide shares. Returns closure capturing frontendURL |
+| `HandleCreateSystemShareAPI` | `POST /api/v1/admin/system-shares` | Creates a system-wide share. Returns closure capturing frontendURL |
 
 ## How to Extend
 
 ### Adding a new admin action
 
 1. Add a new `AdminAction` constant in `audit.go`.
-2. Write the handler method on `Handlers` in `handlers.go`.
+2. Write the handler method on `Handlers` in `api_handlers.go`.
 3. Call `AuditLogFromRequest` with the new action and relevant details.
 4. Register the route in `backend/internal/api/server.go` under the admin group.
 
 ## Invariants
 
 - **Middleware ordering.** `Middleware` must run after `auth.SessionMiddleware`; it reads the user ID from context via `auth.GetUserID`.
-- **S3 before DB on delete.** `HandleDeleteUser` deletes S3 objects first, then the database row. If S3 fails, the DB row is preserved so the operation can be retried.
-- **Audit logging on every mutating action.** Every state-changing handler calls `AuditLogFromRequest` before redirecting.
-- **All HTML is inline.** Admin pages render HTML directly in Go (no external template files) to simplify deployment. This is intentional for low-churn internal tooling.
+- **S3 before DB on delete.** `HandleDeleteUserAPI` deletes S3 objects first, then the database row. If S3 fails, the DB row is preserved so the operation can be retried.
+- **Audit logging on every mutating action.** Every state-changing handler calls `AuditLogFromRequest` before responding.
 - **Database timeout.** All DB operations use a 5-second context timeout (`DatabaseTimeout`), except user deletion which uses 60 seconds to allow for S3 cleanup.
 
 ## Design Decisions
 
-**Inline HTML instead of template files.** Admin pages are internal tools that change rarely. Keeping HTML inline avoids template file management and makes the binary self-contained.
+**JSON API instead of inline HTML.** Admin UI is a React SPA (CF-322). All handlers return JSON; the old server-rendered HTML handlers have been removed.
 
 **Env-var-based super admin list.** `SUPER_ADMIN_EMAILS` is read on every request rather than cached, so changes take effect without restart. The list is expected to be small (a few emails).
 
-**Shared email normalization.** The admin package uses `validation.NormalizeEmail` when checking the super admin list, keeping email handling consistent across the codebase.
+**Shared httputil package.** JSON response helpers (`RespondJSON`, `RespondError`) live in `internal/httputil` to avoid circular imports between `api` and `admin`.
 
 ## Testing
 
@@ -69,10 +70,10 @@ Server-rendered admin UI and middleware for super-admin user management.
 go test ./internal/admin/...
 ```
 
-Unit tests cover `IsSuperAdmin` with various env var configurations. Integration tests (`admin_http_integration_test.go`) exercise the full HTTP handler flow with a real database.
+Unit tests cover `IsSuperAdmin` with various env var configurations. Integration tests (`api_handlers_test.go`) exercise the full HTTP handler flow with real database, CSRF, and auth middleware.
 
 ## Dependencies
 
-**Uses:** `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbauth`, `internal/db/user`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`, `golang.org/x/crypto/bcrypt`
+**Uses:** `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbauth`, `internal/db/user`, `internal/httputil`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`, `golang.org/x/crypto/bcrypt`
 
 **Used by:** `internal/api` (server setup and routing)

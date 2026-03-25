@@ -107,6 +107,7 @@ export const UserSchema = z.object({
   avatar_url: z.string().optional(),
   has_own_sessions: z.boolean().optional(),
   has_api_keys: z.boolean().optional(),
+  is_admin: z.boolean().optional(),
 });
 
 // ============================================================================
@@ -574,6 +575,73 @@ export type TILWithSession = z.infer<typeof TILWithSessionSchema>;
 export type TILFilterOptions = z.infer<typeof TILFilterOptionsSchema>;
 export type TILListResponse = z.infer<typeof TILListResponseSchema>;
 export type SessionTILsResponse = z.infer<typeof SessionTILsResponseSchema>;
+
+// ============================================================================
+// Admin Schemas
+// ============================================================================
+
+export const AdminUserSchema = z.object({
+  id: z.number(),
+  email: z.string(),
+  name: z.string().nullable(),
+  status: z.string(),
+  session_count: z.number(),
+  recap_cache_count: z.number(),
+  recaps_this_month: z.number(),
+  last_api_key_used: z.string().nullable(),
+  last_logged_in: z.string().nullable(),
+  created_at: z.string(),
+});
+export type AdminUser = z.infer<typeof AdminUserSchema>;
+
+export const AdminTotalsSchema = z.object({
+  total_sessions: z.number(),
+  non_empty_sessions: z.number(),
+  sessions_with_cache: z.number(),
+  computations_this_month: z.number(),
+});
+export type AdminTotals = z.infer<typeof AdminTotalsSchema>;
+
+export const AdminUserListResponseSchema = z.object({
+  users: z.array(AdminUserSchema),
+  totals: AdminTotalsSchema,
+});
+export type AdminUserListResponse = z.infer<typeof AdminUserListResponseSchema>;
+
+export const CreateAdminUserResponseSchema = z.object({
+  id: z.number(),
+  email: z.string(),
+});
+export type CreateAdminUserResponse = z.infer<typeof CreateAdminUserResponseSchema>;
+
+export const StatusChangeResponseSchema = z.object({
+  id: z.number(),
+  status: z.string(),
+});
+export type StatusChangeResponse = z.infer<typeof StatusChangeResponseSchema>;
+
+export const AdminSystemShareSchema = z.object({
+  id: z.number(),
+  session_id: z.string(),
+  external_id: z.string(),
+  share_url: z.string(),
+  expires_at: z.string().nullable(),
+  created_at: z.string(),
+  last_accessed_at: z.string().nullable(),
+});
+export type AdminSystemShare = z.infer<typeof AdminSystemShareSchema>;
+
+export const AdminSystemSharesResponseSchema = z.object({
+  shares: z.array(AdminSystemShareSchema),
+});
+export type AdminSystemSharesResponse = z.infer<typeof AdminSystemSharesResponseSchema>;
+
+export const CreateSystemShareResponseSchema = z.object({
+  share_id: z.number(),
+  external_id: z.string(),
+  share_url: z.string(),
+});
+export type CreateSystemShareResponse = z.infer<typeof CreateSystemShareResponseSchema>;
 
 // ============================================================================
 // Validation Functions

@@ -13,6 +13,7 @@ type authConfigFeatures struct {
 	SaasFooterEnabled   bool   `json:"saas_footer_enabled"`
 	SaasTermlyEnabled   bool   `json:"saas_termly_enabled"`
 	OrgAnalyticsEnabled bool   `json:"org_analytics_enabled"`
+	PasswordAuthEnabled bool   `json:"password_auth_enabled"`
 	SupportEmail        string `json:"support_email"`
 }
 
@@ -69,6 +70,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 			SaasFooterEnabled:   s.saasFooterEnabled,
 			SaasTermlyEnabled:   s.saasTermlyEnabled,
 			OrgAnalyticsEnabled: s.orgAnalyticsEnabled,
+			PasswordAuthEnabled: s.oauthConfig.PasswordEnabled,
 			SupportEmail:        s.supportEmail,
 		},
 	})

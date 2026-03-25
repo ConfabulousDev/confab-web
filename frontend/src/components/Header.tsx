@@ -103,6 +103,11 @@ function Header() {
                 Shares
               </Link>
             )}
+            {user?.is_admin && (
+              <Link to="/admin" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
+                Admin
+              </Link>
+            )}
             <div className={styles.dropdownDivider} />
             <button className={styles.dropdownItem} onClick={handleLogout}>
               Logout

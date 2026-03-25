@@ -5,6 +5,7 @@ const defaultAppConfig: AppConfig = {
   saasFooterEnabled: false,
   saasTermlyEnabled: false,
   orgAnalyticsEnabled: false,
+  passwordAuthEnabled: false,
   supportEmail: '',
 };
 
@@ -22,6 +23,7 @@ export async function fetchConfigWithRetry(): Promise<AppConfig> {
         saasFooterEnabled: data.features?.saas_footer_enabled ?? false,
         saasTermlyEnabled: data.features?.saas_termly_enabled ?? false,
         orgAnalyticsEnabled: data.features?.org_analytics_enabled ?? false,
+        passwordAuthEnabled: data.features?.password_auth_enabled ?? false,
         supportEmail: data.features?.support_email ?? '',
       };
     } catch {

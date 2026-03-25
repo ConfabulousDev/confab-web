@@ -368,7 +368,8 @@ GET /api/v1/me
   "status": "active",
   "created_at": "2024-01-01T00:00:00Z",
   "has_own_sessions": false,
-  "has_api_keys": false
+  "has_api_keys": false,
+  "is_admin": true
 }
 ```
 
@@ -376,6 +377,7 @@ GET /api/v1/me
 |-------|------|-------------|
 | `has_own_sessions` | bool | Whether the user owns any synced sessions |
 | `has_api_keys` | bool | Whether the user has any API keys configured |
+| `is_admin` | bool | Whether the user is a super admin (checked against `SUPER_ADMIN_EMAILS`) |
 
 ---
 
@@ -1433,20 +1435,95 @@ When `email` is provided:
 
 ## Admin Endpoints (Super Admin Only)
 
-Admin functionality is accessed via HTML pages at `/admin`. Requires web session authentication and super admin privileges (configured via `SUPER_ADMIN_EMAILS` environment variable).
+Admin API endpoints under `/api/v1/admin/`. Requires web session authentication + CSRF + super admin privileges (configured via `SUPER_ADMIN_EMAILS` environment variable). All admin actions are audit logged.
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /admin/users` | List all users |
-| `POST /admin/users/{id}/deactivate` | Deactivate user |
-| `POST /admin/users/{id}/activate` | Activate user |
-| `POST /admin/users/{id}/delete` | Delete user permanently |
-| `GET /admin/users/new` | Create user form (password auth only) |
-| `POST /admin/users/create` | Create user (password auth only) |
-| `GET /admin/system-shares` | System shares form |
-| `POST /admin/system-shares` | Create system share |
+### List Users
+```
+GET /api/v1/admin/users
+```
 
-All admin actions are audit logged with admin identity and action details.
+**Response:**
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "email": "user@example.com",
+      "name": "User Name",
+      "status": "active",
+      "session_count": 42,
+      "recap_cache_count": 10,
+      "recaps_this_month": 3,
+      "last_api_key_used": "2024-01-15T10:30:00Z",
+      "last_logged_in": "2024-01-20T14:00:00Z",
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "totals": {
+    "total_sessions": 100,
+    "non_empty_sessions": 80,
+    "sessions_with_cache": 50,
+    "computations_this_month": 25
+  }
+}
+```
+
+### Create User (Password Auth Only)
+```
+POST /api/v1/admin/users
+```
+**Request:** `{ "email": "new@example.com", "password": "securepass123" }`
+**Response:** `{ "id": 2, "email": "new@example.com" }`
+**Errors:** 400 (validation), 409 (duplicate email)
+
+### Deactivate User
+```
+POST /api/v1/admin/users/{id}/deactivate
+```
+**Response:** `{ "id": 1, "status": "inactive" }`
+
+### Activate User
+```
+POST /api/v1/admin/users/{id}/activate
+```
+**Response:** `{ "id": 1, "status": "active" }`
+
+### Delete User
+```
+DELETE /api/v1/admin/users/{id}
+```
+Deletes S3 data first, then DB record (CASCADE). Uses 60s timeout.
+**Response:** 204 No Content
+**Errors:** 404 (not found)
+
+### List System Shares
+```
+GET /api/v1/admin/system-shares
+```
+**Response:**
+```json
+{
+  "shares": [
+    {
+      "id": 1,
+      "session_id": "uuid",
+      "external_id": "ext-id",
+      "share_url": "https://app.example.com/sessions/uuid",
+      "expires_at": null,
+      "created_at": "2024-01-01T00:00:00Z",
+      "last_accessed_at": "2024-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+### Create System Share
+```
+POST /api/v1/admin/system-shares
+```
+**Request:** `{ "session_id": "uuid" }`
+**Response:** `{ "share_id": 1, "external_id": "ext-id", "share_url": "https://..." }`
+**Errors:** 400 (shares disabled, missing session_id), 404 (session not found)
 
 ---
 
@@ -1502,6 +1579,7 @@ Returns the list of enabled authentication providers. No authentication required
 | `features.saas_footer_enabled` | bool | Whether the SaaS footer is shown (`true` when `ENABLE_SAAS_FOOTER=true`) |
 | `features.saas_termly_enabled` | bool | Whether Termly cookie consent is enabled (`true` when `ENABLE_SAAS_TERMLY=true`) |
 | `features.org_analytics_enabled` | bool | Whether org-wide analytics is enabled (`true` when `ENABLE_ORG_ANALYTICS=true`). See [Organization Analytics](#organization-analytics) for privacy implications |
+| `features.password_auth_enabled` | bool | Whether password-based authentication is enabled |
 | `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |
 
 Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.

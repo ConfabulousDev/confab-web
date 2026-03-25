@@ -1,0 +1,3 @@
+.pageWrapper { composes: pageWrapper from '../pageLayout.module.css'; }
+.mainContent { composes: mainContent from '../pageLayout.module.css'; }
+.container { composes: container from '../pageLayout.module.css'; }

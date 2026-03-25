@@ -6,6 +6,7 @@ export interface AppConfig {
   saasFooterEnabled: boolean;
   saasTermlyEnabled: boolean;
   orgAnalyticsEnabled: boolean;
+  passwordAuthEnabled: boolean;
   supportEmail: string;
 }
 
@@ -14,6 +15,7 @@ const defaultAppConfig: AppConfig = {
   saasFooterEnabled: false,
   saasTermlyEnabled: false,
   orgAnalyticsEnabled: false,
+  passwordAuthEnabled: false,
   supportEmail: '',
 };
 

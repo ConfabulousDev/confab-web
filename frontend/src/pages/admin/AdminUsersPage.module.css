@@ -1,0 +1,99 @@
+.card { composes: card from './adminShared.module.css'; }
+.empty { composes: empty from './adminShared.module.css'; }
+.createSection { composes: createSection from './adminShared.module.css'; }
+.createForm { composes: createForm from './adminShared.module.css'; }
+.input { composes: input from './adminShared.module.css'; }
+.formActions { composes: formActions from './adminShared.module.css'; }
+.tableWrapper { composes: tableWrapper from './adminShared.module.css'; }
+.table { composes: table from './adminShared.module.css'; }
+.timestamp { composes: timestamp from './adminShared.module.css'; }
+
+/* Summary cards */
+.summaryCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.summaryCard {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  text-align: center;
+}
+
+.summaryValue {
+  font-size: 1.5rem;
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.summaryLabel {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-xs);
+}
+
+.emailCell {
+  font-weight: var(--font-medium);
+}
+
+/* Status chips */
+.statusChip {
+  display: inline-block;
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  text-transform: uppercase;
+}
+
+.status_active {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.status_deactivated {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+/* Actions column */
+.actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  white-space: nowrap;
+}
+
+/* Confirm modal */
+.confirmModal {
+  padding: var(--spacing-md);
+}
+
+.confirmModal h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.confirmModal p {
+  margin: 0 0 var(--spacing-lg) 0;
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.modalActions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .summaryCards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

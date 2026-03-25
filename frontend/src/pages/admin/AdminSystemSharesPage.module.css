@@ -1,0 +1,41 @@
+.card { composes: card from './adminShared.module.css'; }
+.empty { composes: empty from './adminShared.module.css'; }
+.createSection { composes: createSection from './adminShared.module.css'; }
+.createForm { composes: createForm from './adminShared.module.css'; }
+.input { composes: input from './adminShared.module.css'; }
+.formActions { composes: formActions from './adminShared.module.css'; }
+.tableWrapper { composes: tableWrapper from './adminShared.module.css'; }
+.table { composes: table from './adminShared.module.css'; }
+.timestamp { composes: timestamp from './adminShared.module.css'; }
+
+/* Disabled message */
+.disabled {
+  text-align: center;
+  padding: var(--spacing-3xl) var(--spacing-lg);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+
+.code {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  background: var(--color-bg-secondary);
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.urlCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.urlText {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}

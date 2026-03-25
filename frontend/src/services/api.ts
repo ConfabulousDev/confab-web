@@ -17,6 +17,11 @@ import {
   OrgAnalyticsResponseSchema,
   TILListResponseSchema,
   SessionTILsResponseSchema,
+  AdminUserListResponseSchema,
+  CreateAdminUserResponseSchema,
+  StatusChangeResponseSchema,
+  AdminSystemSharesResponseSchema,
+  CreateSystemShareResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -32,6 +37,11 @@ import {
   type OrgAnalyticsResponse,
   type TILListResponse,
   type SessionTILsResponse,
+  type AdminUserListResponse,
+  type CreateAdminUserResponse,
+  type StatusChangeResponse,
+  type AdminSystemSharesResponse,
+  type CreateSystemShareResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
@@ -563,4 +573,26 @@ export const orgAnalyticsAPI = {
     const data = await response.json();
     return validateResponse(OrgAnalyticsResponseSchema, data, url);
   },
+};
+
+export const adminAPI = {
+  listUsers: (): Promise<AdminUserListResponse> =>
+    api.getValidated('/admin/users', AdminUserListResponseSchema),
+
+  createUser: (data: { email: string; password: string }): Promise<CreateAdminUserResponse> =>
+    api.postValidated('/admin/users', CreateAdminUserResponseSchema, data),
+
+  deactivateUser: (id: number): Promise<StatusChangeResponse> =>
+    api.postValidated(`/admin/users/${id}/deactivate`, StatusChangeResponseSchema),
+
+  activateUser: (id: number): Promise<StatusChangeResponse> =>
+    api.postValidated(`/admin/users/${id}/activate`, StatusChangeResponseSchema),
+
+  deleteUser: (id: number): Promise<void> => api.deleteVoid(`/admin/users/${id}`),
+
+  listSystemShares: (): Promise<AdminSystemSharesResponse> =>
+    api.getValidated('/admin/system-shares', AdminSystemSharesResponseSchema),
+
+  createSystemShare: (data: { session_id: string }): Promise<CreateSystemShareResponse> =>
+    api.postValidated('/admin/system-shares', CreateSystemShareResponseSchema, data),
 };

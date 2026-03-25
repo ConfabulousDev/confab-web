@@ -266,30 +266,8 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Get("/auth/device", withMaxBody(MaxBodyXS, auth.HandleDevicePage(s.db)))
 	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db, s.oauthConfig.AllowedEmailDomains))))
 
-	// Admin routes (require web session + super admin)
-	adminHandlers := admin.NewHandlers(s.db, s.storage, s.oauthConfig.PasswordEnabled, s.oauthConfig.AllowedEmailDomains, s.sharesEnabled)
-	r.Route("/admin", func(r chi.Router) {
-		r.Use(csrfMiddleware)
-		r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
-		r.Use(admin.Middleware(s.db))
-
-		r.Get("/users", withMaxBody(MaxBodyXS, adminHandlers.HandleListUsers))
-		r.Post("/users/{id}/deactivate", withMaxBody(MaxBodyXS, adminHandlers.HandleDeactivateUser))
-		r.Post("/users/{id}/activate", withMaxBody(MaxBodyXS, adminHandlers.HandleActivateUser))
-		r.Post("/users/{id}/delete", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteUser))
-
-		// User creation (only available if password auth is enabled)
-		if s.oauthConfig.PasswordEnabled {
-			r.Get("/users/new", withMaxBody(MaxBodyXS, adminHandlers.HandleCreateUserPage))
-			r.Post("/users/create", withMaxBody(MaxBodyS, adminHandlers.HandleCreateUser))
-		}
-
-		// System share admin page
-		r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleSystemSharePage))
-		r.Post("/system-shares", withMaxBody(MaxBodyXS, func(w http.ResponseWriter, r *http.Request) {
-			adminHandlers.HandleCreateSystemShareForm(w, r, s.frontendURL)
-		}))
-	})
+	// Admin handlers (shared across API routes)
+	adminHandlers := admin.NewHandlers(s.db, s.storage, s.frontendURL, s.oauthConfig.AllowedEmailDomains, s.sharesEnabled)
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -378,6 +356,21 @@ func (s *Server) SetupRoutes() http.Handler {
 			// TIL management (web dashboard)
 			r.Get("/tils", withMaxBody(MaxBodyXS, HandleListTILs(s.db)))
 			r.Delete("/tils/{id}", withMaxBody(MaxBodyXS, HandleDeleteTIL(s.db)))
+
+			// Admin API routes (JSON) — inherits CSRF + RequireSession from parent group
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(admin.Middleware(s.db))
+
+				r.Get("/users", withMaxBody(MaxBodyXS, adminHandlers.HandleListUsersAPI))
+				if s.oauthConfig.PasswordEnabled {
+					r.Post("/users", withMaxBody(MaxBodyS, adminHandlers.HandleCreateUserAPI))
+				}
+				r.Post("/users/{id}/deactivate", withMaxBody(MaxBodyXS, adminHandlers.HandleDeactivateUserAPI))
+				r.Post("/users/{id}/activate", withMaxBody(MaxBodyXS, adminHandlers.HandleActivateUserAPI))
+				r.Delete("/users/{id}", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteUserAPI))
+				r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleListSystemSharesAPI))
+				r.Post("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleCreateSystemShareAPI))
+			})
 		})
 
 		// Session lookup by external_id - requires auth (session cookie OR API key)

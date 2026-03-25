@@ -208,6 +208,49 @@ func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expires
 	return &share, nil
 }
 
+// ListSystemShares returns all system-wide shares (admin operation).
+// System shares are identified by having a row in session_share_system.
+func (s *Store) ListSystemShares(ctx context.Context) ([]db.SessionShare, error) {
+	ctx, span := tracer.Start(ctx, "db.list_system_shares")
+	defer span.End()
+
+	query := `
+		SELECT ss.id, ss.session_id, se.external_id,
+		       ss.expires_at, ss.created_at, ss.last_accessed_at
+		FROM session_shares ss
+		JOIN session_share_system sss ON ss.id = sss.share_id
+		JOIN sessions se ON ss.session_id = se.id
+		ORDER BY ss.created_at DESC
+	`
+
+	rows, err := s.conn().QueryContext(ctx, query)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("failed to list system shares: %w", err)
+	}
+	defer rows.Close()
+
+	shares := make([]db.SessionShare, 0)
+	for rows.Next() {
+		var share db.SessionShare
+		err := rows.Scan(&share.ID, &share.SessionID, &share.ExternalID,
+			&share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan system share: %w", err)
+		}
+		share.IsPublic = false // System shares are not public
+		shares = append(shares, share)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating system shares: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("shares.count", len(shares)))
+	return shares, nil
+}
+
 // ListShares returns all shares for a session (by UUID primary key)
 func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) ([]db.SessionShare, error) {
 	ctx, span := tracer.Start(ctx, "db.list_shares",

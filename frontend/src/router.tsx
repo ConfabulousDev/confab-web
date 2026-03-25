@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import App from './App';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAppConfig } from '@/hooks/useAppConfig';
+import { useAuth } from '@/hooks/useAuth';
 
 // Lazy load pages for code splitting
 const HomePage = lazy(() => import('@/pages/HomePage'));
@@ -13,6 +14,7 @@ const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const TrendsPage = lazy(() => import('@/pages/TrendsPage'));
 const OrgPage = lazy(() => import('@/pages/OrgPage'));
 const TILsPage = lazy(() => import('@/pages/TILsPage'));
+const AdminPage = lazy(() => import('@/pages/admin/AdminPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const PoliciesPage = lazy(() => import('@/pages/PoliciesPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -64,6 +66,15 @@ function OrgAnalyticsRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Gate admin routes — redirect non-admins to home */
+// eslint-disable-next-line react-refresh/only-export-components
+function AdminRoute({ children }: { children: ReactNode }) {
+  const { user, isAuthenticated } = useAuth();
+  if (!isAuthenticated) return null;
+  if (!user?.is_admin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 /** Wrap a page component with Suspense and optional ProtectedRoute */
 function page(component: ReactNode, isProtected = false) {
   const wrapped = isProtected ? <ProtectedRoute>{component}</ProtectedRoute> : component;
@@ -88,6 +99,7 @@ export const router = createBrowserRouter([
       { path: 'privacy', element: <Suspense fallback={null}><SaasRoute><RedirectToPrivacy /></SaasRoute></Suspense> },
       { path: 'login', element: page(<LoginPage />) },
       { path: 'policies', element: <Suspense fallback={null}><SaasRoute><PoliciesPage /></SaasRoute></Suspense> },
+      { path: 'admin/*', element: page(<AdminRoute><AdminPage /></AdminRoute>, true) },
       { path: '*', element: page(<NotFoundPage />) },
     ],
   },
