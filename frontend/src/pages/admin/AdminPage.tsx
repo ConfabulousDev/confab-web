@@ -8,6 +8,7 @@ import styles from './AdminPage.module.css';
 
 const AdminUsersPage = lazy(() => import('./AdminUsersPage'));
 const AdminSystemSharesPage = lazy(() => import('./AdminSystemSharesPage'));
+const AdminSettingsPage = lazy(() => import('./AdminSettingsPage'));
 
 const UsersIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -28,13 +29,25 @@ const SharesIcon = (
   </svg>
 );
 
+const SmartRecapIcon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
+    <line x1="10" y1="22" x2="14" y2="22" />
+  </svg>
+);
+
 function AdminPage() {
   useDocumentTitle('Admin');
   const location = useLocation();
   const navigate = useNavigate();
-  const { sharesEnabled } = useAppConfig();
+  const { sharesEnabled, smartRecapEnabled } = useAppConfig();
 
-  const currentTab = location.pathname.includes('/admin/system-shares') ? 'system-shares' : 'users';
+  let currentTab = 'users';
+  if (location.pathname.includes('/admin/system-shares')) {
+    currentTab = 'system-shares';
+  } else if (location.pathname.includes('/admin/smart-recap')) {
+    currentTab = 'smart-recap';
+  }
 
   return (
     <div className={styles.pageWrapper}>
@@ -55,6 +68,15 @@ function AdminPage() {
             collapsed={false}
           />
         )}
+        {smartRecapEnabled && (
+          <SidebarItem
+            icon={SmartRecapIcon}
+            label="Smart Recap"
+            active={currentTab === 'smart-recap'}
+            onClick={() => navigate('/admin/smart-recap')}
+            collapsed={false}
+          />
+        )}
       </PageSidebar>
 
       <div className={styles.mainContent}>
@@ -66,6 +88,7 @@ function AdminPage() {
               <Route index element={<Navigate to="users" replace />} />
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="system-shares" element={<AdminSystemSharesPage />} />
+              <Route path="smart-recap" element={<AdminSettingsPage />} />
             </Routes>
           </Suspense>
         </div>

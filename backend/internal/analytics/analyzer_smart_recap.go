@@ -86,12 +86,14 @@ type SmartRecapAnalyzer struct {
 	model              string
 	maxOutputTokens    int
 	maxTranscriptChars int
+	systemPrompt       string
 }
 
 // SmartRecapAnalyzerConfig holds tunable parameters for the analyzer.
 type SmartRecapAnalyzerConfig struct {
-	MaxOutputTokens    int // 0 means use DefaultMaxOutputTokens
-	MaxTranscriptTokens int // 0 means use DefaultMaxTranscriptTokens
+	MaxOutputTokens    int    // 0 means use DefaultMaxOutputTokens
+	MaxTranscriptTokens int   // 0 means use DefaultMaxTranscriptTokens
+	SystemPrompt       string // Fully assembled system prompt. If empty, uses the default.
 }
 
 // NewSmartRecapAnalyzer creates a new analyzer with the given Anthropic client.
@@ -104,11 +106,16 @@ func NewSmartRecapAnalyzer(client *anthropic.Client, model string, cfg SmartReca
 	if maxTranscriptTokens <= 0 {
 		maxTranscriptTokens = DefaultMaxTranscriptTokens
 	}
+	systemPrompt := cfg.SystemPrompt
+	if systemPrompt == "" {
+		systemPrompt = BuildSmartRecapSystemPrompt(nil)
+	}
 	return &SmartRecapAnalyzer{
 		client:             client,
 		model:              model,
 		maxOutputTokens:    maxOutput,
 		maxTranscriptChars: maxTranscriptTokens * 4,
+		systemPrompt:       systemPrompt,
 	}
 }
 
@@ -172,7 +179,7 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 		Model:       a.model,
 		MaxTokens:   a.maxOutputTokens,
 		Temperature: &temperature,
-		System:      smartRecapSystemPrompt,
+		System:      a.systemPrompt,
 		Messages: []anthropic.Message{
 			{Role: "user", Content: userContent},
 			// Prefill assistant response with "{" to force JSON output.
@@ -786,9 +793,10 @@ func resolveMessageIDs(result *SmartRecapResult, idMap map[int]string) {
 	}
 }
 
-const smartRecapSystemPrompt = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
-
-You are analyzing a Claude Code session. The input contains:
+// smartRecapInputFormat describes the XML transcript and session_stats input structure.
+// This is a FIXED section — it describes the actual data format produced by the system
+// and must not be modified by admins.
+const smartRecapInputFormat = `You are analyzing a Claude Code session. The input contains:
 
 1. <transcript> - The conversation in XML format:
    - Each element has a sequential integer id attribute for reference (e.g., <user id="1">, <assistant id="2">)
@@ -805,26 +813,36 @@ You are analyzing a Claude Code session. The input contains:
    - Conversation turn count and assistant utilization percentage
    - Code activity (files created/modified, lines added/removed)
    - Tool usage and error rates
-   - Agent and skill invocations
+   - Agent and skill invocations`
 
-Provide a high-signal analysis. Look for interesting patterns in both the transcript AND the stats.
-
-Output ONLY valid JSON with these fields:
+// smartRecapOutputSchema defines the JSON output field names, types, and constraints.
+// This is a FIXED section — the Go parser (parseSmartRecapResponse) depends on these
+// exact field names. Changing them would break response parsing.
+const smartRecapOutputSchema = `Output ONLY valid JSON with these fields:
 - suggested_session_title: Concise, descriptive title for this session (max 100 chars). Focus on the main task or outcome. Examples: "Add dark mode toggle to settings", "Debug OAuth login redirect loop", "Refactor API validation middleware"
 - recap: Short 2-3 sentence recap of what occurred (plain text, no message references). If stats show notable patterns (e.g., high assistant utilization showing good flow, high cache hit rate showing efficiency, many tool errors), mention them briefly.
 - went_well: Up to 3 objects of things that went well (omit or use empty array if none are clearly valid). Each item is {"text": "...", "message_id": N} where message_id is the integer id of the transcript element that best illustrates the point. Omit message_id if no specific message is relevant.
 - went_bad: Up to 3 objects of things that did not go well (same format as went_well)
 - human_suggestions: Up to 2 objects of human technique improvements (same format). Omit or use empty array if nothing stands out.
 - environment_suggestions: Up to 2 objects of environment improvements (same format). Omit or use empty array if nothing stands out.
-- default_context_suggestions: Up to 2 objects of CLAUDE.md/system context improvements (same format). These should be high-level general practices (e.g., "always run tests before committing"), NOT task-specific details (e.g., "when implementing OAuth, use PKCE flow"). Omit or use empty array if nothing stands out.
+- default_context_suggestions: Up to 2 objects of CLAUDE.md/system context improvements (same format). These should be high-level general practices (e.g., "always run tests before committing"), NOT task-specific details (e.g., "when implementing OAuth, use PKCE flow"). Omit or use empty array if nothing stands out.`
+
+// smartRecapDefaultInstructions is the default customizable section: persona, analysis
+// instructions, and guidelines. Admins can replace this via the admin_settings table.
+const smartRecapDefaultInstructions = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
+
+Provide a high-signal analysis. Look for interesting patterns in both the transcript AND the stats.
 
 Guidelines:
 - The session may still be in progress. Do not penalize workflows that appear incomplete or in-progress. Focus on what has happened so far rather than judging whether tasks were "finished."
 - Keep lists very high signal. Better to omit an item than show something low-confidence.
 - Suggestions should be concise and actionable. Don't prefix with "suggest" - they're already suggestions.
 - Focus on what would actually improve future sessions.
-- Note interesting stat patterns: high assistant utilization and cache hit rates are positive, high tool error rates suggest issues.
-- Output ONLY the JSON object, no additional text.
+- Note interesting stat patterns: high assistant utilization and cache hit rates are positive, high tool error rates suggest issues.`
+
+// smartRecapExample provides a concrete JSON output example.
+// This is a FIXED section — it reinforces the output schema and must stay in sync with it.
+const smartRecapExample = `Output ONLY the JSON object, no additional text.
 
 Example output:
 {
@@ -836,3 +854,32 @@ Example output:
   "environment_suggestions": [],
   "default_context_suggestions": [{"text": "Document preferred testing patterns in CLAUDE.md"}]
 }`
+
+// BuildSmartRecapSystemPrompt assembles the full system prompt from fixed sections
+// and the provided instructions. Three cases:
+//   - instructions is nil  → use smartRecapDefaultInstructions (no customization)
+//   - instructions is ""   → omit instructions section entirely (admin explicitly emptied it)
+//   - instructions is "X"  → use "X" as the instructions section
+func BuildSmartRecapSystemPrompt(instructions *string) string {
+	parts := []string{smartRecapInputFormat, smartRecapOutputSchema}
+	if instructions == nil {
+		parts = append(parts, smartRecapDefaultInstructions)
+	} else if *instructions != "" {
+		parts = append(parts, *instructions)
+	}
+	// empty string = no instructions section
+	parts = append(parts, smartRecapExample)
+	return strings.Join(parts, "\n\n")
+}
+
+// DefaultSmartRecapInstructions returns the default customizable instructions section.
+// Used by the admin API to show the default when no custom prompt is set.
+func DefaultSmartRecapInstructions() string {
+	return smartRecapDefaultInstructions
+}
+
+// SmartRecapFixedSections returns the fixed (non-customizable) prompt sections.
+// Used by the admin API to expose the full prompt context for reference.
+func SmartRecapFixedSections() (inputFormat, outputSchema, example string) {
+	return smartRecapInputFormat, smartRecapOutputSchema, smartRecapExample
+}

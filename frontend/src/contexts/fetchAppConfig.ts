@@ -6,6 +6,7 @@ const defaultAppConfig: AppConfig = {
   saasTermlyEnabled: false,
   orgAnalyticsEnabled: false,
   passwordAuthEnabled: false,
+  smartRecapEnabled: false,
   supportEmail: '',
 };
 
@@ -24,6 +25,7 @@ export async function fetchConfigWithRetry(): Promise<AppConfig> {
         saasTermlyEnabled: data.features?.saas_termly_enabled ?? false,
         orgAnalyticsEnabled: data.features?.org_analytics_enabled ?? false,
         passwordAuthEnabled: data.features?.password_auth_enabled ?? false,
+        smartRecapEnabled: data.features?.smart_recap_enabled ?? false,
         supportEmail: data.features?.support_email ?? '',
       };
     } catch {

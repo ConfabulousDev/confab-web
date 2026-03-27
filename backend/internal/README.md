@@ -7,7 +7,7 @@ Internal packages for the Confab backend server. All packages live under
 
 | Package | Purpose | Change this when... |
 |---------|---------|---------------------|
-| `admin` | Super-admin handlers (user management, system shares, audit) | Adding admin actions, changing admin authorization rules |
+| `admin` | Super-admin handlers (user management, system shares, settings, audit) | Adding admin actions, changing admin authorization rules, adding admin settings |
 | `analytics` | Session analytics computation, card storage, trends, search index, smart recaps | Adding analytics cards, changing cost/token calculations, modifying analyzers |
 | `anthropic` | HTTP client for the Anthropic Messages API | Changing AI model calls, updating API version |
 | `api` | HTTP handlers, routing (chi), middleware wiring, request/response helpers | Adding/changing API endpoints, adjusting rate limits, modifying middleware stack |
@@ -15,6 +15,7 @@ Internal packages for the Confab backend server. All packages live under
 | `clientip` | Middleware to extract real client IPs (Fly.io, Cloudflare, nginx) | Supporting new reverse proxy headers |
 | `db` | Database connection, shared types (`SessionListItem`, `SessionDetail`), error sentinels, helpers | Changing connection pooling, adding shared DB types |
 | `db/access` | Session access checks and share CRUD | Changing share permissions, access control rules |
+| `db/dbadminsettings` | Admin settings key-value store (`admin_settings` table) | Adding new admin-configurable settings |
 | `db/dbauth` | OAuth accounts, password hashes, web sessions, API keys, device codes | Adding auth storage, changing token/session schema |
 | `db/events` | Session event insertion (e.g., sync events) | Adding new event types |
 | `db/github` | GitHub link CRUD | Changing GitHub integration storage |
@@ -41,13 +42,14 @@ have no internal dependencies.
                   storage, db/*, models, recapquota, validation,
                   clientip, logger
 
-  admin        ─→ auth, db, db/access, db/dbauth, db/user,
-                  models, recapquota, storage, validation, logger
+  admin        ─→ analytics, auth, db, db/access, db/dbadminsettings,
+                  db/dbauth, db/user, models, recapquota, storage,
+                  validation, logger
 
   auth         ─→ db, db/dbauth, db/user, models,
                   clientip, logger, validation
 
-  analytics    ─→ storage, anthropic, recapquota
+  analytics    ─→ storage, anthropic, db/dbadminsettings, recapquota
 
   ratelimit    ─→ clientip, logger
 

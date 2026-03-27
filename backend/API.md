@@ -1525,6 +1525,116 @@ POST /api/v1/admin/system-shares
 **Response:** `{ "share_id": 1, "external_id": "ext-id", "share_url": "https://..." }`
 **Errors:** 400 (shares disabled, missing session_id), 404 (session not found)
 
+### Get Smart Recap Prompt
+```
+GET /api/v1/admin/settings/smart-recap-prompt
+```
+
+Returns the current smart recap system prompt (custom or default) along with the fixed (non-customizable) prompt sections for reference.
+
+**Response:**
+```json
+{
+  "instructions": "You are an expert software engineer...",
+  "is_custom": false,
+  "updated_at": "2024-01-15T10:30:00Z",
+  "input_format": "## Input Format\n...",
+  "output_schema": "## Output Schema\n...",
+  "example": "## Example\n..."
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `instructions` | string | The customizable instructions section (default or admin-set) |
+| `is_custom` | bool | `true` if an admin has set custom instructions |
+| `updated_at` | string? | RFC 3339 timestamp of last update (only present when `is_custom` is true) |
+| `input_format` | string | Fixed input format section (read-only) |
+| `output_schema` | string | Fixed output JSON schema section (read-only) |
+| `example` | string | Fixed example section (read-only) |
+
+### Get Smart Recap Prompt Default
+```
+GET /api/v1/admin/settings/smart-recap-prompt/default
+```
+
+Returns the hardcoded default instructions, useful for showing a "reset preview" in the UI.
+
+**Response:**
+```json
+{
+  "instructions": "You are an expert software engineer..."
+}
+```
+
+### Set Smart Recap Prompt
+```
+PUT /api/v1/admin/settings/smart-recap-prompt
+```
+
+Sets custom instructions for the smart recap system prompt. The fixed sections (input format, output schema, example) are not affected.
+
+**Request:**
+```json
+{
+  "instructions": "Custom instructions for the LLM..."
+}
+```
+
+**Response:**
+```json
+{
+  "instructions": "Custom instructions for the LLM...",
+  "is_custom": true,
+  "updated_at": "2024-01-15T10:30:00Z"
+}
+```
+
+**Errors:** 400 (invalid UTF-8, null bytes, exceeds 50,000 character limit)
+
+### Reset Smart Recap Prompt
+```
+DELETE /api/v1/admin/settings/smart-recap-prompt
+```
+
+Resets the prompt to the hardcoded default by deleting the custom setting.
+
+**Response:**
+```json
+{
+  "instructions": "You are an expert software engineer...",
+  "is_custom": false
+}
+```
+
+### Get Smart Recap Regenerate Count
+```
+GET /api/v1/admin/settings/smart-recap-prompt/regenerate-count
+```
+
+Returns the number of sessions that have existing smart recap cards (i.e., would be affected by a bulk regeneration).
+
+**Response:**
+```json
+{
+  "count": 42
+}
+```
+
+### Regenerate All Smart Recaps
+```
+POST /api/v1/admin/settings/smart-recap-prompt/regenerate-all
+```
+
+Triggers bulk regeneration of all smart recaps. Writes a timestamp to `admin_settings`; the background worker picks up cards with `computed_at` before this timestamp as stale (category 4). Admin-triggered regeneration bypasses per-user quota checks.
+
+**Response:**
+```json
+{
+  "sessions_queued": 42
+}
+```
+
 ---
 
 ## Public API Endpoints (No Auth)

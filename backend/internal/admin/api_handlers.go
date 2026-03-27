@@ -7,10 +7,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
@@ -407,3 +409,199 @@ func formatTimePtr(t *time.Time) *string {
 	s := t.Format(time.RFC3339)
 	return &s
 }
+
+// =============================================================================
+// Smart Recap Prompt Settings
+// =============================================================================
+
+const (
+	settingsKeySmartRecapPrompt = "smart_recap_system_prompt"
+	settingsKeyRegenRequestedAt = "smart_recap_regen_requested_at"
+	maxPromptLength             = 50000
+)
+
+// SmartRecapPromptResponse is the response for GET /api/v1/admin/settings/smart-recap-prompt
+type SmartRecapPromptResponse struct {
+	Instructions string  `json:"instructions"`
+	IsCustom     bool    `json:"is_custom"`
+	UpdatedAt    *string `json:"updated_at,omitempty"`
+	InputFormat  string  `json:"input_format"`
+	OutputSchema string  `json:"output_schema"`
+	Example      string  `json:"example"`
+}
+
+// SetSmartRecapPromptRequest is the request body for PUT
+type SetSmartRecapPromptRequest struct {
+	Instructions string `json:"instructions"`
+}
+
+// SetSmartRecapPromptResponse is the response for PUT
+type SetSmartRecapPromptResponse struct {
+	Instructions string `json:"instructions"`
+	IsCustom     bool   `json:"is_custom"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+// DeleteSmartRecapPromptResponse is the response for DELETE
+type DeleteSmartRecapPromptResponse struct {
+	Instructions string `json:"instructions"`
+	IsCustom     bool   `json:"is_custom"`
+}
+
+// HandleGetSmartRecapPrompt returns the current smart recap prompt settings.
+func (h *Handlers) HandleGetSmartRecapPrompt(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	setting, err := h.settingsStore.Get(ctx, settingsKeySmartRecapPrompt)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to fetch setting")
+		return
+	}
+
+	inputFormat, outputSchema, example := analytics.SmartRecapFixedSections()
+
+	resp := SmartRecapPromptResponse{
+		InputFormat:  inputFormat,
+		OutputSchema: outputSchema,
+		Example:      example,
+	}
+
+	if setting != nil {
+		resp.Instructions = setting.Value
+		resp.IsCustom = true
+		ts := setting.UpdatedAt.Format(time.RFC3339)
+		resp.UpdatedAt = &ts
+	} else {
+		resp.Instructions = analytics.DefaultSmartRecapInstructions()
+		resp.IsCustom = false
+	}
+
+	httputil.RespondJSON(w, http.StatusOK, resp)
+}
+
+// HandleGetSmartRecapPromptDefault returns the hardcoded default instructions.
+func (h *Handlers) HandleGetSmartRecapPromptDefault(w http.ResponseWriter, r *http.Request) {
+	httputil.RespondJSON(w, http.StatusOK, map[string]string{
+		"instructions": analytics.DefaultSmartRecapInstructions(),
+	})
+}
+
+// HandleSetSmartRecapPrompt sets a custom smart recap prompt.
+func (h *Handlers) HandleSetSmartRecapPrompt(w http.ResponseWriter, r *http.Request) {
+	var req SetSmartRecapPromptRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.RespondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate: valid UTF-8, no null bytes, max length
+	if !utf8.ValidString(req.Instructions) {
+		httputil.RespondError(w, http.StatusBadRequest, "Instructions must be valid UTF-8")
+		return
+	}
+	if strings.ContainsRune(req.Instructions, '\x00') {
+		httputil.RespondError(w, http.StatusBadRequest, "Instructions must not contain null bytes")
+		return
+	}
+	if len(req.Instructions) > maxPromptLength {
+		httputil.RespondError(w, http.StatusBadRequest, "Instructions exceed maximum length of 50,000 characters")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	if err := h.settingsStore.Set(ctx, settingsKeySmartRecapPrompt, req.Instructions); err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to save setting")
+		return
+	}
+
+	AuditLogFromRequest(r, h.DB, ActionSettingUpdate, map[string]interface{}{
+		"key":        settingsKeySmartRecapPrompt,
+		"char_count": len(req.Instructions),
+	})
+
+	// Re-fetch to get the updated_at timestamp
+	setting, err := h.settingsStore.Get(ctx, settingsKeySmartRecapPrompt)
+	if err != nil || setting == nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to read back setting")
+		return
+	}
+
+	httputil.RespondJSON(w, http.StatusOK, SetSmartRecapPromptResponse{
+		Instructions: setting.Value,
+		IsCustom:     true,
+		UpdatedAt:    setting.UpdatedAt.Format(time.RFC3339),
+	})
+}
+
+// HandleDeleteSmartRecapPrompt resets the prompt to the hardcoded default.
+func (h *Handlers) HandleDeleteSmartRecapPrompt(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	if err := h.settingsStore.Delete(ctx, settingsKeySmartRecapPrompt); err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to delete setting")
+		return
+	}
+
+	AuditLogFromRequest(r, h.DB, ActionSettingReset, map[string]interface{}{
+		"key": settingsKeySmartRecapPrompt,
+	})
+
+	httputil.RespondJSON(w, http.StatusOK, DeleteSmartRecapPromptResponse{
+		Instructions: analytics.DefaultSmartRecapInstructions(),
+		IsCustom:     false,
+	})
+}
+
+// HandleGetSmartRecapRegenerateCount returns the number of sessions with smart recap cards.
+func (h *Handlers) HandleGetSmartRecapRegenerateCount(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	count, err := h.countSmartRecapCards(ctx)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to count smart recap cards")
+		return
+	}
+
+	httputil.RespondJSON(w, http.StatusOK, map[string]int{"count": count})
+}
+
+// HandleRegenerateAllSmartRecaps triggers bulk regeneration of all smart recaps.
+// This writes a timestamp to admin_settings; the worker picks up stale cards.
+func (h *Handlers) HandleRegenerateAllSmartRecaps(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	count, err := h.countSmartRecapCards(ctx)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to count smart recap cards")
+		return
+	}
+
+	// Write the regeneration timestamp. The worker's staleness query treats
+	// cards with computed_at < this timestamp as stale (category 4).
+	if err := h.settingsStore.Set(ctx, settingsKeyRegenRequestedAt, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to trigger regeneration")
+		return
+	}
+
+	AuditLogFromRequest(r, h.DB, ActionSmartRecapRegenerateAll, map[string]interface{}{
+		"sessions_queued": count,
+	})
+
+	httputil.RespondJSON(w, http.StatusOK, map[string]int{"sessions_queued": count})
+}
+
+// countSmartRecapCards returns the number of sessions with smart recap cards.
+func (h *Handlers) countSmartRecapCards(ctx context.Context) (int, error) {
+	var count int
+	err := h.DB.Conn().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM session_card_smart_recap`,
+	).Scan(&count)
+	return count, err
+}
+

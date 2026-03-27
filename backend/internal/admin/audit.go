@@ -19,6 +19,10 @@ const (
 	ActionUserActivate      AdminAction = "user.activate"
 	ActionUserDelete        AdminAction = "user.delete"
 	ActionSystemShareCreate AdminAction = "system_share.create"
+
+	ActionSettingUpdate           AdminAction = "setting.update"
+	ActionSettingReset            AdminAction = "setting.reset"
+	ActionSmartRecapRegenerateAll AdminAction = "smart_recap.regenerate_all"
 )
 
 // AuditLog logs an admin action with full context for security audit trail.

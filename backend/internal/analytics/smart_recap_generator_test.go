@@ -89,7 +89,7 @@ func setupGeneratorTest(t *testing.T, email, externalID string) *generatorTestFi
 	conn := env.DB.Conn()
 	store := analytics.NewStore(conn)
 
-	generator := analytics.NewSmartRecapGenerator(store, conn, analytics.SmartRecapGeneratorConfig{
+	generator := analytics.NewSmartRecapGenerator(store, env.DB, analytics.SmartRecapGeneratorConfig{
 		APIKey:            "test-key",
 		Model:             "test-model",
 		GenerationTimeout: 10 * time.Second,
@@ -117,7 +117,7 @@ func (f *generatorTestFixture) generateWithDefaults(t *testing.T) *analytics.Gen
 		LineCount:      1,
 		FileCollection: fc,
 	}
-	return f.generator.Generate(context.Background(), input, 60)
+	return f.generator.Generate(context.Background(), input, 60, false)
 }
 
 // requireSuccessfulGeneration asserts that the result has no error, returns a card,

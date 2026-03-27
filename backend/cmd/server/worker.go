@@ -93,7 +93,7 @@ func runWorker() {
 
 	// Create analytics store and precomputer
 	analyticsStore := analytics.NewStore(database.Conn())
-	precomputer := analytics.NewPrecomputer(database.Conn(), store, analyticsStore, precomputeConfig)
+	precomputer := analytics.NewPrecomputer(database.Conn(), store, analyticsStore, precomputeConfig, database)
 
 	// Create and run worker
 	worker := &Worker{

@@ -541,3 +541,117 @@ func TestAnnotatedItem_UnmarshalJSON_BoolMessageID(t *testing.T) {
 		t.Errorf("MessageID = %q, want empty (bool should be cleared)", item.MessageID)
 	}
 }
+
+// =============================================================================
+// BuildSmartRecapSystemPrompt tests
+// =============================================================================
+
+func ptr(s string) *string { return &s }
+
+func TestBuildSmartRecapSystemPrompt_NilUsesDefault(t *testing.T) {
+	prompt := BuildSmartRecapSystemPrompt(nil)
+
+	// Should contain the default instructions
+	defaultInstructions := DefaultSmartRecapInstructions()
+	if !strings.Contains(prompt, defaultInstructions) {
+		t.Error("expected prompt to contain default instructions when instructions is nil")
+	}
+
+	// Should also contain fixed sections
+	inputFormat, outputSchema, example := SmartRecapFixedSections()
+	if !strings.Contains(prompt, inputFormat) {
+		t.Error("expected prompt to contain input format")
+	}
+	if !strings.Contains(prompt, outputSchema) {
+		t.Error("expected prompt to contain output schema")
+	}
+	if !strings.Contains(prompt, example) {
+		t.Error("expected prompt to contain example")
+	}
+}
+
+func TestBuildSmartRecapSystemPrompt_EmptyStringOmitsInstructions(t *testing.T) {
+	prompt := BuildSmartRecapSystemPrompt(ptr(""))
+
+	// Should NOT contain default instructions
+	defaultInstructions := DefaultSmartRecapInstructions()
+	if strings.Contains(prompt, defaultInstructions) {
+		t.Error("expected prompt to NOT contain default instructions when instructions is empty string")
+	}
+
+	// Should still contain the fixed sections
+	inputFormat, outputSchema, example := SmartRecapFixedSections()
+	if !strings.Contains(prompt, inputFormat) {
+		t.Error("expected prompt to contain input format")
+	}
+	if !strings.Contains(prompt, outputSchema) {
+		t.Error("expected prompt to contain output schema")
+	}
+	if !strings.Contains(prompt, example) {
+		t.Error("expected prompt to contain example")
+	}
+}
+
+func TestBuildSmartRecapSystemPrompt_CustomInstructions(t *testing.T) {
+	custom := "You are a pirate analyst. Analyze sessions with nautical metaphors."
+	prompt := BuildSmartRecapSystemPrompt(ptr(custom))
+
+	// Should contain custom instructions
+	if !strings.Contains(prompt, custom) {
+		t.Error("expected prompt to contain custom instructions")
+	}
+
+	// Should NOT contain default instructions
+	defaultInstructions := DefaultSmartRecapInstructions()
+	if strings.Contains(prompt, defaultInstructions) {
+		t.Error("expected prompt to NOT contain default instructions when custom is provided")
+	}
+
+	// Should still contain fixed sections
+	inputFormat, outputSchema, example := SmartRecapFixedSections()
+	if !strings.Contains(prompt, inputFormat) {
+		t.Error("expected prompt to contain input format")
+	}
+	if !strings.Contains(prompt, outputSchema) {
+		t.Error("expected prompt to contain output schema")
+	}
+	if !strings.Contains(prompt, example) {
+		t.Error("expected prompt to contain example")
+	}
+}
+
+func TestDefaultSmartRecapInstructions_NonEmpty(t *testing.T) {
+	instructions := DefaultSmartRecapInstructions()
+	if instructions == "" {
+		t.Error("DefaultSmartRecapInstructions() should return a non-empty string")
+	}
+	// Should contain some recognizable content from the default instructions
+	if !strings.Contains(instructions, "software engineer") {
+		t.Error("expected default instructions to mention 'software engineer'")
+	}
+}
+
+func TestSmartRecapFixedSections_AllNonEmpty(t *testing.T) {
+	inputFormat, outputSchema, example := SmartRecapFixedSections()
+
+	if inputFormat == "" {
+		t.Error("inputFormat should be non-empty")
+	}
+	if outputSchema == "" {
+		t.Error("outputSchema should be non-empty")
+	}
+	if example == "" {
+		t.Error("example should be non-empty")
+	}
+
+	// Verify each section contains expected content
+	if !strings.Contains(inputFormat, "transcript") {
+		t.Error("inputFormat should mention 'transcript'")
+	}
+	if !strings.Contains(outputSchema, "suggested_session_title") {
+		t.Error("outputSchema should mention 'suggested_session_title'")
+	}
+	if !strings.Contains(example, "JSON") {
+		t.Error("example should mention 'JSON'")
+	}
+}

@@ -18,8 +18,8 @@ Session analytics engine: parses Claude Code transcripts and computes, caches, a
 | `analyzer_agents.go` | `AgentsAnalyzer` -- Task tool invocations grouped by `subagent_type`. Main-only. |
 | `analyzer_skills.go` | `SkillsAnalyzer` -- Skill tool invocations plus command-expansion (`<command-name>`) detection. Main-only. |
 | `analyzer_redactions.go` | `RedactionsAnalyzer` -- counts `[REDACTED:TYPE]` markers by recursively walking `RawData`. Processes all files. |
-| `analyzer_smart_recap.go` | `SmartRecapAnalyzer` -- calls Anthropic LLM to generate session recaps. Handles transcript preparation (`PrepareTranscript`, `TranscriptBuilder`), stats formatting, response parsing, and message-ID resolution. Contains the system prompt. |
-| `smart_recap_generator.go` | `SmartRecapGenerator` -- full lifecycle for smart recap: lock acquisition, LLM call, quota increment, card persistence, and suggested-title update. Used by both the precomputer and the on-demand API handler. |
+| `analyzer_smart_recap.go` | `SmartRecapAnalyzer` -- calls Anthropic LLM to generate session recaps. Handles transcript preparation (`PrepareTranscript`, `TranscriptBuilder`), stats formatting, response parsing, and message-ID resolution. Contains the system prompt sections and `BuildSmartRecapSystemPrompt` assembly function. |
+| `smart_recap_generator.go` | `SmartRecapGenerator` -- full lifecycle for smart recap: lock acquisition, LLM call, quota increment, card persistence, and suggested-title update. Resolves custom system prompt from `dbadminsettings` at generation time. Used by both the precomputer and the on-demand API handler. |
 | `agent_provider.go` | `AgentFileInfo`, `AgentDownloader`, and `NewAgentProvider()` -- streams agent files from storage one at a time, capping at `maxAgents` (0 = unlimited). |
 | `cards.go` | Card record types (DB schema), card data types (API response), version constants, `IsValid`/`AllValid` staleness helpers. |
 | `models.go` | `AnalyticsResponse` (API envelope), legacy flat types (`TokenStats`, `CostStats`, `CompactionInfo`). |
@@ -69,7 +69,7 @@ Each analyzer has its own result struct (`TokensResult`, `SessionResult`, `Tools
 `Precomputer` ties together storage, the analytics store, and configuration. It exposes three independent staleness-detection queries and their corresponding compute functions:
 
 1. `FindStaleSessions` / `PrecomputeRegularCards` -- the seven deterministic cards
-2. `FindStaleSmartRecapSessions` / `PrecomputeSmartRecapOnly` -- LLM-generated recap
+2. `FindStaleSmartRecapSessions` / `PrecomputeSmartRecapOnly` -- LLM-generated recap (four staleness categories: missing, version mismatch, threshold-based, and admin-triggered regeneration)
 3. `FindStaleSearchIndexSessions` / `BuildSearchIndexOnly` -- full-text search tsvector
 
 ### Store
@@ -106,7 +106,7 @@ If you need a new computation that feeds into an existing card (or is used only 
 
 A card is **valid** when `Version == current constant` AND `UpToLine == session's current total line count`. The `IsValid` method on each record type encodes this. `Cards.AllValid` checks all seven regular cards.
 
-Smart recap uses different staleness rules: `HasValidVersion()` checks only the version (time-based invalidation), while `IsUpToDate()` checks version and `UpToLine >= currentLineCount` (used by the precomputer).
+Smart recap uses different staleness rules: `HasValidVersion()` checks only the version (time-based invalidation), while `IsUpToDate()` checks version and `UpToLine >= currentLineCount` (used by the precomputer). A fourth staleness category (admin-triggered regeneration) marks cards as stale when `computed_at < regen_requested_at` from the `admin_settings` table; this is indicated by a non-nil `RegenRequestedAt` field on `StaleSession`.
 
 ### Version Bumping
 
@@ -130,7 +130,16 @@ The smart recap uses an optimistic lock (`computing_started_at` column) to preve
 
 ### Quota Enforcement
 
-Smart recap quota is incremented BEFORE the card is saved. If quota tracking fails, the recap is discarded. This ensures usage is never under-counted.
+Smart recap quota is incremented BEFORE the card is saved. If quota tracking fails, the recap is discarded. This ensures usage is never under-counted. Admin-triggered bulk regeneration (category 4 staleness, indicated by `StaleSession.RegenRequestedAt != nil`) bypasses quota checks entirely.
+
+### Customizable System Prompt
+
+The smart recap system prompt is composed of four sections: input format, output schema, instructions, and example. The instructions section is customizable by admins via the `admin_settings` table (key: `smart_recap_system_prompt`). The other three sections are fixed in code. `BuildSmartRecapSystemPrompt(instructions *string)` assembles the full prompt:
+- `nil` instructions: use the hardcoded default (`DefaultSmartRecapInstructions()`)
+- Empty string: omit the instructions section entirely
+- Non-empty string: use the custom instructions
+
+`SmartRecapFixedSections()` returns the three fixed sections (input format, output schema, example) for the admin API to display as read-only context.
 
 ## Design Decisions
 
@@ -190,6 +199,7 @@ Key test patterns:
 | `go.opentelemetry.io/otel` | Distributed tracing spans on all Store and compute operations |
 | `github.com/lib/pq` | PostgreSQL array parameters in trends queries |
 | `github.com/ConfabulousDev/confab-web/internal/anthropic` | LLM client for smart recap generation |
+| `github.com/ConfabulousDev/confab-web/internal/db/dbadminsettings` | Custom smart recap prompt retrieval |
 | `github.com/ConfabulousDev/confab-web/internal/recapquota` | Monthly smart recap quota tracking |
 | `github.com/ConfabulousDev/confab-web/internal/storage` | `DownloadAndMergeChunks` for transcript/agent file retrieval; `MaxAgentFiles` cap |
 
@@ -200,4 +210,5 @@ Key test patterns:
 | `internal/api/analytics.go` | HTTP handler for session analytics (GET cards, trigger on-demand compute) |
 | `internal/api/trends.go` | HTTP handler for the trends dashboard |
 | `internal/api/org_analytics.go` | HTTP handler for admin org analytics |
+| `internal/admin/api_handlers.go` | Smart recap prompt settings endpoints (reads `DefaultSmartRecapInstructions`, `SmartRecapFixedSections`) |
 | `cmd/server/worker.go` | Background worker that polls `FindStaleSessions` / `FindStaleSmartRecapSessions` / `FindStaleSearchIndexSessions` and calls the corresponding precompute functions |
