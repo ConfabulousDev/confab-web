@@ -1,6 +1,9 @@
 /* Smart Recap Settings Page */
 
-.card { composes: card from './adminShared.module.css'; }
+.card {
+  composes: card from './adminShared.module.css';
+  padding: var(--spacing-lg);
+}
 .empty { composes: empty from './adminShared.module.css'; }
 
 /* Header row: title + status chip on left, metadata on right */
@@ -167,6 +170,7 @@
 /* Bulk operations card */
 .bulkCard {
   composes: card from './adminShared.module.css';
+  padding: var(--spacing-lg);
   margin-top: var(--spacing-lg);
 }
 
