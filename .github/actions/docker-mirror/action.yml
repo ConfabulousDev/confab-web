@@ -1,0 +1,18 @@
+name: Configure Docker Hub mirror
+description: >
+  Configures the Docker daemon to use mirror.gcr.io as a pull-through cache
+  for Docker Hub images. Reduces Docker Hub rate limit pressure in CI.
+  Docker falls back to Docker Hub automatically if the mirror is unavailable.
+
+runs:
+  using: composite
+  steps:
+    - name: Set registry mirror
+      shell: bash
+      run: |
+        # Configure mirror.gcr.io as a Docker Hub pull-through cache.
+        # The daemon tries the mirror first and falls back to Docker Hub on failure.
+        sudo mkdir -p /etc/docker
+        echo '{"registry-mirrors": ["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json > /dev/null
+        sudo systemctl restart docker
+        echo "Docker daemon configured with mirror.gcr.io"
