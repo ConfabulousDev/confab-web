@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -615,9 +614,8 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Get authenticated user (RequireSession middleware ensures this exists)
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Authentication required")
 			return
 		}
 

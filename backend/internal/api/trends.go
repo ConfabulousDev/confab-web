@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
@@ -86,9 +85,8 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Authentication required")
 			return
 		}
 

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	dbtil "github.com/ConfabulousDev/confab-web/internal/db/til"
@@ -43,9 +42,8 @@ func HandleCreateTIL(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -123,9 +121,8 @@ func HandleListTILs(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -224,9 +221,8 @@ func HandleDeleteTIL(database *db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 

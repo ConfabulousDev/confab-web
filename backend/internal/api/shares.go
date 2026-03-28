@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
@@ -58,9 +57,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -232,9 +230,8 @@ func HandleListShares(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -280,9 +277,8 @@ func HandleRevokeShare(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -325,9 +321,8 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 

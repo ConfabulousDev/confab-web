@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/ConfabulousDev/confab-web/internal/admin"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -23,9 +22,8 @@ type meResponse struct {
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	log := logger.Ctx(r.Context())
 
-	userID, ok := auth.GetUserID(r.Context())
+	userID, ok := requireUserID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
 

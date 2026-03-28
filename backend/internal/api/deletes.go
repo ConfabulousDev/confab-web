@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -21,9 +20,8 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		log := logger.Ctx(r.Context())
 
 		// Get authenticated user ID
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "User not authenticated")
 			return
 		}
 

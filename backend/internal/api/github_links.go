@@ -78,9 +78,8 @@ func HandleCreateGitHubLink(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -245,9 +244,8 @@ func HandleDeleteGitHubLink(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context (web auth only, no API key)
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 

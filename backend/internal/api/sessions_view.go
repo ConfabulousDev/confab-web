@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -42,9 +41,8 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context (set by SessionMiddleware)
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -123,9 +121,8 @@ func HandleLookupSessionByExternalID(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context (set by SessionOrAPIKeyMiddleware)
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -170,9 +167,8 @@ func HandleUpdateSessionTitle(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 

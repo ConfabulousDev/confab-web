@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbevents "github.com/ConfabulousDev/confab-web/internal/db/events"
 	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
@@ -113,9 +112,8 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	log := logger.Ctx(r.Context())
 
 	// Get authenticated user
-	userID, ok := auth.GetUserID(r.Context())
+	userID, ok := requireUserID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
@@ -222,9 +220,8 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	log := logger.Ctx(r.Context())
 
 	// Get authenticated user
-	userID, ok := auth.GetUserID(r.Context())
+	userID, ok := requireUserID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
@@ -488,9 +485,8 @@ func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
 	log := logger.Ctx(r.Context())
 
 	// Get authenticated user
-	userID, ok := auth.GetUserID(r.Context())
+	userID, ok := requireUserID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
@@ -877,9 +873,8 @@ func (s *Server) handleUpdateSessionSummary(w http.ResponseWriter, r *http.Reque
 	log := logger.Ctx(r.Context())
 
 	// Get authenticated user
-	userID, ok := auth.GetUserID(r.Context())
+	userID, ok := requireUserID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 

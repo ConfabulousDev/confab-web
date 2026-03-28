@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	dbtil "github.com/ConfabulousDev/confab-web/internal/db/til"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
@@ -46,9 +46,8 @@ type ExportTILsResponse struct {
 func (s *Server) handleExportTILs(w http.ResponseWriter, r *http.Request) {
 	log := logger.Ctx(r.Context())
 
-	userID, ok := auth.GetUserID(r.Context())
+	userID, ok := requireUserID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -110,7 +109,7 @@ func (s *Server) handleExportTILs(w http.ResponseWriter, r *http.Request) {
 		sessionURL := s.frontendURL + "/sessions/" + t.SessionID
 		deepLink := sessionURL
 		if t.MessageUUID != nil && *t.MessageUUID != "" {
-			deepLink = sessionURL + "?msg=" + *t.MessageUUID
+			deepLink = sessionURL + "?msg=" + url.QueryEscape(*t.MessageUUID)
 		}
 
 		exportTILs[i] = ExportTIL{

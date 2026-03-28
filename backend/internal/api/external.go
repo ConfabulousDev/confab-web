@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -74,9 +73,8 @@ func (s *Server) handleCondensedTranscriptByExternalID(w http.ResponseWriter, r 
 		return
 	}
 
-	userID, ok := auth.GetUserID(r.Context())
+	userID, ok := requireUserID(w, r)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 

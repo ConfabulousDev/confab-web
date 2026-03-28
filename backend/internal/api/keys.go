@@ -37,9 +37,8 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context (set by SessionMiddleware)
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -108,9 +107,8 @@ func HandleListAPIKeys(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -146,9 +144,8 @@ func HandleDeleteAPIKey(database *db.DB) http.HandlerFunc {
 		log := logger.Ctx(r.Context())
 
 		// Get user ID from context
-		userID, ok := auth.GetUserID(r.Context())
+		userID, ok := requireUserID(w, r)
 		if !ok {
-			respondError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 

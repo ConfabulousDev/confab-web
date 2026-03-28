@@ -730,6 +730,16 @@ func respondStorageError(w http.ResponseWriter, err error, defaultMsg string) {
 	respondError(w, http.StatusInternalServerError, defaultMsg)
 }
 
+// requireUserID extracts the authenticated user ID from the request context.
+// If the user is not authenticated, it writes a 401 response and returns false.
+func requireUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "Unauthorized")
+	}
+	return userID, ok
+}
+
 // securityHeadersMiddleware creates middleware that adds appropriate security headers
 func securityHeadersMiddleware() func(http.Handler) http.Handler {
 	staticDir := os.Getenv("STATIC_FILES_DIR")

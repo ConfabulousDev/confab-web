@@ -39,13 +39,17 @@ func cookieSecure() bool {
 	return os.Getenv("INSECURE_DEV_MODE") != "true"
 }
 
-// clearCookie clears a cookie by setting it with an empty value and MaxAge -1
+// clearCookie clears a cookie by setting it with an empty value and MaxAge -1.
+// Includes HttpOnly, Secure, and SameSite flags for defense-in-depth.
 func clearCookie(w http.ResponseWriter, name string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:   name,
-		Value:  "",
-		Path:   "/",
-		MaxAge: -1,
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   cookieSecure(),
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 
