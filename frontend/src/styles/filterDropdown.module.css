@@ -1,0 +1,100 @@
+/* Shared base styles for page-level filter dropdowns (OrgFilters, TrendsFilters) */
+
+.container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.filterWrapper {
+  position: relative;
+}
+
+.filterBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  transition: all var(--transition-base);
+}
+
+.filterBtn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.filterBtn svg {
+  width: var(--spacing-lg);
+  height: var(--spacing-lg);
+}
+
+.filterLabel {
+  font-weight: var(--font-medium);
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + var(--spacing-xs));
+  right: 0;
+  z-index: var(--z-dropdown);
+  min-width: 240px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.dropdownContent {
+  padding: var(--spacing-sm) 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.section {
+  padding: 0 var(--spacing-xs);
+}
+
+.filterItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--transition-base);
+}
+
+.filterItem:hover {
+  background: var(--color-bg-hover);
+}
+
+/* Applied alongside .filterItem to indicate the active selection */
+.selected {
+  background: var(--color-bg-hover);
+  color: var(--color-accent);
+}
+
+.itemLabel {
+  flex: 1;
+}
+
+.checkIcon {
+  color: var(--color-accent);
+}
+
+.checkIcon svg {
+  width: 14px;
+  height: 14px;
+}

@@ -18,7 +18,7 @@ with Storybook.
 | `pages/` | Route-level page components (SessionsPage, TrendsPage, LoginPage, etc.) | Adding new pages/routes, changing page layout |
 | `schemas/` | Zod schemas for API response validation and transcript parsing | Changing API contracts, adding new response types |
 | `services/` | API client (fetch wrapper + Zod validation), transcript/message parsing | Changing API calls, adding new endpoints |
-| `styles/` | CSS variables for theme support (light/dark) | Changing theme colors, adding design tokens |
+| `styles/` | CSS variables for theme support (light/dark), shared CSS module base styles | Changing theme colors, adding design tokens, extracting shared component styles |
 | `test/` | Test setup (Vitest configuration) | Changing test infrastructure |
 | `types/` | Shared TypeScript type definitions | Adding cross-module types |
 | `utils/` | Pure utility functions: formatting, date ranges, token stats, sorting | Adding helper functions, changing display formatting |
