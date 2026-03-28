@@ -580,7 +580,7 @@ export type SessionTILsResponse = z.infer<typeof SessionTILsResponseSchema>;
 // Admin Schemas
 // ============================================================================
 
-export const AdminUserSchema = z.object({
+const AdminUserSchema = z.object({
   id: z.number(),
   email: z.string(),
   name: z.string().nullable(),
@@ -592,16 +592,12 @@ export const AdminUserSchema = z.object({
   last_logged_in: z.string().nullable(),
   created_at: z.string(),
 });
-export type AdminUser = z.infer<typeof AdminUserSchema>;
-
-export const AdminTotalsSchema = z.object({
+const AdminTotalsSchema = z.object({
   total_sessions: z.number(),
   non_empty_sessions: z.number(),
   sessions_with_cache: z.number(),
   computations_this_month: z.number(),
 });
-export type AdminTotals = z.infer<typeof AdminTotalsSchema>;
-
 export const AdminUserListResponseSchema = z.object({
   users: z.array(AdminUserSchema),
   totals: AdminTotalsSchema,
@@ -620,7 +616,7 @@ export const StatusChangeResponseSchema = z.object({
 });
 export type StatusChangeResponse = z.infer<typeof StatusChangeResponseSchema>;
 
-export const AdminSystemShareSchema = z.object({
+const AdminSystemShareSchema = z.object({
   id: z.number(),
   session_id: z.string(),
   external_id: z.string(),
@@ -629,8 +625,6 @@ export const AdminSystemShareSchema = z.object({
   created_at: z.string(),
   last_accessed_at: z.string().nullable(),
 });
-export type AdminSystemShare = z.infer<typeof AdminSystemShareSchema>;
-
 export const AdminSystemSharesResponseSchema = z.object({
   shares: z.array(AdminSystemShareSchema),
 });

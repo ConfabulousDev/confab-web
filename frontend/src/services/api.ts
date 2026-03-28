@@ -57,7 +57,7 @@ import {
 } from '@/schemas/api';
 
 // Re-export types for consumers
-export type { GitHubLink, SessionAnalytics, TIL, TILWithSession, TILListResponse, SessionTILsResponse } from '@/schemas/api';
+export type { GitHubLink, SessionAnalytics, TIL } from '@/schemas/api';
 
 /**
  * Handles authentication failures by redirecting to home.

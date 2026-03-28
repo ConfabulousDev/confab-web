@@ -45,7 +45,7 @@ function shouldReplace(opts?: SetFilterOptions): boolean {
   return opts?.replace ?? false;
 }
 
-export interface URLFiltersResult<T> {
+interface URLFiltersResult<T> {
   filters: T;
   setFilter: <K extends keyof T & string>(key: K, value: T[K], opts?: SetFilterOptions) => void;
   setAll: (updates: Partial<T>, opts?: SetFilterOptions) => void;
