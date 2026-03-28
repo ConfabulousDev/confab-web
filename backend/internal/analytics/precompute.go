@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,6 +24,10 @@ type StaleSession struct {
 	UserID     int64
 	ExternalID string
 	TotalLines int64
+	// RegenRequestedAt is non-nil when this session was surfaced due to an
+	// admin-triggered bulk regeneration (staleness category 4). When set,
+	// the precomputer bypasses quota checks and does not increment quota.
+	RegenRequestedAt *time.Time
 }
 
 // StalenessThresholds holds configuration for determining when a session is stale enough
@@ -90,19 +95,26 @@ type Precomputer struct {
 }
 
 // NewPrecomputer creates a new Precomputer.
-func NewPrecomputer(db *sql.DB, store *storage.S3Storage, analyticsStore *Store, config PrecomputeConfig) *Precomputer {
+// The database parameter is optional; if provided, it enables custom prompt
+// lookups in the smart recap generator. Pass nil in tests that don't need this.
+func NewPrecomputer(rawDB *sql.DB, store *storage.S3Storage, analyticsStore *Store, config PrecomputeConfig, database ...*db.DB) *Precomputer {
 	p := &Precomputer{
-		db:             db,
+		db:             rawDB,
 		store:          store,
 		analyticsStore: analyticsStore,
 		config:         config,
 	}
 
-	// Create the shared smart recap generator if enabled
-	if config.SmartRecapEnabled {
+	// Create the shared smart recap generator if enabled.
+	// Requires the wrapped *db.DB for admin_settings lookups in the generator.
+	var wrappedDB *db.DB
+	if len(database) > 0 {
+		wrappedDB = database[0]
+	}
+	if config.SmartRecapEnabled && wrappedDB != nil {
 		p.smartRecapGenerator = NewSmartRecapGenerator(
 			analyticsStore,
-			db,
+			wrappedDB,
 			SmartRecapGeneratorConfig{
 				APIKey:              config.AnthropicAPIKey,
 				Model:               config.SmartRecapModel,
@@ -432,6 +444,11 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
 	defer span.End()
 
+	isAdminRegen := session.RegenRequestedAt != nil
+	if isAdminRegen {
+		span.SetAttributes(attribute.Bool("admin_regen", true))
+	}
+
 	// Get current smart recap card to check if up-to-date
 	smartCard, err := p.analyticsStore.GetSmartRecapCard(ctx, session.SessionID)
 	if err != nil {
@@ -440,27 +457,34 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		return err
 	}
 
-	// Check if we need to regenerate - skip if card is up-to-date
+	// Check if we need to regenerate - skip if card is up-to-date.
+	// For admin-triggered regeneration (category 4), also check computed_at < regen_requested_at
+	// since the card may be "up to date" by version+lines but stale by admin request.
 	if smartCard.IsUpToDate(session.TotalLines) {
-		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "up_to_date"))
-		return nil
+		if !isAdminRegen || !smartCard.ComputedAt.Before(*session.RegenRequestedAt) {
+			span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "up_to_date"))
+			return nil
+		}
 	}
 
-	// Ensure quota record exists and check limit (creates row if missing so
-	// the later Increment call in the generator never fails on a missing row).
-	quota, err := recapquota.GetOrCreate(ctx, p.db, session.UserID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	if p.config.SmartRecapQuota > 0 && quota.ComputeCount >= p.config.SmartRecapQuota {
-		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "quota_exceeded"))
-		return ErrQuotaExceeded
+	// Quota check: admin-triggered regeneration bypasses quota entirely.
+	if !isAdminRegen {
+		// Ensure quota record exists and check limit (creates row if missing so
+		// the later Increment call in the generator never fails on a missing row).
+		quota, err := recapquota.GetOrCreate(ctx, p.db, session.UserID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		if p.config.SmartRecapQuota > 0 && quota.ComputeCount >= p.config.SmartRecapQuota {
+			span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "quota_exceeded"))
+			return ErrQuotaExceeded
+		}
 	}
 
 	// Use the shared generator for the actual generation (handles lock, LLM call, save, quota increment)
-	result := p.smartRecapGenerator.Generate(ctx, input, p.config.LockTimeoutSeconds)
+	result := p.smartRecapGenerator.Generate(ctx, input, p.config.LockTimeoutSeconds, isAdminRegen)
 
 	if result.Skipped {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "lock_held"))
@@ -505,6 +529,8 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	//    - Missing with enough content OR old enough session
 	//    - Version mismatch
 	//    - Line gap or time gap meets threshold
+	//    - Admin-triggered regeneration (computed_at < regen_requested_at) [category 4]
+	// Category 4 (admin regen) bypasses quota checks — the admin explicitly requested it.
 	query := `
 		WITH session_lines AS (
 			SELECT session_id, SUM(last_synced_line) as total_lines
@@ -512,6 +538,14 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			WHERE file_type IN ('transcript', 'agent')
 			GROUP BY session_id
 			HAVING SUM(last_synced_line) > 0
+		),
+		regen_ts AS (
+			-- Read admin-triggered regeneration timestamp from admin_settings.
+			-- When an admin clicks "Regenerate All", this row is upserted with NOW().
+			-- Cards with computed_at < this timestamp are treated as stale (category 4).
+			SELECT value::timestamptz AS requested_at
+			FROM admin_settings
+			WHERE key = 'smart_recap_regen_requested_at'
 		),
 		recap_status AS (
 			SELECT
@@ -526,6 +560,10 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 				CASE WHEN sr.session_id IS NOT NULL AND sr.version != $8 THEN TRUE ELSE FALSE END AS has_version_mismatch,
 				COALESCE(sr.up_to_line, 0) AS up_to_line,
 				sr.computed_at,
+				-- Admin regen: card exists and was computed before the regen request
+				CASE WHEN sr.session_id IS NOT NULL AND rt.requested_at IS NOT NULL
+					AND sr.computed_at < rt.requested_at THEN TRUE ELSE FALSE END AS needs_admin_regen,
+				rt.requested_at AS regen_requested_at,
 				-- Calculate line gap
 				sl.total_lines - COALESCE(sr.up_to_line, 0) AS line_gap,
 				-- Calculate time gap in seconds (only if card exists)
@@ -542,10 +580,12 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 				EXTRACT(EPOCH FROM (NOW() - s.first_seen)) AS session_age_secs,
 				-- Line threshold = MAX(base_min_lines, up_to_line * pct)
 				GREATEST($9::bigint, (COALESCE(sr.up_to_line, 0)::float8 * $10::float8)::bigint) AS line_threshold,
-				-- Staleness category for ordering (1=new, 2=version mismatch, 3=threshold met)
+				-- Staleness category for ordering (1=new, 2=version mismatch, 3=threshold met, 4=admin regen)
 				CASE
 					WHEN sr.session_id IS NULL THEN 1
 					WHEN sr.version != $8 THEN 2
+					WHEN sr.session_id IS NOT NULL AND rt.requested_at IS NOT NULL
+						AND sr.computed_at < rt.requested_at THEN 4
 					ELSE 3
 				END AS staleness_category
 			FROM session_lines sl
@@ -568,10 +608,19 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			LEFT JOIN session_card_smart_recap sr ON sl.session_id = sr.session_id
 			LEFT JOIN smart_recap_quota sq ON s.user_id = sq.user_id
 				AND sq.quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
+			LEFT JOIN regen_ts rt ON TRUE
 			WHERE s.session_type = 'Claude Code'
-				AND ($15::int = 0 OR COALESCE(sq.compute_count, 0) < $15::int)
+				-- Quota check: skip for category 4 (admin regen bypasses quota).
+				-- A session qualifies if: no quota limit, under quota, OR admin-regen triggered.
+				AND (
+					$15::int = 0
+					OR COALESCE(sq.compute_count, 0) < $15::int
+					OR (sr.session_id IS NOT NULL AND rt.requested_at IS NOT NULL
+						AND sr.computed_at < rt.requested_at)
+				)
 		)
-		SELECT session_id, user_id, external_id, total_lines
+		SELECT session_id, user_id, external_id, total_lines,
+			CASE WHEN needs_admin_regen THEN regen_requested_at ELSE NULL END AS regen_requested_at
 		FROM recap_status
 		WHERE
 			-- Case 1: Missing smart recap with enough content OR old enough
@@ -588,8 +637,10 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 				-- OR time gap meets threshold: MAX(base_min_time, prior_duration * pct)
 				OR time_gap_secs >= GREATEST($11::float8, prior_duration_secs * $10::float8)
 			))
+			-- Case 4: Admin-triggered regeneration (computed_at < regen_requested_at)
+			OR needs_admin_regen = TRUE
 		ORDER BY
-			staleness_category,           -- Missing first, then version mismatches, then threshold
+			staleness_category,           -- Missing first, then version mismatches, then threshold, then admin regen
 			line_gap DESC NULLS LAST,     -- Largest line gap within category
 			last_sync_at DESC NULLS LAST  -- Most recently synced as tie-breaker
 		LIMIT $14
@@ -622,7 +673,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	var sessions []StaleSession
 	for rows.Next() {
 		var s StaleSession
-		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &s.TotalLines); err != nil {
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &s.TotalLines, &s.RegenRequestedAt); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err

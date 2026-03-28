@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
+	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbadminsettings"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -26,22 +29,37 @@ type SmartRecapGeneratorConfig struct {
 // SmartRecapGenerator handles the full smart recap generation flow.
 // It coordinates lock acquisition, LLM generation, and persistence.
 type SmartRecapGenerator struct {
-	store  *Store
-	db     *sql.DB
-	config SmartRecapGeneratorConfig
+	store         *Store
+	db            *sql.DB
+	settingsStore *dbadminsettings.Store
+	config        SmartRecapGeneratorConfig
 }
 
 // NewSmartRecapGenerator creates a new generator with the given dependencies.
-func NewSmartRecapGenerator(store *Store, db *sql.DB, config SmartRecapGeneratorConfig) *SmartRecapGenerator {
+func NewSmartRecapGenerator(store *Store, database *db.DB, config SmartRecapGeneratorConfig) *SmartRecapGenerator {
 	// Default timeout if not specified
 	if config.GenerationTimeout == 0 {
 		config.GenerationTimeout = 30 * time.Second
 	}
 	return &SmartRecapGenerator{
-		store:  store,
-		db:     db,
-		config: config,
+		store:         store,
+		db:            database.Conn(),
+		settingsStore: &dbadminsettings.Store{DB: database},
+		config:        config,
 	}
+}
+
+// resolveSystemPrompt fetches the custom instructions from admin_settings (if any)
+// and assembles the full system prompt. Returns a fully assembled prompt string.
+func (g *SmartRecapGenerator) resolveSystemPrompt(ctx context.Context) string {
+	setting, err := g.settingsStore.Get(ctx, "smart_recap_system_prompt")
+	if err != nil {
+		slog.WarnContext(ctx, "failed to fetch custom smart recap prompt, using default", "error", err)
+	}
+	if err != nil || setting == nil {
+		return BuildSmartRecapSystemPrompt(nil)
+	}
+	return BuildSmartRecapSystemPrompt(&setting.Value)
 }
 
 // GenerateInput contains all the information needed to generate a smart recap.
@@ -69,7 +87,8 @@ type GenerateResult struct {
 // It handles lock acquisition, LLM generation, saving, title update, and quota increment.
 // If the lock cannot be acquired, it returns Skipped=true without an error.
 // The caller is responsible for checking staleness and quota before calling this.
-func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput, lockTimeoutSeconds int) *GenerateResult {
+// If skipQuota is true, the quota increment is skipped (used for admin-triggered regeneration).
+func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput, lockTimeoutSeconds int, skipQuota bool) *GenerateResult {
 	ctx, span := tracer.Start(ctx, "smart_recap.generate",
 		trace.WithAttributes(
 			attribute.String("session.id", input.SessionID),
@@ -90,6 +109,10 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 		return &GenerateResult{Skipped: true}
 	}
 
+	// Resolve the system prompt: check admin_settings for a custom instructions override,
+	// then assemble the full prompt. The generator owns all prompt resolution logic.
+	systemPrompt := g.resolveSystemPrompt(ctx)
+
 	// Create the analyzer and generate
 	var clientOpts []anthropic.ClientOption
 	if g.config.BaseURL != "" {
@@ -97,8 +120,9 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 	}
 	client := anthropic.NewClient(g.config.APIKey, clientOpts...)
 	analyzer := NewSmartRecapAnalyzer(client, g.config.Model, SmartRecapAnalyzerConfig{
-		MaxOutputTokens:    g.config.MaxOutputTokens,
+		MaxOutputTokens:     g.config.MaxOutputTokens,
 		MaxTranscriptTokens: g.config.MaxTranscriptTokens,
+		SystemPrompt:        systemPrompt,
 	})
 
 	genCtx, genCancel := context.WithTimeout(ctx, g.config.GenerationTimeout)
@@ -140,11 +164,14 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 
 	// Increment quota BEFORE saving the card.
 	// If we can't track usage, we must not produce the recap.
-	if err := recapquota.Increment(saveCtx, g.db, input.UserID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "quota increment failed: "+err.Error())
-		_ = g.store.ClearSmartRecapLock(saveCtx, input.SessionID)
-		return &GenerateResult{Error: fmt.Errorf("failed to increment quota: %w", err)}
+	// Admin-triggered regeneration (skipQuota=true) bypasses this.
+	if !skipQuota {
+		if err := recapquota.Increment(saveCtx, g.db, input.UserID); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "quota increment failed: "+err.Error())
+			_ = g.store.ClearSmartRecapLock(saveCtx, input.SessionID)
+			return &GenerateResult{Error: fmt.Errorf("failed to increment quota: %w", err)}
+		}
 	}
 
 	// Save the card (this also clears the lock via upsert)

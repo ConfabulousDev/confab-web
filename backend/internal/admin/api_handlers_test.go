@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/admin"
@@ -614,6 +615,416 @@ func TestAuthConfig_PasswordAuthEnabled(t *testing.T) {
 	if !body.Features.PasswordAuthEnabled {
 		t.Error("expected password_auth_enabled=true")
 	}
+}
+
+// ===================================================================
+// Smart Recap Prompt Settings API
+// ===================================================================
+
+func TestAdminSmartRecapPrompt_GetDefault(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("GET returns default when no custom prompt set", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		resp, err := client.Get("/api/v1/admin/settings/smart-recap-prompt")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var body admin.SmartRecapPromptResponse
+		testutil.ParseJSON(t, resp, &body)
+
+		if body.IsCustom {
+			t.Error("expected is_custom=false when no custom prompt set")
+		}
+		if body.Instructions == "" {
+			t.Error("expected non-empty default instructions")
+		}
+		if body.UpdatedAt != nil {
+			t.Errorf("expected updated_at to be nil for default, got %v", body.UpdatedAt)
+		}
+		if body.InputFormat == "" {
+			t.Error("expected non-empty input_format")
+		}
+		if body.OutputSchema == "" {
+			t.Error("expected non-empty output_schema")
+		}
+		if body.Example == "" {
+			t.Error("expected non-empty example")
+		}
+	})
+}
+
+func TestAdminSmartRecapPrompt_PutThenGet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("PUT saves custom prompt, GET returns it with is_custom=true", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		// PUT custom instructions
+		putResp, err := client.Request("PUT", "/api/v1/admin/settings/smart-recap-prompt", map[string]string{
+			"instructions": "Custom analysis instructions for testing.",
+		})
+		if err != nil {
+			t.Fatalf("PUT request failed: %v", err)
+		}
+		testutil.RequireStatus(t, putResp, http.StatusOK)
+
+		var putBody admin.SetSmartRecapPromptResponse
+		testutil.ParseJSON(t, putResp, &putBody)
+
+		if !putBody.IsCustom {
+			t.Error("expected is_custom=true in PUT response")
+		}
+		if putBody.Instructions != "Custom analysis instructions for testing." {
+			t.Errorf("unexpected instructions in PUT response: %q", putBody.Instructions)
+		}
+		if putBody.UpdatedAt == "" {
+			t.Error("expected non-empty updated_at in PUT response")
+		}
+
+		// GET should return the custom prompt
+		getResp, err := client.Get("/api/v1/admin/settings/smart-recap-prompt")
+		if err != nil {
+			t.Fatalf("GET request failed: %v", err)
+		}
+		testutil.RequireStatus(t, getResp, http.StatusOK)
+
+		var getBody admin.SmartRecapPromptResponse
+		testutil.ParseJSON(t, getResp, &getBody)
+
+		if !getBody.IsCustom {
+			t.Error("expected is_custom=true in GET response after PUT")
+		}
+		if getBody.Instructions != "Custom analysis instructions for testing." {
+			t.Errorf("unexpected instructions in GET response: %q", getBody.Instructions)
+		}
+		if getBody.UpdatedAt == nil {
+			t.Error("expected non-nil updated_at in GET response after PUT")
+		}
+	})
+}
+
+func TestAdminSmartRecapPrompt_PutEmptyString(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("PUT with empty string saves as custom with is_custom=true", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		// PUT empty instructions
+		putResp, err := client.Request("PUT", "/api/v1/admin/settings/smart-recap-prompt", map[string]string{
+			"instructions": "",
+		})
+		if err != nil {
+			t.Fatalf("PUT request failed: %v", err)
+		}
+		testutil.RequireStatus(t, putResp, http.StatusOK)
+
+		var putBody admin.SetSmartRecapPromptResponse
+		testutil.ParseJSON(t, putResp, &putBody)
+		if !putBody.IsCustom {
+			t.Error("expected is_custom=true for empty string")
+		}
+		if putBody.Instructions != "" {
+			t.Errorf("expected empty instructions, got %q", putBody.Instructions)
+		}
+
+		// GET confirms it
+		getResp, err := client.Get("/api/v1/admin/settings/smart-recap-prompt")
+		if err != nil {
+			t.Fatalf("GET request failed: %v", err)
+		}
+		testutil.RequireStatus(t, getResp, http.StatusOK)
+
+		var getBody admin.SmartRecapPromptResponse
+		testutil.ParseJSON(t, getResp, &getBody)
+		if !getBody.IsCustom {
+			t.Error("expected is_custom=true in GET after PUT empty string")
+		}
+		if getBody.Instructions != "" {
+			t.Errorf("expected empty instructions in GET, got %q", getBody.Instructions)
+		}
+	})
+}
+
+func TestAdminSmartRecapPrompt_DeleteResets(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("DELETE resets to default, GET returns is_custom=false", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		// First PUT a custom prompt
+		putResp, err := client.Request("PUT", "/api/v1/admin/settings/smart-recap-prompt", map[string]string{
+			"instructions": "Custom prompt to be deleted.",
+		})
+		if err != nil {
+			t.Fatalf("PUT request failed: %v", err)
+		}
+		testutil.RequireStatus(t, putResp, http.StatusOK)
+		putResp.Body.Close()
+
+		// DELETE to reset
+		delResp, err := client.Delete("/api/v1/admin/settings/smart-recap-prompt")
+		if err != nil {
+			t.Fatalf("DELETE request failed: %v", err)
+		}
+		testutil.RequireStatus(t, delResp, http.StatusOK)
+
+		var delBody admin.DeleteSmartRecapPromptResponse
+		testutil.ParseJSON(t, delResp, &delBody)
+		if delBody.IsCustom {
+			t.Error("expected is_custom=false in DELETE response")
+		}
+		if delBody.Instructions == "" {
+			t.Error("expected non-empty default instructions in DELETE response")
+		}
+
+		// GET should return default
+		getResp, err := client.Get("/api/v1/admin/settings/smart-recap-prompt")
+		if err != nil {
+			t.Fatalf("GET request failed: %v", err)
+		}
+		testutil.RequireStatus(t, getResp, http.StatusOK)
+
+		var getBody admin.SmartRecapPromptResponse
+		testutil.ParseJSON(t, getResp, &getBody)
+		if getBody.IsCustom {
+			t.Error("expected is_custom=false after DELETE")
+		}
+		if getBody.UpdatedAt != nil {
+			t.Error("expected nil updated_at after DELETE")
+		}
+	})
+}
+
+func TestAdminSmartRecapPrompt_GetDefaultEndpoint(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("GET /default always returns hardcoded default regardless of state", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		// Set a custom prompt first
+		putResp, err := client.Request("PUT", "/api/v1/admin/settings/smart-recap-prompt", map[string]string{
+			"instructions": "Custom prompt that should not affect /default.",
+		})
+		if err != nil {
+			t.Fatalf("PUT request failed: %v", err)
+		}
+		testutil.RequireStatus(t, putResp, http.StatusOK)
+		putResp.Body.Close()
+
+		// GET /default should still return the hardcoded default
+		resp, err := client.Get("/api/v1/admin/settings/smart-recap-prompt/default")
+		if err != nil {
+			t.Fatalf("GET /default request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var body map[string]string
+		testutil.ParseJSON(t, resp, &body)
+
+		instructions, ok := body["instructions"]
+		if !ok {
+			t.Fatal("expected 'instructions' field in response")
+		}
+		if instructions == "" {
+			t.Error("expected non-empty default instructions")
+		}
+		// Should NOT be the custom prompt
+		if instructions == "Custom prompt that should not affect /default." {
+			t.Error("GET /default should return hardcoded default, not custom prompt")
+		}
+	})
+}
+
+func TestAdminSmartRecapPrompt_PutValidation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("rejects null bytes", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		resp, err := client.Request("PUT", "/api/v1/admin/settings/smart-recap-prompt", map[string]string{
+			"instructions": "contains\x00null",
+		})
+		if err != nil {
+			t.Fatalf("PUT request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		resp.Body.Close()
+	})
+
+	t.Run("rejects content exceeding 50000 chars", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		// Create a string that exceeds 50000 chars
+		longString := strings.Repeat("a", 50001)
+
+		resp, err := client.Request("PUT", "/api/v1/admin/settings/smart-recap-prompt", map[string]string{
+			"instructions": longString,
+		})
+		if err != nil {
+			t.Fatalf("PUT request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		resp.Body.Close()
+	})
+}
+
+func TestAdminSmartRecapPrompt_RegenerateCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("returns count of smart recap cards", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		// With empty DB, count should be 0
+		resp, err := client.Get("/api/v1/admin/settings/smart-recap-prompt/regenerate-count")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var body map[string]int
+		testutil.ParseJSON(t, resp, &body)
+
+		count, ok := body["count"]
+		if !ok {
+			t.Fatal("expected 'count' field in response")
+		}
+		if count != 0 {
+			t.Errorf("expected count=0 with empty DB, got %d", count)
+		}
+	})
+}
+
+func TestAdminSmartRecapPrompt_RegenerateAll(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("writes regen timestamp and returns count", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		// Trigger regeneration
+		resp, err := client.Post("/api/v1/admin/settings/smart-recap-prompt/regenerate-all", map[string]string{})
+		if err != nil {
+			t.Fatalf("POST request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var body map[string]int
+		testutil.ParseJSON(t, resp, &body)
+
+		_, ok := body["sessions_queued"]
+		if !ok {
+			t.Fatal("expected 'sessions_queued' field in response")
+		}
+
+		// Verify the regen timestamp was written to admin_settings
+		var value string
+		err = env.DB.Conn().QueryRow(
+			"SELECT value FROM admin_settings WHERE key = 'smart_recap_regen_requested_at'",
+		).Scan(&value)
+		if err != nil {
+			t.Fatalf("expected regen timestamp in admin_settings, got error: %v", err)
+		}
+		if value == "" {
+			t.Error("expected non-empty regen timestamp value")
+		}
+	})
 }
 
 // Suppress unused import warning

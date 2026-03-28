@@ -1,0 +1,223 @@
+/* Smart Recap Settings Page */
+
+.card { composes: card from './adminShared.module.css'; }
+.empty { composes: empty from './adminShared.module.css'; }
+
+/* Header row: title + status chip on left, metadata on right */
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.headerRow h3 {
+  margin: 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+/* Status chip (Custom / Default) */
+.statusChip {
+  display: inline-block;
+  padding: 2px var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.statusCustom {
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+}
+
+.statusDefault {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+}
+
+/* Metadata line */
+.metadata {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+/* Collapsible fixed sections */
+.collapsibleSection {
+  margin-bottom: var(--spacing-md);
+}
+
+.collapsibleToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: none;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.collapsibleToggle:hover {
+  background: var(--color-bg-hover);
+}
+
+.toggleArrow {
+  transition: transform 0.2s ease;
+  font-size: var(--font-xs);
+}
+
+.toggleArrowOpen {
+  transform: rotate(90deg);
+}
+
+.collapsibleContent {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Editor area: side-by-side panels */
+.editorArea {
+  display: flex;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.editorPanel {
+  flex: 1;
+  min-width: 0;
+}
+
+.editorLabel {
+  display: block;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 400px;
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.textareaReadOnly {
+  composes: textarea;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+/* Character count */
+.charCount {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-xs);
+}
+
+/* Action buttons row */
+.actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+/* Bulk operations card */
+.bulkCard {
+  composes: card from './adminShared.module.css';
+  margin-top: var(--spacing-lg);
+}
+
+.bulkCard h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.bulkDescription {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Confirm modal */
+.confirmModal {
+  padding: var(--spacing-md);
+}
+
+.confirmModal h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.confirmModal p {
+  margin: 0 0 var(--spacing-lg) 0;
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.modalActions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+/* Fixed sections group */
+.fixedSections {
+  margin-bottom: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+@media (max-width: 768px) {
+  .editorArea {
+    flex-direction: column;
+  }
+}

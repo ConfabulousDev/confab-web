@@ -22,6 +22,12 @@ import {
   StatusChangeResponseSchema,
   AdminSystemSharesResponseSchema,
   CreateSystemShareResponseSchema,
+  SmartRecapPromptResponseSchema,
+  SmartRecapPromptDefaultResponseSchema,
+  SetSmartRecapPromptResponseSchema,
+  DeleteSmartRecapPromptResponseSchema,
+  RegenerateCountResponseSchema,
+  RegenerateAllResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -42,6 +48,12 @@ import {
   type StatusChangeResponse,
   type AdminSystemSharesResponse,
   type CreateSystemShareResponse,
+  type SmartRecapPromptResponse,
+  type SmartRecapPromptDefaultResponse,
+  type SetSmartRecapPromptResponse,
+  type DeleteSmartRecapPromptResponse,
+  type RegenerateCountResponse,
+  type RegenerateAllResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
@@ -286,6 +298,43 @@ class APIClient {
       ...options,
       method: 'PATCH',
       body: data,
+    });
+    return validateResponse(schema, response, endpoint);
+  }
+
+  /**
+   * Make a validated PUT request
+   * @param endpoint - API endpoint
+   * @param schema - Zod schema to validate response
+   * @param data - Request body
+   */
+  async putValidated<T>(
+    endpoint: string,
+    schema: z.ZodType<T>,
+    data?: unknown,
+    options?: RequestOptions
+  ): Promise<T> {
+    const response = await this.requestRaw(endpoint, {
+      ...options,
+      method: 'PUT',
+      body: data,
+    });
+    return validateResponse(schema, response, endpoint);
+  }
+
+  /**
+   * Make a validated DELETE request
+   * @param endpoint - API endpoint
+   * @param schema - Zod schema to validate response
+   */
+  async deleteValidated<T>(
+    endpoint: string,
+    schema: z.ZodType<T>,
+    options?: RequestOptions
+  ): Promise<T> {
+    const response = await this.requestRaw(endpoint, {
+      ...options,
+      method: 'DELETE',
     });
     return validateResponse(schema, response, endpoint);
   }
@@ -595,4 +644,22 @@ export const adminAPI = {
 
   createSystemShare: (data: { session_id: string }): Promise<CreateSystemShareResponse> =>
     api.postValidated('/admin/system-shares', CreateSystemShareResponseSchema, data),
+
+  getSmartRecapPrompt: (): Promise<SmartRecapPromptResponse> =>
+    api.getValidated('/admin/settings/smart-recap-prompt', SmartRecapPromptResponseSchema),
+
+  getSmartRecapPromptDefault: (): Promise<SmartRecapPromptDefaultResponse> =>
+    api.getValidated('/admin/settings/smart-recap-prompt/default', SmartRecapPromptDefaultResponseSchema),
+
+  setSmartRecapPrompt: (data: { instructions: string }): Promise<SetSmartRecapPromptResponse> =>
+    api.putValidated('/admin/settings/smart-recap-prompt', SetSmartRecapPromptResponseSchema, data),
+
+  deleteSmartRecapPrompt: (): Promise<DeleteSmartRecapPromptResponse> =>
+    api.deleteValidated('/admin/settings/smart-recap-prompt', DeleteSmartRecapPromptResponseSchema),
+
+  getSmartRecapRegenerateCount: (): Promise<RegenerateCountResponse> =>
+    api.getValidated('/admin/settings/smart-recap-prompt/regenerate-count', RegenerateCountResponseSchema),
+
+  regenerateAllSmartRecaps: (): Promise<RegenerateAllResponse> =>
+    api.postValidated('/admin/settings/smart-recap-prompt/regenerate-all', RegenerateAllResponseSchema),
 };

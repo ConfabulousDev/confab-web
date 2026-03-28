@@ -67,6 +67,7 @@ type Server struct {
 	saasFooterEnabled bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
 	saasTermlyEnabled    bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
 	orgAnalyticsEnabled  bool                      // When true, org-wide analytics view is enabled (ENABLE_ORG_ANALYTICS=true)
+	smartRecapEnabled    bool                      // When true, smart recap generation is active (SMART_RECAP_ENABLED=true)
 	globalLimiter        ratelimit.RateLimiter     // Global rate limiter for all requests
 	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
 	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
@@ -92,6 +93,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		saasFooterEnabled: os.Getenv("ENABLE_SAAS_FOOTER") == "true",
 		saasTermlyEnabled:   os.Getenv("ENABLE_SAAS_TERMLY") == "true",
 		orgAnalyticsEnabled: os.Getenv("ENABLE_ORG_ANALYTICS") == "true",
+		smartRecapEnabled:   os.Getenv("SMART_RECAP_ENABLED") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
 		// Generous limit to allow normal usage while preventing DoS
 		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
@@ -370,6 +372,16 @@ func (s *Server) SetupRoutes() http.Handler {
 				r.Delete("/users/{id}", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteUserAPI))
 				r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleListSystemSharesAPI))
 				r.Post("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleCreateSystemShareAPI))
+
+				// Admin settings routes
+				r.Route("/settings", func(r chi.Router) {
+					r.Get("/smart-recap-prompt", withMaxBody(MaxBodyXS, adminHandlers.HandleGetSmartRecapPrompt))
+					r.Get("/smart-recap-prompt/default", withMaxBody(MaxBodyXS, adminHandlers.HandleGetSmartRecapPromptDefault))
+					r.Put("/smart-recap-prompt", withMaxBody(MaxBodyL, adminHandlers.HandleSetSmartRecapPrompt))
+					r.Delete("/smart-recap-prompt", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteSmartRecapPrompt))
+					r.Get("/smart-recap-prompt/regenerate-count", withMaxBody(MaxBodyXS, adminHandlers.HandleGetSmartRecapRegenerateCount))
+					r.Post("/smart-recap-prompt/regenerate-all", withMaxBody(MaxBodyXS, adminHandlers.HandleRegenerateAllSmartRecaps))
+				})
 			})
 		})
 

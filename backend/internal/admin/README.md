@@ -8,7 +8,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 |------|------|
 | `admin.go` | `IsSuperAdmin` check against the `SUPER_ADMIN_EMAILS` env var |
 | `admin_test.go` | Unit tests for `IsSuperAdmin` |
-| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, delete, and system shares |
+| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, delete, system shares, and smart recap prompt settings |
 | `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
@@ -17,16 +17,17 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 ## Key Types
 
 - **`Handlers`** -- Dependency holder (DB, Storage, config flags) for all admin HTTP handlers.
-- **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`) used as audit log keys.
+- **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`, `setting.update`, `setting.reset`, `smart_recap.regenerate_all`) used as audit log keys.
 - **`AdminUserListResponse`**, **`AdminUserJSON`**, **`AdminTotals`** -- JSON response types for the user list endpoint.
 - **`SystemSharesResponse`**, **`SystemShareJSON`** -- JSON response types for system shares.
+- **`SmartRecapPromptResponse`**, **`SetSmartRecapPromptRequest`**, **`SetSmartRecapPromptResponse`**, **`DeleteSmartRecapPromptResponse`** -- JSON request/response types for smart recap prompt settings.
 
 ## Key API
 
 - **`IsSuperAdmin(email string) bool`** -- Checks the comma-separated `SUPER_ADMIN_EMAILS` env var (case-insensitive, trimmed).
 - **`Middleware(database *db.DB)`** -- Returns a `func(http.Handler) http.Handler` that rejects non-super-admins with 403.
 - **`AuditLog` / `AuditLogFromRequest`** -- Logs admin actions with admin identity, action type, and arbitrary detail key-value pairs. All log lines include `"audit", true` for filtering.
-- **`NewHandlers(database, store, passwordAuthEnabled, allowedDomains, sharesEnabled)`** -- Constructor that wires up dependencies.
+- **`NewHandlers(database, store, frontendURL, allowedDomains, sharesEnabled)`** -- Constructor that wires up dependencies. Internally creates `settingsStore` (`dbadminsettings.Store`) and `analyticsStore` (`analytics.Store`).
 
 ### Handler methods on `Handlers`
 
@@ -39,6 +40,12 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleDeleteUserAPI` | `DELETE /api/v1/admin/users/{id}` | Deletes user, their S3 objects, then DB record. Returns closure capturing storage |
 | `HandleListSystemSharesAPI` | `GET /api/v1/admin/system-shares` | Returns all system-wide shares. Returns closure capturing frontendURL |
 | `HandleCreateSystemShareAPI` | `POST /api/v1/admin/system-shares` | Creates a system-wide share. Returns closure capturing frontendURL |
+| `HandleGetSmartRecapPrompt` | `GET /api/v1/admin/settings/smart-recap-prompt` | Returns current prompt (custom or default) plus fixed sections |
+| `HandleGetSmartRecapPromptDefault` | `GET /api/v1/admin/settings/smart-recap-prompt/default` | Returns the hardcoded default instructions |
+| `HandleSetSmartRecapPrompt` | `PUT /api/v1/admin/settings/smart-recap-prompt` | Saves custom instructions (validates UTF-8, max 50k chars) |
+| `HandleDeleteSmartRecapPrompt` | `DELETE /api/v1/admin/settings/smart-recap-prompt` | Resets to default by deleting the custom setting |
+| `HandleGetSmartRecapRegenerateCount` | `GET /api/v1/admin/settings/smart-recap-prompt/regenerate-count` | Returns count of sessions with smart recap cards |
+| `HandleRegenerateAllSmartRecaps` | `POST /api/v1/admin/settings/smart-recap-prompt/regenerate-all` | Triggers bulk regeneration via timestamp in `admin_settings` |
 
 ## How to Extend
 
@@ -74,6 +81,6 @@ Unit tests cover `IsSuperAdmin` with various env var configurations. Integration
 
 ## Dependencies
 
-**Uses:** `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbauth`, `internal/db/user`, `internal/httputil`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`, `golang.org/x/crypto/bcrypt`
+**Uses:** `internal/analytics`, `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbadminsettings`, `internal/db/dbauth`, `internal/db/user`, `internal/httputil`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`, `golang.org/x/crypto/bcrypt`
 
 **Used by:** `internal/api` (server setup and routing)

@@ -21,6 +21,7 @@ Core database connection, shared types, sentinel errors, and helper functions fo
 | `db/user` | `dbuser` | User CRUD, admin operations |
 | `db/github` | `dbgithub` | GitHub link CRUD |
 | `db/til` | `dbtil` | TIL CRUD |
+| `db/dbadminsettings` | (none needed) | Admin settings key-value store |
 | `db/events` | `dbevents` | Session event insertion |
 
 All sub-packages follow the same `Store` struct pattern:

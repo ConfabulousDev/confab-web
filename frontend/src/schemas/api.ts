@@ -644,6 +644,48 @@ export const CreateSystemShareResponseSchema = z.object({
 export type CreateSystemShareResponse = z.infer<typeof CreateSystemShareResponseSchema>;
 
 // ============================================================================
+// Smart Recap Prompt Schemas
+// ============================================================================
+
+export const SmartRecapPromptResponseSchema = z.object({
+  instructions: z.string(),
+  is_custom: z.boolean(),
+  updated_at: z.string().optional(),
+  input_format: z.string(),
+  output_schema: z.string(),
+  example: z.string(),
+});
+export type SmartRecapPromptResponse = z.infer<typeof SmartRecapPromptResponseSchema>;
+
+export const SmartRecapPromptDefaultResponseSchema = z.object({
+  instructions: z.string(),
+});
+export type SmartRecapPromptDefaultResponse = z.infer<typeof SmartRecapPromptDefaultResponseSchema>;
+
+export const SetSmartRecapPromptResponseSchema = z.object({
+  instructions: z.string(),
+  is_custom: z.literal(true),
+  updated_at: z.string(),
+});
+export type SetSmartRecapPromptResponse = z.infer<typeof SetSmartRecapPromptResponseSchema>;
+
+export const DeleteSmartRecapPromptResponseSchema = z.object({
+  instructions: z.string(),
+  is_custom: z.literal(false),
+});
+export type DeleteSmartRecapPromptResponse = z.infer<typeof DeleteSmartRecapPromptResponseSchema>;
+
+export const RegenerateCountResponseSchema = z.object({
+  count: z.number(),
+});
+export type RegenerateCountResponse = z.infer<typeof RegenerateCountResponseSchema>;
+
+export const RegenerateAllResponseSchema = z.object({
+  sessions_queued: z.number(),
+});
+export type RegenerateAllResponse = z.infer<typeof RegenerateAllResponseSchema>;
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 

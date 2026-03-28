@@ -7,6 +7,7 @@ export interface AppConfig {
   saasTermlyEnabled: boolean;
   orgAnalyticsEnabled: boolean;
   passwordAuthEnabled: boolean;
+  smartRecapEnabled: boolean;
   supportEmail: string;
 }
 
@@ -16,6 +17,7 @@ const defaultAppConfig: AppConfig = {
   saasTermlyEnabled: false,
   orgAnalyticsEnabled: false,
   passwordAuthEnabled: false,
+  smartRecapEnabled: false,
   supportEmail: '',
 };
 

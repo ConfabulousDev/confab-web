@@ -3,7 +3,9 @@ package admin
 import (
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/dbadminsettings"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
@@ -19,6 +21,8 @@ type Handlers struct {
 	FrontendURL         string
 	AllowedEmailDomains []string
 	SharesEnabled       bool
+	settingsStore       *dbadminsettings.Store
+	analyticsStore      *analytics.Store
 }
 
 // NewHandlers creates admin handlers with dependencies
@@ -29,5 +33,7 @@ func NewHandlers(database *db.DB, store *storage.S3Storage, frontendURL string, 
 		FrontendURL:         frontendURL,
 		AllowedEmailDomains: allowedDomains,
 		SharesEnabled:       sharesEnabled,
+		settingsStore:       &dbadminsettings.Store{DB: database},
+		analyticsStore:      analytics.NewStore(database.Conn()),
 	}
 }

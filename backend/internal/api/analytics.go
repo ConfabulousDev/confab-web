@@ -237,7 +237,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 	analyticsStore := analytics.NewStore(database.Conn())
 	sessionStore := &dbsession.Store{DB: database}
 	smartRecapConfig := loadSmartRecapConfig()
-	smartRecapGenerator := analytics.NewSmartRecapGenerator(analyticsStore, database.Conn(), smartRecapConfig.generatorConfig())
+	smartRecapGenerator := analytics.NewSmartRecapGenerator(analyticsStore, database, smartRecapConfig.generatorConfig())
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -536,7 +536,7 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 		Transcript: transcript,
 		IDMap:      idMap,
 		CardStats:  sc.cardStats,
-	}, sc.config.LockTimeoutSeconds)
+	}, sc.config.LockTimeoutSeconds, false)
 	if genResult.Error != nil {
 		sc.log.Error("Failed to generate smart recap", "error", genResult.Error, "session_id", sc.sessionID)
 		addCardError("Failed to generate smart recap")
@@ -596,7 +596,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 	analyticsStore := analytics.NewStore(database.Conn())
 	sessionStore := &dbsession.Store{DB: database}
 	smartRecapConfig := loadSmartRecapConfig()
-	smartRecapGenerator := analytics.NewSmartRecapGenerator(analyticsStore, database.Conn(), smartRecapConfig.generatorConfig())
+	smartRecapGenerator := analytics.NewSmartRecapGenerator(analyticsStore, database, smartRecapConfig.generatorConfig())
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -700,7 +700,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			Transcript: transcript,
 			IDMap:      idMap,
 			CardStats:  cardStats,
-		}, smartRecapConfig.LockTimeoutSeconds)
+		}, smartRecapConfig.LockTimeoutSeconds, false)
 		if genResult.Error != nil {
 			log.Error("Failed to generate smart recap", "error", genResult.Error, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to generate smart recap")
