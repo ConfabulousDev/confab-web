@@ -57,7 +57,7 @@ function hideArrayToFilterState(hide: string[]): FilterState {
   };
 }
 
-export interface TranscriptFiltersResult {
+interface TranscriptFiltersResult {
   filterState: FilterState;
   setFilterState: (state: FilterState, opts?: { replace?: boolean }) => void;
   toggleCategory: (category: MessageCategory) => void;

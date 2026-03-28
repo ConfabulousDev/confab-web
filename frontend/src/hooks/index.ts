@@ -15,5 +15,4 @@ export { useOrgAnalytics } from './useOrgAnalytics';
 export { useTILsFetch } from './useTILs';
 export { useColumnCount, distributeToColumns } from './useColumnCount';
 export { useURLFilters } from './useURLFilters';
-export { useTranscriptFilters } from './useTranscriptFilters';
 export type { URLFiltersConfig } from './useURLFilters';
