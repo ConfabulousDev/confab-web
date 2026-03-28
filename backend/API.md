@@ -290,6 +290,103 @@ Authorization: Bearer <api_key>
 
 ---
 
+### List Session Files
+
+Returns the list of transcript files (main transcript + agent files) for a session.
+
+```
+GET /api/v1/sessions/{id}/files
+Authorization: Bearer <api_key>
+```
+
+**Response:**
+```json
+{
+  "files": [
+    {
+      "file_name": "transcript.jsonl",
+      "file_type": "transcript",
+      "last_synced_line": 150,
+      "updated_at": "2026-03-28T12:00:00Z"
+    },
+    {
+      "file_name": "agent-abc123.jsonl",
+      "file_type": "agent",
+      "last_synced_line": 42,
+      "updated_at": "2026-03-28T12:01:00Z"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `files[].file_name` | string | File name (e.g., `transcript.jsonl`, `agent-{id}.jsonl`) |
+| `files[].file_type` | string | `"transcript"` or `"agent"` |
+| `files[].last_synced_line` | integer | Number of lines synced for this file |
+| `files[].updated_at` | string | ISO 8601 timestamp of last sync |
+
+Uses canonical access model (CF-132) — owner, recipient, system, and public shares. Returns an empty `files` array if the session has no sync files.
+
+**Error responses:**
+- `401` — Missing or invalid API key
+- `404` — Session not found or no access
+
+#### List Session Files by External ID
+
+```
+GET /api/v1/sessions/files?external_id=xxx
+Authorization: Bearer <api_key>
+```
+
+Same response format as above. Requires the caller to own the session (external_id is owner-scoped).
+
+**Error responses:**
+- `400` — Missing `external_id` query parameter
+- `401` — Missing or invalid API key
+- `404` — Session not found for this user
+
+---
+
+### Download Session File
+
+Downloads the full raw JSONL content of a single transcript file.
+
+```
+GET /api/v1/sessions/{id}/files/download?file_name=transcript.jsonl
+Authorization: Bearer <api_key>
+```
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_name` | string | Yes | Name of the file to download (e.g., `transcript.jsonl`) |
+
+**Response:** `text/plain; charset=utf-8` — raw JSONL content (one JSON object per line).
+
+Uses canonical access model (CF-132). Validates the file exists in the session's sync_files before downloading from S3.
+
+**Error responses:**
+- `400` — Missing `file_name` query parameter
+- `401` — Missing or invalid API key
+- `404` — Session not found, no access, or file not found
+
+#### Download Session File by External ID
+
+```
+GET /api/v1/sessions/files/download?external_id=xxx&file_name=transcript.jsonl
+Authorization: Bearer <api_key>
+```
+
+Same behavior as above. Requires the caller to own the session (external_id is owner-scoped).
+
+**Error responses:**
+- `400` — Missing `external_id` or `file_name` query parameter
+- `401` — Missing or invalid API key
+- `404` — Session not found for this user, or file not found
+
+---
+
 ### TIL Export
 
 Returns a paginated list of TILs visible to the authenticated user, enriched with session URLs for external consumption. Designed for machine consumers that sync TILs to downstream systems (Confluence, Notion, wikis, etc.).

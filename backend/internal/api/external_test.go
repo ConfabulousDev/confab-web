@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -360,6 +361,416 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 
 		testutil.RequireStatus(t, resp, http.StatusNotFound)
+	})
+}
+
+// =============================================================================
+// Session Files API — HTTP Integration Tests
+//
+// Tests the file list and download endpoints through the full HTTP stack
+// including API key authentication, canonical access model, and S3 download.
+// =============================================================================
+
+func TestSessionFiles_HTTP_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("list files by UUID returns transcript and agent files", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-files-1", testutil.TestSessionFullOpts{
+			Summary: "Files test session",
+		})
+
+		// Add agent sync files (transcript already created by CreateTestSessionFull)
+		testutil.CreateTestSyncFile(t, env, sessionID, "agent-abc.jsonl", "agent", 50)
+		testutil.CreateTestSyncFile(t, env, sessionID, "agent-def.jsonl", "agent", 30)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result SessionFilesResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		if len(result.Files) != 3 {
+			t.Fatalf("expected 3 files, got %d", len(result.Files))
+		}
+
+		// Verify file types present
+		fileTypes := map[string]int{}
+		for _, f := range result.Files {
+			fileTypes[f.FileType]++
+		}
+		if fileTypes["transcript"] != 1 {
+			t.Errorf("expected 1 transcript file, got %d", fileTypes["transcript"])
+		}
+		if fileTypes["agent"] != 2 {
+			t.Errorf("expected 2 agent files, got %d", fileTypes["agent"])
+		}
+	})
+
+	t.Run("list files by external_id", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		testutil.CreateTestSessionFull(t, env, user.ID, "ext-files-2", testutil.TestSessionFullOpts{
+			Summary: "External ID test",
+		})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/files?external_id=ext-files-2")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result SessionFilesResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		if len(result.Files) != 1 {
+			t.Fatalf("expected 1 file (transcript), got %d", len(result.Files))
+		}
+		if result.Files[0].FileType != "transcript" {
+			t.Errorf("expected transcript file, got %q", result.Files[0].FileType)
+		}
+	})
+
+	t.Run("list files returns empty array for session with no sync files", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		// SyncLines: -1 means no sync file created
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-no-files", testutil.TestSessionFullOpts{
+			Summary:   "No files session",
+			SyncLines: -1,
+		})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result SessionFilesResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		if len(result.Files) != 0 {
+			t.Errorf("expected 0 files, got %d", len(result.Files))
+		}
+	})
+
+	t.Run("non-owner without share gets 404", func(t *testing.T) {
+		env.CleanDB(t)
+
+		owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		other := testutil.CreateTestUser(t, env, "other@example.com", "Other")
+		otherKey := testutil.CreateTestAPIKeyWithToken(t, env, other.ID, "Other Key")
+
+		sessionID := testutil.CreateTestSessionFull(t, env, owner.ID, "ext-private", testutil.TestSessionFullOpts{
+			Summary: "Private session",
+		})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(otherKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusNotFound)
+	})
+
+	t.Run("recipient share grants file list access", func(t *testing.T) {
+		env.CleanDB(t)
+
+		owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+		recipientKey := testutil.CreateTestAPIKeyWithToken(t, env, recipient.ID, "Recipient Key")
+
+		sessionID := testutil.CreateTestSessionFull(t, env, owner.ID, "ext-shared", testutil.TestSessionFullOpts{
+			Summary: "Shared session",
+		})
+
+		testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(recipientKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result SessionFilesResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		if len(result.Files) != 1 {
+			t.Errorf("expected 1 file, got %d", len(result.Files))
+		}
+	})
+
+	t.Run("no API key returns 401", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-noauth", testutil.TestSessionFullOpts{
+			Summary: "Test session",
+		})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts) // no API key
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
+	})
+
+	t.Run("external_id missing returns 400", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/files")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("nonexistent session UUID returns 404", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/00000000-0000-0000-0000-000000000000/files")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusNotFound)
+	})
+}
+
+func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("download file by UUID returns raw JSONL content", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-1", testutil.TestSessionFullOpts{
+			Summary: "Download test",
+		})
+
+		transcript := validTestTranscript()
+		testutil.UploadTestTranscript(t, env, user.ID, "ext-dl-1", "transcript.jsonl", transcript)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=transcript.jsonl")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+			t.Errorf("expected Content-Type text/plain; charset=utf-8, got %q", ct)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+
+		if len(body) == 0 {
+			t.Error("expected non-empty response body")
+		}
+		// Verify it contains JSONL content
+		if !strings.Contains(string(body), `"type"`) {
+			t.Error("expected JSONL content with type field")
+		}
+	})
+
+	t.Run("download file by external_id", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-2", testutil.TestSessionFullOpts{
+			Summary: "External ID download",
+		})
+
+		transcript := validTestTranscript()
+		testutil.UploadTestTranscript(t, env, user.ID, "ext-dl-2", "transcript.jsonl", transcript)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/files/download?external_id=ext-dl-2&file_name=transcript.jsonl")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+
+		if len(body) == 0 {
+			t.Error("expected non-empty response body")
+		}
+	})
+
+	t.Run("download unknown file returns 404", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-3", testutil.TestSessionFullOpts{
+			Summary: "Unknown file test",
+		})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=nonexistent.jsonl")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusNotFound)
+	})
+
+	t.Run("download missing file_name param returns 400", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-4", testutil.TestSessionFullOpts{
+			Summary: "Missing param test",
+		})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("non-owner without share cannot download", func(t *testing.T) {
+		env.CleanDB(t)
+
+		owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		other := testutil.CreateTestUser(t, env, "other@example.com", "Other")
+		otherKey := testutil.CreateTestAPIKeyWithToken(t, env, other.ID, "Other Key")
+
+		sessionID := testutil.CreateTestSessionFull(t, env, owner.ID, "ext-dl-5", testutil.TestSessionFullOpts{
+			Summary: "Private download",
+		})
+
+		transcript := validTestTranscript()
+		testutil.UploadTestTranscript(t, env, owner.ID, "ext-dl-5", "transcript.jsonl", transcript)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(otherKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=transcript.jsonl")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusNotFound)
+	})
+
+	t.Run("no API key returns 401", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-6", testutil.TestSessionFullOpts{
+			Summary: "No auth download",
+		})
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts) // no API key
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=transcript.jsonl")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -65,34 +66,10 @@ func (s *Server) handleCondensedTranscript(w http.ResponseWriter, r *http.Reques
 // the condensed transcript. Requires the caller to own the session.
 // GET /api/v1/sessions/condensed-transcript?external_id=xxx
 func (s *Server) handleCondensedTranscriptByExternalID(w http.ResponseWriter, r *http.Request) {
-	log := logger.Ctx(r.Context())
-
-	externalID := r.URL.Query().Get("external_id")
-	if externalID == "" {
-		respondError(w, http.StatusBadRequest, "Missing external_id query parameter")
-		return
-	}
-
-	userID, ok := requireUserID(w, r)
+	sessionID, ok := s.resolveExternalID(w, r)
 	if !ok {
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer cancel()
-
-	sessionStore := &dbsession.Store{DB: s.db}
-	sessionID, err := sessionStore.GetSessionIDByExternalID(ctx, externalID, userID)
-	if err != nil {
-		if errors.Is(err, db.ErrSessionNotFound) {
-			respondError(w, http.StatusNotFound, "Session not found")
-			return
-		}
-		log.Error("Failed to lookup session by external_id", "error", err, "external_id", externalID)
-		respondError(w, http.StatusInternalServerError, "Failed to lookup session")
-		return
-	}
-
 	s.serveCondensedTranscript(w, r, sessionID)
 }
 
@@ -277,6 +254,164 @@ func extractTexts(items []analytics.AnnotatedItem) []string {
 		texts[i] = item.Text
 	}
 	return texts
+}
+
+// resolveExternalID resolves an external_id query parameter to a session UUID.
+// Returns the session ID or an empty string if the response was already written (error case).
+func (s *Server) resolveExternalID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	log := logger.Ctx(r.Context())
+
+	externalID := r.URL.Query().Get("external_id")
+	if externalID == "" {
+		respondError(w, http.StatusBadRequest, "Missing external_id query parameter")
+		return "", false
+	}
+
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return "", false
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	sessionStore := &dbsession.Store{DB: s.db}
+	sessionID, err := sessionStore.GetSessionIDByExternalID(ctx, externalID, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrSessionNotFound) {
+			respondError(w, http.StatusNotFound, "Session not found")
+			return "", false
+		}
+		log.Error("Failed to lookup session by external_id", "error", err, "external_id", externalID)
+		respondError(w, http.StatusInternalServerError, "Failed to lookup session")
+		return "", false
+	}
+
+	return sessionID, true
+}
+
+// ============================================================================
+// Session Files (CF-331)
+// ============================================================================
+
+// SessionFilesResponse is the JSON response for the file list endpoint.
+type SessionFilesResponse struct {
+	Files []db.SyncFileDetail `json:"files"`
+}
+
+// handleListSessionFiles returns the list of transcript files for a session.
+// Uses canonical access model (CF-132) — owner, recipient, system, and public shares.
+// GET /api/v1/sessions/{id}/files
+func (s *Server) handleListSessionFiles(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "id")
+	if sessionID == "" {
+		respondError(w, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+	s.serveSessionFiles(w, r, sessionID)
+}
+
+// handleListSessionFilesByExternalID looks up a session by external_id, then returns
+// the file list. Requires the caller to own the session.
+// GET /api/v1/sessions/files?external_id=xxx
+func (s *Server) handleListSessionFilesByExternalID(w http.ResponseWriter, r *http.Request) {
+	sessionID, ok := s.resolveExternalID(w, r)
+	if !ok {
+		return
+	}
+	s.serveSessionFiles(w, r, sessionID)
+}
+
+// serveSessionFiles is the shared implementation for both file list routes.
+func (s *Server) serveSessionFiles(w http.ResponseWriter, r *http.Request, sessionID string) {
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	result := RequireCanonicalRead(ctx, w, s.db, sessionID)
+	if result == nil {
+		return
+	}
+
+	files := result.Session.Files
+	if files == nil {
+		files = []db.SyncFileDetail{}
+	}
+
+	respondJSON(w, http.StatusOK, SessionFilesResponse{Files: files})
+}
+
+// handleDownloadSessionFile downloads the full content of a single transcript file.
+// Uses canonical access model (CF-132) — owner, recipient, system, and public shares.
+// GET /api/v1/sessions/{id}/files/download?file_name=transcript.jsonl
+func (s *Server) handleDownloadSessionFile(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "id")
+	if sessionID == "" {
+		respondError(w, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+	s.serveSessionFileDownload(w, r, sessionID)
+}
+
+// handleDownloadSessionFileByExternalID looks up a session by external_id, then downloads
+// the file content. Requires the caller to own the session.
+// GET /api/v1/sessions/files/download?external_id=xxx&file_name=transcript.jsonl
+func (s *Server) handleDownloadSessionFileByExternalID(w http.ResponseWriter, r *http.Request) {
+	sessionID, ok := s.resolveExternalID(w, r)
+	if !ok {
+		return
+	}
+	s.serveSessionFileDownload(w, r, sessionID)
+}
+
+// serveSessionFileDownload is the shared implementation for both file download routes.
+func (s *Server) serveSessionFileDownload(w http.ResponseWriter, r *http.Request, sessionID string) {
+	log := logger.Ctx(r.Context())
+
+	fileName := r.URL.Query().Get("file_name")
+	if fileName == "" {
+		respondError(w, http.StatusBadRequest, "Missing file_name query parameter")
+		return
+	}
+
+	dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer dbCancel()
+
+	result := RequireCanonicalRead(dbCtx, w, s.db, sessionID)
+	if result == nil {
+		return
+	}
+
+	// Verify file exists in session's sync_files (DB check before hitting S3)
+	if !slices.ContainsFunc(result.Session.Files, func(f db.SyncFileDetail) bool {
+		return f.FileName == fileName
+	}) {
+		respondError(w, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Get session owner info for S3 path
+	sessionStore := &dbsession.Store{DB: s.db}
+	sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+	if err != nil {
+		log.Error("Failed to get session owner info", "error", err, "session_id", sessionID)
+		respondError(w, http.StatusInternalServerError, "Failed to get session info")
+		return
+	}
+
+	// Download and merge all chunks for this file
+	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
+	defer storageCancel()
+
+	content, err := s.storage.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, fileName)
+	if err != nil {
+		log.Error("Failed to download file", "error", err, "session_id", sessionID, "file_name", fileName)
+		respondError(w, http.StatusInternalServerError, "Failed to download file")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(content)
 }
 
 // truncateTranscriptFromStart truncates a transcript XML string from the beginning,
