@@ -1,6 +1,8 @@
 package analytics
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -231,6 +233,51 @@ func TestTokensCardRecordIsValid(t *testing.T) {
 			t.Error("expected true when valid")
 		}
 	})
+}
+
+// TestCardsAllValid_Exhaustive uses reflect to verify that AllValid checks every
+// *CardRecord field in the Cards struct. If a new card type is added to Cards but
+// AllValid is not updated, this test fails.
+func TestCardsAllValid_Exhaustive(t *testing.T) {
+	// Use reflect.TypeOf(Cards{}) to find all *XxxCardRecord fields
+	cardsType := reflect.TypeOf(Cards{})
+	var cardFields []string
+	for i := 0; i < cardsType.NumField(); i++ {
+		field := cardsType.Field(i)
+		if field.Type.Kind() == reflect.Ptr && strings.HasSuffix(field.Type.Elem().Name(), "CardRecord") {
+			cardFields = append(cardFields, field.Name)
+		}
+	}
+
+	if len(cardFields) == 0 {
+		t.Fatal("No *CardRecord fields found in Cards struct")
+	}
+
+	// AllValid should return false when any single card field is nil.
+	// Create fully valid cards, then nil out one field at a time.
+	now := time.Now().UTC()
+	lineCount := int64(100)
+
+	for _, fieldName := range cardFields {
+		t.Run("nil_"+fieldName, func(t *testing.T) {
+			cards := &Cards{
+				Tokens:         &TokensCardRecord{Version: TokensCardVersion, ComputedAt: now, UpToLine: lineCount, EstimatedCostUSD: decimal.Zero},
+				Session:        &SessionCardRecord{Version: SessionCardVersion, ComputedAt: now, UpToLine: lineCount},
+				Tools:          &ToolsCardRecord{Version: ToolsCardVersion, ComputedAt: now, UpToLine: lineCount},
+				CodeActivity:   &CodeActivityCardRecord{Version: CodeActivityCardVersion, ComputedAt: now, UpToLine: lineCount},
+				Conversation:   &ConversationCardRecord{Version: ConversationCardVersion, ComputedAt: now, UpToLine: lineCount},
+				AgentsAndSkills: &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion, ComputedAt: now, UpToLine: lineCount},
+				Redactions:     &RedactionsCardRecord{Version: RedactionsCardVersion, ComputedAt: now, UpToLine: lineCount},
+			}
+
+			// Nil out this one field
+			reflect.ValueOf(cards).Elem().FieldByName(fieldName).Set(reflect.Zero(reflect.ValueOf(cards).Elem().FieldByName(fieldName).Type()))
+
+			if cards.AllValid(lineCount) {
+				t.Errorf("AllValid returned true with %s=nil; AllValid does not check this card field", fieldName)
+			}
+		})
+	}
 }
 
 func TestSessionCardRecordIsValid(t *testing.T) {
