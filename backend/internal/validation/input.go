@@ -16,7 +16,33 @@ const (
 	MaxHostnameLength         = 255  // sessions.hostname
 	MaxUsernameLength         = 255  // sessions.username
 	MaxAPIKeyNameLength       = 255  // api_keys.name
+
+	// Filter parameter limits to prevent memory exhaustion from oversized query strings.
+	MaxFilterCount    = 50   // max number of values per filter param
+	FilterMaxLen = 512  // maxLen of a single filter value
+	MaxSearchQueryLen = 1024 // max length of the search query
 )
+
+// ValidateFilterValues validates a filter parameter's value count and individual lengths.
+func ValidateFilterValues(name string, values []string) error {
+	if len(values) > MaxFilterCount {
+		return fmt.Errorf("%s filter exceeds maximum of %d values", name, MaxFilterCount)
+	}
+	for _, v := range values {
+		if len(v) > FilterMaxLen {
+			return fmt.Errorf("%s filter value exceeds maximum length of %d", name, FilterMaxLen)
+		}
+	}
+	return nil
+}
+
+// ValidateSearchQuery validates a search query string.
+func ValidateSearchQuery(q string) error {
+	if len(q) > MaxSearchQueryLen {
+		return fmt.Errorf("search query exceeds maximum length of %d", MaxSearchQueryLen)
+	}
+	return nil
+}
 
 // ValidateExternalID validates an external ID from URL parameters
 // Returns error if external ID is invalid

@@ -11,6 +11,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // parseCommaSeparated splits a comma-separated query parameter into trimmed non-empty values.
@@ -59,6 +60,23 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		// Parse search query
 		if q := r.URL.Query().Get("q"); q != "" {
 			params.Query = &q
+		}
+
+		// Validate filter param bounds
+		for name, values := range map[string][]string{
+			"repo": params.Repos, "branch": params.Branches,
+			"owner": params.Owners, "pr": params.PRs,
+		} {
+			if err := validation.ValidateFilterValues(name, values); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
+		if params.Query != nil {
+			if err := validation.ValidateSearchQuery(*params.Query); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 
 		// Create context with timeout for database operation
