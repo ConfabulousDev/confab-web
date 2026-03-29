@@ -420,11 +420,8 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Use(ratelimit.MiddlewareWithKey(s.externalReadLimiter, ratelimit.UserKeyFunc(auth.GetUserIDContextKey())))
 
 			r.Get("/sessions/{id}/condensed-transcript", withMaxBody(MaxBodyXS, s.handleCondensedTranscript))
-			r.Get("/sessions/condensed-transcript", withMaxBody(MaxBodyXS, s.handleCondensedTranscriptByExternalID))
 			r.Get("/sessions/{id}/files", withMaxBody(MaxBodyXS, s.handleListSessionFiles))
-			r.Get("/sessions/files", withMaxBody(MaxBodyXS, s.handleListSessionFilesByExternalID))
 			r.Get("/sessions/{id}/files/download", withMaxBody(MaxBodyXS, s.handleDownloadSessionFile))
-			r.Get("/sessions/files/download", withMaxBody(MaxBodyXS, s.handleDownloadSessionFileByExternalID))
 			r.Get("/tils/export", withMaxBody(MaxBodyXS, s.handleExportTILs))
 		})
 

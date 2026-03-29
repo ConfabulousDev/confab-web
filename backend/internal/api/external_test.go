@@ -84,89 +84,18 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("owner can fetch by external_id", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
-
-		testutil.CreateTestSessionFull(t, env, user.ID, "my-ext-id", testutil.TestSessionFullOpts{
-			Summary: "External ID test",
-		})
-
-		transcript := validTestTranscript()
-		testutil.UploadTestTranscript(t, env, user.ID, "my-ext-id", "transcript.jsonl", transcript)
-
-		ts := setupTestServerWithEnv(t, env)
-		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
-
-		resp, err := client.Get("/api/v1/sessions/condensed-transcript?external_id=my-ext-id")
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		testutil.RequireStatus(t, resp, http.StatusOK)
-
-		var result CondensedTranscriptResponse
-		testutil.ParseJSON(t, resp, &result)
-
-		if result.Metadata.ExternalID != "my-ext-id" {
-			t.Errorf("expected external_id %q, got %q", "my-ext-id", result.Metadata.ExternalID)
-		}
-		if result.Transcript == "" {
-			t.Error("expected non-empty transcript")
-		}
-	})
-
-	t.Run("external_id lookup returns 404 for non-existent", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
-
-		ts := setupTestServerWithEnv(t, env)
-		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
-
-		resp, err := client.Get("/api/v1/sessions/condensed-transcript?external_id=nonexistent")
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		testutil.RequireStatus(t, resp, http.StatusNotFound)
-	})
-
-	t.Run("external_id lookup returns 400 when missing", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
-
-		ts := setupTestServerWithEnv(t, env)
-		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
-
-		resp, err := client.Get("/api/v1/sessions/condensed-transcript")
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		testutil.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-
 	t.Run("no API key returns 401", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		testutil.CreateTestSessionFull(t, env, user.ID, "ext-123", testutil.TestSessionFullOpts{
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-123", testutil.TestSessionFullOpts{
 			Summary: "Test session",
 		})
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts) // no API key
 
-		resp, err := client.Get("/api/v1/sessions/condensed-transcript?external_id=ext-123")
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -243,7 +172,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
 
-		testutil.CreateTestSessionFull(t, env, user.ID, "ext-123", testutil.TestSessionFullOpts{
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-123", testutil.TestSessionFullOpts{
 			Summary: "Truncation test",
 		})
 
@@ -253,7 +182,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// First get full transcript to know its length
-		fullResp, err := client.Get("/api/v1/sessions/condensed-transcript?external_id=ext-123")
+		fullResp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript")
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -267,7 +196,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 
 		// Now request with max_chars smaller than full
 		maxChars := fullLen / 2
-		resp, err := client.Get("/api/v1/sessions/condensed-transcript?external_id=ext-123&max_chars=" + strconv.Itoa(maxChars))
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript?max_chars=" + strconv.Itoa(maxChars))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -424,38 +353,6 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("list files by external_id", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
-
-		testutil.CreateTestSessionFull(t, env, user.ID, "ext-files-2", testutil.TestSessionFullOpts{
-			Summary: "External ID test",
-		})
-
-		ts := setupTestServerWithEnv(t, env)
-		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
-
-		resp, err := client.Get("/api/v1/sessions/files?external_id=ext-files-2")
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		testutil.RequireStatus(t, resp, http.StatusOK)
-
-		var result SessionFilesResponse
-		testutil.ParseJSON(t, resp, &result)
-
-		if len(result.Files) != 1 {
-			t.Fatalf("expected 1 file (transcript), got %d", len(result.Files))
-		}
-		if result.Files[0].FileType != "transcript" {
-			t.Errorf("expected transcript file, got %q", result.Files[0].FileType)
-		}
-	})
-
 	t.Run("list files returns empty array for session with no sync files", func(t *testing.T) {
 		env.CleanDB(t)
 
@@ -562,24 +459,6 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
 	})
 
-	t.Run("external_id missing returns 400", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
-
-		ts := setupTestServerWithEnv(t, env)
-		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
-
-		resp, err := client.Get("/api/v1/sessions/files")
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		testutil.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-
 	t.Run("nonexistent session UUID returns 404", func(t *testing.T) {
 		env.CleanDB(t)
 
@@ -646,40 +525,6 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 		// Verify it contains JSONL content
 		if !strings.Contains(string(body), `"type"`) {
 			t.Error("expected JSONL content with type field")
-		}
-	})
-
-	t.Run("download file by external_id", func(t *testing.T) {
-		env.CleanDB(t)
-
-		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
-		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
-
-		testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-2", testutil.TestSessionFullOpts{
-			Summary: "External ID download",
-		})
-
-		transcript := validTestTranscript()
-		testutil.UploadTestTranscript(t, env, user.ID, "ext-dl-2", "transcript.jsonl", transcript)
-
-		ts := setupTestServerWithEnv(t, env)
-		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
-
-		resp, err := client.Get("/api/v1/sessions/files/download?external_id=ext-dl-2&file_name=transcript.jsonl")
-		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		defer resp.Body.Close()
-
-		testutil.RequireStatus(t, resp, http.StatusOK)
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-
-		if len(body) == 0 {
-			t.Error("expected non-empty response body")
 		}
 	})
 

@@ -266,30 +266,6 @@ Authorization: Bearer <api_key>
 
 ---
 
-### Condensed Transcript (by External ID)
-
-Same as above, but looks up the session by `external_id` instead of UUID. Only the session owner can use this lookup.
-
-```
-GET /api/v1/sessions/condensed-transcript?external_id=xxx
-Authorization: Bearer <api_key>
-```
-
-**Query Parameters:**
-| Parameter     | Type   | Required | Description |
-|--------------|--------|----------|-------------|
-| `external_id` | string | Yes      | The CLI session ID (external_id) |
-| `max_chars`   | int    | No       | Same as UUID endpoint |
-
-**Response:** Same as UUID endpoint above.
-
-**Error responses:**
-- `400` — Missing `external_id` query parameter
-- `401` — Missing or invalid API key
-- `404` — Session not found for this user
-
----
-
 ### List Session Files
 
 Returns the list of transcript files (main transcript + agent files) for a session.
@@ -332,22 +308,6 @@ Uses canonical access model (CF-132) — owner, recipient, system, and public sh
 - `401` — Missing or invalid API key
 - `404` — Session not found or no access
 
-#### List Session Files by External ID
-
-```
-GET /api/v1/sessions/files?external_id=xxx
-Authorization: Bearer <api_key>
-```
-
-Same response format as above. Requires the caller to own the session (external_id is owner-scoped).
-
-**Error responses:**
-- `400` — Missing `external_id` query parameter
-- `401` — Missing or invalid API key
-- `404` — Session not found for this user
-
----
-
 ### Download Session File
 
 Downloads the full raw JSONL content of a single transcript file.
@@ -370,20 +330,6 @@ Uses canonical access model (CF-132). Validates the file exists in the session's
 - `400` — Missing `file_name` query parameter
 - `401` — Missing or invalid API key
 - `404` — Session not found, no access, or file not found
-
-#### Download Session File by External ID
-
-```
-GET /api/v1/sessions/files/download?external_id=xxx&file_name=transcript.jsonl
-Authorization: Bearer <api_key>
-```
-
-Same behavior as above. Requires the caller to own the session (external_id is owner-scoped).
-
-**Error responses:**
-- `400` — Missing `external_id` or `file_name` query parameter
-- `401` — Missing or invalid API key
-- `404` — Session not found for this user, or file not found
 
 ---
 

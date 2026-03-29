@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"slices"
@@ -62,18 +61,7 @@ func (s *Server) handleCondensedTranscript(w http.ResponseWriter, r *http.Reques
 	s.serveCondensedTranscript(w, r, sessionID)
 }
 
-// handleCondensedTranscriptByExternalID looks up a session by external_id, then returns
-// the condensed transcript. Requires the caller to own the session.
-// GET /api/v1/sessions/condensed-transcript?external_id=xxx
-func (s *Server) handleCondensedTranscriptByExternalID(w http.ResponseWriter, r *http.Request) {
-	sessionID, ok := s.resolveExternalID(w, r)
-	if !ok {
-		return
-	}
-	s.serveCondensedTranscript(w, r, sessionID)
-}
-
-// serveCondensedTranscript is the shared implementation for both condensed transcript routes.
+// serveCondensedTranscript contains the business logic for the condensed transcript endpoint.
 func (s *Server) serveCondensedTranscript(w http.ResponseWriter, r *http.Request, sessionID string) {
 	log := logger.Ctx(r.Context())
 
@@ -256,40 +244,6 @@ func extractTexts(items []analytics.AnnotatedItem) []string {
 	return texts
 }
 
-// resolveExternalID resolves an external_id query parameter to a session UUID.
-// Returns the session ID or an empty string if the response was already written (error case).
-func (s *Server) resolveExternalID(w http.ResponseWriter, r *http.Request) (string, bool) {
-	log := logger.Ctx(r.Context())
-
-	externalID := r.URL.Query().Get("external_id")
-	if externalID == "" {
-		respondError(w, http.StatusBadRequest, "Missing external_id query parameter")
-		return "", false
-	}
-
-	userID, ok := requireUserID(w, r)
-	if !ok {
-		return "", false
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
-	defer cancel()
-
-	sessionStore := &dbsession.Store{DB: s.db}
-	sessionID, err := sessionStore.GetSessionIDByExternalID(ctx, externalID, userID)
-	if err != nil {
-		if errors.Is(err, db.ErrSessionNotFound) {
-			respondError(w, http.StatusNotFound, "Session not found")
-			return "", false
-		}
-		log.Error("Failed to lookup session by external_id", "error", err, "external_id", externalID)
-		respondError(w, http.StatusInternalServerError, "Failed to lookup session")
-		return "", false
-	}
-
-	return sessionID, true
-}
-
 // ============================================================================
 // Session Files (CF-331)
 // ============================================================================
@@ -311,18 +265,7 @@ func (s *Server) handleListSessionFiles(w http.ResponseWriter, r *http.Request) 
 	s.serveSessionFiles(w, r, sessionID)
 }
 
-// handleListSessionFilesByExternalID looks up a session by external_id, then returns
-// the file list. Requires the caller to own the session.
-// GET /api/v1/sessions/files?external_id=xxx
-func (s *Server) handleListSessionFilesByExternalID(w http.ResponseWriter, r *http.Request) {
-	sessionID, ok := s.resolveExternalID(w, r)
-	if !ok {
-		return
-	}
-	s.serveSessionFiles(w, r, sessionID)
-}
-
-// serveSessionFiles is the shared implementation for both file list routes.
+// serveSessionFiles contains the business logic for the file list endpoint.
 func (s *Server) serveSessionFiles(w http.ResponseWriter, r *http.Request, sessionID string) {
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
@@ -352,18 +295,7 @@ func (s *Server) handleDownloadSessionFile(w http.ResponseWriter, r *http.Reques
 	s.serveSessionFileDownload(w, r, sessionID)
 }
 
-// handleDownloadSessionFileByExternalID looks up a session by external_id, then downloads
-// the file content. Requires the caller to own the session.
-// GET /api/v1/sessions/files/download?external_id=xxx&file_name=transcript.jsonl
-func (s *Server) handleDownloadSessionFileByExternalID(w http.ResponseWriter, r *http.Request) {
-	sessionID, ok := s.resolveExternalID(w, r)
-	if !ok {
-		return
-	}
-	s.serveSessionFileDownload(w, r, sessionID)
-}
-
-// serveSessionFileDownload is the shared implementation for both file download routes.
+// serveSessionFileDownload contains the business logic for the file download endpoint.
 func (s *Server) serveSessionFileDownload(w http.ResponseWriter, r *http.Request, sessionID string) {
 	log := logger.Ctx(r.Context())
 
