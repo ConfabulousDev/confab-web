@@ -77,13 +77,13 @@ type SessionDetail struct {
 	Summary               *string          `json:"summary,omitempty"`                 // First summary from transcript
 	FirstUserMessage      *string          `json:"first_user_message,omitempty"`      // First user message
 	FirstSeen             time.Time        `json:"first_seen"`
-	CWD              *string          `json:"cwd,omitempty"`                // Working directory
-	TranscriptPath   *string          `json:"transcript_path,omitempty"`    // Original transcript path
-	GitInfo          interface{}      `json:"git_info,omitempty"`           // Git metadata
-	LastSyncAt       *time.Time       `json:"last_sync_at,omitempty"`       // Last sync timestamp
-	Files            []SyncFileDetail `json:"files"`                        // Sync files
-	Hostname         *string          `json:"hostname,omitempty"`           // Client machine hostname (owner-only)
-	Username         *string          `json:"username,omitempty"`           // OS username (owner-only)
+	CWD              *string          `json:"cwd,omitempty" pii:"redact"`                // Working directory
+	TranscriptPath   *string          `json:"transcript_path,omitempty" pii:"redact"`    // Original transcript path
+	GitInfo          interface{}      `json:"git_info,omitempty"`                        // Git metadata
+	LastSyncAt       *time.Time       `json:"last_sync_at,omitempty"`                    // Last sync timestamp
+	Files            []SyncFileDetail `json:"files"`                                     // Sync files
+	Hostname         *string          `json:"hostname,omitempty" pii:"redact"`           // Client machine hostname (owner-only)
+	Username         *string          `json:"username,omitempty" pii:"redact"`           // OS username (owner-only)
 	IsOwner          *bool            `json:"is_owner,omitempty"`           // True if viewer is session owner (shared sessions only)
 	SharedByEmail    *string          `json:"shared_by_email,omitempty"`    // Email of session owner (non-owner access only)
 	OwnerEmail       string           `json:"owner_email"`                  // Email of session owner (always populated)
