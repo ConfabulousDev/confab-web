@@ -165,9 +165,18 @@ func containsAny(s string, substrs []string) bool {
 // Incremental Sync - Chunk Operations
 // ============================================================================
 
+// MaxLineNumber is the upper bound for chunk line numbers. The %08d formatting
+// requires values to fit in 8 digits so that lexicographic order equals numeric order.
+const MaxLineNumber = 99999999
+
 // UploadChunk uploads a chunk file for incremental sync
 // Key format: {user_id}/claude-code/{external_id}/chunks/{file_name}/chunk_{first:08d}_{last:08d}.jsonl
 func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, fileName string, firstLine, lastLine int, data []byte) (string, error) {
+	// Validate line number bounds: must be positive and fit in 8-digit zero-padding
+	if firstLine < 1 || lastLine < firstLine || lastLine > MaxLineNumber {
+		return "", fmt.Errorf("invalid line range [%d, %d]: must satisfy 1 <= firstLine <= lastLine <= %d", firstLine, lastLine, MaxLineNumber)
+	}
+
 	ctx, span := tracer.Start(ctx, "storage.upload_chunk",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
