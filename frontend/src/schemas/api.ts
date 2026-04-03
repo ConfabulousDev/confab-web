@@ -6,6 +6,7 @@ import { z } from 'zod';
 // Common Schemas
 // ============================================================================
 
+
 const GitInfoSchema = z.object({
   repo_url: z.string().optional(),
   branch: z.string().optional(),
@@ -172,7 +173,7 @@ const TokenStatsSchema = z.object({
 });
 
 const CostStatsSchema = z.object({
-  estimated_usd: z.string(), // Decimal serialized as string from backend
+  estimated_usd: z.string().refine((s) => /^-?\d+(\.\d+)?$/.test(s), { message: 'Invalid decimal' }), // Decimal serialized as string from backend
 });
 
 const CompactionInfoSchema = z.object({
@@ -188,7 +189,7 @@ const TokensCardDataSchema = z.object({
   output: z.number(),
   cache_creation: z.number(),
   cache_read: z.number(),
-  estimated_usd: z.string(), // Consolidated from cost card
+  estimated_usd: z.string().refine((s) => /^-?\d+(\.\d+)?$/.test(s), { message: 'Invalid decimal' }), // Consolidated from cost card
   // Fast mode breakdown (only present when fast mode was used)
   fast_turns: z.number().optional(),
   fast_cost_usd: z.string().optional(),

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/minio/minio-go/v7"
@@ -173,6 +174,35 @@ func TestS3Config_Validation(t *testing.T) {
 	}
 	if config.BucketName == "" {
 		t.Error("BucketName should not be empty")
+	}
+}
+
+// TestUploadChunkLineBounds verifies that UploadChunk rejects invalid line ranges
+// before attempting any S3 operation. Uses a nil client since the bounds check is first.
+func TestUploadChunkLineBounds(t *testing.T) {
+	s := &S3Storage{} // nil client — bounds check runs before S3 calls
+
+	tests := []struct {
+		name      string
+		firstLine int
+		lastLine  int
+	}{
+		{"zero firstLine", 0, 100},
+		{"negative firstLine", -1, 100},
+		{"firstLine > lastLine", 100, 50},
+		{"lastLine exceeds max", 1, MaxLineNumber + 1},
+		{"both exceed max", MaxLineNumber + 1, MaxLineNumber + 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := s.UploadChunk(t.Context(), 1, "ext-123", "transcript.jsonl", tt.firstLine, tt.lastLine, []byte("data"))
+			if err == nil {
+				t.Errorf("expected error for invalid range [%d, %d]", tt.firstLine, tt.lastLine)
+			} else if !strings.Contains(err.Error(), "invalid line range") {
+				t.Errorf("expected bounds error, got: %v", err)
+			}
+		})
 	}
 }
 

@@ -44,3 +44,6 @@ fly-secrets.sh
 
 # Deploy logs
 deploy-logs/
+
+# Lean Forge (code hardening process artifacts)
+.lean-forge/

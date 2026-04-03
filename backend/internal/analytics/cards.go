@@ -304,6 +304,23 @@ type SmartRecapQuotaInfo struct {
 // Validation helpers
 // =============================================================================
 
+// CardValidator is the interface that all regular card records implement.
+// Each card must check both its version constant and line count watermark.
+type CardValidator interface {
+	IsValid(currentLineCount int64) bool
+}
+
+// Compile-time checks that all card types implement CardValidator.
+var (
+	_ CardValidator = (*TokensCardRecord)(nil)
+	_ CardValidator = (*SessionCardRecord)(nil)
+	_ CardValidator = (*ToolsCardRecord)(nil)
+	_ CardValidator = (*CodeActivityCardRecord)(nil)
+	_ CardValidator = (*ConversationCardRecord)(nil)
+	_ CardValidator = (*AgentsAndSkillsCardRecord)(nil)
+	_ CardValidator = (*RedactionsCardRecord)(nil)
+)
+
 // IsValid checks if a tokens card record is valid for the current line count.
 func (c *TokensCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == TokensCardVersion && c.UpToLine == currentLineCount
