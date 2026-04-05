@@ -21,6 +21,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `CardGrid.module.css` | Grid layout for analytics cards |
 | `CardGrid.tsx` | CSS grid container for rendering card layouts |
 | `Chip.tsx` | Tag/chip component for filter selections |
+| `CopyIdDropdown.tsx` | Dropdown for copying Confab ID or Claude Code ID with confirmation feedback |
 | `DeployCTA.tsx` | Call-to-action for self-hosted deployment |
 | `ErrorBoundary.tsx` | React error boundary with fallback UI |
 | `ErrorDisplay.tsx` | Styled error message display |

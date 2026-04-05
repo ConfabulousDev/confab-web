@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { GitInfo, SessionDetail } from '@/types';
-import { useCopyToClipboard } from '@/hooks';
 import { formatDuration, formatDateTime, formatModelName } from '@/utils/formatting';
 import { sessionsAPI } from '@/services/api';
 import type {
@@ -15,23 +14,10 @@ import { PersonIcon } from '@/components/icons';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
 import FilterDropdown from './FilterDropdown';
+import CopyIdDropdown from '@/components/CopyIdDropdown';
 import styles from './SessionHeader.module.css';
 
 const MAX_CUSTOM_TITLE_LENGTH = 255;
-
-// SVG Icons (local to this component; not shared because they use header-specific sizes)
-const CopyIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-  </svg>
-);
-
-const CheckIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
 
 const ModelIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -143,7 +129,6 @@ function SessionHeader({
   isCostMode,
   onToggleCostMode,
 }: SessionHeaderProps) {
-  const { copy, copied } = useCopyToClipboard();
   const displayTitle = title || `Session ${externalId.substring(0, 8)}`;
 
   // Edit mode state
@@ -280,14 +265,7 @@ function SessionHeader({
               )}
             </>
           )}
-          <button
-            className={styles.copyIdBtn}
-            onClick={() => copy(externalId)}
-            title={copied ? 'Copied!' : 'Copy Claude Code session id'}
-            aria-label="Copy Claude Code session id"
-          >
-            {copied ? CheckIcon : CopyIcon}
-          </button>
+          <CopyIdDropdown confabId={sessionId} claudeCodeId={externalId} showChip />
         </div>
         <div className={styles.metadata}>
           <MetaItem icon={PersonIcon} value={ownerEmail} />

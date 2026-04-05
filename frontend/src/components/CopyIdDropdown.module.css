@@ -1,0 +1,118 @@
+.container {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Chip trigger (detail page) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--color-text-secondary);
+  color: var(--color-text-secondary);
+}
+
+.chipText {
+  user-select: none;
+}
+
+.chipIcon {
+  display: flex;
+  align-items: center;
+}
+
+.chipIcon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Icon-only trigger (list page) */
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs);
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  opacity: 0.6;
+  transition: all var(--transition-fast);
+}
+
+.iconBtn:hover {
+  opacity: 1;
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.iconBtn svg {
+  display: block;
+}
+
+/* Dropdown menu */
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  min-width: 180px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menuItem:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.menuLabel {
+  flex: 1;
+}
+
+.menuCheck {
+  display: flex;
+  align-items: center;
+  color: var(--color-success);
+  margin-left: 8px;
+}
+
+.menuCheck svg {
+  width: 14px;
+  height: 14px;
+}

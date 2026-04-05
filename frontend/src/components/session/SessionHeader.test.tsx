@@ -15,6 +15,28 @@ describe('SessionHeader', () => {
     ownerEmail: 'owner@example.com',
   };
 
+  describe('UUID chip', () => {
+    it('renders truncated backend UUID as a chip', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} isOwner={true} />
+      );
+      // First 8 chars of the UUID
+      expect(screen.getByText('123e4567')).toBeInTheDocument();
+    });
+
+    it('renders UUID chip for shared sessions too', () => {
+      renderWithRouter(
+        <SessionHeader
+          {...defaultProps}
+          isShared={true}
+          isOwner={false}
+          sharedByEmail="owner@example.com"
+        />
+      );
+      expect(screen.getByText('123e4567')).toBeInTheDocument();
+    });
+  });
+
   describe('sharedByEmail', () => {
     it('renders "Shared Session" when sharedByEmail is provided and not owner', () => {
       renderWithRouter(

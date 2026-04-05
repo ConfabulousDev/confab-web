@@ -14,6 +14,7 @@ import Quickstart from '@/components/Quickstart';
 import QuickstartCTA from '@/components/QuickstartCTA';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
+import CopyIdDropdown from '@/components/CopyIdDropdown';
 import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon, RefreshIcon, PersonIcon } from '@/components/icons';
 import styles from './SessionsPage.module.css';
 
@@ -41,9 +42,9 @@ function SessionsPage() {
   const ownersExceptSelf = owners.filter((o: string) => o !== user?.email);
   const hasActiveFilters = repos.length > 0 || branches.length > 0 || ownersExceptSelf.length > 0 || query !== '';
 
-  const handleRowClick = (sessionId: string) => {
+  function handleRowClick(sessionId: string) {
     navigate(`/sessions/${sessionId}`);
-  };
+  }
 
   return (
     <div className={styles.pageWrapper}>
@@ -132,8 +133,13 @@ function SessionsPage() {
                           onClick={() => handleRowClick(session.id)}
                         >
                           <td className={styles.sessionCell}>
-                            <div className={title ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
-                              {title || 'Untitled'}
+                            <div className={styles.sessionTitleRow}>
+                              <div className={title ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
+                                {title || 'Untitled'}
+                              </div>
+                              <span className={styles.rowCopyBtn}>
+                                <CopyIdDropdown confabId={session.id} claudeCodeId={session.external_id} />
+                              </span>
                             </div>
                             <div className={styles.chipRow}>
                               <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>

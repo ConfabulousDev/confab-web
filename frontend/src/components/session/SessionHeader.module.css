@@ -39,30 +39,6 @@
   -webkit-box-orient: vertical;
 }
 
-.copyIdBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xs);
-  border: none;
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  opacity: 0.5;
-  transition: all var(--transition-fast);
-}
-
-.copyIdBtn:hover {
-  opacity: 1;
-  background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
-}
-
-.copyIdBtn svg {
-  display: block;
-}
-
 /* Edit button */
 .editBtn {
   display: flex;

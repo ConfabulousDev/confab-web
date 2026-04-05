@@ -75,12 +75,27 @@
   max-width: 0; /* Forces column to respect table width constraints */
 }
 
+.sessionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
 .sessionTitle {
   font-weight: var(--font-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 4px;
+}
+
+.rowCopyBtn {
+  display: none;
+  flex-shrink: 0;
+}
+
+.clickableRow:hover .rowCopyBtn {
+  display: flex;
 }
 
 .chipRow {
