@@ -25,18 +25,18 @@ describe('CopyIdDropdown', () => {
 
     it('opens dropdown on click', () => {
       render(<CopyIdDropdown {...defaultProps} showChip />);
-      expect(screen.queryByText('Copy Confab ID')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Copy Confab ID/)).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: 'Copy session ID' }));
 
-      expect(screen.getByText('Copy Confab ID')).toBeInTheDocument();
-      expect(screen.getByText('Copy Claude Code ID')).toBeInTheDocument();
+      expect(screen.getByText(/Copy Confab ID/)).toBeInTheDocument();
+      expect(screen.getByText(/Copy Claude Code ID/)).toBeInTheDocument();
     });
 
     it('copies Confab ID when selected', () => {
       render(<CopyIdDropdown {...defaultProps} showChip />);
       fireEvent.click(screen.getByRole('button', { name: 'Copy session ID' }));
-      fireEvent.click(screen.getByText('Copy Confab ID'));
+      fireEvent.click(screen.getByText(/Copy Confab ID/));
 
       expect(writeTextMock).toHaveBeenCalledWith(defaultProps.confabId);
     });
@@ -44,7 +44,7 @@ describe('CopyIdDropdown', () => {
     it('copies Claude Code ID when selected', () => {
       render(<CopyIdDropdown {...defaultProps} showChip />);
       fireEvent.click(screen.getByRole('button', { name: 'Copy session ID' }));
-      fireEvent.click(screen.getByText('Copy Claude Code ID'));
+      fireEvent.click(screen.getByText(/Copy Claude Code ID/));
 
       expect(writeTextMock).toHaveBeenCalledWith(defaultProps.claudeCodeId);
     });
@@ -53,15 +53,15 @@ describe('CopyIdDropdown', () => {
       vi.useFakeTimers();
       render(<CopyIdDropdown {...defaultProps} showChip />);
       fireEvent.click(screen.getByRole('button', { name: 'Copy session ID' }));
-      fireEvent.click(screen.getByText('Copy Confab ID'));
+      fireEvent.click(screen.getByText(/Copy Confab ID/));
 
       // Still open briefly for confirmation
-      expect(screen.getByText('Copy Confab ID')).toBeInTheDocument();
+      expect(screen.getByText(/Copy Confab ID/)).toBeInTheDocument();
 
       act(() => { vi.advanceTimersByTime(700); });
 
       // Closed after delay
-      expect(screen.queryByText('Copy Confab ID')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Copy Confab ID/)).not.toBeInTheDocument();
       vi.useRealTimers();
     });
   });
@@ -76,8 +76,8 @@ describe('CopyIdDropdown', () => {
       render(<CopyIdDropdown {...defaultProps} />);
       fireEvent.click(screen.getByRole('button', { name: 'Copy session ID' }));
 
-      expect(screen.getByText('Copy Confab ID')).toBeInTheDocument();
-      expect(screen.getByText('Copy Claude Code ID')).toBeInTheDocument();
+      expect(screen.getByText(/Copy Confab ID/)).toBeInTheDocument();
+      expect(screen.getByText(/Copy Claude Code ID/)).toBeInTheDocument();
     });
   });
 
@@ -90,10 +90,10 @@ describe('CopyIdDropdown', () => {
         </div>
       );
       fireEvent.click(screen.getByRole('button', { name: 'Copy session ID' }));
-      expect(screen.getByText('Copy Confab ID')).toBeInTheDocument();
+      expect(screen.getByText(/Copy Confab ID/)).toBeInTheDocument();
 
       fireEvent.mouseDown(screen.getByTestId('outside'));
-      expect(screen.queryByText('Copy Confab ID')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Copy Confab ID/)).not.toBeInTheDocument();
     });
   });
 

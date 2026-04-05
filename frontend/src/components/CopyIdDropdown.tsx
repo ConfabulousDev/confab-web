@@ -61,14 +61,20 @@ function CopyIdDropdown({ confabId, claudeCodeId, showChip = false }: CopyIdDrop
             className={styles.menuItem}
             onClick={(e) => handleCopy(confabId, 'confab', e)}
           >
-            <span className={styles.menuLabel}>Copy Confab ID</span>
+            <span className={styles.menuLabel}>
+              Copy Confab ID
+              <span className={styles.menuHint}>for /retro</span>
+            </span>
             {copiedLabel === 'confab' && <span className={styles.menuCheck}>{CheckIcon}</span>}
           </button>
           <button
             className={styles.menuItem}
             onClick={(e) => handleCopy(claudeCodeId, 'claude', e)}
           >
-            <span className={styles.menuLabel}>Copy Claude Code ID</span>
+            <span className={styles.menuLabel}>
+              Copy Claude Code ID
+              <span className={styles.menuHint}>for /resume</span>
+            </span>
             {copiedLabel === 'claude' && <span className={styles.menuCheck}>{CheckIcon}</span>}
           </button>
         </div>
