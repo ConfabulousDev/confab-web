@@ -45,10 +45,12 @@ Two categories get their own dedicated `##`-level sections in **every** release.
 
 ### Step 3: Tag, publish, and verify
 
+The release title must be just the version number (e.g., `v0.3.19`) — nothing else.
+
 ```bash
 git tag v0.X.Y
 git push origin v0.X.Y
-gh release create v0.X.Y --notes "<release notes>"
+gh release create v0.X.Y --title "v0.X.Y" --notes "<release notes>"
 ```
 
 Use a HEREDOC for the notes body to preserve formatting.
