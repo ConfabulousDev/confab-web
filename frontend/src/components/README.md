@@ -6,6 +6,7 @@ Reusable UI components and domain-specific component subdirectories for the Conf
 
 Root-level files are **shared, reusable components** used across multiple pages. Domain-specific components live in subdirectories:
 
+- `charts/` -- Shared chart primitives (e.g., `AgentSkillYAxisTick` custom Recharts tick)
 - `session/` -- Session viewer, summary panel, analytics cards, message timeline
 - `transcript/` -- Transcript rendering (code blocks, bash output, timeline bars)
 - `trends/` -- Trends analytics dashboard cards

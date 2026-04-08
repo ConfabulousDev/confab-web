@@ -2,6 +2,12 @@ import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { UsersIcon, ZapIcon } from '@/components/icons';
 import type { AgentsAndSkillsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
+import { AgentSkillYAxisTick } from '@/components/charts/AgentSkillYAxisTick';
+import {
+  AGENT_SKILL_COLORS,
+  truncateName,
+  type ChartDataItem,
+} from '@/utils/agentSkillChart';
 import {
   BarChart,
   Bar,
@@ -12,26 +18,6 @@ import {
   Cell,
 } from 'recharts';
 import styles from './AgentsAndSkillsCard.module.css';
-
-// Color schemes for agents vs skills
-const COLORS = {
-  agent: {
-    success: '#3B82F6', // Blue
-    error: '#EF4444', // Red
-  },
-  skill: {
-    success: '#8B5CF6', // Purple
-    error: '#EF4444', // Red
-  },
-};
-
-interface ChartDataItem {
-  name: string;
-  success: number;
-  errors: number;
-  total: number;
-  type: 'agent' | 'skill';
-}
 
 function prepareChartData(
   agentStats: Record<string, { success: number; errors: number }>,
@@ -78,7 +64,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const errors = payload.find((p) => p.dataKey === 'errors')?.value ?? 0;
   const total = success + errors;
   const typeLabel = item.type === 'agent' ? 'Agent' : 'Skill';
-  const colors = COLORS[item.type];
+  const colors = AGENT_SKILL_COLORS[item.type];
 
   return (
     <div className={styles.tooltip}>
@@ -126,8 +112,8 @@ export function AgentsAndSkillsCard({ data, loading, error }: CardProps<AgentsAn
   // Calculate dynamic height based on number of items (24px per item, min 80px)
   const chartHeight = Math.max(80, chartData.length * 24);
 
-  // Calculate dynamic YAxis width based on longest label (~7px per char at 11px font)
-  const maxLabelLength = Math.max(...chartData.map((d) => d.name.length), 6);
+  // Calculate dynamic YAxis width based on longest truncated label (~7px per char at 11px font)
+  const maxLabelLength = Math.max(...chartData.map((d) => truncateName(d.name).length), 6);
   const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
 
   // Find max value for integer ticks
@@ -143,11 +129,11 @@ export function AgentsAndSkillsCard({ data, loading, error }: CardProps<AgentsAn
         <>
           <div className={styles.legend} style={{ marginTop: 'var(--spacing-sm)' }}>
             <div className={styles.legendItem}>
-              <span className={styles.legendDot} style={{ backgroundColor: COLORS.agent.success }} />
+              <span className={styles.legendDot} style={{ backgroundColor: AGENT_SKILL_COLORS.agent.success }} />
               <span>Agents</span>
             </div>
             <div className={styles.legendItem}>
-              <span className={styles.legendDot} style={{ backgroundColor: COLORS.skill.success }} />
+              <span className={styles.legendDot} style={{ backgroundColor: AGENT_SKILL_COLORS.skill.success }} />
               <span>Skills</span>
             </div>
           </div>
@@ -174,7 +160,7 @@ export function AgentsAndSkillsCard({ data, loading, error }: CardProps<AgentsAn
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+                  tick={<AgentSkillYAxisTick />}
                   width={yAxisWidth}
                   interval={0}
                 />
@@ -187,12 +173,12 @@ export function AgentsAndSkillsCard({ data, loading, error }: CardProps<AgentsAn
                 />
                 <Bar dataKey="success" stackId="stack" radius={[2, 2, 2, 2]} isAnimationActive={false}>
                   {chartData.map((entry, index) => (
-                    <Cell key={`success-${index}`} fill={COLORS[entry.type].success} />
+                    <Cell key={`success-${index}`} fill={AGENT_SKILL_COLORS[entry.type].success} />
                   ))}
                 </Bar>
                 <Bar dataKey="errors" stackId="stack" radius={[2, 2, 2, 2]} isAnimationActive={false}>
                   {chartData.map((entry, index) => (
-                    <Cell key={`error-${index}`} fill={COLORS[entry.type].error} />
+                    <Cell key={`error-${index}`} fill={AGENT_SKILL_COLORS[entry.type].error} />
                   ))}
                 </Bar>
               </BarChart>

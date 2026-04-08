@@ -1,6 +1,12 @@
 import { TrendsCard } from './TrendsCard';
 import { UsersIcon } from '@/components/icons';
 import type { TrendsAgentsAndSkillsCard as TrendsAgentsAndSkillsCardData } from '@/schemas/api';
+import { AgentSkillYAxisTick } from '@/components/charts/AgentSkillYAxisTick';
+import {
+  AGENT_SKILL_COLORS,
+  truncateName,
+  type ChartDataItem,
+} from '@/utils/agentSkillChart';
 import {
   BarChart,
   Bar,
@@ -11,25 +17,6 @@ import {
   Cell,
 } from 'recharts';
 import styles from './TrendsAgentsAndSkillsCard.module.css';
-
-const COLORS = {
-  agent: {
-    success: '#3B82F6', // Blue
-    error: '#EF4444', // Red
-  },
-  skill: {
-    success: '#8B5CF6', // Purple
-    error: '#EF4444', // Red
-  },
-};
-
-interface ChartDataItem {
-  name: string;
-  success: number;
-  errors: number;
-  total: number;
-  type: 'agent' | 'skill';
-}
 
 function prepareChartData(
   stats: Record<string, { success: number; errors: number }>,
@@ -67,7 +54,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const errors = payload.find((p) => p.dataKey === 'errors')?.value ?? 0;
   const total = success + errors;
   const typeLabel = item.type === 'agent' ? 'Agent' : 'Skill';
-  const colors = COLORS[item.type];
+  const colors = AGENT_SKILL_COLORS[item.type];
 
   return (
     <div className={styles.tooltip}>
@@ -96,7 +83,7 @@ interface SectionChartProps {
 
 function SectionChart({ data }: SectionChartProps) {
   const chartHeight = Math.max(80, data.length * 28);
-  const maxLabelLength = Math.max(...data.map((d) => d.name.length), 4);
+  const maxLabelLength = Math.max(...data.map((d) => truncateName(d.name).length), 4);
   const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
 
   return (
@@ -120,7 +107,7 @@ function SectionChart({ data }: SectionChartProps) {
             dataKey="name"
             axisLine={false}
             tickLine={false}
-            tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+            tick={<AgentSkillYAxisTick />}
             width={yAxisWidth}
             interval={0}
           />
@@ -132,12 +119,12 @@ function SectionChart({ data }: SectionChartProps) {
           />
           <Bar dataKey="success" stackId="stack" radius={[2, 2, 2, 2]} isAnimationActive={false}>
             {data.map((entry, index) => (
-              <Cell key={`success-${index}`} fill={COLORS[entry.type].success} />
+              <Cell key={`success-${index}`} fill={AGENT_SKILL_COLORS[entry.type].success} />
             ))}
           </Bar>
           <Bar dataKey="errors" stackId="stack" radius={[2, 2, 2, 2]} isAnimationActive={false}>
             {data.map((entry, index) => (
-              <Cell key={`error-${index}`} fill={COLORS[entry.type].error} />
+              <Cell key={`error-${index}`} fill={AGENT_SKILL_COLORS[entry.type].error} />
             ))}
           </Bar>
         </BarChart>
@@ -170,20 +157,22 @@ export function TrendsAgentsAndSkillsCard({ data }: TrendsAgentsAndSkillsCardPro
   }
 
   return (
-    <TrendsCard title="Agents & Skills" icon={UsersIcon} subtitle={subtitle}>
-      <div className={styles.sectionHeading}>Agents</div>
-      {agentChartData.length > 0 ? (
-        <SectionChart data={agentChartData} />
-      ) : (
-        <div className={styles.emptyMessage}>None</div>
-      )}
+    <div className={styles.wrapper}>
+      <TrendsCard title="Agents & Skills" icon={UsersIcon} subtitle={subtitle}>
+        <div className={styles.sectionHeading}>Agents</div>
+        {agentChartData.length > 0 ? (
+          <SectionChart data={agentChartData} />
+        ) : (
+          <div className={styles.emptyMessage}>None</div>
+        )}
 
-      <div className={styles.sectionHeading}>Skills</div>
-      {skillChartData.length > 0 ? (
-        <SectionChart data={skillChartData} />
-      ) : (
-        <div className={styles.emptyMessage}>None</div>
-      )}
-    </TrendsCard>
+        <div className={styles.sectionHeading}>Skills</div>
+        {skillChartData.length > 0 ? (
+          <SectionChart data={skillChartData} />
+        ) : (
+          <div className={styles.emptyMessage}>None</div>
+        )}
+      </TrendsCard>
+    </div>
   );
 }

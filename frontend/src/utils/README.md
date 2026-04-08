@@ -15,6 +15,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `dateRange.ts` | Date range types, presets (This Week, Last 30 Days, etc.), URL parsing |
 | `git.ts` | Git URL conversion (SSH to HTTPS, branch URLs) |
 | `sessionErrors.ts` | Session error types, messages, icons, and 401 redirect skip list |
+| `agentSkillChart.ts` | Shared agent/skill chart constants, types, and name truncation |
 | `utils.ts` | Low-level utilities: `stripAnsi`, `formatBytes` |
 | `index.ts` | Barrel re-exports of commonly used functions |
 

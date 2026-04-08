@@ -120,6 +120,27 @@ export const SingleItem: Story = {
   },
 };
 
+export const LongNames: Story = {
+  args: {
+    data: {
+      agent_invocations: 12,
+      skill_invocations: 8,
+      agent_stats: {
+        'execute-linear-ticket-electron': { success: 5, errors: 1 },
+        'golang-deep-maintenance': { success: 3, errors: 0 },
+        Explore: { success: 2, errors: 0 },
+        Plan: { success: 1, errors: 0 },
+      },
+      skill_stats: {
+        'frontend-design:frontend-design': { success: 3, errors: 0 },
+        'transcript-parser-gaps': { success: 2, errors: 1 },
+        commit: { success: 2, errors: 0 },
+      },
+    },
+    loading: false,
+  },
+};
+
 export const Loading: Story = {
   args: {
     data: undefined,

@@ -9,7 +9,7 @@ const meta: Meta<typeof TrendsAgentsAndSkillsCard> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '400px' }}>
+      <div style={{ width: '780px' }}>
         <Story />
       </div>
     ),
@@ -72,6 +72,27 @@ export const SkillsOnly: Story = {
 export const NoData: Story = {
   args: {
     data: null,
+  },
+};
+
+export const LongNames: Story = {
+  args: {
+    data: {
+      total_agent_invocations: 35,
+      total_skill_invocations: 25,
+      agent_stats: {
+        'execute-linear-ticket-electron': { success: 12, errors: 1 },
+        'golang-deep-maintenance': { success: 8, errors: 0 },
+        Explore: { success: 10, errors: 2 },
+        Plan: { success: 2, errors: 0 },
+      },
+      skill_stats: {
+        'frontend-design:frontend-design': { success: 10, errors: 0 },
+        'transcript-parser-gaps': { success: 8, errors: 1 },
+        commit: { success: 5, errors: 0 },
+        'backend-maintenance': { success: 1, errors: 0 },
+      },
+    },
   },
 };
 
