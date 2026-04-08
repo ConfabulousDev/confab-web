@@ -15,7 +15,7 @@ Session analytics engine: parses Claude Code transcripts and computes, caches, a
 | `analyzer_tools.go` | `ToolsAnalyzer` -- per-tool success/error counts. Attributes `tool_result` errors back to the originating tool via ID mapping. |
 | `analyzer_code_activity.go` | `CodeActivityAnalyzer` -- files read/modified, lines added/removed, search count, language breakdown by extension. Inspects `Read`/`Write`/`Edit`/`Glob`/`Grep` tool inputs. |
 | `analyzer_conversation.go` | `ConversationAnalyzer` -- user/assistant turn counts, turn timing, utilization percentage. Main-only (no agent files). |
-| `analyzer_agents.go` | `AgentsAnalyzer` -- Task tool invocations grouped by `subagent_type`. Main-only. |
+| `analyzer_agents.go` | `AgentsAnalyzer` -- Agent/Task tool invocations grouped by `subagent_type`. Main-only. |
 | `analyzer_skills.go` | `SkillsAnalyzer` -- Skill tool invocations plus command-expansion (`<command-name>`) detection. Main-only. |
 | `analyzer_redactions.go` | `RedactionsAnalyzer` -- counts `[REDACTED:TYPE]` markers by recursively walking `RawData`. Processes all files. |
 | `analyzer_smart_recap.go` | `SmartRecapAnalyzer` -- calls Anthropic LLM to generate session recaps. Handles transcript preparation (`PrepareTranscript`, `TranscriptBuilder`), stats formatting, response parsing, and message-ID resolution. Contains the system prompt sections and `BuildSmartRecapSystemPrompt` assembly function. |

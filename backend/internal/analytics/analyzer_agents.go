@@ -6,8 +6,16 @@ type AgentsResult struct {
 	AgentStats       map[string]*AgentStats
 }
 
-// AgentsAnalyzer extracts agent/Task usage metrics from transcripts.
-// It tracks invocations of the Task tool by subagent_type and their outcomes.
+// isAgentToolName reports whether the given tool name is the agent tool.
+// The tool was originally named "Task" and later renamed to "Agent";
+// both names appear in transcripts.
+func isAgentToolName(name string) bool {
+	return name == "Task" || name == "Agent"
+}
+
+// AgentsAnalyzer extracts agent usage metrics from transcripts.
+// It tracks invocations of the agent tool (named "Task" in older transcripts,
+// "Agent" in newer ones) by subagent_type and their outcomes.
 // Main-only: agent invocations are tracked in the main transcript.
 type AgentsAnalyzer struct {
 	result              AgentsResult
@@ -25,10 +33,10 @@ func (a *AgentsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 	a.toolUseIDToAgentType = make(map[string]string)
 
 	for _, line := range file.Lines {
-		// Find Task tool_use blocks and extract subagent_type
+		// Find agent tool_use blocks and extract subagent_type.
 		if line.IsAssistantMessage() {
 			for _, tool := range line.GetToolUses() {
-				if tool.Name == "Task" && tool.ID != "" {
+				if isAgentToolName(tool.Name) && tool.ID != "" {
 					if subagentType, ok := tool.Input["subagent_type"].(string); ok && subagentType != "" {
 						a.toolUseIDToAgentType[tool.ID] = subagentType
 					}

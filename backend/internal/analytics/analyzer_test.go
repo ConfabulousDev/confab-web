@@ -856,7 +856,7 @@ func TestAgentsAnalyzer_MultipleAgentTypes(t *testing.T) {
 }
 
 func TestAgentsAnalyzer_NoAgentInvocations(t *testing.T) {
-	// Regular tool usage without Task/agents
+	// Regular tool usage without agent invocations
 	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
 		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/test.txt"}),
 	}, "tool_use") + "\n" +
@@ -882,8 +882,39 @@ func TestAgentsAnalyzer_NoAgentInvocations(t *testing.T) {
 	}
 }
 
+func TestAgentsAnalyzer_AgentToolName(t *testing.T) {
+	// The tool was renamed from "Task" to "Agent" — both names should be recognized
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+		makeToolUseBlock("toolu_1", "Agent", map[string]interface{}{"subagent_type": "Explore", "prompt": "Find something", "description": "test"}),
+	}, "tool_use") + "\n" +
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+			makeToolResultBlock("toolu_1", "Found it", false),
+		}, map[string]interface{}{"agentId": "agent_1"}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+
+	result, err := (&AgentsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalInvocations != 1 {
+		t.Errorf("TotalInvocations = %d, want 1", result.TotalInvocations)
+	}
+
+	if result.AgentStats["Explore"] == nil {
+		t.Fatal("AgentStats should have 'Explore' entry for Agent tool (renamed from Task)")
+	}
+	if result.AgentStats["Explore"].Success != 1 {
+		t.Errorf("AgentStats[Explore].Success = %d, want 1", result.AgentStats["Explore"].Success)
+	}
+}
+
 func TestAgentsAnalyzer_UnknownAgentType(t *testing.T) {
-	// Task tool without subagent_type but with agentId in result (should count as "unknown")
+	// Agent tool without subagent_type but with agentId in result (should count as "unknown")
 	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
 		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{"prompt": "Do something"}),
 	}, "tool_use") + "\n" +
