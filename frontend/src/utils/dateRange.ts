@@ -70,6 +70,9 @@ export function getDatePresets(): DateRange[] {
   const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
 
+  const last7Days = new Date(today);
+  last7Days.setDate(last7Days.getDate() - 6);
+
   const last30Days = new Date(today);
   last30Days.setDate(last30Days.getDate() - 29);
 
@@ -79,6 +82,7 @@ export function getDatePresets(): DateRange[] {
   return [
     { startDate: formatLocalDate(startOfThisWeek), endDate: formatLocalDate(today), label: 'This Week' },
     { startDate: formatLocalDate(startOfLastWeek), endDate: formatLocalDate(endOfLastWeek), label: 'Last Week' },
+    { startDate: formatLocalDate(last7Days), endDate: formatLocalDate(today), label: 'Last 7 Days' },
     { startDate: formatLocalDate(startOfThisMonth), endDate: formatLocalDate(today), label: 'This Month' },
     { startDate: formatLocalDate(startOfLastMonth), endDate: formatLocalDate(endOfLastMonth), label: 'Last Month' },
     { startDate: formatLocalDate(last30Days), endDate: formatLocalDate(today), label: 'Last 30 Days' },
