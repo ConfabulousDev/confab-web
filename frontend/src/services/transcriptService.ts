@@ -12,6 +12,10 @@ import { syncFilesAPI } from './api';
 // Maximum errors per report (must match backend maxClientErrors)
 const MAX_ERRORS_PER_REPORT = 50;
 
+// Message types that are metadata-only and should be silently skipped during parsing.
+// These are not conversation content and don't match the TranscriptLine schema.
+const SKIPPED_MESSAGE_TYPES = new Set(['progress', 'permission-mode', 'attachment']);
+
 // Track which sessions have already had errors reported (dedup across re-parses)
 const reportedSessions = new Set<string>();
 
@@ -136,9 +140,12 @@ export function parseJSONL(jsonl: string): TranscriptParseResult {
       return;
     }
 
-    // Skip progress messages - they're streaming updates not needed in transcript view
-    if (parsed !== null && typeof parsed === 'object' && 'type' in parsed && parsed.type === 'progress') {
-      return;
+    // Skip metadata-only message types — not conversation content
+    if (parsed !== null && typeof parsed === 'object' && 'type' in parsed) {
+      const obj: Record<string, unknown> = parsed;
+      if (typeof obj.type === 'string' && SKIPPED_MESSAGE_TYPES.has(obj.type)) {
+        return;
+      }
     }
 
     const result = validateParsedTranscriptLine(parsed, line, index);

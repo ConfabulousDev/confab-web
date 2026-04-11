@@ -89,20 +89,36 @@ ${createSystemMessage(2)}`;
     expect(result.totalLines).toBe(3);
   });
 
-  it('skips progress messages silently', () => {
-    // Progress messages are streaming updates that shouldn't be included in transcript view
-    const progressMessage = JSON.stringify({
-      type: 'progress',
-      content: { type: 'bash_output', output: 'some streaming output' },
-    });
+  it.each([
+    {
+      typeName: 'progress',
+      payload: { type: 'progress', content: { type: 'bash_output', output: 'some streaming output' } },
+    },
+    {
+      typeName: 'permission-mode',
+      payload: { type: 'permission-mode', permissionMode: 'default', sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'attachment',
+      payload: {
+        type: 'attachment',
+        parentUuid: null,
+        isSidechain: false,
+        attachment: { type: 'hook_success', hookName: 'SessionStart:startup', content: '', stdout: '{"continue":true}', exitCode: 0 },
+        uuid: 'fcc7d010-2d9b-46e9-b877-d410ec97dded',
+        timestamp: '2026-04-11T00:35:42.829Z',
+      },
+    },
+  ])('skips $typeName messages silently', ({ payload }) => {
+    const skippedLine = JSON.stringify(payload);
 
     const content = `${createSystemMessage(1)}
-${progressMessage}
+${skippedLine}
 ${createSystemMessage(2)}`;
 
     const result = parseJSONL(content);
 
-    // Progress message should be skipped without adding to errors
+    // Skipped message should not appear in messages or errors
     expect(result.successCount).toBe(2);
     expect(result.errorCount).toBe(0);
     expect(result.messages).toHaveLength(2);
