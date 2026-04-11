@@ -394,3 +394,45 @@ drwxr-xr-x  3 user  staff    96 Jan  3 09:00 ..
     );
   },
 };
+
+// Tool reference blocks
+export const ToolReference: Story = {
+  render: () => {
+    const refs: { label: string; block: ContentBlockType }[] = [
+      {
+        label: 'Single tool reference',
+        block: {
+          type: 'tool_reference',
+          tool_name: 'TaskCreate',
+        },
+      },
+      {
+        label: 'Another tool reference',
+        block: {
+          type: 'tool_reference',
+          tool_name: 'WebSearch',
+        },
+      },
+    ];
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {refs.map((item, i) => (
+          <div key={i}>
+            <div style={{
+              fontSize: '12px',
+              color: 'var(--color-text-muted)',
+              marginBottom: '8px',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}>
+              {item.label}
+            </div>
+            <ContentBlock block={item.block} />
+          </div>
+        ))}
+      </div>
+    );
+  },
+};

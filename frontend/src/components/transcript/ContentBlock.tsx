@@ -1,7 +1,7 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
-import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
+import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, isToolReferenceBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
 import { stripAnsi } from '@/utils';
 import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
 import CodeBlock from './CodeBlock';
@@ -166,6 +166,15 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
     return (
       <div className={styles.imageBlock}>
         <img src={src} alt="User provided image" loading="lazy" />
+      </div>
+    );
+  }
+
+  if (isToolReferenceBlock(block)) {
+    return (
+      <div className={styles.toolReference}>
+        <span className={styles.toolReferenceIcon}>🔗</span>
+        <span className={styles.toolReferenceName}>{block.tool_name}</span>
       </div>
     );
   }

@@ -217,6 +217,29 @@
   border: 1px solid var(--color-border);
 }
 
+/* Tool reference block - inline tool name reference */
+.toolReference {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 2px var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  margin: 2px 0;
+}
+
+.toolReferenceIcon {
+  font-size: var(--font-xs);
+}
+
+.toolReferenceName {
+  font-family: monospace;
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+}
+
 .unknownBlock {
   color: var(--color-text-muted);
   font-style: italic;

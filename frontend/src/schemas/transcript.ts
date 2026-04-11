@@ -46,6 +46,11 @@ const ImageBlockSchema = z.object({
   }),
 });
 
+const ToolReferenceBlockSchema = z.object({
+  type: z.literal('tool_reference'),
+  tool_name: z.string(),
+});
+
 // Catch-all for forward compatibility — must be last in the union.
 // Unknown block types pass validation and render with a fallback UI.
 const UnknownBlockSchema = z.object({ type: z.string() }).passthrough();
@@ -56,6 +61,7 @@ const ContentBlockSchema: z.ZodType<ContentBlock> = z.union([
   ToolUseBlockSchema,
   ToolResultBlockSchema,
   ImageBlockSchema,
+  ToolReferenceBlockSchema,
   UnknownBlockSchema,
 ]);
 
@@ -64,6 +70,7 @@ export type TextBlock = z.infer<typeof TextBlockSchema>;
 export type ThinkingBlock = z.infer<typeof ThinkingBlockSchema>;
 export type ToolUseBlock = z.infer<typeof ToolUseBlockSchema>;
 export type ImageBlock = z.infer<typeof ImageBlockSchema>;
+export type ToolReferenceBlock = z.infer<typeof ToolReferenceBlockSchema>;
 
 // ContentBlock needs manual definition due to recursion
 export type UnknownBlock = { type: string; [key: string]: unknown };
@@ -74,6 +81,7 @@ export type ContentBlock =
   | ToolUseBlock
   | { type: 'tool_result'; tool_use_id: string; content: string | ContentBlock[]; is_error?: boolean }
   | ImageBlock
+  | ToolReferenceBlock
   | UnknownBlock;
 
 // ============================================================================
@@ -481,7 +489,7 @@ export function parseTranscriptLineWithError(
 // Forward-compatibility: known type lists for schema drift detection
 // ============================================================================
 
-const KNOWN_BLOCK_TYPES = ['text', 'thinking', 'tool_use', 'tool_result', 'image'];
+const KNOWN_BLOCK_TYPES = ['text', 'thinking', 'tool_use', 'tool_result', 'image', 'tool_reference'];
 const KNOWN_MESSAGE_TYPES = ['user', 'assistant', 'system', 'file-history-snapshot', 'summary', 'queue-operation', 'pr-link'];
 const _warnedTypes = new Set<string>();
 
@@ -526,6 +534,10 @@ export function isToolResultBlock(
 
 export function isImageBlock(block: ContentBlock): block is ImageBlock {
   return block.type === 'image';
+}
+
+export function isToolReferenceBlock(block: ContentBlock): block is ToolReferenceBlock {
+  return block.type === 'tool_reference';
 }
 
 export function isUserMessage(line: TranscriptLine): line is z.infer<typeof UserMessageSchema> {
