@@ -20,12 +20,13 @@ describe('getDefaultDateRange', () => {
 describe('getDatePresets', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('returns 6 presets with expected labels', () => {
+  it('returns 7 presets with expected labels', () => {
     vi.useFakeTimers({ now: FAKE_NOW });
     const presets = getDatePresets();
     expect(presets.map((p) => p.label)).toEqual([
       'This Week',
       'Last Week',
+      'Last 7 Days',
       'This Month',
       'Last Month',
       'Last 30 Days',
@@ -46,6 +47,10 @@ describe('getDatePresets', () => {
     // Last Week: Mon Jul 7 - Sun Jul 13
     expect(byLabel['Last Week']?.startDate).toBe('2025-07-07');
     expect(byLabel['Last Week']?.endDate).toBe('2025-07-13');
+
+    // Last 7 Days: Jul 10 - Jul 16
+    expect(byLabel['Last 7 Days']?.startDate).toBe('2025-07-10');
+    expect(byLabel['Last 7 Days']?.endDate).toBe('2025-07-16');
 
     // This Month: Jul 1 - today
     expect(byLabel['This Month']?.startDate).toBe('2025-07-01');
