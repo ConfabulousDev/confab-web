@@ -244,6 +244,7 @@ describe('Forward-compatibility: unknown content block types', () => {
     expect(isUnknownBlock({ type: 'tool_use', id: '1', name: 'Read', input: {} })).toBe(false);
     expect(isUnknownBlock({ type: 'tool_result', tool_use_id: '1', content: 'ok' })).toBe(false);
     expect(isUnknownBlock({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: '' } })).toBe(false);
+    expect(isUnknownBlock({ type: 'tool_reference', tool_name: 'TaskCreate' })).toBe(false);
   });
 });
 

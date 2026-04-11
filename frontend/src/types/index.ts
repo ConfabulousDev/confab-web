@@ -28,6 +28,7 @@ export {
   isToolUseBlock,
   isToolResultBlock,
   isImageBlock,
+  isToolReferenceBlock,
   isUserMessage,
   isAssistantMessage,
   isSystemMessage,
