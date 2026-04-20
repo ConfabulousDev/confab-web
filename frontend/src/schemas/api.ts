@@ -681,6 +681,64 @@ export const RegenerateAllResponseSchema = z.object({
 export type RegenerateAllResponse = z.infer<typeof RegenerateAllResponseSchema>;
 
 // ============================================================================
+// Card Invalidations (CF-343)
+// ============================================================================
+
+/**
+ * CARD_TABLE_NAMES mirrors backend `analytics.AllCardTableNames`.
+ * Kept in sync manually — the backend validates what the server actually accepts,
+ * so drift will be caught by an integration run. Update both when adding a card.
+ */
+export const CARD_TABLE_NAMES = [
+  'session_card_tokens',
+  'session_card_session',
+  'session_card_tools',
+  'session_card_code_activity',
+  'session_card_conversation',
+  'session_card_agents_and_skills',
+  'session_card_redactions',
+  'session_card_smart_recap',
+] as const;
+export type CardTableName = (typeof CARD_TABLE_NAMES)[number];
+
+export const InvalidateCardsRequestSchema = z.object({
+  start_date: z.string(),
+  end_date: z.string().optional(),
+  card_types: z.array(z.enum(CARD_TABLE_NAMES)).min(1),
+  reason: z.string().min(1).max(500),
+  dry_run: z.boolean().optional(),
+});
+export type InvalidateCardsRequest = z.infer<typeof InvalidateCardsRequestSchema>;
+
+export const InvalidateCardsResponseSchema = z.object({
+  correlation_id: z.string(),
+  affected_sessions: z.number(),
+  affected_cards: z.record(z.string(), z.number()),
+  executed: z.boolean(),
+  completed_batches: z.number().nullable().optional(),
+  affected_sessions_executed: z.number().nullable().optional(),
+  error: z.string().optional(),
+});
+export type InvalidateCardsResponse = z.infer<typeof InvalidateCardsResponseSchema>;
+
+export const CardInvalidationRowSchema = z.object({
+  id: z.number(),
+  session_id: z.string(),
+  admin_user_id: z.number(),
+  admin_email: z.string().optional(),
+  invalidated_at: z.string(),
+  card_types: z.array(z.string()),
+  correlation_id: z.string(),
+  reason: z.string(),
+});
+export type CardInvalidationRow = z.infer<typeof CardInvalidationRowSchema>;
+
+export const CardInvalidationsListResponseSchema = z.object({
+  rows: z.array(CardInvalidationRowSchema),
+});
+export type CardInvalidationsListResponse = z.infer<typeof CardInvalidationsListResponseSchema>;
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 

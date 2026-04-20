@@ -531,6 +531,10 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	//    - Line gap or time gap meets threshold
 	//    - Admin-triggered regeneration (computed_at < regen_requested_at) [category 4]
 	// Category 4 (admin regen) bypasses quota checks — the admin explicitly requested it.
+	//
+	// Per-session admin invalidation (CF-343) also bypasses quota: if there's an unconsumed
+	// admin_card_invalidations row covering session_card_smart_recap (invalidated_at > current
+	// recap's computed_at, or recap is missing), the session qualifies regardless of quota.
 	query := `
 		WITH session_lines AS (
 			SELECT session_id, SUM(last_synced_line) as total_lines
@@ -546,6 +550,15 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			SELECT value::timestamptz AS requested_at
 			FROM admin_settings
 			WHERE key = 'smart_recap_regen_requested_at'
+		),
+		admin_invalidations AS (
+			-- Per-session admin invalidations covering smart recap. The MAX captures
+			-- the latest invalidation; the bypass clause below treats it as "unconsumed"
+			-- if the smart recap is missing or was computed before invalidated_at.
+			SELECT session_id, MAX(invalidated_at) AS last_invalidated_at
+			FROM admin_card_invalidations
+			WHERE 'session_card_smart_recap' = ANY(card_types)
+			GROUP BY session_id
 		),
 		recap_status AS (
 			SELECT
@@ -609,14 +622,19 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			LEFT JOIN smart_recap_quota sq ON s.user_id = sq.user_id
 				AND sq.quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
 			LEFT JOIN regen_ts rt ON TRUE
+			LEFT JOIN admin_invalidations ai ON ai.session_id = sl.session_id
 			WHERE s.session_type = 'Claude Code'
-				-- Quota check: skip for category 4 (admin regen bypasses quota).
-				-- A session qualifies if: no quota limit, under quota, OR admin-regen triggered.
+				-- Quota check: skip for category 4 (global admin regen) and for
+				-- per-session admin invalidations (CF-343). Bypass clauses OR together.
 				AND (
 					$15::int = 0
 					OR COALESCE(sq.compute_count, 0) < $15::int
+					-- Global admin regen (category 4):
 					OR (sr.session_id IS NOT NULL AND rt.requested_at IS NOT NULL
 						AND sr.computed_at < rt.requested_at)
+					-- Per-session admin invalidation (CF-343): unconsumed invalidation.
+					OR (ai.last_invalidated_at IS NOT NULL
+						AND (sr.session_id IS NULL OR sr.computed_at < ai.last_invalidated_at))
 				)
 		)
 		SELECT session_id, user_id, external_id, total_lines,

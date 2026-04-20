@@ -6,6 +6,30 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// AllCardTableNames is the canonical list of session_card_* table names the admin
+// invalidation feature can operate on. Used for request validation and as the driver
+// for per-table DELETE statements during an invalidation run.
+var AllCardTableNames = []string{
+	"session_card_tokens",
+	"session_card_session",
+	"session_card_tools",
+	"session_card_code_activity",
+	"session_card_conversation",
+	"session_card_agents_and_skills",
+	"session_card_redactions",
+	"session_card_smart_recap",
+}
+
+// IsKnownCardTableName reports whether name is one of AllCardTableNames.
+func IsKnownCardTableName(name string) bool {
+	for _, n := range AllCardTableNames {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Card version constants - increment when compute logic changes
 const (
 	TokensCardVersion          = 3 // v3: dedup by message.id (fixes multi-line + replay over-counting)

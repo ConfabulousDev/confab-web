@@ -15,6 +15,7 @@ Internal packages for the Confab backend server. All packages live under
 | `clientip` | Middleware to extract real client IPs (Fly.io, Cloudflare, nginx) | Supporting new reverse proxy headers |
 | `db` | Database connection, shared types (`SessionListItem`, `SessionDetail`), error sentinels, helpers | Changing connection pooling, adding shared DB types |
 | `db/access` | Session access checks and share CRUD | Changing share permissions, access control rules |
+| `db/dbadmincardinvalidations` | Admin card invalidation audit table + smart-recap quota-bypass signal (CF-343) | Changing card invalidation semantics, audit shape |
 | `db/dbadminsettings` | Admin settings key-value store (`admin_settings` table) | Adding new admin-configurable settings |
 | `db/dbauth` | OAuth accounts, password hashes, web sessions, API keys, device codes | Adding auth storage, changing token/session schema |
 | `db/events` | Session event insertion (e.g., sync events) | Adding new event types |
@@ -42,9 +43,9 @@ have no internal dependencies.
                   storage, db/*, models, recapquota, validation,
                   clientip, logger
 
-  admin        ─→ analytics, auth, db, db/access, db/dbadminsettings,
-                  db/dbauth, db/user, models, recapquota, storage,
-                  validation, logger
+  admin        ─→ analytics, auth, db, db/access, db/dbadmincardinvalidations,
+                  db/dbadminsettings, db/dbauth, db/user, models, recapquota,
+                  storage, validation, logger
 
   auth         ─→ db, db/dbauth, db/user, models,
                   clientip, logger, validation
@@ -53,13 +54,14 @@ have no internal dependencies.
 
   ratelimit    ─→ clientip, logger
 
-  db/access  ┐
-  db/dbauth  │
-  db/events  ├─→ db (root only; sub-packages do NOT import each other)
-  db/github  │
-  db/session │
-  db/til     │
-  db/user    ┘
+  db/access                    ┐
+  db/dbadmincardinvalidations  │ (also imports analytics for
+  db/dbauth                    │  AllCardTableNames validation)
+  db/events                    ├─→ db (root only; sub-packages do NOT
+  db/github                    │     import each other)
+  db/session                   │
+  db/til                       │
+  db/user                      ┘
 
   Leaf packages (zero internal deps):
     clientip, logger, validation, models, anthropic,

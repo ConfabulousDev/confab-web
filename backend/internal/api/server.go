@@ -382,6 +382,11 @@ func (s *Server) SetupRoutes() http.Handler {
 					r.Get("/smart-recap-prompt/regenerate-count", withMaxBody(MaxBodyXS, adminHandlers.HandleGetSmartRecapRegenerateCount))
 					r.Post("/smart-recap-prompt/regenerate-all", withMaxBody(MaxBodyXS, adminHandlers.HandleRegenerateAllSmartRecaps))
 				})
+
+				// Admin card invalidations (CF-343): delete session_card_* rows by date range
+				// so the precompute worker repopulates them with current logic/pricing.
+				r.Post("/cards/invalidate", withMaxBody(MaxBodyS, adminHandlers.HandleInvalidateCards))
+				r.Get("/cards/invalidations", withMaxBody(MaxBodyXS, adminHandlers.HandleListCardInvalidations))
 			})
 		})
 
