@@ -1678,6 +1678,85 @@ Triggers bulk regeneration of all smart recaps. Writes a timestamp to `admin_set
 }
 ```
 
+### Invalidate Cards by Date Range
+```
+POST /api/v1/admin/cards/invalidate
+```
+
+Deletes `session_card_*` rows for sessions in a date window so the precompute worker recomputes them with current logic/pricing on the next tick (CF-343). Writes one audit row per affected session to `admin_card_invalidations`; the row also acts as a per-session smart-recap quota bypass signal.
+
+**Request:**
+```json
+{
+  "start_date": "2026-04-01T00:00:00Z",
+  "end_date": "2026-04-20T23:59:59Z",
+  "card_types": ["session_card_tokens"],
+  "reason": "Opus 4.7 pricing backfill",
+  "dry_run": false
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `start_date` | string | Required. ISO-8601 with explicit timezone (`Z` or `±hh:mm`). Filter: `sessions.last_message_at >= start_date`. |
+| `end_date` | string | Optional. Same format as `start_date`. Filter: `last_message_at < end_date`. Must be after `start_date`. |
+| `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_smart_recap`. |
+| `reason` | string | Required, 1–500 chars. Stored in the audit row. |
+| `dry_run` | bool | Defaults to `true`. `false` to actually delete. |
+
+**Response (dry-run or success):**
+```json
+{
+  "correlation_id": "0191a3e0-1234-7000-8000-aabbccddeeff",
+  "affected_sessions": 1234,
+  "affected_cards": {
+    "session_card_tokens": 1234
+  },
+  "executed": false
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `correlation_id` | string | UUID grouping all writes from this run (shared across batches). Generated for dry-run too so the UI can stitch preview → execute. |
+| `affected_sessions` | int | `COUNT(DISTINCT s.id)` where the session has at least one row in any selected card table (intersection semantic). |
+| `affected_cards[<table>]` | int | Per-table count of rows that would be / were deleted. |
+| `executed` | bool | `false` for dry-run; `true` for actual execute. |
+
+**Partial-failure response (500):** the body includes `completed_batches` and `affected_sessions_executed` reporting progress before the failure, plus an `error` string. Already-committed batches remain invalidated; re-running the same window is safe.
+
+**Auth:** super-admin only (`admin.Middleware`).
+
+### List Card Invalidations
+```
+GET /api/v1/admin/cards/invalidations
+GET /api/v1/admin/cards/invalidations?correlation_id=<uuid>
+```
+
+Returns up to 500 most recent audit rows (ordered by `invalidated_at DESC`). Pass `correlation_id` to drill down into a single run.
+
+**Response:**
+```json
+{
+  "rows": [
+    {
+      "id": 42,
+      "session_id": "...",
+      "admin_user_id": 7,
+      "admin_email": "admin@example.com",
+      "invalidated_at": "2026-04-20T15:30:00Z",
+      "card_types": ["session_card_tokens"],
+      "correlation_id": "0191a3e0-1234-7000-8000-aabbccddeeff",
+      "reason": "Opus 4.7 pricing backfill"
+    }
+  ]
+}
+```
+
+`admin_email` is empty (omitted) when the admin user has been deleted.
+
+**Auth:** super-admin only.
+
 ---
 
 ## Public API Endpoints (No Auth)

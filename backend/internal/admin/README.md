@@ -11,16 +11,19 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, delete, system shares, and smart recap prompt settings |
 | `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
+| `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`) |
+| `card_invalidations_test.go` | Integration tests for the card invalidation handlers |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
 | `middleware.go` | Chi middleware that gates routes to super admins only |
 
 ## Key Types
 
 - **`Handlers`** -- Dependency holder (DB, Storage, config flags) for all admin HTTP handlers.
-- **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`, `setting.update`, `setting.reset`, `smart_recap.regenerate_all`) used as audit log keys.
+- **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`, `setting.update`, `setting.reset`, `smart_recap.regenerate_all`, `cards.invalidate`) used as audit log keys.
 - **`AdminUserListResponse`**, **`AdminUserJSON`**, **`AdminTotals`** -- JSON response types for the user list endpoint.
 - **`SystemSharesResponse`**, **`SystemShareJSON`** -- JSON response types for system shares.
 - **`SmartRecapPromptResponse`**, **`SetSmartRecapPromptRequest`**, **`SetSmartRecapPromptResponse`**, **`DeleteSmartRecapPromptResponse`** -- JSON request/response types for smart recap prompt settings.
+- **`InvalidateCardsRequest`**, **`InvalidateCardsResponse`**, **`CardInvalidationRow`**, **`CardInvalidationsListResponse`** -- JSON request/response types for card invalidations (CF-343).
 
 ## Key API
 
@@ -46,6 +49,8 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleDeleteSmartRecapPrompt` | `DELETE /api/v1/admin/settings/smart-recap-prompt` | Resets to default by deleting the custom setting |
 | `HandleGetSmartRecapRegenerateCount` | `GET /api/v1/admin/settings/smart-recap-prompt/regenerate-count` | Returns count of sessions with smart recap cards |
 | `HandleRegenerateAllSmartRecaps` | `POST /api/v1/admin/settings/smart-recap-prompt/regenerate-all` | Triggers bulk regeneration via timestamp in `admin_settings` |
+| `HandleInvalidateCards` | `POST /api/v1/admin/cards/invalidate` | Dry-run or execute DELETE of `session_card_*` rows for sessions in a date window. Writes audit rows so the smart-recap quota is bypassed on recompute. Defaults to `dry_run: true` |
+| `HandleListCardInvalidations` | `GET /api/v1/admin/cards/invalidations` | Returns up to 500 recent audit rows; `?correlation_id=` filters to one run |
 
 ## How to Extend
 
@@ -81,6 +86,6 @@ Unit tests cover `IsSuperAdmin` with various env var configurations. Integration
 
 ## Dependencies
 
-**Uses:** `internal/analytics`, `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbadminsettings`, `internal/db/dbauth`, `internal/db/user`, `internal/httputil`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`, `golang.org/x/crypto/bcrypt`
+**Uses:** `internal/analytics`, `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbadmincardinvalidations`, `internal/db/dbadminsettings`, `internal/db/dbauth`, `internal/db/user`, `internal/httputil`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`, `golang.org/x/crypto/bcrypt`
 
 **Used by:** `internal/api` (server setup and routing)

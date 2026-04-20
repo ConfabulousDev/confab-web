@@ -130,7 +130,7 @@ The smart recap uses an optimistic lock (`computing_started_at` column) to preve
 
 ### Quota Enforcement
 
-Smart recap quota is incremented BEFORE the card is saved. If quota tracking fails, the recap is discarded. This ensures usage is never under-counted. Admin-triggered bulk regeneration (category 4 staleness, indicated by `StaleSession.RegenRequestedAt != nil`) bypasses quota checks entirely.
+Smart recap quota is incremented BEFORE the card is saved. If quota tracking fails, the recap is discarded. This ensures usage is never under-counted. Admin-triggered bulk regeneration (category 4 staleness, indicated by `StaleSession.RegenRequestedAt != nil`) bypasses quota checks entirely. The per-session `admin_card_invalidations` audit table (CF-343) also bypasses quota: when a row exists for the session with `session_card_smart_recap` in `card_types` and the recap has not been recomputed past `invalidated_at`, the session qualifies regardless of quota.
 
 ### Customizable System Prompt
 

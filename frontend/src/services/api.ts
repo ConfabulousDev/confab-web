@@ -28,6 +28,8 @@ import {
   DeleteSmartRecapPromptResponseSchema,
   RegenerateCountResponseSchema,
   RegenerateAllResponseSchema,
+  InvalidateCardsResponseSchema,
+  CardInvalidationsListResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -54,6 +56,9 @@ import {
   type DeleteSmartRecapPromptResponse,
   type RegenerateCountResponse,
   type RegenerateAllResponse,
+  type InvalidateCardsRequest,
+  type InvalidateCardsResponse,
+  type CardInvalidationsListResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
@@ -662,4 +667,13 @@ export const adminAPI = {
 
   regenerateAllSmartRecaps: (): Promise<RegenerateAllResponse> =>
     api.postValidated('/admin/settings/smart-recap-prompt/regenerate-all', RegenerateAllResponseSchema),
+
+  // CF-343: invalidate session_card_* rows so the worker recomputes them.
+  invalidateCards: (data: InvalidateCardsRequest): Promise<InvalidateCardsResponse> =>
+    api.postValidated('/admin/cards/invalidate', InvalidateCardsResponseSchema, data),
+
+  listCardInvalidations: (params?: { correlationId?: string }): Promise<CardInvalidationsListResponse> => {
+    const query = params?.correlationId ? `?correlation_id=${encodeURIComponent(params.correlationId)}` : '';
+    return api.getValidated(`/admin/cards/invalidations${query}`, CardInvalidationsListResponseSchema);
+  },
 };

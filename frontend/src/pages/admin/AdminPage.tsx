@@ -9,6 +9,7 @@ import styles from './AdminPage.module.css';
 const AdminUsersPage = lazy(() => import('./AdminUsersPage'));
 const AdminSystemSharesPage = lazy(() => import('./AdminSystemSharesPage'));
 const AdminSettingsPage = lazy(() => import('./AdminSettingsPage'));
+const AdminCardInvalidationsPage = lazy(() => import('./AdminCardInvalidationsPage'));
 
 const UsersIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -36,6 +37,14 @@ const SmartRecapIcon = (
   </svg>
 );
 
+const CardsIcon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+    <line x1="9" y1="4" x2="9" y2="20" />
+  </svg>
+);
+
 function AdminPage() {
   useDocumentTitle('Admin');
   const location = useLocation();
@@ -47,6 +56,8 @@ function AdminPage() {
     currentTab = 'system-shares';
   } else if (location.pathname.includes('/admin/smart-recap')) {
     currentTab = 'smart-recap';
+  } else if (location.pathname.includes('/admin/cards')) {
+    currentTab = 'cards';
   }
 
   return (
@@ -77,6 +88,13 @@ function AdminPage() {
             collapsed={false}
           />
         )}
+        <SidebarItem
+          icon={CardsIcon}
+          label="Card Invalidations"
+          active={currentTab === 'cards'}
+          onClick={() => navigate('/admin/cards')}
+          collapsed={false}
+        />
       </PageSidebar>
 
       <div className={styles.mainContent}>
@@ -89,6 +107,7 @@ function AdminPage() {
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="system-shares" element={<AdminSystemSharesPage />} />
               <Route path="smart-recap" element={<AdminSettingsPage />} />
+              <Route path="cards" element={<AdminCardInvalidationsPage />} />
             </Routes>
           </Suspense>
         </div>

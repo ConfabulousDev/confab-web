@@ -23,6 +23,7 @@ const (
 	ActionSettingUpdate           AdminAction = "setting.update"
 	ActionSettingReset            AdminAction = "setting.reset"
 	ActionSmartRecapRegenerateAll AdminAction = "smart_recap.regenerate_all"
+	ActionCardInvalidate          AdminAction = "cards.invalidate"
 )
 
 // AuditLog logs an admin action with full context for security audit trail.

@@ -1,0 +1,209 @@
+/* Admin card invalidations page */
+
+.card {
+  composes: card from './adminShared.module.css';
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.card h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.card h4 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.description {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-lg);
+  line-height: 1.5;
+}
+
+.description code {
+  background: var(--color-bg-secondary);
+  padding: 0 var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: var(--font-xs);
+}
+
+/* Form layout */
+.formRow {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  flex: 1;
+  min-width: 220px;
+  margin-bottom: var(--spacing-md);
+}
+
+.required {
+  color: var(--color-accent);
+}
+
+.input {
+  composes: input from './adminShared.module.css';
+}
+
+.textarea {
+  composes: input from './adminShared.module.css';
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+.charCount {
+  align-self: flex-end;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+/* Card-types fieldset */
+.cardTypesGroup {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.legend {
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  padding: 0 var(--spacing-xs);
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.checkboxLabel code {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+/* Preview box */
+.previewBox {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+}
+
+.cardCounts {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.cardCounts code {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.correlationHint {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+.correlationHint code {
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--color-text-secondary);
+}
+
+/* History section */
+.tableWrapper {
+  composes: tableWrapper from './adminShared.module.css';
+}
+
+.table {
+  composes: table from './adminShared.module.css';
+}
+
+.timestamp {
+  composes: timestamp from './adminShared.module.css';
+}
+
+.historyStatus {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  padding: var(--spacing-md) 0;
+}
+
+.cardTypePill {
+  display: inline-block;
+  margin: 0 var(--spacing-xs) var(--spacing-xs) 0;
+  padding: 2px var(--spacing-xs);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Confirm modal */
+.confirmModal {
+  padding: var(--spacing-md);
+}
+
+.confirmModal h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.confirmModal p {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--spacing-lg) 0;
+}
+
+.modalActions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
