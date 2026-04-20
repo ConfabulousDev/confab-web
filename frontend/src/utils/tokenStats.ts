@@ -11,6 +11,8 @@ interface ModelPricing {
 }
 
 const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Opus 4.7
+  'opus-4-7': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
   // Opus 4.6
   'opus-4-6': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
   // Opus 4.5

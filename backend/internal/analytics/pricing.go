@@ -19,6 +19,13 @@ type ModelPricing struct {
 // modelPricingTable contains pricing for all model families.
 // Source: https://www.anthropic.com/pricing
 var modelPricingTable = map[string]ModelPricing{
+	// Opus 4.7
+	"opus-4-7": {
+		Input:      decimal.NewFromFloat(5),
+		Output:     decimal.NewFromFloat(25),
+		CacheWrite: decimal.NewFromFloat(6.25),
+		CacheRead:  decimal.NewFromFloat(0.50),
+	},
 	// Opus 4.6
 	"opus-4-6": {
 		Input:      decimal.NewFromFloat(5),
