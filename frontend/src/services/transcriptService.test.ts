@@ -109,6 +109,14 @@ ${createSystemMessage(2)}`;
         timestamp: '2026-04-11T00:35:42.829Z',
       },
     },
+    {
+      typeName: 'ai-title',
+      payload: { type: 'ai-title', aiTitle: 'Explore pending changes in folder', sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'last-prompt',
+      payload: { type: 'last-prompt', lastPrompt: 'audit the docs', leafUuid: 'leaf-uuid-1', sessionId: 'abc-123' },
+    },
   ])('skips $typeName messages silently', ({ payload }) => {
     const skippedLine = JSON.stringify(payload);
 
