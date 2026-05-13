@@ -16,7 +16,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `git.ts` | Git URL conversion (SSH to HTTPS, branch URLs) |
 | `sessionErrors.ts` | Session error types, messages, icons, and 401 redirect skip list |
 | `agentSkillChart.ts` | Shared agent/skill chart constants, types, and name truncation |
-| `utils.ts` | Low-level utilities: `stripAnsi`, `formatBytes` |
+| `utils.ts` | Low-level utilities: `stripAnsi`, `isRecord` (runtime guard for plain objects, used wherever an `unknown` needs its fields read without an `as` cast), `formatBytes` |
 | `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. Used by `ContentBlock`, `AwaySummary`, and `QueuedCommand` |
 | `index.ts` | Barrel re-exports of commonly used functions |
 

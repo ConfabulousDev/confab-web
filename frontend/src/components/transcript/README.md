@@ -1,6 +1,10 @@
 # transcript/
 
-Rendering components for Claude Code transcript content: code blocks with syntax highlighting, bash output, timeline navigation bars, the main content block dispatcher, and (under `attachments/`) renderers for the side-channel `attachment.*` JSONL rows and `system.away_summary` resume-context blurbs.
+Rendering components for transcript content. Claude Code components live at the
+top level (code blocks, bash output, timeline navigation bars, the main content
+dispatcher, and the `attachments/` renderers for side-channel `attachment.*`
+rows + `system.away_summary` blurbs). Codex components live under `codex/` and
+consume a separate render-item model produced by `services/codexTranscriptService`.
 
 ## Files
 
@@ -13,6 +17,7 @@ Rendering components for Claude Code transcript content: code blocks with syntax
 | `TimelineBar.tsx` | Vertical timeline bar showing user/assistant turn segments with duration tooltips |
 | `timelineSegments.ts` | Shared segment computation and layout hook (`useSegmentLayout`) for both bars |
 | `attachments/` | Renderers for `attachment.*` subtypes (hook output, edited files, queued commands, tool deltas) and `system.away_summary`. See `attachments/README.md` |
+| `codex/` | Codex transcript renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback, virtualized timeline). See "Codex transcript renderers" below |
 
 ## Key Components
 
@@ -37,6 +42,34 @@ Syntax-highlighted code rendering with:
 - **Line truncation** with "Show all" toggle (auto-expands when search query matches hidden content)
 - **Copy to clipboard** button
 - **Search highlighting** layered on top of syntax highlighting
+
+### Codex transcript renderers (`codex/`)
+
+The Codex JSONL has its own shape (`{ timestamp, type, payload }` envelopes
+with nested `payload.type` discriminators) and gets a parallel set of
+components. They consume the normalized `CodexRenderItem` union from
+`@/types/codexRenderItem`, produced by `normalizeCodexLines()` in the service
+layer.
+
+| File | Role |
+|------|------|
+| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Dispatches each item to its renderer by `kind` |
+| `CodexUserMessage.tsx` | Plain user prompt in a chat row, with timestamp |
+| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message |
+| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (command + output + exit-code badge, 100-line soft cap), `ApplyPatchBody` (file-list summary + raw expand), `WebSearchBody` (query chips), or a generic `details`-based fallback |
+| `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries |
+| `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines |
+| `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages |
+| `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema |
+| `codexFormat.ts` | Shared formatters: `formatCodexTimestamp`, `formatDurationMs`, `leafFileName`, `stringifyForDisplay` |
+| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages |
+| `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips) |
+| `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, unknown fallback |
+| `CodexMessageTimeline.module.css` | Scroll container + virtualizer placement styles |
+
+The Codex renderers intentionally do **not** participate in cost mode, filter
+chips, or transcript search. CF-349 ships v1 as read-only display; analytics
+(CF-350) and search will arrive in follow-ups.
 
 ### TimelineBar / CostBar
 
@@ -74,6 +107,33 @@ interface SegmentLayout {
 3. Add a rendering branch in `ContentBlock.tsx` before the unknown-block fallback
 4. Update the `KNOWN_BLOCK_TYPES` list in `transcript.ts` to suppress schema drift warnings
 
+### Adding a new Codex tool renderer
+
+1. Identify the new tool name as it appears in `function_call.name` /
+   `custom_tool_call.name` on the JSONL line.
+2. Add a body component alongside `ExecCommandBody` / `ApplyPatchBody` /
+   `WebSearchBody` in `codex/CodexToolCallBlock.tsx`.
+3. Add a `case` in `renderBody()` and an entry in `TOOL_NAME_LABELS` so the
+   header shows a friendly name instead of the generic `"Tool: <name>"`.
+4. If the tool needs a per-status badge (e.g., `exit N` for exec), extend
+   `renderStatusBadge()` similarly.
+5. If the tool emits a paired `event_msg.*` enrichment (like
+   `event_msg.patch_apply_end` does for `apply_patch`), add a case in
+   `handleEventMsg()` in `services/codexTranscriptService.ts` that merges
+   into the existing draft via `callIdToDraft`.
+
+### Adding a new Codex top-level line type
+
+1. Add the schema branch to `@/schemas/codexTranscript.ts` and include it in
+   `KnownCodexLineSchema`, `KNOWN_LINE_TYPES`, and the type predicate
+   `isKnownCodexLine`.
+2. Add a `case` in `normalizeCodexLines()`'s top-level switch to produce a
+   render item (or extend an existing item type).
+3. Add a new `CodexRenderItem` variant in `@/types/codexRenderItem.ts` if
+   the new line needs its own render shape. The exhaustiveness check in
+   `CodexMessageTimeline.renderItem()` will force you to wire up the
+   renderer.
+
 ### Adding a new syntax language to CodeBlock
 1. Add the Prism.js language import at the top of `CodeBlock.tsx`
 2. Add any aliases to the `languageMap` object
@@ -99,8 +159,11 @@ Content block rendering is tested indirectly through `TimelineMessage.test.tsx` 
 
 - `marked` + `dompurify` (markdown rendering and XSS sanitization, accessed via `@/utils/markdown.renderMarkdownToHtml`)
 - `prismjs` (syntax highlighting in CodeBlock)
+- `@tanstack/react-virtual` (CodexMessageTimeline virtualization, same as MessageTimeline)
 - `@/hooks/useCopyToClipboard` (copy button in CodeBlock and BashOutput)
 - `@/utils/highlightSearch` (search match highlighting)
-- `@/utils/utils` (`stripAnsi` for terminal escape code removal)
+- `@/utils/utils` (`stripAnsi` for terminal escape code removal; `isRecord` for the Codex shape readers)
 - `@/utils/markdown` (`renderMarkdownToHtml` — shared by ContentBlock, AwaySummary, QueuedCommand)
 - `@/utils/tokenStats` (`formatCost` in CostBar)
+- `@/types/codexRenderItem` (Codex render-item discriminated union)
+- `@/schemas/codexTranscript` (Codex Zod schemas)

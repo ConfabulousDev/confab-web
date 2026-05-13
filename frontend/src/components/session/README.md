@@ -6,10 +6,13 @@ Session viewer components for displaying session details, transcript timeline, a
 
 | File | Role |
 |------|------|
-| `SessionViewer.tsx` | Top-level session viewer with Summary/Transcript tab switching |
+| `SessionViewer.tsx` | Top-level session viewer with Summary/Transcript tab switching. Branches on `session.provider` (`claude-code` vs `codex`) to pick the right pane and to hide filter chips / cost toggle for Codex |
 | `SessionHeader.tsx` | Session header with title, metadata, share/delete actions, and filter controls |
-| `SessionSummaryPanel.tsx` | Summary tab: renders analytics cards via card registry, GitHub links, smart recap actions |
-| `MessageTimeline.tsx` | Transcript tab: virtualized message list with search, timeline bar, cost bar |
+| `SessionSummaryPanel.tsx` | Summary tab for Claude Code sessions: renders analytics cards via card registry, GitHub links, smart recap actions |
+| `CodexSummaryEmpty.tsx` | Summary tab for Codex sessions: placeholder explaining analytics aren't computed yet (CF-350) and pointing users to the Transcript tab |
+| `ClaudeTranscriptPane.tsx` | Transcript tab for Claude Code: thin wrapper around `MessageTimeline` that handles loading / error states (parent owns filter + cost state so the header can render chips) |
+| `CodexTranscriptPane.tsx` | Transcript tab for Codex: self-contained fetch + 15s poll + normalize → render `CodexMessageTimeline`. Mirrors the Claude line-offset polling pattern |
+| `MessageTimeline.tsx` | Claude transcript: virtualized message list with search, timeline bar, cost bar |
 | `TimelineMessage.tsx` | Single message row in the timeline (role badge, content blocks, cost, copy link) |
 | `TranscriptSearchBar.tsx` | Cmd+F search bar with match count and prev/next navigation |
 | `FilterDropdown.tsx` | Hierarchical dropdown for filtering messages by category/subcategory |
@@ -62,7 +65,10 @@ interface FilterState {
 
 ## Key Components
 
-- **SessionViewer** -- Orchestrates the entire session view. Supports controlled and uncontrolled tab modes. Loads transcript, polls for new messages (15s interval), and manages filter/cost-mode state.
+- **SessionViewer** -- Orchestrates the entire session view. Supports controlled and uncontrolled tab modes. For Claude sessions: loads transcript, polls for new messages (15s interval), and manages filter/cost-mode state. For Codex sessions: skips the Claude-specific fetch/poll/TILs/filter UI; the `CodexTranscriptPane` owns its own data path. Provider detection uses `isCodexProvider(session.provider)`, which matches the canonical `'codex'` value from CF-347.
+- **ClaudeTranscriptPane** -- Stateless wrapper around `MessageTimeline` that handles the loading / error / timeline branching for Claude sessions. Filter and cost-mode state live in `SessionViewer` so the header can render the chips and toggle alongside the timeline.
+- **CodexTranscriptPane** -- Self-contained transcript view for Codex sessions. Owns its raw-line state, fetch (`fetchParsedCodexTranscript`), 15s poll (`fetchNewCodexLines`), and re-derives render items via `useMemo`. Hands the result to `CodexMessageTimeline`.
+- **CodexSummaryEmpty** -- Placeholder rendered in the Summary tab for Codex sessions. Codex analytics aren't computed yet (CF-350); this stops the tab from looking broken.
 - **SessionSummaryPanel** -- Polls analytics via `useAnalyticsPolling`, renders ordered cards from the card registry, and provides smart recap regeneration.
 - **MessageTimeline** -- Uses `@tanstack/react-virtual` for virtualized rendering of potentially thousands of messages. Integrates `TranscriptSearchBar`, `TimelineBar`, and `CostBar`.
 - **FilterDropdown** -- Hierarchical filter with three top-level categories with subcategories (user, assistant, attachment) plus flat chips for system, away-summary, file-history-snapshot, summary, queue-operation, and pr-link. The attachment chip groups hook output, file edits, queued commands, deferred tools, and mcp instructions. Default state: only user + assistant + unknown are visible; everything else is opt-in.
@@ -82,7 +88,8 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 
 ## Invariants / Conventions
 
-- **Transcript polling**: New messages are fetched incrementally using `line_offset` to avoid re-downloading the entire transcript. The `lineCountRef` tracks total JSONL lines (not parsed messages) to stay in sync with the backend.
+- **Transcript polling**: New messages are fetched incrementally using `line_offset` to avoid re-downloading the entire transcript. The `lineCountRef` tracks total JSONL lines (not parsed messages) to stay in sync with the backend. Both `ClaudeTranscriptPane` (via `SessionViewer`) and `CodexTranscriptPane` use the same pattern; the latter just re-derives its render items via `useMemo` after appending raw lines.
+- **Provider branching**: `SessionViewer` dispatches on `session.provider`. `'codex'` → `CodexTranscriptPane` + `CodexSummaryEmpty`. Anything else (including the legacy `'Claude Code'` value backfilled by the API) → `ClaudeTranscriptPane` + `SessionSummaryPanel`.
 - **Storybook bypass**: `SessionViewer` and `SessionSummaryPanel` accept `initial*` props to skip API calls in Storybook stories.
 - **Deep linking**: When `targetMessageUuid` is set but the target message is hidden by filters, filters are automatically reset to make it visible.
 
@@ -106,6 +113,8 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - `@/hooks/useAnalyticsPolling` (analytics data)
 - `@/hooks/useTranscriptSearch` (transcript search)
 - `@/hooks/useVisibility` (pause polling when tab hidden)
-- `@/services/transcriptService` (fetch/parse transcripts)
+- `@/services/transcriptService` (Claude fetch/parse)
+- `@/services/codexTranscriptService` (Codex fetch/parse/normalize)
 - `@/components/transcript/` (TimelineBar, CostBar)
+- `@/components/transcript/codex/` (Codex render components)
 - `./cards/` (analytics card components and registry)

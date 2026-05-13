@@ -12,9 +12,17 @@ import {
   DEFAULT_FILTER_STATE,
 } from './messageCategories';
 import SessionHeader from './SessionHeader';
-import MessageTimeline from './MessageTimeline';
 import SessionSummaryPanel from './SessionSummaryPanel';
+import ClaudeTranscriptPane from './ClaudeTranscriptPane';
+import CodexTranscriptPane from './CodexTranscriptPane';
+import CodexSummaryEmpty from './CodexSummaryEmpty';
 import styles from './SessionViewer.module.css';
+
+// Provider canonical names per CF-347. Legacy 'Claude Code' rows still exist
+// in the database but the API normalizes them to 'claude-code' on read.
+function isCodexProvider(provider: string): boolean {
+  return provider === 'codex';
+}
 
 export type ViewTab = 'summary' | 'transcript';
 
@@ -40,14 +48,17 @@ interface SessionViewerProps {
   initialAnalytics?: import('@/services/api').SessionAnalytics;
   /** For Storybook: pass GitHub links directly instead of fetching from API */
   initialGithubLinks?: import('@/services/api').GitHubLink[];
+  /** For Storybook: pass raw Codex lines directly instead of fetching from API */
+  initialCodexRawLines?: import('@/schemas/codexTranscript').RawCodexLine[];
 }
 
-function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, activeTab: controlledTab, onTabChange, targetMessageUuid, initialMessages, initialAnalytics, initialGithubLinks }: SessionViewerProps) {
+function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = true, isShared = false, activeTab: controlledTab, onTabChange, targetMessageUuid, initialMessages, initialAnalytics, initialGithubLinks, initialCodexRawLines }: SessionViewerProps) {
   // Support both controlled and uncontrolled modes
   const [uncontrolledTab, setUncontrolledTab] = useState<ViewTab>('summary');
   const activeTab = controlledTab ?? uncontrolledTab;
   const setActiveTab = onTabChange ?? setUncontrolledTab;
-  const [loading, setLoading] = useState(!initialMessages);
+  const isCodex = isCodexProvider(session.provider);
+  const [loading, setLoading] = useState(!initialMessages && !isCodex);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>(initialMessages ?? []);
 
@@ -60,10 +71,13 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   // Cost mode toggle
   const [isCostMode, setIsCostMode] = useState(false);
 
-  // TILs for this session (fetched once on mount)
+  // TILs for this session (fetched once on mount).
+  // Skip for Codex — TILs are message-anchored via UUIDs, which Codex
+  // sessions don't have. The request would return an empty list anyway.
   const [sessionTILs, setSessionTILs] = useState<Map<string, TIL[]>>(new Map());
   useEffect(() => {
     setSessionTILs(new Map()); // Clear stale badges when navigating between sessions
+    if (isCodex) return;
     tilsAPI.listForSession(session.id).then((response) => {
       const map = new Map<string, TIL[]>();
       for (const til of response.tils) {
@@ -76,7 +90,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     }).catch(() => {
       // Non-critical — TIL markers simply won't appear
     });
-  }, [session.id]);
+  }, [session.id, isCodex]);
 
   // Filter state - synced to URL via ?hide= param
   const {
@@ -117,12 +131,15 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
   const transcriptFileName = transcriptFile?.file_name;
 
-  // Load transcript initially (skip if initialMessages provided for Storybook)
+  // Load transcript initially (skip if initialMessages provided for Storybook,
+  // or if this is a Codex session — the dedicated CodexTranscriptPane handles
+  // its own fetch with the codex-aware parser).
   useEffect(() => {
     if (initialMessages !== undefined) return;
+    if (isCodex) return;
     loadTranscript();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, initialMessages]);
+  }, [session.id, initialMessages, isCodex]);
 
   async function loadTranscript() {
     setLoading(true);
@@ -148,9 +165,10 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     }
   }
 
-  // Poll for new messages when visible (skip if initialMessages provided for Storybook)
+  // Poll for new messages when visible (skip if initialMessages provided for
+  // Storybook, or for Codex — CodexTranscriptPane runs its own poll loop).
   useEffect(() => {
-    if (initialMessages !== undefined || !isVisible || loading || !transcriptFileName) {
+    if (initialMessages !== undefined || !isVisible || loading || !transcriptFileName || isCodex) {
       return;
     }
 
@@ -179,7 +197,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     return () => {
       clearInterval(intervalId);
     };
-  }, [initialMessages, isVisible, loading, session.id, transcriptFileName]);
+  }, [initialMessages, isVisible, loading, session.id, transcriptFileName, isCodex]);
 
   const toggleCostMode = useCallback(() => setIsCostMode((prev) => !prev), []);
 
@@ -217,6 +235,11 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     return { model, durationMs, sessionDate };
   }, [messages, session.first_seen, session.last_sync_at]);
 
+  // The transcript header controls (cost toggle, filter chips) only apply to
+  // the Claude transcript view. Codex has no per-message filtering yet, and
+  // the Summary tab doesn't show transcript chrome.
+  const showTranscriptControls = activeTab === 'transcript' && !isCodex;
+
   return (
     <div className={styles.sessionViewer}>
       <div className={styles.mainContent}>
@@ -237,14 +260,14 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           isOwner={isOwner}
           isShared={isShared}
           sharedByEmail={session.shared_by_email}
-          isCostMode={activeTab === 'transcript' ? isCostMode : undefined}
-          onToggleCostMode={activeTab === 'transcript' ? toggleCostMode : undefined}
-          categoryCounts={activeTab === 'transcript' ? categoryCounts : undefined}
-          filterState={activeTab === 'transcript' ? filterState : undefined}
-          onToggleCategory={activeTab === 'transcript' ? toggleCategory : undefined}
-          onToggleUserSubcategory={activeTab === 'transcript' ? toggleUserSubcategory : undefined}
-          onToggleAssistantSubcategory={activeTab === 'transcript' ? toggleAssistantSubcategory : undefined}
-          onToggleAttachmentSubcategory={activeTab === 'transcript' ? toggleAttachmentSubcategory : undefined}
+          isCostMode={showTranscriptControls ? isCostMode : undefined}
+          onToggleCostMode={showTranscriptControls ? toggleCostMode : undefined}
+          categoryCounts={showTranscriptControls ? categoryCounts : undefined}
+          filterState={showTranscriptControls ? filterState : undefined}
+          onToggleCategory={showTranscriptControls ? toggleCategory : undefined}
+          onToggleUserSubcategory={showTranscriptControls ? toggleUserSubcategory : undefined}
+          onToggleAssistantSubcategory={showTranscriptControls ? toggleAssistantSubcategory : undefined}
+          onToggleAttachmentSubcategory={showTranscriptControls ? toggleAttachmentSubcategory : undefined}
         />
 
         {/* Tabs */}
@@ -266,27 +289,33 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
         {/* Tab Content */}
         <div className={styles.tabContent}>
           {activeTab === 'summary' ? (
-            <SessionSummaryPanel
-              sessionId={session.id}
-              isOwner={isOwner}
-              initialAnalytics={initialAnalytics}
-              initialGithubLinks={initialGithubLinks}
-              onSuggestedTitleChange={handleSuggestedTitleChange}
-            />
+            isCodex ? (
+              <CodexSummaryEmpty />
+            ) : (
+              <SessionSummaryPanel
+                sessionId={session.id}
+                isOwner={isOwner}
+                initialAnalytics={initialAnalytics}
+                initialGithubLinks={initialGithubLinks}
+                onSuggestedTitleChange={handleSuggestedTitleChange}
+              />
+            )
           ) : (
             <div className={styles.timelineContainer}>
-              {loading ? (
-                <div className={styles.loading}>Loading transcript...</div>
-              ) : error ? (
-                <div className={styles.error}>
-                  <strong>Error:</strong> {error}
-                </div>
-              ) : (
-                <MessageTimeline
-                  messages={filteredMessages}
-                  allMessages={messages}
-                  targetMessageUuid={targetMessageUuid}
+              {isCodex ? (
+                <CodexTranscriptPane
                   sessionId={session.id}
+                  transcriptFileName={transcriptFileName}
+                  initialRawLines={initialCodexRawLines}
+                />
+              ) : (
+                <ClaudeTranscriptPane
+                  loading={loading}
+                  error={error}
+                  filteredMessages={filteredMessages}
+                  allMessages={messages}
+                  sessionId={session.id}
+                  targetMessageUuid={targetMessageUuid}
                   isCostMode={isCostMode}
                   tilsByMessageUuid={sessionTILs}
                 />

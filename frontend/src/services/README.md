@@ -7,8 +7,9 @@ API client and business logic services. All HTTP communication with the backend 
 | File | Role |
 |------|------|
 | `api.ts` | Centralized API client with Zod-validated endpoints, error classes, and auth handling |
-| `transcriptService.ts` | Transcript fetching, JSONL parsing, validation, caching, and incremental updates |
-| `messageParser.ts` | Extracts display-ready data from raw transcript messages |
+| `transcriptService.ts` | Claude Code transcript: fetching, JSONL parsing, validation, caching, incremental updates |
+| `codexTranscriptService.ts` | Codex rollout transcript: parses the Codex JSONL shape, normalizes raw lines into render items, and mirrors the Claude fetch / poll surface |
+| `messageParser.ts` | Extracts display-ready data from raw Claude transcript messages |
 
 ## Key Components
 
@@ -59,6 +60,55 @@ Key exports:
 - `fetchNewTranscriptMessages(sessionId, fileName, currentLineCount)` -- Incremental fetch
 - `parseJSONL(jsonl)` -- Parse JSONL string into validated `TranscriptLine[]`
 
+### codexTranscriptService.ts -- Codex Transcript Processing
+
+Provider-specific parser for the Codex rollout JSONL (`{ timestamp, type, payload }`
+envelopes with nested `payload.type` discriminators). Splits the work into two
+passes so the React layer can re-derive items from raw lines in `useMemo`
+without re-fetching:
+
+1. **`parseCodexJSONL(jsonl)`** -- Validates each line against
+   `RawCodexLineSchema` from `@/schemas/codexTranscript`. Returns
+   `{ rawLines, errors, totalLines, successCount, errorCount }`. Bad lines are
+   recorded but do not abort the parse. `totalLines` reflects non-empty input
+   lines so the line-offset incremental fetch stays in sync.
+2. **`normalizeCodexLines(rawLines)`** -- Pure synchronous transform that
+   collapses the rich, partially-redundant Codex stream into a clean
+   `CodexRenderItem[]` for the timeline. Responsibilities:
+   - Drop noise: `session_meta`, `turn_context`, `event_msg.token_count`,
+     `event_msg.task_started`, `event_msg.user_message`,
+     `event_msg.agent_message`, `response_item.message[role=developer]`.
+   - Strip `<environment_context>…</environment_context>` blocks from user
+     message text.
+   - Strip the Codex exec output preamble (`Chunk ID:`, `Wall time:`,
+     `Process exited with code:`) and surface the parsed exit code + wall
+     time as `execMetadata`.
+   - Pair `function_call` ↔ `function_call_output` by `call_id`.
+   - Pair `custom_tool_call` ↔ `custom_tool_call_output` ↔
+     `event_msg.patch_apply_end` (merges structured patch info into the
+     existing draft).
+   - Track the running model from `session_meta.model` and
+     `task_started.model`; attach it to each assistant render item.
+   - Emit `CodexReasoningHiddenItem` placeholders for encrypted reasoning
+     lines, `CodexTurnSeparatorItem` per `task_complete` (with
+     `durationMs` + `timeToFirstTokenMs`), and `CodexCompactedItem` per
+     `compacted` line.
+   - Fall back to `CodexUnknownItem` for any top-level or nested type that
+     isn't recognized, so forward-compat additions are visible instead of
+     silently dropped.
+
+Key exports:
+- `fetchParsedCodexTranscript(sessionId, fileName, skipCache?)` -- Initial
+  load with in-memory cache (mirrors `fetchParsedTranscript`).
+- `fetchNewCodexLines(sessionId, fileName, currentLineCount)` -- Incremental
+  poll, returns `{ newRawLines, newTotalLineCount }`. Callers append raw lines
+  to their accumulated state and re-derive items via `useMemo`.
+- `parseCodexJSONL`, `normalizeCodexLines` -- Used directly by tests and
+  Storybook stories; exposed so consumers don't need to re-fetch to re-derive.
+- `reportCodexTranscriptErrors(sessionId, errors)` -- Sends to
+  `/api/v1/client-errors` with `category: 'codex_transcript_validation'`
+  (separate from Claude's `transcript_validation` for independent triage).
+
 ### messageParser.ts -- Message Display
 
 Transforms raw `TranscriptLine` objects into display-ready `ParsedMessageData`:
@@ -105,6 +155,7 @@ Key exports:
 
 - `api.test.ts` -- API client error handling, auth flow, response validation
 - `transcriptService.test.ts` -- JSONL parsing, validation error handling, incremental fetch
+- `codexTranscriptService.test.ts` -- Codex JSONL parsing + normalization, fixture-driven (`src/test-fixtures/codex-rollout.jsonl`)
 - `messageParser.test.ts` -- Message parsing for all message types, text extraction
 
 ## Dependencies
@@ -112,4 +163,7 @@ Key exports:
 - `zod` (runtime response validation)
 - `@/schemas/api` (response schemas and types)
 - `@/schemas/transcript` (transcript line schemas)
+- `@/schemas/codexTranscript` (Codex rollout schemas + `isKnown*` type predicates)
+- `@/types/codexRenderItem` (Codex render-item types)
 - `@/utils/sessionErrors` (401 redirect skip list)
+- `@/utils/utils` (`isRecord` for safe shape inspection without `as` casts)

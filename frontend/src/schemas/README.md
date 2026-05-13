@@ -8,6 +8,7 @@ Zod validation schemas and the TypeScript type system for the Confab frontend. A
 |------|------|
 | `api.ts` | Zod schemas for all API responses: sessions, analytics, trends, org, auth, shares, GitHub links |
 | `transcript.ts` | Zod schemas for Claude Code transcript JSONL: message types, content blocks, token usage |
+| `codexTranscript.ts` | Zod schemas for Codex rollout JSONL: top-level line envelopes, response_item / event_msg payload variants, forward-compat catch-all branches, and `isKnownCodexLine` / `isKnownResponseItemPayload` / `isKnownEventPayload` type predicates |
 | `validation.ts` | Zod schemas for form input validation: share forms, API key creation, email validation |
 
 ## Key Types
@@ -77,6 +78,45 @@ All types are inferred from Zod schemas via `z.infer<>`:
 - Validation: `validateParsedTranscriptLine()`, `parseTranscriptLineWithError()`
 - Schema drift detection: `warnIfKnownTypeCaughtByCatchall()`
 
+### codexTranscript.ts -- Codex Rollout Types
+
+Each on-disk Codex line has the envelope `{ timestamp, type, payload }`.
+`RawCodexLineSchema` is a `z.union` of the five known top-level branches
+(`session_meta`, `turn_context`, `response_item`, `event_msg`, `compacted`)
+plus a catch-all `CodexUnknownLineSchema` so unfamiliar future types parse
+without erroring.
+
+**Top-level inferred types:**
+- `RawCodexLine` -- union of all branches
+- `KnownCodexLine` -- union of the five known branches (catch-all excluded)
+- Per-branch: `CodexSessionMetaLine`, `CodexTurnContextLine`,
+  `CodexResponseItemLine`, `CodexEventMsgLine`, `CodexCompactedLine`
+
+**Nested payload variants:**
+- `response_item.payload` is a union with seven known shapes
+  (`message`, `function_call`, `function_call_output`,
+  `custom_tool_call`, `custom_tool_call_output`, `reasoning`,
+  `web_search_call`) plus a catch-all. Exported branch types:
+  `CodexResponseMessage`, `CodexFunctionCall`, `CodexFunctionCallOutput`,
+  `CodexCustomToolCall`, `CodexCustomToolCallOutput`, `CodexWebSearchCall`.
+- `event_msg.payload` is a union with six known shapes
+  (`user_message`, `agent_message`, `task_started`, `task_complete`,
+  `token_count`, `patch_apply_end`) plus a catch-all. Exported branch
+  types: `CodexEventPatchApplyEnd`, `CodexEventTaskComplete`.
+
+**Type predicates** (each narrows away the catch-all so a subsequent
+`switch` on `.type` discriminates cleanly between the known branches):
+- `isKnownCodexLine(line)`
+- `isKnownResponseItemPayload(payload)`
+- `isKnownEventPayload(payload)`
+
+**Parse result:**
+- `CodexParseResult` -- `{ rawLines, errors, totalLines, successCount, errorCount }`
+  produced by `parseCodexJSONL` in `@/services/codexTranscriptService`.
+
+The schema layer never sees a parsed `CodexRenderItem` — that's the
+normalizer's output, defined separately in `@/types/codexRenderItem`.
+
 ### validation.ts -- Form Validation
 
 - `emailSchema` -- Trimmed, non-empty, valid email, max 255 chars
@@ -100,6 +140,18 @@ All types are inferred from Zod schemas via `z.infer<>`:
 4. Export a type guard function
 5. Update `messageParser.ts` to handle the new type
 
+### Adding a new Codex top-level line type
+1. Define the schema in `codexTranscript.ts` (use `.passthrough()` + `z.string()` over `z.literal()` for non-tag fields, per forward-compat conventions).
+2. Add it to `KnownCodexLineSchema` (the union of known branches) and to `RawCodexLineSchema` is unchanged — it composes `KnownCodexLineSchema` plus the catch-all.
+3. Add the type string to `KNOWN_LINE_TYPES` so `isKnownCodexLine` recognizes it.
+4. Update `normalizeCodexLines` in `@/services/codexTranscriptService` to produce render items for the new type.
+
+### Adding a new Codex nested payload type (response_item / event_msg)
+1. Define the payload schema in `codexTranscript.ts` (`z.literal('your_type')` + `.passthrough()`).
+2. Add it to `KnownResponseItemPayloadSchema` or `KnownEventPayloadSchema` accordingly.
+3. Add the type string to `KNOWN_RESPONSE_ITEM_PAYLOAD_TYPES` or `KNOWN_EVENT_PAYLOAD_TYPES`.
+4. Add a `case` to the matching switch in `normalizeCodexLines` so the new payload produces a render item.
+
 ### Adding a new form validation schema
 1. Define the Zod schema in `validation.ts`
 2. Export both the schema and the inferred `z.infer<>` type
@@ -108,7 +160,8 @@ All types are inferred from Zod schemas via `z.infer<>`:
 ## Invariants / Conventions
 
 - **Schemas validate external data**: Schemas are designed to validate data we don't control (API responses, transcript files). They use `.passthrough()` and `z.string()` (instead of `z.enum()`) for forward compatibility with new field values.
-- **Union ordering matters**: In discriminated unions (`TranscriptLineSchema`, `ContentBlockSchema`), the catch-all (`UnknownMessageSchema`, `UnknownBlockSchema`) must be last. Zod tries branches in order and returns the first match.
+- **Union ordering matters**: In discriminated unions (`TranscriptLineSchema`, `ContentBlockSchema`, `RawCodexLineSchema`, `CodexResponseItemPayloadSchema`, `CodexEventPayloadSchema`), the catch-all branch must be last. Zod tries branches in order and returns the first match.
+- **Type predicates for narrowing**: When a union has a catch-all whose discriminator is `z.string()`, TypeScript's switch-narrowing widens the payload to `unknown` because the catch-all matches any literal. The `isKnown*` predicates in `codexTranscript.ts` filter out the catch-all so a subsequent `switch (line.type)` discriminates cleanly. Same trick applies to nested payload unions.
 - **Type guards re-exported from `@/types`**: The `src/types/index.ts` file re-exports all type guards and types from `schemas/transcript.ts`. Components import from `@/types`, not directly from schemas.
 - **Schema drift detection**: `warnIfKnownTypeCaughtByCatchall()` logs a console warning when a message with a known `type` string falls through to the catch-all schema, indicating the specific schema needs updating.
 - **`AnnotatedItem` backward compatibility**: Accepts both plain strings (legacy) and `{ text, message_id? }` objects, normalizing strings to objects via `.transform()`.
@@ -123,6 +176,7 @@ All types are inferred from Zod schemas via `z.infer<>`:
 ## Testing
 
 - `transcript.test.ts` -- Transcript line parsing, validation error formatting, type guards
+- `codexTranscript.test.ts` -- Every documented top-level type and nested payload variant, forward-compat catch-all behavior, `.passthrough()` preservation
 - `validation.test.ts` -- Share form validation, email validation, API key name validation
 
 ## Dependencies

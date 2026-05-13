@@ -1,0 +1,23 @@
+/* Codex virtualized timeline container. */
+
+.scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+}
+
+.virtualizer {
+  position: relative;
+  width: 100%;
+}
+
+.row {
+  padding-bottom: var(--spacing-xs);
+}
+
+.empty {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+}

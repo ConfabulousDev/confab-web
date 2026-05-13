@@ -13,6 +13,14 @@ export function stripAnsi(text: string): string {
 }
 
 /**
+ * Runtime guard for "is this a plain object?". Use whenever a value typed
+ * `unknown` needs its fields inspected without an `as` cast (eslint-banned).
+ */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+/**
  * Format bytes into human-readable size
  */
 export function formatBytes(bytes: number): string {

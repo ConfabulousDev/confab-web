@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { MemoryRouter } from 'react-router-dom';
 import type { SessionDetail, AssistantMessage, UserMessage, TranscriptLine } from '@/types';
 import type { SessionAnalytics, GitHubLink } from '@/services/api';
+import type { RawCodexLine } from '@/schemas/codexTranscript';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
 import SessionViewer from './SessionViewer';
 
@@ -256,12 +258,16 @@ const meta = {
     layout: 'fullscreen',
   },
   decorators: [
+    // SessionViewer calls useTranscriptFilters → useURLFilters → useSearchParams,
+    // so Storybook needs a router context in addition to the keyboard provider.
     (Story) => (
-      <KeyboardShortcutProvider>
-        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-          <Story />
-        </div>
-      </KeyboardShortcutProvider>
+      <MemoryRouter>
+        <KeyboardShortcutProvider>
+          <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+            <Story />
+          </div>
+        </KeyboardShortcutProvider>
+      </MemoryRouter>
     ),
   ],
 } satisfies Meta<typeof SessionViewer>;
@@ -419,5 +425,102 @@ export const DeepLinkSharedSession: Story = {
     initialMessages: mockMessages,
     initialAnalytics: mockAnalytics,
     initialGithubLinks: mockGithubLinks,
+  },
+};
+
+/**
+ * Codex session (CF-349). The Summary tab shows the "not yet available"
+ * placeholder; switch to Transcript to see the Codex-specific renderer
+ * fed by `initialCodexRawLines` (bypassing the live fetch). Filter chips,
+ * cost toggle, and analytics cards are all hidden for Codex.
+ */
+const codexFixtureLines: RawCodexLine[] = [
+  {
+    timestamp: '2026-05-13T18:00:00Z',
+    type: 'session_meta',
+    payload: { id: 'fixture', model_provider: 'openai', model: 'gpt-5' },
+  },
+  {
+    timestamp: '2026-05-13T18:00:00.5Z',
+    type: 'response_item',
+    payload: {
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'input_text', text: 'add the linear mcp to my codex config' }],
+    },
+  },
+  {
+    timestamp: '2026-05-13T18:00:02Z',
+    type: 'response_item',
+    payload: {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: "I'll check how this repo manages MCP entries." }],
+      phase: 'commentary',
+    },
+  },
+  {
+    timestamp: '2026-05-13T18:00:03Z',
+    type: 'response_item',
+    payload: {
+      type: 'function_call',
+      name: 'exec_command',
+      arguments: JSON.stringify({ cmd: 'pwd', workdir: '/Users/dev/example-project' }),
+      call_id: 'call_pwd',
+    },
+  },
+  {
+    timestamp: '2026-05-13T18:00:03.5Z',
+    type: 'response_item',
+    payload: {
+      type: 'function_call_output',
+      call_id: 'call_pwd',
+      output:
+        'Chunk ID: 155fed\nWall time: 0.7 seconds\nProcess exited with code 0\nOriginal token count: 7\nOutput:\n/Users/dev/example-project\n',
+    },
+  },
+  {
+    timestamp: '2026-05-13T18:00:11Z',
+    type: 'response_item',
+    payload: {
+      type: 'message',
+      role: 'assistant',
+      content: [
+        {
+          type: 'output_text',
+          text: 'Added the Linear MCP entry to your Codex config.\n\nReload the session for the change to take effect.',
+        },
+      ],
+      phase: 'final',
+    },
+  },
+  {
+    timestamp: '2026-05-13T18:00:11.5Z',
+    type: 'event_msg',
+    payload: {
+      type: 'task_complete',
+      turn_id: 't1',
+      last_agent_message: 'Added the Linear MCP entry.',
+      completed_at: 0,
+      duration_ms: 11000,
+      time_to_first_token_ms: 1704,
+    },
+  },
+];
+
+export const CodexSession: Story = {
+  args: {
+    session: {
+      ...mockSession,
+      provider: 'codex',
+      external_id: '019e-codex-fixture',
+      summary: 'Add the Linear MCP to my Codex config',
+      first_user_message: 'add the linear mcp to my codex config',
+    },
+    isOwner: true,
+    isShared: false,
+    activeTab: 'transcript',
+    initialMessages: [],
+    initialCodexRawLines: codexFixtureLines,
   },
 };

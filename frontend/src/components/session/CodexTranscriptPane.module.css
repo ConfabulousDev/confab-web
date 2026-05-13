@@ -1,0 +1,11 @@
+.loading,
+.error {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-xs);
+}
+
+.error {
+  color: var(--color-danger);
+}

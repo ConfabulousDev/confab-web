@@ -1,0 +1,24 @@
+.empty {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--color-text-secondary);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.icon {
+  font-size: 32px;
+  margin-bottom: var(--spacing-md);
+}
+
+.title {
+  font-size: var(--font-md);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.body {
+  font-size: var(--font-xs);
+  line-height: 1.6;
+  margin: 0;
+}
