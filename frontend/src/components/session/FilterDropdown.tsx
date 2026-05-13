@@ -5,6 +5,7 @@ import type {
   MessageCategory,
   UserSubcategory,
   AssistantSubcategory,
+  AttachmentSubcategory,
   HierarchicalCounts,
   FilterState,
 } from './messageCategories';
@@ -17,6 +18,7 @@ interface FilterDropdownProps {
   onToggleCategory: (category: MessageCategory) => void;
   onToggleUserSubcategory: (subcategory: UserSubcategory) => void;
   onToggleAssistantSubcategory: (subcategory: AssistantSubcategory) => void;
+  onToggleAttachmentSubcategory: (subcategory: AttachmentSubcategory) => void;
 }
 
 // Subcategory configurations
@@ -32,8 +34,16 @@ const ASSISTANT_SUBCATEGORIES: Array<{ key: AssistantSubcategory; label: string 
   { key: 'thinking', label: 'Thinking' },
 ];
 
+const ATTACHMENT_SUBCATEGORIES: Array<{ key: AttachmentSubcategory; label: string }> = [
+  { key: 'hook', label: 'Hook' },
+  { key: 'file-edit', label: 'File Edit' },
+  { key: 'queued-command', label: 'Queued Command' },
+  { key: 'deferred-tools', label: 'Deferred Tools' },
+  { key: 'mcp-instructions', label: 'MCP Instructions' },
+];
+
 // Flat category type - categories without subcategories
-type FlatCategory = 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation' | 'pr-link';
+type FlatCategory = 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation' | 'pr-link' | 'away-summary';
 
 // Flat categories (no subcategories)
 interface FlatFilterItem {
@@ -44,6 +54,7 @@ interface FlatFilterItem {
 
 const FLAT_CATEGORIES: FlatFilterItem[] = [
   { category: 'system', label: 'System', color: 'gray' },
+  { category: 'away-summary', label: 'Resume Summary', color: 'purple' },
   { category: 'file-history-snapshot', label: 'File Snapshot', color: 'cyan' },
   { category: 'summary', label: 'Summary', color: 'purple' },
   { category: 'queue-operation', label: 'Queue', color: 'amber' },
@@ -53,13 +64,14 @@ const FLAT_CATEGORIES: FlatFilterItem[] = [
 // Checkbox state types
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
-function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSubcategory, onToggleAssistantSubcategory }: FilterDropdownProps) {
+function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSubcategory, onToggleAssistantSubcategory, onToggleAttachmentSubcategory }: FilterDropdownProps) {
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
   // Expand/collapse state for hierarchical categories
-  const [expandedCategories, setExpandedCategories] = useState<Set<'user' | 'assistant'>>(new Set());
+  type HierarchicalParent = 'user' | 'assistant' | 'attachment';
+  const [expandedCategories, setExpandedCategories] = useState<Set<HierarchicalParent>>(new Set());
 
-  const toggleExpand = (category: 'user' | 'assistant') => {
+  const toggleExpand = (category: HierarchicalParent) => {
     setExpandedCategories((prev) => {
       const next = new Set(prev);
       if (next.has(category)) {
@@ -71,47 +83,44 @@ function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSub
     });
   };
 
-  // Calculate checkbox state for hierarchical categories
-  function getUserCheckboxState(): CheckboxState {
-    const { prompt, 'tool-result': toolResult, skill } = filterState.user;
-    if (prompt && toolResult && skill) return 'checked';
-    if (!prompt && !toolResult && !skill) return 'unchecked';
-    return 'indeterminate';
-  }
-
-  function getAssistantCheckboxState(): CheckboxState {
-    const { text, 'tool-use': toolUse, thinking } = filterState.assistant;
-    if (text && toolUse && thinking) return 'checked';
-    if (!text && !toolUse && !thinking) return 'unchecked';
+  // Roll up a set of booleans into a parent checkbox tri-state.
+  function rollupCheckboxState(values: boolean[]): CheckboxState {
+    if (values.every(Boolean)) return 'checked';
+    if (values.every((v) => !v)) return 'unchecked';
     return 'indeterminate';
   }
 
   // Check if filters are active (any category hidden that has messages)
   function hasActiveFilters(): boolean {
-    // Check user subcategories
-    if (counts.user.prompt > 0 && !filterState.user.prompt) return true;
-    if (counts.user['tool-result'] > 0 && !filterState.user['tool-result']) return true;
-    if (counts.user.skill > 0 && !filterState.user.skill) return true;
+    const hiddenWithMessages = (count: number, visible: boolean) => count > 0 && !visible;
 
-    // Check assistant subcategories
-    if (counts.assistant.text > 0 && !filterState.assistant.text) return true;
-    if (counts.assistant['tool-use'] > 0 && !filterState.assistant['tool-use']) return true;
-    if (counts.assistant.thinking > 0 && !filterState.assistant.thinking) return true;
-
-    // Check flat categories
-    if (counts.system > 0 && !filterState.system) return true;
-    if (counts['file-history-snapshot'] > 0 && !filterState['file-history-snapshot']) return true;
-    if (counts.summary > 0 && !filterState.summary) return true;
-    if (counts['queue-operation'] > 0 && !filterState['queue-operation']) return true;
-    if (counts['pr-link'] > 0 && !filterState['pr-link']) return true;
-
+    for (const sub of USER_SUBCATEGORIES) {
+      if (hiddenWithMessages(counts.user[sub.key], filterState.user[sub.key])) return true;
+    }
+    for (const sub of ASSISTANT_SUBCATEGORIES) {
+      if (hiddenWithMessages(counts.assistant[sub.key], filterState.assistant[sub.key])) return true;
+    }
+    for (const sub of ATTACHMENT_SUBCATEGORIES) {
+      if (hiddenWithMessages(counts.attachment[sub.key], filterState.attachment[sub.key])) return true;
+    }
+    for (const item of FLAT_CATEGORIES) {
+      if (hiddenWithMessages(counts[item.category], filterState[item.category])) return true;
+    }
     return false;
   }
 
   const isUserExpanded = expandedCategories.has('user');
   const isAssistantExpanded = expandedCategories.has('assistant');
-  const userCheckboxState = getUserCheckboxState();
-  const assistantCheckboxState = getAssistantCheckboxState();
+  const isAttachmentExpanded = expandedCategories.has('attachment');
+  const userCheckboxState = rollupCheckboxState(
+    USER_SUBCATEGORIES.map((sub) => filterState.user[sub.key]),
+  );
+  const assistantCheckboxState = rollupCheckboxState(
+    ASSISTANT_SUBCATEGORIES.map((sub) => filterState.assistant[sub.key]),
+  );
+  const attachmentCheckboxState = rollupCheckboxState(
+    ATTACHMENT_SUBCATEGORIES.map((sub) => filterState.attachment[sub.key]),
+  );
 
   return (
     <div className={styles.container} ref={containerRef}>
@@ -233,6 +242,64 @@ function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSub
                         <span
                           className={`${styles.checkbox} ${isVisible ? styles.checked : ''}`}
                           style={{ color: isVisible ? getColorValue('blue') : undefined }}
+                        >
+                          {CheckIcon}
+                        </span>
+                        <span className={styles.filterLabel}>{sub.label}</span>
+                        <span className={styles.filterCount}>{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Attachment category with subcategories (CF-346) */}
+            <div className={styles.categoryGroup}>
+              <div className={`${styles.filterItem} ${styles.parentItem} ${counts.attachment.total === 0 ? styles.disabled : ''}`}>
+                <button
+                  className={styles.expandBtn}
+                  onClick={() => toggleExpand('attachment')}
+                  aria-label={isAttachmentExpanded ? 'Collapse attachment subcategories' : 'Expand attachment subcategories'}
+                >
+                  <span className={`${styles.expandIcon} ${isAttachmentExpanded ? styles.expanded : ''}`}>
+                    <ChevronIcon />
+                  </span>
+                </button>
+                <button
+                  className={styles.checkboxBtn}
+                  onClick={() => counts.attachment.total > 0 && onToggleCategory('attachment')}
+                  disabled={counts.attachment.total === 0}
+                  aria-label="Toggle all attachment messages"
+                >
+                  <span
+                    className={`${styles.checkbox} ${styles[attachmentCheckboxState]}`}
+                    style={{ color: attachmentCheckboxState !== 'unchecked' ? getColorValue('gray') : undefined }}
+                  >
+                    {attachmentCheckboxState === 'indeterminate' ? <MinusIcon /> : CheckIcon}
+                  </span>
+                  <span className={styles.filterLabel}>Attachment</span>
+                  <span className={styles.filterCount}>{counts.attachment.total}</span>
+                </button>
+              </div>
+
+              {isAttachmentExpanded && (
+                <div className={styles.subcategories}>
+                  {ATTACHMENT_SUBCATEGORIES.map((sub) => {
+                    const count = counts.attachment[sub.key];
+                    const isVisible = filterState.attachment[sub.key];
+                    const isDisabled = count === 0;
+
+                    return (
+                      <button
+                        key={sub.key}
+                        className={`${styles.filterItem} ${styles.subcategoryItem} ${isDisabled ? styles.disabled : ''}`}
+                        onClick={() => !isDisabled && onToggleAttachmentSubcategory(sub.key)}
+                        disabled={isDisabled}
+                      >
+                        <span
+                          className={`${styles.checkbox} ${isVisible ? styles.checked : ''}`}
+                          style={{ color: isVisible ? getColorValue('gray') : undefined }}
                         >
                           {CheckIcon}
                         </span>

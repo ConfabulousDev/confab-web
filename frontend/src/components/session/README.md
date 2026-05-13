@@ -43,11 +43,19 @@ interface SessionViewerProps {
 interface FilterState {
   user: { prompt: boolean; 'tool-result': boolean; skill: boolean };
   assistant: { text: boolean; 'tool-use': boolean; thinking: boolean };
+  attachment: {
+    hook: boolean;
+    'file-edit': boolean;
+    'queued-command': boolean;
+    'deferred-tools': boolean;
+    'mcp-instructions': boolean;
+  };
   system: boolean;
   'file-history-snapshot': boolean;
   summary: boolean;
   'queue-operation': boolean;
   'pr-link': boolean;
+  'away-summary': boolean;
   unknown: boolean;
 }
 ```
@@ -57,15 +65,17 @@ interface FilterState {
 - **SessionViewer** -- Orchestrates the entire session view. Supports controlled and uncontrolled tab modes. Loads transcript, polls for new messages (15s interval), and manages filter/cost-mode state.
 - **SessionSummaryPanel** -- Polls analytics via `useAnalyticsPolling`, renders ordered cards from the card registry, and provides smart recap regeneration.
 - **MessageTimeline** -- Uses `@tanstack/react-virtual` for virtualized rendering of potentially thousands of messages. Integrates `TranscriptSearchBar`, `TimelineBar`, and `CostBar`.
-- **FilterDropdown** -- Hierarchical filter with top-level categories (user, assistant, system) and subcategories (prompt, tool-result, skill, text, tool-use, thinking).
+- **FilterDropdown** -- Hierarchical filter with three top-level categories with subcategories (user, assistant, attachment) plus flat chips for system, away-summary, file-history-snapshot, summary, queue-operation, and pr-link. The attachment chip groups hook output, file edits, queued commands, deferred tools, and mcp instructions. Default state: only user + assistant + unknown are visible; everything else is opt-in.
 
 ## How to Extend
 
 ### Adding a new message category filter
 1. Add the category to `MessageCategory` type in `messageCategories.ts`
 2. Add default visibility to `DEFAULT_FILTER_STATE`
-3. Update `classifyMessage()` and `messageMatchesFilter()`
+3. Update `countHierarchicalCategories()` and `messageMatchesFilter()`
 4. Add the filter chip to `FilterDropdown.tsx`
+5. Add the new path to `SUB_KEYS` / `FLAT_KEYS` and the `stateFromPaths` / `pathsFromState` round-trip in `@/hooks/useTranscriptFilters.ts` (so the chip persists in the `?hide=` URL param)
+6. If the new category needs a custom body renderer (like attachments or away-summary), wire a dispatch branch in `TimelineMessage.tsx`'s content render block
 
 ### Adding session header metadata
 Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.

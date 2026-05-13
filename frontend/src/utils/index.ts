@@ -1,6 +1,9 @@
 // Re-export utilities from utils.ts
 export { stripAnsi } from './utils';
 
+// Re-export markdown rendering
+export { renderMarkdownToHtml } from './markdown';
+
 // Re-export formatting utilities
 export {
   formatDateString,

@@ -58,12 +58,20 @@ All types are inferred from Zod schemas via `z.infer<>`:
 **Message types** (discriminated union on `type`):
 - `UserMessage` -- User prompts and tool results
 - `AssistantMessage` -- Claude responses with token usage
-- `SystemMessage` -- System events (compact_boundary, api_error, turn_duration, etc.)
+- `SystemMessage` -- System events (compact_boundary, api_error, turn_duration, away_summary, etc.)
 - `SummaryMessage`, `PRLinkMessage`, `QueueOperationMessage`, `FileHistorySnapshot`
+- `AttachmentMessage` -- Side-channel rows whose inner `attachment` field is discriminated on its own `type` (hook_success, hook_blocking_error, edited_text_file, queued_command, deferred_tools_delta, mcp_instructions_delta, plus a catch-all branch for noisy/unknown subtypes)
 - Unknown message -- Forward-compatibility catch-all
 
+**Attachment subtypes** (inner discriminated union on `attachment.type`):
+- `HookSuccessAttachment`, `HookBlockingErrorAttachment` -- Hook lifecycle output
+- `EditedTextFileAttachment` -- Out-of-band user edits (filename + numbered snippet)
+- `QueuedCommandAttachment` -- Queued prompts or background-task notifications
+- `DeferredToolsDeltaAttachment`, `McpInstructionsDeltaAttachment` -- Mid-session tool/MCP availability changes
+
 **Utility functions:**
-- Type guards: `isUserMessage()`, `isAssistantMessage()`, `isTextBlock()`, `isToolUseBlock()`, etc.
+- Type guards: `isUserMessage()`, `isAssistantMessage()`, `isTextBlock()`, `isToolUseBlock()`, `isAttachmentMessage()`, etc.
+- Attachment subtype discriminators (each narrows `msg.attachment` to the matching branch): `isHookSuccessAttachment()`, `isHookBlockingErrorAttachment()`, `isEditedTextFileAttachment()`, `isQueuedCommandAttachment()`, `isDeferredToolsDeltaAttachment()`, `isMcpInstructionsDeltaAttachment()`
 - Content helpers: `hasThinking()`, `usesTools()`, `isToolResultMessage()`, `isSkillExpansionMessage()`
 - Command expansion: `isCommandExpansionMessage()`, `getCommandExpansionSkillName()`, `stripCommandExpansionTags()`
 - Validation: `validateParsedTranscriptLine()`, `parseTranscriptLineWithError()`

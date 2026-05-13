@@ -80,6 +80,12 @@
   border-left: 3px solid var(--color-text-muted);
 }
 
+/* Attachment rows (hook output, edited files, queued commands, tool deltas) */
+.message.attachment {
+  background: var(--color-bg-secondary);
+  border-left: 3px solid var(--color-text-muted);
+}
+
 /* Message header row */
 .header {
   display: flex;

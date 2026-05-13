@@ -1,12 +1,46 @@
-import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
-import { isToolResultMessage, isToolResultBlock, isSkillExpansionMessage, isUserMessage, isAssistantMessage, isTextBlock, isThinkingBlock, isToolUseBlock } from '@/types';
+import type { TranscriptLine, UserMessage, AssistantMessage, AttachmentMessage } from '@/types';
+import {
+  isToolResultMessage,
+  isToolResultBlock,
+  isSkillExpansionMessage,
+  isUserMessage,
+  isAssistantMessage,
+  isSystemMessage,
+  isAttachmentMessage,
+  isHookSuccessAttachment,
+  isHookBlockingErrorAttachment,
+  isEditedTextFileAttachment,
+  isQueuedCommandAttachment,
+  isDeferredToolsDeltaAttachment,
+  isMcpInstructionsDeltaAttachment,
+  isTextBlock,
+  isThinkingBlock,
+  isToolUseBlock,
+} from '@/types';
 
-// Message categories for filtering - matches top-level transcript types
-export type MessageCategory = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'summary' | 'queue-operation' | 'pr-link' | 'unknown';
+// Message categories for filtering - matches top-level transcript types plus
+// the synthetic categories introduced in CF-346.
+export type MessageCategory =
+  | 'user'
+  | 'assistant'
+  | 'system'
+  | 'file-history-snapshot'
+  | 'summary'
+  | 'queue-operation'
+  | 'pr-link'
+  | 'attachment'
+  | 'away-summary'
+  | 'unknown';
 
 // Subcategory types for hierarchical filtering
 export type UserSubcategory = 'prompt' | 'tool-result' | 'skill';
 export type AssistantSubcategory = 'text' | 'tool-use' | 'thinking';
+export type AttachmentSubcategory =
+  | 'hook'
+  | 'file-edit'
+  | 'queued-command'
+  | 'deferred-tools'
+  | 'mcp-instructions';
 
 // Subcategory counts for hierarchical categories
 export interface UserSubcategoryCounts {
@@ -21,45 +55,71 @@ export interface AssistantSubcategoryCounts {
   thinking: number;
 }
 
+export interface AttachmentSubcategoryCounts {
+  hook: number;
+  'file-edit': number;
+  'queued-command': number;
+  'deferred-tools': number;
+  'mcp-instructions': number;
+}
+
 // Hierarchical counts structure
 export interface HierarchicalCounts {
   user: { total: number } & UserSubcategoryCounts;
   assistant: { total: number } & AssistantSubcategoryCounts;
+  attachment: { total: number } & AttachmentSubcategoryCounts;
   system: number;
   'file-history-snapshot': number;
   summary: number;
   'queue-operation': number;
   'pr-link': number;
+  'away-summary': number;
   unknown: number;
 }
-
 
 // Filter state - tracks which subcategories are visible
 export interface FilterState {
   user: { prompt: boolean; 'tool-result': boolean; skill: boolean };
   assistant: { text: boolean; 'tool-use': boolean; thinking: boolean };
+  attachment: {
+    hook: boolean;
+    'file-edit': boolean;
+    'queued-command': boolean;
+    'deferred-tools': boolean;
+    'mcp-instructions': boolean;
+  };
   system: boolean;
   'file-history-snapshot': boolean;
   summary: boolean;
   'queue-operation': boolean;
   'pr-link': boolean;
+  'away-summary': boolean;
   unknown: boolean;
 }
 
-// Default filter state (user and assistant visible with all subs, others hidden)
+// Default filter state: user and assistant visible with all subs; attachments,
+// away-summary, and the other side-channel categories all hidden (opt-in).
 export const DEFAULT_FILTER_STATE: FilterState = {
   user: { prompt: true, 'tool-result': true, skill: true },
   assistant: { text: true, 'tool-use': true, thinking: true },
+  attachment: {
+    hook: false,
+    'file-edit': false,
+    'queued-command': false,
+    'deferred-tools': false,
+    'mcp-instructions': false,
+  },
   system: false,
   'file-history-snapshot': false,
   summary: false,
   'queue-operation': false,
   'pr-link': false,
+  'away-summary': false,
   unknown: true,
 };
 
 /**
- * Get the subcategory for a user message
+ * Get the subcategory for a user message.
  * Priority: skill > tool-result > prompt
  */
 function categorizeUserMessage(message: UserMessage): UserSubcategory {
@@ -81,17 +141,49 @@ function categorizeAssistantMessage(message: AssistantMessage): AssistantSubcate
 }
 
 /**
+ * Get the sub-chip an attachment row belongs to, or null for noisy / unknown
+ * subtypes that no filter chip routes to (task_reminder, skill_listing,
+ * command_permissions, or any future subtype). Returning null means the row
+ * is parsed but never rendered.
+ */
+function categorizeAttachmentMessage(message: AttachmentMessage): AttachmentSubcategory | null {
+  if (isHookSuccessAttachment(message) || isHookBlockingErrorAttachment(message)) return 'hook';
+  if (isEditedTextFileAttachment(message)) return 'file-edit';
+  if (isQueuedCommandAttachment(message)) return 'queued-command';
+  if (isDeferredToolsDeltaAttachment(message)) return 'deferred-tools';
+  if (isMcpInstructionsDeltaAttachment(message)) return 'mcp-instructions';
+  return null;
+}
+
+/**
+ * `system` rows where `subtype === 'away_summary'` are surfaced under their own
+ * chip; this helper centralizes the test so counters and the filter agree.
+ */
+function isAwaySummaryMessage(message: TranscriptLine): boolean {
+  return isSystemMessage(message) && message.subtype === 'away_summary';
+}
+
+/**
  * Count messages in each category with hierarchical subcategories
  */
 export function countHierarchicalCategories(messages: TranscriptLine[]): HierarchicalCounts {
   const counts: HierarchicalCounts = {
     user: { total: 0, prompt: 0, 'tool-result': 0, skill: 0 },
     assistant: { total: 0, text: 0, 'tool-use': 0, thinking: 0 },
+    attachment: {
+      total: 0,
+      hook: 0,
+      'file-edit': 0,
+      'queued-command': 0,
+      'deferred-tools': 0,
+      'mcp-instructions': 0,
+    },
     system: 0,
     'file-history-snapshot': 0,
     summary: 0,
     'queue-operation': 0,
     'pr-link': 0,
+    'away-summary': 0,
     unknown: 0,
   };
 
@@ -104,6 +196,16 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
       counts.assistant.total++;
       const subcategory = categorizeAssistantMessage(message);
       counts.assistant[subcategory]++;
+    } else if (isAttachmentMessage(message)) {
+      // Only rendered subs increment the parent total (per CF-346 decision #11).
+      const subcategory = categorizeAttachmentMessage(message);
+      if (subcategory !== null) {
+        counts.attachment.total++;
+        counts.attachment[subcategory]++;
+      }
+    } else if (isAwaySummaryMessage(message)) {
+      // away_summary system rows are bucketed to their own chip, not `system`.
+      counts['away-summary']++;
     } else {
       // Flat categories - increment the specific counter, unknown as fallback
       const msgType = message.type;
@@ -137,6 +239,8 @@ export function getRoleLabel(message: TranscriptLine): string {
     }
     return 'User';
   }
+  if (isAttachmentMessage(message)) return 'Attachment';
+  if (isAwaySummaryMessage(message)) return 'Resume Summary';
   switch (message.type) {
     case 'assistant':
       return 'Assistant';
@@ -196,6 +300,17 @@ export function messageMatchesFilter(message: TranscriptLine, filterState: Filte
   if (isAssistantMessage(message)) {
     const subcategory = categorizeAssistantMessage(message);
     return filterState.assistant[subcategory];
+  }
+
+  if (isAttachmentMessage(message)) {
+    const subcategory = categorizeAttachmentMessage(message);
+    // Noisy/unknown subtypes are hidden regardless of chip state.
+    if (subcategory === null) return false;
+    return filterState.attachment[subcategory];
+  }
+
+  if (isAwaySummaryMessage(message)) {
+    return filterState['away-summary'];
   }
 
   // Flat categories - check the specific filter state

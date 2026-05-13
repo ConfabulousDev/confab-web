@@ -1,0 +1,19 @@
+.editedFile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.header {
+  composes: header from './_chrome.module.css';
+}
+
+.badge {
+  composes: badge from './_chrome.module.css';
+}
+
+.filename {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  word-break: break-all;
+}

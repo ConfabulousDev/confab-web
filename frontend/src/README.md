@@ -11,7 +11,7 @@ with Storybook.
 | `components/` | Shared UI components (Button, Alert, Modal, Header, etc.) | Adding reusable UI elements, changing design system |
 | `components/session/` | Session detail view: viewer, summary panel, header, timeline, filters | Changing session detail layout, adding session UI features |
 | `components/session/cards/` | Analytics card components + registry (TokensCard, ToolsCard, SmartRecapCard, etc.) | Adding new analytics cards, changing card layout |
-| `components/transcript/` | Transcript rendering: content blocks, code blocks, timeline/cost bars | Changing how transcript messages are displayed |
+| `components/transcript/` | Transcript rendering: content blocks, code blocks, timeline/cost bars, and `attachments/` renderers for `attachment.*` side-channel rows + `away_summary` | Changing how transcript messages are displayed |
 | `config/` | App configuration constants (polling intervals) | Changing polling behavior, adding feature flags |
 | `contexts/` | React contexts: ThemeContext, AppConfigContext, KeyboardShortcutContext | Adding app-wide state, changing context providers |
 | `hooks/` | Custom React hooks: data fetching, polling, auth, UI state | Adding data-fetching logic, changing state management |

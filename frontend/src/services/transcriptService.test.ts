@@ -98,17 +98,9 @@ ${createSystemMessage(2)}`;
       typeName: 'permission-mode',
       payload: { type: 'permission-mode', permissionMode: 'default', sessionId: 'abc-123' },
     },
-    {
-      typeName: 'attachment',
-      payload: {
-        type: 'attachment',
-        parentUuid: null,
-        isSidechain: false,
-        attachment: { type: 'hook_success', hookName: 'SessionStart:startup', content: '', stdout: '{"continue":true}', exitCode: 0 },
-        uuid: 'fcc7d010-2d9b-46e9-b877-d410ec97dded',
-        timestamp: '2026-04-11T00:35:42.829Z',
-      },
-    },
+    // `attachment` was previously in the skip list but is now parsed via
+    // AttachmentMessageSchema (CF-346). Coverage for that path lives in
+    // schemas/transcript.test.ts.
     {
       typeName: 'ai-title',
       payload: { type: 'ai-title', aiTitle: 'Explore pending changes in folder', sessionId: 'abc-123' },

@@ -1,0 +1,43 @@
+.queued {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.header {
+  composes: header from './_chrome.module.css';
+}
+
+.badge {
+  composes: badge from './_chrome.module.css';
+}
+
+.mode {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.xmlBody {
+  margin: 0;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.markdownBody {
+  color: var(--color-text-primary);
+}
+
+.markdownBody p {
+  margin: 0;
+}
+
+.markdownBody p + p {
+  margin-top: var(--spacing-xs);
+}

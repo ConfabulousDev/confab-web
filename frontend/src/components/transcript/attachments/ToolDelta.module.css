@@ -1,0 +1,60 @@
+.delta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.header {
+  composes: header from './_chrome.module.css';
+}
+
+.badge {
+  composes: badge from './_chrome.module.css';
+}
+
+.summary {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.sectionLabel {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  font-weight: var(--font-semibold);
+}
+
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.chip {
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.chipAdded {
+  border-color: rgba(34, 134, 58, 0.4);
+  background: rgba(34, 134, 58, 0.06);
+  color: var(--color-success-text, #166534);
+}
+
+.chipRemoved {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.06);
+  color: var(--color-error-text, #b91c1c);
+}
