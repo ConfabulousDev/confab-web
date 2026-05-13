@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
 import type { TIL } from '@/schemas/api';
-import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
+import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
+import { AttachmentContent, AwaySummary } from '@/components/transcript/attachments';
 import TILBadge from './TILBadge';
 import { formatCost, formatTokenCount, WEB_SEARCH_COST_PER_REQUEST } from '@/utils/tokenStats';
 import { getRoleLabel } from './messageCategories';
@@ -36,15 +37,18 @@ interface TimelineMessageProps {
 /**
  * Get the CSS class for message type styling
  */
-function getStyleClass(type: TranscriptLine['type']): string {
+function getStyleClass(message: TranscriptLine): string {
+  // `away_summary` system rows reuse the summary card chrome (per CF-346
+  // decision #9) — distinguishing role label lives in getRoleLabel.
+  if (isSystemMessage(message) && message.subtype === 'away_summary') return 'summary';
   // Map hyphenated types to camelCase CSS class names
-  switch (type) {
+  switch (message.type) {
     case 'file-history-snapshot':
       return 'fileHistorySnapshot';
     case 'queue-operation':
       return 'queueOperation';
     default:
-      return type;
+      return message.type;
   }
 }
 
@@ -228,9 +232,16 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
-  const styleClass = getStyleClass(message.type);
+  const styleClass = getStyleClass(message);
   const roleLabel = getRoleLabel(message);
-  const contentBlocks = useMemo(() => getContentBlocks(message), [message]);
+  const isAwaySummary = isSystemMessage(message) && message.subtype === 'away_summary';
+  // Attachment rows have no obvious text representation, so skip the
+  // getContentBlocks work entirely — the dedicated AttachmentContent
+  // component renders the body instead. Away-summary rows fall through to
+  // the system branch of getContentBlocks so the Copy button can extract
+  // the markdown content even though AwaySummary renders the visual body.
+  const hasCustomBody = isAttachmentMessage(message);
+  const contentBlocks = useMemo(() => (hasCustomBody ? [] : getContentBlocks(message)), [message, hasCustomBody]);
 
   // Get timestamp if available
   const timestamp = 'timestamp' in message && typeof message.timestamp === 'string' ? message.timestamp : undefined;
@@ -349,23 +360,25 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
               </svg>
             </button>
           )}
-          <button
-            className={`${styles.copyBtn} ${textCopied ? styles.copied : ''}`}
-            onClick={handleCopyText}
-            title="Copy message"
-            aria-label="Copy message"
-          >
-            {textCopied ? (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
-                <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
-              </svg>
-            )}
-          </button>
+          {!hasCustomBody && (
+            <button
+              className={`${styles.copyBtn} ${textCopied ? styles.copied : ''}`}
+              onClick={handleCopyText}
+              title="Copy message"
+              aria-label="Copy message"
+            >
+              {textCopied ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                  <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
+                </svg>
+              )}
+            </button>
+          )}
           {messageUuid && sessionId && (
             <button
               className={`${styles.copyBtn} ${linkCopied ? styles.copied : ''}`}
@@ -391,6 +404,10 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
       <div className={styles.content}>
         {message.type === 'file-history-snapshot' ? (
           <FileSnapshotContent message={message} />
+        ) : isAttachmentMessage(message) ? (
+          <AttachmentContent message={message} />
+        ) : isAwaySummary ? (
+          <AwaySummary message={message} />
         ) : (
           contentBlocks.map((block, i) => (
             <ContentBlockComponent

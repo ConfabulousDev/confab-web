@@ -14,7 +14,10 @@ const MAX_ERRORS_PER_REPORT = 50;
 
 // Message types that are metadata-only and should be silently skipped during parsing.
 // These are not conversation content and don't match the TranscriptLine schema.
-const SKIPPED_MESSAGE_TYPES = new Set(['progress', 'permission-mode', 'attachment', 'ai-title', 'last-prompt']);
+// `attachment` is parsed via AttachmentMessageSchema (CF-346) — the categorizer
+// hides noisy subtypes (task_reminder, skill_listing, command_permissions) by
+// not routing them to any filter chip.
+const SKIPPED_MESSAGE_TYPES = new Set(['progress', 'permission-mode', 'ai-title', 'last-prompt']);
 
 // Track which sessions have already had errors reported (dedup across re-parses)
 const reportedSessions = new Set<string>();

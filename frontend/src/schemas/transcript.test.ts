@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { UserMessage, UnknownBlock, UnknownMessage } from './transcript';
+import type { UserMessage, UnknownBlock, UnknownMessage, AttachmentMessage } from './transcript';
 import {
   isCommandExpansionMessage,
   getCommandExpansionSkillName,
@@ -9,6 +9,13 @@ import {
   isUnknownBlock,
   isUnknownMessage,
   isAssistantMessage,
+  isAttachmentMessage,
+  isHookSuccessAttachment,
+  isHookBlockingErrorAttachment,
+  isEditedTextFileAttachment,
+  isQueuedCommandAttachment,
+  isDeferredToolsDeltaAttachment,
+  isMcpInstructionsDeltaAttachment,
   warnIfKnownTypeCaughtByCatchall,
 } from './transcript';
 
@@ -359,5 +366,206 @@ describe('Forward-compatibility: known-type-caught-by-catchall warning', () => {
     expect(imageCalls.length).toBeLessThanOrEqual(1);
 
     warnSpy.mockRestore();
+  });
+});
+
+// Helper: minimal attachment base shape mirroring real JSONL
+function makeAttachmentRaw(attachment: Record<string, unknown>) {
+  return {
+    type: 'attachment',
+    uuid: 'attach-uuid-1',
+    timestamp: '2026-04-20T22:31:25.657Z',
+    parentUuid: 'parent-uuid',
+    isSidechain: false,
+    userType: 'external',
+    cwd: '/home/user/project',
+    sessionId: 'session-1',
+    version: '2.1.140',
+    attachment,
+  };
+}
+
+describe('AttachmentMessageSchema', () => {
+  it('parses hook_success', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'hook_success',
+      hookName: 'SessionStart:startup',
+      hookEvent: 'SessionStart',
+      toolUseID: 'tool-1',
+      command: '/usr/local/bin/confab hook session-start',
+      content: '',
+      stdout: '{"continue":true}\n',
+      stderr: '=== Banner ===\n',
+      exitCode: 0,
+      durationMs: 31,
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('attachment');
+      expect(isAttachmentMessage(result.data)).toBe(true);
+      if (isAttachmentMessage(result.data)) {
+        expect(isHookSuccessAttachment(result.data)).toBe(true);
+        expect(isHookBlockingErrorAttachment(result.data)).toBe(false);
+      }
+    }
+  });
+
+  it('parses hook_blocking_error', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'hook_blocking_error',
+      hookName: 'PreToolUse:Bash',
+      hookEvent: 'PreToolUse',
+      toolUseID: 'tool-2',
+      blockingError: {
+        blockingError: 'Add the Confab-Link trailer to your commit message.',
+        command: '/usr/local/bin/confab hook pre-tool-use',
+      },
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isAttachmentMessage(result.data)) {
+      expect(isHookBlockingErrorAttachment(result.data)).toBe(true);
+      expect(isHookSuccessAttachment(result.data)).toBe(false);
+    }
+  });
+
+  it('parses edited_text_file', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'edited_text_file',
+      filename: '/home/user/project/notes.md',
+      snippet: '     1\t# Notes\n     2\t\n     3\tHello world.\n',
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isAttachmentMessage(result.data)) {
+      expect(isEditedTextFileAttachment(result.data)).toBe(true);
+    }
+  });
+
+  it('parses queued_command (free-text)', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'queued_command',
+      prompt: 'check the build status',
+      commandMode: 'prompt',
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isAttachmentMessage(result.data)) {
+      expect(isQueuedCommandAttachment(result.data)).toBe(true);
+    }
+  });
+
+  it('parses queued_command (task-notification XML)', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'queued_command',
+      prompt: '<task-notification><task-id>abc</task-id><status>completed</status></task-notification>',
+      commandMode: 'task-notification',
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isAttachmentMessage(result.data)) {
+      expect(isQueuedCommandAttachment(result.data)).toBe(true);
+    }
+  });
+
+  it('parses deferred_tools_delta', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'deferred_tools_delta',
+      addedNames: ['WebFetch', 'WebSearch'],
+      removedNames: [],
+      addedLines: ['<function>WebFetch</function>'],
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isAttachmentMessage(result.data)) {
+      expect(isDeferredToolsDeltaAttachment(result.data)).toBe(true);
+      expect(isMcpInstructionsDeltaAttachment(result.data)).toBe(false);
+    }
+  });
+
+  it('parses mcp_instructions_delta', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'mcp_instructions_delta',
+      addedNames: ['linear-server'],
+      removedNames: [],
+      addedBlocks: ['## linear-server\nWhen passing strings...'],
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isAttachmentMessage(result.data)) {
+      expect(isMcpInstructionsDeltaAttachment(result.data)).toBe(true);
+      expect(isDeferredToolsDeltaAttachment(result.data)).toBe(false);
+    }
+  });
+
+  it('parses noisy subtypes (task_reminder) via catch-all branch', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'task_reminder',
+      content: 'Reminder text',
+      itemCount: 3,
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('attachment');
+      expect(isAttachmentMessage(result.data)).toBe(true);
+      // None of the rendered subtype discriminators match
+      if (isAttachmentMessage(result.data)) {
+        expect(isHookSuccessAttachment(result.data)).toBe(false);
+        expect(isHookBlockingErrorAttachment(result.data)).toBe(false);
+        expect(isEditedTextFileAttachment(result.data)).toBe(false);
+        expect(isQueuedCommandAttachment(result.data)).toBe(false);
+        expect(isDeferredToolsDeltaAttachment(result.data)).toBe(false);
+        expect(isMcpInstructionsDeltaAttachment(result.data)).toBe(false);
+      }
+    }
+  });
+
+  it('parses unknown future subtype via catch-all', () => {
+    const raw = JSON.stringify(makeAttachmentRaw({
+      type: 'future_thing_we_have_not_seen',
+      whatever: { nested: true },
+    }));
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('attachment');
+    }
+  });
+
+  it('isAttachmentMessage returns false for user/assistant/system rows', () => {
+    const user = validateParsedTranscriptLine(makeUserMessage('hi'), '', 0);
+    const assistant = validateParsedTranscriptLine(
+      makeAssistantRaw([{ type: 'text', text: 'hi' }]),
+      '',
+      0,
+    );
+    const system = validateParsedTranscriptLine(
+      {
+        type: 'system',
+        uuid: 'sys-1',
+        timestamp: '2026-04-20T22:31:25.657Z',
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd: '/home/user',
+        sessionId: 'session-1',
+        version: '2.1.140',
+        subtype: 'info',
+        content: 'hi',
+      },
+      '',
+      0,
+    );
+    expect(user.success && isAttachmentMessage(user.data)).toBe(false);
+    expect(assistant.success && isAttachmentMessage(assistant.data)).toBe(false);
+    expect(system.success && isAttachmentMessage(system.data)).toBe(false);
+  });
+
+  it('AttachmentMessage type carries the attachment discriminator', () => {
+    // Compile-time check that AttachmentMessage is exported and shaped correctly
+    const sample: AttachmentMessage | undefined = undefined;
+    void sample;
   });
 });

@@ -241,6 +241,100 @@ const PRLinkMessageSchema = z.object({
   timestamp: z.string(),
 });
 
+// ============================================================================
+// Attachment Subtype Schemas
+// ============================================================================
+//
+// `attachment` rows are non-conversational JSONL records that Claude Code emits
+// to capture side-channel events: hook output, out-of-band file edits, queued
+// prompts, and mid-session tool-availability changes. Each row has an outer
+// envelope (type: "attachment") and an inner `attachment` object whose own
+// `type` field discriminates the subtype.
+//
+// We render 6 high-signal subtypes (grouped into 5 sub-chips in the UI) and
+// preserve 3 noisy ones (`task_reminder`, `skill_listing`, `command_permissions`)
+// + any future subtypes via a catch-all branch — those parse without error but
+// no filter chip routes to them, so they don't render. This mirrors the
+// forward-compat approach used by ContentBlockSchema and TranscriptLineSchema.
+
+const HookSuccessAttachmentSchema = z.object({
+  type: z.literal('hook_success'),
+  hookName: z.string().optional(),
+  hookEvent: z.string().optional(),
+  toolUseID: z.string().optional(),
+  command: z.string().optional(),
+  content: z.string().optional(),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+  exitCode: z.number().optional(),
+  durationMs: z.number().optional(),
+}).passthrough();
+
+const HookBlockingErrorAttachmentSchema = z.object({
+  type: z.literal('hook_blocking_error'),
+  hookName: z.string().optional(),
+  hookEvent: z.string().optional(),
+  toolUseID: z.string().optional(),
+  blockingError: z.object({
+    blockingError: z.string(),
+    command: z.string().optional(),
+  }).passthrough(),
+}).passthrough();
+
+const EditedTextFileAttachmentSchema = z.object({
+  type: z.literal('edited_text_file'),
+  filename: z.string(),
+  snippet: z.string(),
+}).passthrough();
+
+const QueuedCommandAttachmentSchema = z.object({
+  type: z.literal('queued_command'),
+  prompt: z.string(),
+  commandMode: z.string().optional(),
+}).passthrough();
+
+const DeferredToolsDeltaAttachmentSchema = z.object({
+  type: z.literal('deferred_tools_delta'),
+  addedNames: z.array(z.string()).optional(),
+  removedNames: z.array(z.string()).optional(),
+  addedLines: z.array(z.string()).optional(),
+}).passthrough();
+
+const McpInstructionsDeltaAttachmentSchema = z.object({
+  type: z.literal('mcp_instructions_delta'),
+  addedNames: z.array(z.string()).optional(),
+  removedNames: z.array(z.string()).optional(),
+  addedBlocks: z.array(z.string()).optional(),
+}).passthrough();
+
+// Catch-all for noisy + unknown attachment subtypes — must be last in the union.
+const UnknownAttachmentSchema = z.object({ type: z.string() }).passthrough();
+
+const AttachmentInnerSchema = z.union([
+  HookSuccessAttachmentSchema,
+  HookBlockingErrorAttachmentSchema,
+  EditedTextFileAttachmentSchema,
+  QueuedCommandAttachmentSchema,
+  DeferredToolsDeltaAttachmentSchema,
+  McpInstructionsDeltaAttachmentSchema,
+  UnknownAttachmentSchema,
+]);
+
+const AttachmentMessageSchema = z.object({
+  type: z.literal('attachment'),
+  uuid: z.string(),
+  timestamp: z.string(),
+  parentUuid: z.string().nullable().optional(),
+  isSidechain: z.boolean().optional(),
+  userType: z.string().optional(),
+  entrypoint: z.string().optional(),
+  cwd: z.string().optional(),
+  sessionId: z.string().optional(),
+  version: z.string().optional(),
+  gitBranch: z.string().optional(),
+  attachment: AttachmentInnerSchema,
+}).passthrough();
+
 // Catch-all for forward compatibility — must be last in the union.
 // Unknown message types pass validation and render with a fallback UI.
 const UnknownMessageSchema = z.object({ type: z.string() }).passthrough();
@@ -253,6 +347,7 @@ const TranscriptLineSchema = z.union([
   SummaryMessageSchema,
   QueueOperationMessageSchema,
   PRLinkMessageSchema,
+  AttachmentMessageSchema,
   UnknownMessageSchema,
 ]);
 
@@ -490,7 +585,7 @@ export function parseTranscriptLineWithError(
 // ============================================================================
 
 const KNOWN_BLOCK_TYPES = ['text', 'thinking', 'tool_use', 'tool_result', 'image', 'tool_reference'];
-const KNOWN_MESSAGE_TYPES = ['user', 'assistant', 'system', 'file-history-snapshot', 'summary', 'queue-operation', 'pr-link'];
+const KNOWN_MESSAGE_TYPES = ['user', 'assistant', 'system', 'file-history-snapshot', 'summary', 'queue-operation', 'pr-link', 'attachment'];
 const _warnedTypes = new Set<string>();
 
 /**
@@ -568,6 +663,52 @@ export function isPRLinkMessage(line: TranscriptLine): line is z.infer<typeof PR
   return line.type === 'pr-link';
 }
 
+export function isAttachmentMessage(line: TranscriptLine): line is AttachmentMessage {
+  return line.type === 'attachment'
+    && 'attachment' in line
+    && line.attachment !== null
+    && typeof line.attachment === 'object';
+}
+
+// Type-predicate discriminators on the inner attachment. Each one narrows
+// `msg.attachment` to the matching branch type, so call sites can read the
+// subtype-specific fields without further assertions.
+export function isHookSuccessAttachment(
+  msg: AttachmentMessage,
+): msg is AttachmentMessage & { attachment: HookSuccessAttachment } {
+  return msg.attachment.type === 'hook_success';
+}
+
+export function isHookBlockingErrorAttachment(
+  msg: AttachmentMessage,
+): msg is AttachmentMessage & { attachment: HookBlockingErrorAttachment } {
+  return msg.attachment.type === 'hook_blocking_error';
+}
+
+export function isEditedTextFileAttachment(
+  msg: AttachmentMessage,
+): msg is AttachmentMessage & { attachment: EditedTextFileAttachment } {
+  return msg.attachment.type === 'edited_text_file';
+}
+
+export function isQueuedCommandAttachment(
+  msg: AttachmentMessage,
+): msg is AttachmentMessage & { attachment: QueuedCommandAttachment } {
+  return msg.attachment.type === 'queued_command';
+}
+
+export function isDeferredToolsDeltaAttachment(
+  msg: AttachmentMessage,
+): msg is AttachmentMessage & { attachment: DeferredToolsDeltaAttachment } {
+  return msg.attachment.type === 'deferred_tools_delta';
+}
+
+export function isMcpInstructionsDeltaAttachment(
+  msg: AttachmentMessage,
+): msg is AttachmentMessage & { attachment: McpInstructionsDeltaAttachment } {
+  return msg.attachment.type === 'mcp_instructions_delta';
+}
+
 export function isUnknownBlock(block: ContentBlock): block is UnknownBlock {
   return !KNOWN_BLOCK_TYPES.includes(block.type);
 }
@@ -586,6 +727,13 @@ export type UserMessage = z.infer<typeof UserMessageSchema>;
 export type AssistantMessage = z.infer<typeof AssistantMessageSchema>;
 export type SystemMessage = z.infer<typeof SystemMessageSchema>;
 export type PRLinkMessage = z.infer<typeof PRLinkMessageSchema>;
+export type AttachmentMessage = z.infer<typeof AttachmentMessageSchema>;
+export type HookSuccessAttachment = z.infer<typeof HookSuccessAttachmentSchema>;
+export type HookBlockingErrorAttachment = z.infer<typeof HookBlockingErrorAttachmentSchema>;
+export type EditedTextFileAttachment = z.infer<typeof EditedTextFileAttachmentSchema>;
+export type QueuedCommandAttachment = z.infer<typeof QueuedCommandAttachmentSchema>;
+export type DeferredToolsDeltaAttachment = z.infer<typeof DeferredToolsDeltaAttachmentSchema>;
+export type McpInstructionsDeltaAttachment = z.infer<typeof McpInstructionsDeltaAttachmentSchema>;
 
 // ============================================================================
 // Utility Functions

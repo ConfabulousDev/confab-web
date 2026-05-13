@@ -1,17 +1,18 @@
 # transcript/
 
-Rendering components for Claude Code transcript content: code blocks with syntax highlighting, bash output, timeline navigation bars, and the main content block dispatcher.
+Rendering components for Claude Code transcript content: code blocks with syntax highlighting, bash output, timeline navigation bars, the main content block dispatcher, and (under `attachments/`) renderers for the side-channel `attachment.*` JSONL rows and `system.away_summary` resume-context blurbs.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `ContentBlock.tsx` | Dispatcher that renders content blocks by type (text, thinking, tool_use, tool_result, image, unknown) |
+| `ContentBlock.tsx` | Dispatcher that renders content blocks by type (text, thinking, tool_use, tool_result, image, unknown). Uses the shared `renderMarkdownToHtml` helper from `@/utils/markdown` |
 | `CodeBlock.tsx` | Syntax-highlighted code with Prism.js, copy button, line truncation, and search highlighting |
 | `BashOutput.tsx` | Terminal-style bash command output with error styling |
 | `CostBar.tsx` | Vertical cost heatmap bar alongside the transcript (intensity = cost per API call) |
 | `TimelineBar.tsx` | Vertical timeline bar showing user/assistant turn segments with duration tooltips |
 | `timelineSegments.ts` | Shared segment computation and layout hook (`useSegmentLayout`) for both bars |
+| `attachments/` | Renderers for `attachment.*` subtypes (hook output, edited files, queued commands, tool deltas) and `system.away_summary`. See `attachments/README.md` |
 
 ## Key Components
 
@@ -96,9 +97,10 @@ Content block rendering is tested indirectly through `TimelineMessage.test.tsx` 
 
 ## Dependencies
 
-- `marked` + `dompurify` (markdown rendering and XSS sanitization in ContentBlock)
+- `marked` + `dompurify` (markdown rendering and XSS sanitization, accessed via `@/utils/markdown.renderMarkdownToHtml`)
 - `prismjs` (syntax highlighting in CodeBlock)
 - `@/hooks/useCopyToClipboard` (copy button in CodeBlock and BashOutput)
 - `@/utils/highlightSearch` (search match highlighting)
 - `@/utils/utils` (`stripAnsi` for terminal escape code removal)
+- `@/utils/markdown` (`renderMarkdownToHtml` — shared by ContentBlock, AwaySummary, QueuedCommand)
 - `@/utils/tokenStats` (`formatCost` in CostBar)

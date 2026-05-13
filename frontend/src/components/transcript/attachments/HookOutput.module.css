@@ -1,0 +1,111 @@
+.hook {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.badge {
+  composes: badge from './_chrome.module.css';
+}
+
+.badgeBlocked {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.4);
+  color: var(--color-error-text, #b91c1c);
+}
+
+.name {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.event {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.exitCode {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.duration {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.command {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.stream {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.streamLabel {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  font-weight: var(--font-semibold);
+}
+
+.streamBody {
+  margin: 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.blockingErrorPanel {
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.06);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.blockingErrorLabel {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: var(--font-semibold);
+  color: var(--color-error-text, #b91c1c);
+}
+
+.blockingErrorBody {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

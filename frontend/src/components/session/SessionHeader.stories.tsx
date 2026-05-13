@@ -6,6 +6,7 @@ import type {
   MessageCategory,
   UserSubcategory,
   AssistantSubcategory,
+  AttachmentSubcategory,
   HierarchicalCounts,
   FilterState,
 } from './messageCategories';
@@ -16,11 +17,13 @@ import type { GitInfo } from '@/types';
 const sampleCounts: HierarchicalCounts = {
   user: { total: 194, prompt: 40, 'tool-result': 152, skill: 2 },
   assistant: { total: 271, text: 50, 'tool-use': 180, thinking: 41 },
+  attachment: { total: 0, hook: 0, 'file-edit': 0, 'queued-command': 0, 'deferred-tools': 0, 'mcp-instructions': 0 },
   system: 0,
   'file-history-snapshot': 39,
   summary: 0,
   'queue-operation': 6,
   'pr-link': 0,
+  'away-summary': 0,
   unknown: 0,
 };
 
@@ -34,7 +37,7 @@ const sampleGitInfo: GitInfo = {
 function SessionHeaderInteractive(
   props: Omit<
     React.ComponentProps<typeof SessionHeader>,
-    'categoryCounts' | 'filterState' | 'onToggleCategory' | 'onToggleUserSubcategory' | 'onToggleAssistantSubcategory'
+    'categoryCounts' | 'filterState' | 'onToggleCategory' | 'onToggleUserSubcategory' | 'onToggleAssistantSubcategory' | 'onToggleAttachmentSubcategory'
   > & {
     counts?: HierarchicalCounts;
     initialFilterState?: FilterState;
@@ -52,6 +55,16 @@ function SessionHeaderInteractive(
       } else if (category === 'assistant') {
         const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
         next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
+      } else if (category === 'attachment') {
+        const a = prev.attachment;
+        const allVisible = a.hook && a['file-edit'] && a['queued-command'] && a['deferred-tools'] && a['mcp-instructions'];
+        next.attachment = {
+          hook: !allVisible,
+          'file-edit': !allVisible,
+          'queued-command': !allVisible,
+          'deferred-tools': !allVisible,
+          'mcp-instructions': !allVisible,
+        };
       } else {
         next[category] = !prev[category];
       }
@@ -73,6 +86,13 @@ function SessionHeaderInteractive(
     }));
   };
 
+  const handleToggleAttachmentSubcategory = (subcategory: AttachmentSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      attachment: { ...prev.attachment, [subcategory]: !prev.attachment[subcategory] },
+    }));
+  };
+
   return (
     <SessionHeader
       {...rest}
@@ -81,6 +101,7 @@ function SessionHeaderInteractive(
       onToggleCategory={handleToggleCategory}
       onToggleUserSubcategory={handleToggleUserSubcategory}
       onToggleAssistantSubcategory={handleToggleAssistantSubcategory}
+      onToggleAttachmentSubcategory={handleToggleAttachmentSubcategory}
     />
   );
 }
@@ -251,6 +272,16 @@ function CostModeDemo() {
       } else if (category === 'assistant') {
         const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
         next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
+      } else if (category === 'attachment') {
+        const a = prev.attachment;
+        const allVisible = a.hook && a['file-edit'] && a['queued-command'] && a['deferred-tools'] && a['mcp-instructions'];
+        next.attachment = {
+          hook: !allVisible,
+          'file-edit': !allVisible,
+          'queued-command': !allVisible,
+          'deferred-tools': !allVisible,
+          'mcp-instructions': !allVisible,
+        };
       } else {
         next[category] = !prev[category];
       }
@@ -269,6 +300,13 @@ function CostModeDemo() {
     setFilterState((prev) => ({
       ...prev,
       assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
+    }));
+  };
+
+  const handleToggleAttachmentSubcategory = (subcategory: AttachmentSubcategory) => {
+    setFilterState((prev) => ({
+      ...prev,
+      attachment: { ...prev.attachment, [subcategory]: !prev.attachment[subcategory] },
     }));
   };
 
@@ -296,6 +334,7 @@ function CostModeDemo() {
       onToggleCategory={handleToggleCategory}
       onToggleUserSubcategory={handleToggleUserSubcategory}
       onToggleAssistantSubcategory={handleToggleAssistantSubcategory}
+      onToggleAttachmentSubcategory={handleToggleAttachmentSubcategory}
     />
   );
 }

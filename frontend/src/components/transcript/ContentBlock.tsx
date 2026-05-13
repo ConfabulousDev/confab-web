@@ -1,19 +1,10 @@
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
 import type { ContentBlock as ContentBlockType } from '@/types';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, isToolReferenceBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
-import { stripAnsi } from '@/utils';
+import { stripAnsi, renderMarkdownToHtml } from '@/utils';
 import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
 import CodeBlock from './CodeBlock';
 import BashOutput from './BashOutput';
 import styles from './ContentBlock.module.css';
-
-// Configure marked for performance
-marked.use({
-  async: false,
-  gfm: true,
-  breaks: true,
-});
 
 interface ContentBlockProps {
   block: ContentBlockType;
@@ -22,50 +13,35 @@ interface ContentBlockProps {
   isCurrentSearchMatch?: boolean;
 }
 
+// Detect if this is Bash-like output
+function isBashOutput(content: string, tool: string): boolean {
+  if (tool === 'Bash') return true;
+  // Heuristic: check for common bash patterns
+  return content.includes('$ ') || content.match(/^[\w@-]+:/) !== null || content.includes('\n$ ');
+}
+
+// Try to parse text as JSON and return pretty-printed version if it's an object/array
+function tryParseAsJson(text: string): string | null {
+  const trimmed = text.trim();
+  // Quick check: must start with { or [
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    // Only pretty-print objects and arrays, not primitives
+    if (typeof parsed === 'object' && parsed !== null) {
+      return JSON.stringify(parsed, null, 2);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCurrentSearchMatch }: ContentBlockProps) {
   // Derive tool name from block if it's a tool_use block, otherwise use the passed-in name
   const toolName = isToolUseBlock(block) ? block.name : initialToolName;
-
-  // Parse markdown and sanitize HTML
-  function renderMarkdown(text: string): string {
-    const cleaned = stripAnsi(text);
-    // marked.parse returns string when async: false is configured
-    const html = marked.parse(cleaned);
-    if (typeof html !== 'string') {
-      // Should never happen with async: false, but satisfies TypeScript
-      return '';
-    }
-    return DOMPurify.sanitize(html, {
-      ADD_ATTR: ['target'], // Allow target="_blank" on links
-    });
-  }
-
-  // Detect if this is Bash-like output
-  function isBashOutput(content: string, tool: string): boolean {
-    if (tool === 'Bash') return true;
-    // Heuristic: check for common bash patterns
-    return content.includes('$ ') || content.match(/^[\w@-]+:/) !== null || content.includes('\n$ ');
-  }
-
-  // Try to parse text as JSON and return pretty-printed version if it's an object/array
-  function tryParseAsJson(text: string): string | null {
-    const trimmed = text.trim();
-    // Quick check: must start with { or [
-    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(trimmed);
-      // Only pretty-print objects and arrays, not primitives
-      if (typeof parsed === 'object' && parsed !== null) {
-        return JSON.stringify(parsed, null, 2);
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
   const highlightClass = getHighlightClass(isCurrentSearchMatch ?? false);
 
   if (isTextBlock(block)) {
@@ -74,7 +50,7 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
     if (jsonContent) {
       return <CodeBlock code={jsonContent} language="json" maxHeight="500px" searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />;
     }
-    let html = renderMarkdown(block.text);
+    let html = renderMarkdownToHtml(block.text);
     if (searchQuery) {
       html = highlightTextInHtml(html, searchQuery, highlightClass);
     }

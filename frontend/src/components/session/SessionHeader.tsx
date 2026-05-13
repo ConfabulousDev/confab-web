@@ -7,6 +7,7 @@ import type {
   MessageCategory,
   UserSubcategory,
   AssistantSubcategory,
+  AttachmentSubcategory,
   HierarchicalCounts,
   FilterState,
 } from './messageCategories';
@@ -100,6 +101,7 @@ interface SessionHeaderProps {
   onToggleCategory?: (category: MessageCategory) => void;
   onToggleUserSubcategory?: (subcategory: UserSubcategory) => void;
   onToggleAssistantSubcategory?: (subcategory: AssistantSubcategory) => void;
+  onToggleAttachmentSubcategory?: (subcategory: AttachmentSubcategory) => void;
   // Cost mode toggle - only shown on transcript tab
   isCostMode?: boolean;
   onToggleCostMode?: () => void;
@@ -126,6 +128,7 @@ function SessionHeader({
   onToggleCategory,
   onToggleUserSubcategory,
   onToggleAssistantSubcategory,
+  onToggleAttachmentSubcategory,
   isCostMode,
   onToggleCostMode,
 }: SessionHeaderProps) {
@@ -294,13 +297,14 @@ function SessionHeader({
             $
           </button>
         )}
-        {categoryCounts && filterState && onToggleCategory && onToggleUserSubcategory && onToggleAssistantSubcategory && (
+        {categoryCounts && filterState && onToggleCategory && onToggleUserSubcategory && onToggleAssistantSubcategory && onToggleAttachmentSubcategory && (
           <FilterDropdown
             counts={categoryCounts}
             filterState={filterState}
             onToggleCategory={onToggleCategory}
             onToggleUserSubcategory={onToggleUserSubcategory}
             onToggleAssistantSubcategory={onToggleAssistantSubcategory}
+            onToggleAttachmentSubcategory={onToggleAttachmentSubcategory}
           />
         )}
         {isShared ? (

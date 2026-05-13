@@ -17,6 +17,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `sessionErrors.ts` | Session error types, messages, icons, and 401 redirect skip list |
 | `agentSkillChart.ts` | Shared agent/skill chart constants, types, and name truncation |
 | `utils.ts` | Low-level utilities: `stripAnsi`, `formatBytes` |
+| `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. Used by `ContentBlock`, `AwaySummary`, and `QueuedCommand` |
 | `index.ts` | Barrel re-exports of commonly used functions |
 
 ## Key Functions
@@ -122,4 +123,5 @@ These tables must stay in sync. Look up current prices on the Anthropic pricing 
 ## Dependencies
 
 - `@/types` (type imports for `TranscriptLine`, `AssistantMessage`, `GitInfo`)
-- No external dependencies (pure TypeScript utilities)
+- `marked` (GFM markdown parser, used by `markdown.ts`)
+- `dompurify` (HTML sanitization, used by `markdown.ts`)

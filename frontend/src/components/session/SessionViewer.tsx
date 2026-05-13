@@ -81,7 +81,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   // Filter state - synced to URL via ?hide= param
   const {
     filterState, setFilterState,
-    toggleCategory, toggleUserSubcategory, toggleAssistantSubcategory,
+    toggleCategory, toggleUserSubcategory, toggleAssistantSubcategory, toggleAttachmentSubcategory,
   } = useTranscriptFilters();
 
   // Compute hierarchical category counts
@@ -244,6 +244,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           onToggleCategory={activeTab === 'transcript' ? toggleCategory : undefined}
           onToggleUserSubcategory={activeTab === 'transcript' ? toggleUserSubcategory : undefined}
           onToggleAssistantSubcategory={activeTab === 'transcript' ? toggleAssistantSubcategory : undefined}
+          onToggleAttachmentSubcategory={activeTab === 'transcript' ? toggleAttachmentSubcategory : undefined}
         />
 
         {/* Tabs */}

@@ -19,6 +19,13 @@ export type {
   AssistantMessage,
   SystemMessage,
   PRLinkMessage,
+  AttachmentMessage,
+  HookSuccessAttachment,
+  HookBlockingErrorAttachment,
+  EditedTextFileAttachment,
+  QueuedCommandAttachment,
+  DeferredToolsDeltaAttachment,
+  McpInstructionsDeltaAttachment,
 } from '@/schemas/transcript';
 
 // Re-export type guards
@@ -36,6 +43,13 @@ export {
   isSummaryMessage,
   isQueueOperationMessage,
   isPRLinkMessage,
+  isAttachmentMessage,
+  isHookSuccessAttachment,
+  isHookBlockingErrorAttachment,
+  isEditedTextFileAttachment,
+  isQueuedCommandAttachment,
+  isDeferredToolsDeltaAttachment,
+  isMcpInstructionsDeltaAttachment,
 } from '@/schemas/transcript';
 
 // Re-export utility functions
