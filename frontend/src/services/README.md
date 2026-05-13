@@ -49,7 +49,7 @@ class NetworkError extends Error { /* fetch TypeError */ }
 Handles the full lifecycle of transcript data:
 
 1. **Fetching**: `fetchTranscriptContent()` retrieves JSONL via `syncFilesAPI.getContent()`
-2. **Parsing**: `parseJSONL()` splits on newlines, validates each line with Zod, skips `progress` messages
+2. **Parsing**: `parseJSONL()` splits on newlines, validates each line with Zod, and pre-filters metadata-only records listed in `SKIPPED_MESSAGE_TYPES` (currently `progress`, `permission-mode`, `attachment`, `ai-title`, `last-prompt`)
 3. **Caching**: In-memory cache keyed by `sessionId-fileName`, with `skipCache` option for fresh loads
 4. **Incremental updates**: `fetchNewTranscriptMessages()` fetches only lines after a given offset
 5. **Error reporting**: Validation errors are reported to `/api/v1/client-errors` (fire-and-forget, deduplicated per session)
