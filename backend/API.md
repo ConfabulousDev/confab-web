@@ -56,6 +56,7 @@ Content-Type: application/json
 **Request (recommended):**
 ```json
 {
+  "provider": "claude-code",
   "external_id": "session-uuid",
   "transcript_path": "/path/to/transcript.jsonl",
   "metadata": {
@@ -69,13 +70,16 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `external_id` | string | Yes | Unique session identifier (UUID from Claude Code) |
+| `provider` | string | No | Agent that produced the session: `"claude-code"` or `"codex"`. **Omit the field to default to `"claude-code"`** (preserves backward compatibility with older CLIs). An explicit empty string returns 400. Any other value returns 400. |
+| `external_id` | string | Yes | Unique session identifier (UUID from the originating agent) |
 | `transcript_path` | string | Yes | Path to transcript file on user's machine |
 | `metadata` | object | No | Session metadata (see below) |
 | `metadata.cwd` | string | No | Current working directory |
 | `metadata.git_info` | object | No | Git repository metadata (branch, remote, etc.) |
 | `metadata.hostname` | string | No | Client machine hostname |
 | `metadata.username` | string | No | OS username of the client |
+
+Session uniqueness is `(user_id, provider, external_id)`. The same `external_id` may exist under different providers without colliding.
 
 **Deprecated fields (backward compatibility):**
 
@@ -90,12 +94,19 @@ The following top-level fields are deprecated but still supported for backward c
 ```json
 {
   "session_id": "uuid",
+  "provider": "claude-code",
   "files": {
     "transcript.jsonl": { "last_synced_line": 150 },
     "agent.jsonl": { "last_synced_line": 42 }
   }
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | string | Backend UUID for this session |
+| `provider` | string | The resolved provider — echoes the request value, or `"claude-code"` if the request omitted it |
+| `files` | object | Map of file_name to current sync state |
 
 ---
 
@@ -507,7 +518,7 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
       "first_user_message": "First message",
       "first_seen": "2024-01-15T10:00:00Z",
       "last_sync_time": "2024-01-15T11:30:00Z",
-      "session_type": "Claude Code",
+      "provider": "claude-code",
       "file_count": 2,
       "total_lines": 1500,
       "git_repo": "org/repo",
@@ -564,6 +575,7 @@ Authentication is optional - the endpoint extracts user from session cookie if p
 {
   "id": "uuid",
   "external_id": "session-uuid",
+  "provider": "claude-code",
   "custom_title": "My Custom Title",
   "summary": "Session summary",
   "first_user_message": "First message",

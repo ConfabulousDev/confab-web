@@ -1,0 +1,28 @@
+-- CF-347: Switch the sessions.session_type default to the canonical lowercase
+-- form. The column has held a default of 'Claude Code' since migration 000001.
+-- The application now treats 'claude-code' (along with 'codex') as the only
+-- valid forms to write going forward, so any code path that inserts a session
+-- without specifying session_type — most notably test helpers and any future
+-- short-form INSERT — gets the canonical value automatically.
+--
+-- Why keep a DB default at all (when the app could supply the value)?
+-- Confab's deploy invariant is: migrations land BEFORE the new binary, so
+-- during the rollout gap older code may still be running. Keeping a default
+-- eliminates the race where a freshly-migrated schema would NOT-NULL-reject
+-- an INSERT that omits session_type. With the default in place, any such
+-- INSERT silently receives the canonical value. Existing application code
+-- paths supply session_type explicitly, so they are unaffected.
+--
+-- This migration intentionally does NOT backfill existing rows that still
+-- hold the legacy display value 'Claude Code'. Backfilling now would race
+-- the old binary's inserts. Read paths handle the legacy value via
+-- normalizeProvider() in internal/db/session/provider.go and dual-value
+-- SQL IN-clauses in session lookups and analytics filters.
+--
+-- TODO(post-Codex-rollout): once the deploy gap has closed and the new
+-- binary has been the only writer for long enough, run a one-time backfill
+-- in a separate migration (`UPDATE sessions SET session_type='claude-code'
+-- WHERE session_type='Claude Code'`), then strip the normalizer and the
+-- IN-clauses.
+
+ALTER TABLE sessions ALTER COLUMN session_type SET DEFAULT 'claude-code';

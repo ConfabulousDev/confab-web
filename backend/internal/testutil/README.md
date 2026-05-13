@@ -55,7 +55,9 @@ go test ./internal/api/... -v -run "TestSyncInit_HTTP_Integration/creates_new"
 
 4. **Helper Functions** - Create test data and make HTTP requests
    - `CreateTestUser()` - Insert user into database
-   - `CreateTestSession()` - Insert session into database
+   - `CreateTestSession()` - Insert session into database (session_type defaults to `'claude-code'`)
+   - `CreateTestSessionWithProvider()` - Insert session with explicit `session_type` (e.g. `'codex'`)
+   - `CreateTestSessionLegacyClaudeCode()` - Insert session with legacy `'Claude Code'` value, for exercising read-side normalization
    - `CreateTestAPIKeyWithToken()` - Create API key and return raw token
    - `CreateTestWebSessionWithToken()` - Create web session and return token
    - `CreateTestSyncFile()` - Insert sync file into database

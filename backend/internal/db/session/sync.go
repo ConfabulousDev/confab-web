@@ -15,18 +15,40 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 )
 
-// FindOrCreateSyncSession finds an existing session by external_id or creates a new one
+// FindOrCreateSyncSession finds an existing session by (user_id, provider,
+// external_id) or creates a new one.
+//
+// Provider handling:
+//   - An empty params.Provider is defaulted to "claude-code" so the DB layer
+//     is robust to callers that forgot to set it. The HTTP handler validates
+//     and supplies the canonical value before reaching here.
+//   - The SELECT-side lookup for "claude-code" matches BOTH the canonical
+//     form and the legacy display value "Claude Code". The migration in
+//     000043 intentionally does not backfill legacy rows (see
+//     project-deploy-migration-ordering); without the dual-value match a
+//     freshly-deployed binary would fail to find a row written moments
+//     earlier by an older binary and create a duplicate.
+//   - The INSERT writes the canonical form parameterized — never a hardcoded
+//     legacy literal.
 func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, params db.SyncSessionParams) (sessionID string, files map[string]db.SyncFileState, err error) {
+	if params.Provider == "" {
+		params.Provider = providerClaudeCode
+	}
+
 	ctx, span := tracer.Start(ctx, "db.find_or_create_sync_session",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
 			attribute.String("session.external_id", params.ExternalID),
+			attribute.String("session.provider", params.Provider),
 		))
 	defer span.End()
 
-	selectQuery := `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = 'Claude Code'`
+	// Build a provider-scoped SELECT. claude-code lookups must also match
+	// the legacy "Claude Code" value left over from older binaries; codex
+	// is new, so a single-value match is sufficient.
+	selectQuery, selectArgs := buildSessionLookupQuery(userID, params.ExternalID, params.Provider)
 
-	err = s.conn().QueryRowContext(ctx, selectQuery, userID, params.ExternalID).Scan(&sessionID)
+	err = s.conn().QueryRowContext(ctx, selectQuery, selectArgs...).Scan(&sessionID)
 	if err == nil {
 		span.SetAttributes(attribute.Bool("session.created", false))
 		if err := s.updateSessionMetadata(ctx, sessionID, params); err != nil {
@@ -51,9 +73,9 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 	sessionID = uuid.New().String()
 	insertQuery := `
 		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type, cwd, transcript_path, git_info, hostname, username, last_sync_at)
-		VALUES ($1, $2, $3, NOW(), 'Claude Code', $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), NOW())
+		VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), NOW())
 	`
-	_, err = s.conn().ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.CWD, params.TranscriptPath, params.GitInfo, params.Hostname, params.Username)
+	_, err = s.conn().ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.Provider, params.CWD, params.TranscriptPath, params.GitInfo, params.Hostname, params.Username)
 	if err == nil {
 		span.SetAttributes(attribute.Bool("session.created", true))
 		s.upsertFilterLookups(ctx, params.GitInfo)
@@ -62,7 +84,7 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 
 	if db.IsUniqueViolation(err) {
 		span.SetAttributes(attribute.Bool("session.race_condition", true))
-		err = s.conn().QueryRowContext(ctx, selectQuery, userID, params.ExternalID).Scan(&sessionID)
+		err = s.conn().QueryRowContext(ctx, selectQuery, selectArgs...).Scan(&sessionID)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -84,6 +106,20 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 	span.RecordError(err)
 	span.SetStatus(codes.Error, err.Error())
 	return "", nil, fmt.Errorf("failed to create session: %w", err)
+}
+
+// buildSessionLookupQuery returns the SELECT-by-provider query and its args.
+// For "claude-code" the WHERE matches both the canonical form and the legacy
+// "Claude Code" display form so a freshly-deployed binary still finds rows
+// written by an older binary during the deploy gap. For any other provider
+// (currently only "codex") a plain equality match is used.
+func buildSessionLookupQuery(userID int64, externalID, provider string) (string, []any) {
+	if provider == providerClaudeCode {
+		return `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type IN ('claude-code', 'Claude Code')`,
+			[]any{userID, externalID}
+	}
+	return `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = $3`,
+		[]any{userID, externalID, provider}
 }
 
 func (s *Store) updateSessionMetadata(ctx context.Context, sessionID string, params db.SyncSessionParams) error {

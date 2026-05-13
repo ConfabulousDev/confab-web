@@ -107,6 +107,37 @@ func CreateTestSession(t *testing.T, env *TestEnvironment, userID int64, externa
 	return sessionID
 }
 
+// CreateTestSessionWithProvider creates a session with an explicit session_type
+// value. Use for testing provider-aware code paths and dedupe isolation.
+// Pass the canonical lowercase form ("claude-code" or "codex"); for the
+// legacy 'Claude Code' value, use CreateTestSessionLegacyClaudeCode.
+func CreateTestSessionWithProvider(t *testing.T, env *TestEnvironment, userID int64, externalID, provider string) string {
+	t.Helper()
+
+	sessionID := uuid.New().String()
+
+	query := `
+		INSERT INTO sessions (id, user_id, external_id, first_seen, session_type)
+		VALUES ($1, $2, $3, NOW(), $4)
+	`
+
+	_, err := env.DB.Exec(env.Ctx, query, sessionID, userID, externalID, provider)
+	if err != nil {
+		t.Fatalf("failed to create test session with provider %q: %v", provider, err)
+	}
+
+	return sessionID
+}
+
+// CreateTestSessionLegacyClaudeCode creates a session with the legacy display
+// value `'Claude Code'` in session_type. Use to exercise read-side normalization
+// and SELECT-side IN-clause behavior that must coexist with rows written by
+// older binaries.
+func CreateTestSessionLegacyClaudeCode(t *testing.T, env *TestEnvironment, userID int64, externalID string) string {
+	t.Helper()
+	return CreateTestSessionWithProvider(t, env, userID, externalID, "Claude Code")
+}
+
 // CreateTestSessionWithGitInfo creates a session with git_info in the database for testing
 func CreateTestSessionWithGitInfo(t *testing.T, env *TestEnvironment, userID int64, externalID, repoURL string) string {
 	t.Helper()

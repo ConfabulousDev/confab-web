@@ -144,3 +144,45 @@ func TestValidateUsername(t *testing.T) {
 	}
 }
 
+// TestValidateProvider locks the strict-exact-match contract for the
+// `provider` field on POST /api/v1/sync/init. The HTTP handler is
+// responsible for defaulting a missing (nil) field to ProviderClaudeCode
+// before calling here. An explicit empty string is NOT accepted at this
+// layer — only "claude-code" and "codex" pass.
+func TestValidateProvider(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		wantErr  bool
+	}{
+		{name: "canonical claude-code is accepted", provider: "claude-code", wantErr: false},
+		{name: "canonical codex is accepted", provider: "codex", wantErr: false},
+		{name: "explicit empty string is rejected", provider: "", wantErr: true},
+		{name: "uppercase Codex is rejected", provider: "Codex", wantErr: true},
+		{name: "leading space is rejected", provider: " codex", wantErr: true},
+		{name: "trailing space is rejected", provider: "claude-code ", wantErr: true},
+		{name: "unknown provider gemini is rejected", provider: "gemini", wantErr: true},
+		{name: "uppercase CLAUDE-CODE is rejected", provider: "CLAUDE-CODE", wantErr: true},
+		{name: "legacy display form Claude Code is rejected", provider: "Claude Code", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateProvider(tt.provider)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateProvider(%q) error = %v, wantErr %v", tt.provider, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestProviderConstants asserts that the public provider constants hold
+// the exact canonical lowercase forms required by the API contract.
+func TestProviderConstants(t *testing.T) {
+	if ProviderClaudeCode != "claude-code" {
+		t.Errorf("ProviderClaudeCode = %q, want %q", ProviderClaudeCode, "claude-code")
+	}
+	if ProviderCodex != "codex" {
+		t.Errorf("ProviderCodex = %q, want %q", ProviderCodex, "codex")
+	}
+}

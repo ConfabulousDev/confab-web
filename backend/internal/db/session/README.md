@@ -7,15 +7,17 @@ Session CRUD, paginated listing with filtering, and incremental sync state manag
 | File | Role |
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
-| `session.go` | Session listing (`ListUserSessions`, `ListUserSessionsPaginated`), detail retrieval, delete, ownership verification, title/summary updates, ID lookups. Contains the `SharedWithMe` SQL view builder, cursor-based pagination, full-text search with `BuildPrefixTsquery`, and filter option materialization. |
-| `sync.go` | Incremental sync operations: `FindOrCreateSyncSession`, `UpdateSyncFileState`, `GetSyncFileState`, `UpdateSyncFileChunkCount`. Manages the `sync_files` table and session metadata updates during sync. |
+| `session.go` | Session listing (`ListUserSessions`, `ListUserSessionsPaginated`), detail retrieval, delete, ownership verification, title/summary updates, ID lookups. Contains the `SharedWithMe` SQL view builder, cursor-based pagination, full-text search with `BuildPrefixTsquery`, and filter option materialization. `VerifySessionOwnership` returns the session's canonical provider alongside the external_id. |
+| `sync.go` | Incremental sync operations: `FindOrCreateSyncSession`, `UpdateSyncFileState`, `GetSyncFileState`, `UpdateSyncFileChunkCount`, `buildSessionLookupQuery`. Manages the `sync_files` table and session metadata updates during sync. The provider-aware lookup matches both canonical and legacy `session_type` values for `claude-code`. |
+| `provider.go` | Provider value constants (`providerClaudeCode`, `providerClaudeCodeLegacy`) and `normalizeProvider()` — maps the legacy display value `'Claude Code'` to canonical `'claude-code'`. Applied at every Scan site that reads `sessions.session_type`. |
 
 ## Key API
 
 - **`ListUserSessionsPaginated(ctx, userID, params)`** -- Returns filtered, cursor-paginated sessions with pre-materialized filter dropdown values (repos, branches, owners). Supports `ShareAllSessions` mode.
 - **`ListUserSessions(ctx, userID)`** -- Returns all visible sessions (owned + shared) without pagination. Used for non-paginated views.
 - **`GetSessionDetail(ctx, sessionID, userID)`** -- Returns full session detail for an owner. Returns `ErrSessionNotFound` for non-owners.
-- **`FindOrCreateSyncSession(ctx, userID, params)`** -- Idempotent session creation for the sync API. Returns existing sync file state so the client can resume from the last checkpoint. Handles unique-violation races.
+- **`FindOrCreateSyncSession(ctx, userID, params)`** -- Idempotent session creation for the sync API, keyed by `(user_id, provider, external_id)`. Returns existing sync file state so the client can resume from the last checkpoint. Handles unique-violation races. The `claude-code` lookup matches both canonical and legacy `'Claude Code'` rows so a freshly-deployed binary still finds rows written by an older one during the deploy gap.
+- **`VerifySessionOwnership(ctx, sessionID, userID)`** -- Returns `(externalID, provider, err)`. `provider` is normalized via `normalizeProvider`; callers can compare against `validation.ProviderCodex` / `ProviderClaudeCode` without worrying about legacy values.
 - **`UpdateSyncFileState(ctx, sessionID, fileName, fileType, lastSyncedLine, ...)`** -- Updates the high-water mark for a file's sync state in a transaction. Also updates session-level fields (summary, first user message, git info, last message timestamp).
 - **`BuildPrefixTsquery(query)`** -- Builds a PostgreSQL tsquery with prefix matching from a search string. Escapes special characters and joins terms with `&`.
 
@@ -31,6 +33,7 @@ Session CRUD, paginated listing with filtering, and incremental sync state manag
 - Cursor pagination uses `(COALESCE(last_message_at, first_seen), id)` as the keyset. Cursors are base64-encoded `RFC3339Nano|UUID` strings.
 - Access type priority during deduplication: `owner` (1) > `private_share` (2) > `system_share` (3).
 - `FindOrCreateSyncSession` uses an optimistic insert with unique-violation fallback to handle concurrent syncs for the same external ID.
+- Session uniqueness is `(user_id, session_type, external_id)`. New code writes the canonical `session_type` values `'claude-code'` and `'codex'`; legacy `'Claude Code'` rows may persist until a future one-time backfill. Read paths apply `normalizeProvider` so the application layer always sees canonical values.
 - `UpdateSyncFileState` increments `chunk_count` on each upsert; this is an estimate that may drift. The read path self-heals via `UpdateSyncFileChunkCount`.
 - Filter lookup tables (`session_repos`, `session_branches`) are upserted during sync via `upsertFilterLookups` for fast filter option queries.
 

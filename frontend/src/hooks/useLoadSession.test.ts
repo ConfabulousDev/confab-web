@@ -7,6 +7,7 @@ import type { SessionDetail } from '@/types';
 const mockSession: SessionDetail = {
   id: '1',
   external_id: 'ext-1',
+  provider: 'claude-code',
   summary: 'Test session',
   first_user_message: 'Hello',
   first_seen: '2025-01-01T10:00:00Z',

@@ -37,7 +37,10 @@ const SessionSchema = z.object({
   suggested_session_title: z.string().max(100).nullable().optional(),
   summary: z.string().nullable().optional(),
   first_user_message: z.string().nullable().optional(),
-  session_type: z.string(),
+  // Canonical agent identifier: 'claude-code' or 'codex'. Future providers
+  // may be added; treat as a free string at the schema layer so older
+  // backends shipping new values do not fail validation.
+  provider: z.string(),
   total_lines: z.number(),
   git_repo: z.string().nullable().optional(),
   git_repo_url: z.string().nullable().optional(), // Full git repository URL
@@ -68,6 +71,8 @@ export const SessionListResponseSchema = z.object({
 export const SessionDetailSchema = z.object({
   id: z.string(),
   external_id: z.string(),
+  // Canonical agent identifier: 'claude-code' or 'codex'.
+  provider: z.string(),
   custom_title: z.string().max(255).nullable().optional(),
   suggested_session_title: z.string().max(100).nullable().optional(),
   summary: z.string().nullable().optional(),

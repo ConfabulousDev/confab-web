@@ -8,6 +8,7 @@ import SessionViewer from './SessionViewer';
 const mockSession: SessionDetail = {
   id: 'test-session-uuid',
   external_id: 'abc123def456',
+  provider: 'claude-code',
   custom_title: null,
   summary: 'Building a session analytics feature',
   first_user_message: 'Help me build analytics for my app',

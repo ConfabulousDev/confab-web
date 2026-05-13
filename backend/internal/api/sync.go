@@ -41,6 +41,12 @@ type SyncInitRequest struct {
 	TranscriptPath string            `json:"transcript_path"`
 	Metadata       *SyncInitMetadata `json:"metadata,omitempty"`
 
+	// Provider identifies which agent produced the session. Pointer
+	// distinguishes "field omitted" (nil → defaulted to "claude-code")
+	// from "explicit empty string" (rejected with 400). Accepted explicit
+	// values: "claude-code", "codex".
+	Provider *string `json:"provider,omitempty"`
+
 	// ===========================================================================
 	// DEPRECATED: The following top-level fields are deprecated.
 	// Use the nested Metadata struct instead for consistency with the chunk API.
@@ -56,8 +62,12 @@ type SyncInitRequest struct {
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
 type SyncInitResponse struct {
-	SessionID string                        `json:"session_id"`
-	Files     map[string]SyncFileStateResp `json:"files"`
+	SessionID string                       `json:"session_id"`
+	// Provider echoes the resolved provider for this session, so clients
+	// can verify which agent identity the backend recorded. Always one of
+	// "claude-code" or "codex".
+	Provider string                       `json:"provider"`
+	Files    map[string]SyncFileStateResp `json:"files"`
 }
 
 // SyncFileStateResp represents the sync state for a single file in API responses
@@ -144,6 +154,21 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve provider. A missing field (nil pointer) is defaulted to
+	// claude-code for backward compatibility with existing CLI clients.
+	// An explicit empty string flows through to ValidateProvider and is
+	// rejected — distinct from "field omitted entirely".
+	var provider string
+	if req.Provider == nil {
+		provider = validation.ProviderClaudeCode
+	} else {
+		provider = *req.Provider
+	}
+	if err := validation.ValidateProvider(provider); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Extract metadata, preferring new nested format over deprecated top-level fields
 	cwd := req.CWD
 	gitInfo := req.GitInfo
@@ -186,6 +211,7 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		GitInfo:        gitInfo,
 		Hostname:       hostname,
 		Username:       username,
+		Provider:       provider,
 	}
 	sessionStore := &dbsession.Store{DB: s.db}
 	sessionID, files, err := sessionStore.FindOrCreateSyncSession(ctx, userID, params)
@@ -206,10 +232,12 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	log.Info("Sync session initialized",
 		"session_id", sessionID,
 		"external_id", req.ExternalID,
+		"provider", provider,
 		"file_count", len(files))
 
 	respondJSON(w, http.StatusOK, SyncInitResponse{
 		SessionID: sessionID,
+		Provider:  provider,
 		Files:     respFiles,
 	})
 }
@@ -283,7 +311,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	defer dbCancel()
 
 	sessionStore := &dbsession.Store{DB: s.db}
-	externalID, err := sessionStore.VerifySessionOwnership(dbCtx, req.SessionID, userID)
+	externalID, provider, err := sessionStore.VerifySessionOwnership(dbCtx, req.SessionID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrSessionNotFound) {
 			respondError(w, http.StatusNotFound, "Session not found")
@@ -295,6 +323,15 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Error("Failed to verify session ownership", "error", err, "session_id", req.SessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to verify session")
+		return
+	}
+
+	// Codex sessions only carry rollout JSONL under file_type "transcript".
+	// No other file_type is defined for codex yet (see ticket non-goals);
+	// reject explicitly rather than silently accepting an unknown shape.
+	if provider == validation.ProviderCodex && req.FileType != "transcript" {
+		respondError(w, http.StatusBadRequest,
+			"file_type must be 'transcript' for codex sessions")
 		return
 	}
 
@@ -336,8 +373,14 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build chunk content (lines joined by newlines, with trailing newline)
-	// Also extract timestamp metadata and pr-link associations from transcript lines
+	// Build chunk content (lines joined by newlines, with trailing newline).
+	// Timestamp and PR-link extraction is specific to the Claude Code transcript
+	// schema (assistant_message envelope, tool_use blocks, etc.) and is not
+	// meaningful for other providers — for example, Codex rollout JSONL has a
+	// different shape entirely. Gate parsing on provider so non-claude-code
+	// sessions store raw bytes only.
+	parseClaudeCode := provider == validation.ProviderClaudeCode && req.FileType == "transcript"
+
 	var content bytes.Buffer
 	var latestTimestamp *time.Time
 	var prLinks []*models.GitHubLink
@@ -346,15 +389,13 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		content.WriteString(line)
 		content.WriteString("\n")
 
-		if req.FileType == "transcript" {
-			// Try to extract timestamp from transcript lines
+		if parseClaudeCode {
 			if ts := extractTimestampFromLine(line); ts != nil {
 				if latestTimestamp == nil || ts.After(*latestTimestamp) {
 					latestTimestamp = ts
 				}
 			}
 
-			// Try to extract pr-link associations
 			if link := extractPRLinkFromLine(line); link != nil {
 				dedupKey := link.Owner + "/" + link.Repo + "/" + link.Ref
 				if _, exists := prLinkSeen[dedupKey]; !exists {
@@ -520,7 +561,7 @@ func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
 	defer dbCancel()
 
 	sessionStore := &dbsession.Store{DB: s.db}
-	_, err := sessionStore.VerifySessionOwnership(dbCtx, req.SessionID, userID)
+	_, _, err := sessionStore.VerifySessionOwnership(dbCtx, req.SessionID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrSessionNotFound) {
 			respondError(w, http.StatusNotFound, "Session not found")

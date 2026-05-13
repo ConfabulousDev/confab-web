@@ -222,15 +222,12 @@ func TestFindStaleSessions_IgnoresNonClaudeCodeSessions(t *testing.T) {
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 
-	// Create a user and session with a different session_type (not Claude Code)
+	// Create a user and session that is NOT a claude-code session. We use
+	// 'codex' (the only other real provider today) so the test reflects what
+	// FindStaleSessions sees in production: a non-claude-code session must be
+	// excluded by the precompute filter.
 	user := testutil.CreateTestUser(t, env, "regular@test.com", "Regular User")
-	sessionID := testutil.CreateTestSession(t, env, user.ID, "regular-external-id")
-
-	// Change session_type to something else
-	_, err := env.DB.Exec(env.Ctx, "UPDATE sessions SET session_type = 'Other Tool' WHERE id = $1", sessionID)
-	if err != nil {
-		t.Fatalf("failed to update session type: %v", err)
-	}
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "regular-external-id", "codex")
 
 	// Add transcript sync file
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)

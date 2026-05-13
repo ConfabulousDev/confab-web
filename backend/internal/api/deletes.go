@@ -36,7 +36,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
-		externalID, err := sessionStore.VerifySessionOwnership(dbCtx, sessionID, userID)
+		externalID, _, err := sessionStore.VerifySessionOwnership(dbCtx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")

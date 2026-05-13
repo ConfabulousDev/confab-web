@@ -6,8 +6,8 @@ Input validation and sanitization utilities for field length limits, email forma
 
 | File | Role |
 |------|------|
-| `input.go` | Field length constants (matching DB constraints) and validation functions |
-| `input_test.go` | Tests for `ValidateExternalID`, `ValidateHostname`, `ValidateUsername` |
+| `input.go` | Field length constants (matching DB constraints), validation functions, provider constants and validator |
+| `input_test.go` | Tests for `ValidateExternalID`, `ValidateHostname`, `ValidateUsername`, `ValidateProvider` |
 | `email.go` | Email format validation, domain allowlist checking, email normalization, and domain list validation |
 | `email_test.go` | Tests for email format validation, domain allowlist logic, `NormalizeEmail`, and domain list validation |
 
@@ -33,6 +33,14 @@ Each function returns `nil` if valid, or an error describing the violation:
 - **`ValidateAPIKeyName(name string) error`** -- Max 255 characters.
 - **`ValidateHostname(hostname string) error`** -- Max 255 characters.
 - **`ValidateUsername(username string) error`** -- Max 255 characters.
+- **`ValidateProvider(provider string) error`** -- Strict exact-match against `ProviderClaudeCode` (`"claude-code"`) and `ProviderCodex` (`"codex"`). No trimming, no case folding. An empty string is rejected — the HTTP handler is responsible for defaulting a missing API field to `ProviderClaudeCode` before calling.
+
+### Provider constants (`input.go`)
+
+- **`ProviderClaudeCode = "claude-code"`** — Canonical agent identifier for Claude Code sessions.
+- **`ProviderCodex = "codex"`** — Canonical agent identifier for OpenAI Codex sessions.
+
+These are the public values written to `sessions.session_type` for new rows; the legacy display form `'Claude Code'` may still appear on older rows and is normalized by `normalizeProvider()` in `internal/db/session/provider.go`.
 
 ### Field size constants (`input.go`)
 

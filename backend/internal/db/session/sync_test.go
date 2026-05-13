@@ -831,3 +831,184 @@ func TestGetSessionOwnerAndExternalID_NotFound(t *testing.T) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
 }
+
+// =============================================================================
+// Provider-aware FindOrCreateSyncSession tests (CF-347)
+// =============================================================================
+
+// TestFindOrCreateSyncSession_ProviderIsolation asserts that the same user
+// using the same external_id under two different providers ends up with two
+// distinct backend sessions. This is the core "dedupe by
+// (user_id, provider, external_id)" invariant from the ticket.
+func TestFindOrCreateSyncSession_ProviderIsolation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	user := testutil.CreateTestUser(t, env, "providers@test.com", "Providers User")
+	ctx := context.Background()
+
+	commonExternalID := "shared-external-id"
+
+	ccSessionID, _, err := store.FindOrCreateSyncSession(ctx, user.ID, db.SyncSessionParams{
+		ExternalID:     commonExternalID,
+		TranscriptPath: "/path/cc.jsonl",
+		Provider:       "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreate (claude-code) failed: %v", err)
+	}
+
+	codexSessionID, _, err := store.FindOrCreateSyncSession(ctx, user.ID, db.SyncSessionParams{
+		ExternalID:     commonExternalID,
+		TranscriptPath: "/path/codex.jsonl",
+		Provider:       "codex",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreate (codex) failed: %v", err)
+	}
+
+	if ccSessionID == codexSessionID {
+		t.Errorf("provider isolation broken: claude-code and codex sessions share UUID %s", ccSessionID)
+	}
+
+	// Both rows should exist in the DB with the correct session_type values.
+	var ccType, codexType string
+	if err := env.DB.QueryRow(ctx, "SELECT session_type FROM sessions WHERE id = $1", ccSessionID).Scan(&ccType); err != nil {
+		t.Fatalf("query claude-code row: %v", err)
+	}
+	if err := env.DB.QueryRow(ctx, "SELECT session_type FROM sessions WHERE id = $1", codexSessionID).Scan(&codexType); err != nil {
+		t.Fatalf("query codex row: %v", err)
+	}
+	if ccType != "claude-code" {
+		t.Errorf("claude-code session has session_type = %q, want %q", ccType, "claude-code")
+	}
+	if codexType != "codex" {
+		t.Errorf("codex session has session_type = %q, want %q", codexType, "codex")
+	}
+}
+
+// TestFindOrCreateSyncSession_DefaultsParamsToClaudeCode asserts that when
+// SyncSessionParams.Provider is empty (the HTTP handler is responsible for
+// defaulting, but defense-in-depth at the DB layer matters too), the row is
+// stored with session_type = 'claude-code'.
+func TestFindOrCreateSyncSession_DefaultsParamsToClaudeCode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	user := testutil.CreateTestUser(t, env, "default-provider@test.com", "Default Provider User")
+	ctx := context.Background()
+
+	sessionID, _, err := store.FindOrCreateSyncSession(ctx, user.ID, db.SyncSessionParams{
+		ExternalID:     "default-provider-external",
+		TranscriptPath: "/path.jsonl",
+		// Provider intentionally left empty
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreate failed: %v", err)
+	}
+
+	var stored string
+	if err := env.DB.QueryRow(ctx, "SELECT session_type FROM sessions WHERE id = $1", sessionID).Scan(&stored); err != nil {
+		t.Fatalf("query session_type: %v", err)
+	}
+	if stored != "claude-code" {
+		t.Errorf("session_type = %q, want %q (empty Provider should default to claude-code)", stored, "claude-code")
+	}
+}
+
+// TestFindOrCreateSyncSession_FindsLegacyClaudeCodeRow asserts that when an
+// older binary has already written a session with session_type = 'Claude Code'
+// (the historical display form), a subsequent FindOrCreate call from new code
+// with Provider = "claude-code" returns the SAME row rather than creating a
+// duplicate. This is required because the migration intentionally does not
+// backfill legacy values (deploy gap invariant).
+func TestFindOrCreateSyncSession_FindsLegacyClaudeCodeRow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	user := testutil.CreateTestUser(t, env, "legacy@test.com", "Legacy User")
+	ctx := context.Background()
+
+	// Pre-seed a row with the legacy display value.
+	preexisting := testutil.CreateTestSessionLegacyClaudeCode(t, env, user.ID, "legacy-external-id")
+
+	// New code should find that row via the IN-clause lookup.
+	found, _, err := store.FindOrCreateSyncSession(ctx, user.ID, db.SyncSessionParams{
+		ExternalID:     "legacy-external-id",
+		TranscriptPath: "/path.jsonl",
+		Provider:       "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreate failed: %v", err)
+	}
+	if found != preexisting {
+		t.Errorf("did not find legacy row: got new session %s, want preexisting %s (duplicate row created)", found, preexisting)
+	}
+
+	// And the DB still holds exactly one session for this user+external_id.
+	var count int
+	if err := env.DB.QueryRow(ctx,
+		"SELECT COUNT(*) FROM sessions WHERE user_id = $1 AND external_id = $2",
+		user.ID, "legacy-external-id").Scan(&count); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 session row, got %d (legacy-vs-canonical duplication)", count)
+	}
+}
+
+// TestFindOrCreateSyncSession_CodexLookupSkipsLegacyClaudeCode asserts that
+// a codex FindOrCreate does NOT accidentally pick up a legacy 'Claude Code'
+// row for the same external_id (which would be wrong: providers are isolated).
+func TestFindOrCreateSyncSession_CodexLookupSkipsLegacyClaudeCode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	user := testutil.CreateTestUser(t, env, "codex-iso@test.com", "Codex Iso User")
+	ctx := context.Background()
+
+	legacy := testutil.CreateTestSessionLegacyClaudeCode(t, env, user.ID, "shared-external")
+
+	codexSessionID, _, err := store.FindOrCreateSyncSession(ctx, user.ID, db.SyncSessionParams{
+		ExternalID:     "shared-external",
+		TranscriptPath: "/codex.jsonl",
+		Provider:       "codex",
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreate (codex) failed: %v", err)
+	}
+	if codexSessionID == legacy {
+		t.Errorf("codex lookup returned legacy claude-code row %s (provider isolation broken)", legacy)
+	}
+
+	// Two distinct rows now exist.
+	var count int
+	if err := env.DB.QueryRow(ctx,
+		"SELECT COUNT(*) FROM sessions WHERE user_id = $1 AND external_id = $2",
+		user.ID, "shared-external").Scan(&count); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 session rows (one per provider), got %d", count)
+	}
+}

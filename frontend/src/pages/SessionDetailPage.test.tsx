@@ -9,6 +9,7 @@ import SessionDetailPage from './SessionDetailPage';
 const mockSession: SessionDetail = {
   id: 'test-session-uuid',
   external_id: 'abc123def456',
+  provider: 'claude-code',
   custom_title: null,
   summary: 'Test session summary',
   first_user_message: 'Help me test',

@@ -25,7 +25,11 @@ type SessionListItem struct {
 	SuggestedSessionTitle *string    `json:"suggested_session_title,omitempty"` // AI-suggested title from Smart Recap
 	Summary               *string    `json:"summary,omitempty"`                 // First summary from transcript
 	FirstUserMessage      *string    `json:"first_user_message,omitempty"`      // First user message
-	SessionType           string     `json:"session_type"`
+	// Provider is the canonical agent identifier ("claude-code" or "codex").
+	// Legacy 'Claude Code' DB values are normalized to "claude-code" at Scan
+	// time via normalizeProvider() so the public API never exposes the
+	// historical display form.
+	Provider              string     `json:"provider"`
 	TotalLines            int64      `json:"total_lines"`                       // Sum of last_synced_line across all files
 	// TODO: Remove git_repo field and only return git_repo_url, let frontend parse the org/repo
 	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
@@ -72,6 +76,10 @@ type SessionFilterOptions struct {
 type SessionDetail struct {
 	ID                    string           `json:"id"`                                // UUID primary key for URL routing
 	ExternalID            string           `json:"external_id"`                       // External system's session ID
+	// Provider is the canonical agent identifier ("claude-code" or "codex").
+	// Legacy 'Claude Code' DB values are normalized to "claude-code" at Scan
+	// time via normalizeProvider().
+	Provider              string           `json:"provider"`
 	CustomTitle           *string          `json:"custom_title,omitempty"`            // User-set title override
 	SuggestedSessionTitle *string          `json:"suggested_session_title,omitempty"` // AI-suggested title from Smart Recap
 	Summary               *string          `json:"summary,omitempty"`                 // First summary from transcript
@@ -158,6 +166,11 @@ type SyncSessionParams struct {
 	GitInfo        json.RawMessage // Optional: JSONB for git metadata
 	Hostname       string          // Optional: client machine hostname
 	Username       string          // Optional: OS username of the client
+	// Provider identifies the agent that produced the session.
+	// Canonical values: "claude-code", "codex". Caller (the HTTP handler)
+	// must default empty/missing to "claude-code" and validate before
+	// passing in.
+	Provider string
 }
 
 // SessionEventParams contains parameters for inserting a session event

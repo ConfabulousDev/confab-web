@@ -123,3 +123,24 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
+// Provider name constants. These are the canonical lowercase values stored
+// in sessions.session_type for new rows. Legacy rows may still hold the
+// display form 'Claude Code' until a future one-time backfill PR; see
+// normalizeProvider() in db/session/provider.go.
+const (
+	ProviderClaudeCode = "claude-code"
+	ProviderCodex      = "codex"
+)
+
+// ValidateProvider returns an error unless p exactly equals one of the
+// canonical provider values. The handler is responsible for defaulting a
+// missing API field to ProviderClaudeCode before calling this — an explicit
+// empty string is not accepted here. No trimming or case folding.
+func ValidateProvider(p string) error {
+	switch p {
+	case ProviderClaudeCode, ProviderCodex:
+		return nil
+	}
+	return fmt.Errorf("unknown provider %q: must be %q or %q",
+		p, ProviderClaudeCode, ProviderCodex)
+}

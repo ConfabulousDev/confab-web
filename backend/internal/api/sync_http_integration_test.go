@@ -3455,3 +3455,356 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// CF-347: Provider-aware sync init and chunk
+// =============================================================================
+
+// strPtr returns a pointer to s. Local helper to keep the provider tests below
+// readable (the SyncInitRequest.Provider field is a *string so missing and
+// explicit-empty can be distinguished).
+func strPtr(s string) *string { return &s }
+
+// TestSyncInit_Provider_HTTP_Integration locks the wire-level contract for the
+// optional `provider` field on POST /api/v1/sync/init. Each subtest is a
+// row from the spec table in the CF-347 plan.
+func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("defaults missing provider to claude-code", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "missing-provider@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		reqBody := SyncInitRequest{
+			ExternalID:     "missing-provider-ext",
+			TranscriptPath: "/p/transcript.jsonl",
+			// Provider intentionally nil
+		}
+		resp, err := client.Post("/api/v1/sync/init", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result SyncInitResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		if result.Provider != "claude-code" {
+			t.Errorf("response provider = %q, want %q (missing field must default)", result.Provider, "claude-code")
+		}
+
+		var stored string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT session_type FROM sessions WHERE id = $1", result.SessionID).Scan(&stored); err != nil {
+			t.Fatalf("query session_type: %v", err)
+		}
+		if stored != "claude-code" {
+			t.Errorf("DB session_type = %q, want %q", stored, "claude-code")
+		}
+	})
+
+	t.Run("rejects explicit empty provider", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "empty-provider@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		reqBody := SyncInitRequest{
+			ExternalID:     "empty-provider-ext",
+			TranscriptPath: "/p/transcript.jsonl",
+			Provider:       strPtr(""),
+		}
+		resp, err := client.Post("/api/v1/sync/init", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+
+		var result map[string]string
+		testutil.ParseJSON(t, resp, &result)
+		if !strings.Contains(strings.ToLower(result["error"]), "provider") {
+			t.Errorf("expected error mentioning 'provider', got: %s", result["error"])
+		}
+	})
+
+	t.Run("accepts codex provider", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "codex@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		reqBody := SyncInitRequest{
+			ExternalID:     "codex-ext",
+			TranscriptPath: "/p/rollout.jsonl",
+			Provider:       strPtr("codex"),
+		}
+		resp, err := client.Post("/api/v1/sync/init", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result SyncInitResponse
+		testutil.ParseJSON(t, resp, &result)
+		if result.Provider != "codex" {
+			t.Errorf("response provider = %q, want %q", result.Provider, "codex")
+		}
+
+		var stored string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT session_type FROM sessions WHERE id = $1", result.SessionID).Scan(&stored); err != nil {
+			t.Fatalf("query session_type: %v", err)
+		}
+		if stored != "codex" {
+			t.Errorf("DB session_type = %q, want %q", stored, "codex")
+		}
+	})
+
+	t.Run("rejects unknown provider", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "gemini@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		reqBody := SyncInitRequest{
+			ExternalID:     "gemini-ext",
+			TranscriptPath: "/p.jsonl",
+			Provider:       strPtr("gemini"),
+		}
+		resp, err := client.Post("/api/v1/sync/init", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+
+		var result map[string]string
+		testutil.ParseJSON(t, resp, &result)
+		if !strings.Contains(strings.ToLower(result["error"]), "provider") {
+			t.Errorf("expected error mentioning 'provider', got: %s", result["error"])
+		}
+	})
+
+	t.Run("rejects uppercase Codex (no case folding)", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "uppercase@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		reqBody := SyncInitRequest{
+			ExternalID:     "uppercase-ext",
+			TranscriptPath: "/p.jsonl",
+			Provider:       strPtr("Codex"),
+		}
+		resp, err := client.Post("/api/v1/sync/init", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("dedupes per provider — same user+external_id splits into two sessions", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "dedupe@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		shared := "shared-id-cf347"
+
+		cc, err := client.Post("/api/v1/sync/init", SyncInitRequest{
+			ExternalID:     shared,
+			TranscriptPath: "/p/cc.jsonl",
+			Provider:       strPtr("claude-code"),
+		})
+		if err != nil {
+			t.Fatalf("claude-code request: %v", err)
+		}
+		defer cc.Body.Close()
+		testutil.RequireStatus(t, cc, http.StatusOK)
+		var ccResp SyncInitResponse
+		testutil.ParseJSON(t, cc, &ccResp)
+
+		cx, err := client.Post("/api/v1/sync/init", SyncInitRequest{
+			ExternalID:     shared,
+			TranscriptPath: "/p/codex.jsonl",
+			Provider:       strPtr("codex"),
+		})
+		if err != nil {
+			t.Fatalf("codex request: %v", err)
+		}
+		defer cx.Body.Close()
+		testutil.RequireStatus(t, cx, http.StatusOK)
+		var cxResp SyncInitResponse
+		testutil.ParseJSON(t, cx, &cxResp)
+
+		if ccResp.SessionID == cxResp.SessionID {
+			t.Errorf("provider isolation broken: claude-code and codex returned same session_id %s", ccResp.SessionID)
+		}
+		if ccResp.Provider != "claude-code" {
+			t.Errorf("ccResp.Provider = %q, want claude-code", ccResp.Provider)
+		}
+		if cxResp.Provider != "codex" {
+			t.Errorf("cxResp.Provider = %q, want codex", cxResp.Provider)
+		}
+	})
+
+	t.Run("returns canonical provider for legacy 'Claude Code' DB row", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "legacy-row@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		// Pre-seed a row written by an older binary with session_type = 'Claude Code'.
+		preexisting := testutil.CreateTestSessionLegacyClaudeCode(t, env, user.ID, "legacy-row-ext")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// New client omits provider → defaulted to claude-code → must find the legacy row.
+		resp, err := client.Post("/api/v1/sync/init", SyncInitRequest{
+			ExternalID:     "legacy-row-ext",
+			TranscriptPath: "/p.jsonl",
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result SyncInitResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		if result.SessionID != preexisting {
+			t.Errorf("expected session_id %s (legacy row), got %s — duplicate row created", preexisting, result.SessionID)
+		}
+		if result.Provider != "claude-code" {
+			t.Errorf("response provider = %q, want canonical %q (read-side normalize must hide legacy form)", result.Provider, "claude-code")
+		}
+	})
+}
+
+// TestSyncChunk_Provider_HTTP_Integration covers the chunk endpoint's
+// provider-awareness: codex sessions accept transcript chunks, anything else
+// is rejected, and the chunk handler must not attempt Claude-Code parsing.
+func TestSyncChunk_Provider_HTTP_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("accepts transcript chunk for codex session", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "codex-chunk@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "codex-chunk-ext", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// Realistic Codex rollout JSONL lines — note these are NOT Claude Code
+		// transcript JSON; the backend must store them raw without parsing.
+		rolloutLines := []string{
+			`{"timestamp":"2026-01-01T00:00:00Z","type":"session_meta","payload":{"id":"019e..."}}`,
+			`{"timestamp":"2026-01-01T00:00:01Z","type":"turn_context","payload":{"cwd":"/repo"}}`,
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "rollout-2026-01-01-019e....jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     rolloutLines,
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// sync_files row should record the chunk's last line.
+		var lastSyncedLine int
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT last_synced_line FROM sync_files WHERE session_id = $1 AND file_name = $2",
+			sessionID, "rollout-2026-01-01-019e....jsonl").Scan(&lastSyncedLine); err != nil {
+			t.Fatalf("query sync_files: %v", err)
+		}
+		if lastSyncedLine != 2 {
+			t.Errorf("last_synced_line = %d, want 2", lastSyncedLine)
+		}
+
+		// Codex sessions must NOT have github_links auto-extracted from
+		// transcript content (Claude-Code-specific parsing must be skipped).
+		var ghCount int
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID).Scan(&ghCount); err != nil {
+			t.Fatalf("count github_links: %v", err)
+		}
+		if ghCount != 0 {
+			t.Errorf("codex session has %d github_links, want 0 (Claude-Code parsing must be skipped)", ghCount)
+		}
+	})
+
+	t.Run("rejects non-transcript file_type for codex session", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "codex-reject@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "codex-reject-ext", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "agent.jsonl",
+			FileType:  "agent",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+
+		var result map[string]string
+		testutil.ParseJSON(t, resp, &result)
+		errMsg := strings.ToLower(result["error"])
+		if !strings.Contains(errMsg, "transcript") || !strings.Contains(errMsg, "codex") {
+			t.Errorf("expected error mentioning 'transcript' and 'codex', got: %s", result["error"])
+		}
+	})
+}

@@ -30,7 +30,7 @@ const mockResponse: SessionListResponse = {
       last_sync_time: '2025-01-01T12:00:00Z',
       summary: 'Test session 1',
       first_user_message: 'Hello',
-      session_type: 'cli',
+      provider: 'claude-code',
       total_lines: 100,
       git_repo: 'test/repo',
       git_branch: 'main',

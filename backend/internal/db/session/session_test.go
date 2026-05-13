@@ -255,12 +255,16 @@ func TestVerifySessionOwnership_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	externalID, err := store.VerifySessionOwnership(ctx, sessionID, user.ID)
+	externalID, provider, err := store.VerifySessionOwnership(ctx, sessionID, user.ID)
 	if err != nil {
 		t.Fatalf("VerifySessionOwnership failed: %v", err)
 	}
 	if externalID != "owner-external-id" {
 		t.Errorf("externalID = %s, want owner-external-id", externalID)
+	}
+	// CreateTestSession relies on the DB default, which is now 'claude-code'.
+	if provider != "claude-code" {
+		t.Errorf("provider = %q, want %q", provider, "claude-code")
 	}
 }
 
@@ -278,7 +282,7 @@ func TestVerifySessionOwnership_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := store.VerifySessionOwnership(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
+	_, _, err := store.VerifySessionOwnership(ctx, "00000000-0000-0000-0000-000000000000", user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -301,7 +305,7 @@ func TestVerifySessionOwnership_Forbidden(t *testing.T) {
 	ctx := context.Background()
 
 	// User2 tries to verify ownership of User1's session
-	_, err := store.VerifySessionOwnership(ctx, sessionID, user2.ID)
+	_, _, err := store.VerifySessionOwnership(ctx, sessionID, user2.ID)
 	if !errors.Is(err, db.ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
 	}
@@ -321,7 +325,7 @@ func TestVerifySessionOwnership_InvalidUUID(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := store.VerifySessionOwnership(ctx, "not-a-valid-uuid", user.ID)
+	_, _, err := store.VerifySessionOwnership(ctx, "not-a-valid-uuid", user.ID)
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound for invalid UUID, got %v", err)
 	}

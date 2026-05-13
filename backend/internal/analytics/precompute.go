@@ -205,7 +205,9 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 			LEFT JOIN session_card_conversation cv ON sl.session_id = cv.session_id
 			LEFT JOIN session_card_agents_and_skills as_card ON sl.session_id = as_card.session_id
 			LEFT JOIN session_card_redactions rd ON sl.session_id = rd.session_id
-			WHERE s.session_type = 'Claude Code'
+			-- Match both legacy ('Claude Code') and canonical ('claude-code') values.
+			-- TODO(post-Codex-rollout): collapse to single-value after backfill.
+			WHERE s.session_type IN ('claude-code', 'Claude Code')
 		),
 		stale_sessions AS (
 			SELECT
@@ -623,7 +625,9 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 				AND sq.quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
 			LEFT JOIN regen_ts rt ON TRUE
 			LEFT JOIN admin_invalidations ai ON ai.session_id = sl.session_id
-			WHERE s.session_type = 'Claude Code'
+			-- Match both legacy ('Claude Code') and canonical ('claude-code') values.
+			-- TODO(post-Codex-rollout): collapse to single-value after backfill.
+			WHERE s.session_type IN ('claude-code', 'Claude Code')
 				-- Quota check: skip for category 4 (global admin regen) and for
 				-- per-session admin invalidations (CF-343). Bypass clauses OR together.
 				AND (
@@ -749,7 +753,9 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 			AND rd.version = $7 AND rd.up_to_line = sl.total_lines
 		LEFT JOIN session_search_index si ON sl.session_id = si.session_id
 		LEFT JOIN session_card_smart_recap sr ON sl.session_id = sr.session_id
-		WHERE s.session_type = 'Claude Code'
+		-- Match both legacy ('Claude Code') and canonical ('claude-code') values.
+		-- TODO(post-Codex-rollout): collapse to single-value after backfill.
+		WHERE s.session_type IN ('claude-code', 'Claude Code')
 		  AND (
 			-- 1. Never indexed
 			si.session_id IS NULL

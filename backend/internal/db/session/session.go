@@ -98,12 +98,13 @@ func scanSessionListItems(rows *sql.Rows) ([]db.SessionListItem, error) {
 			&session.ID, &session.ExternalID, &session.FirstSeen,
 			&session.FileCount, &session.LastSyncTime, &session.CustomTitle,
 			&session.SuggestedSessionTitle, &session.Summary, &session.FirstUserMessage,
-			&session.SessionType, &session.TotalLines, &gitRepoURL, &session.GitBranch,
+			&session.Provider, &session.TotalLines, &gitRepoURL, &session.GitBranch,
 			&githubPRs, &githubCommits, &session.EstimatedCostUSD,
 			&session.IsOwner, &session.AccessType, &session.SharedByEmail, &session.OwnerEmail,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
+		session.Provider = normalizeProvider(session.Provider)
 		if gitRepoURL != nil && *gitRepoURL != "" {
 			session.GitRepo = db.ExtractRepoName(*gitRepoURL)
 			session.GitRepoURL = gitRepoURL
@@ -590,13 +591,13 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 	var session db.SessionDetail
 	var gitInfoBytes []byte
 	sessionQuery := `
-		SELECT s.id, s.external_id, s.custom_title, s.suggested_session_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.email
+		SELECT s.id, s.external_id, s.session_type, s.custom_title, s.suggested_session_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.email
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.id = $1 AND s.user_id = $2
 	`
 	err := s.conn().QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(
-		&session.ID, &session.ExternalID, &session.CustomTitle,
+		&session.ID, &session.ExternalID, &session.Provider, &session.CustomTitle,
 		&session.SuggestedSessionTitle, &session.Summary, &session.FirstUserMessage,
 		&session.FirstSeen, &session.CWD, &session.TranscriptPath, &gitInfoBytes,
 		&session.LastSyncAt, &session.Hostname, &session.Username, &session.OwnerEmail,
@@ -609,6 +610,7 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
+	session.Provider = normalizeProvider(session.Provider)
 
 	if err := db.UnmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
 		span.RecordError(err)
@@ -648,8 +650,10 @@ func (s *Store) DeleteSessionFromDB(ctx context.Context, sessionID string, userI
 	return nil
 }
 
-// VerifySessionOwnership checks if a session exists and is owned by the user
-func (s *Store) VerifySessionOwnership(ctx context.Context, sessionID string, userID int64) (externalID string, err error) {
+// VerifySessionOwnership checks if a session exists and is owned by the user.
+// It returns the session's external_id and the canonical provider value
+// (legacy 'Claude Code' rows are normalized to 'claude-code' here).
+func (s *Store) VerifySessionOwnership(ctx context.Context, sessionID string, userID int64) (externalID string, provider string, err error) {
 	ctx, span := tracer.Start(ctx, "db.verify_session_ownership",
 		trace.WithAttributes(
 			attribute.String("session.id", sessionID),
@@ -657,34 +661,38 @@ func (s *Store) VerifySessionOwnership(ctx context.Context, sessionID string, us
 		))
 	defer span.End()
 
-	query := `SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`
-	err = s.conn().QueryRowContext(ctx, query, sessionID, userID).Scan(&externalID)
+	query := `SELECT external_id, session_type FROM sessions WHERE id = $1 AND user_id = $2`
+	err = s.conn().QueryRowContext(ctx, query, sessionID, userID).Scan(&externalID, &provider)
 	if err == sql.ErrNoRows {
 		var exists bool
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)`
 		if checkErr := s.conn().QueryRowContext(ctx, checkQuery, sessionID).Scan(&exists); checkErr != nil {
 			span.RecordError(checkErr)
 			span.SetStatus(codes.Error, checkErr.Error())
-			return "", fmt.Errorf("failed to check session existence: %w", checkErr)
+			return "", "", fmt.Errorf("failed to check session existence: %w", checkErr)
 		}
 		if exists {
 			span.SetAttributes(attribute.String("result", "forbidden"))
-			return "", db.ErrForbidden
+			return "", "", db.ErrForbidden
 		}
 		span.SetAttributes(attribute.String("result", "not_found"))
-		return "", db.ErrSessionNotFound
+		return "", "", db.ErrSessionNotFound
 	}
 	if err != nil {
 		if db.IsInvalidUUIDError(err) {
 			span.SetAttributes(attribute.String("result", "not_found"))
-			return "", db.ErrSessionNotFound
+			return "", "", db.ErrSessionNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return "", fmt.Errorf("failed to verify session ownership: %w", err)
+		return "", "", fmt.Errorf("failed to verify session ownership: %w", err)
 	}
-	span.SetAttributes(attribute.String("result", "owner"))
-	return externalID, nil
+	provider = normalizeProvider(provider)
+	span.SetAttributes(
+		attribute.String("result", "owner"),
+		attribute.String("session.provider", provider),
+	)
+	return externalID, provider, nil
 }
 
 // UpdateSessionSummary updates the summary field for a session identified by external_id
