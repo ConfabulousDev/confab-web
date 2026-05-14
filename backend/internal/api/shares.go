@@ -170,6 +170,12 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 				sessionTitle = *session.FirstUserMessage
 			}
 
+			// Resolve provider once: GetSessionDetail should already return
+			// the canonical form (per CLAUDE.md, every Scan site normalises),
+			// but applying NormalizeProvider here is defensive and matches
+			// the project convention for boundary-layer code.
+			provider := db.NormalizeProvider(session.Provider)
+			shareIDStr := strconv.FormatInt(share.ID, 10)
 			for _, toEmail := range req.Recipients {
 				// Include recipient email in URL so login flow can guide them to the right account
 				recipientShareURL := shareURL + "?email=" + url.QueryEscape(toEmail)
@@ -180,6 +186,8 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 					SessionTitle: sessionTitle,
 					ShareURL:     recipientShareURL,
 					ExpiresAt:    expiresAt,
+					Provider:     provider,
+					ShareID:      shareIDStr,
 				}
 
 				if err := emailService.SendShareInvitation(r.Context(), userID, emailParams); err != nil {

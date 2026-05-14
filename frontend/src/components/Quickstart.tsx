@@ -30,7 +30,7 @@ function Quickstart() {
       <div className={styles.icon}>🚀</div>
       <h2 className={styles.headline}>Quickstart</h2>
       <p className={styles.description}>
-        Install the CLI to automatically sync your <em>Claude Code</em> sessions.
+        Install the CLI to automatically sync your <em>Claude Code and Codex</em> sessions.
       </p>
       <p className={styles.platformNote}>macOS, Linux & WSL</p>
 
@@ -52,7 +52,7 @@ function Quickstart() {
         <div className={styles.step}>
           <span className={styles.stepNumber}>3</span>
           <div className={styles.stepContent}>
-            <p className={styles.stepLabel}><em>Use Claude Code as usual</em></p>
+            <p className={styles.stepLabel}><em>Use Claude Code or Codex as usual</em></p>
             <p className={styles.stepDescription}>
               Your sessions will automatically sync here.
             </p>

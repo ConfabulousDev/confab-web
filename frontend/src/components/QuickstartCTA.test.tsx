@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import QuickstartCTA from './QuickstartCTA';
 
 const DISMISS_KEY = 'quickstart-cta-dismissed';
+const BANNER_TEXT = 'Set up session syncing to track your own Claude Code and Codex sessions.';
 
 // Mock localStorage since jsdom may not provide a fully functional implementation
 function createMockLocalStorage() {
@@ -40,41 +41,31 @@ describe('QuickstartCTA', () => {
 
   it('renders banner when show is true and not dismissed', () => {
     render(<QuickstartCTA show={true} />);
-    expect(
-      screen.getByText('Set up session syncing to track your own Claude Code sessions.')
-    ).toBeInTheDocument();
+    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Get started' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
   });
 
   it('does not render when show is false', () => {
     render(<QuickstartCTA show={false} />);
-    expect(
-      screen.queryByText('Set up session syncing to track your own Claude Code sessions.')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument();
   });
 
   it('does not render when show is true but localStorage dismiss key is already set', () => {
     mockStorage.setItem(DISMISS_KEY, 'true');
     render(<QuickstartCTA show={true} />);
-    expect(
-      screen.queryByText('Set up session syncing to track your own Claude Code sessions.')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument();
   });
 
   it('dismisses banner and sets localStorage when dismiss button is clicked', async () => {
     const user = userEvent.setup();
     render(<QuickstartCTA show={true} />);
 
-    expect(
-      screen.getByText('Set up session syncing to track your own Claude Code sessions.')
-    ).toBeInTheDocument();
+    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }));
 
-    expect(
-      screen.queryByText('Set up session syncing to track your own Claude Code sessions.')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument();
     expect(mockStorage.setItem).toHaveBeenCalledWith(DISMISS_KEY, 'true');
   });
 

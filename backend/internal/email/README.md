@@ -6,8 +6,8 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 
 | File | Role |
 |------|------|
-| `email.go` | `Service` interface, `ResendService` implementation, `RateLimitedService` wrapper, `EmailRateLimiter`, HTML/text email templates, and `MockService` |
-| `email_test.go` | Tests for `EmailRateLimiter` sliding window logic and `MockService` |
+| `email.go` | `Service` interface, `ResendService` implementation, `RateLimitedService` wrapper, `EmailRateLimiter`, HTML/text email templates, `MockService`, and the `humanProviderLabel` / `composeSubject` helpers for provider-aware wording |
+| `email_test.go` | Tests for `EmailRateLimiter`, `MockService`, template rendering, and the provider-aware wording matrix (`claude-code` / `codex` / legacy / empty / unknown) including an ERROR-log assertion via the `captureLogs` helper |
 | `errors.go` | Package-level sentinel error `ErrRateLimitExceeded` |
 
 ## Key Types
@@ -16,7 +16,7 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 - **`ResendService`** -- Production implementation that sends emails via the Resend HTTP API. Holds API key, from address/name, frontend URL, and an HTTP client with a 10-second timeout.
 - **`RateLimitedService`** -- Wraps any `Service` with per-user hourly rate limiting. Checks the limit before delegating to the inner service.
 - **`EmailRateLimiter`** -- Sliding-window rate limiter that tracks exact send timestamps per user ID. Thread-safe via `sync.Mutex`.
-- **`ShareInvitationParams`** -- Parameters for a share invitation email: recipient, sharer info, session title, share URL, optional expiration.
+- **`ShareInvitationParams`** -- Parameters for a share invitation email: recipient, sharer info, session title, share URL, optional expiration, plus `Provider` (canonical session type — drives subject/body wording) and `ShareID` (DB share row ID — surfaces in the unknown-provider ERROR log).
 - **`MockService`** -- Test double that records sent emails and can be configured to fail.
 
 ## Key API
@@ -43,6 +43,7 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 - **Thread safety.** `EmailRateLimiter` is protected by a `sync.Mutex`. All public methods acquire the lock.
 - **Rate check before send.** `RateLimitedService.SendShareInvitation` checks the limit and records the attempt before calling the inner service. The count is incremented even if the send fails, preventing retries from bypassing the limit.
 - **Both HTML and plain text.** Every email is sent with both an HTML body (using `html/template`) and a plain text fallback.
+- **Provider-aware wording.** Share invitations identify the agent in the subject and body ("Claude Code session" / "Codex session"). Unknown or empty `Provider` values fall back to the neutral phrase "session" and emit an `ERROR` log via `logger.Ctx(ctx)` carrying `provider`, `share_id`, `to_email` so on-call notices unrecognised values. Resolution happens once per send (in `SendShareInvitation`) so the log fires exactly once, not once per template render.
 
 ## Design Decisions
 
@@ -51,6 +52,8 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 **Mock service in production code.** `MockService` lives in the main package (not a `_test.go` file) so that other packages' tests can import and use it without circular dependencies.
 
 **Resend as the email provider.** The `Service` interface abstracts the provider, so switching from Resend to another API only requires a new implementation.
+
+**`humanProviderLabel` is local.** The provider→phrase mapping lives in this package rather than next to `db.NormalizeProvider`, since email is the only consumer today. The helper still calls `db.NormalizeProvider` internally so legacy `"Claude Code"` rows do not trigger the unknown-provider log. If a second caller needs the same mapping, lift it to `internal/db/provider.go` per CLAUDE.md's "Where shared code lives" rule.
 
 ## Testing
 

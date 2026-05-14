@@ -54,6 +54,9 @@ have no internal dependencies.
 
   ratelimit    ─→ clientip, logger
 
+  email        ─→ db, logger  (for provider normalisation + ERROR log
+                               on unknown providers in share invitations)
+
   db/access                    ┐
   db/dbadmincardinvalidations  │ (also imports analytics for
   db/dbauth                    │  AllCardTableNames validation)
@@ -65,7 +68,7 @@ have no internal dependencies.
 
   Leaf packages (zero internal deps):
     clientip, logger, validation, models, anthropic,
-    recapquota, email, storage
+    recapquota, storage
 
   Test-only:
     testutil   ─→ db, db/migrations, storage, auth, models
@@ -146,6 +149,6 @@ Client (browser / CLI)
 2. **`auth`** handles authentication concerns. It imports `db`, `db/dbauth`, `db/user`, `models`, `clientip`, `logger`, `validation`.
 3. **`analytics`** handles computation. It imports `storage`, `anthropic`, `recapquota` but NOT `api` or `auth`.
 4. **`db` sub-packages** (`access`, `dbauth`, `events`, `github`, `session`, `til`, `user`) depend only on `db` root (for the `DB` struct and shared types). They do NOT import each other.
-5. **Leaf packages** (`logger`, `clientip`, `validation`, `models`, `anthropic`, `recapquota`, `email`, `storage`) have zero internal dependencies. `ratelimit` has minimal deps (`clientip`, `logger`). None of these may import `api`, `auth`, `admin`, or `analytics`.
+5. **Leaf packages** (`logger`, `clientip`, `validation`, `models`, `anthropic`, `recapquota`, `storage`) have zero internal dependencies. `ratelimit` has minimal deps (`clientip`, `logger`). `email` has minimal deps (`db`, `logger`) — it consults `db.NormalizeProvider` plus the canonical provider constants to keep share-invitation wording in lockstep with the rest of the codebase. None of these may import `api`, `auth`, `admin`, or `analytics`.
 6. **`testutil`** is test-only infrastructure. Production code must not import it.
 7. **No circular imports.** If two packages need to share a type, put it in `db/types.go` or `models/models.go`.

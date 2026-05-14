@@ -27,7 +27,7 @@ function HomePage() {
     <div className={styles.wrapper}>
       <div className={styles.container}>
         <div className={styles.hero}>
-          <h1 className={styles.headline}>Understand your Claude Code sessions</h1>
+          <h1 className={styles.headline}>Understand your Claude Code and Codex sessions</h1>
           <p className={styles.subheadline}>Open source and self-hostable. Maintain data sovereignty.</p>
         </div>
 

@@ -312,3 +312,43 @@ export const WithSharedSessions: Story = {
     sessions: [...mockSessions.slice(0, 2), ...mockSharedSessions],
   },
 };
+
+// Codex-only sessions: confirms getProviderIcon renders the teal OpenAI
+// blossom (CodexIcon) on every row instead of the orange Claude logo.
+// Regression guard for CF-353 — pair with the providerIcon.test.tsx unit test.
+const mockCodexSessions: MockSession[] = [
+  {
+    id: 'codex-1',
+    external_id: '019e23cc-1111-2222-3333-444455556666',
+    provider: 'codex',
+    custom_title: null,
+    summary: 'Investigate Codex rollout schema for transcript parser',
+    first_user_message: null,
+    first_seen: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '0.4200',
+    git_repo: 'ConfabulousDev/confab-web',
+    git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
+    git_branch: 'main',
+  },
+  {
+    id: 'codex-2',
+    external_id: '019e23cc-aaaa-bbbb-cccc-ddddeeeeffff',
+    provider: 'codex',
+    custom_title: null,
+    summary: 'Refactor Codex transcript pane to handle away_summary attachments',
+    first_user_message: null,
+    first_seen: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '1.2300',
+    git_repo: 'ConfabulousDev/confab-web',
+    git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
+    git_branch: 'feature/codex-attachments',
+  },
+];
+
+export const CodexOnly: Story = {
+  args: {
+    sessions: mockCodexSessions,
+  },
+};

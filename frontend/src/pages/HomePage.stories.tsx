@@ -8,7 +8,7 @@ function HomePageLayout() {
     <div className={styles.wrapper}>
       <div className={styles.container}>
         <div className={styles.hero}>
-          <h1 className={styles.headline}>Understand your Claude Code sessions</h1>
+          <h1 className={styles.headline}>Understand your Claude Code and Codex sessions</h1>
         </div>
         <HeroCards />
       </div>

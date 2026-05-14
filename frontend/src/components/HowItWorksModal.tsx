@@ -30,9 +30,9 @@ function HowItWorksDiagram() {
         <rect x="12" y="12" width="55" height="22" rx="4" fill="#f1f5f9"/>
         <text x="40" y="27" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="10" fontWeight="600" fill="#64748b">LOCAL</text>
 
-        {/* Claude Code Session */}
+        {/* Coding Session (Claude Code or Codex) */}
         <rect x="15" y="48" width="270" height="38" rx="6" fill="#f5c9b8"/>
-        <text x="150" y="72" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="14" fontWeight="600" fill="#1a1a1a">Claude Code Session</text>
+        <text x="150" y="72" textAnchor="middle" fontFamily="system-ui, sans-serif" fontSize="14" fontWeight="600" fill="#1a1a1a">Coding Session</text>
 
         {/* Confab Sidecar */}
         <rect x="15" y="150" width="270" height="38" rx="6" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1"/>

@@ -29,7 +29,7 @@ const cards: HeroCard[] = [
     id: 'review',
     icon: '📖',
     title: 'Review',
-    description: 'Browse your Claude Code sessions with full conversation history and context.',
+    description: 'Browse your Claude Code and Codex sessions with full conversation history and context.',
   },
   {
     id: 'share',
@@ -65,7 +65,7 @@ const cards: HeroCard[] = [
     id: 'how-it-works',
     icon: '⚙️',
     title: 'How it works',
-    description: 'Learn how Confab syncs and organizes your Claude Code sessions on your own server.',
+    description: 'Learn how Confab syncs and organizes your Claude Code and Codex sessions on your own server.',
   },
   {
     id: 'quickstart',

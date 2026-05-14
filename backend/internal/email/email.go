@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
 // ShareInvitationParams contains the parameters for a share invitation email
@@ -19,6 +22,16 @@ type ShareInvitationParams struct {
 	SessionTitle string
 	ShareURL     string
 	ExpiresAt    *time.Time
+	// Provider is the canonical session type (db.ProviderClaudeCode /
+	// db.ProviderCodex). Empty or unknown values fall back to neutral
+	// wording in the subject/body and emit an ERROR log so the operator
+	// notices unrecognised providers.
+	Provider string
+	// ShareID is the DB share row identifier. Included in the
+	// unknown-provider error log so on-call can correlate the offending
+	// row. Optional for callers that don't yet have a share row (e.g.
+	// preview rendering in tests).
+	ShareID string
 }
 
 // Service defines the interface for email operations
@@ -144,16 +157,57 @@ type resendRequest struct {
 	Text    string   `json:"text"`
 }
 
+// humanProviderLabel returns the phrase the recipient sees identifying which
+// agent's session they were sent ("Claude Code session" / "Codex session").
+// Unknown or empty values fall back to a neutral phrase ("session") and emit
+// an ERROR log on the supplied context so on-call notices ungrounded values.
+//
+// Defensive: legacy "Claude Code" (display form, pre-CF-347) is treated as
+// the canonical claude-code value here so the email layer is robust even if
+// a caller forgot to normalise. New callers should still call
+// db.NormalizeProvider at the boundary; this helper just refuses to silently
+// emit the wrong wording or spurious unknown-provider logs for known legacy
+// values.
+//
+// Local to the email package today; if a second surface needs the same
+// mapping, lift this next to db.NormalizeProvider per CLAUDE.md's "Where
+// shared code lives" guidance.
+func humanProviderLabel(ctx context.Context, provider, shareID, toEmail string) string {
+	switch db.NormalizeProvider(provider) {
+	case db.ProviderClaudeCode:
+		return "Claude Code session"
+	case db.ProviderCodex:
+		return "Codex session"
+	default:
+		logger.Ctx(ctx).Error("email: unknown provider, using neutral wording",
+			"provider", provider,
+			"share_id", shareID,
+			"to_email", toEmail,
+		)
+		return "session"
+	}
+}
+
+// composeSubject builds the email Subject header. Extracted so tests can
+// exercise the wording without spinning up a transport.
+func composeSubject(ctx context.Context, params ShareInvitationParams) string {
+	phrase := humanProviderLabel(ctx, params.Provider, params.ShareID, params.ToEmail)
+	return fmt.Sprintf("%s shared a %s transcript with you", params.SharerName, phrase)
+}
+
 // SendShareInvitation sends an invitation email via Resend
 func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInvitationParams) error {
-	subject := fmt.Sprintf("%s shared a Claude Code session transcript with you", params.SharerName)
+	// Resolve the provider phrase once so the unknown-provider ERROR log
+	// (if any) fires exactly once per send, not once per template render.
+	phrase := humanProviderLabel(ctx, params.Provider, params.ShareID, params.ToEmail)
+	subject := fmt.Sprintf("%s shared a %s transcript with you", params.SharerName, phrase)
 
-	htmlBody, err := renderHTMLTemplate(params, s.frontendURL)
+	htmlBody, err := renderHTMLTemplateWithPhrase(params, phrase, s.frontendURL)
 	if err != nil {
 		return fmt.Errorf("failed to render HTML template: %w", err)
 	}
 
-	textBody := renderTextTemplate(params, s.frontendURL)
+	textBody := renderTextTemplateWithPhrase(params, phrase, s.frontendURL)
 
 	reqBody := resendRequest{
 		From:    fmt.Sprintf("%s <%s>", s.fromName, s.fromAddress),
@@ -193,14 +247,25 @@ func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInv
 
 var shareInvitationTmpl = template.Must(template.New("share_invitation").Parse(htmlTemplate))
 
-// renderHTMLTemplate renders the HTML email template
+// renderHTMLTemplate renders the HTML email template. Resolves the provider
+// phrase using context.Background() — callers wanting log context should use
+// renderHTMLTemplateWithPhrase directly.
 func renderHTMLTemplate(params ShareInvitationParams, frontendURL string) (string, error) {
+	phrase := humanProviderLabel(context.Background(), params.Provider, params.ShareID, params.ToEmail)
+	return renderHTMLTemplateWithPhrase(params, phrase, frontendURL)
+}
+
+// renderHTMLTemplateWithPhrase renders the HTML email template with a
+// pre-resolved provider phrase. SendShareInvitation uses this directly so
+// the unknown-provider ERROR log fires only once per send.
+func renderHTMLTemplateWithPhrase(params ShareInvitationParams, phrase, frontendURL string) (string, error) {
 	data := templateData{
 		SharerName:     params.SharerName,
 		SharerEmail:    params.SharerEmail,
 		SessionTitle:   params.SessionTitle,
 		ShareURL:       params.ShareURL,
 		UnsubscribeURL: frontendURL + "/unsubscribe",
+		ProviderPhrase: phrase,
 	}
 
 	if params.ExpiresAt != nil {
@@ -215,19 +280,29 @@ func renderHTMLTemplate(params ShareInvitationParams, frontendURL string) (strin
 	return buf.String(), nil
 }
 
-// renderTextTemplate renders the plain text email template
+// renderTextTemplate renders the plain text email template. Resolves the
+// provider phrase using context.Background() — callers wanting log context
+// should use renderTextTemplateWithPhrase directly.
 func renderTextTemplate(params ShareInvitationParams, frontendURL string) string {
+	phrase := humanProviderLabel(context.Background(), params.Provider, params.ShareID, params.ToEmail)
+	return renderTextTemplateWithPhrase(params, phrase, frontendURL)
+}
+
+// renderTextTemplateWithPhrase renders the plain text email template with a
+// pre-resolved provider phrase. SendShareInvitation uses this directly so
+// the unknown-provider ERROR log fires only once per send.
+func renderTextTemplateWithPhrase(params ShareInvitationParams, phrase, frontendURL string) string {
 	title := params.SessionTitle
 	if title == "" {
 		title = "Untitled Session"
 	}
 
-	text := fmt.Sprintf(`%s (%s) shared a Claude Code session transcript with you.
+	text := fmt.Sprintf(`%s (%s) shared a %s transcript with you.
 
 Session: %s
 
 View it here: %s
-`, params.SharerName, params.SharerEmail, title, params.ShareURL)
+`, params.SharerName, params.SharerEmail, phrase, title, params.ShareURL)
 
 	if params.ExpiresAt != nil {
 		text += fmt.Sprintf("\nThis link expires on %s.\n", params.ExpiresAt.Format("January 2, 2006"))
@@ -248,6 +323,10 @@ type templateData struct {
 	ShareURL       string
 	ExpiresAt      string
 	UnsubscribeURL string
+	// ProviderPhrase is the resolved per-provider noun phrase used in the
+	// body line "shared a {{.ProviderPhrase}} transcript with you:".
+	// Examples: "Claude Code session" / "Codex session" / "session".
+	ProviderPhrase string
 }
 
 const htmlTemplate = `<!DOCTYPE html>
@@ -289,7 +368,7 @@ const htmlTemplate = `<!DOCTYPE html>
                     <tr>
                         <td class="content-padding" style="padding: 24px;">
                             <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.5; color: #1a1a1a;">
-                                <strong>{{.SharerName}}</strong> <span style="color: #666666;">({{.SharerEmail}})</span> shared a Claude Code session transcript with you:
+                                <strong>{{.SharerName}}</strong> <span style="color: #666666;">({{.SharerEmail}})</span> shared a {{.ProviderPhrase}} transcript with you:
                             </p>
 
                             <!-- Session preview block (styled like user message) -->

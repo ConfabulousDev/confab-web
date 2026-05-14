@@ -1,11 +1,16 @@
 package email
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
 // mockService is a mock implementation for testing
@@ -368,5 +373,238 @@ func TestRenderHTMLTemplate(t *testing.T) {
 			t.Error("expected expiration date in HTML template")
 		}
 	})
+}
+
+// providerWordingCases is the locked test matrix for CF-353. Each row asserts
+// that the rendered email (subject, plaintext body, HTML body) contains the
+// brand phrase matching params.Provider and that no other brand phrase leaks
+// in. The empty / unknown rows pin the neutral fallback wording.
+//
+// Use the longer phrases "Claude Code session" / "Codex session" — not just
+// the brand names — as discriminators so substring matches can't false-match
+// a future "Claude Codex" or similar.
+var providerWordingCases = []struct {
+	name     string
+	provider string
+	wants    []string // substrings that MUST appear
+	forbids  []string // substrings that MUST NOT appear
+}{
+	{
+		name:     "claude-code canonical",
+		provider: "claude-code",
+		wants:    []string{"Claude Code session transcript"},
+		forbids:  []string{"Codex session", "shared a session transcript with you"},
+	},
+	{
+		name:     "codex canonical",
+		provider: "codex",
+		wants:    []string{"Codex session transcript"},
+		forbids:  []string{"Claude Code session", "shared a session transcript with you"},
+	},
+	{
+		name:     "empty falls back to neutral",
+		provider: "",
+		wants:    []string{"shared a session transcript with you"},
+		forbids:  []string{"Claude Code session", "Codex session"},
+	},
+	{
+		name:     "unknown future provider falls back to neutral",
+		provider: "windsurf",
+		wants:    []string{"shared a session transcript with you"},
+		forbids:  []string{"Claude Code session", "Codex session"},
+	},
+}
+
+func TestRenderTextTemplate_ProviderAware(t *testing.T) {
+	frontendURL := "https://example.com"
+	for _, tc := range providerWordingCases {
+		t.Run(tc.name, func(t *testing.T) {
+			params := ShareInvitationParams{
+				ToEmail:      "recipient@example.com",
+				SharerName:   "Alice",
+				SharerEmail:  "alice@example.com",
+				SessionTitle: "Some Session",
+				ShareURL:     "https://example.com/share/abc",
+				Provider:     tc.provider,
+				ShareID:      "share-" + tc.name,
+			}
+			body := renderTextTemplate(params, frontendURL)
+			for _, want := range tc.wants {
+				if !strings.Contains(body, want) {
+					t.Errorf("plaintext body missing required phrase %q for provider=%q\nbody:\n%s",
+						want, tc.provider, body)
+				}
+			}
+			for _, forbid := range tc.forbids {
+				if strings.Contains(body, forbid) {
+					t.Errorf("plaintext body leaked forbidden phrase %q for provider=%q\nbody:\n%s",
+						forbid, tc.provider, body)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderHTMLTemplate_ProviderAware(t *testing.T) {
+	frontendURL := "https://example.com"
+	for _, tc := range providerWordingCases {
+		t.Run(tc.name, func(t *testing.T) {
+			params := ShareInvitationParams{
+				ToEmail:      "recipient@example.com",
+				SharerName:   "Alice",
+				SharerEmail:  "alice@example.com",
+				SessionTitle: "Some Session",
+				ShareURL:     "https://example.com/share/abc",
+				Provider:     tc.provider,
+				ShareID:      "share-" + tc.name,
+			}
+			body, err := renderHTMLTemplate(params, frontendURL)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for _, want := range tc.wants {
+				if !strings.Contains(body, want) {
+					t.Errorf("HTML body missing required phrase %q for provider=%q", want, tc.provider)
+				}
+			}
+			for _, forbid := range tc.forbids {
+				if strings.Contains(body, forbid) {
+					t.Errorf("HTML body leaked forbidden phrase %q for provider=%q", forbid, tc.provider)
+				}
+			}
+		})
+	}
+}
+
+func TestComposeSubject_ProviderAware(t *testing.T) {
+	for _, tc := range providerWordingCases {
+		t.Run(tc.name, func(t *testing.T) {
+			params := ShareInvitationParams{
+				SharerName: "Alice",
+				ToEmail:    "recipient@example.com",
+				Provider:   tc.provider,
+				ShareID:    "share-" + tc.name,
+			}
+			subject := composeSubject(context.Background(), params)
+			for _, want := range tc.wants {
+				// The subject reuses the same phrase as the body for known
+				// providers ("Claude Code session transcript") and for the
+				// neutral fallback ("shared a session transcript with you").
+				if !strings.Contains(subject, want) {
+					t.Errorf("subject missing required phrase %q for provider=%q\nsubject: %s",
+						want, tc.provider, subject)
+				}
+			}
+			for _, forbid := range tc.forbids {
+				if strings.Contains(subject, forbid) {
+					t.Errorf("subject leaked forbidden phrase %q for provider=%q\nsubject: %s",
+						forbid, tc.provider, subject)
+				}
+			}
+		})
+	}
+}
+
+func TestComposeSubject_NormalizesLegacyClaudeCode(t *testing.T) {
+	// Defense in depth: even if a caller forgets to call
+	// db.NormalizeProvider, the legacy display form "Claude Code" must not
+	// produce a different brand phrase or trigger the unknown-provider log.
+	params := ShareInvitationParams{
+		SharerName: "Alice",
+		ToEmail:    "recipient@example.com",
+		Provider:   "Claude Code", // legacy display form
+		ShareID:    "share-legacy",
+	}
+	subject := composeSubject(context.Background(), params)
+	if !strings.Contains(subject, "Claude Code session transcript") {
+		t.Errorf("legacy provider %q must produce Claude Code wording, got: %s", "Claude Code", subject)
+	}
+	if strings.Contains(subject, "shared a session transcript with you") {
+		t.Errorf("legacy provider %q must not fall back to neutral wording: %s", "Claude Code", subject)
+	}
+}
+
+// captureLogs runs fn with a slog logger that writes to a buffer, then returns
+// the captured JSON log lines parsed into maps. Routes via logger.WithLogger
+// so any code path calling logger.Ctx(ctx) picks up our buffer.
+func captureLogs(t *testing.T, fn func(ctx context.Context)) []map[string]any {
+	t.Helper()
+	var buf bytes.Buffer
+	h := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	ctx := logger.WithLogger(context.Background(), slog.New(h))
+	fn(ctx)
+	var records []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("log line not JSON: %q (%v)", line, err)
+		}
+		records = append(records, rec)
+	}
+	return records
+}
+
+func TestHumanProviderLabel_UnknownProviderLogsError(t *testing.T) {
+	cases := []struct {
+		name     string
+		provider string
+	}{
+		{"empty", ""},
+		{"unknown future provider", "windsurf"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			records := captureLogs(t, func(ctx context.Context) {
+				_ = humanProviderLabel(ctx, tc.provider, "share-xyz", "recipient@example.com")
+			})
+			var matched bool
+			for _, rec := range records {
+				if rec["level"] != "ERROR" {
+					continue
+				}
+				if rec["provider"] != tc.provider {
+					continue
+				}
+				if rec["share_id"] != "share-xyz" {
+					continue
+				}
+				if rec["to_email"] != "recipient@example.com" {
+					continue
+				}
+				matched = true
+				break
+			}
+			if !matched {
+				t.Errorf("expected an ERROR log with provider=%q share_id=share-xyz to_email=recipient@example.com; got records=%v",
+					tc.provider, records)
+			}
+		})
+	}
+}
+
+func TestHumanProviderLabel_KnownProvidersDoNotLog(t *testing.T) {
+	cases := []struct {
+		name     string
+		provider string
+	}{
+		{"claude-code", "claude-code"},
+		{"codex", "codex"},
+		{"legacy Claude Code display form", "Claude Code"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			records := captureLogs(t, func(ctx context.Context) {
+				_ = humanProviderLabel(ctx, tc.provider, "share-xyz", "recipient@example.com")
+			})
+			for _, rec := range records {
+				if rec["level"] == "ERROR" {
+					t.Errorf("known provider %q should not emit ERROR log; got %v", tc.provider, rec)
+				}
+			}
+		})
+	}
 }
 

@@ -576,7 +576,7 @@ func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request)
         <p>When your account is deleted, the following data will be permanently removed:</p>
         <ul>
             <li>Your user account and profile information</li>
-            <li>All Claude Code session transcripts you've uploaded</li>
+            <li>All session transcripts you've uploaded</li>
             <li>All API keys associated with your account</li>
             <li>All session shares you've created</li>
             <li>Any web sessions (you'll be logged out everywhere)</li>
