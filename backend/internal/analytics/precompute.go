@@ -1,12 +1,16 @@
 package analytics
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -23,10 +27,12 @@ type StaleSession struct {
 	SessionID  string
 	UserID     int64
 	ExternalID string
-	// Provider is the canonical provider for the session, scanned from
-	// sessions.session_type and normalized via db.NormalizeProvider.
-	// Threaded into chunk-storage calls so chunks are read from the
-	// correct provider-scoped S3 prefix.
+	// Provider is the canonical session_type ("claude-code" or "codex"),
+	// scanned from sessions.session_type and normalized via db.NormalizeProvider.
+	// Two consumers:
+	//   1. Chunk-storage calls — chunks are read from the provider-scoped S3 prefix.
+	//   2. Dispatch switch in PrecomputeRegularCards / PrecomputeSmartRecapOnly /
+	//      BuildSearchIndexOnly — routes to the right per-provider parser.
 	Provider   string
 	TotalLines int64
 	// RegenRequestedAt is non-nil when this session was surfaced due to an
@@ -211,9 +217,10 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 			LEFT JOIN session_card_conversation cv ON sl.session_id = cv.session_id
 			LEFT JOIN session_card_agents_and_skills as_card ON sl.session_id = as_card.session_id
 			LEFT JOIN session_card_redactions rd ON sl.session_id = rd.session_id
-			-- Match both legacy ('Claude Code') and canonical ('claude-code') values.
-			-- TODO(post-Codex-rollout): collapse to single-value after backfill.
-			WHERE s.session_type IN ('claude-code', 'Claude Code')
+			-- Include all provider types eligible for analytics computation.
+			-- TODO(post-Codex-rollout): collapse 'Claude Code' legacy after backfill;
+			-- 'codex' is canonical from day one (no legacy variant).
+			WHERE s.session_type IN ('claude-code', 'Claude Code', 'codex')
 		),
 		stale_sessions AS (
 			SELECT
@@ -308,10 +315,28 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 // PrecomputeRegularCards computes only the regular analytics cards for a session.
 // Smart recap is handled separately via PrecomputeSmartRecapOnly with its own staleness thresholds.
 // Agent files are streamed one at a time to avoid O(all agents) memory usage.
+//
+// Dispatches by session.Provider:
+//   - claude-code (canonical or legacy): existing TranscriptBuilder pipeline
+//   - codex: Codex parser + ComputeFromCodexRollout adapter
+//   - anything else: loud error (the SQL filter and switch must stay in sync)
 func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleSession) error {
+	switch session.Provider {
+	case db.ProviderClaudeCode, db.ProviderClaudeCodeLegacy:
+		return p.precomputeRegularCardsClaudeCode(ctx, session)
+	case db.ProviderCodex:
+		return p.precomputeRegularCardsCodex(ctx, session)
+	default:
+		return fmt.Errorf("unsupported provider for analytics precompute: %q", session.Provider)
+	}
+}
+
+// precomputeRegularCardsClaudeCode is the Claude-Code branch of PrecomputeRegularCards.
+func (p *Precomputer) precomputeRegularCardsClaudeCode(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.regular_cards",
 		trace.WithAttributes(
 			attribute.String("session.id", session.SessionID),
+			attribute.String("session.provider", session.Provider),
 			attribute.Int64("session.user_id", session.UserID),
 			attribute.Int64("session.total_lines", session.TotalLines),
 		))
@@ -634,9 +659,9 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 				AND sq.quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
 			LEFT JOIN regen_ts rt ON TRUE
 			LEFT JOIN admin_invalidations ai ON ai.session_id = sl.session_id
-			-- Match both legacy ('Claude Code') and canonical ('claude-code') values.
-			-- TODO(post-Codex-rollout): collapse to single-value after backfill.
-			WHERE s.session_type IN ('claude-code', 'Claude Code')
+			-- Include all provider types eligible for analytics computation.
+			-- TODO(post-Codex-rollout): collapse 'Claude Code' legacy after backfill.
+			WHERE s.session_type IN ('claude-code', 'Claude Code', 'codex')
 				-- Quota check: skip for category 4 (global admin regen) and for
 				-- per-session admin invalidations (CF-343). Bypass clauses OR together.
 				AND (
@@ -764,9 +789,9 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 			AND rd.version = $7 AND rd.up_to_line = sl.total_lines
 		LEFT JOIN session_search_index si ON sl.session_id = si.session_id
 		LEFT JOIN session_card_smart_recap sr ON sl.session_id = sr.session_id
-		-- Match both legacy ('Claude Code') and canonical ('claude-code') values.
-		-- TODO(post-Codex-rollout): collapse to single-value after backfill.
-		WHERE s.session_type IN ('claude-code', 'Claude Code')
+		-- Include all provider types eligible for analytics computation.
+		-- TODO(post-Codex-rollout): collapse 'Claude Code' legacy after backfill.
+		WHERE s.session_type IN ('claude-code', 'Claude Code', 'codex')
 		  AND (
 			-- 1. Never indexed
 			si.session_id IS NULL
@@ -823,13 +848,27 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 	return sessions, nil
 }
 
-// BuildSearchIndexOnly builds the search index for a session.
+// BuildSearchIndexOnly builds the search index for a session. Dispatches
+// by session.Provider — see PrecomputeRegularCards for the dispatch contract.
+func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSession) error {
+	switch session.Provider {
+	case db.ProviderClaudeCode, db.ProviderClaudeCodeLegacy:
+		return p.buildSearchIndexClaudeCode(ctx, session)
+	case db.ProviderCodex:
+		return p.buildSearchIndexCodex(ctx, session)
+	default:
+		return fmt.Errorf("unsupported provider for search index: %q", session.Provider)
+	}
+}
+
+// buildSearchIndexClaudeCode is the Claude-Code branch of BuildSearchIndexOnly.
 // Downloads transcript, extracts content, queries recap timestamp, and upserts the index.
 // Agent files are streamed one at a time using UserMessagesBuilder.
-func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSession) error {
+func (p *Precomputer) buildSearchIndexClaudeCode(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.build_search_index",
 		trace.WithAttributes(
 			attribute.String("session.id", session.SessionID),
+			attribute.String("session.provider", session.Provider),
 			attribute.Int64("session.total_lines", session.TotalLines),
 		))
 	defer span.End()
@@ -862,22 +901,13 @@ func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSes
 		return err
 	}
 
-	// Get recap computed_at for freshness tracking
-	var recapIndexedAt *time.Time
-	var recapComputedAt sql.NullTime
-	recapQuery := `SELECT computed_at FROM session_card_smart_recap WHERE session_id = $1`
-	err = p.db.QueryRowContext(ctx, recapQuery, session.SessionID).Scan(&recapComputedAt)
-	if err != nil && err != sql.ErrNoRows {
+	recapIndexedAt, err := p.loadRecapIndexedAt(ctx, session.SessionID)
+	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if recapComputedAt.Valid {
-		t := recapComputedAt.Time.UTC()
-		recapIndexedAt = &t
-	}
 
-	// Upsert search index
 	record := &SearchIndexRecord{
 		SessionID:       session.SessionID,
 		Version:         SearchIndexVersion,
@@ -896,13 +926,46 @@ func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSes
 	return nil
 }
 
+// loadRecapIndexedAt fetches session_card_smart_recap.computed_at (UTC) for the
+// given session, returning nil if the row does not exist. Used by both Claude
+// and Codex search-index builders to populate SearchIndexRecord.RecapIndexedAt.
+func (p *Precomputer) loadRecapIndexedAt(ctx context.Context, sessionID string) (*time.Time, error) {
+	var computedAt sql.NullTime
+	err := p.db.QueryRowContext(ctx,
+		`SELECT computed_at FROM session_card_smart_recap WHERE session_id = $1`,
+		sessionID,
+	).Scan(&computedAt)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if !computedAt.Valid {
+		return nil, nil
+	}
+	t := computedAt.Time.UTC()
+	return &t, nil
+}
+
 // PrecomputeSmartRecapOnly computes only the smart recap for a session.
+// Dispatches by session.Provider — see PrecomputeRegularCards for the contract.
+func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session StaleSession) error {
+	switch session.Provider {
+	case db.ProviderClaudeCode, db.ProviderClaudeCodeLegacy:
+		return p.precomputeSmartRecapClaudeCode(ctx, session)
+	case db.ProviderCodex:
+		return p.precomputeSmartRecapCodex(ctx, session)
+	default:
+		return fmt.Errorf("unsupported provider for smart recap: %q", session.Provider)
+	}
+}
+
+// precomputeSmartRecapClaudeCode is the Claude-Code branch of PrecomputeSmartRecapOnly.
 // Use this when regular cards are already up-to-date but smart recap is stale.
 // Downloads main transcript, streams agents through TranscriptBuilder, then generates smart recap.
-func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session StaleSession) error {
+func (p *Precomputer) precomputeSmartRecapClaudeCode(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.smart_recap_only",
 		trace.WithAttributes(
 			attribute.String("session.id", session.SessionID),
+			attribute.String("session.provider", session.Provider),
 			attribute.Int64("session.user_id", session.UserID),
 			attribute.Int64("session.total_lines", session.TotalLines),
 		))
@@ -961,6 +1024,186 @@ func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session Stal
 		return err
 	}
 
+	span.SetAttributes(attribute.Bool("session.computed", true))
+	return nil
+}
+
+// =============================================================================
+// Codex provider branches (CF-350)
+// =============================================================================
+//
+// Each *Codex variant mirrors the Claude-Code counterpart but routes the raw
+// transcript bytes through codex.ParseRollout + the analytics adapter
+// (ComputeFromCodexRollout) and the Codex-specific search/recap helpers.
+// Codex has no agent files — the sync_files JOIN returns just the transcript.
+
+// loadCodexRollout downloads and parses the Codex transcript for a session.
+// Returns (nil, nil) when the session has no transcript row (caller should
+// treat as empty). Validation errors from the parser are logged but do not
+// fail the call.
+func (p *Precomputer) loadCodexRollout(ctx context.Context, session StaleSession) (*codex.ParsedRollout, error) {
+	var fileName string
+	err := p.db.QueryRowContext(ctx,
+		`SELECT file_name FROM sync_files WHERE session_id = $1 AND file_type = 'transcript' LIMIT 1`,
+		session.SessionID,
+	).Scan(&fileName)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.Provider, session.ExternalID, fileName)
+	if err != nil || raw == nil {
+		return nil, err
+	}
+
+	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		return nil, fmt.Errorf("parse codex rollout: %w", err)
+	}
+	if len(rollout.ValidationErrors) > 0 {
+		slog.WarnContext(ctx, "codex rollout parse warnings",
+			"session_id", session.SessionID,
+			"validation_errors", len(rollout.ValidationErrors),
+		)
+	}
+	return rollout, nil
+}
+
+// codexSpanAttrs is the standard attribute set used for Codex precompute spans.
+func codexSpanAttrs(session StaleSession) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("session.id", session.SessionID),
+		attribute.String("session.provider", session.Provider),
+		attribute.Int64("session.user_id", session.UserID),
+		attribute.Int64("session.total_lines", session.TotalLines),
+	}
+}
+
+// precomputeRegularCardsCodex is the Codex branch of PrecomputeRegularCards.
+func (p *Precomputer) precomputeRegularCardsCodex(ctx context.Context, session StaleSession) error {
+	ctx, span := tracer.Start(ctx, "precompute.regular_cards.codex",
+		trace.WithAttributes(codexSpanAttrs(session)...))
+	defer span.End()
+
+	rollout, err := p.loadCodexRollout(ctx, session)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if rollout == nil {
+		span.SetAttributes(attribute.Bool("session.empty", true))
+		return nil
+	}
+
+	cards := ComputeFromCodexRollout(rollout).ToCards(session.SessionID, session.TotalLines)
+	if err := p.analyticsStore.UpsertCards(ctx, cards); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	span.SetAttributes(attribute.Bool("session.computed", true))
+	return nil
+}
+
+// buildSearchIndexCodex is the Codex branch of BuildSearchIndexOnly.
+func (p *Precomputer) buildSearchIndexCodex(ctx context.Context, session StaleSession) error {
+	ctx, span := tracer.Start(ctx, "precompute.build_search_index.codex",
+		trace.WithAttributes(codexSpanAttrs(session)...))
+	defer span.End()
+
+	rollout, err := p.loadCodexRollout(ctx, session)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if rollout == nil {
+		span.SetAttributes(attribute.Bool("session.empty", true))
+		return nil
+	}
+
+	content, err := ExtractSearchContentWithUserMessages(ctx, p.db, session.SessionID, ExtractCodexUserMessagesText(rollout))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	recapIndexedAt, err := p.loadRecapIndexedAt(ctx, session.SessionID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	record := &SearchIndexRecord{
+		SessionID:       session.SessionID,
+		Version:         SearchIndexVersion,
+		IndexedUpToLine: session.TotalLines,
+		RecapIndexedAt:  recapIndexedAt,
+		MetadataHash:    content.MetadataHash,
+	}
+	if err := p.analyticsStore.UpsertSearchIndex(ctx, record, content); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	span.SetAttributes(attribute.Bool("session.indexed", true))
+	return nil
+}
+
+// precomputeSmartRecapCodex is the Codex branch of PrecomputeSmartRecapOnly.
+func (p *Precomputer) precomputeSmartRecapCodex(ctx context.Context, session StaleSession) error {
+	ctx, span := tracer.Start(ctx, "precompute.smart_recap_only.codex",
+		trace.WithAttributes(codexSpanAttrs(session)...))
+	defer span.End()
+
+	if !p.config.SmartRecapEnabled {
+		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
+		return nil
+	}
+
+	rollout, err := p.loadCodexRollout(ctx, session)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if rollout == nil {
+		span.SetAttributes(attribute.Bool("session.empty", true))
+		return nil
+	}
+
+	// Reuse already-computed regular cards as stats for the LLM prompt.
+	cards, err := p.analyticsStore.GetCards(ctx, session.SessionID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	var cardStats map[string]interface{}
+	if cards != nil {
+		cardStats = cards.ToResponse().Cards
+	}
+
+	transcript, idMap := PrepareCodexTranscript(rollout)
+	if err := p.precomputeSmartRecap(ctx, session, GenerateInput{
+		SessionID:       session.SessionID,
+		UserID:          session.UserID,
+		LineCount:       session.TotalLines,
+		Transcript:      transcript,
+		IDMap:           idMap,
+		CardStats:       cardStats,
+		ClearMessageIDs: true, // Codex messages have no stable id for frontend deep-linking
+	}); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
 	span.SetAttributes(attribute.Bool("session.computed", true))
 	return nil
 }
