@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import type { CodexToolCallItem } from '@/types/codexRenderItem';
-import { isRecord } from '@/utils/utils';
+import { cx, isRecord } from '@/utils/utils';
 import {
   formatCodexTimestamp,
   leafFileName,
@@ -18,13 +18,22 @@ import styles from './CodexToolCallBlock.module.css';
 
 export interface CodexToolCallBlockProps {
   item: CodexToolCallItem;
+  /** Hover/click selection — adds the .selected ring. */
+  isSelected?: boolean;
+  /**
+   * Speaker continuity flag. tool_call items never break user/assistant
+   * continuity, so this prop is accepted for shape uniformity but does
+   * not affect rendering.
+   */
+  isNewSpeaker?: boolean;
 }
 
 const EXEC_OUTPUT_SOFT_CAP = 100;
 
-export default function CodexToolCallBlock({ item }: CodexToolCallBlockProps) {
+export default function CodexToolCallBlock({ item, isSelected }: CodexToolCallBlockProps) {
+  const className = cx(styles.toolCall, isSelected && styles.selected);
   return (
-    <div className={styles.toolCall} data-kind="tool_call" data-tool={item.toolName}>
+    <div className={className} data-kind="tool_call" data-tool={item.toolName}>
       <div className={styles.header}>
         <span className={styles.toolName}>{toolNameLabel(item)}</span>
         {renderStatusBadge(item)}
@@ -49,10 +58,9 @@ function toolNameLabel(item: CodexToolCallItem): string {
 
 function renderStatusBadge(item: CodexToolCallItem) {
   if (item.toolName === 'exec_command' && item.execMetadata) {
-    const cls =
-      item.execMetadata.exitCode === 0 ? styles.exitOk : styles.exitFail;
+    const cls = item.execMetadata.exitCode === 0 ? styles.exitOk : styles.exitFail;
     return (
-      <span className={`${styles.badge} ${cls}`}>
+      <span className={cx(styles.badge, cls)}>
         exit {item.execMetadata.exitCode}
         {item.execMetadata.wallTimeMs > 0
           ? ` · ${item.execMetadata.wallTimeMs}ms`
@@ -63,7 +71,7 @@ function renderStatusBadge(item: CodexToolCallItem) {
   // For pending status we let the body's "pending — no output yet" line carry
   // the indicator; an extra badge would be redundant and duplicate text.
   if (item.status === 'failed') {
-    return <span className={`${styles.badge} ${styles.exitFail}`}>failed</span>;
+    return <span className={cx(styles.badge, styles.exitFail)}>failed</span>;
   }
   return null;
 }

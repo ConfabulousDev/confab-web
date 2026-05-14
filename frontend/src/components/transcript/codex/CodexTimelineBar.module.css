@@ -1,0 +1,63 @@
+/* Codex timeline bar — vertical turn-based segments. Mirrors the Claude
+   TimelineBar chrome; Codex segments are uniformly accented (one color
+   per turn) since the data model has no user/assistant segment split. */
+
+.timelineBar {
+  position: relative;
+  width: 22px;
+  height: 100%;
+  flex-shrink: 0;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  overflow: visible;
+}
+
+.segmentsContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.segment {
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), filter var(--transition-fast);
+  min-height: 2px;
+  background: var(--color-timeline-assistant);
+}
+
+.segment:hover {
+  filter: brightness(1.1);
+}
+
+/* Position indicator — matches TimelineBar. */
+.positionIndicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-text-primary);
+  border-radius: 1.5px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  transition: top 0.1s ease-out;
+}
+
+.tooltip {
+  position: fixed;
+  transform: translate(-100%, -50%);
+  margin-left: -8px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: var(--shadow-lg);
+  white-space: nowrap;
+  z-index: 9999;
+  pointer-events: none;
+  font-size: 12px;
+  color: var(--color-text-primary);
+}

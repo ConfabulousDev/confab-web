@@ -3,18 +3,34 @@
 // to the final answer in the same turn.
 
 import type { CodexAssistantItem } from '@/types/codexRenderItem';
+import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
 import styles from './CodexMessage.module.css';
 
 export interface CodexAssistantMessageProps {
   item: CodexAssistantItem;
+  /** Hover/click selection — adds the .selected ring. */
+  isSelected?: boolean;
+  /** Speaker kind differs from the previous speaker (tool_call doesn't count). */
+  isNewSpeaker?: boolean;
 }
 
-export default function CodexAssistantMessage({ item }: CodexAssistantMessageProps) {
+export default function CodexAssistantMessage({
+  item,
+  isSelected,
+  isNewSpeaker,
+}: CodexAssistantMessageProps) {
   const phaseClass = item.phase === 'commentary' ? styles.commentary : styles.final;
+  const className = cx(
+    styles.message,
+    styles.assistant,
+    phaseClass,
+    isSelected && styles.selected,
+    isNewSpeaker && styles.newSpeaker,
+  );
   return (
     <div
-      className={`${styles.message} ${styles.assistant} ${phaseClass}`}
+      className={className}
       data-kind="assistant"
       data-phase={item.phase}
     >

@@ -1,13 +1,37 @@
-/* Codex virtualized timeline container. */
+/* Codex virtualized timeline container + navigation chrome. */
+
+.container {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
 
 .scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--spacing-md);
+  position: relative;
+  overscroll-behavior: contain;
 }
 
 .virtualizer {
   position: relative;
+  width: 100%;
+}
+
+/* Absolute-positioned slot used by both rows and time separators inside the
+   virtualizer. `top` and `transform: translateY(...)` come from the
+   virtualizer's per-item layout values. */
+.slot {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
 }
 
@@ -20,4 +44,27 @@
   text-align: center;
   color: var(--color-text-muted);
   font-size: var(--font-xs);
+}
+
+/* Time separator (>5min idle gap) — mirrors MessageTimeline. */
+.timeSeparator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) 0;
+}
+
+.separatorLine {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.separatorText {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
 }

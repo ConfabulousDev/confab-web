@@ -117,4 +117,14 @@ describe('CodexToolCallBlock', () => {
     );
     expect(screen.getByText(/pending|no output/i)).toBeInTheDocument();
   });
+
+  it('applies the selected class when isSelected is true', () => {
+    const { container } = render(<CodexToolCallBlock item={execCommandItem()} isSelected />);
+    expect(container.firstChild).toHaveClass(/selected/);
+  });
+
+  it('does not apply the selected class by default', () => {
+    const { container } = render(<CodexToolCallBlock item={execCommandItem()} />);
+    expect(container.firstChild).not.toHaveClass(/selected/);
+  });
 });

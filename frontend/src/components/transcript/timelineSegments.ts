@@ -136,8 +136,19 @@ const MESSAGE_WEIGHT = 0.4;
 const MS_PER_MESSAGE = 10000;
 const MIN_SEGMENT_PERCENT = 2;
 
-interface SegmentLayout {
-  segments: TimelineSegment[];
+/**
+ * Minimum shape any segment must satisfy to feed `useBlendedSegmentLayout`.
+ * `TimelineSegment` (Claude) and `CodexTimelineSegment` both extend this.
+ */
+export interface BlendedSegment {
+  durationMs: number;
+  startIndex: number;
+  endIndex: number;
+  messageCount: number;
+}
+
+export interface BlendedSegmentLayout<S extends BlendedSegment> {
+  segments: S[];
   /** Visual height percentage for each segment (normalized to sum to 100) */
   heightPercents: number[];
   /** Total blended size across all segments (0 when empty) */
@@ -145,16 +156,21 @@ interface SegmentLayout {
   /** Position indicator percentage for a given selectedIndex */
   indicatorPosition: number;
   /** Find the segment containing a message index */
-  findSegmentForIndex: (messageIndex: number) => { segment: TimelineSegment; segmentIndex: number } | null;
+  findSegmentForIndex: (messageIndex: number) => { segment: S; segmentIndex: number } | null;
 }
 
 /**
- * Shared hook that computes segment layout for both TimelineBar and CostBar.
- * Produces identical sizing, display percentages, and position indicator logic.
+ * Generic blend math shared by Claude (`useSegmentLayout`) and Codex
+ * (`useCodexSegmentLayout`). 60% time / 40% count blend, min 2% segment
+ * height, smooth position indicator inside the active segment.
+ *
+ * The caller is responsible for computing the segment array — this hook
+ * only handles sizing + lookup.
  */
-export function useSegmentLayout(messages: TranscriptLine[], selectedIndex: number): SegmentLayout {
-  const segments = useMemo(() => computeSegments(messages), [messages]);
-
+export function useBlendedSegmentLayout<S extends BlendedSegment>(
+  segments: S[],
+  selectedIndex: number,
+): BlendedSegmentLayout<S> {
   const segmentSizes = useMemo(
     () => segments.map((seg) => {
       const timeComponent = seg.durationMs;
@@ -186,7 +202,7 @@ export function useSegmentLayout(messages: TranscriptLine[], selectedIndex: numb
   }, [segments, displayPercents, totalDisplayPercent]);
 
   const findSegmentForIndex = useCallback(
-    (messageIndex: number): { segment: TimelineSegment; segmentIndex: number } | null => {
+    (messageIndex: number): { segment: S; segmentIndex: number } | null => {
       for (let i = 0; i < segments.length; i++) {
         const segment = segments[i];
         if (!segment) continue;
@@ -235,4 +251,20 @@ export function useSegmentLayout(messages: TranscriptLine[], selectedIndex: numb
   }, [selectedIndex, segments, heightPercents, totalDisplayPercent, findSegmentForIndex]);
 
   return { segments, heightPercents, totalSize, indicatorPosition, findSegmentForIndex };
+}
+
+/**
+ * Shared hook that computes segment layout for both TimelineBar and CostBar.
+ * Produces identical sizing, display percentages, and position indicator logic.
+ *
+ * Internally delegates to `useBlendedSegmentLayout` (also used by the Codex
+ * timeline bar) for the size/position math; this wrapper handles Claude's
+ * segment derivation from `TranscriptLine[]`.
+ */
+export function useSegmentLayout(
+  messages: TranscriptLine[],
+  selectedIndex: number,
+): BlendedSegmentLayout<TimelineSegment> {
+  const segments = useMemo(() => computeSegments(messages), [messages]);
+  return useBlendedSegmentLayout(segments, selectedIndex);
 }

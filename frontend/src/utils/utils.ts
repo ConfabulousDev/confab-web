@@ -21,6 +21,16 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Compose a className string from an arbitrary list of fragments, dropping
+ * any falsy entries (`null`, `undefined`, `false`, `''`). Lets components
+ * write `cx(styles.x, isFoo && styles.foo, isBar ? styles.bar : null)`
+ * instead of the `[…].filter(Boolean).join(' ')` boilerplate.
+ */
+export function cx(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+/**
  * Format bytes into human-readable size
  */
 export function formatBytes(bytes: number): string {

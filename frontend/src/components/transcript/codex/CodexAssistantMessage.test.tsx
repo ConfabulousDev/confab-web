@@ -40,4 +40,23 @@ describe('CodexAssistantMessage', () => {
     // distinguished phases.
     expect(commentaryEl.innerHTML).not.toBe(finalEl.innerHTML);
   });
+
+  it('applies the selected class when isSelected is true', () => {
+    const { container } = render(
+      <CodexAssistantMessage item={assistant()} isSelected />,
+    );
+    expect(container.firstChild).toHaveClass(/selected/);
+  });
+
+  it('does not apply the selected class by default', () => {
+    const { container } = render(<CodexAssistantMessage item={assistant()} />);
+    expect(container.firstChild).not.toHaveClass(/selected/);
+  });
+
+  it('applies the newSpeaker class when isNewSpeaker is true', () => {
+    const { container } = render(
+      <CodexAssistantMessage item={assistant()} isNewSpeaker />,
+    );
+    expect(container.firstChild).toHaveClass(/newSpeaker/);
+  });
 });

@@ -15,9 +15,10 @@ consume a separate render-item model produced by `services/codexTranscriptServic
 | `BashOutput.tsx` | Terminal-style bash command output with error styling |
 | `CostBar.tsx` | Vertical cost heatmap bar alongside the transcript (intensity = cost per API call) |
 | `TimelineBar.tsx` | Vertical timeline bar showing user/assistant turn segments with duration tooltips |
-| `timelineSegments.ts` | Shared segment computation and layout hook (`useSegmentLayout`) for both bars |
+| `timelineSegments.ts` | Claude segment compute (`useSegmentLayout`) + generic `useBlendedSegmentLayout` hook (size + position math, also consumed by Codex's bar) |
+| `timelineUtils.ts` | Provider-neutral helpers shared by Claude & Codex timelines: `formatTimeSeparator` (>5min idle-gap label) and `retryOnAnimationFrame` (virtualizer scroll positioning) |
 | `attachments/` | Renderers for `attachment.*` subtypes (hook output, edited files, queued commands, tool deltas) and `system.away_summary`. See `attachments/README.md` |
-| `codex/` | Codex transcript renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback, virtualized timeline). See "Codex transcript renderers" below |
+| `codex/` | Codex transcript renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback, virtualized timeline, turn-based timeline bar). See "Codex transcript renderers" below |
 
 ## Key Components
 
@@ -53,49 +54,66 @@ layer.
 
 | File | Role |
 |------|------|
-| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Dispatches each item to its renderer by `kind` |
-| `CodexUserMessage.tsx` | Plain user prompt in a chat row, with timestamp |
-| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message |
-| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (command + output + exit-code badge, 100-line soft cap), `ApplyPatchBody` (file-list summary + raw expand), `WebSearchBody` (query chips), or a generic `details`-based fallback |
-| `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries |
-| `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines |
-| `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages |
-| `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema |
+| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Owns selection state (`firstVisibleIndex`, `selectedIndex`), scroll buttons, the timeline bar, and time-separator injection. Dispatches each item to its renderer by `kind`, threading `isSelected` + `isNewSpeaker` props |
+| `CodexTimelineBar.tsx` | Vertical, turn-based navigation rail. One segment per `CodexTurnSeparatorItem` (plus a trailing in-flight segment); click-to-seek, hover tooltip (`Turn N — duration · TTFT, N items`), and a position indicator driven by the parent's `selectedIndex`. Consumes `useCodexSegmentLayout` |
+| `codexTimelineSegments.ts` | `CodexTimelineSegment`, `computeCodexSegments`, `useCodexSegmentLayout`. Slices the render-item stream on each `CodexTurnSeparatorItem`; delegates size + indicator math to the shared `useBlendedSegmentLayout` |
+| `codexVirtualItems.ts` | Pure `buildVirtualItems(items)` that injects `>5min` time separators and tags each item with `isNewSpeaker`. The speaker rule is Codex-specific: `tool_call` / `reasoning_hidden` / `turn_separator` / `compacted` / `unknown` items do NOT break user/assistant continuity, so `user → tool_call → user` is the same speaker |
+| `CodexUserMessage.tsx` | Plain user prompt in a chat row, with timestamp. Accepts `isSelected` + `isNewSpeaker` for selection ring and speaker-change spacing |
+| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Accepts `isSelected` + `isNewSpeaker` |
+| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (command + output + exit-code badge, 100-line soft cap), `ApplyPatchBody` (file-list summary + raw expand), `WebSearchBody` (query chips), or a generic `details`-based fallback. Accepts `isSelected` (`isNewSpeaker` is no-op for tool_call per the speaker rule) |
+| `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries. Accepts `isSelected` |
+| `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines. Accepts `isSelected` |
+| `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages. Accepts `isSelected` |
+| `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema. Accepts `isSelected` |
 | `codexFormat.ts` | Shared formatters: `formatCodexTimestamp`, `formatDurationMs`, `leafFileName`, `stringifyForDisplay` |
-| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages |
-| `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips) |
-| `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, unknown fallback |
-| `CodexMessageTimeline.module.css` | Scroll container + virtualizer placement styles |
+| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint) and `.newSpeaker` (extra top margin) |
+| `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips). Defines `.selected` |
+| `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, unknown fallback. Defines `.selected` |
+| `CodexMessageTimeline.module.css` | Container (flex with bar on the right), virtualizer slot positioning, scroll chrome, time-separator divider |
+| `CodexTimelineBar.module.css` | Vertical-bar chrome: segments, position indicator, hover tooltip |
 
-The Codex renderers intentionally do **not** participate in cost mode, filter
-chips, or transcript search. CF-349 ships v1 as read-only display; analytics
-(CF-350) and search will arrive in follow-ups.
+CF-357 adds the same navigation chrome the Claude view has: turn-based
+timeline bar, scroll-to-top/bottom buttons, row hover → selection state, and
+`>5min` idle-gap time separators. Cost mode, transcript search, deep
+linking, and filter chips are still deferred to CF-362, CF-359, CF-360, and
+CF-358 respectively.
 
-### TimelineBar / CostBar
+### TimelineBar / CostBar / CodexTimelineBar
 
 Vertical navigation bars displayed alongside the transcript:
-- **TimelineBar** shows user (blue) and assistant (purple) turn segments sized by a blended time+message-count metric. Clicking a segment scrolls to those messages.
-- **CostBar** shows cost density as green intensity (per-API-call cost, not total segment cost). Only visible in cost mode.
-- Both share layout computation via `useSegmentLayout` to ensure identical segment sizing and position indicator placement.
+- **TimelineBar** (Claude) shows user (blue) and assistant (warm orange) turn segments derived from user-prompt boundaries, sized by a blended time+message-count metric. Clicking a segment scrolls to those messages.
+- **CodexTimelineBar** (Codex) shows one segment per `CodexTurnSeparatorItem` in a single accent color (Codex has no user/assistant alternation at the segment level — a turn is one block). Tooltip text differs accordingly (`Turn N — duration · TTFT, N items`). Same sizing math, same position indicator.
+- **CostBar** (Claude only) shows cost density as green intensity (per-API-call cost, not total segment cost). Only visible in cost mode.
+- All three share layout computation via `useBlendedSegmentLayout` (in `timelineSegments.ts`) to guarantee identical sizing and position-indicator placement. Each provider supplies its own segment-derivation function (`useSegmentLayout` / `useCodexSegmentLayout`).
 
 ## Key Types
 
 ```typescript
-// From timelineSegments.ts
-interface TimelineSegment {
-  speaker: 'user' | 'assistant';
+// From timelineSegments.ts — generic shape consumed by useBlendedSegmentLayout
+interface BlendedSegment {
   durationMs: number;
-  startIndex: number;   // Index into messages array
+  startIndex: number;
   endIndex: number;
   messageCount: number;
 }
 
-interface SegmentLayout {
-  segments: TimelineSegment[];
+// Claude-specific (extends BlendedSegment)
+interface TimelineSegment extends BlendedSegment {
+  speaker: 'user' | 'assistant';
+}
+
+// Codex-specific (extends BlendedSegment) — from codex/codexTimelineSegments.ts
+interface CodexTimelineSegment extends BlendedSegment {
+  turnIndex: number;
+  timeToFirstTokenMs?: number;
+}
+
+interface BlendedSegmentLayout<S extends BlendedSegment> {
+  segments: S[];
   heightPercents: number[];     // Visual height per segment
   totalSize: number;
   indicatorPosition: number;   // Current position as percentage
-  findSegmentForIndex: (messageIndex: number) => { segment; segmentIndex } | null;
+  findSegmentForIndex: (messageIndex: number) => { segment: S; segmentIndex: number } | null;
 }
 ```
 

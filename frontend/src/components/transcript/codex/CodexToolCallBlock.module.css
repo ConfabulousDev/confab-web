@@ -9,6 +9,13 @@
   border-left: 3px solid var(--color-info);
 }
 
+/* Selection ring (mirrors CodexMessage.module.css). The newSpeaker cue
+   never fires for tool_call (see isNewSpeaker rule), so no rule here. */
+.selected {
+  box-shadow: inset 0 0 0 2px var(--color-border-dark);
+  filter: brightness(1.02);
+}
+
 .header {
   display: flex;
   align-items: center;

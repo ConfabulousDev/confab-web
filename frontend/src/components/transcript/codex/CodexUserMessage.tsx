@@ -1,16 +1,27 @@
 // Renders a Codex user prompt. Plain text in a chat-style row.
 
 import type { CodexUserItem } from '@/types/codexRenderItem';
+import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
 import styles from './CodexMessage.module.css';
 
 export interface CodexUserMessageProps {
   item: CodexUserItem;
+  /** Hover/click selection — adds the .selected ring. */
+  isSelected?: boolean;
+  /** Speaker kind differs from the previous speaker (tool_call doesn't count). */
+  isNewSpeaker?: boolean;
 }
 
-export default function CodexUserMessage({ item }: CodexUserMessageProps) {
+export default function CodexUserMessage({ item, isSelected, isNewSpeaker }: CodexUserMessageProps) {
+  const className = cx(
+    styles.message,
+    styles.user,
+    isSelected && styles.selected,
+    isNewSpeaker && styles.newSpeaker,
+  );
   return (
-    <div className={`${styles.message} ${styles.user}`} data-kind="user">
+    <div className={className} data-kind="user">
       <div className={styles.header}>
         <span className={styles.role}>User</span>
         <span className={styles.timestamp}>{formatCodexTimestamp(item.timestamp)}</span>

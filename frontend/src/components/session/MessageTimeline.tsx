@@ -11,6 +11,7 @@ import { getRoleLabel } from './messageCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
+import { formatTimeSeparator, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import styles from './MessageTimeline.module.css';
 
 // Right offset for ScrollNavButtons when CostBar is visible.
@@ -48,30 +49,6 @@ function shouldShowTimeSeparator(current: TranscriptLine, previous: TranscriptLi
 }
 
 /**
- * Format timestamp for time separator
- */
-function formatTimeSeparator(timestamp: string): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-  if (messageDate.getTime() === today.getTime()) {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-/**
  * Build a map of tool_use_id -> tool name for matching tool results
  */
 function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
@@ -88,25 +65,6 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
   }
 
   return map;
-}
-
-/**
- * Repeatedly call `action` across animation frames until `shouldStop` returns
- * true or `maxAttempts` is reached. Useful for virtual scroll positioning where
- * item sizes are estimated until measured.
- */
-function retryOnAnimationFrame(
-  action: () => void,
-  shouldStop: () => boolean,
-  maxAttempts = 5,
-): void {
-  function attempt(n: number) {
-    action();
-    if (n < maxAttempts && !shouldStop()) {
-      requestAnimationFrame(() => attempt(n + 1));
-    }
-  }
-  attempt(0);
 }
 
 function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, tilsByMessageUuid }: MessageTimelineProps) {

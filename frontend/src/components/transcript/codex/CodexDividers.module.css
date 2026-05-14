@@ -1,6 +1,14 @@
 /* Codex divider/sub-row styles — turn separators, reasoning placeholders,
    compaction markers, and unknown-item fallbacks. */
 
+/* Selection ring shared by every divider/sub-row renderer in this stylesheet.
+   `.newSpeaker` never fires for these kinds (user/assistant only), so it
+   has no rule here. */
+.selected {
+  box-shadow: inset 0 0 0 2px var(--color-border-dark);
+  background: var(--color-bg-primary);
+}
+
 .turnSeparator {
   display: flex;
   align-items: center;

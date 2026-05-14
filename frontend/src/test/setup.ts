@@ -23,6 +23,16 @@ import '@testing-library/jest-dom/vitest';
 // - Complex components → add Storybook stories + optional unit tests
 // =============================================================================
 
+// jsdom doesn't implement ResizeObserver, but components like ScrollNavButtons
+// instantiate one on mount. Provide a no-op stub so renders complete.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe(): void { /* no-op */ }
+    unobserve(): void { /* no-op */ }
+    disconnect(): void { /* no-op */ }
+  };
+}
+
 // Cleanup after each test case (e.g., clearing jsdom)
 afterEach(() => {
   cleanup();

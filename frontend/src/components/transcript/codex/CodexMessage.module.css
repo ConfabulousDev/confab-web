@@ -13,6 +13,21 @@
   border-color: var(--color-border);
 }
 
+/* Selection ring for hover / click selection. Applied by the row wrapper
+   in CodexMessageTimeline. Subtle inset ring + faint tint, visible in
+   both themes. */
+.selected {
+  box-shadow: inset 0 0 0 2px var(--color-border-dark);
+  background: var(--color-bg-secondary);
+}
+
+/* New-speaker spacing cue: extra top margin when the previous speaker
+   kind (user|assistant) differs from this one. Codex-specific because
+   tool_call is a separate item kind that does NOT break continuity. */
+.newSpeaker {
+  margin-top: var(--spacing-md);
+}
+
 .user {
   background: rgba(34, 134, 58, 0.04);
   border-left: 3px solid var(--color-success);

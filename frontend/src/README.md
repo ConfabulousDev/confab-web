@@ -12,7 +12,7 @@ with Storybook.
 | `components/session/` | Session detail view: provider-aware shell that branches to `ClaudeTranscriptPane` / `CodexTranscriptPane` and `SessionSummaryPanel` / `CodexSummaryEmpty` on `session.provider` | Changing session detail layout, adding session UI features |
 | `components/session/cards/` | Analytics card components + registry (TokensCard, ToolsCard, SmartRecapCard, etc.) | Adding new analytics cards, changing card layout |
 | `components/transcript/` | Claude transcript rendering: content blocks, code blocks, timeline/cost bars, and `attachments/` renderers for `attachment.*` side-channel rows + `away_summary` | Changing how Claude transcript messages are displayed |
-| `components/transcript/codex/` | Codex transcript rendering: virtualized timeline plus per-item renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback) | Changing how Codex transcript items are displayed |
+| `components/transcript/codex/` | Codex transcript rendering: virtualized timeline + turn-based navigation rail (`CodexTimelineBar`) + per-item renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback) with `isSelected` / `isNewSpeaker` hover/selection state | Changing how Codex transcript items are displayed |
 | `config/` | App configuration constants (polling intervals) | Changing polling behavior, adding feature flags |
 | `contexts/` | React contexts: ThemeContext, AppConfigContext, KeyboardShortcutContext | Adding app-wide state, changing context providers |
 | `hooks/` | Custom React hooks: data fetching, polling, auth, UI state | Adding data-fetching logic, changing state management |

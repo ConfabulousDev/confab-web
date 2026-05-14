@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import CodexMessageTimeline from './CodexMessageTimeline';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
@@ -105,7 +106,51 @@ const sample: CodexRenderItem[] = [
   },
 ];
 
-function Frame({ children }: { children: React.ReactNode }) {
+// Sample that includes a >5min idle gap between two items so the time
+// separator divider is exercised.
+const sampleWithGap: CodexRenderItem[] = [
+  {
+    kind: 'user',
+    timestamp: '2026-05-13T18:00:00Z',
+    text: 'check the deploy status',
+  },
+  {
+    kind: 'assistant',
+    timestamp: '2026-05-13T18:00:02Z',
+    text: 'Deploy is green. All checks pass.',
+    phase: 'final',
+    model: 'gpt-5',
+  },
+  {
+    kind: 'turn_separator',
+    timestamp: '2026-05-13T18:00:02Z',
+    turnIndex: 1,
+    durationMs: 2000,
+    timeToFirstTokenMs: 500,
+  },
+  // 12-minute idle gap → separator divider lands here.
+  {
+    kind: 'user',
+    timestamp: '2026-05-13T18:12:00Z',
+    text: 'great, now bump the version',
+  },
+  {
+    kind: 'assistant',
+    timestamp: '2026-05-13T18:12:03Z',
+    text: 'Bumped to 1.2.0.',
+    phase: 'final',
+    model: 'gpt-5',
+  },
+  {
+    kind: 'turn_separator',
+    timestamp: '2026-05-13T18:12:03Z',
+    turnIndex: 2,
+    durationMs: 3000,
+    timeToFirstTokenMs: 600,
+  },
+];
+
+function Frame({ children }: { children: ReactNode }) {
   return <div style={{ height: '600px', width: '100%' }}>{children}</div>;
 }
 
@@ -113,6 +158,14 @@ export const FullSession: Story = {
   render: () => (
     <Frame>
       <CodexMessageTimeline items={sample} />
+    </Frame>
+  ),
+};
+
+export const WithTimeGap: Story = {
+  render: () => (
+    <Frame>
+      <CodexMessageTimeline items={sampleWithGap} />
     </Frame>
   ),
 };
