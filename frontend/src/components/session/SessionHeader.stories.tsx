@@ -112,6 +112,11 @@ const meta: Meta<typeof SessionHeaderInteractive> = {
   parameters: {
     layout: 'fullscreen',
   },
+  // Every story inherits a Claude provider by default; the CodexSession
+  // story below overrides it.
+  args: {
+    provider: 'claude-code',
+  },
   decorators: [
     (Story) => (
       <MemoryRouter>
@@ -242,6 +247,28 @@ export const LongTitle: Story = {
   },
 };
 
+// Codex provider: copy-ID dropdown reads "Copy Codex ID" with "for codex resume".
+export const CodexSession: Story = {
+  args: {
+    sessionId: 'session-codex',
+    title: 'Investigate Codex rollout schema for transcript parser',
+    hasCustomTitle: false,
+    autoTitle: 'Investigate Codex rollout schema for transcript parser',
+    externalId: '019e23cc-fixture-codex-rollout',
+    provider: 'codex',
+    ownerEmail: 'developer@example.com',
+    model: 'gpt-5',
+    durationMs: 1800000, // 30 min
+    sessionDate: new Date('2026-05-13T01:00:00'),
+    gitInfo: sampleGitInfo,
+    isOwner: true,
+    isShared: false,
+    onShare: () => alert('Share clicked'),
+    onDelete: () => alert('Delete clicked'),
+    onSessionUpdate: (session) => console.log('Session updated:', session),
+  },
+};
+
 export const FallbackTitle: Story = {
   args: {
     sessionId: 'session-fallback',
@@ -317,6 +344,7 @@ function CostModeDemo() {
       hasCustomTitle={false}
       autoTitle="Cost Mode Demo"
       externalId="cost123"
+      provider="claude-code"
       ownerEmail="developer@example.com"
       model="claude-opus-4-5-20251101"
       durationMs={3600000}
@@ -357,6 +385,7 @@ export const WithoutFilter: DirectStory = {
       hasCustomTitle={false}
       autoTitle="Viewing Analytics Tab"
       externalId="analytics123"
+      provider="claude-code"
       ownerEmail="developer@example.com"
       model="claude-opus-4-5-20251101"
       durationMs={3600000}

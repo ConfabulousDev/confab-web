@@ -12,6 +12,7 @@ describe('SessionHeader', () => {
   const defaultProps = {
     sessionId: '123e4567-e89b-12d3-a456-426614174000',
     externalId: 'abc12345-6789-0def-ghij-klmnopqrstuv',
+    provider: 'claude-code',
     ownerEmail: 'owner@example.com',
   };
 

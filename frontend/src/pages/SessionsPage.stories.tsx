@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, ClaudeCodeIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon } from '@/components/icons';
+import { getProviderIcon } from '@/components/providerIcon';
 import { formatRelativeTime, formatDuration } from '@/utils';
 import { formatCost } from '@/utils/tokenStats';
 import styles from './SessionsPage.module.css';
@@ -9,6 +10,9 @@ import styles from './SessionsPage.module.css';
 interface MockSession {
   id: string;
   external_id: string;
+  // Canonical agent identifier; drives the chip icon (orange Claude or
+  // teal Codex). Defaults to 'claude-code' when omitted on a mock row.
+  provider?: string;
   custom_title: string | null;
   summary: string | null;
   first_user_message: string | null;
@@ -104,6 +108,20 @@ const mockSessions: MockSession[] = [
     git_repo_url: 'https://github.com/ConfabulousDev/confab',
     git_branch: 'develop',
   },
+  {
+    id: '7',
+    external_id: '019e23cc-7890-bcde-f012-345678901234',
+    provider: 'codex',
+    custom_title: null,
+    summary: 'Investigate Codex rollout schema for transcript parser',
+    first_user_message: null,
+    first_seen: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '0.4200',
+    git_repo: 'ConfabulousDev/confab-web',
+    git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
+    git_branch: 'main',
+  },
 ];
 
 // Presentational component for the session list table
@@ -131,7 +149,7 @@ function SessionListTable({ sessions }: SessionListTableProps) {
                     {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
                   </div>
                   <div className={styles.chipRow}>
-                    <Chip icon={ClaudeCodeIcon} variant="neutral">
+                    <Chip icon={getProviderIcon(session.provider ?? 'claude-code')} variant="neutral">
                       {session.external_id.substring(0, 8)}
                     </Chip>
                     {session.git_repo && (

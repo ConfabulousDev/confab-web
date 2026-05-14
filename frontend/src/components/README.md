@@ -22,7 +22,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `CardGrid.module.css` | Grid layout for analytics cards |
 | `CardGrid.tsx` | CSS grid container for rendering card layouts |
 | `Chip.tsx` | Tag/chip component for filter selections |
-| `CopyIdDropdown.tsx` | Dropdown for copying Confab ID or Claude Code ID with confirmation feedback |
+| `CopyIdDropdown.tsx` | Dropdown for copying Confab ID or the agent-native session ID (Claude Code / Codex) with confirmation feedback; label switches per `provider` |
 | `DeployCTA.tsx` | Call-to-action for self-hosted deployment |
 | `ErrorBoundary.tsx` | React error boundary with fallback UI |
 | `ErrorDisplay.tsx` | Styled error message display |
@@ -32,7 +32,8 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `Header.tsx` | App header with navigation and auth state |
 | `HeroCards.tsx` | Landing page hero section cards |
 | `HowItWorksModal.tsx` | Onboarding modal explaining the product |
-| `icons.tsx` | SVG icon components (ClaudeCodeIcon, GitHubIcon, etc.) |
+| `icons.tsx` | SVG icon components (ClaudeCodeIcon, CodexIcon, GitHubIcon, etc.) |
+| `providerIcon.ts` | `getProviderIcon(provider)` -- picks ClaudeCodeIcon or CodexIcon for chip avatars |
 | `LoadingSkeleton.tsx` | Animated loading placeholder |
 | `Modal.tsx` | Base modal component with backdrop and close handling |
 | `PageHeader.tsx` | Page-level header with title and optional actions |

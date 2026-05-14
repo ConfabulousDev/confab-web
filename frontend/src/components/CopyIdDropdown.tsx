@@ -6,15 +6,33 @@ import styles from './CopyIdDropdown.module.css';
 interface CopyIdDropdownProps {
   /** Backend session UUID (Confab ID) */
   confabId: string;
-  /** Claude Code local session ID */
-  claudeCodeId: string;
+  /** Agent-native session ID (Claude Code UUID or Codex rollout UUID) */
+  externalId: string;
+  /**
+   * Canonical agent identifier from the session record (`'claude-code'`,
+   * `'codex'`, …). Drives the second menu item's label and resume-command
+   * hint. Defaults to `'claude-code'` for backward compatibility.
+   */
+  provider?: string;
   /** Show truncated UUID chip as trigger (detail page). If false, shows just a copy icon (list page). */
   showChip?: boolean;
 }
 
-function CopyIdDropdown({ confabId, claudeCodeId, showChip = false }: CopyIdDropdownProps) {
+// Per-provider strings for the "Copy <agent> ID" menu item. We intentionally
+// keep this local to CopyIdDropdown (rather than a shared util) because no
+// other surface today needs the resume-command hint; adding a provider here
+// is a one-line change.
+function externalIdMenuStrings(provider: string): { label: string; hint: string } {
+  if (provider === 'codex') {
+    return { label: 'Copy Codex ID', hint: 'for codex resume' };
+  }
+  return { label: 'Copy Claude Code ID', hint: 'for /resume' };
+}
+
+function CopyIdDropdown({ confabId, externalId, provider = 'claude-code', showChip = false }: CopyIdDropdownProps) {
   const { isOpen, setIsOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+  const externalStrings = externalIdMenuStrings(provider);
 
   function handleToggle(e: MouseEvent) {
     e.stopPropagation();
@@ -69,13 +87,13 @@ function CopyIdDropdown({ confabId, claudeCodeId, showChip = false }: CopyIdDrop
           </button>
           <button
             className={styles.menuItem}
-            onClick={(e) => handleCopy(claudeCodeId, 'claude', e)}
+            onClick={(e) => handleCopy(externalId, 'external', e)}
           >
             <span className={styles.menuLabel}>
-              Copy Claude Code ID
-              <span className={styles.menuHint}>for /resume</span>
+              {externalStrings.label}
+              <span className={styles.menuHint}>{externalStrings.hint}</span>
             </span>
-            {copiedLabel === 'claude' && <span className={styles.menuCheck}>{CheckIcon}</span>}
+            {copiedLabel === 'external' && <span className={styles.menuCheck}>{CheckIcon}</span>}
           </button>
         </div>
       )}

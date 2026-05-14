@@ -15,7 +15,8 @@ import QuickstartCTA from '@/components/QuickstartCTA';
 import SessionEmptyState from '@/components/SessionEmptyState';
 import Chip from '@/components/Chip';
 import CopyIdDropdown from '@/components/CopyIdDropdown';
-import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, ClaudeCodeIcon, RefreshIcon, PersonIcon } from '@/components/icons';
+import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, CommitIcon, RefreshIcon, PersonIcon } from '@/components/icons';
+import { getProviderIcon } from '@/components/providerIcon';
 import styles from './SessionsPage.module.css';
 
 // Derive display title from session fields with fallback chain
@@ -138,11 +139,15 @@ function SessionsPage() {
                                 {title || 'Untitled'}
                               </div>
                               <span className={styles.rowCopyBtn}>
-                                <CopyIdDropdown confabId={session.id} claudeCodeId={session.external_id} />
+                                <CopyIdDropdown
+                                  confabId={session.id}
+                                  externalId={session.external_id}
+                                  provider={session.provider}
+                                />
                               </span>
                             </div>
                             <div className={styles.chipRow}>
-                              <Chip icon={ClaudeCodeIcon} variant="neutral" copyValue={session.external_id}>
+                              <Chip icon={getProviderIcon(session.provider)} variant="neutral" copyValue={session.external_id}>
                                 {session.external_id.substring(0, 8)}
                               </Chip>
                               <Chip icon={PersonIcon} variant="neutral" copyValue={session.owner_email}>

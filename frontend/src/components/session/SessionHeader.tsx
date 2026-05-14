@@ -83,6 +83,9 @@ interface SessionHeaderProps {
   hasCustomTitle?: boolean;
   autoTitle?: string; // The auto-derived title (summary || first_user_message)
   externalId: string;
+  /** Canonical agent identifier ('claude-code' | 'codex'). Drives the
+   *  "Copy <agent> ID" label/hint in the CopyIdDropdown chip. */
+  provider: string;
   ownerEmail: string; // Email of session owner (always populated)
   model?: string;
   durationMs?: number;
@@ -113,6 +116,7 @@ function SessionHeader({
   hasCustomTitle = false,
   autoTitle,
   externalId,
+  provider,
   ownerEmail,
   model,
   durationMs,
@@ -268,7 +272,7 @@ function SessionHeader({
               )}
             </>
           )}
-          <CopyIdDropdown confabId={sessionId} claudeCodeId={externalId} showChip />
+          <CopyIdDropdown confabId={sessionId} externalId={externalId} provider={provider} showChip />
         </div>
         <div className={styles.metadata}>
           <MetaItem icon={PersonIcon} value={ownerEmail} />
