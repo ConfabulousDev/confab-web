@@ -1,10 +1,10 @@
-package session
+package db
 
 import "testing"
 
 // TestNormalizeProvider locks the legacy-to-canonical mapping for the
 // sessions.session_type column. The transformation is intentionally
-// minimal — only the one historical display value 'Claude Code' is
+// minimal — only the one historical display value "Claude Code" is
 // rewritten — and is applied at every Scan path until a future
 // one-time backfill PR removes it (see comment in provider.go).
 func TestNormalizeProvider(t *testing.T) {
@@ -42,9 +42,9 @@ func TestNormalizeProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeProvider(tt.in)
+			got := NormalizeProvider(tt.in)
 			if got != tt.want {
-				t.Errorf("normalizeProvider(%q) = %q, want %q", tt.in, got, tt.want)
+				t.Errorf("NormalizeProvider(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}

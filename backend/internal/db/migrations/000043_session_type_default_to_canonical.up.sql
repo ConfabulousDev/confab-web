@@ -16,7 +16,7 @@
 -- This migration intentionally does NOT backfill existing rows that still
 -- hold the legacy display value 'Claude Code'. Backfilling now would race
 -- the old binary's inserts. Read paths handle the legacy value via
--- normalizeProvider() in internal/db/session/provider.go and dual-value
+-- db.NormalizeProvider in internal/db/provider.go and dual-value
 -- SQL IN-clauses in session lookups and analytics filters.
 --
 -- TODO(post-Codex-rollout): once the deploy gap has closed and the new

@@ -40,7 +40,7 @@ Each function returns `nil` if valid, or an error describing the violation:
 - **`ProviderClaudeCode = "claude-code"`** — Canonical agent identifier for Claude Code sessions.
 - **`ProviderCodex = "codex"`** — Canonical agent identifier for OpenAI Codex sessions.
 
-These are the public values written to `sessions.session_type` for new rows; the legacy display form `'Claude Code'` may still appear on older rows and is normalized by `normalizeProvider()` in `internal/db/session/provider.go`.
+These are the public values written to `sessions.session_type` for new rows; the legacy display form `'Claude Code'` may still appear on older rows and is normalized by `db.NormalizeProvider` in `internal/db/provider.go`.
 
 ### Field size constants (`input.go`)
 

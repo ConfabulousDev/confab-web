@@ -2,11 +2,13 @@ package access_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/access"
+	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -730,6 +732,88 @@ func TestGetSessionDetailWithAccess_UpdatesLastAccessedAt(t *testing.T) {
 	}
 	if lastAccessedAfter == nil {
 		t.Error("expected last_accessed_at to be set after access")
+	}
+}
+
+// TestSessionDetailReaders_Equivalent locks the contract that the two
+// SessionDetail readers — the owner-only one in db/session and the
+// canonical-access one in db/access — return the same field values for
+// the same owner+session input.
+//
+// The two readers are independent SQL implementations of "load a
+// SessionDetail row." CF-347 added the Provider field to one and missed
+// the other, which shipped a production bug. This test will fail the
+// next time anyone adds a new SessionDetail column to one reader and
+// not the other.
+//
+// IsOwner / SharedByEmail are intentionally set by the access path and
+// not by the owner-only path; they are excluded from the comparison.
+func TestSessionDetailReaders_Equivalent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+
+	// Three provider values are exercised because the canonical-vs-legacy
+	// normalization is itself part of what the readers must agree on.
+	providers := []struct {
+		name      string
+		stored    string
+		canonical string
+	}{
+		{"claude-code", db.ProviderClaudeCode, db.ProviderClaudeCode},
+		{"codex", db.ProviderCodex, db.ProviderCodex},
+		{"legacy Claude Code", db.ProviderClaudeCodeLegacy, db.ProviderClaudeCode},
+	}
+
+	for _, p := range providers {
+		t.Run(p.name, func(t *testing.T) {
+			env.CleanDB(t)
+
+			owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+			sessionID := testutil.CreateTestSessionWithProvider(
+				t, env, owner.ID, "equiv-"+p.name, p.stored,
+			)
+
+			ctx := context.Background()
+			sessionStore := &dbsession.Store{DB: env.DB}
+			accessStore := &access.Store{DB: env.DB}
+
+			fromSession, err := sessionStore.GetSessionDetail(ctx, sessionID, owner.ID)
+			if err != nil {
+				t.Fatalf("GetSessionDetail failed: %v", err)
+			}
+
+			ownerAccess := &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}
+			fromAccess, err := accessStore.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, ownerAccess)
+			if err != nil {
+				t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
+			}
+
+			// Both readers must canonicalize Provider identically.
+			if fromSession.Provider != p.canonical {
+				t.Errorf("GetSessionDetail: Provider = %q, want %q", fromSession.Provider, p.canonical)
+			}
+			if fromAccess.Provider != p.canonical {
+				t.Errorf("GetSessionDetailWithAccess: Provider = %q, want %q", fromAccess.Provider, p.canonical)
+			}
+
+			// Normalize the access-path-only fields before structural compare.
+			// IsOwner and SharedByEmail are *intentional* divergences: the access
+			// path computes them; the owner-only path doesn't. Everything else
+			// must match.
+			cmpAccess := *fromAccess
+			cmpAccess.IsOwner = nil
+			cmpAccess.SharedByEmail = nil
+
+			if !reflect.DeepEqual(*fromSession, cmpAccess) {
+				t.Errorf("SessionDetail mismatch between readers:\n"+
+					"  GetSessionDetail          = %+v\n"+
+					"  GetSessionDetailWithAccess = %+v",
+					*fromSession, cmpAccess)
+			}
+		})
 	}
 }
 

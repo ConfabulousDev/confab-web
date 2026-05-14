@@ -132,32 +132,25 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 	var session db.SessionDetail
 	var gitInfoBytes []byte
 	var ownerStatus models.UserStatus
-	var hostname, username *string
-	var ownerEmail string
 
+	// Column list and Scan targets are shared with session.GetSessionDetail
+	// via db/session_detail.go so a new SessionDetail field can't land in
+	// one reader and not the other (CF-347 missed this and shipped a bug
+	// where Codex sessions ended up with `provider: ""` on this path).
+	// `u.status` is access-path-only — used for the inactive-owner check —
+	// so it's appended after the shared columns and scanned as an extra
+	// trailing target.
 	sessionQuery := `
-		SELECT s.id, s.external_id, s.custom_title, s.suggested_session_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.status, u.email
+		SELECT ` + db.SessionDetailColumns + `, u.status
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.id = $1
 	`
-	err := s.conn().QueryRowContext(ctx, sessionQuery, sessionID).Scan(
-		&session.ID,
-		&session.ExternalID,
-		&session.CustomTitle,
-		&session.SuggestedSessionTitle,
-		&session.Summary,
-		&session.FirstUserMessage,
-		&session.FirstSeen,
-		&session.CWD,
-		&session.TranscriptPath,
-		&gitInfoBytes,
-		&session.LastSyncAt,
-		&hostname,
-		&username,
+	scanTargets := append(
+		db.SessionDetailScanTargets(&session, &gitInfoBytes),
 		&ownerStatus,
-		&ownerEmail,
 	)
+	err := s.conn().QueryRowContext(ctx, sessionQuery, sessionID).Scan(scanTargets...)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, db.ErrSessionNotFound
@@ -169,22 +162,20 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
+	session.Provider = db.NormalizeProvider(session.Provider)
 
 	// Check if session owner is deactivated
 	if ownerStatus == models.UserStatusInactive {
 		return nil, db.ErrOwnerInactive
 	}
 
-	// Always include owner email
-	session.OwnerEmail = ownerEmail
-
-	// Only include PII fields for owners; redact for all shared access
+	// Only include PII fields for owners; redact for all shared access.
+	// Hostname/Username/CWD/TranscriptPath were scanned directly into
+	// session above; RedactForSharing zeroes the lot for non-owners.
 	isOwner := accessInfo.AccessType == db.SessionAccessOwner
 	session.IsOwner = &isOwner
-	if isOwner {
-		session.Hostname = hostname
-		session.Username = username
-	} else {
+	if !isOwner {
+		ownerEmail := session.OwnerEmail
 		session.RedactForSharing()
 		session.SharedByEmail = &ownerEmail
 	}
