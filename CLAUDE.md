@@ -31,12 +31,25 @@ Before writing any code, create a clear plan:
 
 3. **Business logic in multiple code paths** - If both "on-demand" and "background worker" paths do the same thing, extract the shared logic to a common function.
 
+4. **Hand-rolled SELECT column lists for shared structs** - If two functions Scan into the same DB struct (`db.SessionDetail`, `db.SessionListItem`, …), do **not** repeat the column list in each query. Use the shared `db.SessionDetailColumns` constant + `db.SessionDetailScanTargets` helper (and follow the same pattern for new shared types). Go's `database/sql` lets you Scan a subset of columns silently — every parallel column list is one CF-347-style ghost field waiting to happen.
+
+#### When Adding a Field to a Shared DB Struct
+
+Adding a column to `db.SessionDetail`, `db.SessionListItem`, or any struct loaded from SQL in more than one place:
+
+1. Update the shared column list (`db.SessionDetailColumns` / `sessionSelectCols`) and the shared Scan-target helper (`db.SessionDetailScanTargets` / `scanSessionListItems`) — both in one edit, since their order must match.
+2. Grep for every other Scan into the struct: `grep -rn 'db.SessionDetail{' backend/` etc. Audit each to confirm it goes through the shared helpers, not a hand-rolled column list.
+3. Add a wire-level assertion: extend the relevant `*_http_integration_test.go` to read the new field off the JSON response and check its value. Subset-of-columns drift is invisible to type checks; the wire test is the cheapest reliable guard.
+4. If the new field has provider/legacy/canonical normalization (like `Provider`), include each variant in the test table.
+
 #### Where Shared Code Lives
 
 - **Chunk operations** (download, merge, parse keys): `internal/storage/chunks.go`
 - **Analytics computation**: `internal/analytics/` package
 - **Card staleness validation**: `internal/analytics/cards.go` (`IsValid`, `AllValid` methods)
 - **Smart recap generation**: `internal/analytics/smart_recap_generator.go`
+- **SessionDetail SQL projection**: `internal/db/session_detail.go` (`SessionDetailColumns`, `SessionDetailScanTargets`) — shared between `db/session.GetSessionDetail` and `db/access.GetSessionDetailWithAccess`
+- **Provider value normalization**: `internal/db/provider.go` (`NormalizeProvider`, `ProviderClaudeCode`, `ProviderClaudeCodeLegacy`, `ProviderCodex`) — applied at every Scan site reading `sessions.session_type`
 
 #### Before Writing New Code
 

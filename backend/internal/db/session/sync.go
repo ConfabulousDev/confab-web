@@ -32,7 +32,7 @@ import (
 //     legacy literal.
 func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, params db.SyncSessionParams) (sessionID string, files map[string]db.SyncFileState, err error) {
 	if params.Provider == "" {
-		params.Provider = providerClaudeCode
+		params.Provider = db.ProviderClaudeCode
 	}
 
 	ctx, span := tracer.Start(ctx, "db.find_or_create_sync_session",
@@ -114,7 +114,7 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 // written by an older binary during the deploy gap. For any other provider
 // (currently only "codex") a plain equality match is used.
 func buildSessionLookupQuery(userID int64, externalID, provider string) (string, []any) {
-	if provider == providerClaudeCode {
+	if provider == db.ProviderClaudeCode {
 		return `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type IN ('claude-code', 'Claude Code')`,
 			[]any{userID, externalID}
 	}

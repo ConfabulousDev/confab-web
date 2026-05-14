@@ -126,7 +126,11 @@ func ValidateUsername(username string) error {
 // Provider name constants. These are the canonical lowercase values stored
 // in sessions.session_type for new rows. Legacy rows may still hold the
 // display form 'Claude Code' until a future one-time backfill PR; see
-// normalizeProvider() in db/session/provider.go.
+// db.NormalizeProvider in db/provider.go.
+//
+// These are intentionally duplicated with db.ProviderClaudeCode /
+// db.ProviderCodex (which carry the same string values) to keep the
+// validation and db layers free of cross-imports. Keep them in lockstep.
 const (
 	ProviderClaudeCode = "claude-code"
 	ProviderCodex      = "codex"

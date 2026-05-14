@@ -180,6 +180,52 @@ func TestGetSession_HTTP_Integration(t *testing.T) {
 		}
 	})
 
+	// Wire-level guard against the CF-347 class of bug: a SessionDetail
+	// reader that forgets a column ships an empty field on the JSON. The
+	// original incident was `session_type` missing from the canonical-access
+	// SELECT, so the API returned `"provider": ""` for Codex sessions and
+	// the frontend routed them through the wrong renderer.
+	t.Run("echoes canonical provider for each provider value", func(t *testing.T) {
+		cases := []struct {
+			name      string
+			stored    string // what goes into sessions.session_type
+			canonical string // what the API must echo
+		}{
+			{name: "claude-code", stored: db.ProviderClaudeCode, canonical: db.ProviderClaudeCode},
+			{name: "codex", stored: db.ProviderCodex, canonical: db.ProviderCodex},
+			{name: "legacy Claude Code row", stored: db.ProviderClaudeCodeLegacy, canonical: db.ProviderClaudeCode},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				env.CleanDB(t)
+
+				user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+				sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+				sessionID := testutil.CreateTestSessionWithProvider(
+					t, env, user.ID, "ext-"+tc.name, tc.stored,
+				)
+
+				ts := setupTestServerWithEnv(t, env)
+				client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+				resp, err := client.Get("/api/v1/sessions/" + sessionID)
+				if err != nil {
+					t.Fatalf("request failed: %v", err)
+				}
+				defer resp.Body.Close()
+				testutil.RequireStatus(t, resp, http.StatusOK)
+
+				var got db.SessionDetail
+				testutil.ParseJSON(t, resp, &got)
+
+				if got.Provider != tc.canonical {
+					t.Errorf("provider = %q, want %q (stored as %q)",
+						got.Provider, tc.canonical, tc.stored)
+				}
+			})
+		}
+	})
+
 	t.Run("returns 404 for non-existent session", func(t *testing.T) {
 		env.CleanDB(t)
 

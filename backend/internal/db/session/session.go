@@ -104,7 +104,7 @@ func scanSessionListItems(rows *sql.Rows) ([]db.SessionListItem, error) {
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
-		session.Provider = normalizeProvider(session.Provider)
+		session.Provider = db.NormalizeProvider(session.Provider)
 		if gitRepoURL != nil && *gitRepoURL != "" {
 			session.GitRepo = db.ExtractRepoName(*gitRepoURL)
 			session.GitRepoURL = gitRepoURL
@@ -590,17 +590,17 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 
 	var session db.SessionDetail
 	var gitInfoBytes []byte
+	// Column list and Scan targets live in db/session_detail.go so this
+	// reader stays in lockstep with access.GetSessionDetailWithAccess —
+	// see SessionDetailColumns for why.
 	sessionQuery := `
-		SELECT s.id, s.external_id, s.session_type, s.custom_title, s.suggested_session_title, s.summary, s.first_user_message, s.first_seen, s.cwd, s.transcript_path, s.git_info, s.last_sync_at, s.hostname, s.username, u.email
+		SELECT ` + db.SessionDetailColumns + `
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.id = $1 AND s.user_id = $2
 	`
 	err := s.conn().QueryRowContext(ctx, sessionQuery, sessionID, userID).Scan(
-		&session.ID, &session.ExternalID, &session.Provider, &session.CustomTitle,
-		&session.SuggestedSessionTitle, &session.Summary, &session.FirstUserMessage,
-		&session.FirstSeen, &session.CWD, &session.TranscriptPath, &gitInfoBytes,
-		&session.LastSyncAt, &session.Hostname, &session.Username, &session.OwnerEmail,
+		db.SessionDetailScanTargets(&session, &gitInfoBytes)...,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows || db.IsInvalidUUIDError(err) {
@@ -610,7 +610,7 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
-	session.Provider = normalizeProvider(session.Provider)
+	session.Provider = db.NormalizeProvider(session.Provider)
 
 	if err := db.UnmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
 		span.RecordError(err)
@@ -687,7 +687,7 @@ func (s *Store) VerifySessionOwnership(ctx context.Context, sessionID string, us
 		span.SetStatus(codes.Error, err.Error())
 		return "", "", fmt.Errorf("failed to verify session ownership: %w", err)
 	}
-	provider = normalizeProvider(provider)
+	provider = db.NormalizeProvider(provider)
 	span.SetAttributes(
 		attribute.String("result", "owner"),
 		attribute.String("session.provider", provider),
