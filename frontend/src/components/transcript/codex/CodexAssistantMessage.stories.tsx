@@ -28,3 +28,31 @@ export const Final: Story = {
 export const Commentary: Story = {
   args: { item: item({ phase: 'commentary' }) },
 };
+
+// Exercises the full markdown rendering pipeline (CF-358): headings, lists,
+// inline code, fenced code with Prism syntax highlighting.
+export const MarkdownHeavy: Story = {
+  args: {
+    item: item({
+      text: [
+        '## Adding Linear MCP',
+        '',
+        'I’ll make the following changes:',
+        '',
+        '- Update `~/.codex/config.toml`',
+        '- Add an `mcp_servers.linear` block',
+        '- Restart codex',
+        '',
+        'Here is the new section:',
+        '',
+        '```toml',
+        '[mcp_servers.linear]',
+        'command = "npx"',
+        'args = ["-y", "@linear/mcp"]',
+        '```',
+        '',
+        'Then verify with `codex mcp list`.',
+      ].join('\n'),
+    }),
+  },
+};

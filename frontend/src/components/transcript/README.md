@@ -54,9 +54,10 @@ layer.
 | File | Role |
 |------|------|
 | `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Dispatches each item to its renderer by `kind` |
-| `CodexUserMessage.tsx` | Plain user prompt in a chat row, with timestamp |
-| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message |
-| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (command + output + exit-code badge, 100-line soft cap), `ApplyPatchBody` (file-list summary + raw expand), `WebSearchBody` (query chips), or a generic `details`-based fallback |
+| `CodexUserMessage.tsx` | User prompt in a chat row, with timestamp. Body renders through `CodexMessageBody` |
+| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody` |
+| `CodexMessageBody.tsx` | Shared rendering path for user + assistant text. JSON-shaped text pretty-prints via `CodeBlock` (`language="json"`); everything else flows through `renderMarkdownToHtml`. Mirrors `ContentBlock.tsx`'s text-block contract |
+| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s |
 | `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries |
 | `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines |
 | `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages |
@@ -68,8 +69,20 @@ layer.
 | `CodexMessageTimeline.module.css` | Scroll container + virtualizer placement styles |
 
 The Codex renderers intentionally do **not** participate in cost mode, filter
-chips, or transcript search. CF-349 ships v1 as read-only display; analytics
-(CF-350) and search will arrive in follow-ups.
+chips, or transcript search. CF-349 ships v1 as read-only display; CF-358
+brought rendering parity (markdown, Prism, terminal output, diff highlighting)
+in line with Claude. Analytics (CF-350) and Cmd-F search (CF-359) will arrive
+in follow-ups.
+
+**Known gaps (deferred — see TODOs at the referenced sites):**
+- Image content blocks (`input_image` / `output_image`) are dropped in
+  `joinMessageText`; no `CodexImageItem` variant exists yet. Add one when a
+  real transcript surfaces image content.
+- Plaintext `reasoning` is not rendered — every reasoning line emits a
+  `reasoning_hidden` item today. When plaintext arrives, extend
+  `CodexReasoningHiddenItem` with a `{ decoded: true; text }` discriminator
+  and render a 💭 collapsible block mirroring `ContentBlock`'s thinking
+  treatment.
 
 ### TimelineBar / CostBar
 
@@ -158,12 +171,13 @@ Content block rendering is tested indirectly through `TimelineMessage.test.tsx` 
 ## Dependencies
 
 - `marked` + `dompurify` (markdown rendering and XSS sanitization, accessed via `@/utils/markdown.renderMarkdownToHtml`)
-- `prismjs` (syntax highlighting in CodeBlock)
+- `prismjs` (syntax highlighting in CodeBlock; includes the `diff` grammar for `apply_patch` raw views and the standard set of language grammars)
 - `@tanstack/react-virtual` (CodexMessageTimeline virtualization, same as MessageTimeline)
 - `@/hooks/useCopyToClipboard` (copy button in CodeBlock and BashOutput)
 - `@/utils/highlightSearch` (search match highlighting)
 - `@/utils/utils` (`stripAnsi` for terminal escape code removal; `isRecord` for the Codex shape readers)
-- `@/utils/markdown` (`renderMarkdownToHtml` — shared by ContentBlock, AwaySummary, QueuedCommand)
+- `@/utils/markdown` (`renderMarkdownToHtml` — shared by ContentBlock, the Codex message renderers, AwaySummary, QueuedCommand; `tryParseAsJson` — shared JSON-fallback helper used before markdown rendering)
+- `@/styles/markdown.module.css` (typography for rendered markdown — composed into `ContentBlock.module.css .textBlock` and `CodexMessage.module.css .markdown`)
 - `@/utils/tokenStats` (`formatCost` in CostBar)
 - `@/types/codexRenderItem` (Codex render-item discriminated union)
 - `@/schemas/codexTranscript` (Codex Zod schemas)

@@ -68,11 +68,8 @@
   line-height: 1.6;
 }
 
-.text {
-  margin: 0;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  font-family: inherit;
-  font-size: inherit;
+/* Markdown-rendered text (assistant / user message bodies).
+ * Typography rules live in @/styles/markdown.module.css and are composed in. */
+.markdown {
+  composes: markdown from '@/styles/markdown.module.css';
 }
