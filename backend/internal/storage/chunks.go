@@ -68,16 +68,17 @@ func ParseChunkKey(key string) (int, int, bool) {
 // DownloadAndMergeChunks downloads all chunks for a file and merges them into a single byte slice.
 // This is a convenience method that combines ListChunks, DownloadChunks, and MergeChunks.
 // Returns nil if no chunks exist (not an error).
-func (s *S3Storage) DownloadAndMergeChunks(ctx context.Context, userID int64, externalID, fileName string) ([]byte, error) {
+func (s *S3Storage) DownloadAndMergeChunks(ctx context.Context, userID int64, provider string, externalID, fileName string) ([]byte, error) {
 	ctx, span := tracer.Start(ctx, "storage.download_and_merge_chunks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
+			attribute.String("session.provider", provider),
 			attribute.String("session.external_id", externalID),
 			attribute.String("file.name", fileName),
 		))
 	defer span.End()
 
-	chunkKeys, err := s.ListChunks(ctx, userID, externalID, fileName)
+	chunkKeys, err := s.ListChunks(ctx, userID, provider, externalID, fileName)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

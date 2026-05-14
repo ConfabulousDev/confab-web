@@ -134,12 +134,13 @@ func downloadMainFromFiles(
 	store *storage.S3Storage,
 	files *classifiedFiles,
 	sessionUserID int64,
+	sessionProvider string,
 	externalID string,
 ) (*analytics.TranscriptFile, error) {
 	storageCtx, storageCancel := context.WithTimeout(ctx, StorageTimeout)
 	defer storageCancel()
 
-	mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, files.transcript.FileName)
+	mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, sessionProvider, externalID, files.transcript.FileName)
 	if err != nil {
 		return nil, err
 	}
@@ -167,9 +168,9 @@ func agentInfosFromFiles(files *classifiedFiles) []analytics.AgentFileInfo {
 }
 
 // newAPIAgentDownloader creates an AgentDownloader for the API handler.
-func newAPIAgentDownloader(store *storage.S3Storage, sessionUserID int64, externalID string) analytics.AgentDownloader {
+func newAPIAgentDownloader(store *storage.S3Storage, sessionUserID int64, sessionProvider string, externalID string) analytics.AgentDownloader {
 	return func(ctx context.Context, fileName string) ([]byte, error) {
-		return store.DownloadAndMergeChunks(ctx, sessionUserID, externalID, fileName)
+		return store.DownloadAndMergeChunks(ctx, sessionUserID, sessionProvider, externalID, fileName)
 	}
 }
 
@@ -181,6 +182,7 @@ func downloadAndBuildTranscript(
 	store *storage.S3Storage,
 	sessionID string,
 	sessionUserID int64,
+	sessionProvider string,
 	externalID string,
 	log *slog.Logger,
 ) (string, map[int]string) {
@@ -199,7 +201,7 @@ func downloadAndBuildTranscript(
 		return "", nil
 	}
 
-	mainTF, err := downloadMainFromFiles(ctx, store, files, sessionUserID, externalID)
+	mainTF, err := downloadMainFromFiles(ctx, store, files, sessionUserID, sessionProvider, externalID)
 	if err != nil || mainTF == nil {
 		log.Error("Failed to download transcript", "error", err)
 		return "", nil
@@ -208,10 +210,10 @@ func downloadAndBuildTranscript(
 	tb := analytics.NewTranscriptBuilder(analytics.DefaultFormatConfig())
 	tb.ProcessFile(mainTF)
 
-	download := newAPIAgentDownloader(store, sessionUserID, externalID)
-	provider := analytics.NewAgentProvider(agentInfosFromFiles(files), download, storage.MaxAgentFiles)
+	download := newAPIAgentDownloader(store, sessionUserID, sessionProvider, externalID)
+	agentProvider := analytics.NewAgentProvider(agentInfosFromFiles(files), download, storage.MaxAgentFiles)
 	for {
-		agent, err := provider(ctx)
+		agent, err := agentProvider(ctx)
 		if err == io.EOF {
 			break
 		}
@@ -297,23 +299,24 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 			// Handle smart recap (if enabled) even for cached responses
 			if smartRecapConfig.Enabled {
-				// Get session owner ID for quota lookup
-				sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+				// Get session owner ID and provider for quota + storage lookup
+				sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 				if err == nil {
 					attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
-						database:       database,
-						analyticsStore: analyticsStore,
-						store:          store,
-						config:         smartRecapConfig,
-						generator:      smartRecapGenerator,
-						sessionID:      sessionID,
-						sessionUserID:  sessionUserID,
-						externalID:     externalID,
-						lineCount:      totalLineCount,
-						cardStats:      response.Cards,
-						response:       response,
-						log:            log,
-						isOwner:        result.AccessInfo.AccessType == db.SessionAccessOwner,
+						database:        database,
+						analyticsStore:  analyticsStore,
+						store:           store,
+						config:          smartRecapConfig,
+						generator:       smartRecapGenerator,
+						sessionID:       sessionID,
+						sessionUserID:   sessionUserID,
+						sessionProvider: sessionProvider,
+						externalID:      externalID,
+						lineCount:       totalLineCount,
+						cardStats:       response.Cards,
+						response:        response,
+						log:             log,
+						isOwner:         result.AccessInfo.AccessType == db.SessionAccessOwner,
 					})
 				}
 			}
@@ -326,8 +329,8 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Cache miss or stale - need to recompute
-		// Get the session's user_id and external_id for S3 path
-		sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+		// Get the session's user_id, external_id, and provider for the S3 path
+		sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get session info", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to get session info")
@@ -335,7 +338,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 		}
 
 		// Download and parse main transcript
-		mainTF, dlErr := downloadMainFromFiles(r.Context(), store, files, sessionUserID, externalID)
+		mainTF, dlErr := downloadMainFromFiles(r.Context(), store, files, sessionUserID, sessionProvider, externalID)
 		if dlErr != nil || mainTF == nil {
 			log.Error("Failed to download transcript", "error", dlErr, "session_id", sessionID)
 			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
@@ -344,7 +347,7 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		// Stream agent files through analyzers (one at a time to avoid OOM)
 		agentInfos := agentInfosFromFiles(files)
-		download := newAPIAgentDownloader(store, sessionUserID, externalID)
+		download := newAPIAgentDownloader(store, sessionUserID, sessionProvider, externalID)
 		provider := analytics.NewAgentProvider(agentInfos, download, storage.MaxAgentFiles)
 
 		// If smart recap enabled, tee agent files through TranscriptBuilder
@@ -399,21 +402,22 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				transcript, idMap = tb.Finish()
 			}
 			attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
-				database:       database,
-				analyticsStore: analyticsStore,
-				store:          store,
-				config:         smartRecapConfig,
-				generator:      smartRecapGenerator,
-				sessionID:      sessionID,
-				sessionUserID:  sessionUserID,
-				externalID:     externalID,
-				lineCount:      totalLineCount,
-				transcript:     transcript,
-				idMap:          idMap,
-				cardStats:      response.Cards,
-				response:       response,
-				log:            log,
-				isOwner:        result.AccessInfo.AccessType == db.SessionAccessOwner,
+				database:        database,
+				analyticsStore:  analyticsStore,
+				store:           store,
+				config:          smartRecapConfig,
+				generator:       smartRecapGenerator,
+				sessionID:       sessionID,
+				sessionUserID:   sessionUserID,
+				sessionProvider: sessionProvider,
+				externalID:      externalID,
+				lineCount:       totalLineCount,
+				transcript:      transcript,
+				idMap:           idMap,
+				cardStats:       response.Cards,
+				response:        response,
+				log:             log,
+				isOwner:         result.AccessInfo.AccessType == db.SessionAccessOwner,
 			})
 		}
 
@@ -426,21 +430,22 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 // smartRecapContext groups the parameters needed for smart recap attachment/generation.
 type smartRecapContext struct {
-	database       *db.DB
-	analyticsStore *analytics.Store
-	store          *storage.S3Storage
-	config         SmartRecapConfig
-	generator      *analytics.SmartRecapGenerator
-	sessionID      string
-	sessionUserID  int64
-	externalID     string
-	lineCount      int64
-	transcript     string            // pre-built XML transcript (empty if not yet built)
-	idMap          map[int]string    // sequential ID -> UUID map for transcript
-	cardStats      map[string]interface{}          // computed card data for LLM context
-	response       *analytics.AnalyticsResponse
-	log            *slog.Logger
-	isOwner        bool
+	database        *db.DB
+	analyticsStore  *analytics.Store
+	store           *storage.S3Storage
+	config          SmartRecapConfig
+	generator       *analytics.SmartRecapGenerator
+	sessionID       string
+	sessionUserID   int64
+	sessionProvider string
+	externalID      string
+	lineCount       int64
+	transcript      string                 // pre-built XML transcript (empty if not yet built)
+	idMap           map[int]string         // sequential ID -> UUID map for transcript
+	cardStats       map[string]interface{} // computed card data for LLM context
+	response        *analytics.AnalyticsResponse
+	log             *slog.Logger
+	isOwner         bool
 }
 
 // attachOrGenerateSmartRecap adds smart recap to the analytics response.
@@ -520,7 +525,7 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 	transcript := sc.transcript
 	idMap := sc.idMap
 	if transcript == "" {
-		transcript, idMap = downloadAndBuildTranscript(ctx, sc.database, sc.store, sc.sessionID, sc.sessionUserID, sc.externalID, sc.log)
+		transcript, idMap = downloadAndBuildTranscript(ctx, sc.database, sc.store, sc.sessionID, sc.sessionUserID, sc.sessionProvider, sc.externalID, sc.log)
 		if transcript == "" {
 			addCardError("Failed to download transcript for smart recap")
 			return
@@ -623,7 +628,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		defer cancel()
 
 		// Get session and verify ownership
-		sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+		sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get session", "error", err, "session_id", sessionID)
 			respondError(w, http.StatusNotFound, "Session not found")
@@ -684,7 +689,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		// Build transcript via streaming
-		transcript, idMap := downloadAndBuildTranscript(r.Context(), database, store, sessionID, sessionUserID, externalID, log)
+		transcript, idMap := downloadAndBuildTranscript(r.Context(), database, store, sessionID, sessionUserID, sessionProvider, externalID, log)
 		if transcript == "" {
 			respondError(w, http.StatusInternalServerError, "Failed to download transcript")
 			return
@@ -727,4 +732,3 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		respondJSON(w, http.StatusOK, response)
 	}
 }
-

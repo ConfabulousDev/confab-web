@@ -95,7 +95,7 @@ func (s *Server) serveCondensedTranscript(w http.ResponseWriter, r *http.Request
 
 	// Get session owner info for S3 path
 	sessionStore := &dbsession.Store{DB: s.db}
-	sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+	sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 	if err != nil {
 		log.Error("Failed to get session owner info", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to get session info")
@@ -103,7 +103,7 @@ func (s *Server) serveCondensedTranscript(w http.ResponseWriter, r *http.Request
 	}
 
 	// Download and build condensed transcript (no per-message truncation)
-	mainTF, dlErr := downloadMainFromFiles(r.Context(), s.storage, files, sessionUserID, externalID)
+	mainTF, dlErr := downloadMainFromFiles(r.Context(), s.storage, files, sessionUserID, sessionProvider, externalID)
 	if dlErr != nil || mainTF == nil {
 		log.Error("Failed to download transcript", "error", dlErr, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to download transcript")
@@ -115,7 +115,7 @@ func (s *Server) serveCondensedTranscript(w http.ResponseWriter, r *http.Request
 
 	// Stream agent files one at a time (same pattern as analytics handler)
 	agentInfos := agentInfosFromFiles(files)
-	download := newAPIAgentDownloader(s.storage, sessionUserID, externalID)
+	download := newAPIAgentDownloader(s.storage, sessionUserID, sessionProvider, externalID)
 	provider := analytics.NewAgentProvider(agentInfos, download, storage.MaxAgentFiles)
 	for {
 		agent, err := provider(r.Context())
@@ -323,7 +323,7 @@ func (s *Server) serveSessionFileDownload(w http.ResponseWriter, r *http.Request
 
 	// Get session owner info for S3 path
 	sessionStore := &dbsession.Store{DB: s.db}
-	sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+	sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 	if err != nil {
 		log.Error("Failed to get session owner info", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to get session info")
@@ -334,7 +334,7 @@ func (s *Server) serveSessionFileDownload(w http.ResponseWriter, r *http.Request
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 	defer storageCancel()
 
-	content, err := s.storage.DownloadAndMergeChunks(storageCtx, sessionUserID, externalID, fileName)
+	content, err := s.storage.DownloadAndMergeChunks(storageCtx, sessionUserID, sessionProvider, externalID, fileName)
 	if err != nil {
 		log.Error("Failed to download file", "error", err, "session_id", sessionID, "file_name", fileName)
 		respondError(w, http.StatusInternalServerError, "Failed to download file")

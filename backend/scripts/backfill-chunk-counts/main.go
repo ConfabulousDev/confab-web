@@ -27,10 +27,21 @@ import (
 )
 
 type syncFile struct {
-	sessionID  string
-	fileName   string
-	userID     int64
-	externalID string
+	sessionID   string
+	fileName    string
+	userID      int64
+	externalID  string
+	sessionType string // canonical provider segment used in the S3 path
+}
+
+// normalizeProvider mirrors normalizeProvider() in
+// internal/db/session/provider.go. Duplicated here (rather than imported)
+// so this one-off script doesn't depend on an internal package.
+func normalizeProvider(p string) string {
+	if p == "Claude Code" {
+		return "claude-code"
+	}
+	return p
 }
 
 func main() {
@@ -71,7 +82,7 @@ func main() {
 	// Query files with NULL chunk_count
 	ctx := context.Background()
 	query := `
-		SELECT sf.session_id, sf.file_name, s.user_id, s.external_id
+		SELECT sf.session_id, sf.file_name, s.user_id, s.external_id, s.session_type
 		FROM sync_files sf
 		JOIN sessions s ON sf.session_id = s.id
 		WHERE sf.chunk_count IS NULL
@@ -93,10 +104,11 @@ func main() {
 		var files []syncFile
 		for rows.Next() {
 			var f syncFile
-			if err := rows.Scan(&f.sessionID, &f.fileName, &f.userID, &f.externalID); err != nil {
+			if err := rows.Scan(&f.sessionID, &f.fileName, &f.userID, &f.externalID, &f.sessionType); err != nil {
 				log.Printf("Error scanning row: %v", err)
 				continue
 			}
+			f.sessionType = normalizeProvider(f.sessionType)
 			files = append(files, f)
 		}
 		rows.Close()
@@ -110,7 +122,7 @@ func main() {
 		for _, f := range files {
 			totalProcessed++
 
-			prefix := fmt.Sprintf("%d/claude-code/%s/chunks/%s/", f.userID, f.externalID, f.fileName)
+			prefix := fmt.Sprintf("%d/%s/%s/chunks/%s/", f.userID, f.sessionType, f.externalID, f.fileName)
 			chunkCount := 0
 
 			objectCh := s3Client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{

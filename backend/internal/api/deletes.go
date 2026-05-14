@@ -36,7 +36,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		dbCtx, dbCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer dbCancel()
 
-		externalID, _, err := sessionStore.VerifySessionOwnership(dbCtx, sessionID, userID)
+		externalID, provider, err := sessionStore.VerifySessionOwnership(dbCtx, sessionID, userID)
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")
@@ -57,7 +57,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 		storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 		defer storageCancel()
 
-		if err := store.DeleteAllSessionChunks(storageCtx, userID, externalID); err != nil {
+		if err := store.DeleteAllSessionChunks(storageCtx, userID, provider, externalID); err != nil {
 			log.Error("Failed to delete session chunks",
 				"error", err,
 				"session_id", sessionID,

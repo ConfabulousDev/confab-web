@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/minio/minio-go/v7"
+
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // TestContainsAny tests the helper function for network error detection
@@ -196,13 +198,58 @@ func TestUploadChunkLineBounds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := s.UploadChunk(t.Context(), 1, "ext-123", "transcript.jsonl", tt.firstLine, tt.lastLine, []byte("data"))
+			_, err := s.UploadChunk(t.Context(), 1, validation.ProviderClaudeCode, "ext-123", "transcript.jsonl", tt.firstLine, tt.lastLine, []byte("data"))
 			if err == nil {
 				t.Errorf("expected error for invalid range [%d, %d]", tt.firstLine, tt.lastLine)
 			} else if !strings.Contains(err.Error(), "invalid line range") {
 				t.Errorf("expected bounds error, got: %v", err)
 			}
 		})
+	}
+}
+
+// TestUploadChunk_RejectsInvalidProvider verifies the storage-layer
+// defense-in-depth check: an invalid provider value must error out before
+// any S3 call so plumbing bugs surface immediately rather than as silently
+// missing objects. Uses a nil S3 client — the provider check runs first.
+func TestUploadChunk_RejectsInvalidProvider(t *testing.T) {
+	s := &S3Storage{} // nil client — provider check runs before S3 calls
+
+	tests := []struct {
+		name     string
+		provider string
+	}{
+		{"empty provider", ""},
+		{"unknown provider", "gemini"},
+		{"legacy display form is rejected at the storage layer", "Claude Code"},
+		{"uppercase Codex is rejected", "Codex"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := s.UploadChunk(t.Context(), 1, tt.provider, "ext-123", "transcript.jsonl", 1, 5, []byte("data"))
+			if err == nil {
+				t.Errorf("expected error for invalid provider %q", tt.provider)
+			}
+		})
+	}
+}
+
+// TestListChunks_RejectsInvalidProvider mirrors the UploadChunk check.
+func TestListChunks_RejectsInvalidProvider(t *testing.T) {
+	s := &S3Storage{}
+	_, err := s.ListChunks(t.Context(), 1, "Claude Code", "ext-123", "transcript.jsonl")
+	if err == nil {
+		t.Error("expected error for legacy provider value")
+	}
+}
+
+// TestDeleteAllSessionChunks_RejectsInvalidProvider mirrors the UploadChunk check.
+func TestDeleteAllSessionChunks_RejectsInvalidProvider(t *testing.T) {
+	s := &S3Storage{}
+	err := s.DeleteAllSessionChunks(t.Context(), 1, "", "ext-123")
+	if err == nil {
+		t.Error("expected error for empty provider value")
 	}
 }
 

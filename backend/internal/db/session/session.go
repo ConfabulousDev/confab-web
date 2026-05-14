@@ -789,24 +789,34 @@ func (s *Store) UpdateSessionSuggestedTitle(ctx context.Context, sessionID strin
 	return nil
 }
 
-// GetSessionOwnerAndExternalID returns the user_id and external_id for a session
-func (s *Store) GetSessionOwnerAndExternalID(ctx context.Context, sessionID string) (userID int64, externalID string, err error) {
-	ctx, span := tracer.Start(ctx, "db.get_session_owner_and_external_id",
+// GetSessionOwnerExternalIDAndProvider returns the user_id, external_id, and
+// canonical provider for a session. Legacy 'Claude Code' rows are normalized
+// to db.ProviderClaudeCode via db.NormalizeProvider so callers can pass the
+// returned provider straight into the chunk-storage methods without further
+// massaging. Used by canonical-access read paths (analytics, sync file read,
+// transcript download) that don't go through the owner-only
+// VerifySessionOwnership route.
+func (s *Store) GetSessionOwnerExternalIDAndProvider(ctx context.Context, sessionID string) (userID int64, externalID string, provider string, err error) {
+	ctx, span := tracer.Start(ctx, "db.get_session_owner_external_id_and_provider",
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
 	defer span.End()
 
-	query := `SELECT user_id, external_id FROM sessions WHERE id = $1`
-	err = s.conn().QueryRowContext(ctx, query, sessionID).Scan(&userID, &externalID)
+	query := `SELECT user_id, external_id, session_type FROM sessions WHERE id = $1`
+	err = s.conn().QueryRowContext(ctx, query, sessionID).Scan(&userID, &externalID, &provider)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, "", db.ErrSessionNotFound
+			return 0, "", "", db.ErrSessionNotFound
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return 0, "", fmt.Errorf("failed to get session: %w", err)
+		return 0, "", "", fmt.Errorf("failed to get session: %w", err)
 	}
-	span.SetAttributes(attribute.Int64("user.id", userID))
-	return userID, externalID, nil
+	provider = db.NormalizeProvider(provider)
+	span.SetAttributes(
+		attribute.Int64("user.id", userID),
+		attribute.String("session.provider", provider),
+	)
+	return userID, externalID, provider, nil
 }
 
 // GetSessionIDByExternalID looks up the internal session ID by external_id for a specific user.

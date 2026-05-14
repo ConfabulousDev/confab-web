@@ -8,6 +8,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // =============================================================================
@@ -322,7 +323,7 @@ func TestPrecomputeRegularCards_ComputesAndUpsertsCards(t *testing.T) {
 
 	// Upload test transcript to S3
 	transcript := testutil.MinimalTranscript()
-	testutil.UploadTestTranscript(t, env, user.ID, "precompute-external-id", "transcript.jsonl", transcript)
+	testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderClaudeCode, "precompute-external-id", "transcript.jsonl", transcript)
 
 	// Create precomputer and run
 	analyticsStore := analytics.NewStore(env.DB.Conn())
@@ -332,6 +333,7 @@ func TestPrecomputeRegularCards_ComputesAndUpsertsCards(t *testing.T) {
 		SessionID:  sessionID,
 		UserID:     user.ID,
 		ExternalID: "precompute-external-id",
+		Provider:   validation.ProviderClaudeCode,
 		TotalLines: 3,
 	}
 
@@ -395,6 +397,7 @@ func TestPrecomputeRegularCards_EmptyTranscript(t *testing.T) {
 		SessionID:  sessionID,
 		UserID:     user.ID,
 		ExternalID: "empty-external-id",
+		Provider:   validation.ProviderClaudeCode,
 		TotalLines: 0,
 	}
 
@@ -435,7 +438,7 @@ func TestPrecomputeRegularCards_UpdatesExistingCards(t *testing.T) {
 
 	// Upload test transcript
 	transcript := testutil.MinimalTranscript()
-	testutil.UploadTestTranscript(t, env, user.ID, "update-external-id", "transcript.jsonl", transcript)
+	testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderClaudeCode, "update-external-id", "transcript.jsonl", transcript)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
@@ -444,6 +447,7 @@ func TestPrecomputeRegularCards_UpdatesExistingCards(t *testing.T) {
 		SessionID:  sessionID,
 		UserID:     user.ID,
 		ExternalID: "update-external-id",
+		Provider:   validation.ProviderClaudeCode,
 		TotalLines: 3,
 	}
 
@@ -2547,7 +2551,7 @@ func TestBuildSearchIndexOnly_EndToEnd(t *testing.T) {
 {"type":"assistant","message":{"role":"assistant","content":"Sure!"},"uuid":"a1","timestamp":"2024-01-01T00:00:02Z","parentUuid":"u1","isSidechain":false,"usage":{"input_tokens":10,"output_tokens":5}}
 `)
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)
-	testutil.UploadTestTranscript(t, env, user.ID, "buildindex-external-id", "transcript.jsonl", transcript)
+	testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderClaudeCode, "buildindex-external-id", "transcript.jsonl", transcript)
 
 	// Run BuildSearchIndexOnly
 	analyticsStore := analytics.NewStore(env.DB.Conn())
@@ -2557,6 +2561,7 @@ func TestBuildSearchIndexOnly_EndToEnd(t *testing.T) {
 		SessionID:  sessionID,
 		UserID:     user.ID,
 		ExternalID: "buildindex-external-id",
+		Provider:   validation.ProviderClaudeCode,
 		TotalLines: 3,
 	}
 
