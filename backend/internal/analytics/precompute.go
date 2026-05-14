@@ -23,6 +23,11 @@ type StaleSession struct {
 	SessionID  string
 	UserID     int64
 	ExternalID string
+	// Provider is the canonical provider for the session, scanned from
+	// sessions.session_type and normalized via db.NormalizeProvider.
+	// Threaded into chunk-storage calls so chunks are read from the
+	// correct provider-scoped S3 prefix.
+	Provider   string
 	TotalLines int64
 	// RegenRequestedAt is non-nil when this session was surfaced due to an
 	// admin-triggered bulk regeneration (staleness category 4). When set,
@@ -165,6 +170,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 				sl.session_id,
 				s.user_id,
 				s.external_id,
+				s.session_type,
 				sl.total_lines,
 				s.first_seen,
 				-- Check if ALL cards exist (not missing)
@@ -230,7 +236,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 				END AS staleness_category
 			FROM card_status cs
 		)
-		SELECT session_id, user_id, external_id, total_lines
+		SELECT session_id, user_id, external_id, session_type, total_lines
 		FROM stale_sessions
 		WHERE
 			-- Case 1: New session (missing cards) with enough content OR old enough
@@ -279,11 +285,13 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 	var sessions []StaleSession
 	for rows.Next() {
 		var s StaleSession
-		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &s.TotalLines); err != nil {
+		var rawProvider string
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
+		s.Provider = db.NormalizeProvider(rawProvider)
 		sessions = append(sessions, s)
 	}
 
@@ -349,7 +357,7 @@ func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleS
 // newAgentProvider creates an AgentProvider that streams agent files from storage.
 func (p *Precomputer) newAgentProvider(session StaleSession, agentInfos []AgentFileInfo) AgentProvider {
 	download := func(ctx context.Context, fileName string) ([]byte, error) {
-		return p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, fileName)
+		return p.store.DownloadAndMergeChunks(ctx, session.UserID, session.Provider, session.ExternalID, fileName)
 	}
 	return NewAgentProvider(agentInfos, download, storage.MaxAgentFiles)
 }
@@ -421,7 +429,7 @@ func (p *Precomputer) downloadMainAndListAgents(ctx context.Context, session Sta
 	}
 
 	// Download and parse main transcript
-	mainContent, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.ExternalID, mainFileName)
+	mainContent, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.Provider, session.ExternalID, mainFileName)
 	if err != nil || mainContent == nil {
 		return nil, nil, err
 	}
@@ -567,6 +575,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 				sl.session_id,
 				s.user_id,
 				s.external_id,
+				s.session_type,
 				sl.total_lines,
 				s.first_seen,
 				s.last_sync_at,
@@ -641,7 +650,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 						AND (sr.session_id IS NULL OR sr.computed_at < ai.last_invalidated_at))
 				)
 		)
-		SELECT session_id, user_id, external_id, total_lines,
+		SELECT session_id, user_id, external_id, session_type, total_lines,
 			CASE WHEN needs_admin_regen THEN regen_requested_at ELSE NULL END AS regen_requested_at
 		FROM recap_status
 		WHERE
@@ -695,11 +704,13 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	var sessions []StaleSession
 	for rows.Next() {
 		var s StaleSession
-		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &s.TotalLines, &s.RegenRequestedAt); err != nil {
+		var rawProvider string
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines, &s.RegenRequestedAt); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
+		s.Provider = db.NormalizeProvider(rawProvider)
 		sessions = append(sessions, s)
 	}
 
@@ -733,7 +744,7 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 			GROUP BY session_id
 			HAVING SUM(last_synced_line) > 0
 		)
-		SELECT sl.session_id, s.user_id, s.external_id, sl.total_lines
+		SELECT sl.session_id, s.user_id, s.external_id, s.session_type, sl.total_lines
 		FROM session_lines sl
 		JOIN sessions s ON sl.session_id = s.id
 		-- All 7 regular cards must be current
@@ -793,11 +804,13 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 	var sessions []StaleSession
 	for rows.Next() {
 		var s StaleSession
-		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &s.TotalLines); err != nil {
+		var rawProvider string
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
+		s.Provider = db.NormalizeProvider(rawProvider)
 		sessions = append(sessions, s)
 	}
 	if err := rows.Err(); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // =============================================================================
@@ -784,11 +785,11 @@ func TestFindOrCreateSyncSession_EmptyHostnameUsername(t *testing.T) {
 }
 
 // =============================================================================
-// GetSessionOwnerAndExternalID Tests
+// GetSessionOwnerExternalIDAndProvider Tests
 // =============================================================================
 
-// TestGetSessionOwnerAndExternalID_Success tests successful retrieval
-func TestGetSessionOwnerAndExternalID_Success(t *testing.T) {
+// TestGetSessionOwnerExternalIDAndProvider_Success tests successful retrieval
+func TestGetSessionOwnerExternalIDAndProvider_Success(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -802,9 +803,9 @@ func TestGetSessionOwnerAndExternalID_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	userID, externalID, err := store.GetSessionOwnerAndExternalID(ctx, sessionID)
+	userID, externalID, provider, err := store.GetSessionOwnerExternalIDAndProvider(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("GetSessionOwnerAndExternalID failed: %v", err)
+		t.Fatalf("GetSessionOwnerExternalIDAndProvider failed: %v", err)
 	}
 	if userID != user.ID {
 		t.Errorf("userID = %d, want %d", userID, user.ID)
@@ -812,10 +813,13 @@ func TestGetSessionOwnerAndExternalID_Success(t *testing.T) {
 	if externalID != "test-external-id" {
 		t.Errorf("externalID = %s, want test-external-id", externalID)
 	}
+	if provider != validation.ProviderClaudeCode {
+		t.Errorf("provider = %q, want %q", provider, validation.ProviderClaudeCode)
+	}
 }
 
-// TestGetSessionOwnerAndExternalID_NotFound tests non-existent session
-func TestGetSessionOwnerAndExternalID_NotFound(t *testing.T) {
+// TestGetSessionOwnerExternalIDAndProvider_NotFound tests non-existent session
+func TestGetSessionOwnerExternalIDAndProvider_NotFound(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -826,9 +830,44 @@ func TestGetSessionOwnerAndExternalID_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, _, err := store.GetSessionOwnerAndExternalID(ctx, "00000000-0000-0000-0000-000000000000")
+	_, _, _, err := store.GetSessionOwnerExternalIDAndProvider(ctx, "00000000-0000-0000-0000-000000000000")
 	if !errors.Is(err, db.ErrSessionNotFound) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
+	}
+}
+
+// TestGetSessionOwnerExternalIDAndProvider_NormalizesLegacy asserts that a
+// session row written with the legacy display value 'Claude Code' is
+// surfaced as canonical validation.ProviderClaudeCode. This is the CF-351
+// contract that downstream chunk-storage paths can rely on without doing
+// their own normalization.
+func TestGetSessionOwnerExternalIDAndProvider_NormalizesLegacy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	user := testutil.CreateTestUser(t, env, "legacy@test.com", "Legacy Owner")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "legacy-external-id")
+
+	ctx := context.Background()
+
+	// Directly write the legacy display value bypassing any normalization path.
+	if _, err := env.DB.Exec(ctx,
+		`UPDATE sessions SET session_type = 'Claude Code' WHERE id = $1`,
+		sessionID); err != nil {
+		t.Fatalf("failed to set legacy session_type: %v", err)
+	}
+
+	_, _, provider, err := store.GetSessionOwnerExternalIDAndProvider(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetSessionOwnerExternalIDAndProvider failed: %v", err)
+	}
+	if provider != validation.ProviderClaudeCode {
+		t.Errorf("provider = %q, want canonical %q (legacy 'Claude Code' should normalize)", provider, validation.ProviderClaudeCode)
 	}
 }
 

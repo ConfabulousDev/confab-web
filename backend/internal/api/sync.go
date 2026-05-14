@@ -413,7 +413,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 	defer storageCancel()
 
-	s3Key, err := s.storage.UploadChunk(storageCtx, userID, externalID, req.FileName, req.FirstLine, lastLine, content.Bytes())
+	s3Key, err := s.storage.UploadChunk(storageCtx, userID, provider, externalID, req.FileName, req.FirstLine, lastLine, content.Bytes())
 	if err != nil {
 		log.Error("Failed to upload chunk",
 			"error", err,
@@ -602,13 +602,6 @@ func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
 // Helpers
 // ============================================================================
 
-// buildChunkS3Key constructs the S3 key for a chunk file
-// Format: {user_id}/claude-code/{external_id}/chunks/{file_name}/chunk_{first:08d}_{last:08d}.jsonl
-func buildChunkS3Key(userID int64, externalID, fileName string, firstLine, lastLine int) string {
-	return fmt.Sprintf("%d/claude-code/%s/chunks/%s/chunk_%08d_%08d.jsonl",
-		userID, externalID, fileName, firstLine, lastLine)
-}
-
 // handleCanonicalSyncFileRead reads and concatenates all chunks for a file via canonical access (CF-132)
 // GET /api/v1/sessions/{id}/sync/file?file_name=...&line_offset=...
 // Supports: owner access, public shares, system shares, recipient shares
@@ -671,9 +664,9 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	session := result.Session
 	isOwner := result.AccessInfo.AccessType == db.SessionAccessOwner
 
-	// Get the session's user_id and external_id for S3 path
+	// Get the session's user_id, external_id, and provider for the S3 path
 	sessionStore := &dbsession.Store{DB: s.db}
-	sessionUserID, externalID, err := sessionStore.GetSessionOwnerAndExternalID(dbCtx, sessionID)
+	sessionUserID, externalID, provider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 	if err != nil {
 		log.Error("Failed to get session info", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to get session info")
@@ -705,7 +698,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	listCtx, listCancel := context.WithTimeout(r.Context(), StorageTimeout)
 	defer listCancel()
 
-	chunkKeys, err := s.storage.ListChunks(listCtx, sessionUserID, externalID, fileName)
+	chunkKeys, err := s.storage.ListChunks(listCtx, sessionUserID, provider, externalID, fileName)
 	if err != nil {
 		log.Error("Failed to list chunks", "error", err, "session_id", sessionID, "file_name", fileName)
 		respondStorageError(w, err, "Failed to list chunks")

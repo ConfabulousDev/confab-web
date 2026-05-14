@@ -256,6 +256,10 @@ func TestParseChunkKey(t *testing.T) {
 	}{
 		{"123/claude-code/abc/chunks/transcript.jsonl/chunk_00000001_00000010.jsonl", 1, 10, true},
 		{"123/claude-code/abc/chunks/agent.jsonl/chunk_00000100_00000200.jsonl", 100, 200, true},
+		// Codex-path fixtures (CF-351). The parser is opaque to the provider
+		// segment and must accept any value there identically.
+		{"123/codex/abc/chunks/transcript.jsonl/chunk_00000001_00000010.jsonl", 1, 10, true},
+		{"456/codex/def/chunks/transcript.jsonl/chunk_00000050_00000099.jsonl", 50, 99, true},
 		{"chunk_00000001_00000005.jsonl", 1, 5, true},
 		{"invalid.jsonl", 0, 0, false},
 		{"chunk_abc_def.jsonl", 0, 0, false},

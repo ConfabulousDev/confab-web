@@ -14,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 var tracer = otel.Tracer("confab/storage")
@@ -185,9 +187,34 @@ func NewValidFirstLineRange(first, last int) (ValidFirstLineRange, error) {
 	return ValidFirstLineRange{First: first, Last: last, validated: true}, nil
 }
 
-// UploadChunk uploads a chunk file for incremental sync
-// Key format: {user_id}/claude-code/{external_id}/chunks/{file_name}/chunk_{first:08d}_{last:08d}.jsonl
-func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, fileName string, firstLine, lastLine int, data []byte) (string, error) {
+// sessionChunksPrefix returns the per-(user, provider, session) prefix that
+// covers every chunk file for a session. The trailing slash makes it usable
+// directly as a ListObjects prefix.
+//
+// Format: {userID}/{provider}/{externalID}/chunks/
+func sessionChunksPrefix(userID int64, provider string, externalID string) string {
+	return fmt.Sprintf("%d/%s/%s/chunks/", userID, provider, externalID)
+}
+
+// chunkPrefix returns the per-(user, provider, session, file) prefix used for
+// chunk objects in S3. The provider segment makes the path canonical for the
+// agent that produced the session ("claude-code" or "codex"). The trailing
+// slash makes the result usable directly as a ListObjects prefix.
+//
+// Format: {userID}/{provider}/{externalID}/chunks/{fileName}/
+func chunkPrefix(userID int64, provider string, externalID, fileName string) string {
+	return sessionChunksPrefix(userID, provider, externalID) + fileName + "/"
+}
+
+// UploadChunk uploads a chunk file for incremental sync.
+// Key format: {user_id}/{provider}/{external_id}/chunks/{file_name}/chunk_{first:08d}_{last:08d}.jsonl
+func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, provider string, externalID, fileName string, firstLine, lastLine int, data []byte) (string, error) {
+	// Reject invalid provider before any S3 call so plumbing bugs fail loudly
+	// at the storage boundary instead of as missing objects.
+	if err := validation.ValidateProvider(provider); err != nil {
+		return "", fmt.Errorf("upload chunk: %w", err)
+	}
+
 	// Validate line number bounds: must be positive and fit in 8-digit zero-padding
 	if firstLine < 1 || lastLine < firstLine || lastLine > MaxLineNumber {
 		return "", fmt.Errorf("invalid line range [%d, %d]: must satisfy 1 <= firstLine <= lastLine <= %d", firstLine, lastLine, MaxLineNumber)
@@ -196,6 +223,7 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, f
 	ctx, span := tracer.Start(ctx, "storage.upload_chunk",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
+			attribute.String("session.provider", provider),
 			attribute.String("session.external_id", externalID),
 			attribute.String("file.name", fileName),
 			attribute.Int("chunk.first_line", firstLine),
@@ -204,8 +232,8 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, f
 		))
 	defer span.End()
 
-	key := fmt.Sprintf("%d/claude-code/%s/chunks/%s/chunk_%08d_%08d.jsonl",
-		userID, externalID, fileName, firstLine, lastLine)
+	key := chunkPrefix(userID, provider, externalID, fileName) +
+		fmt.Sprintf("chunk_%08d_%08d.jsonl", firstLine, lastLine)
 
 	reader := bytes.NewReader(data)
 	_, err := s.client.PutObject(ctx, s.bucket, key, reader, int64(len(data)), minio.PutObjectOptions{
@@ -223,16 +251,21 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, externalID, f
 // ListChunks lists all chunk files for a given session and file name
 // Returns keys sorted by name (which gives correct line order due to zero-padded naming)
 // Returns ErrTooManyChunks if the file exceeds MaxChunksPerFile.
-func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fileName string) ([]string, error) {
+func (s *S3Storage) ListChunks(ctx context.Context, userID int64, provider string, externalID, fileName string) ([]string, error) {
+	if err := validation.ValidateProvider(provider); err != nil {
+		return nil, fmt.Errorf("list chunks: %w", err)
+	}
+
 	ctx, span := tracer.Start(ctx, "storage.list_chunks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
+			attribute.String("session.provider", provider),
 			attribute.String("session.external_id", externalID),
 			attribute.String("file.name", fileName),
 		))
 	defer span.End()
 
-	prefix := fmt.Sprintf("%d/claude-code/%s/chunks/%s/", userID, externalID, fileName)
+	prefix := chunkPrefix(userID, provider, externalID, fileName)
 
 	var keys []string
 	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
@@ -264,16 +297,25 @@ func (s *S3Storage) ListChunks(ctx context.Context, userID int64, externalID, fi
 	return keys, nil
 }
 
-// DeleteAllSessionChunks deletes all chunks for all files in a session
-func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, externalID string) error {
+// DeleteAllSessionChunks deletes all chunks for all files in a session under
+// the given provider. The prefix is provider-scoped — chunks written under a
+// different provider for the same (user, externalID) pair are NOT touched.
+func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, provider string, externalID string) error {
+	if err := validation.ValidateProvider(provider); err != nil {
+		return fmt.Errorf("delete session chunks: %w", err)
+	}
+
 	ctx, span := tracer.Start(ctx, "storage.delete_all_session_chunks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
+			attribute.String("session.provider", provider),
 			attribute.String("session.external_id", externalID),
 		))
 	defer span.End()
 
-	prefix := fmt.Sprintf("%d/claude-code/%s/chunks/", userID, externalID)
+	// Session-wide prefix (no file-name segment) — deletes every chunk under
+	// this session's chunks/ subtree, scoped to the named provider.
+	prefix := sessionChunksPrefix(userID, provider, externalID)
 
 	var deletedCount int
 	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{

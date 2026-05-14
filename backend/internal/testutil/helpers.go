@@ -350,18 +350,22 @@ func CreateTestGitHubLink(t *testing.T, env *TestEnvironment, sessionID, linkTyp
 	return id
 }
 
-// UploadTestChunk uploads a JSONL chunk to S3 storage for testing
-func UploadTestChunk(t *testing.T, env *TestEnvironment, userID int64, externalID, fileName string, firstLine, lastLine int, data []byte) {
+// UploadTestChunk uploads a JSONL chunk to S3 storage for testing. The
+// provider argument is the canonical typed provider segment that ends up in
+// the S3 path; pass validation.ProviderClaudeCode for tests that don't care
+// about the provider dimension.
+func UploadTestChunk(t *testing.T, env *TestEnvironment, userID int64, provider string, externalID, fileName string, firstLine, lastLine int, data []byte) {
 	t.Helper()
 
-	_, err := env.Storage.UploadChunk(env.Ctx, userID, externalID, fileName, firstLine, lastLine, data)
+	_, err := env.Storage.UploadChunk(env.Ctx, userID, provider, externalID, fileName, firstLine, lastLine, data)
 	if err != nil {
 		t.Fatalf("failed to upload test chunk: %v", err)
 	}
 }
 
-// UploadTestTranscript uploads transcript bytes to S3 as a single chunk
-func UploadTestTranscript(t *testing.T, env *TestEnvironment, userID int64, externalID, fileName string, data []byte) {
+// UploadTestTranscript uploads transcript bytes to S3 as a single chunk.
+// See UploadTestChunk for the provider semantics.
+func UploadTestTranscript(t *testing.T, env *TestEnvironment, userID int64, provider string, externalID, fileName string, data []byte) {
 	t.Helper()
 
 	lineCount := bytes.Count(data, []byte{'\n'})
@@ -369,7 +373,7 @@ func UploadTestTranscript(t *testing.T, env *TestEnvironment, userID int64, exte
 		lineCount++
 	}
 
-	_, err := env.Storage.UploadChunk(env.Ctx, userID, externalID, fileName, 1, lineCount, data)
+	_, err := env.Storage.UploadChunk(env.Ctx, userID, provider, externalID, fileName, 1, lineCount, data)
 	if err != nil {
 		t.Fatalf("failed to upload test transcript: %v", err)
 	}

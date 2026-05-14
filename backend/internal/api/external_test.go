@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // =============================================================================
@@ -42,7 +43,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 
 		// Upload a valid transcript to S3
 		transcript := validTestTranscript()
-		testutil.UploadTestTranscript(t, env, user.ID, "ext-123", "transcript.jsonl", transcript)
+		testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderClaudeCode, "ext-123", "transcript.jsonl", transcript)
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
@@ -116,7 +117,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		})
 
 		transcript := validTestTranscript()
-		testutil.UploadTestTranscript(t, env, owner.ID, "ext-123", "transcript.jsonl", transcript)
+		testutil.UploadTestTranscript(t, env, owner.ID, validation.ProviderClaudeCode, "ext-123", "transcript.jsonl", transcript)
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(otherKey.RawToken)
@@ -142,7 +143,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		})
 
 		transcript := validTestTranscript()
-		testutil.UploadTestTranscript(t, env, owner.ID, "ext-123", "transcript.jsonl", transcript)
+		testutil.UploadTestTranscript(t, env, owner.ID, validation.ProviderClaudeCode, "ext-123", "transcript.jsonl", transcript)
 
 		// Share with recipient
 		testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
@@ -176,7 +177,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 			Summary: "Truncation test",
 		})
 
-		testutil.UploadTestTranscript(t, env, user.ID, "ext-123", "transcript.jsonl", longTestTranscript())
+		testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderClaudeCode, "ext-123", "transcript.jsonl", longTestTranscript())
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
@@ -497,7 +498,7 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 		})
 
 		transcript := validTestTranscript()
-		testutil.UploadTestTranscript(t, env, user.ID, "ext-dl-1", "transcript.jsonl", transcript)
+		testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderClaudeCode, "ext-dl-1", "transcript.jsonl", transcript)
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
@@ -584,7 +585,7 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 		})
 
 		transcript := validTestTranscript()
-		testutil.UploadTestTranscript(t, env, owner.ID, "ext-dl-5", "transcript.jsonl", transcript)
+		testutil.UploadTestTranscript(t, env, owner.ID, validation.ProviderClaudeCode, "ext-dl-5", "transcript.jsonl", transcript)
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(otherKey.RawToken)
