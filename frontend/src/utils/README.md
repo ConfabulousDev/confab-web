@@ -17,7 +17,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `sessionErrors.ts` | Session error types, messages, icons, and 401 redirect skip list |
 | `agentSkillChart.ts` | Shared agent/skill chart constants, types, and name truncation |
 | `utils.ts` | Low-level utilities: `stripAnsi`, `isRecord` (runtime guard for plain objects, used wherever an `unknown` needs its fields read without an `as` cast), `formatBytes` |
-| `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. Used by `ContentBlock`, `AwaySummary`, and `QueuedCommand` |
+| `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. `tryParseAsJson` — if a string is a JSON object/array, return a pretty-printed version (used as the JSON fallback before markdown rendering). Used by `ContentBlock`, the Codex message renderers, `AwaySummary`, and `QueuedCommand` |
 | `index.ts` | Barrel re-exports of commonly used functions |
 
 ## Key Functions

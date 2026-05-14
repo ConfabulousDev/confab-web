@@ -1,0 +1,93 @@
+/* Shared markdown typography (CF-358).
+ *
+ * Used by Claude's `ContentBlock.textBlock` and Codex's `CodexMessage.markdown`
+ * via CSS Modules `composes`. Anything that renders `renderMarkdownToHtml`
+ * output should compose this class so paragraph/code/list/heading styling is
+ * consistent across providers.
+ */
+.markdown {
+  color: var(--color-text-primary);
+  font-size: var(--font-xs);
+  line-height: 1.6;
+}
+
+.markdown :global(p) {
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.markdown :global(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown :global(a) {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.markdown :global(a:hover) {
+  color: var(--color-accent-hover);
+}
+
+.markdown :global(code) {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--color-bg-secondary);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.markdown :global(pre) {
+  margin: var(--spacing-xs) 0;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.markdown :global(pre code) {
+  background: none;
+  padding: 0;
+}
+
+/* Dark mode: ensure code blocks in text are readable */
+:global([data-theme="dark"]) .markdown :global(pre),
+:global([data-theme="dark"]) .markdown :global(code) {
+  color: var(--color-text-primary);
+  text-shadow: none;
+}
+
+.markdown :global(ul),
+.markdown :global(ol) {
+  margin: var(--spacing-xs) 0;
+  padding-left: var(--spacing-lg);
+}
+
+.markdown :global(li) {
+  margin: 2px 0;
+}
+
+.markdown :global(blockquote) {
+  margin: var(--spacing-xs) 0;
+  padding-left: var(--spacing-sm);
+  border-left: 2px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.markdown :global(strong) {
+  font-weight: var(--font-semibold);
+}
+
+.markdown :global(h1),
+.markdown :global(h2),
+.markdown :global(h3),
+.markdown :global(h4) {
+  margin: var(--spacing-sm) 0 var(--spacing-xs) 0;
+  font-weight: var(--font-semibold);
+}
+
+.markdown :global(h1) { font-size: var(--font-lg); }
+.markdown :global(h2) { font-size: var(--font-md); }
+.markdown :global(h3) { font-size: var(--font-base); }
+.markdown :global(h4) { font-size: var(--font-sm); }

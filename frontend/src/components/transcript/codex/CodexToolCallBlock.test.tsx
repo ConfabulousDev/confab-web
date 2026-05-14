@@ -1,5 +1,7 @@
 // Component tests for CodexToolCallBlock — locks the dispatch contract per
-// tool name. Each branch is a separate spec-test row.
+// tool name and the rendering pipeline upgrade from CF-358 (BashOutput for
+// exec, CodeBlock with language="diff" for apply_patch, expanded CodeBlocks
+// for generic tools, no `<details>` wrappers).
 
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -23,11 +25,8 @@ function execCommandItem(overrides: Partial<CodexToolCallItem> = {}): CodexToolC
 describe('CodexToolCallBlock', () => {
   it('renders exec_command with command, output, and exit-code badge', () => {
     render(<CodexToolCallBlock item={execCommandItem()} />);
-    // The command itself is visible.
     expect(screen.getByText(/pwd/)).toBeInTheDocument();
-    // Output text is rendered.
     expect(screen.getByText(/\/tmp\/proj/)).toBeInTheDocument();
-    // Exit-code badge ("exit 0") shows up somewhere in the rendered DOM.
     expect(screen.getByText(/exit\s*0/i)).toBeInTheDocument();
   });
 
@@ -44,7 +43,7 @@ describe('CodexToolCallBlock', () => {
   });
 
   it('renders apply_patch with file-list summary', () => {
-    render(
+    const { container } = render(
       <CodexToolCallBlock
         item={{
           kind: 'tool_call',
@@ -63,8 +62,11 @@ describe('CodexToolCallBlock', () => {
         }}
       />,
     );
-    // The file path or its leaf shows up in the rendered summary.
-    expect(screen.getByText(/codex-support\.md/)).toBeInTheDocument();
+    // The leaf filename appears inside the file-list summary <ul>. The patch
+    // body + raw output also mention it, so scope the assertion to the list.
+    const fileList = container.querySelector('ul');
+    expect(fileList).not.toBeNull();
+    expect(fileList?.textContent).toContain('codex-support.md');
   });
 
   it('renders web_search_call with query chips', () => {
@@ -116,5 +118,106 @@ describe('CodexToolCallBlock', () => {
       />,
     );
     expect(screen.getByText(/pending|no output/i)).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // CF-358 — content rendering parity
+  // ---------------------------------------------------------------------------
+
+  it('strips ANSI escape codes from exec_command output', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={execCommandItem({ rawOutput: '\x1b[31merror line\x1b[0m\nsecond line' })}
+      />,
+    );
+    // No raw escape characters survive into the DOM text content.
+    expect(container.textContent).not.toContain('\x1b[');
+    expect(container.textContent).toContain('error line');
+    expect(container.textContent).toContain('second line');
+  });
+
+  it('routes exec_command output through BashOutput (terminal styling)', () => {
+    const { container } = render(<CodexToolCallBlock item={execCommandItem()} />);
+    // BashOutput.module.css exports a `.bashOutput` class on the container.
+    // CSS Modules produces a unique class name that includes the source name.
+    const bash = container.querySelector('[class*="bashOutput"]');
+    expect(bash).not.toBeNull();
+  });
+
+  it('applies error styling to BashOutput container on non-zero exit', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={execCommandItem({
+          execMetadata: { exitCode: 1, wallTimeMs: 200 },
+          rawOutput: 'boom',
+        })}
+      />,
+    );
+    const bash = container.querySelector('[class*="bashOutput"]');
+    expect(bash).not.toBeNull();
+    // `.error` from BashOutput.module.css must be present on (or under) the
+    // container when exitCode !== 0.
+    expect(bash?.className).toMatch(/error/i);
+  });
+
+  it('renders apply_patch raw diff with a prism language-diff class (no expand toggle)', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={{
+          kind: 'tool_call',
+          timestamp: '2026-05-13T01:00:00Z',
+          toolName: 'apply_patch',
+          callId: 'call_patch_diff',
+          rawInput: '--- a/foo.ts\n+++ b/foo.ts\n@@\n-old\n+new\n',
+          structuredOutput: {
+            success: true,
+            changes: { '/proj/foo.ts': { type: 'update' } },
+          },
+          status: 'completed',
+        }}
+      />,
+    );
+    const diffCode = container.querySelector('code[class*="language-diff"]');
+    expect(diffCode).not.toBeNull();
+    // The raw diff text shows without clicking any expansion button.
+    expect(diffCode?.textContent).toContain('-old');
+    expect(diffCode?.textContent).toContain('+new');
+  });
+
+  it('generic tool renders rawInput JSON via CodeBlock (language-json, expanded)', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={{
+          kind: 'tool_call',
+          timestamp: '2026-05-13T01:00:00Z',
+          toolName: 'future_tool',
+          callId: 'call_future',
+          rawInput: { k: 'v', n: 1 },
+          rawOutput: 'plain text result',
+          status: 'completed',
+        }}
+      />,
+    );
+    expect(container.querySelector('code[class*="language-json"]')).not.toBeNull();
+    expect(container.querySelector('code[class*="language-plain"]')).not.toBeNull();
+    // No <summary> means no collapsed <details> wrapper — content is expanded.
+    expect(container.querySelector('summary')).toBeNull();
+  });
+
+  it('generic tool renders string rawInput that parses as JSON with language-json', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={{
+          kind: 'tool_call',
+          timestamp: '2026-05-13T01:00:00Z',
+          toolName: 'future_tool_str',
+          callId: 'call_future_str',
+          rawInput: '{"k":"v"}',
+          rawOutput: '',
+          status: 'completed',
+        }}
+      />,
+    );
+    expect(container.querySelector('code[class*="language-json"]')).not.toBeNull();
   });
 });

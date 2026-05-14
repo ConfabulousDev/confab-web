@@ -1,8 +1,8 @@
 // Re-export utilities from utils.ts
 export { stripAnsi } from './utils';
 
-// Re-export markdown rendering
-export { renderMarkdownToHtml } from './markdown';
+// Re-export markdown rendering + the shared JSON pretty-print fallback
+export { renderMarkdownToHtml, tryParseAsJson } from './markdown';
 
 // Re-export formatting utilities
 export {

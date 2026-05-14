@@ -51,20 +51,14 @@
   border-color: var(--color-danger);
 }
 
-.pending {
-  background: var(--color-bg-primary);
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
 .body {
   color: var(--color-text-primary);
   font-size: var(--font-xs);
   line-height: 1.5;
 }
 
-.command,
-.output {
+/* Body-level `$ cmd` line above an exec_command's BashOutput frame. */
+.commandLine {
   margin: var(--spacing-xs) 0;
   padding: var(--spacing-sm);
   background: var(--color-bg-primary);
@@ -76,32 +70,10 @@
   overflow-wrap: break-word;
 }
 
-.workdir {
-  color: var(--color-text-muted);
-}
-
 .noOutput {
   margin: var(--spacing-xs) 0;
   font-style: italic;
   color: var(--color-text-muted);
-}
-
-.showAllButton,
-.expandButton {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 0.85em;
-  cursor: pointer;
-  margin-top: var(--spacing-xs);
-}
-
-.showAllButton:hover,
-.expandButton:hover {
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
 }
 
 .patchSummary {
@@ -148,14 +120,4 @@
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
   font-size: 0.85em;
   color: var(--color-text-primary);
-}
-
-.detailsBlock {
-  margin: var(--spacing-xs) 0;
-}
-
-.detailsBlock summary {
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  font-size: 0.9em;
 }

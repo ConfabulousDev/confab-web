@@ -1,14 +1,16 @@
 // Renders a paired Codex tool call + output.
 //
 // Dispatch by `toolName`:
-//   exec_command       command + output + exit-code badge
-//   apply_patch        file-list summary + raw + click-to-expand
+//   exec_command       command + BashOutput (ANSI-stripped, terminal styling)
+//   apply_patch        file-list summary + CodeBlock(language="diff")
 //   web_search_call    query chip(s)
-//   <anything else>    generic "Tool: <name>" with rawInput / rawOutput
+//   <anything else>    generic Input / Output via CodeBlock (json / plain)
 
-import { useState } from 'react';
 import type { CodexToolCallItem } from '@/types/codexRenderItem';
+import { tryParseAsJson } from '@/utils';
 import { isRecord } from '@/utils/utils';
+import BashOutput from '../BashOutput';
+import CodeBlock from '../CodeBlock';
 import {
   formatCodexTimestamp,
   leafFileName,
@@ -19,8 +21,6 @@ import styles from './CodexToolCallBlock.module.css';
 export interface CodexToolCallBlockProps {
   item: CodexToolCallItem;
 }
-
-const EXEC_OUTPUT_SOFT_CAP = 100;
 
 export default function CodexToolCallBlock({ item }: CodexToolCallBlockProps) {
   return (
@@ -87,40 +87,18 @@ function renderBody(item: CodexToolCallItem) {
 
 function ExecCommandBody({ item }: { item: CodexToolCallItem }) {
   const cmd = readStringField(item.rawInput, 'cmd');
-
   return (
     <div className={styles.body}>
-      {cmd ? <pre className={styles.command}>$ {cmd}</pre> : null}
+      {cmd ? <pre className={styles.commandLine}>$ {cmd}</pre> : null}
       {item.rawOutput !== undefined ? (
-        <ExecOutput output={item.rawOutput} />
+        <BashOutput
+          output={item.rawOutput}
+          exitCode={item.execMetadata?.exitCode ?? null}
+        />
       ) : (
         <NoOutputIndicator status={item.status} />
       )}
     </div>
-  );
-}
-
-function ExecOutput({ output }: { output: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const lines = output.split('\n');
-  const isOverCap = lines.length > EXEC_OUTPUT_SOFT_CAP;
-  const visible = expanded || !isOverCap ? lines : lines.slice(0, EXEC_OUTPUT_SOFT_CAP);
-
-  return (
-    <>
-      <pre className={styles.output}>{visible.join('\n')}</pre>
-      {isOverCap ? (
-        <button
-          type="button"
-          className={styles.showAllButton}
-          onClick={() => setExpanded((prev) => !prev)}
-        >
-          {expanded
-            ? `Show fewer (${EXEC_OUTPUT_SOFT_CAP} of ${lines.length})`
-            : `Show all (${lines.length} lines)`}
-        </button>
-      ) : null}
-    </>
   );
 }
 
@@ -139,7 +117,6 @@ interface PatchChange {
 }
 
 function ApplyPatchBody({ item }: { item: CodexToolCallItem }) {
-  const [expanded, setExpanded] = useState(false);
   const changes = readPatchChanges(item.structuredOutput);
   const filePaths = Object.keys(changes);
 
@@ -164,23 +141,11 @@ function ApplyPatchBody({ item }: { item: CodexToolCallItem }) {
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className={styles.expandButton}
-        onClick={() => setExpanded((prev) => !prev)}
-      >
-        {expanded ? 'Hide raw patch' : 'Show raw patch'}
-      </button>
-
-      {expanded ? (
-        <>
-          {typeof item.rawInput === 'string' ? (
-            <pre className={styles.output}>{item.rawInput}</pre>
-          ) : null}
-          {item.rawOutput ? (
-            <pre className={styles.output}>{item.rawOutput}</pre>
-          ) : null}
-        </>
+      {typeof item.rawInput === 'string' ? (
+        <CodeBlock code={item.rawInput} language="diff" maxHeight="500px" />
+      ) : null}
+      {item.rawOutput ? (
+        <CodeBlock code={item.rawOutput} language="plain" maxHeight="300px" />
       ) : null}
     </div>
   );
@@ -228,23 +193,43 @@ function WebSearchBody({ item }: { item: CodexToolCallItem }) {
 // ----------------------------------------------------------------------------
 
 function GenericToolBody({ item }: { item: CodexToolCallItem }) {
+  // Treat `null` as "no input" so unknown tools don't render a tiny `null`
+  // code block. `undefined` is also absent; non-null values render.
+  const hasInput = item.rawInput !== undefined && item.rawInput !== null;
+  const output = item.rawOutput;
+  const hasOutput = typeof output === 'string' && output !== '';
+  // Show the no-output line when the user would otherwise see literally
+  // nothing under the header (no input + no output) or while we're still
+  // waiting on the call to complete.
+  const showNoOutput = !hasOutput && (!hasInput || item.status === 'pending');
+
   return (
     <div className={styles.body}>
-      {item.rawInput !== undefined ? (
-        <details className={styles.detailsBlock}>
-          <summary>Input</summary>
-          <pre className={styles.output}>{stringifyForDisplay(item.rawInput)}</pre>
-        </details>
+      {hasInput ? <GenericInputBlock input={item.rawInput} /> : null}
+      {hasOutput ? (
+        <CodeBlock code={output} language="plain" maxHeight="400px" />
       ) : null}
-      {item.rawOutput ? (
-        <details className={styles.detailsBlock}>
-          <summary>Output</summary>
-          <pre className={styles.output}>{item.rawOutput}</pre>
-        </details>
-      ) : (
-        <NoOutputIndicator status={item.status} />
-      )}
+      {showNoOutput ? <NoOutputIndicator status={item.status} /> : null}
     </div>
+  );
+}
+
+// Render `rawInput` as a CodeBlock. Object/array inputs are always JSON.
+// String inputs pretty-print as JSON when parseable, otherwise stay as-is in
+// a plain block.
+function GenericInputBlock({ input }: { input: unknown }) {
+  if (typeof input === 'string') {
+    const jsonPretty = tryParseAsJson(input);
+    return (
+      <CodeBlock
+        code={jsonPretty ?? input}
+        language={jsonPretty ? 'json' : 'plain'}
+        maxHeight="400px"
+      />
+    );
+  }
+  return (
+    <CodeBlock code={stringifyForDisplay(input)} language="json" maxHeight="400px" />
   );
 }
 

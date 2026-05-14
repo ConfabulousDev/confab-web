@@ -1,6 +1,6 @@
 import type { ContentBlock as ContentBlockType } from '@/types';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, isToolReferenceBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
-import { stripAnsi, renderMarkdownToHtml } from '@/utils';
+import { stripAnsi, renderMarkdownToHtml, tryParseAsJson } from '@/utils';
 import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
 import CodeBlock from './CodeBlock';
 import BashOutput from './BashOutput';
@@ -18,25 +18,6 @@ function isBashOutput(content: string, tool: string): boolean {
   if (tool === 'Bash') return true;
   // Heuristic: check for common bash patterns
   return content.includes('$ ') || content.match(/^[\w@-]+:/) !== null || content.includes('\n$ ');
-}
-
-// Try to parse text as JSON and return pretty-printed version if it's an object/array
-function tryParseAsJson(text: string): string | null {
-  const trimmed = text.trim();
-  // Quick check: must start with { or [
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(trimmed);
-    // Only pretty-print objects and arrays, not primitives
-    if (typeof parsed === 'object' && parsed !== null) {
-      return JSON.stringify(parsed, null, 2);
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCurrentSearchMatch }: ContentBlockProps) {
