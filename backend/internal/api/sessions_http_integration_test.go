@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
@@ -97,6 +98,82 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 
 		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
+	})
+
+	// CF-355: SessionListItem.LastSyncTime → JSON last_sync_time projection
+	// must work for both providers. Pre-fix, codex sessions had
+	// last_message_at = NULL because chunk-ingest skipped timestamp
+	// extraction; this test pins that the wire shape works once the column
+	// is populated, for both claude-code and codex.
+	t.Run("populates last_sync_time for both claude-code and codex sessions", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		ccID := testutil.CreateTestSessionFull(t, env, user.ID, "cc-session", testutil.TestSessionFullOpts{Summary: "claude"})
+		// CreateTestSessionFull doesn't accept a provider; flip session_type after
+		// the fact so the row stays visible (has content) and is tagged as codex.
+		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-session", testutil.TestSessionFullOpts{Summary: "codex"})
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			t.Fatalf("set codex session_type: %v", err)
+		}
+
+		ccWant := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+		cxWant := time.Date(2026, 5, 13, 12, 30, 0, 0, time.UTC)
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET last_message_at = $1 WHERE id = $2", ccWant, ccID); err != nil {
+			t.Fatalf("set cc last_message_at: %v", err)
+		}
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET last_message_at = $1 WHERE id = $2", cxWant, cxID); err != nil {
+			t.Fatalf("set cx last_message_at: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+
+		byExtID := make(map[string]db.SessionListItem, len(result.Sessions))
+		for _, s := range result.Sessions {
+			byExtID[s.ExternalID] = s
+		}
+
+		cc, ok := byExtID["cc-session"]
+		if !ok {
+			t.Fatalf("claude-code session not in list: got %d sessions", len(result.Sessions))
+		}
+		if cc.LastSyncTime == nil {
+			t.Error("claude-code session last_sync_time is nil")
+		} else if !cc.LastSyncTime.Equal(ccWant) {
+			t.Errorf("claude-code last_sync_time = %v, want %v", cc.LastSyncTime, ccWant)
+		}
+		if cc.Provider != db.ProviderClaudeCode {
+			t.Errorf("claude-code provider = %q, want %q", cc.Provider, db.ProviderClaudeCode)
+		}
+
+		cx, ok := byExtID["cx-session"]
+		if !ok {
+			t.Fatalf("codex session not in list: got %d sessions", len(result.Sessions))
+		}
+		if cx.LastSyncTime == nil {
+			t.Error("codex session last_sync_time is nil")
+		} else if !cx.LastSyncTime.Equal(cxWant) {
+			t.Errorf("codex last_sync_time = %v, want %v", cx.LastSyncTime, cxWant)
+		}
+		if cx.Provider != db.ProviderCodex {
+			t.Errorf("codex provider = %q, want %q", cx.Provider, db.ProviderCodex)
+		}
 	})
 
 	t.Run("isolates sessions between users", func(t *testing.T) {

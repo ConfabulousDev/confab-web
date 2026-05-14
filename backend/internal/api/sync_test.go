@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 )
 
 func TestExtractTextFromMessage(t *testing.T) {
@@ -142,6 +143,74 @@ func TestExtractSessionTitle(t *testing.T) {
 			got := extractSessionTitle([]byte(tt.content))
 			if got != tt.want {
 				t.Errorf("extractSessionTitle() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestExtractTimestampFromLine pins the helper's schema-agnostic behavior.
+// Both Claude Code transcript lines and Codex rollout lines carry a top-level
+// ISO-8601 "timestamp" field; the helper must parse either without provider
+// knowledge. CF-355: regression guard so a future "tighten with a type check"
+// refactor cannot silently break Codex last-message-at tracking.
+func TestExtractTimestampFromLine(t *testing.T) {
+	// want is RFC3339Nano; empty string means "expect nil".
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "claude code transcript line",
+			line: `{"type":"assistant","timestamp":"2025-01-15T11:30:00.000Z","message":{"role":"assistant","content":"hi"}}`,
+			want: "2025-01-15T11:30:00.000Z",
+		},
+		{
+			name: "codex session_meta line",
+			line: `{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"abc","cwd":"/p"}}`,
+			want: "2026-05-13T01:00:00.000Z",
+		},
+		{
+			name: "codex response_item line",
+			line: `{"timestamp":"2026-05-13T01:00:00.300Z","type":"response_item","payload":{"type":"message","role":"developer","content":[]}}`,
+			want: "2026-05-13T01:00:00.300Z",
+		},
+		{
+			name: "missing timestamp field",
+			line: `{"type":"summary","summary":"hello"}`,
+		},
+		{
+			name: "empty timestamp value",
+			line: `{"type":"user","timestamp":""}`,
+		},
+		{
+			name: "malformed timestamp value",
+			line: `{"type":"user","timestamp":"not-a-date"}`,
+		},
+		{
+			name: "malformed json",
+			line: `{"timestamp":"2026-05-13T01:00:00.000Z","type":`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTimestampFromLine(tt.line)
+			if tt.want == "" {
+				if got != nil {
+					t.Errorf("extractTimestampFromLine() = %v, want nil", got)
+				}
+				return
+			}
+			want, err := time.Parse(time.RFC3339Nano, tt.want)
+			if err != nil {
+				t.Fatalf("test fixture: bad RFC3339Nano %q: %v", tt.want, err)
+			}
+			if got == nil {
+				t.Fatalf("extractTimestampFromLine() = nil, want %v", want)
+			}
+			if !got.Equal(want) {
+				t.Errorf("extractTimestampFromLine() = %v, want %v", got, want)
 			}
 		})
 	}

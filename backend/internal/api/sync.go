@@ -374,12 +374,19 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build chunk content (lines joined by newlines, with trailing newline).
-	// Timestamp and PR-link extraction is specific to the Claude Code transcript
-	// schema (assistant_message envelope, tool_use blocks, etc.) and is not
-	// meaningful for other providers — for example, Codex rollout JSONL has a
-	// different shape entirely. Gate parsing on provider so non-claude-code
-	// sessions store raw bytes only.
+	//
+	// Per-line parsing has two independent gates — CF-355 keeps them separate
+	// so codex sessions still get last_message_at populated:
+	//
+	//   1. Timestamp extraction is provider-agnostic. Both Claude Code
+	//      transcripts and Codex rollouts carry a top-level ISO-8601
+	//      "timestamp" on every line. Gated only on transcript file_type so
+	//      agent/etc. files don't touch session.last_message_at.
+	//
+	//   2. PR-link extraction is Claude-Code-specific (assistant_message
+	//      envelope, tool_use blocks). Gated on provider AND file_type.
 	parseClaudeCode := provider == validation.ProviderClaudeCode && req.FileType == "transcript"
+	extractTimestamps := req.FileType == "transcript"
 
 	var content bytes.Buffer
 	var latestTimestamp *time.Time
@@ -389,13 +396,15 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		content.WriteString(line)
 		content.WriteString("\n")
 
-		if parseClaudeCode {
+		if extractTimestamps {
 			if ts := extractTimestampFromLine(line); ts != nil {
 				if latestTimestamp == nil || ts.After(*latestTimestamp) {
 					latestTimestamp = ts
 				}
 			}
+		}
 
+		if parseClaudeCode {
 			if link := extractPRLinkFromLine(line); link != nil {
 				dedupKey := link.Owner + "/" + link.Repo + "/" + link.Ref
 				if _, exists := prLinkSeen[dedupKey]; !exists {
