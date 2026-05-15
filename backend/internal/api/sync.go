@@ -359,15 +359,6 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Codex sessions only carry rollout JSONL under file_type "transcript".
-	// No other file_type is defined for codex yet (see ticket non-goals);
-	// reject explicitly rather than silently accepting an unknown shape.
-	if provider == validation.ProviderCodex && req.FileType != "transcript" {
-		respondError(w, http.StatusBadRequest,
-			"file_type must be 'transcript' for codex sessions")
-		return
-	}
-
 	// codex_rollout metadata is only meaningful for codex sessions. Check
 	// after VerifySessionOwnership so we don't leak the existence of someone
 	// else's claude-code session via this validation path.
