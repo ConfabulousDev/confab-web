@@ -1,5 +1,5 @@
 import { TrendsCard, StatRow } from './TrendsCard';
-import { ClaudeCodeIcon, DurationIcon, CalendarIcon, RobotIcon, ZapIcon } from '@/components/icons';
+import { SparklesIcon, DurationIcon, CalendarIcon, RobotIcon, ZapIcon } from '@/components/icons';
 import type { TrendsOverviewCard as TrendsOverviewCardData } from '@/schemas/api';
 import { formatDuration } from '@/utils';
 
@@ -29,7 +29,7 @@ export function TrendsOverviewCard({ data }: TrendsOverviewCardProps) {
   return (
     <TrendsCard
       title="Overview"
-      icon={ClaudeCodeIcon}
+      icon={SparklesIcon}
       subtitle={`${data.days_covered} day${data.days_covered !== 1 ? 's' : ''} with activity`}
     >
       <StatRow
