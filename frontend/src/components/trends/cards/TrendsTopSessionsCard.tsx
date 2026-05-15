@@ -1,5 +1,5 @@
 import { TrendsCard } from './TrendsCard';
-import { TrendingUpIcon } from '@/components/icons';
+import { ChatIcon, ClaudeCodeIcon, CodexIcon, TrendingUpIcon } from '@/components/icons';
 import { formatDuration } from '@/utils';
 import { formatCost } from '@/utils/tokenStats';
 import type { TrendsTopSessionsCard as TrendsTopSessionsCardData } from '@/schemas/api';
@@ -13,6 +13,15 @@ interface TrendsTopSessionsCardProps {
 function formatRepoName(repo: string): string {
   const parts = repo.split('/');
   return parts.length > 1 ? parts[parts.length - 1]! : repo;
+}
+
+// Diverges from the app-wide getProviderIcon (which defaults to Claude for
+// unknown values). The Costliest Sessions card must not assert Claude
+// identity for empty/unknown providers — surface a neutral ChatIcon instead.
+function getRowProviderIcon(provider: string) {
+  if (provider === 'codex') return CodexIcon;
+  if (provider === 'claude-code' || provider === 'Claude Code') return ClaudeCodeIcon;
+  return ChatIcon;
 }
 
 export function TrendsTopSessionsCard({ data }: TrendsTopSessionsCardProps) {
@@ -35,6 +44,7 @@ export function TrendsTopSessionsCard({ data }: TrendsTopSessionsCardProps) {
               <span className={styles.rank}>{index + 1}</span>
               <div className={styles.sessionInfo}>
                 <span className={styles.sessionTitle} title={session.title}>
+                  <span className={styles.providerIcon}>{getRowProviderIcon(session.provider)}</span>
                   {session.title}
                 </span>
                 <div className={styles.sessionMeta}>

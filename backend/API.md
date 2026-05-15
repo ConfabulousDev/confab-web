@@ -1139,6 +1139,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
         {
           "id": "550e8400-e29b-41d4-a716-446655440000",
           "title": "Implement dark mode with theme system",
+          "provider": "claude-code",
           "estimated_cost_usd": "45.20",
           "duration_ms": 7200000,
           "git_repo": "org/frontend-app"
@@ -1146,6 +1147,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
         {
           "id": "660e8400-e29b-41d4-a716-446655440001",
           "title": "Debug OAuth redirect loop",
+          "provider": "codex",
           "estimated_cost_usd": "32.15",
           "duration_ms": 5400000,
           "git_repo": "org/auth-service"
@@ -1187,6 +1189,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | `cards.top_sessions.sessions` | array | Top 10 most expensive sessions, ordered by cost descending |
 | `cards.top_sessions.sessions[].id` | string | Session UUID (for linking to session detail) |
 | `cards.top_sessions.sessions[].title` | string | Best available session title (custom > suggested > summary > first message > fallback) |
+| `cards.top_sessions.sessions[].provider` | string | Canonical provider value (`claude-code` or `codex`). Legacy `Claude Code` is normalized server-side. |
 | `cards.top_sessions.sessions[].estimated_cost_usd` | string | Session cost (decimal as string) |
 | `cards.top_sessions.sessions[].duration_ms` | int\|null | Session duration in milliseconds |
 | `cards.top_sessions.sessions[].git_repo` | string\|null | Extracted repo name (e.g., "org/repo") |

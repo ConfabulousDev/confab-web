@@ -1119,6 +1119,95 @@ func TestGetTrends_TopSessionsEmpty(t *testing.T) {
 	}
 }
 
+// TestGetTrends_TopSessions_PerProvider pins that the /trends top_sessions
+// response carries a canonical `provider` value per row, regardless of which
+// session_type variant exists in the database. Legacy 'Claude Code' rows
+// must surface as 'claude-code' — db.NormalizeProvider runs at the Scan site
+// per CLAUDE.md.
+func TestGetTrends_TopSessions_PerProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-top-providers@test.com", "Trends Providers User")
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Three sessions, distinct costs (descending: $9, $6, $3) so the top_sessions
+	// order is deterministic and we can index by row.
+	codexSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "top-prov-codex", "codex")
+	claudeSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "top-prov-claude", "claude-code")
+	legacySession := testutil.CreateTestSessionLegacyClaudeCode(t, env, user.ID, "top-prov-legacy")
+
+	seed := func(t *testing.T, sessionID string, cost float64) {
+		t.Helper()
+		err := store.UpsertCards(ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:        sessionID,
+				Version:          analytics.TokensCardVersion,
+				ComputedAt:       time.Now().UTC(),
+				UpToLine:         100,
+				EstimatedCostUSD: decimal.NewFromFloat(cost),
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s) failed: %v", sessionID, err)
+		}
+	}
+	seed(t, codexSession, 9.00)
+	seed(t, claudeSession, 6.00)
+	seed(t, legacySession, 3.00)
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+
+	response, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends failed: %v", err)
+	}
+	if response.Cards.TopSessions == nil {
+		t.Fatal("expected TopSessions card to be non-nil")
+	}
+	sessions := response.Cards.TopSessions.Sessions
+	if len(sessions) != 3 {
+		t.Fatalf("TopSessions length = %d, want 3", len(sessions))
+	}
+
+	// Expected order by descending cost: codex ($9), claude-code ($6), legacy → claude-code ($3).
+	cases := []struct {
+		index            int
+		wantProvider     string
+		wantSessionID    string
+		seededWithLegacy bool
+	}{
+		{0, "codex", codexSession, false},
+		{1, "claude-code", claudeSession, false},
+		{2, "claude-code", legacySession, true},
+	}
+	for _, c := range cases {
+		got := sessions[c.index]
+		if got.ID != c.wantSessionID {
+			t.Errorf("sessions[%d].ID = %s, want %s", c.index, got.ID, c.wantSessionID)
+		}
+		if got.Provider != c.wantProvider {
+			label := c.wantProvider
+			if c.seededWithLegacy {
+				label = "normalized from 'Claude Code' → 'claude-code'"
+			}
+			t.Errorf("sessions[%d].Provider = %q, want %q (%s)", c.index, got.Provider, c.wantProvider, label)
+		}
+	}
+}
+
 func int64Ptr(v int64) *int64 {
 	return &v
 }

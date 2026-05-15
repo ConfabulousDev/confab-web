@@ -126,6 +126,7 @@ type TrendsTopSessionsCard struct {
 type TopSessionItem struct {
 	ID               string  `json:"id"`
 	Title            string  `json:"title"`
+	Provider         string  `json:"provider"`
 	EstimatedCostUSD string  `json:"estimated_cost_usd"`
 	DurationMs       *int64  `json:"duration_ms,omitempty"`
 	GitRepo          *string `json:"git_repo,omitempty"`

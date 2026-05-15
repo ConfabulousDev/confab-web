@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/attribute"
@@ -490,6 +491,7 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 			SELECT
 				s.id,
 				s.external_id,
+				s.session_type,
 				COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message) AS title,
 				NULLIF(regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1'), '') AS git_repo
 			FROM sessions s
@@ -501,7 +503,7 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 		)
-		SELECT fs.id, fs.external_id, fs.title, fs.git_repo,
+		SELECT fs.id, fs.external_id, fs.session_type, fs.title, fs.git_repo,
 			   t.estimated_cost_usd, sess.duration_ms
 		FROM filtered_sessions fs
 		INNER JOIN session_card_tokens t ON fs.id = t.session_id
@@ -527,12 +529,14 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 	for rows.Next() {
 		var item TopSessionItem
 		var externalID string
+		var providerRaw string
 		var title *string
 		var costStr string
 
 		err := rows.Scan(
 			&item.ID,
 			&externalID,
+			&providerRaw,
 			&title,
 			&item.GitRepo,
 			&costStr,
@@ -541,6 +545,11 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 		if err != nil {
 			return nil, err
 		}
+
+		// Normalize legacy 'Claude Code' → canonical 'claude-code' (CLAUDE.md
+		// invariant: every Scan site reading sessions.session_type must call
+		// db.NormalizeProvider so the API surface only exposes canonical values).
+		item.Provider = db.NormalizeProvider(providerRaw)
 
 		if title != nil {
 			item.Title = *title

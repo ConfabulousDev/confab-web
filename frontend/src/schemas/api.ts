@@ -432,6 +432,7 @@ const TrendsAgentsAndSkillsCardSchema = z.object({
 const TopSessionItemSchema = z.object({
   id: z.string(),
   title: z.string(),
+  provider: z.string(),
   estimated_cost_usd: z.string(),
   duration_ms: z.number().nullable().optional(),
   git_repo: z.string().nullable().optional(),

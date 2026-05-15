@@ -13,7 +13,7 @@ Trend analytics cards for the Trends dashboard. Each card visualizes aggregated 
 | `TrendsToolsCard.tsx` | Aggregated tool usage with per-tool success/error breakdown |
 | `TrendsUtilizationCard.tsx` | Daily assistant utilization percentage chart |
 | `TrendsAgentsAndSkillsCard.tsx` | Aggregated agent and skill invocation counts |
-| `TrendsTopSessionsCard.tsx` | Top sessions by cost with links to session detail |
+| `TrendsTopSessionsCard.tsx` | Top sessions by cost with per-row provider icons (Claude / Codex / neutral) and links to session detail |
 | `trendsChart.module.css` | Shared chart styling for daily data visualizations |
 | `index.ts` | Barrel export for all trend card components |
 

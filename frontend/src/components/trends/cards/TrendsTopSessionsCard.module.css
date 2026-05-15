@@ -55,6 +55,13 @@
   text-overflow: ellipsis;
 }
 
+.providerIcon {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: text-bottom;
+  color: var(--color-text-primary);
+}
+
 .sessionMeta {
   display: flex;
   align-items: center;
