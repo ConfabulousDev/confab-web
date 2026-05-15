@@ -9,7 +9,7 @@ with Storybook.
 | Directory | Purpose | Change this when... |
 |-----------|---------|---------------------|
 | `components/` | Shared UI components (Button, Alert, Modal, Header, etc.) | Adding reusable UI elements, changing design system |
-| `components/session/` | Session detail view: provider-aware shell that branches to `ClaudeTranscriptPane` / `CodexTranscriptPane` and `SessionSummaryPanel` / `CodexSummaryEmpty` on `session.provider` | Changing session detail layout, adding session UI features |
+| `components/session/` | Session detail view: provider-aware shell that branches the Transcript pane (`ClaudeTranscriptPane` / `CodexTranscriptPane`) on `session.provider`. The Summary tab is provider-agnostic — both providers render `SessionSummaryPanel` (CF-364) | Changing session detail layout, adding session UI features |
 | `components/session/cards/` | Analytics card components + registry (TokensCard, ToolsCard, SmartRecapCard, etc.) | Adding new analytics cards, changing card layout |
 | `components/transcript/` | Claude transcript rendering: content blocks, code blocks, timeline/cost bars, and `attachments/` renderers for `attachment.*` side-channel rows + `away_summary` | Changing how Claude transcript messages are displayed |
 | `components/transcript/codex/` | Codex transcript rendering: virtualized timeline + turn-based navigation rail (`CodexTimelineBar`) + per-item renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback) with `isSelected` / `isNewSpeaker` hover/selection state | Changing how Codex transcript items are displayed |

@@ -5,6 +5,7 @@ import type { SessionAnalytics, GitHubLink } from '@/services/api';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
 import SessionViewer from './SessionViewer';
+import { buildCodexAnalyticsFixture } from './codexAnalyticsFixture';
 
 // Mock session detail
 const mockSession: SessionDetail = {
@@ -429,10 +430,12 @@ export const DeepLinkSharedSession: Story = {
 };
 
 /**
- * Codex session (CF-349). The Summary tab shows the "not yet available"
- * placeholder; switch to Transcript to see the Codex-specific renderer
- * fed by `initialCodexRawLines` (bypassing the live fetch). Filter chips,
- * cost toggle, and analytics cards are all hidden for Codex.
+ * Codex session (CF-364). The Summary tab renders the provider-agnostic
+ * `SessionSummaryPanel` with Codex-shaped analytics (gpt-5 model strings,
+ * `cache_creation=0`, `files_read=0`, etc. — see codexAnalyticsFixture.ts).
+ * Switch to Transcript to see the Codex-specific renderer fed by
+ * `initialCodexRawLines` (bypassing the live fetch). Filter chips and the
+ * cost toggle remain hidden for Codex.
  */
 const codexFixtureLines: RawCodexLine[] = [
   {
@@ -519,8 +522,11 @@ export const CodexSession: Story = {
     },
     isOwner: true,
     isShared: false,
-    activeTab: 'transcript',
+    activeTab: 'summary',
     initialMessages: [],
+    // Codex analytics fixture lives in codexAnalyticsFixture.ts and is shared
+    // with SessionSummaryPanel.stories so both stories stay in sync.
+    initialAnalytics: buildCodexAnalyticsFixture(),
     initialCodexRawLines: codexFixtureLines,
   },
 };

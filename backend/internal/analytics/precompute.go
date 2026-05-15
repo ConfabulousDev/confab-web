@@ -1,13 +1,11 @@
 package analytics
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
@@ -1037,39 +1035,11 @@ func (p *Precomputer) precomputeSmartRecapClaudeCode(ctx context.Context, sessio
 // (ComputeFromCodexRollout) and the Codex-specific search/recap helpers.
 // Codex has no agent files — the sync_files JOIN returns just the transcript.
 
-// loadCodexRollout downloads and parses the Codex transcript for a session.
-// Returns (nil, nil) when the session has no transcript row (caller should
-// treat as empty). Validation errors from the parser are logged but do not
-// fail the call.
+// loadCodexRollout wraps the package-level LoadCodexRollout for use from the
+// precompute worker, which carries session context in a StaleSession value.
+// The on-demand API handler calls LoadCodexRollout directly (CF-364).
 func (p *Precomputer) loadCodexRollout(ctx context.Context, session StaleSession) (*codex.ParsedRollout, error) {
-	var fileName string
-	err := p.db.QueryRowContext(ctx,
-		`SELECT file_name FROM sync_files WHERE session_id = $1 AND file_type = 'transcript' LIMIT 1`,
-		session.SessionID,
-	).Scan(&fileName)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	raw, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.Provider, session.ExternalID, fileName)
-	if err != nil || raw == nil {
-		return nil, err
-	}
-
-	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
-	if err != nil {
-		return nil, fmt.Errorf("parse codex rollout: %w", err)
-	}
-	if len(rollout.ValidationErrors) > 0 {
-		slog.WarnContext(ctx, "codex rollout parse warnings",
-			"session_id", session.SessionID,
-			"validation_errors", len(rollout.ValidationErrors),
-		)
-	}
-	return rollout, nil
+	return LoadCodexRollout(ctx, p.db, p.store, session.SessionID, session.UserID, session.Provider, session.ExternalID)
 }
 
 // codexSpanAttrs is the standard attribute set used for Codex precompute spans.

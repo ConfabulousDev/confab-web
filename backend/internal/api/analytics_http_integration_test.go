@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
@@ -476,4 +477,200 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 			t.Error("expected computed_at to be set")
 		}
 	})
+}
+
+// =============================================================================
+// Codex Session Analytics HTTP Integration Tests (CF-364)
+//
+// Exercises the Codex provider branch in HandleGetSessionAnalytics. The branch
+// must mirror precomputeRegularCardsCodex synchronously: download the rollout
+// via storage, parse via codex.ParseRollout, compute via ComputeFromCodexRollout,
+// upsert via Cards, respond.
+// =============================================================================
+
+// codexExactFixture is a hand-crafted minimal Codex rollout that exercises one
+// turn with a known token_count and a single apply_patch creating one file.
+//
+// Expected (per analytics.ComputeFromCodexRollout's documented mapping):
+//   - tokens.input          = 800   (1000 - 200 cached, OpenAI semantics)
+//   - tokens.output         = 200   (150 output + 50 reasoning)
+//   - tokens.cache_creation = 0     (OpenAI doesn't charge for cache writes)
+//   - tokens.cache_read     = 200   (cached portion)
+//   - code_activity.files_modified = 1 (one Add File)
+//   - code_activity.files_read     = 0 (Codex has no Read tool)
+//   - code_activity.lines_added    = 3 (the three +-prefixed lines)
+const codexExactFixture = `{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-test-aaaa-bbbb-cccc-dddddddddddd","timestamp":"2026-05-13T01:00:00.000Z","cwd":"/test","originator":"codex-tui","cli_version":"0.130.0","source":"cli","thread_source":"user","model_provider":"openai","model":"gpt-5"}}
+{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","cwd":"/test","approval_policy":"on-request"}}
+{"timestamp":"2026-05-13T01:00:00.200Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1778634000,"model_context_window":258400,"model":"gpt-5"}}
+{"timestamp":"2026-05-13T01:00:00.500Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"do something"}]}}
+{"timestamp":"2026-05-13T01:00:02.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"OK."}],"phase":"final"}}
+{"timestamp":"2026-05-13T01:00:03.000Z","type":"response_item","payload":{"type":"custom_tool_call","status":"completed","call_id":"c1","name":"apply_patch","input":"*** Begin Patch\n*** Add File: foo.go\n+package foo\n+\n+func Bar() {}\n*** End Patch"}}
+{"timestamp":"2026-05-13T01:00:03.100Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"c1","output":"{\"output\":\"Success.\\n\",\"metadata\":{\"exit_code\":0}}"}}
+{"timestamp":"2026-05-13T01:00:03.200Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"c1","turn_id":"t1","stdout":"Success.\n","stderr":"","success":true,"changes":{"/test/foo.go":{"type":"add","content":"package foo\n\nfunc Bar() {}"}}}}
+{"timestamp":"2026-05-13T01:00:04.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":150,"reasoning_output_tokens":50,"total_tokens":1400},"last_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":150,"reasoning_output_tokens":50,"total_tokens":1400},"model_context_window":258400},"rate_limits":{}}}
+{"timestamp":"2026-05-13T01:00:05.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":1778634005,"duration_ms":5000}}
+`
+
+// TestGetSessionAnalytics_Codex_HTTP_Integration_Smoke uploads the canonical
+// codex parser fixture and confirms the analytics endpoint dispatches through
+// the Codex branch, returning real cards instead of an empty/Claude-parsed
+// response.
+func TestGetSessionAnalytics_Codex_HTTP_Integration_Smoke(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	rollout, err := os.ReadFile("../codex/testdata/sample_rollout.jsonl")
+	if err != nil {
+		t.Fatalf("failed to read sample_rollout.jsonl: %v", err)
+	}
+	lineCount := bytes.Count(rollout, []byte{'\n'})
+	if len(rollout) > 0 && rollout[len(rollout)-1] != '\n' {
+		lineCount++
+	}
+
+	user := testutil.CreateTestUser(t, env, "codex@example.com", "Codex User")
+	sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+	externalID := "codex-smoke-session"
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, externalID, validation.ProviderCodex)
+
+	testutil.UploadTestChunk(t, env, user.ID, validation.ProviderCodex, externalID, "rollout.jsonl", 1, lineCount, rollout)
+	testutil.CreateTestSyncFile(t, env, sessionID, "rollout.jsonl", "transcript", lineCount)
+
+	ts := setupTestServerWithEnv(t, env)
+	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+	resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	testutil.RequireStatus(t, resp, http.StatusOK)
+
+	var result analytics.AnalyticsResponse
+	testutil.ParseJSON(t, resp, &result)
+
+	// Tokens populated (OpenAI semantics: uncached portion only).
+	if result.Tokens.Input == 0 {
+		t.Error("expected non-zero input tokens for codex session")
+	}
+	if result.Tokens.CacheRead == 0 {
+		t.Error("expected non-zero cache_read tokens for codex session (cached portion)")
+	}
+	if result.Tokens.CacheCreation != 0 {
+		t.Errorf("expected cache_creation=0 for codex (OpenAI doesn't charge for writes), got %d", result.Tokens.CacheCreation)
+	}
+
+	// Cost is computed via gpt-5 pricing entry.
+	if result.Cost.EstimatedUSD.IsZero() {
+		t.Error("expected non-zero estimated cost for codex session (gpt-5 pricing should apply)")
+	}
+
+	// Cards map should carry the per-card payloads the frontend reads.
+	for _, key := range []string{"tokens", "session", "conversation", "code_activity", "tools"} {
+		if _, ok := result.Cards[key]; !ok {
+			t.Errorf("expected Cards[%q] to be present in codex analytics response", key)
+		}
+	}
+
+	// agents_and_skills always zero for Codex; the cards layer may emit it
+	// with zero counts. The frontend hides it via shouldRender, which we
+	// don't assert here — only that the backend produces a stable shape.
+}
+
+// TestGetSessionAnalytics_Codex_HTTP_Integration_Exact pins the exact token
+// counts the Codex branch must produce for a hand-crafted single-turn rollout
+// so future regressions in ComputeFromCodexRollout or the OpenAI-cache subtraction
+// surface immediately.
+func TestGetSessionAnalytics_Codex_HTTP_Integration_Exact(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	rollout := []byte(codexExactFixture)
+	lineCount := bytes.Count(rollout, []byte{'\n'})
+
+	user := testutil.CreateTestUser(t, env, "codex-exact@example.com", "Codex User")
+	sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+	externalID := "codex-exact-session"
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, externalID, validation.ProviderCodex)
+
+	testutil.UploadTestChunk(t, env, user.ID, validation.ProviderCodex, externalID, "rollout.jsonl", 1, lineCount, rollout)
+	testutil.CreateTestSyncFile(t, env, sessionID, "rollout.jsonl", "transcript", lineCount)
+
+	ts := setupTestServerWithEnv(t, env)
+	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+	resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	testutil.RequireStatus(t, resp, http.StatusOK)
+
+	var result analytics.AnalyticsResponse
+	testutil.ParseJSON(t, resp, &result)
+
+	// Exact token counts per ComputeFromCodexRollout mapping.
+	if result.Tokens.Input != 800 {
+		t.Errorf("tokens.input = %d, want 800 (1000 - 200 cached)", result.Tokens.Input)
+	}
+	if result.Tokens.Output != 200 {
+		t.Errorf("tokens.output = %d, want 200 (150 output + 50 reasoning)", result.Tokens.Output)
+	}
+	if result.Tokens.CacheRead != 200 {
+		t.Errorf("tokens.cache_read = %d, want 200", result.Tokens.CacheRead)
+	}
+	if result.Tokens.CacheCreation != 0 {
+		t.Errorf("tokens.cache_creation = %d, want 0 (OpenAI semantics)", result.Tokens.CacheCreation)
+	}
+
+	// Code activity: one apply_patch creating one file with 3 added lines.
+	codeActivityRaw, ok := result.Cards["code_activity"]
+	if !ok {
+		t.Fatal("Cards[\"code_activity\"] missing")
+	}
+	codeActivity, ok := codeActivityRaw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Cards[\"code_activity\"] = %T, want map[string]interface{}", codeActivityRaw)
+	}
+	if got := jsonNumber(codeActivity["files_read"]); got != 0 {
+		t.Errorf("code_activity.files_read = %d, want 0 (no Read tool in codex)", got)
+	}
+	if got := jsonNumber(codeActivity["files_modified"]); got != 1 {
+		t.Errorf("code_activity.files_modified = %d, want 1", got)
+	}
+	if got := jsonNumber(codeActivity["lines_added"]); got != 3 {
+		t.Errorf("code_activity.lines_added = %d, want 3", got)
+	}
+	if got := jsonNumber(codeActivity["lines_removed"]); got != 0 {
+		t.Errorf("code_activity.lines_removed = %d, want 0", got)
+	}
+}
+
+// jsonNumber unwraps a JSON-decoded number (float64 from encoding/json) to int64.
+// Returns -1 for missing or non-numeric fields so test errors are obvious.
+func jsonNumber(v interface{}) int64 {
+	switch n := v.(type) {
+	case float64:
+		return int64(n)
+	case int:
+		return int64(n)
+	case int64:
+		return n
+	default:
+		return -1
+	}
 }

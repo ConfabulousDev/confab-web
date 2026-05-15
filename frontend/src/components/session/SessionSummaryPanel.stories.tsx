@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { SessionAnalytics, GitHubLink } from '@/schemas/api';
 import SessionSummaryPanel from './SessionSummaryPanel';
+import { buildCodexAnalyticsFixture } from './codexAnalyticsFixture';
 
 // Helper to create analytics with both legacy and cards format
 function createAnalytics(base: {
@@ -587,4 +588,18 @@ export const AllCardsNarrow: Story = {
       </div>
     ),
   ],
+};
+
+/**
+ * Codex session (CF-364). Exercises the provider-agnostic panel against
+ * the shape ComputeFromCodexRollout produces — see codexAnalyticsFixture.ts
+ * for the full per-field rationale (gpt-5 models, cache_creation=0,
+ * files_read=0, empty smart_recap message_ids, absent agents/redactions).
+ */
+export const CodexSession: Story = {
+  args: {
+    sessionId: 'codex-session-id',
+    isOwner: true,
+    initialAnalytics: buildCodexAnalyticsFixture(),
+  },
 };

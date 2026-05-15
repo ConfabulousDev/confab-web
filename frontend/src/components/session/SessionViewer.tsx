@@ -15,7 +15,6 @@ import SessionHeader from './SessionHeader';
 import SessionSummaryPanel from './SessionSummaryPanel';
 import ClaudeTranscriptPane from './ClaudeTranscriptPane';
 import CodexTranscriptPane from './CodexTranscriptPane';
-import CodexSummaryEmpty from './CodexSummaryEmpty';
 import styles from './SessionViewer.module.css';
 
 // Provider canonical names per CF-347. Legacy 'Claude Code' rows still exist
@@ -290,17 +289,19 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
         {/* Tab Content */}
         <div className={styles.tabContent}>
           {activeTab === 'summary' ? (
-            isCodex ? (
-              <CodexSummaryEmpty />
-            ) : (
-              <SessionSummaryPanel
-                sessionId={session.id}
-                isOwner={isOwner}
-                initialAnalytics={initialAnalytics}
-                initialGithubLinks={initialGithubLinks}
-                onSuggestedTitleChange={handleSuggestedTitleChange}
-              />
-            )
+            // CF-364: Summary tab is provider-agnostic. Codex sessions get
+            // analytics from ComputeFromCodexRollout (CF-350) via the same
+            // SessionSummaryPanel. Smart-recap deep-links and TIL badges
+            // still skip on Codex — see SmartRecapCard and the TIL effect
+            // above — because both anchor to message UUIDs that Codex
+            // messages don't carry.
+            <SessionSummaryPanel
+              sessionId={session.id}
+              isOwner={isOwner}
+              initialAnalytics={initialAnalytics}
+              initialGithubLinks={initialGithubLinks}
+              onSuggestedTitleChange={handleSuggestedTitleChange}
+            />
           ) : (
             <div className={styles.timelineContainer}>
               {isCodex ? (
