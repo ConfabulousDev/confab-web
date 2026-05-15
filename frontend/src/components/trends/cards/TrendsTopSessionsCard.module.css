@@ -58,7 +58,7 @@
 .providerIcon {
   display: inline-block;
   margin-right: 6px;
-  vertical-align: text-bottom;
+  vertical-align: middle;
   color: var(--color-text-primary);
 }
 
