@@ -400,3 +400,40 @@ export const WithoutFilter: DirectStory = {
     />
   ),
 };
+
+// CF-382: Two headers stacked with identical metadata except provider + model
+// so reviewers can visually diff the Anthropic (orange) and OpenAI (teal) brand
+// glyphs side-by-side in the model meta-item.
+export const ProviderIconComparison: DirectStory = {
+  render: () => {
+    const sharedProps = {
+      title: 'Survey Codex subagent rollout integration points for CF-354',
+      hasCustomTitle: false,
+      autoTitle: 'Survey Codex subagent rollout integration points for CF-354',
+      ownerEmail: 'developer@example.com',
+      durationMs: 1800000,
+      sessionDate: new Date('2026-05-14T21:00:00'),
+      gitInfo: sampleGitInfo,
+      isOwner: true,
+      isShared: false,
+    };
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <SessionHeader
+          {...sharedProps}
+          sessionId="session-claude"
+          externalId="019e23cc-fixture-claude-session"
+          provider="claude-code"
+          model="claude-opus-4-7"
+        />
+        <SessionHeader
+          {...sharedProps}
+          sessionId="session-codex"
+          externalId="019e23cc-fixture-codex-session"
+          provider="codex"
+          model="gpt-5-codex"
+        />
+      </div>
+    );
+  },
+};

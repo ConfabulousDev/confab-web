@@ -108,4 +108,22 @@ describe('SessionHeader', () => {
       expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
     });
   });
+
+  describe('provider icon', () => {
+    it('renders the Claude brand icon for claude-code sessions', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} provider="claude-code" model="claude-opus-4-7" />
+      );
+      expect(screen.getByTestId('icon-claude')).toBeInTheDocument();
+      expect(screen.queryByTestId('icon-codex')).not.toBeInTheDocument();
+    });
+
+    it('renders the Codex brand icon for codex sessions', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} provider="codex" model="gpt-5-codex" />
+      );
+      expect(screen.getByTestId('icon-codex')).toBeInTheDocument();
+      expect(screen.queryByTestId('icon-claude')).not.toBeInTheDocument();
+    });
+  });
 });
