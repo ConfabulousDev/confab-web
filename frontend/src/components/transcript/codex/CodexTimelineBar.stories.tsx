@@ -130,3 +130,22 @@ export const Empty: Story = {
     </BarFrame>
   ),
 };
+
+// Two turns separated by a ~10 minute thinking gap. The blue user stripe
+// for turn 2 visibly dominates because the time blend favors duration.
+const longUserGap: CodexRenderItem[] = [
+  user('2026-05-13T18:00:00Z', 'first prompt'),
+  assistant('2026-05-13T18:00:05Z'),
+  turnSep('2026-05-13T18:00:06Z', 1, 6000, 800),
+  user('2026-05-13T18:10:00Z', 'after a walk'), // ~10 min user thinking gap
+  assistant('2026-05-13T18:10:08Z'),
+  turnSep('2026-05-13T18:10:09Z', 2, 8000, 900),
+];
+
+export const LongUserGap: Story = {
+  render: () => (
+    <BarFrame label="Two turns with a long user thinking gap between them — note the dominant blue stripe.">
+      <CodexTimelineBar items={longUserGap} selectedIndex={0} onSeek={() => undefined} />
+    </BarFrame>
+  ),
+};

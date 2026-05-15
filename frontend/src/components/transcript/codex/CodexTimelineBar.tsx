@@ -1,12 +1,11 @@
-// Vertical turn-based navigation bar for Codex transcripts. One clickable
-// segment per `CodexTurnSeparatorItem`, plus a trailing in-flight segment.
-// Layout math is shared with Claude's TimelineBar via useCodexSegmentLayout
-// → useBlendedSegmentLayout in ../timelineSegments.ts.
+// Vertical turn-based navigation bar for Codex transcripts. Each turn
+// emits up to two clickable segments — a user thinking-gap segment and an
+// assistant body segment — matching the Claude TimelineBar shape.
 
 import { useCallback, useState, useRef } from 'react';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
+import { formatDuration } from '../timelineFormat';
 import { useCodexSegmentLayout, type CodexTimelineSegment } from './codexTimelineSegments';
-import { formatDurationMs } from './codexFormat';
 import styles from './CodexTimelineBar.module.css';
 
 export interface CodexTimelineBarProps {
@@ -25,17 +24,11 @@ export default function CodexTimelineBar({ items, selectedIndex, onSeek }: Codex
   const { segments, heightPercents, totalSize, indicatorPosition } =
     useCodexSegmentLayout(items, selectedIndex);
 
-  const handleSegmentClick = useCallback(
-    (segment: CodexTimelineSegment) => onSeek(segment.startIndex),
-    [onSeek],
-  );
-
   const handleSegmentHover = useCallback(
     (segment: CodexTimelineSegment | null, event?: React.MouseEvent) => {
       setHoveredSegment(segment);
       if (segment && event && barRef.current) {
-        const barRect = barRef.current.getBoundingClientRect();
-        setTooltipPosition({ top: event.clientY, left: barRect.left });
+        setTooltipPosition({ top: event.clientY, left: barRef.current.getBoundingClientRect().left });
       }
     },
     [],
@@ -53,9 +46,9 @@ export default function CodexTimelineBar({ items, selectedIndex, onSeek }: Codex
             key={index}
             data-codex-segment
             data-turn-index={segment.turnIndex}
-            className={styles.segment}
+            className={`${styles.segment} ${styles[segment.speaker]}`}
             style={{ height: `${heightPercents[index]}%` }}
-            onClick={() => handleSegmentClick(segment)}
+            onClick={() => onSeek(segment.startIndex)}
             onMouseEnter={(e) => handleSegmentHover(segment, e)}
             onMouseMove={(e) => handleSegmentHover(segment, e)}
             onMouseLeave={() => handleSegmentHover(null)}
@@ -68,24 +61,20 @@ export default function CodexTimelineBar({ items, selectedIndex, onSeek }: Codex
         style={{ top: `${indicatorPosition}%` }}
       />
 
-      {hoveredSegment ? (
+      {hoveredSegment && (
         <div
           className={styles.tooltip}
           style={{ top: tooltipPosition.top, left: tooltipPosition.left }}
         >
           {formatTooltip(hoveredSegment)}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
 
 function formatTooltip(segment: CodexTimelineSegment): string {
+  const speaker = segment.speaker === 'user' ? 'User' : 'Codex';
   const itemLabel = segment.messageCount === 1 ? 'item' : 'items';
-  const duration = formatDurationMs(segment.durationMs);
-  const ttftPart =
-    segment.timeToFirstTokenMs !== undefined
-      ? ` · TTFT ${formatDurationMs(segment.timeToFirstTokenMs)}`
-      : '';
-  return `Turn ${segment.turnIndex} — ${duration}${ttftPart}, ${segment.messageCount} ${itemLabel}`;
+  return `${speaker}: ${formatDuration(segment.durationMs)}, ${segment.messageCount} ${itemLabel}`;
 }

@@ -1,5 +1,9 @@
-// Spec tests for the Codex timeline bar. Locks the contract on what the bar
-// renders, what the tooltip says, and how click-to-seek calls back.
+// Spec tests for the Codex timeline bar (CF-379).
+//
+// Locks the contract on segmentation (2N segments for N completed turns,
+// alternating user/assistant), Claude-style tooltip copy ("User: <dur>, 1
+// item" / "Codex: <dur>, N items" with no TTFT or turn index), and
+// click-to-seek targets.
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -27,7 +31,7 @@ const twoTurnSession: CodexRenderItem[] = [
   user('2026-05-13T18:00:00Z'),
   assistant('2026-05-13T18:00:05Z'),
   turnSep('2026-05-13T18:00:06Z', 1, 6000, 1200),
-  user('2026-05-13T18:01:00Z'),
+  user('2026-05-13T18:01:00Z'), // 54s gap
   assistant('2026-05-13T18:01:03Z'),
   turnSep('2026-05-13T18:01:04Z', 2, 4000, 800),
 ];
@@ -40,81 +44,105 @@ describe('CodexTimelineBar', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders one clickable segment per turn', () => {
-    const onSeek = vi.fn();
-    const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
-    );
-    // Two segments → two clickable children of the segments container.
-    // We assert via a count of any element marked as a segment.
-    const segments = container.querySelectorAll('[data-codex-segment]');
-    expect(segments).toHaveLength(2);
-  });
-
-  it('click on a segment calls onSeek with that segment startIndex', () => {
-    const onSeek = vi.fn();
-    const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
-    );
-    const segments = container.querySelectorAll('[data-codex-segment]');
-    // Click the second segment → its startIndex is 3 (after first separator).
-    fireEvent.click(segments[1]!);
-    expect(onSeek).toHaveBeenCalledWith(3);
-  });
-
-  it('hover tooltip shows turn label, duration, TTFT, and item count', () => {
+  it('renders 2N segments for N completed turns (user + assistant alternating)', () => {
     const { container } = render(
       <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
-    fireEvent.mouseEnter(segments[0]!);
-
-    // First turn: 6s duration, TTFT 1.2s, 3 items (user + assistant + separator).
-    expect(screen.getByText(/Turn\s+1/i)).toBeInTheDocument();
-    expect(screen.getByText(/6s/)).toBeInTheDocument();
-    expect(screen.getByText(/TTFT\s+1\.2s|TTFT\s+1200ms|TTFT\s+1s/)).toBeInTheDocument();
-    expect(screen.getByText(/3\s+items/)).toBeInTheDocument();
+    expect(segments).toHaveLength(4);
   });
 
-  it('hover tooltip omits TTFT when the separator did not carry one', () => {
+  it('click on a user segment seeks to the user item index', () => {
+    const onSeek = vi.fn();
+    const { container } = render(
+      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
+    );
+    const segments = container.querySelectorAll('[data-codex-segment]');
+    // Order: [turn1 user, turn1 assistant, turn2 user, turn2 assistant]
+    fireEvent.click(segments[2]!); // turn 2 user
+    expect(onSeek).toHaveBeenCalledWith(3); // index of turn 2's user item
+  });
+
+  it('click on an assistant segment seeks to the first item after the user', () => {
+    const onSeek = vi.fn();
+    const { container } = render(
+      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
+    );
+    const segments = container.querySelectorAll('[data-codex-segment]');
+    fireEvent.click(segments[1]!); // turn 1 assistant
+    expect(onSeek).toHaveBeenCalledWith(1); // first non-user item in turn 1
+  });
+
+  it('hover on a user segment shows "User: <dur>, 1 item"', () => {
+    const { container } = render(
+      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+    );
+    const segments = container.querySelectorAll('[data-codex-segment]');
+    fireEvent.mouseEnter(segments[2]!); // turn 2 user (real 54s gap)
+    expect(screen.getByText(/^User:\s+54s,\s+1\s+item$/)).toBeInTheDocument();
+  });
+
+  it('hover on an assistant segment shows "Codex: <dur>, N items"', () => {
+    const { container } = render(
+      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+    );
+    const segments = container.querySelectorAll('[data-codex-segment]');
+    fireEvent.mouseEnter(segments[1]!); // turn 1 assistant: 6s, 2 items
+    expect(screen.getByText(/^Codex:\s+6s,\s+2\s+items$/)).toBeInTheDocument();
+  });
+
+  it('tooltips do not show TTFT', () => {
+    const { container } = render(
+      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+    );
+    const segments = container.querySelectorAll('[data-codex-segment]');
+    fireEvent.mouseEnter(segments[1]!);
+    expect(screen.queryByText(/TTFT/i)).toBeNull();
+  });
+
+  it('tooltips do not show turn index', () => {
+    const { container } = render(
+      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+    );
+    const segments = container.querySelectorAll('[data-codex-segment]');
+    fireEvent.mouseEnter(segments[1]!);
+    expect(screen.queryByText(/Turn\s+\d+/i)).toBeNull();
+  });
+
+  it('renders 2 segments for an in-flight turn (user + assistant durationMs=0)', () => {
     const items: CodexRenderItem[] = [
       user('2026-05-13T18:00:00Z'),
       assistant('2026-05-13T18:00:05Z'),
-      turnSep('2026-05-13T18:00:06Z', 1, 6000), // no TTFT
     ];
     const { container } = render(
       <CodexTimelineBar items={items} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
-    fireEvent.mouseEnter(segments[0]!);
-
-    expect(screen.queryByText(/TTFT/i)).toBeNull();
+    expect(segments).toHaveLength(2);
   });
 
-  it('renders a single segment for an in-flight session (no separators)', () => {
+  it('renders 1 segment for a user-only turn', () => {
     const items: CodexRenderItem[] = [
       user('2026-05-13T18:00:00Z'),
-      assistant('2026-05-13T18:00:05Z'),
+      turnSep('2026-05-13T18:00:01Z', 1, 1000),
     ];
     const { container } = render(
       <CodexTimelineBar items={items} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     expect(segments).toHaveLength(1);
+    expect(segments[0]).toHaveAttribute('data-turn-index', '1');
   });
 
-  it('uses singular "item" wording for a 1-item segment', () => {
-    const items: CodexRenderItem[] = [
-      user('2026-05-13T18:00:00Z'),
-      turnSep('2026-05-13T18:00:01Z', 1, 1000),
-      assistant('2026-05-13T18:00:02Z'),
-      // No closing separator → second segment has 1 item (just the assistant).
-    ];
+  it('applies separate CSS classes to user vs assistant segments', () => {
     const { container } = render(
-      <CodexTimelineBar items={items} selectedIndex={0} onSeek={() => undefined} />,
+      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
-    const segments = container.querySelectorAll('[data-codex-segment]');
-    fireEvent.mouseEnter(segments[1]!);
-    expect(screen.getByText(/1\s+item(?!s)/i)).toBeInTheDocument();
+    const segments = container.querySelectorAll<HTMLElement>('[data-codex-segment]');
+    // turn1 user, turn1 assistant should have different class lists
+    expect(segments[0]!.className).not.toEqual(segments[1]!.className);
+    // Same speaker → same class list
+    expect(segments[0]!.className).toEqual(segments[2]!.className);
+    expect(segments[1]!.className).toEqual(segments[3]!.className);
   });
 });

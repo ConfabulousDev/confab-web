@@ -1,6 +1,6 @@
-/* Codex timeline bar — vertical turn-based segments. Mirrors the Claude
-   TimelineBar chrome; Codex segments are uniformly accented (one color
-   per turn) since the data model has no user/assistant segment split. */
+/* Codex timeline bar — vertical turn-based segments. Each turn splits
+   into a user thinking-gap stripe and an assistant body stripe, matching
+   the Claude TimelineBar's color language. */
 
 .timelineBar {
   position: relative;
@@ -24,6 +24,13 @@
   cursor: pointer;
   transition: opacity var(--transition-fast), filter var(--transition-fast);
   min-height: 2px;
+}
+
+.segment.user {
+  background: var(--color-timeline-user);
+}
+
+.segment.assistant {
   background: var(--color-timeline-assistant);
 }
 

@@ -1,8 +1,10 @@
 // Spec tests for the Codex timeline-segment computation.
 //
-// Locks the contract: one segment per turn boundary (CodexTurnSeparatorItem),
-// trailing in-flight segment for items after the last separator, and
-// timing/index metadata preserved from the separator.
+// Locks the contract (per CF-379): each turn emits up to two segments — a
+// user thinking-gap segment (synthetic 1s for turn 1, real wall-clock gap
+// from the prior separator for later turns, clamped to 1s minimum) and an
+// assistant body segment. Slices with no user item collapse to a single
+// assistant segment.
 
 import { describe, it, expect } from 'vitest';
 import { computeCodexSegments } from './codexTimelineSegments';
@@ -27,13 +29,16 @@ function toolCall(timestamp: string, callId = 'c1'): CodexRenderItem {
   };
 }
 
+function compacted(timestamp: string, replacementCount = 5): CodexRenderItem {
+  return { kind: 'compacted', timestamp, replacementCount };
+}
+
 function turnSep(
   timestamp: string,
   turnIndex: number,
   durationMs: number,
-  timeToFirstTokenMs?: number,
 ): CodexRenderItem {
-  return { kind: 'turn_separator', timestamp, turnIndex, durationMs, timeToFirstTokenMs };
+  return { kind: 'turn_separator', timestamp, turnIndex, durationMs };
 }
 
 describe('computeCodexSegments', () => {
@@ -41,81 +46,148 @@ describe('computeCodexSegments', () => {
     expect(computeCodexSegments([])).toEqual([]);
   });
 
-  it('returns one trailing segment for items without a turn separator (in-flight)', () => {
+  it('renders user + assistant segments for a single completed turn with synthetic 1s user gap', () => {
     const items: CodexRenderItem[] = [
       user('2026-05-13T18:00:00Z'),
       assistant('2026-05-13T18:00:05Z'),
+      turnSep('2026-05-13T18:00:06Z', 1, 6000),
+    ];
+    const segments = computeCodexSegments(items);
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toMatchObject({
+      speaker: 'user',
+      turnIndex: 1,
+      durationMs: 1000,
+      startIndex: 0,
+      endIndex: 0,
+      messageCount: 1,
+    });
+    expect(segments[1]).toMatchObject({
+      speaker: 'assistant',
+      turnIndex: 1,
+      durationMs: 6000,
+      startIndex: 1,
+      endIndex: 2,
+      messageCount: 2,
+    });
+  });
+
+  it('uses the wall-clock gap from the previous separator as turn 2 user duration', () => {
+    const items: CodexRenderItem[] = [
+      user('2026-05-13T18:00:00Z'),
+      assistant('2026-05-13T18:00:05Z'),
+      turnSep('2026-05-13T18:00:06Z', 1, 6000),
+      user('2026-05-13T18:01:36Z'), // 90s after the separator
+      assistant('2026-05-13T18:01:40Z'),
+      turnSep('2026-05-13T18:01:41Z', 2, 5000),
+    ];
+    const segments = computeCodexSegments(items);
+    expect(segments).toHaveLength(4);
+    expect(segments[2]).toMatchObject({
+      speaker: 'user',
+      turnIndex: 2,
+      durationMs: 90_000,
+      startIndex: 3,
+      endIndex: 3,
+      messageCount: 1,
+    });
+    expect(segments[3]).toMatchObject({
+      speaker: 'assistant',
+      turnIndex: 2,
+      durationMs: 5000,
+      startIndex: 4,
+      endIndex: 5,
+      messageCount: 2,
+    });
+  });
+
+  it('emits only a user segment for a user-only turn', () => {
+    const items: CodexRenderItem[] = [
+      user('2026-05-13T18:00:00Z'),
+      turnSep('2026-05-13T18:00:01Z', 1, 1000),
     ];
     const segments = computeCodexSegments(items);
     expect(segments).toHaveLength(1);
-    expect(segments[0]?.startIndex).toBe(0);
-    expect(segments[0]?.endIndex).toBe(1);
-    expect(segments[0]?.messageCount).toBe(2);
+    expect(segments[0]).toMatchObject({
+      speaker: 'user',
+      turnIndex: 1,
+      messageCount: 1,
+    });
   });
 
-  it('slices on each turn_separator and returns N segments for N separators', () => {
+  it('emits only an assistant segment when a slice has no user item (compaction case)', () => {
     const items: CodexRenderItem[] = [
-      user('2026-05-13T18:00:00Z'),
-      assistant('2026-05-13T18:00:05Z'),
-      turnSep('2026-05-13T18:00:06Z', 1, 6000, 1200),
-      user('2026-05-13T18:01:00Z'),
-      assistant('2026-05-13T18:01:03Z'),
-      turnSep('2026-05-13T18:01:04Z', 2, 4000, 800),
-    ];
-    const segments = computeCodexSegments(items);
-    expect(segments).toHaveLength(2);
-    expect(segments[0]?.startIndex).toBe(0);
-    expect(segments[0]?.endIndex).toBe(2);
-    expect(segments[1]?.startIndex).toBe(3);
-    expect(segments[1]?.endIndex).toBe(5);
-  });
-
-  it('includes a trailing in-flight segment for items after the last separator', () => {
-    const items: CodexRenderItem[] = [
-      user('2026-05-13T18:00:00Z'),
-      assistant('2026-05-13T18:00:05Z'),
-      turnSep('2026-05-13T18:00:06Z', 1, 6000, 1200),
-      user('2026-05-13T18:01:00Z'),
-      toolCall('2026-05-13T18:01:01Z'),
-    ];
-    const segments = computeCodexSegments(items);
-    expect(segments).toHaveLength(2);
-    expect(segments[1]?.startIndex).toBe(3);
-    expect(segments[1]?.endIndex).toBe(4);
-  });
-
-  it('preserves turnIndex from the separator on each completed segment', () => {
-    const items: CodexRenderItem[] = [
-      user('2026-05-13T18:00:00Z'),
-      turnSep('2026-05-13T18:00:01Z', 1, 1000),
-      user('2026-05-13T18:00:10Z'),
-      turnSep('2026-05-13T18:00:11Z', 2, 1000),
-    ];
-    const segments = computeCodexSegments(items);
-    expect(segments[0]?.turnIndex).toBe(1);
-    expect(segments[1]?.turnIndex).toBe(2);
-  });
-
-  it('uses durationMs from the separator', () => {
-    const items: CodexRenderItem[] = [
-      user('2026-05-13T18:00:00Z'),
-      turnSep('2026-05-13T18:00:01Z', 1, 12345, 678),
-    ];
-    const segments = computeCodexSegments(items);
-    expect(segments[0]?.durationMs).toBe(12345);
-    expect(segments[0]?.timeToFirstTokenMs).toBe(678);
-  });
-
-  it('omits timeToFirstTokenMs when the separator did not carry one', () => {
-    const items: CodexRenderItem[] = [
-      user('2026-05-13T18:00:00Z'),
+      compacted('2026-05-13T18:00:00Z'),
       turnSep('2026-05-13T18:00:01Z', 1, 1000),
     ];
     const segments = computeCodexSegments(items);
-    expect(segments[0]?.timeToFirstTokenMs).toBeUndefined();
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toMatchObject({
+      speaker: 'assistant',
+      turnIndex: 1,
+      startIndex: 0,
+      endIndex: 1,
+      messageCount: 2,
+    });
   });
 
-  it('messageCount equals endIndex - startIndex + 1 (counts every render item in the turn)', () => {
+  it('renders user + assistant segments for an in-flight turn with durationMs=0 on assistant', () => {
+    const items: CodexRenderItem[] = [
+      user('2026-05-13T18:00:00Z'),
+      assistant('2026-05-13T18:00:05Z'),
+    ];
+    const segments = computeCodexSegments(items);
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toMatchObject({
+      speaker: 'user',
+      turnIndex: 1,
+      durationMs: 1000, // synthetic — no prior separator
+      messageCount: 1,
+    });
+    expect(segments[1]).toMatchObject({
+      speaker: 'assistant',
+      turnIndex: 1,
+      durationMs: 0,
+      messageCount: 1,
+    });
+  });
+
+  it('renders a single assistant segment for an in-flight slice with no user item', () => {
+    const items: CodexRenderItem[] = [
+      toolCall('2026-05-13T18:00:00Z'),
+      toolCall('2026-05-13T18:00:01Z', 'c2'),
+    ];
+    const segments = computeCodexSegments(items);
+    expect(segments).toHaveLength(1);
+    expect(segments[0]?.speaker).toBe('assistant');
+    expect(segments[0]?.durationMs).toBe(0);
+  });
+
+  it('clamps zero / negative computed user durations to 1s', () => {
+    const items: CodexRenderItem[] = [
+      user('2026-05-13T18:00:00Z'),
+      turnSep('2026-05-13T18:00:01Z', 1, 1000),
+      // Second user message at the *same* instant as the separator → 0ms gap
+      user('2026-05-13T18:00:01Z'),
+      turnSep('2026-05-13T18:00:02Z', 2, 1000),
+    ];
+    const segments = computeCodexSegments(items);
+    // Turn 2's user segment is the third segment (after turn 1 user + turn 1 separator-only segment)
+    const turn2User = segments.find((s) => s.turnIndex === 2 && s.speaker === 'user');
+    expect(turn2User?.durationMs).toBe(1000);
+  });
+
+  it('preserves turnIndex on both segments of a turn', () => {
+    const items: CodexRenderItem[] = [
+      user('2026-05-13T18:00:00Z'),
+      assistant('2026-05-13T18:00:01Z'),
+      turnSep('2026-05-13T18:00:02Z', 7, 2000),
+    ];
+    const segments = computeCodexSegments(items);
+    expect(segments.every((s) => s.turnIndex === 7)).toBe(true);
+  });
+
+  it('messageCount on user is always 1; assistant counts the rest of the slice', () => {
     const items: CodexRenderItem[] = [
       user('2026-05-13T18:00:00Z'),
       { kind: 'reasoning_hidden', timestamp: '2026-05-13T18:00:01Z' },
@@ -125,30 +197,23 @@ describe('computeCodexSegments', () => {
       turnSep('2026-05-13T18:00:05Z', 1, 5000),
     ];
     const segments = computeCodexSegments(items);
-    expect(segments).toHaveLength(1);
-    // 6 items total (user, reasoning_hidden, assistant, tool_call, assistant, turn_separator)
-    expect(segments[0]?.messageCount).toBe(6);
+    const userSeg = segments.find((s) => s.speaker === 'user');
+    const assistantSeg = segments.find((s) => s.speaker === 'assistant');
+    expect(userSeg?.messageCount).toBe(1);
+    // 5 items after user: reasoning_hidden, assistant, tool_call, assistant, separator
+    expect(assistantSeg?.messageCount).toBe(5);
   });
 
-  it('handles a single trailing item with no separator', () => {
-    const items: CodexRenderItem[] = [user('2026-05-13T18:00:00Z')];
-    const segments = computeCodexSegments(items);
-    expect(segments).toHaveLength(1);
-    expect(segments[0]?.messageCount).toBe(1);
-  });
-
-  it('handles back-to-back turn_separators (degenerate but valid) as N+1 segments only when the second has content after it', () => {
-    // Two separators with content only between them: 2 segments.
+  it('does not carry timeToFirstTokenMs on segments (field removed from shape)', () => {
     const items: CodexRenderItem[] = [
       user('2026-05-13T18:00:00Z'),
-      turnSep('2026-05-13T18:00:01Z', 1, 1000),
-      turnSep('2026-05-13T18:00:02Z', 2, 1000),
+      assistant('2026-05-13T18:00:01Z'),
+      // Separator with a TTFT — must be ignored when shaping the segment
+      { kind: 'turn_separator', timestamp: '2026-05-13T18:00:02Z', turnIndex: 1, durationMs: 2000, timeToFirstTokenMs: 500 },
     ];
     const segments = computeCodexSegments(items);
-    // Two separators → two completed segments; second segment is just the separator itself.
-    expect(segments).toHaveLength(2);
-    expect(segments[1]?.startIndex).toBe(2);
-    expect(segments[1]?.endIndex).toBe(2);
-    expect(segments[1]?.messageCount).toBe(1);
+    for (const seg of segments) {
+      expect('timeToFirstTokenMs' in seg).toBe(false);
+    }
   });
 });
