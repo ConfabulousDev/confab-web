@@ -320,6 +320,68 @@ func TestPrecomputeRegularCards_UnsupportedProvider_LoudError(t *testing.T) {
 	}
 }
 
+// TestBuildSearchIndexOnly_UnsupportedProvider_LoudError mirrors the regular-cards
+// loud-error test for the search-index dispatcher. CF-352: ensures the default
+// guard fires when StaleSession.Provider is outside the SQL filter's allow-list,
+// so a future filter widening / switch shrinkage can't silently no-op.
+func TestBuildSearchIndexOnly_UnsupportedProvider_LoudError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	stale := analytics.StaleSession{
+		SessionID:  "irrelevant",
+		UserID:     1,
+		ExternalID: "irrelevant",
+		Provider:   "future-provider",
+		TotalLines: 1,
+	}
+	err := precomputer.BuildSearchIndexOnly(context.Background(), stale)
+	if err == nil {
+		t.Fatal("expected error for unsupported provider, got nil")
+	}
+	if !contains(err.Error(), "unsupported provider") {
+		t.Errorf("expected error to mention 'unsupported provider', got %q", err)
+	}
+}
+
+// TestPrecomputeSmartRecapOnly_UnsupportedProvider_LoudError mirrors the
+// regular-cards loud-error test for the smart-recap dispatcher. CF-352:
+// the dispatch switch's default arm fires before the SmartRecapEnabled check
+// inside each per-provider branch, so defaultTestConfig is sufficient.
+func TestPrecomputeSmartRecapOnly_UnsupportedProvider_LoudError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	stale := analytics.StaleSession{
+		SessionID:  "irrelevant",
+		UserID:     1,
+		ExternalID: "irrelevant",
+		Provider:   "future-provider",
+		TotalLines: 1,
+	}
+	err := precomputer.PrecomputeSmartRecapOnly(context.Background(), stale)
+	if err == nil {
+		t.Fatal("expected error for unsupported provider, got nil")
+	}
+	if !contains(err.Error(), "unsupported provider") {
+		t.Errorf("expected error to mention 'unsupported provider', got %q", err)
+	}
+}
+
 // contains is a tiny helper for substring assertion (avoids importing strings).
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
@@ -831,6 +893,64 @@ func TestFindStaleSmartRecapSessions_SmartRecapMissing_Found(t *testing.T) {
 	}
 	if sessions[0].SessionID != sessionID {
 		t.Errorf("session ID = %s, want %s", sessions[0].SessionID, sessionID)
+	}
+}
+
+// TestFindStaleSmartRecapSessions_IncludesCodex defends the WHERE clause widening
+// in CF-350. CF-352: the original CF-347 dual-value match
+// (IN ('claude-code', 'Claude Code')) silently excluded Codex sessions from
+// smart-recap precompute. A mixed Claude+Codex fleet must surface both.
+func TestFindStaleSmartRecapSessions_IncludesCodex(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "sr-mixed@test.com", "SR Mixed User")
+
+	claudeSessionID := testutil.CreateTestSession(t, env, user.ID, "sr-claude-external-id")
+	testutil.CreateTestSyncFile(t, env, claudeSessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, claudeSessionID, 100)
+
+	codexSessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "sr-codex-external-id", "codex")
+	testutil.CreateTestSyncFile(t, env, codexSessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, codexSessionID, 100)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
+		SmartRecapEnabled:      true,
+		AnthropicAPIKey:        "test-key",
+		SmartRecapModel:        "test-model",
+		SmartRecapQuota:        100,
+		LockTimeoutSeconds:     60,
+		RegularCardsThresholds: analytics.DefaultRegularCardsThresholds(),
+		SmartRecapThresholds:   analytics.DefaultSmartRecapThresholds(),
+	})
+
+	sessions, err := precomputer.FindStaleSmartRecapSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSmartRecapSessions failed: %v", err)
+	}
+
+	var sawClaude, sawCodex bool
+	for _, s := range sessions {
+		if s.SessionID == claudeSessionID {
+			sawClaude = true
+		}
+		if s.SessionID == codexSessionID {
+			sawCodex = true
+			if s.Provider != "codex" {
+				t.Errorf("codex session Provider = %q, want %q", s.Provider, "codex")
+			}
+		}
+	}
+	if !sawClaude {
+		t.Error("expected Claude session in stale smart-recap list")
+	}
+	if !sawCodex {
+		t.Error("expected Codex session in stale smart-recap list")
 	}
 }
 
@@ -2280,6 +2400,59 @@ func TestFindStaleSearchIndexSessions_NoIndex_Found(t *testing.T) {
 	}
 	if sessions[0].SessionID != sessionID {
 		t.Errorf("session ID = %s, want %s", sessions[0].SessionID, sessionID)
+	}
+}
+
+// TestFindStaleSearchIndexSessions_IncludesCodex defends the WHERE clause
+// widening in CF-350. CF-352: the original CF-347 dual-value match
+// (IN ('claude-code', 'Claude Code')) silently excluded Codex sessions from
+// search-index precompute. A mixed Claude+Codex fleet must surface both.
+// insertAllCards writes Claude-shaped zero-valued rows; that's fine here
+// because we're isolating the WHERE filter, not the Codex compute path
+// (covered by TestPrecomputeRegularCards_CodexSession).
+func TestFindStaleSearchIndexSessions_IncludesCodex(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "si-mixed@test.com", "SI Mixed User")
+
+	claudeSessionID := testutil.CreateTestSession(t, env, user.ID, "si-claude-external-id")
+	testutil.CreateTestSyncFile(t, env, claudeSessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, claudeSessionID, 100)
+
+	codexSessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "si-codex-external-id", "codex")
+	testutil.CreateTestSyncFile(t, env, codexSessionID, "transcript.jsonl", "transcript", 100)
+	insertAllCards(t, env, codexSessionID, 100)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSearchIndexSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSearchIndexSessions failed: %v", err)
+	}
+
+	var sawClaude, sawCodex bool
+	for _, s := range sessions {
+		if s.SessionID == claudeSessionID {
+			sawClaude = true
+		}
+		if s.SessionID == codexSessionID {
+			sawCodex = true
+			if s.Provider != "codex" {
+				t.Errorf("codex session Provider = %q, want %q", s.Provider, "codex")
+			}
+		}
+	}
+	if !sawClaude {
+		t.Error("expected Claude session in stale search-index list")
+	}
+	if !sawCodex {
+		t.Error("expected Codex session in stale search-index list")
 	}
 }
 
