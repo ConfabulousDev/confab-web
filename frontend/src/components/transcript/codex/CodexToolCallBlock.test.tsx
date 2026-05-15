@@ -234,4 +234,35 @@ describe('CodexToolCallBlock', () => {
     );
     expect(container.querySelector('code[class*="language-json"]')).not.toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // CF-378 — empty exec_command output
+  // ---------------------------------------------------------------------------
+
+  it('renders empty exec_command output via NoOutputIndicator, not BashOutput', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={execCommandItem({ rawOutput: '', status: 'completed' })}
+      />,
+    );
+    expect(screen.getByText(/^no output$/i)).toBeInTheDocument();
+    // Strictly "no output" — not the "pending — no output yet" label.
+    expect(screen.queryByText(/pending/i)).toBeNull();
+    expect(container.querySelector('[class*="bashOutput"]')).toBeNull();
+    expect(screen.getByText(/pwd/)).toBeInTheDocument();
+    expect(screen.getByText(/exit\s*0/i)).toBeInTheDocument();
+  });
+
+  it('renders pending exec_command with the "pending — no output yet" label', () => {
+    render(
+      <CodexToolCallBlock
+        item={execCommandItem({
+          status: 'pending',
+          rawOutput: undefined,
+          execMetadata: undefined,
+        })}
+      />,
+    );
+    expect(screen.getByText(/pending\s*—\s*no output yet/i)).toBeInTheDocument();
+  });
 });

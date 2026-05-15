@@ -40,6 +40,23 @@ export const ExecFailure: Story = {
   },
 };
 
+// CF-378: empty stdout (e.g. `git status --short` on a clean tree) renders
+// the "no output" indicator, not an empty BashOutput frame.
+export const ExecEmptyOutput: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'exec_command',
+      callId: 'call_exec_empty',
+      rawInput: { cmd: 'git status --short', workdir: '/Users/dev/example-project' },
+      rawOutput: '',
+      status: 'completed',
+      execMetadata: { exitCode: 0, wallTimeMs: 18 },
+    } satisfies CodexToolCallItem,
+  },
+};
+
 // Long output now scrolls inside BashOutput's frame (max-height 400px) rather
 // than collapsing behind a `Show all` toggle — that affordance was dropped in
 // CF-358 to mirror Claude's Bash-tool rendering.

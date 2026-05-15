@@ -95,12 +95,16 @@ function renderBody(item: CodexToolCallItem) {
 
 function ExecCommandBody({ item }: { item: CodexToolCallItem }) {
   const cmd = readStringField(item.rawInput, 'cmd');
+  const output = item.rawOutput;
+  // Empty stdout falls through to NoOutputIndicator — otherwise BashOutput
+  // would render a blank terminal frame with just a copy button (CF-378).
+  const hasOutput = typeof output === 'string' && output !== '';
   return (
     <div className={styles.body}>
       {cmd ? <pre className={styles.commandLine}>$ {cmd}</pre> : null}
-      {item.rawOutput !== undefined ? (
+      {hasOutput ? (
         <BashOutput
-          output={item.rawOutput}
+          output={output}
           exitCode={item.execMetadata?.exitCode ?? null}
         />
       ) : (
