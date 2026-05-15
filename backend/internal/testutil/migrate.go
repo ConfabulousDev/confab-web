@@ -12,9 +12,9 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db/migrations"
 )
 
-// RunMigrations applies all database migrations using golang-migrate.
+// runMigrations applies all database migrations using golang-migrate.
 // This is only used by tests - production deployments run migrations via CLI.
-func RunMigrations(db *sql.DB) error {
+func runMigrations(db *sql.DB) error {
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create postgres driver: %w", err)

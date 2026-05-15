@@ -83,7 +83,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 
 	// Run migrations (using testutil's migrate function with embedded SQL files)
 	t.Log("Running database migrations...")
-	if err := RunMigrations(database.Conn()); err != nil {
+	if err := runMigrations(database.Conn()); err != nil {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 

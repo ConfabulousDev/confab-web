@@ -155,3 +155,100 @@ func TestSmartRecapCardRecord_CanAcquireLock(t *testing.T) {
 func timePtr(t time.Time) *time.Time {
 	return &t
 }
+
+func TestRegularCardRecord_IsValid(t *testing.T) {
+	const upTo = int64(100)
+
+	tests := []struct {
+		name    string
+		card    CardValidator
+		current int64
+		want    bool
+	}{
+		{"tokens nil", (*TokensCardRecord)(nil), upTo, false},
+		{"tokens valid", &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo}, upTo, true},
+		{"tokens wrong version", &TokensCardRecord{Version: TokensCardVersion - 1, UpToLine: upTo}, upTo, false},
+		{"tokens stale line count", &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo - 1}, upTo, false},
+		{"tokens future line count", &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo + 1}, upTo, false},
+
+		{"session nil", (*SessionCardRecord)(nil), upTo, false},
+		{"session valid", &SessionCardRecord{Version: SessionCardVersion, UpToLine: upTo}, upTo, true},
+		{"session wrong version", &SessionCardRecord{Version: SessionCardVersion - 1, UpToLine: upTo}, upTo, false},
+		{"session stale line count", &SessionCardRecord{Version: SessionCardVersion, UpToLine: upTo - 1}, upTo, false},
+
+		{"tools nil", (*ToolsCardRecord)(nil), upTo, false},
+		{"tools valid", &ToolsCardRecord{Version: ToolsCardVersion, UpToLine: upTo}, upTo, true},
+		{"tools wrong version", &ToolsCardRecord{Version: ToolsCardVersion - 1, UpToLine: upTo}, upTo, false},
+
+		{"code activity nil", (*CodeActivityCardRecord)(nil), upTo, false},
+		{"code activity valid", &CodeActivityCardRecord{Version: CodeActivityCardVersion, UpToLine: upTo}, upTo, true},
+		{"code activity wrong version", &CodeActivityCardRecord{Version: CodeActivityCardVersion - 1, UpToLine: upTo}, upTo, false},
+
+		{"conversation nil", (*ConversationCardRecord)(nil), upTo, false},
+		{"conversation valid", &ConversationCardRecord{Version: ConversationCardVersion, UpToLine: upTo}, upTo, true},
+		{"conversation wrong version", &ConversationCardRecord{Version: ConversationCardVersion - 1, UpToLine: upTo}, upTo, false},
+
+		{"agents+skills nil", (*AgentsAndSkillsCardRecord)(nil), upTo, false},
+		{"agents+skills valid", &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion, UpToLine: upTo}, upTo, true},
+		{"agents+skills wrong version", &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion + 1, UpToLine: upTo}, upTo, false},
+
+		{"redactions nil", (*RedactionsCardRecord)(nil), upTo, false},
+		{"redactions valid", &RedactionsCardRecord{Version: RedactionsCardVersion, UpToLine: upTo}, upTo, true},
+		{"redactions wrong version", &RedactionsCardRecord{Version: RedactionsCardVersion - 1, UpToLine: upTo}, upTo, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.card.IsValid(tt.current)
+			if got != tt.want {
+				t.Errorf("IsValid(%d) = %v, want %v", tt.current, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCards_AllValid(t *testing.T) {
+	const upTo = int64(50)
+
+	allFresh := &Cards{
+		Tokens:          &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo},
+		Session:         &SessionCardRecord{Version: SessionCardVersion, UpToLine: upTo},
+		Tools:           &ToolsCardRecord{Version: ToolsCardVersion, UpToLine: upTo},
+		CodeActivity:    &CodeActivityCardRecord{Version: CodeActivityCardVersion, UpToLine: upTo},
+		Conversation:    &ConversationCardRecord{Version: ConversationCardVersion, UpToLine: upTo},
+		AgentsAndSkills: &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion, UpToLine: upTo},
+		Redactions:      &RedactionsCardRecord{Version: RedactionsCardVersion, UpToLine: upTo},
+	}
+
+	if !allFresh.AllValid(upTo) {
+		t.Fatalf("AllValid(%d) returned false for fully fresh card set", upTo)
+	}
+
+	if (*Cards)(nil).AllValid(upTo) {
+		t.Errorf("nil Cards.AllValid should return false")
+	}
+
+	t.Run("any nil card invalidates the set", func(t *testing.T) {
+		c := *allFresh
+		c.Tools = nil
+		if c.AllValid(upTo) {
+			t.Errorf("AllValid should be false when Tools is nil")
+		}
+	})
+
+	t.Run("any stale card invalidates the set", func(t *testing.T) {
+		c := *allFresh
+		c.Redactions = &RedactionsCardRecord{Version: RedactionsCardVersion, UpToLine: upTo - 1}
+		if c.AllValid(upTo) {
+			t.Errorf("AllValid should be false when one card is behind on UpToLine")
+		}
+	})
+
+	t.Run("any wrong-version card invalidates the set", func(t *testing.T) {
+		c := *allFresh
+		c.Conversation = &ConversationCardRecord{Version: ConversationCardVersion - 1, UpToLine: upTo}
+		if c.AllValid(upTo) {
+			t.Errorf("AllValid should be false when one card has stale Version")
+		}
+	})
+}

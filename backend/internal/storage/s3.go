@@ -171,22 +171,6 @@ func containsAny(s string, substrs []string) bool {
 // requires values to fit in 8 digits so that lexicographic order equals numeric order.
 const MaxLineNumber = 99999999
 
-// ValidFirstLineRange represents a chunk line range guaranteed to satisfy
-// 1 <= First <= Last <= MaxLineNumber. Construction enforces the invariant.
-type ValidFirstLineRange struct {
-	First     int
-	Last      int
-	validated bool // set only by constructor — prevents unvalidated construction
-}
-
-// NewValidFirstLineRange validates and wraps a line range.
-func NewValidFirstLineRange(first, last int) (ValidFirstLineRange, error) {
-	if first < 1 || last < first || last > MaxLineNumber {
-		return ValidFirstLineRange{}, fmt.Errorf("invalid line range [%d, %d]: must satisfy 1 <= first <= last <= %d", first, last, MaxLineNumber)
-	}
-	return ValidFirstLineRange{First: first, Last: last, validated: true}, nil
-}
-
 // sessionChunksPrefix returns the per-(user, provider, session) prefix that
 // covers every chunk file for a session. The trailing slash makes it usable
 // directly as a ListObjects prefix.

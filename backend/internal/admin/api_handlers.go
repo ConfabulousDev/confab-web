@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
@@ -197,7 +198,7 @@ func (h *Handlers) HandleCreateUserAPI(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), auth.BcryptCost)
 	if err != nil {
 		log.Error("Failed to hash password", "error", err)
 		httputil.RespondError(w, http.StatusInternalServerError, "Failed to create user")
