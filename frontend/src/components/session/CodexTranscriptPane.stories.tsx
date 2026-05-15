@@ -104,15 +104,16 @@ const fixtureLines: RawCodexLine[] = [
 ];
 
 /**
- * Storybook bypass: `initialRawLines` skips fetch + poll and renders directly.
+ * Presentational: SessionViewer feeds `rawLines` from its own fetch (CF-386).
  */
 export const FullSession: Story = {
   render: () => (
     <div style={{ height: '100vh' }}>
       <CodexTranscriptPane
         sessionId="storybook"
-        transcriptFileName="rollout.jsonl"
-        initialRawLines={fixtureLines}
+        rawLines={fixtureLines}
+        loading={false}
+        error={null}
       />
     </div>
   ),
@@ -126,8 +127,42 @@ export const Empty: Story = {
     <div style={{ height: '100vh' }}>
       <CodexTranscriptPane
         sessionId="storybook"
-        transcriptFileName="rollout.jsonl"
-        initialRawLines={[]}
+        rawLines={[]}
+        loading={false}
+        error={null}
+      />
+    </div>
+  ),
+};
+
+/**
+ * Loading state — the pane just shows a spinner. Owner (SessionViewer) is
+ * still fetching the rollout.
+ */
+export const Loading: Story = {
+  render: () => (
+    <div style={{ height: '100vh' }}>
+      <CodexTranscriptPane
+        sessionId="storybook"
+        rawLines={[]}
+        loading={true}
+        error={null}
+      />
+    </div>
+  ),
+};
+
+/**
+ * Error state — fetch in SessionViewer failed.
+ */
+export const ErrorState: Story = {
+  render: () => (
+    <div style={{ height: '100vh' }}>
+      <CodexTranscriptPane
+        sessionId="storybook"
+        rawLines={[]}
+        loading={false}
+        error="No transcript file found"
       />
     </div>
   ),

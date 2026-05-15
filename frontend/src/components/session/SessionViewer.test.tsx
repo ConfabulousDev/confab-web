@@ -1,9 +1,10 @@
 // CF-364 — Summary tab on Codex sessions must render the same
 // SessionSummaryPanel as Claude sessions, not the CodexSummaryEmpty placeholder.
 //
-// CF-383 — SessionViewer must derive the Codex model from the rollout's
-// session_meta line (via fetchCodexSessionMeta) and pass it through to
-// SessionHeader so the provider icon + model meta-item render on Codex sessions.
+// CF-386 — SessionViewer owns parsed Codex transcript state (mirroring Claude)
+// and derives the model via `extractCodexModel(rawLines)`, which walks the
+// rollout for session_meta.model → turn_context.model. Replaces CF-383's
+// line-1-only `fetchCodexSessionMeta` approach.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -11,7 +12,12 @@ import { MemoryRouter } from 'react-router-dom';
 import SessionViewer from './SessionViewer';
 import type { SessionDetail } from '@/schemas/api';
 import type { SessionAnalytics } from '@/schemas/api';
-import { fetchCodexSessionMeta } from '@/services/codexTranscriptService';
+import {
+  fetchParsedCodexTranscript,
+  parseCodexJSONL,
+  type ParsedCodexTranscript,
+} from '@/services/codexTranscriptService';
+import type { RawCodexLine } from '@/schemas/codexTranscript';
 
 // Mock useAnalyticsPolling so SessionSummaryPanel doesn't try to fetch.
 // Passing initialAnalytics disables polling, but the hook is still invoked
@@ -53,8 +59,8 @@ vi.mock('./GitHubLinksCard', () => ({
 }));
 
 // SessionHeader pulls in keyboard-shortcut context; render-only stub.
-// Capture props in `headerProps` so CF-383 tests can assert what model
-// SessionViewer plumbed through.
+// Capture props in `headerProps` so tests can assert what model SessionViewer
+// plumbed through.
 const headerProps: { current: Record<string, unknown> | undefined } = { current: undefined };
 vi.mock('./SessionHeader', () => ({
   default: (props: Record<string, unknown>) => {
@@ -63,8 +69,10 @@ vi.mock('./SessionHeader', () => ({
   },
 }));
 
-// CF-383: SessionViewer fetches Codex model via this helper. Mock it so
-// tests can resolve with different return shapes (model present / absent).
+// CF-386: SessionViewer owns the Codex rollout fetch (lifted from
+// CodexTranscriptPane). Mock `fetchParsedCodexTranscript` so tests can return
+// rawLines with different model configurations and assert what reaches
+// SessionHeader via `extractCodexModel`.
 vi.mock('@/services/codexTranscriptService', async () => {
   const actual =
     await vi.importActual<typeof import('@/services/codexTranscriptService')>(
@@ -72,7 +80,16 @@ vi.mock('@/services/codexTranscriptService', async () => {
     );
   return {
     ...actual,
-    fetchCodexSessionMeta: vi.fn(() => Promise.resolve({ model: undefined })),
+    fetchParsedCodexTranscript: vi.fn(() =>
+      Promise.resolve({
+        sessionId: 'codex-session-uuid',
+        items: [],
+        rawLines: [],
+        validationErrors: [],
+        totalLines: 0,
+        metadata: { itemCount: 0, rawLineCount: 0, parseErrorCount: 0 },
+      })
+    ),
   };
 });
 
@@ -139,8 +156,35 @@ describe('SessionViewer / Summary tab on Codex sessions', () => {
   });
 });
 
-// CF-383: ensure Codex model derived from session_meta reaches SessionHeader.
-describe('SessionViewer / Codex model plumbing', () => {
+// CF-386: SessionViewer owns the parsed Codex rollout (lifted from
+// CodexTranscriptPane). The Codex model meta-item is derived from the
+// rawLines via `extractCodexModel`, with the same session_meta → turn_context
+// fallback the backend parser uses.
+describe('SessionViewer / Codex transcript lift', () => {
+  // Build a schema-validated `RawCodexLine` from a single JSONL snippet — keeps
+  // tests in terms of the wire shape (matches `extractCodexModel`'s test style).
+  // Throws on parse failure so a malformed test fixture surfaces immediately.
+  function rawLine(jsonl: string): RawCodexLine {
+    const line = parseCodexJSONL(jsonl).rawLines[0];
+    if (!line) throw new Error(`rawLine helper: failed to parse ${jsonl}`);
+    return line;
+  }
+
+  function parsedResult(rawLines: RawCodexLine[]): ParsedCodexTranscript {
+    return {
+      sessionId: 'codex-session-uuid',
+      items: [],
+      rawLines,
+      validationErrors: [],
+      totalLines: rawLines.length,
+      metadata: {
+        itemCount: 0,
+        rawLineCount: rawLines.length,
+        parseErrorCount: 0,
+      },
+    };
+  }
+
   function renderViewer(session: SessionDetail = makeSession()) {
     render(
       <MemoryRouter>
@@ -154,43 +198,69 @@ describe('SessionViewer / Codex model plumbing', () => {
     );
   }
 
-  it('fetches Codex session_meta and forwards the model prop to SessionHeader', async () => {
-    vi.mocked(fetchCodexSessionMeta).mockResolvedValueOnce({
-      model: 'gpt-5-codex',
-    });
+  it('derives Codex model from session_meta and passes it to SessionHeader', async () => {
+    vi.mocked(fetchParsedCodexTranscript).mockResolvedValueOnce(
+      parsedResult([
+        rawLine(
+          '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"gpt-5-codex"}}',
+        ),
+      ]),
+    );
 
     renderViewer();
 
     await waitFor(() => {
       expect(headerProps.current?.model).toBe('gpt-5-codex');
     });
-    expect(fetchCodexSessionMeta).toHaveBeenCalledWith(
+    expect(fetchParsedCodexTranscript).toHaveBeenCalledWith(
       'codex-session-uuid',
-      'rollout.jsonl'
+      'rollout.jsonl',
+      true
     );
   });
 
-  it('passes undefined model to SessionHeader when fetchCodexSessionMeta returns no model', async () => {
-    vi.mocked(fetchCodexSessionMeta).mockResolvedValueOnce({
-      model: undefined,
-    });
+  it('falls back to turn_context.model when session_meta has no model', async () => {
+    vi.mocked(fetchParsedCodexTranscript).mockResolvedValueOnce(
+      parsedResult([
+        rawLine(
+          '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x"}}',
+        ),
+        rawLine(
+          '{"timestamp":"2026-05-13T01:00:01Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5"}}',
+        ),
+      ]),
+    );
 
     renderViewer();
 
-    // The header is rendered immediately with model=undefined; the fetch
-    // resolving with model=undefined must NOT throw or block render.
+    await waitFor(() => {
+      expect(headerProps.current?.model).toBe('gpt-5');
+    });
+  });
+
+  it('passes undefined model to SessionHeader when no envelope carries model', async () => {
+    vi.mocked(fetchParsedCodexTranscript).mockResolvedValueOnce(
+      parsedResult([
+        rawLine(
+          '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x"}}',
+        ),
+      ]),
+    );
+
+    renderViewer();
+
     await waitFor(() => {
       expect(headerProps.current).toBeDefined();
     });
     expect(headerProps.current?.model).toBeUndefined();
   });
 
-  it('does not call fetchCodexSessionMeta for Claude sessions', async () => {
+  it('does not call fetchParsedCodexTranscript for Claude sessions', async () => {
     renderViewer(makeSession({ provider: 'claude-code' }));
 
     await waitFor(() => {
       expect(headerProps.current).toBeDefined();
     });
-    expect(fetchCodexSessionMeta).not.toHaveBeenCalled();
+    expect(fetchParsedCodexTranscript).not.toHaveBeenCalled();
   });
 });

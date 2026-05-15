@@ -4,23 +4,17 @@
 // `parseCodexJSONL` validates input and `normalizeCodexLines` transforms
 // validated raw lines into a clean render-item stream.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   parseCodexJSONL,
   normalizeCodexLines,
-  fetchCodexSessionMeta,
+  extractCodexModel,
   _resetReportedCodexSessions,
 } from './codexTranscriptService';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
-import { syncFilesAPI } from './api';
-
-vi.mock('./api', () => ({
-  syncFilesAPI: {
-    getContent: vi.fn(),
-  },
-}));
+import type { RawCodexLine } from '@/schemas/codexTranscript';
 
 const FIXTURE_PATH = resolve(__dirname, '../test-fixtures/codex-rollout.jsonl');
 const fixtureJsonl = readFileSync(FIXTURE_PATH, 'utf-8');
@@ -397,67 +391,97 @@ describe('normalizeCodexLines', () => {
 });
 
 // ---------------------------------------------------------------------------
-// fetchCodexSessionMeta (CF-383)
+// extractCodexModel (CF-386)
+//
+// CF-383 added `fetchCodexSessionMeta` that read only the rollout's first
+// line. Real Codex rollouts often miss `payload.model` on `session_meta` — the
+// canonical source per CF-379 is `turn_context.model`. CF-386 lifts Codex
+// transcript state up into SessionViewer (mirroring Claude) and replaces the
+// line-1 helper with this scan-everything fallback chain, matching the backend
+// parser at `backend/internal/codex/parser.go:170-177`.
 // ---------------------------------------------------------------------------
 
-describe('fetchCodexSessionMeta', () => {
-  const mockedGetContent = vi.mocked(syncFilesAPI.getContent);
+// Build a RawCodexLine by parsing a single JSONL snippet — keeps tests in
+// terms of the wire shape rather than constructing schema-validated objects
+// by hand. Throws if the snippet failed to validate so test setup errors
+// don't masquerade as assertion failures.
+function rawLine(jsonl: string): RawCodexLine {
+  const line = parseCodexJSONL(jsonl).rawLines[0];
+  if (!line) throw new Error(`rawLine helper: failed to parse ${jsonl}`);
+  return line;
+}
 
-  beforeEach(() => {
-    mockedGetContent.mockReset();
+describe('extractCodexModel', () => {
+  it('returns model from a session_meta line', () => {
+    const lines = [
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"gpt-5-codex"}}',
+      ),
+    ];
+    expect(extractCodexModel(lines)).toBe('gpt-5-codex');
   });
 
-  it('returns the model from a session_meta first line', async () => {
-    mockedGetContent.mockResolvedValueOnce(
-      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"gpt-5-codex"}}\n' +
-      '{"timestamp":"2026-05-13T01:00:01Z","type":"turn_context","payload":{}}',
-    );
-    const result = await fetchCodexSessionMeta('session-1', 'rollout.jsonl');
-    expect(result.model).toBe('gpt-5-codex');
+  it('returns model from a turn_context line when session_meta has no model', () => {
+    const lines = [
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x"}}',
+      ),
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5"}}',
+      ),
+    ];
+    expect(extractCodexModel(lines)).toBe('gpt-5');
   });
 
-  it('reads only the first line — model from later session_meta is ignored', async () => {
-    mockedGetContent.mockResolvedValueOnce(
-      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"first-model"}}\n' +
-      '{"timestamp":"2026-05-13T01:00:01Z","type":"session_meta","payload":{"id":"y","model":"second-model"}}',
-    );
-    const result = await fetchCodexSessionMeta('session-2', 'rollout.jsonl');
-    expect(result.model).toBe('first-model');
+  it('falls through to a later turn_context when the first has no model', () => {
+    const lines = [
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x"}}',
+      ),
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"turn_context","payload":{"turn_id":"t1"}}',
+      ),
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:02Z","type":"turn_context","payload":{"turn_id":"t2","model":"gpt-5"}}',
+      ),
+    ];
+    expect(extractCodexModel(lines)).toBe('gpt-5');
   });
 
-  it('returns undefined when the first line is not a session_meta envelope', async () => {
-    mockedGetContent.mockResolvedValueOnce(
-      '{"timestamp":"2026-05-13T01:00:00Z","type":"turn_context","payload":{"turn_id":"t1"}}',
-    );
-    const result = await fetchCodexSessionMeta('session-3', 'rollout.jsonl');
-    expect(result.model).toBeUndefined();
+  it('prefers the earliest non-empty model encountered', () => {
+    const lines = [
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"first"}}',
+      ),
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"turn_context","payload":{"turn_id":"t1","model":"second"}}',
+      ),
+    ];
+    expect(extractCodexModel(lines)).toBe('first');
   });
 
-  it('returns undefined for malformed JSON on the first line', async () => {
-    mockedGetContent.mockResolvedValueOnce('not valid json\n{"timestamp":"...","type":"session_meta","payload":{"model":"gpt-5"}}');
-    const result = await fetchCodexSessionMeta('session-4', 'rollout.jsonl');
-    expect(result.model).toBeUndefined();
+  it('returns undefined when no session_meta or turn_context line carries a model', () => {
+    const lines = [
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x"}}',
+      ),
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"turn_context","payload":{"turn_id":"t1"}}',
+      ),
+    ];
+    expect(extractCodexModel(lines)).toBeUndefined();
   });
 
-  it('returns undefined for an empty file', async () => {
-    mockedGetContent.mockResolvedValueOnce('');
-    const result = await fetchCodexSessionMeta('session-5', 'rollout.jsonl');
-    expect(result.model).toBeUndefined();
+  it('returns undefined for an empty rawLines array', () => {
+    expect(extractCodexModel([])).toBeUndefined();
   });
 
-  it('returns undefined when session_meta has no model field', async () => {
-    mockedGetContent.mockResolvedValueOnce(
-      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","cwd":"/tmp"}}',
-    );
-    const result = await fetchCodexSessionMeta('session-6', 'rollout.jsonl');
-    expect(result.model).toBeUndefined();
-  });
-
-  it('returns undefined when model is non-string (defensive)', async () => {
-    mockedGetContent.mockResolvedValueOnce(
-      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":42}}',
-    );
-    const result = await fetchCodexSessionMeta('session-7', 'rollout.jsonl');
-    expect(result.model).toBeUndefined();
+  it('ignores response_item and event_msg lines (only scans session_meta / turn_context)', () => {
+    const lines = [
+      rawLine(
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","model":"event-msg-model"}}',
+      ),
+    ];
+    expect(extractCodexModel(lines)).toBeUndefined();
   });
 });

@@ -691,35 +691,27 @@ export async function fetchNewCodexLines(
 }
 
 /**
- * Fetch only the Codex rollout's `session_meta` (first line) and return its
- * `model` field. Used by SessionViewer to show the model name in the session
- * header on the Summary tab without paying the cost of parsing the entire
- * rollout (CF-383). CodexTranscriptPane does the full fetch + parse when the
- * Transcript tab opens, independently.
+ * Scan a parsed Codex rollout's raw lines for the canonical session model.
  *
- * Returns `{ model: undefined }` for any of:
- *   - empty file
- *   - first line is not valid JSON
- *   - first line is not a `session_meta` envelope
- *   - `session_meta.payload.model` is missing or non-string
+ * Returns the first non-empty `payload.model` found on either a `session_meta`
+ * or `turn_context` line, mirroring the backend parser fallback chain at
+ * `backend/internal/codex/parser.go:170-177`: older CLIs write `model` to
+ * `session_meta`; newer CLIs (per CF-379) write it per-turn to `turn_context`.
  *
- * Callers should treat undefined as "show a provider-name fallback".
+ * Replaces CF-383's `fetchCodexSessionMeta` (which read only the first line
+ * and missed the canonical turn_context source).
+ *
+ * Returns undefined when neither envelope carries a non-empty string model —
+ * caller falls back to the provider display label.
  */
-export async function fetchCodexSessionMeta(
-  sessionId: string,
-  fileName: string,
-): Promise<{ model: string | undefined }> {
-  const content = await syncFilesAPI.getContent(sessionId, fileName);
-  const newlineIdx = content.indexOf('\n');
-  const firstLine = newlineIdx === -1 ? content : content.slice(0, newlineIdx);
-  if (!firstLine.trim()) return { model: undefined };
-
-  const parsed = tryParseJSON(firstLine);
-  if (!isRecord(parsed) || parsed.type !== 'session_meta') return { model: undefined };
-
-  const payload = parsed.payload;
-  if (!isRecord(payload)) return { model: undefined };
-
-  const { model } = payload;
-  return { model: typeof model === 'string' && model ? model : undefined };
+export function extractCodexModel(rawLines: RawCodexLine[]): string | undefined {
+  for (const line of rawLines) {
+    // `isKnownCodexLine` filters out the Unknown catch-all branch so TS
+    // narrows `line.payload` to the typed schema variants below.
+    if (!isKnownCodexLine(line)) continue;
+    if (line.type !== 'session_meta' && line.type !== 'turn_context') continue;
+    const model = line.payload.model;
+    if (typeof model === 'string' && model) return model;
+  }
+  return undefined;
 }

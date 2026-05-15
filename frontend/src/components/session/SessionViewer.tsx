@@ -2,7 +2,12 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { SessionDetail, TranscriptLine } from '@/types';
 import { isAssistantMessage } from '@/types';
 import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
-import { fetchCodexSessionMeta } from '@/services/codexTranscriptService';
+import {
+  fetchParsedCodexTranscript,
+  fetchNewCodexLines,
+  extractCodexModel,
+} from '@/services/codexTranscriptService';
+import type { RawCodexLine } from '@/schemas/codexTranscript';
 import { tilsAPI, type TIL } from '@/services/api';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useTranscriptFilters } from '@/hooks/useTranscriptFilters';
@@ -58,9 +63,17 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   const activeTab = controlledTab ?? uncontrolledTab;
   const setActiveTab = onTabChange ?? setUncontrolledTab;
   const isCodex = isCodexProvider(session.provider);
-  const [loading, setLoading] = useState(!initialMessages && !isCodex);
+  // CF-386: SessionViewer now owns transcript state for both providers.
+  // Initial loading is true whenever we expect to fetch (no Storybook bypass).
+  const willFetch = isCodex
+    ? initialCodexRawLines === undefined
+    : initialMessages === undefined;
+  const [loading, setLoading] = useState(willFetch);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<TranscriptLine[]>(initialMessages ?? []);
+  const [codexRawLines, setCodexRawLines] = useState<RawCodexLine[]>(
+    initialCodexRawLines ?? []
+  );
 
   // Track the current line count for incremental fetching
   const lineCountRef = useRef(0);
@@ -131,36 +144,14 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
   const transcriptFileName = transcriptFile?.file_name;
 
-  // Load transcript initially (skip if initialMessages provided for Storybook,
-  // or if this is a Codex session — the dedicated CodexTranscriptPane handles
-  // its own fetch with the codex-aware parser).
+  // CF-386: provider-aware initial load. SessionViewer owns both Claude and
+  // Codex transcript state so SessionHeader can derive the model name without
+  // waiting for the Transcript tab to mount its pane.
   useEffect(() => {
-    if (initialMessages !== undefined) return;
-    if (isCodex) return;
+    if (!willFetch) return;
     loadTranscript();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, initialMessages, isCodex]);
-
-  // CF-383: Codex sessions don't go through loadTranscript (CodexTranscriptPane
-  // owns the full rollout fetch on the Transcript tab), so the model name has
-  // to come from somewhere else for the header. Fetch only the rollout's
-  // `session_meta` (first line) here. Falls back to undefined on any failure —
-  // SessionHeader renders the provider display name as a fallback.
-  const [codexModel, setCodexModel] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    if (!isCodex || !transcriptFileName) return;
-    let cancelled = false;
-    fetchCodexSessionMeta(session.id, transcriptFileName)
-      .then(({ model }) => {
-        if (!cancelled) setCodexModel(model);
-      })
-      .catch(() => {
-        if (!cancelled) setCodexModel(undefined);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isCodex, session.id, transcriptFileName]);
+  }, [session.id, willFetch, isCodex]);
 
   async function loadTranscript() {
     setLoading(true);
@@ -172,12 +163,22 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
         throw new Error('No transcript file found');
       }
 
-      // Skip cache on initial load to ensure fresh data when navigating to a session
-      const parsed = await fetchParsedTranscript(session.id, transcriptFileName, true);
-      setMessages(parsed.messages);
-      // Use totalLines (not messages.length) to track line_offset accurately
-      // This accounts for parse errors and ensures we don't re-fetch lines
-      lineCountRef.current = parsed.totalLines;
+      // Skip cache on initial load to ensure fresh data when navigating to a session.
+      if (isCodex) {
+        const parsed = await fetchParsedCodexTranscript(
+          session.id,
+          transcriptFileName,
+          true
+        );
+        setCodexRawLines(parsed.rawLines);
+        lineCountRef.current = parsed.totalLines;
+      } else {
+        const parsed = await fetchParsedTranscript(session.id, transcriptFileName, true);
+        setMessages(parsed.messages);
+        // Use totalLines (not messages.length) to track line_offset accurately.
+        // This accounts for parse errors and ensures we don't re-fetch lines.
+        lineCountRef.current = parsed.totalLines;
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load transcript');
       console.error('Failed to load transcript:', e);
@@ -186,39 +187,47 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     }
   }
 
-  // Poll for new messages when visible (skip if initialMessages provided for
-  // Storybook, or for Codex — CodexTranscriptPane runs its own poll loop).
+  // CF-386: provider-aware polling. One useEffect for both providers; branches
+  // on `isCodex` to call the right fetcher and append to the right state.
   useEffect(() => {
-    if (initialMessages !== undefined || !isVisible || loading || !transcriptFileName || isCodex) {
+    if (!willFetch || !isVisible || loading || !transcriptFileName) {
       return;
     }
 
-    const pollForNewMessages = async () => {
+    const poll = async () => {
       try {
-        const { newMessages, newTotalLineCount } = await fetchNewTranscriptMessages(
-          session.id,
-          transcriptFileName,
-          lineCountRef.current
-        );
-
-        if (newMessages.length > 0) {
-          setMessages((prev) => [...prev, ...newMessages]);
-          lineCountRef.current = newTotalLineCount;
+        if (isCodex) {
+          const { newRawLines, newTotalLineCount } = await fetchNewCodexLines(
+            session.id,
+            transcriptFileName,
+            lineCountRef.current
+          );
+          if (newRawLines.length > 0) {
+            setCodexRawLines((prev) => [...prev, ...newRawLines]);
+            lineCountRef.current = newTotalLineCount;
+          }
+        } else {
+          const { newMessages, newTotalLineCount } = await fetchNewTranscriptMessages(
+            session.id,
+            transcriptFileName,
+            lineCountRef.current
+          );
+          if (newMessages.length > 0) {
+            setMessages((prev) => [...prev, ...newMessages]);
+            lineCountRef.current = newTotalLineCount;
+          }
         }
       } catch (e) {
-        // Don't show error for polling failures - just log
-        console.warn('Failed to poll for new messages:', e);
+        // Don't show error for polling failures - just log.
+        console.warn('Failed to poll for new transcript lines:', e);
       }
     };
 
-    // Set up polling interval
-    const intervalId = setInterval(pollForNewMessages, TRANSCRIPT_POLL_INTERVAL_MS);
-
-    // Cleanup
+    const intervalId = setInterval(poll, TRANSCRIPT_POLL_INTERVAL_MS);
     return () => {
       clearInterval(intervalId);
     };
-  }, [initialMessages, isVisible, loading, session.id, transcriptFileName, isCodex]);
+  }, [willFetch, isVisible, loading, isCodex, session.id, transcriptFileName]);
 
   const toggleCostMode = useCallback(() => setIsCostMode((prev) => !prev), []);
 
@@ -244,9 +253,12 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   // Compute session metadata for header
   const sessionMeta = useMemo(() => {
     // Claude path: first assistant message carries the model. Codex path
-    // (CF-383): `codexModel` is loaded from the rollout's session_meta line.
+    // (CF-386): walk the parsed rawLines for the first non-empty model via
+    // the same session_meta → turn_context fallback the backend parser uses.
     const firstAssistant = messages.find(isAssistantMessage);
-    const model = isCodex ? codexModel : firstAssistant?.message.model;
+    const model = isCodex
+      ? extractCodexModel(codexRawLines)
+      : firstAssistant?.message.model;
 
     // Compute duration and date from message timestamps (matches analytics calculation)
     const { durationMs, sessionDate } = computeSessionMeta(messages, {
@@ -255,7 +267,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     });
 
     return { model, durationMs, sessionDate };
-  }, [messages, isCodex, codexModel, session.first_seen, session.last_sync_at]);
+  }, [messages, isCodex, codexRawLines, session.first_seen, session.last_sync_at]);
 
   // The transcript header controls (cost toggle, filter chips) only apply to
   // the Claude transcript view. Codex has no per-message filtering yet, and
@@ -330,9 +342,10 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
               {isCodex ? (
                 <CodexTranscriptPane
                   sessionId={session.id}
-                  transcriptFileName={transcriptFileName}
+                  rawLines={codexRawLines}
+                  loading={loading}
+                  error={error}
                   targetLineId={targetMessageUuid}
-                  initialRawLines={initialCodexRawLines}
                 />
               ) : (
                 <ClaudeTranscriptPane

@@ -288,6 +288,10 @@ const CodexTurnContextPayloadSchema = z
     turn_id: z.string().optional(),
     cwd: z.string().optional(),
     approval_policy: z.string().optional(),
+    // CF-386: per CF-379, the canonical session model lives on turn_context
+    // (older CLIs wrote it to session_meta). Declared explicitly so
+    // `extractCodexModel` and any future readers don't rely on .passthrough().
+    model: z.string().optional(),
   })
   .passthrough();
 
