@@ -1,6 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import CodexTranscriptPane from './CodexTranscriptPane';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
+import { normalizeCodexLines } from '@/services/codexTranscriptService';
+import {
+  codexItemMatchesFilter,
+  DEFAULT_CODEX_FILTER_STATE,
+  type CodexFilterState,
+} from './codexCategories';
 
 const meta: Meta<typeof CodexTranscriptPane> = {
   title: 'Session/CodexTranscriptPane',
@@ -103,20 +109,102 @@ const fixtureLines: RawCodexLine[] = [
   },
 ];
 
+// SessionViewer-shaped derivation helper for the stories (mirrors the live
+// memo chain in `SessionViewer.tsx`).
+function deriveProps(rawLines: RawCodexLine[], filterState: CodexFilterState) {
+  const items = normalizeCodexLines(rawLines);
+  const filteredItems = items.filter((it) => codexItemMatchesFilter(it, filterState));
+  const visibleIndices = new Set<number>();
+  items.forEach((it, idx) => {
+    if (codexItemMatchesFilter(it, filterState)) visibleIndices.add(idx);
+  });
+  return { items, filteredItems, visibleIndices };
+}
+
 /**
- * Presentational: SessionViewer feeds `rawLines` from its own fetch (CF-386).
+ * Presentational: SessionViewer feeds normalized items from its own fetch
+ * (CF-386) and the filter pipeline (CF-361).
  */
 export const FullSession: Story = {
-  render: () => (
-    <div style={{ height: '100vh' }}>
-      <CodexTranscriptPane
-        sessionId="storybook"
-        rawLines={fixtureLines}
-        loading={false}
-        error={null}
-      />
-    </div>
-  ),
+  render: () => {
+    const { items, filteredItems, visibleIndices } = deriveProps(
+      fixtureLines,
+      DEFAULT_CODEX_FILTER_STATE,
+    );
+    return (
+      <div style={{ height: '100vh' }}>
+        <CodexTranscriptPane
+          sessionId="storybook"
+          items={items}
+          filteredItems={filteredItems}
+          visibleIndices={visibleIndices}
+          loading={false}
+          error={null}
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * CF-361: filtered view — only `final` assistant messages pass. The timeline
+ * bar greys segments whose visible-item count is zero; the row list shrinks
+ * to just the matching items.
+ */
+export const FilteredFinalOnly: Story = {
+  render: () => {
+    const filterState: CodexFilterState = {
+      ...DEFAULT_CODEX_FILTER_STATE,
+      user: false,
+      assistant: { commentary: false, final: true },
+      tool_call: { exec_command: false, apply_patch: false, web_search: false, generic: false },
+      compacted: false,
+      turn_separator: false,
+    };
+    const { items, filteredItems, visibleIndices } = deriveProps(fixtureLines, filterState);
+    return (
+      <div style={{ height: '100vh' }}>
+        <CodexTranscriptPane
+          sessionId="storybook"
+          items={items}
+          filteredItems={filteredItems}
+          visibleIndices={visibleIndices}
+          loading={false}
+          error={null}
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * CF-361: all items filtered out — distinct empty state with the hint.
+ */
+export const FilteredAllOut: Story = {
+  render: () => {
+    const filterState: CodexFilterState = {
+      user: false,
+      assistant: { commentary: false, final: false },
+      tool_call: { exec_command: false, apply_patch: false, web_search: false, generic: false },
+      reasoning_hidden: false,
+      compacted: false,
+      turn_separator: false,
+      unknown: false,
+    };
+    const { items, filteredItems, visibleIndices } = deriveProps(fixtureLines, filterState);
+    return (
+      <div style={{ height: '100vh' }}>
+        <CodexTranscriptPane
+          sessionId="storybook"
+          items={items}
+          filteredItems={filteredItems}
+          visibleIndices={visibleIndices}
+          loading={false}
+          error={null}
+        />
+      </div>
+    );
+  },
 };
 
 /**
@@ -127,7 +215,8 @@ export const Empty: Story = {
     <div style={{ height: '100vh' }}>
       <CodexTranscriptPane
         sessionId="storybook"
-        rawLines={[]}
+        items={[]}
+        filteredItems={[]}
         loading={false}
         error={null}
       />
@@ -144,7 +233,8 @@ export const Loading: Story = {
     <div style={{ height: '100vh' }}>
       <CodexTranscriptPane
         sessionId="storybook"
-        rawLines={[]}
+        items={[]}
+        filteredItems={[]}
         loading={true}
         error={null}
       />
@@ -160,7 +250,8 @@ export const ErrorState: Story = {
     <div style={{ height: '100vh' }}>
       <CodexTranscriptPane
         sessionId="storybook"
-        rawLines={[]}
+        items={[]}
+        filteredItems={[]}
         loading={false}
         error="No transcript file found"
       />

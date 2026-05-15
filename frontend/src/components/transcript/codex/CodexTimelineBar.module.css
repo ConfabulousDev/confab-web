@@ -34,6 +34,13 @@
   background: var(--color-timeline-assistant);
 }
 
+/* CF-361: segments whose visible-item count is zero render greyed out and
+   non-interactive. Mirrors the Claude TimelineBar `.filtered` rule. */
+.segment.filtered {
+  background: var(--color-timeline-filtered);
+  cursor: default;
+}
+
 .segment:hover {
   filter: brightness(1.1);
 }

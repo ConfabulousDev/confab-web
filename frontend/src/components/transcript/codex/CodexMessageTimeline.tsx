@@ -28,21 +28,26 @@ import { buildVirtualItems, skipNavKey, skipNavLabel } from './codexVirtualItems
 import styles from './CodexMessageTimeline.module.css';
 
 export interface CodexMessageTimelineProps {
+  /**
+   * Unfiltered item stream — drives the timeline bar's segment layout so
+   * turn boundaries stay correct even when individual rows are filtered out.
+   */
   items: CodexRenderItem[];
+  /**
+   * Post-filter item stream — drives row rendering, skip-nav maps, and the
+   * deep-link target index. Equals `items` when no filter is active.
+   */
+  filteredItems: CodexRenderItem[];
+  /**
+   * CF-361: indices into `items` whose category passes the active filter.
+   * Forwarded to `CodexTimelineBar` for greyed-segment rendering and tooltip
+   * filtered-count display. `undefined` ⇒ no filtering applied.
+   */
+  visibleIndices?: Set<number>;
   /** Session ID — used by per-row Copy Link to build deep-link URLs. */
   sessionId: string;
   /** Deep-link target row, addressed by its stable `lineId` (CF-360). */
   targetLineId?: string;
-  /**
-   * RESERVED placeholder for CF-361 — no consumer yet. CF-361 (filter chips)
-   * will set this to `true` when the active filter hides the row at
-   * `targetLineId` so the timeline can show a "filtered out" affordance.
-   * Declared here today only to lock the prop shape across the
-   * CF-360 / CF-361 boundary; the timeline body intentionally does not read
-   * it. Remove this prop along with the matching one on
-   * `CodexTranscriptPane` if CF-361 changes direction.
-   */
-  targetLineIdHidden?: boolean;
 }
 
 // Conservative initial estimate — virtualizer measures real heights after
@@ -52,6 +57,8 @@ const ESTIMATED_SEPARATOR_HEIGHT = 40;
 
 export default function CodexMessageTimeline({
   items,
+  filteredItems,
+  visibleIndices,
   sessionId,
   targetLineId,
 }: CodexMessageTimelineProps) {
@@ -60,25 +67,27 @@ export default function CodexMessageTimeline({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const hasScrolledToTarget = useRef(false);
 
-  const virtualItems = useMemo(() => buildVirtualItems(items), [items]);
+  const virtualItems = useMemo(() => buildVirtualItems(filteredItems), [filteredItems]);
 
-  // CF-360: map lineId → position in items[] for deep-link lookup. Built off
-  // `items` so it grows naturally as the rawLines array does (polling).
+  // CF-360/CF-361: map lineId → position in filteredItems[] so deep-link lookup
+  // resolves to the actual row index in the visible list. Built off
+  // `filteredItems` so it stays in sync with what the virtualizer renders.
   const lineIdToItemIndex = useMemo(() => {
     const map = new Map<string, number>();
-    items.forEach((item, idx) => {
+    filteredItems.forEach((item, idx) => {
       map.set(item.lineId, idx);
     });
     return map;
-  }, [items]);
+  }, [filteredItems]);
 
-  // CF-360: next-/prev-of-same-kind skip-nav maps, keyed by item index. Items
-  // whose `skipNavKey` returns null don't participate (dividers).
+  // CF-360: next-/prev-of-same-kind skip-nav maps, keyed by filteredItems
+  // index so navigation jumps through visible rows only. Items whose
+  // `skipNavKey` returns null don't participate (dividers).
   const { nextOfSameKind, prevOfSameKind } = useMemo(() => {
     const next = new Map<number, number>();
     const prev = new Map<number, number>();
     const lastSeenByKey = new Map<string, number>();
-    items.forEach((item, idx) => {
+    filteredItems.forEach((item, idx) => {
       const key = skipNavKey(item);
       if (key === null) return;
       const prevIdx = lastSeenByKey.get(key);
@@ -89,7 +98,7 @@ export default function CodexMessageTimeline({
       lastSeenByKey.set(key, idx);
     });
     return { nextOfSameKind: next, prevOfSameKind: prev };
-  }, [items]);
+  }, [filteredItems]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
   const virtualizer = useVirtualizer({
@@ -111,6 +120,16 @@ export default function CodexMessageTimeline({
     });
     return map;
   }, [virtualItems]);
+
+  // CF-361: the timeline bar's segments index into the unfiltered `items`
+  // array, so we need a translation layer between the filteredItems index
+  // we hold internally and the unfiltered index the bar speaks. Inverse
+  // map: lineId → position in unfiltered `items`.
+  const lineIdToUnfilteredIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    items.forEach((item, idx) => map.set(item.lineId, idx));
+    return map;
+  }, [items]);
 
   // Track first visible item index (skipping separator rows) so the bar
   // indicator has something to point at when the user hasn't explicitly
@@ -202,7 +221,41 @@ export default function CodexMessageTimeline({
     );
   }
 
+  // CF-361: distinct empty state when the active filter hides every row.
+  // Mirrors `MessageTimeline.tsx:419-423` text.
+  if (filteredItems.length === 0) {
+    return (
+      <div className={styles.empty}>
+        <p>No items to display</p>
+        <p className={styles.emptyHint}>Try adjusting your filters</p>
+      </div>
+    );
+  }
+
   const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
+
+  // Translate the filteredItems-keyed selection back to an unfiltered-items
+  // index for the bar's position indicator. The selected row is always
+  // visible, so its lineId is guaranteed to be in `lineIdToUnfilteredIndex`.
+  const selectedFilteredItem = filteredItems[effectiveSelectedIndex];
+  const selectedUnfilteredIndex = selectedFilteredItem
+    ? (lineIdToUnfilteredIndex.get(selectedFilteredItem.lineId) ?? 0)
+    : 0;
+
+  // CF-361: bar click → scroll to first visible item at or after `unfilteredStart`.
+  // We only get clicks on un-filtered segments (the bar gates filtered ones),
+  // so at least one item in the segment range is in `lineIdToItemIndex`.
+  const onSeekFromBar = (unfilteredStart: number): void => {
+    for (let i = unfilteredStart; i < items.length; i++) {
+      const candidate = items[i];
+      if (!candidate) continue;
+      const filteredIdx = lineIdToItemIndex.get(candidate.lineId);
+      if (filteredIdx !== undefined) {
+        scrollToItem(filteredIdx);
+        return;
+      }
+    }
+  };
 
   return (
     <div className={styles.container}>
@@ -277,8 +330,9 @@ export default function CodexMessageTimeline({
 
       <CodexTimelineBar
         items={items}
-        selectedIndex={effectiveSelectedIndex}
-        onSeek={scrollToItem}
+        selectedIndex={selectedUnfilteredIndex}
+        visibleIndices={visibleIndices}
+        onSeek={onSeekFromBar}
       />
     </div>
   );

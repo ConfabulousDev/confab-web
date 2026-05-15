@@ -461,3 +461,82 @@ export const CodexNoModel: DirectStory = {
     />
   ),
 };
+
+// CF-361: Codex provider with the new hierarchical filter chip wired up.
+// Use this story to inspect the dropdown's visual treatment of the Codex
+// category model (assistant.commentary/final, tool_call.*, reasoning_hidden,
+// compacted, turn_separator).
+function CodexWithFiltersDemo() {
+  const initial = {
+    user: true,
+    assistant: { commentary: true, final: true },
+    tool_call: { exec_command: true, apply_patch: true, web_search: true, generic: true },
+    reasoning_hidden: false,
+    compacted: true,
+    turn_separator: true,
+    unknown: true,
+  };
+  const [filterState, setFilterState] = useState(initial);
+
+  const counts = {
+    user: 12,
+    assistant: { total: 21, commentary: 9, final: 12 },
+    tool_call: { total: 17, exec_command: 11, apply_patch: 3, web_search: 1, generic: 2 },
+    reasoning_hidden: 7,
+    compacted: 1,
+    turn_separator: 12,
+    unknown: 0,
+  };
+
+  return (
+    <SessionHeader
+      sessionId="session-codex-filters"
+      title="Investigate Codex rollout schema for transcript parser"
+      hasCustomTitle={false}
+      autoTitle="Investigate Codex rollout schema for transcript parser"
+      externalId="019e23cc-fixture-codex-rollout"
+      provider="codex"
+      ownerEmail="developer@example.com"
+      model="gpt-5"
+      durationMs={1800000}
+      sessionDate={new Date('2026-05-13T01:00:00')}
+      gitInfo={sampleGitInfo}
+      isOwner={true}
+      isShared={false}
+      codexCategoryCounts={counts}
+      codexFilterState={filterState}
+      onToggleCodexCategory={(c) => {
+        setFilterState((prev) => {
+          const next = { ...prev };
+          if (c === 'assistant') {
+            const all = prev.assistant.commentary && prev.assistant.final;
+            next.assistant = { commentary: !all, final: !all };
+          } else if (c === 'tool_call') {
+            const tc = prev.tool_call;
+            const all = tc.exec_command && tc.apply_patch && tc.web_search && tc.generic;
+            next.tool_call = { exec_command: !all, apply_patch: !all, web_search: !all, generic: !all };
+          } else {
+            next[c] = !prev[c];
+          }
+          return next;
+        });
+      }}
+      onToggleCodexAssistantSubcategory={(sub) =>
+        setFilterState((prev) => ({
+          ...prev,
+          assistant: { ...prev.assistant, [sub]: !prev.assistant[sub] },
+        }))
+      }
+      onToggleCodexToolCallSubcategory={(sub) =>
+        setFilterState((prev) => ({
+          ...prev,
+          tool_call: { ...prev.tool_call, [sub]: !prev.tool_call[sub] },
+        }))
+      }
+    />
+  );
+}
+
+export const CodexWithFilters: DirectStory = {
+  render: () => <CodexWithFiltersDemo />,
+};

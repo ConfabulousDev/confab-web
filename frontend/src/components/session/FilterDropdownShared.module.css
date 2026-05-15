@@ -1,4 +1,7 @@
-/* Filter dropdown - header button and dropdown menu */
+/* Shared filter-dropdown chrome — consumed by FilterDropdown (Claude) and
+   CodexFilterDropdown (Codex). Both dropdowns render the same hierarchical
+   tree UI, so all visual rules live here. Provider-specific overrides (if
+   ever needed) would go in component-local *.module.css files. */
 
 .container {
   position: relative;

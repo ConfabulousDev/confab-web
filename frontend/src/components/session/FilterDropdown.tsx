@@ -10,7 +10,7 @@ import type {
   FilterState,
 } from './messageCategories';
 import type { SidebarItemColor } from '../PageSidebar';
-import styles from './FilterDropdown.module.css';
+import styles from './FilterDropdownShared.module.css';
 
 interface FilterDropdownProps {
   counts: HierarchicalCounts;

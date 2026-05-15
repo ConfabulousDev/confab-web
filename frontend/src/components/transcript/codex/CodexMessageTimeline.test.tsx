@@ -35,7 +35,7 @@ function toolCall(timestamp: string, callId = 'c1'): CodexRenderItem {
 
 describe('CodexMessageTimeline', () => {
   it('renders the empty-state when items is empty', () => {
-    render(<CodexMessageTimeline items={[]} sessionId="test-session" />);
+    render(<CodexMessageTimeline items={[]} filteredItems={[]} sessionId="test-session" />);
     expect(screen.getByText(/no conversation content/i)).toBeInTheDocument();
   });
 

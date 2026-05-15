@@ -11,11 +11,19 @@ import type {
   HierarchicalCounts,
   FilterState,
 } from './messageCategories';
+import type {
+  CodexCategory,
+  CodexAssistantSubcategory,
+  CodexToolCallSubcategory,
+  CodexHierarchicalCounts,
+  CodexFilterState,
+} from './codexCategories';
 import { PersonIcon } from '@/components/icons';
 import { getProviderIcon } from '@/components/providerIcon';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
 import FilterDropdown from './FilterDropdown';
+import CodexFilterDropdown from './CodexFilterDropdown';
 import CopyIdDropdown from '@/components/CopyIdDropdown';
 import styles from './SessionHeader.module.css';
 
@@ -95,14 +103,21 @@ interface SessionHeaderProps {
   isOwner?: boolean;
   isShared?: boolean;
   sharedByEmail?: string | null; // Email of session owner (for non-owner access)
-  // Filter props - optional, only shown on transcript tab
-  // Currently drilled from SessionViewer -> SessionHeader -> FilterDropdown
+  // Claude filter props - optional, only shown on Claude transcript tab.
+  // Drilled from SessionViewer -> SessionHeader -> FilterDropdown.
   categoryCounts?: HierarchicalCounts;
   filterState?: FilterState;
   onToggleCategory?: (category: MessageCategory) => void;
   onToggleUserSubcategory?: (subcategory: UserSubcategory) => void;
   onToggleAssistantSubcategory?: (subcategory: AssistantSubcategory) => void;
   onToggleAttachmentSubcategory?: (subcategory: AttachmentSubcategory) => void;
+  // Codex filter props (CF-361) - optional, only shown on Codex transcript tab.
+  // Mutually exclusive with the Claude filter props at the call site.
+  codexCategoryCounts?: CodexHierarchicalCounts;
+  codexFilterState?: CodexFilterState;
+  onToggleCodexCategory?: (category: CodexCategory) => void;
+  onToggleCodexAssistantSubcategory?: (sub: CodexAssistantSubcategory) => void;
+  onToggleCodexToolCallSubcategory?: (sub: CodexToolCallSubcategory) => void;
   // Cost mode toggle - only shown on transcript tab
   isCostMode?: boolean;
   onToggleCostMode?: () => void;
@@ -131,6 +146,11 @@ function SessionHeader({
   onToggleUserSubcategory,
   onToggleAssistantSubcategory,
   onToggleAttachmentSubcategory,
+  codexCategoryCounts,
+  codexFilterState,
+  onToggleCodexCategory,
+  onToggleCodexAssistantSubcategory,
+  onToggleCodexToolCallSubcategory,
   isCostMode,
   onToggleCostMode,
 }: SessionHeaderProps) {
@@ -308,6 +328,15 @@ function SessionHeader({
             onToggleUserSubcategory={onToggleUserSubcategory}
             onToggleAssistantSubcategory={onToggleAssistantSubcategory}
             onToggleAttachmentSubcategory={onToggleAttachmentSubcategory}
+          />
+        )}
+        {codexCategoryCounts && codexFilterState && onToggleCodexCategory && onToggleCodexAssistantSubcategory && onToggleCodexToolCallSubcategory && (
+          <CodexFilterDropdown
+            counts={codexCategoryCounts}
+            filterState={codexFilterState}
+            onToggleCategory={onToggleCodexCategory}
+            onToggleAssistantSubcategory={onToggleCodexAssistantSubcategory}
+            onToggleToolCallSubcategory={onToggleCodexToolCallSubcategory}
           />
         )}
         {isShared ? (

@@ -1,24 +1,29 @@
 // CF-386 — CodexTranscriptPane is presentational after the lift. Fetch + poll
 // live in SessionViewer; this component just renders the props it's given.
-// These tests pin the new prop contract.
+// CF-361 — normalization also lifted to SessionViewer; the pane now receives
+// `items` + `filteredItems` + optional `visibleIndices` directly.
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import CodexTranscriptPane from './CodexTranscriptPane';
-import { parseCodexJSONL } from '@/services/codexTranscriptService';
+import { normalizeCodexLines, parseCodexJSONL } from '@/services/codexTranscriptService';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
+import type { CodexRenderItem } from '@/types/codexRenderItem';
 
 // CodexMessageTimeline is heavy (virtualization, search bar, etc.) — stub it
 // so these tests are pure prop-rendering assertions.
 vi.mock('@/components/transcript/codex/CodexMessageTimeline', () => ({
-  default: ({ items }: { items: unknown[] }) => (
-    <div data-testid="codex-message-timeline" data-items-count={items.length} />
+  default: ({ items, filteredItems }: { items: unknown[]; filteredItems: unknown[] }) => (
+    <div
+      data-testid="codex-message-timeline"
+      data-items-count={items.length}
+      data-filtered-count={filteredItems.length}
+    />
   ),
 }));
 
 // Schema-validate test rawLines via the real parser so we don't hand-roll
 // `as unknown as RawCodexLine` casts (matches the service test's `rawLine`).
-// Throws on parse failure so a malformed test fixture surfaces immediately.
 function rawLine(jsonl: string): RawCodexLine {
   const line = parseCodexJSONL(jsonl).rawLines[0];
   if (!line) throw new Error(`rawLine helper: failed to parse ${jsonl}`);
@@ -34,12 +39,17 @@ const minimalRollout: RawCodexLine[] = [
   ),
 ];
 
+function itemsFrom(rawLines: RawCodexLine[]): CodexRenderItem[] {
+  return normalizeCodexLines(rawLines);
+}
+
 describe('CodexTranscriptPane (presentational)', () => {
   it('renders a loading indicator when loading is true', () => {
     render(
       <CodexTranscriptPane
         sessionId="s1"
-        rawLines={[]}
+        items={[]}
+        filteredItems={[]}
         loading={true}
         error={null}
       />
@@ -52,7 +62,8 @@ describe('CodexTranscriptPane (presentational)', () => {
     render(
       <CodexTranscriptPane
         sessionId="s1"
-        rawLines={[]}
+        items={[]}
+        filteredItems={[]}
         loading={false}
         error="boom"
       />
@@ -61,11 +72,13 @@ describe('CodexTranscriptPane (presentational)', () => {
     expect(screen.queryByTestId('codex-message-timeline')).not.toBeInTheDocument();
   });
 
-  it('renders the timeline when rawLines are present and not loading', () => {
+  it('renders the timeline when items are present and not loading', () => {
+    const items = itemsFrom(minimalRollout);
     render(
       <CodexTranscriptPane
         sessionId="s1"
-        rawLines={minimalRollout}
+        items={items}
+        filteredItems={items}
         loading={false}
         error={null}
       />
@@ -73,11 +86,12 @@ describe('CodexTranscriptPane (presentational)', () => {
     expect(screen.getByTestId('codex-message-timeline')).toBeInTheDocument();
   });
 
-  it('renders the timeline with zero items when rawLines is empty (not loading, no error)', () => {
+  it('renders the timeline with zero items when items is empty (not loading, no error)', () => {
     render(
       <CodexTranscriptPane
         sessionId="s1"
-        rawLines={[]}
+        items={[]}
+        filteredItems={[]}
         loading={false}
         error={null}
       />

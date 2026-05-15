@@ -176,7 +176,7 @@ function Frame({ children }: { children: ReactNode }) {
 export const FullSession: Story = {
   render: () => (
     <Frame>
-      <CodexMessageTimeline items={sample} sessionId="story-session" />
+      <CodexMessageTimeline items={sample} filteredItems={sample} sessionId="story-session" />
     </Frame>
   ),
 };
@@ -184,7 +184,7 @@ export const FullSession: Story = {
 export const WithTimeGap: Story = {
   render: () => (
     <Frame>
-      <CodexMessageTimeline items={sampleWithGap} sessionId="story-session" />
+      <CodexMessageTimeline items={sampleWithGap} filteredItems={sampleWithGap} sessionId="story-session" />
     </Frame>
   ),
 };
@@ -196,6 +196,7 @@ export const WithDeepLinkTarget: Story = {
     <Frame>
       <CodexMessageTimeline
         items={sample}
+        filteredItems={sample}
         sessionId="story-session"
         targetLineId="4"
       />
@@ -206,7 +207,42 @@ export const WithDeepLinkTarget: Story = {
 export const Empty: Story = {
   render: () => (
     <Frame>
-      <CodexMessageTimeline items={[]} sessionId="story-session" />
+      <CodexMessageTimeline items={[]} filteredItems={[]} sessionId="story-session" />
+    </Frame>
+  ),
+};
+
+// CF-361: half the rows hidden — the timeline bar greys filtered segments.
+export const FilteredHalf: Story = {
+  render: () => {
+    const filtered = sample.filter((it) => it.kind !== 'tool_call' && it.kind !== 'reasoning_hidden');
+    const visibleIndices = new Set<number>();
+    sample.forEach((it, idx) => {
+      if (it.kind !== 'tool_call' && it.kind !== 'reasoning_hidden') visibleIndices.add(idx);
+    });
+    return (
+      <Frame>
+        <CodexMessageTimeline
+          items={sample}
+          filteredItems={filtered}
+          visibleIndices={visibleIndices}
+          sessionId="story-session"
+        />
+      </Frame>
+    );
+  },
+};
+
+// CF-361: every row hidden — the timeline shows the "all filtered" empty state.
+export const FilteredAllOut: Story = {
+  render: () => (
+    <Frame>
+      <CodexMessageTimeline
+        items={sample}
+        filteredItems={[]}
+        visibleIndices={new Set()}
+        sessionId="story-session"
+      />
     </Frame>
   ),
 };

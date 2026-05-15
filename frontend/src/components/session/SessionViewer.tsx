@@ -6,17 +6,25 @@ import {
   fetchParsedCodexTranscript,
   fetchNewCodexLines,
   extractCodexModel,
+  normalizeCodexLines,
 } from '@/services/codexTranscriptService';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
+import type { CodexRenderItem } from '@/types/codexRenderItem';
 import { tilsAPI, type TIL } from '@/services/api';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useTranscriptFilters } from '@/hooks/useTranscriptFilters';
+import { useCodexTranscriptFilters } from '@/hooks/useCodexTranscriptFilters';
 import { computeSessionMeta } from '@/utils/sessionMeta';
 import {
   countHierarchicalCategories,
   messageMatchesFilter,
   DEFAULT_FILTER_STATE,
 } from './messageCategories';
+import {
+  countCodexCategories,
+  codexItemMatchesFilter,
+  DEFAULT_CODEX_FILTER_STATE,
+} from './codexCategories';
 import SessionHeader from './SessionHeader';
 import SessionSummaryPanel from './SessionSummaryPanel';
 import ClaudeTranscriptPane from './ClaudeTranscriptPane';
@@ -105,11 +113,22 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     });
   }, [session.id, isCodex]);
 
-  // Filter state - synced to URL via ?hide= param
+  // Claude filter state — synced to URL via ?hide= param.
   const {
     filterState, setFilterState,
     toggleCategory, toggleUserSubcategory, toggleAssistantSubcategory, toggleAttachmentSubcategory,
   } = useTranscriptFilters();
+
+  // Codex filter state (CF-361) — same ?hide= URL slot, provider-specific
+  // token grammar. Both hooks render unconditionally; only the active
+  // provider's outputs reach SessionHeader / CodexTranscriptPane downstream.
+  const {
+    filterState: codexFilterState,
+    setFilterState: setCodexFilterState,
+    toggleCategory: toggleCodexCategory,
+    toggleAssistantSubcategory: toggleCodexAssistantSubcategory,
+    toggleToolCallSubcategory: toggleCodexToolCallSubcategory,
+  } = useCodexTranscriptFilters();
 
   // Compute hierarchical category counts
   const categoryCounts = useMemo(() => countHierarchicalCategories(messages), [messages]);
@@ -119,11 +138,28 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     return messages.filter((message) => messageMatchesFilter(message, filterState));
   }, [messages, filterState]);
 
+  // CF-361: lift Codex render items here so SessionHeader can show counts on
+  // the Summary tab too, and we can compute the visible-index set in one
+  // place for the timeline bar.
+  const codexItems = useMemo(() => normalizeCodexLines(codexRawLines), [codexRawLines]);
+  const codexCategoryCounts = useMemo(() => countCodexCategories(codexItems), [codexItems]);
+  const { filteredCodexItems, visibleCodexIndices } = useMemo(() => {
+    const filtered: CodexRenderItem[] = [];
+    const visible = new Set<number>();
+    codexItems.forEach((item, idx) => {
+      if (codexItemMatchesFilter(item, codexFilterState)) {
+        filtered.push(item);
+        visible.add(idx);
+      }
+    });
+    return { filteredCodexItems: filtered, visibleCodexIndices: visible };
+  }, [codexItems, codexFilterState]);
+
   // When a deep-link target exists but is hidden by the active filter, reset
   // filters so the target becomes visible. Runs once per target change since
   // the reset itself makes the target pass on the next check.
   useEffect(() => {
-    if (!targetMessageUuid || messages.length === 0) return;
+    if (isCodex || !targetMessageUuid || messages.length === 0) return;
 
     const targetMessage = messages.find(
       (m) => 'uuid' in m && m.uuid === targetMessageUuid
@@ -135,7 +171,24 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
       ...DEFAULT_FILTER_STATE,
       system: targetMessage.type === 'system',
     }, { replace: true });
-  }, [targetMessageUuid, messages, filterState, setFilterState]);
+  }, [isCodex, targetMessageUuid, messages, filterState, setFilterState]);
+
+  // CF-361: Codex parallel of the deep-link filter-reset fallback. If the
+  // target lineId resolves to a row hidden by the active Codex filter, reset
+  // to defaults and force the target's category visible (only matters when
+  // the target itself is reasoning_hidden, since that's the only category
+  // hidden by default).
+  useEffect(() => {
+    if (!isCodex || !targetMessageUuid || codexItems.length === 0) return;
+    const target = codexItems.find((it) => it.lineId === targetMessageUuid);
+    if (!target) return;
+    if (codexItemMatchesFilter(target, codexFilterState)) return;
+
+    setCodexFilterState({
+      ...DEFAULT_CODEX_FILTER_STATE,
+      reasoning_hidden: target.kind === 'reasoning_hidden',
+    }, { replace: true });
+  }, [isCodex, targetMessageUuid, codexItems, codexFilterState, setCodexFilterState]);
 
   // Get transcript file info
   const transcriptFile = useMemo(() => {
@@ -269,10 +322,13 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     return { model, durationMs, sessionDate };
   }, [messages, isCodex, codexRawLines, session.first_seen, session.last_sync_at]);
 
-  // The transcript header controls (cost toggle, filter chips) only apply to
-  // the Claude transcript view. Codex has no per-message filtering yet, and
-  // the Summary tab doesn't show transcript chrome.
-  const showTranscriptControls = activeTab === 'transcript' && !isCodex;
+  // The transcript header controls (filter chips) apply to both providers on
+  // the Transcript tab (CF-361 added Codex filter chips). Cost mode is still
+  // Claude-only.
+  const showTranscriptControls = activeTab === 'transcript';
+  const showClaudeFilters = showTranscriptControls && !isCodex;
+  const showCodexFilters = showTranscriptControls && isCodex;
+  const showCostToggle = showTranscriptControls && !isCodex;
 
   return (
     <div className={styles.sessionViewer}>
@@ -295,14 +351,19 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
           isOwner={isOwner}
           isShared={isShared}
           sharedByEmail={session.shared_by_email}
-          isCostMode={showTranscriptControls ? isCostMode : undefined}
-          onToggleCostMode={showTranscriptControls ? toggleCostMode : undefined}
-          categoryCounts={showTranscriptControls ? categoryCounts : undefined}
-          filterState={showTranscriptControls ? filterState : undefined}
-          onToggleCategory={showTranscriptControls ? toggleCategory : undefined}
-          onToggleUserSubcategory={showTranscriptControls ? toggleUserSubcategory : undefined}
-          onToggleAssistantSubcategory={showTranscriptControls ? toggleAssistantSubcategory : undefined}
-          onToggleAttachmentSubcategory={showTranscriptControls ? toggleAttachmentSubcategory : undefined}
+          isCostMode={showCostToggle ? isCostMode : undefined}
+          onToggleCostMode={showCostToggle ? toggleCostMode : undefined}
+          categoryCounts={showClaudeFilters ? categoryCounts : undefined}
+          filterState={showClaudeFilters ? filterState : undefined}
+          onToggleCategory={showClaudeFilters ? toggleCategory : undefined}
+          onToggleUserSubcategory={showClaudeFilters ? toggleUserSubcategory : undefined}
+          onToggleAssistantSubcategory={showClaudeFilters ? toggleAssistantSubcategory : undefined}
+          onToggleAttachmentSubcategory={showClaudeFilters ? toggleAttachmentSubcategory : undefined}
+          codexCategoryCounts={showCodexFilters ? codexCategoryCounts : undefined}
+          codexFilterState={showCodexFilters ? codexFilterState : undefined}
+          onToggleCodexCategory={showCodexFilters ? toggleCodexCategory : undefined}
+          onToggleCodexAssistantSubcategory={showCodexFilters ? toggleCodexAssistantSubcategory : undefined}
+          onToggleCodexToolCallSubcategory={showCodexFilters ? toggleCodexToolCallSubcategory : undefined}
         />
 
         {/* Tabs */}
@@ -342,7 +403,9 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
               {isCodex ? (
                 <CodexTranscriptPane
                   sessionId={session.id}
-                  rawLines={codexRawLines}
+                  items={codexItems}
+                  filteredItems={filteredCodexItems}
+                  visibleIndices={visibleCodexIndices}
                   loading={loading}
                   error={error}
                   targetLineId={targetMessageUuid}

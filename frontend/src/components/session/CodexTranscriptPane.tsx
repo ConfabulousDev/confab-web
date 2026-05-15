@@ -1,20 +1,27 @@
 // Renders the transcript-tab content for Codex sessions.
 //
 // CF-386: presentational. Fetch + poll moved up to `SessionViewer` so the
-// session header can derive the model on the Summary tab too (mirrors how
-// Claude state is owned by `SessionViewer`). This component now just
-// normalizes the raw lines into render items and hands them to the timeline.
+// session header can derive the model on the Summary tab too.
+// CF-361: render items + filter inputs are now also lifted to `SessionViewer`
+// so the same `items` stream can drive both the category counts in the
+// header and the row list here.
 
-import { useMemo } from 'react';
-import { normalizeCodexLines } from '@/services/codexTranscriptService';
-import type { RawCodexLine } from '@/schemas/codexTranscript';
 import CodexMessageTimeline from '@/components/transcript/codex/CodexMessageTimeline';
+import type { CodexRenderItem } from '@/types/codexRenderItem';
 import styles from './CodexTranscriptPane.module.css';
 
 export interface CodexTranscriptPaneProps {
   sessionId: string;
-  /** Parsed rollout lines owned by `SessionViewer`. */
-  rawLines: RawCodexLine[];
+  /** Unfiltered render items — drives the timeline bar's segment layout. */
+  items: CodexRenderItem[];
+  /** Post-filter render items — drives the row list. Equals `items` when no filter. */
+  filteredItems: CodexRenderItem[];
+  /**
+   * CF-361: indices into `items` whose category passes the active filter.
+   * Forwarded to the timeline bar so filtered segments render greyed.
+   * `undefined` means no filter is active.
+   */
+  visibleIndices?: Set<number>;
   /** True while the initial rollout fetch is in flight. */
   loading: boolean;
   /** Error message from the rollout fetch, if any. */
@@ -25,24 +32,17 @@ export interface CodexTranscriptPaneProps {
    * the string is reinterpreted as a lineId.
    */
   targetLineId?: string;
-  /**
-   * RESERVED placeholder for CF-361 — no consumer yet. Pass-through to
-   * `CodexMessageTimeline`; see its prop doc for the planned semantics.
-   */
-  targetLineIdHidden?: boolean;
 }
 
 export default function CodexTranscriptPane({
   sessionId,
-  rawLines,
+  items,
+  filteredItems,
+  visibleIndices,
   loading,
   error,
   targetLineId,
-  targetLineIdHidden,
 }: CodexTranscriptPaneProps) {
-  // Re-derive render items whenever raw lines change. Pure, cheap inside useMemo.
-  const items = useMemo(() => normalizeCodexLines(rawLines), [rawLines]);
-
   if (loading) {
     return <div className={styles.loading}>Loading transcript...</div>;
   }
@@ -57,9 +57,10 @@ export default function CodexTranscriptPane({
   return (
     <CodexMessageTimeline
       items={items}
+      filteredItems={filteredItems}
+      visibleIndices={visibleIndices}
       sessionId={sessionId}
       targetLineId={targetLineId}
-      targetLineIdHidden={targetLineIdHidden}
     />
   );
 }
