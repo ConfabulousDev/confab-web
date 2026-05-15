@@ -106,7 +106,7 @@ func (p *parser) dispatch(typ string, ts time.Time, payload json.RawMessage, lin
 	case "session_meta":
 		p.handleSessionMeta(payload)
 	case "turn_context":
-		// Carries no analytics signal in v1; per-turn sandbox/approval policy.
+		p.handleTurnContext(payload)
 	case "response_item":
 		p.handleResponseItem(ts, payload, lineNum)
 	case "event_msg":
@@ -145,6 +145,36 @@ func (p *parser) handleSessionMeta(raw json.RawMessage) {
 	}
 	if len(meta.Git) > 0 {
 		p.out.GitInfo = meta.Git
+	}
+}
+
+// ----------------------------------------------------------------------------
+// turn_context
+// ----------------------------------------------------------------------------
+
+type turnContextPayload struct {
+	Model string `json:"model"`
+}
+
+// handleTurnContext fills Model from the per-turn envelope. Codex CLI
+// ~0.130+ moved `model` out of session_meta into turn_context; without this
+// the rollout's Model stays empty and pricing falls back to $0. Session-
+// level Model is only filled when unset (session_meta wins for older
+// rollouts that carry both); the active turn picks up the model when
+// task_started didn't carry one.
+func (p *parser) handleTurnContext(raw json.RawMessage) {
+	var tc turnContextPayload
+	if err := json.Unmarshal(raw, &tc); err != nil {
+		return
+	}
+	if tc.Model == "" {
+		return
+	}
+	if p.out.Model == "" {
+		p.out.Model = tc.Model
+	}
+	if p.active != nil && p.active.Model == "" {
+		p.active.Model = tc.Model
 	}
 }
 
