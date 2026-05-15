@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
@@ -3778,6 +3779,87 @@ func TestSyncChunk_Provider_HTTP_Integration(t *testing.T) {
 		}
 		if ghCount != 0 {
 			t.Errorf("codex session has %d github_links, want 0 (Claude-Code parsing must be skipped)", ghCount)
+		}
+	})
+
+	// CF-355: timestamp extraction must run for any transcript chunk,
+	// regardless of provider. Pre-CF-355 the parse gate lumped timestamp and
+	// PR-link extraction together under a Claude-Code-only flag, so codex
+	// chunks never wrote sessions.last_message_at and the ACTIVITY column
+	// rendered "-". This subtest pins the post-fix contract.
+	t.Run("populates last_message_at from codex transcript timestamps", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "codex-ts@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "codex-ts-ext", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// Lines with monotonically increasing top-level timestamps. The latest
+		// (third) line's timestamp must propagate to sessions.last_message_at.
+		// One line is deliberately shaped like a Claude-Code pr-link event;
+		// the gate split must NOT auto-extract it for codex sessions.
+		const latest = "2026-05-13T01:00:00.300Z"
+		rolloutLines := []string{
+			`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-fixture"}}`,
+			`{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"cwd":"/repo"}}`,
+			`{"timestamp":"` + latest + `","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}}`,
+			// PR-link-shaped line — must be ignored for codex provider.
+			`{"timestamp":"2026-05-13T01:00:00.250Z","type":"pr-link","prNumber":7,"prUrl":"https://github.com/owner/repo/pull/7","prRepository":"owner/repo","sessionId":"019e"}`,
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "rollout-codex-ts.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     rolloutLines,
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// last_message_at must equal the latest line's timestamp.
+		var stored *time.Time
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT last_message_at FROM sessions WHERE id = $1", sessionID).Scan(&stored); err != nil {
+			t.Fatalf("query last_message_at: %v", err)
+		}
+		if stored == nil {
+			t.Fatal("last_message_at is NULL; codex timestamp extraction did not run")
+		}
+		want, err := time.Parse(time.RFC3339Nano, latest)
+		if err != nil {
+			t.Fatalf("parse latest fixture timestamp: %v", err)
+		}
+		if !stored.Equal(want) {
+			t.Errorf("last_message_at = %v, want %v", stored, want)
+		}
+
+		// last_sync_at must also be set (sanity — chunk upload always touches it).
+		var syncAt *time.Time
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT last_sync_at FROM sessions WHERE id = $1", sessionID).Scan(&syncAt); err != nil {
+			t.Fatalf("query last_sync_at: %v", err)
+		}
+		if syncAt == nil {
+			t.Error("last_sync_at is NULL after chunk upload")
+		}
+
+		// Negative: no github_links — the pr-link-shaped line must not have
+		// been extracted, because PR-link parsing stays Claude-Code-only.
+		var ghCount int
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM session_github_links WHERE session_id = $1",
+			sessionID).Scan(&ghCount); err != nil {
+			t.Fatalf("count github_links: %v", err)
+		}
+		if ghCount != 0 {
+			t.Errorf("codex session has %d github_links, want 0 (PR-link parsing must stay gated to claude-code)", ghCount)
 		}
 	})
 

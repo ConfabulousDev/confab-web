@@ -69,10 +69,16 @@ type GenerateInput struct {
 	SessionID      string
 	UserID         int64
 	LineCount      int64
-	FileCollection *FileCollection           // used when all files are in memory
-	Transcript     string                    // pre-built XML transcript (streaming path)
-	IDMap          map[int]string            // sequential ID -> UUID map (streaming path)
+	FileCollection *FileCollection // used when all files are in memory
+	Transcript     string          // pre-built XML transcript (streaming path)
+	IDMap          map[int]string  // sequential ID -> UUID map (streaming path)
 	CardStats      map[string]interface{}
+	// ClearMessageIDs, when true, zeroes the MessageID on every annotated
+	// item in the LLM response before the card is saved. Used by the Codex
+	// branch: Codex messages have no stable id and the frontend's
+	// `if (!item.message_id)` short-circuit renders items as plain text,
+	// avoiding broken anchor links. Defaults to false for Claude.
+	ClearMessageIDs bool
 }
 
 // GenerateResult contains the result of a generation attempt.
@@ -140,6 +146,13 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 		return &GenerateResult{Error: err}
 	}
 
+	// Codex sessions have no stable per-message id. Zero MessageID on every
+	// annotated item so the frontend's SmartRecapCard short-circuit renders
+	// items as plain text instead of broken anchor links.
+	if input.ClearMessageIDs {
+		clearMessageIDs(result)
+	}
+
 	// Build the card record
 	card := &SmartRecapCardRecord{
 		SessionID:                 input.SessionID,
@@ -199,4 +212,22 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 	)
 
 	return &GenerateResult{Card: card, SuggestedTitle: result.SuggestedSessionTitle}
+}
+
+// clearMessageIDs zeroes every AnnotatedItem.MessageID across all bucket
+// slices on a SmartRecapResult. Used by the Codex precompute path because
+// Codex messages don't have stable ids the frontend can anchor on.
+func clearMessageIDs(r *SmartRecapResult) {
+	buckets := [][]AnnotatedItem{
+		r.WentWell,
+		r.WentBad,
+		r.HumanSuggestions,
+		r.EnvironmentSuggestions,
+		r.DefaultContextSuggestions,
+	}
+	for _, items := range buckets {
+		for i := range items {
+			items[i].MessageID = ""
+		}
+	}
 }

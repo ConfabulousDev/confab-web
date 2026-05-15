@@ -33,6 +33,22 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   'opus-3': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
   // Haiku 3
   'haiku-3': { input: 0.25, output: 1.25, cacheWrite: 0.30, cacheRead: 0.03 },
+
+  // OpenAI / Codex models — CacheWrite=0 (caching is free/automatic).
+  // Source: https://developers.openai.com/api/docs/pricing
+  'gpt-5': { input: 1.25, output: 10.00, cacheWrite: 0, cacheRead: 0.125 },
+  'gpt-5-mini': { input: 0.25, output: 2.00, cacheWrite: 0, cacheRead: 0.025 },
+  'gpt-5-nano': { input: 0.05, output: 0.40, cacheWrite: 0, cacheRead: 0.005 },
+  'gpt-5.4-mini': { input: 0.75, output: 4.50, cacheWrite: 0, cacheRead: 0.075 },
+  'gpt-5.5': { input: 5.00, output: 30.00, cacheWrite: 0, cacheRead: 0.50 },
+  'gpt-4o': { input: 2.50, output: 10.00, cacheWrite: 0, cacheRead: 1.25 },
+  'gpt-4o-mini': { input: 0.15, output: 0.60, cacheWrite: 0, cacheRead: 0.075 },
+  'gpt-4-turbo': { input: 10.00, output: 30.00, cacheWrite: 0, cacheRead: 0 },
+  'o1': { input: 15.00, output: 60.00, cacheWrite: 0, cacheRead: 7.50 },
+  'o1-mini': { input: 1.10, output: 4.40, cacheWrite: 0, cacheRead: 0.55 },
+  'o3': { input: 2.00, output: 8.00, cacheWrite: 0, cacheRead: 0.50 },
+  'o3-mini': { input: 1.10, output: 4.40, cacheWrite: 0, cacheRead: 0.55 },
+  'o4-mini': { input: 1.10, output: 4.40, cacheWrite: 0, cacheRead: 0.275 },
 };
 
 // Zero pricing for unknown models — cost will be underreported rather than silently wrong.
@@ -45,11 +61,25 @@ export const WEB_SEARCH_COST_PER_REQUEST = 0.01; // $10 per 1,000 searches
 // Fast mode multiplier applied to all token costs
 const FAST_MODE_MULTIPLIER = 6;
 
+// Strip the YYYY-MM-DD suffix OpenAI appends to pinned snapshots,
+// e.g. "gpt-5-2026-05-01" -> "gpt-5". Pure names like "gpt-5.5" pass through.
+const OPENAI_DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
+
+function isOpenAIModel(name: string): boolean {
+  return /^gpt-/.test(name) || /^o[134]/.test(name);
+}
+
 /**
- * Extract model family from full model name
- * e.g., "claude-opus-4-5-20251101" -> "opus-4-5"
+ * Extract pricing-table key from a full model name.
+ *  - Claude:  "claude-opus-4-5-20251101" -> "opus-4-5"
+ *  - OpenAI:  "gpt-5-2026-05-01"          -> "gpt-5"
+ *  - OpenAI:  "gpt-5.5"                   -> "gpt-5.5" (pass-through)
  */
 function getModelFamily(modelName: string): string {
+  if (isOpenAIModel(modelName)) {
+    return modelName.replace(OPENAI_DATE_SUFFIX, '');
+  }
+
   // Remove "claude-" prefix if present
   const name = modelName.replace(/^claude-/, '');
 

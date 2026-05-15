@@ -40,7 +40,10 @@ export const ExecFailure: Story = {
   },
 };
 
-export const ExecLongOutput: Story = {
+// Long output now scrolls inside BashOutput's frame (max-height 400px) rather
+// than collapsing behind a `Show all` toggle — that affordance was dropped in
+// CF-358 to mirror Claude's Bash-tool rendering.
+export const ExecScrollableOutput: Story = {
   args: {
     item: {
       kind: 'tool_call',
@@ -51,6 +54,27 @@ export const ExecLongOutput: Story = {
       rawOutput: Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n'),
       status: 'completed',
       execMetadata: { exitCode: 0, wallTimeMs: 50 },
+    } satisfies CodexToolCallItem,
+  },
+};
+
+// Exercises ANSI stripping inside BashOutput — colour escapes disappear and the
+// terminal frame stays clean.
+export const ExecWithAnsi: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'exec_command',
+      callId: 'call_exec_ansi',
+      rawInput: { cmd: 'npm test', workdir: '/tmp/proj' },
+      rawOutput: [
+        '\x1b[32m✓\x1b[0m passes one',
+        '\x1b[32m✓\x1b[0m passes two',
+        '\x1b[31m✗\x1b[0m fails three',
+      ].join('\n'),
+      status: 'failed',
+      execMetadata: { exitCode: 1, wallTimeMs: 1200 },
     } satisfies CodexToolCallItem,
   },
 };
@@ -69,6 +93,43 @@ export const ApplyPatch: Story = {
         changes: {
           '/proj/docs/codex-support.md': { type: 'add', content: '# Plan' },
           '/proj/README.md': { type: 'update', content: 'updated section' },
+        },
+      },
+      status: 'completed',
+    } satisfies CodexToolCallItem,
+  },
+};
+
+// Multi-file unified diff so the Prism `diff` highlighting (additions in green,
+// deletions in red) is exercised end-to-end.
+export const ApplyPatchDiff: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'apply_patch',
+      callId: 'call_patch_diff',
+      rawInput: [
+        '--- a/src/foo.ts',
+        '+++ b/src/foo.ts',
+        '@@ -1,4 +1,5 @@',
+        ' export function foo(): string {',
+        '-  return "hello";',
+        '+  // CF-358: terser greeting',
+        '+  return "hi";',
+        ' }',
+        '--- a/README.md',
+        '+++ b/README.md',
+        '@@ -3,3 +3,3 @@',
+        '-old line',
+        '+new line',
+      ].join('\n'),
+      rawOutput: '{"output":"Success."}',
+      structuredOutput: {
+        success: true,
+        changes: {
+          '/proj/src/foo.ts': { type: 'update' },
+          '/proj/README.md': { type: 'update' },
         },
       },
       status: 'completed',
@@ -115,6 +176,22 @@ export const UnknownTool: Story = {
       callId: 'call_future',
       rawInput: { some: 'shape', nested: { a: 1 } },
       rawOutput: 'some output',
+      status: 'completed',
+    } satisfies CodexToolCallItem,
+  },
+};
+
+// Generic tool with a JSON-shaped string rawInput — should render as
+// syntax-highlighted JSON via the shared `tryParseAsJson` fallback.
+export const GenericJsonInput: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'future_tool_json',
+      callId: 'call_future_json',
+      rawInput: '{"target":"/tmp","options":{"recursive":true,"depth":3}}',
+      rawOutput: 'scanned 42 files',
       status: 'completed',
     } satisfies CodexToolCallItem,
   },

@@ -58,9 +58,10 @@ layer.
 | `CodexTimelineBar.tsx` | Vertical, turn-based navigation rail. One segment per `CodexTurnSeparatorItem` (plus a trailing in-flight segment); click-to-seek, hover tooltip (`Turn N — duration · TTFT, N items`), and a position indicator driven by the parent's `selectedIndex`. Consumes `useCodexSegmentLayout` |
 | `codexTimelineSegments.ts` | `CodexTimelineSegment`, `computeCodexSegments`, `useCodexSegmentLayout`. Slices the render-item stream on each `CodexTurnSeparatorItem`; delegates size + indicator math to the shared `useBlendedSegmentLayout` |
 | `codexVirtualItems.ts` | Pure `buildVirtualItems(items)` that injects `>5min` time separators and tags each item with `isNewSpeaker`. The speaker rule is Codex-specific: `tool_call` / `reasoning_hidden` / `turn_separator` / `compacted` / `unknown` items do NOT break user/assistant continuity, so `user → tool_call → user` is the same speaker |
-| `CodexUserMessage.tsx` | Plain user prompt in a chat row, with timestamp. Accepts `isSelected` + `isNewSpeaker` for selection ring and speaker-change spacing |
-| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Accepts `isSelected` + `isNewSpeaker` |
-| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (command + output + exit-code badge, 100-line soft cap), `ApplyPatchBody` (file-list summary + raw expand), `WebSearchBody` (query chips), or a generic `details`-based fallback. Accepts `isSelected` (`isNewSpeaker` is no-op for tool_call per the speaker rule) |
+| `CodexUserMessage.tsx` | User prompt in a chat row, with timestamp. Body renders through `CodexMessageBody`. Accepts `isSelected` + `isNewSpeaker` for selection ring and speaker-change spacing |
+| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody`. Accepts `isSelected` + `isNewSpeaker` |
+| `CodexMessageBody.tsx` | Shared rendering path for user + assistant text. JSON-shaped text pretty-prints via `CodeBlock` (`language="json"`); everything else flows through `renderMarkdownToHtml`. Mirrors `ContentBlock.tsx`'s text-block contract |
+| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s. Accepts `isSelected` (`isNewSpeaker` is no-op for tool_call per the speaker rule) |
 | `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries. Accepts `isSelected` |
 | `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines. Accepts `isSelected` |
 | `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages. Accepts `isSelected` |
@@ -72,11 +73,22 @@ layer.
 | `CodexMessageTimeline.module.css` | Container (flex with bar on the right), virtualizer slot positioning, scroll chrome, time-separator divider |
 | `CodexTimelineBar.module.css` | Vertical-bar chrome: segments, position indicator, hover tooltip |
 
-CF-357 adds the same navigation chrome the Claude view has: turn-based
-timeline bar, scroll-to-top/bottom buttons, row hover → selection state, and
-`>5min` idle-gap time separators. Cost mode, transcript search, deep
-linking, and filter chips are still deferred to CF-362, CF-359, CF-360, and
-CF-358 respectively.
+CF-349 shipped v1 as read-only display. CF-358 brought rendering parity
+(markdown, Prism, terminal output, diff highlighting) in line with Claude.
+CF-357 added the navigation chrome — turn-based timeline bar, scroll-to-top/
+bottom buttons, row hover → selection state, and `>5min` idle-gap time
+separators. Still deferred: Cmd-F search (CF-359), deep linking (CF-360),
+filter chips (CF-361), and cost mode (CF-362).
+
+**Known gaps (deferred — see TODOs at the referenced sites):**
+- Image content blocks (`input_image` / `output_image`) are dropped in
+  `joinMessageText`; no `CodexImageItem` variant exists yet. Add one when a
+  real transcript surfaces image content.
+- Plaintext `reasoning` is not rendered — every reasoning line emits a
+  `reasoning_hidden` item today. When plaintext arrives, extend
+  `CodexReasoningHiddenItem` with a `{ decoded: true; text }` discriminator
+  and render a 💭 collapsible block mirroring `ContentBlock`'s thinking
+  treatment.
 
 ### TimelineBar / CostBar / CodexTimelineBar
 
@@ -176,12 +188,13 @@ Content block rendering is tested indirectly through `TimelineMessage.test.tsx` 
 ## Dependencies
 
 - `marked` + `dompurify` (markdown rendering and XSS sanitization, accessed via `@/utils/markdown.renderMarkdownToHtml`)
-- `prismjs` (syntax highlighting in CodeBlock)
+- `prismjs` (syntax highlighting in CodeBlock; includes the `diff` grammar for `apply_patch` raw views and the standard set of language grammars)
 - `@tanstack/react-virtual` (CodexMessageTimeline virtualization, same as MessageTimeline)
 - `@/hooks/useCopyToClipboard` (copy button in CodeBlock and BashOutput)
 - `@/utils/highlightSearch` (search match highlighting)
 - `@/utils/utils` (`stripAnsi` for terminal escape code removal; `isRecord` for the Codex shape readers)
-- `@/utils/markdown` (`renderMarkdownToHtml` — shared by ContentBlock, AwaySummary, QueuedCommand)
+- `@/utils/markdown` (`renderMarkdownToHtml` — shared by ContentBlock, the Codex message renderers, AwaySummary, QueuedCommand; `tryParseAsJson` — shared JSON-fallback helper used before markdown rendering)
+- `@/styles/markdown.module.css` (typography for rendered markdown — composed into `ContentBlock.module.css .textBlock` and `CodexMessage.module.css .markdown`)
 - `@/utils/tokenStats` (`formatCost` in CostBar)
 - `@/types/codexRenderItem` (Codex render-item discriminated union)
 - `@/schemas/codexTranscript` (Codex Zod schemas)

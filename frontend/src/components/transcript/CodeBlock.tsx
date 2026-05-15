@@ -16,6 +16,7 @@ import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-sql';
 import 'prismjs/components/prism-css';
 import 'prismjs/components/prism-markup'; // HTML/XML
+import 'prismjs/components/prism-diff';   // unified-diff highlighting (CF-358)
 
 // Import Prism light theme (dark mode overrides in CodeBlock.module.css)
 import 'prismjs/themes/prism.css';

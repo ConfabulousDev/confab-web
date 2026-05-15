@@ -24,6 +24,16 @@ func TestGetModelFamily(t *testing.T) {
 		{"sonnet-3-7", "sonnet-3-7"},
 		{"haiku-3", "haiku-3"},
 		{"unknown-model", "unknown-model"},
+		// OpenAI / Codex: pass-through with date-suffix stripping.
+		{"gpt-5", "gpt-5"},
+		{"gpt-5-mini", "gpt-5-mini"},
+		{"gpt-5.5", "gpt-5.5"},
+		{"gpt-5-2026-05-01", "gpt-5"},
+		{"gpt-5.5-2026-04-15", "gpt-5.5"},
+		{"o1-mini", "o1-mini"},
+		{"o3", "o3"},
+		{"o4-mini", "o4-mini"},
+		{"gpt-4o", "gpt-4o"},
 	}
 
 	for _, tt := range tests {
@@ -46,6 +56,15 @@ func TestGetPricing(t *testing.T) {
 		{"claude-sonnet-4-20241022", 3},
 		{"claude-haiku-3-5-20241022", 0.80},
 		{"unknown-model", 0}, // unknown models return zero pricing
+		// OpenAI / Codex
+		{"gpt-5", 1.25},
+		{"gpt-5-mini", 0.25},
+		{"gpt-5-nano", 0.05},
+		{"gpt-5.5", 5.00},
+		{"gpt-4o", 2.50},
+		{"gpt-4o-mini", 0.15},
+		{"o1", 15.00},
+		{"o3-mini", 1.10},
 	}
 
 	for _, tt := range tests {
@@ -211,7 +230,8 @@ func TestPricingTableSync(t *testing.T) {
 	tsContent := string(data)
 
 	// Parse TS MODEL_PRICING entries: 'family-name': { input: N, output: N, cacheWrite: N, cacheRead: N }
-	entryRe := regexp.MustCompile(`'([\w-]+)':\s*\{\s*input:\s*([\d.]+),\s*output:\s*([\d.]+),\s*cacheWrite:\s*([\d.]+),\s*cacheRead:\s*([\d.]+)\s*\}`)
+	// Family names allow dots (OpenAI uses dotted versions like "gpt-5.5").
+	entryRe := regexp.MustCompile(`'([\w.-]+)':\s*\{\s*input:\s*([\d.]+),\s*output:\s*([\d.]+),\s*cacheWrite:\s*([\d.]+),\s*cacheRead:\s*([\d.]+)\s*\}`)
 	matches := entryRe.FindAllStringSubmatch(tsContent, -1)
 	if len(matches) == 0 {
 		t.Fatal("Could not parse any MODEL_PRICING entries from tokenStats.ts")

@@ -215,7 +215,7 @@ func TestFindStaleSessions_IncludesAgentFiles(t *testing.T) {
 	}
 }
 
-func TestFindStaleSessions_IgnoresNonClaudeCodeSessions(t *testing.T) {
+func TestFindStaleSessions_IgnoresNonAnalyticsProviders(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -223,14 +223,12 @@ func TestFindStaleSessions_IgnoresNonClaudeCodeSessions(t *testing.T) {
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 
-	// Create a user and session that is NOT a claude-code session. We use
-	// 'codex' (the only other real provider today) so the test reflects what
-	// FindStaleSessions sees in production: a non-claude-code session must be
-	// excluded by the precompute filter.
+	// Sessions with provider strings outside the analytics-eligible set
+	// ('claude-code', 'Claude Code', 'codex') must be excluded by the
+	// precompute filter. Use a synthetic provider value to exercise this.
 	user := testutil.CreateTestUser(t, env, "regular@test.com", "Regular User")
-	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "regular-external-id", "codex")
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "regular-external-id", "future-provider-not-yet-supported")
 
-	// Add transcript sync file
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
@@ -241,10 +239,95 @@ func TestFindStaleSessions_IgnoresNonClaudeCodeSessions(t *testing.T) {
 		t.Fatalf("FindStaleSessions failed: %v", err)
 	}
 
-	// Should not find this session since it's not a Claude Code session
 	if len(sessions) != 0 {
-		t.Errorf("expected 0 sessions (not Claude Code), got %d", len(sessions))
+		t.Errorf("expected 0 sessions (unsupported provider), got %d", len(sessions))
 	}
+}
+
+// TestFindStaleSessions_IncludesCodex verifies that Codex sessions are picked
+// up by the stale-session filter alongside Claude Code sessions. Spec: §2a.
+func TestFindStaleSessions_IncludesCodex(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "mixed@test.com", "Mixed User")
+
+	claudeSessionID := testutil.CreateTestSession(t, env, user.ID, "claude-external-id")
+	testutil.CreateTestSyncFile(t, env, claudeSessionID, "transcript.jsonl", "transcript", 100)
+
+	codexSessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "codex-external-id", "codex")
+	testutil.CreateTestSyncFile(t, env, codexSessionID, "transcript.jsonl", "transcript", 100)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	sessions, err := precomputer.FindStaleSessions(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("FindStaleSessions failed: %v", err)
+	}
+
+	var sawClaude, sawCodex bool
+	for _, s := range sessions {
+		if s.SessionID == claudeSessionID {
+			sawClaude = true
+		}
+		if s.SessionID == codexSessionID {
+			sawCodex = true
+			if s.Provider != "codex" {
+				t.Errorf("codex session Provider = %q, want %q", s.Provider, "codex")
+			}
+		}
+	}
+	if !sawClaude {
+		t.Error("expected Claude session in stale list")
+	}
+	if !sawCodex {
+		t.Error("expected Codex session in stale list")
+	}
+}
+
+// TestPrecomputeRegularCards_UnsupportedProvider_LoudError verifies the
+// default-case guard in the dispatch switch. If the SQL filter ever drifts
+// from the switch, we want a clear error instead of a silent no-op. Spec: §2b.
+func TestPrecomputeRegularCards_UnsupportedProvider_LoudError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	stale := analytics.StaleSession{
+		SessionID:  "irrelevant",
+		UserID:     1,
+		ExternalID: "irrelevant",
+		Provider:   "future-provider",
+		TotalLines: 1,
+	}
+	err := precomputer.PrecomputeRegularCards(context.Background(), stale)
+	if err == nil {
+		t.Fatal("expected error for unsupported provider, got nil")
+	}
+	if !contains(err.Error(), "unsupported provider") {
+		t.Errorf("expected error to mention 'unsupported provider', got %q", err)
+	}
+}
+
+// contains is a tiny helper for substring assertion (avoids importing strings).
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }
 
 func TestFindStaleSessions_RespectsLimit(t *testing.T) {
@@ -2760,4 +2843,154 @@ func TestFindStaleSmartRecapSessions_QuotaDisabled_Included(t *testing.T) {
 	if sessions[0].SessionID != sessionID {
 		t.Errorf("session ID = %s, want %s", sessions[0].SessionID, sessionID)
 	}
+}
+
+// =============================================================================
+// Codex Provider Integration Tests (CF-350)
+// =============================================================================
+
+// codexSampleTranscript returns a minimal but realistic Codex rollout that
+// exercises the parser/adapter pipeline end-to-end: session_meta, one full
+// turn with a user prompt, an assistant final message, and a token_count
+// event with non-null info.
+func codexSampleTranscript() []byte {
+	return []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"codex-sess-1","cwd":"/repo","model_provider":"openai","model":"gpt-5"}}
+{"timestamp":"2026-05-13T01:00:00.200Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1778634000,"model":"gpt-5"}}
+{"timestamp":"2026-05-13T01:00:00.500Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"find the auth bug"}]}}
+{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":500,"cached_input_tokens":100,"output_tokens":80,"reasoning_output_tokens":20,"total_tokens":700},"model_context_window":258400}}}
+{"timestamp":"2026-05-13T01:00:11.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"The bug is in auth.go line 42."}],"phase":"final"}}
+{"timestamp":"2026-05-13T01:00:11.100Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":1778634011,"duration_ms":11000,"time_to_first_token_ms":1500}}
+`)
+}
+
+// TestPrecomputeRegularCards_CodexSession verifies the end-to-end Codex
+// precompute path: download → parse → adapter → upsert all 7 cards. Spec: §2c, §8c.
+func TestPrecomputeRegularCards_CodexSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "codex-precompute@test.com", "Codex User")
+	externalID := "codex-precompute-external-id"
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, externalID, "codex")
+
+	transcript := codexSampleTranscript()
+	totalLines := bytes_NewlineCount(transcript)
+	testutil.CreateTestSyncFile(t, env, sessionID, "rollout.jsonl", "transcript", totalLines)
+	testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderCodex, externalID, "rollout.jsonl", transcript)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	stale := analytics.StaleSession{
+		SessionID:  sessionID,
+		UserID:     user.ID,
+		ExternalID: externalID,
+		Provider:   validation.ProviderCodex,
+		TotalLines: int64(totalLines),
+	}
+	if err := precomputer.PrecomputeRegularCards(context.Background(), stale); err != nil {
+		t.Fatalf("PrecomputeRegularCards (codex): %v", err)
+	}
+
+	cards, err := analyticsStore.GetCards(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetCards: %v", err)
+	}
+	if cards == nil {
+		t.Fatal("expected cards to be created")
+	}
+	if cards.Tokens == nil {
+		t.Fatal("expected Tokens card")
+	}
+	// 500 input - 100 cached = 400 uncached billed at full input rate.
+	if cards.Tokens.InputTokens != 400 {
+		t.Errorf("Tokens.InputTokens = %d, want 400 (500 raw - 100 cached)", cards.Tokens.InputTokens)
+	}
+	if cards.Tokens.CacheReadTokens != 100 {
+		t.Errorf("Tokens.CacheReadTokens = %d, want 100", cards.Tokens.CacheReadTokens)
+	}
+	// output 80 + reasoning 20 = 100 total output.
+	if cards.Tokens.OutputTokens != 100 {
+		t.Errorf("Tokens.OutputTokens = %d, want 100 (80 + 20 reasoning)", cards.Tokens.OutputTokens)
+	}
+	// Cost should be > 0 with gpt-5 pricing in the table.
+	if cards.Tokens.EstimatedCostUSD.IsZero() {
+		t.Error("expected Tokens.EstimatedCostUSD > 0 with gpt-5 pricing")
+	}
+	if cards.Session == nil {
+		t.Fatal("expected Session card")
+	}
+	if cards.Session.UserMessages == 0 {
+		t.Error("expected Session.UserMessages > 0")
+	}
+	if cards.Tools == nil || cards.CodeActivity == nil || cards.Conversation == nil ||
+		cards.AgentsAndSkills == nil || cards.Redactions == nil {
+		t.Errorf("missing card(s): tools=%v code=%v conv=%v agents=%v redactions=%v",
+			cards.Tools != nil, cards.CodeActivity != nil, cards.Conversation != nil,
+			cards.AgentsAndSkills != nil, cards.Redactions != nil)
+	}
+	// Codex has no Read tool, so FilesRead must stay at 0.
+	if cards.CodeActivity != nil && cards.CodeActivity.FilesRead != 0 {
+		t.Errorf("CodeActivity.FilesRead = %d, want 0 (Codex has no Read tool)", cards.CodeActivity.FilesRead)
+	}
+}
+
+// TestBuildSearchIndex_CodexSession verifies the search index path for Codex.
+// Spec: §2e, §8c.
+func TestBuildSearchIndex_CodexSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "codex-search@test.com", "Codex Search User")
+	externalID := "codex-search-external-id"
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, externalID, "codex")
+
+	transcript := codexSampleTranscript()
+	totalLines := bytes_NewlineCount(transcript)
+	testutil.CreateTestSyncFile(t, env, sessionID, "rollout.jsonl", "transcript", totalLines)
+	testutil.UploadTestTranscript(t, env, user.ID, validation.ProviderCodex, externalID, "rollout.jsonl", transcript)
+
+	analyticsStore := analytics.NewStore(env.DB.Conn())
+	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
+
+	stale := analytics.StaleSession{
+		SessionID:  sessionID,
+		UserID:     user.ID,
+		ExternalID: externalID,
+		Provider:   validation.ProviderCodex,
+		TotalLines: int64(totalLines),
+	}
+	if err := precomputer.BuildSearchIndexOnly(context.Background(), stale); err != nil {
+		t.Fatalf("BuildSearchIndexOnly (codex): %v", err)
+	}
+
+	// Verify the row exists with non-empty user-message text.
+	var content string
+	err := env.DB.Conn().QueryRowContext(context.Background(),
+		`SELECT content_text FROM session_search_index WHERE session_id = $1`, sessionID).Scan(&content)
+	if err != nil {
+		t.Fatalf("read search index: %v", err)
+	}
+	if !contains(content, "find the auth bug") {
+		t.Errorf("search index content missing user message text: %q", content)
+	}
+}
+
+// bytes_NewlineCount returns the count of '\n' bytes in b.
+func bytes_NewlineCount(b []byte) int {
+	n := 0
+	for _, c := range b {
+		if c == '\n' {
+			n++
+		}
+	}
+	return n
 }

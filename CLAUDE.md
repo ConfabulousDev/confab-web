@@ -50,6 +50,9 @@ Adding a column to `db.SessionDetail`, `db.SessionListItem`, or any struct loade
 - **Smart recap generation**: `internal/analytics/smart_recap_generator.go`
 - **SessionDetail SQL projection**: `internal/db/session_detail.go` (`SessionDetailColumns`, `SessionDetailScanTargets`) — shared between `db/session.GetSessionDetail` and `db/access.GetSessionDetailWithAccess`
 - **Provider value normalization**: `internal/db/provider.go` (`NormalizeProvider`, `ProviderClaudeCode`, `ProviderClaudeCodeLegacy`, `ProviderCodex`) — applied at every Scan site reading `sessions.session_type`
+- **Codex rollout parser**: `internal/codex/parser.go` (`ParseRollout`) — produces a `*ParsedRollout` consumed by analytics
+- **Codex → analytics adapter**: `internal/analytics/codex_adapter.go` (`ComputeFromCodexRollout`) — maps a Codex rollout onto the same `ComputeResult` shape as the Claude path. Per-card mapping decisions documented inline (token cache subset, FilesRead=0, etc.)
+- **Provider-aware precompute dispatch**: `internal/analytics/precompute.go` — `PrecomputeRegularCards` / `BuildSearchIndexOnly` / `PrecomputeSmartRecapOnly` switch on `StaleSession.Provider` to call `*ClaudeCode` or `*Codex` branches. Unsupported providers return a loud error.
 
 #### Before Writing New Code
 
@@ -232,12 +235,19 @@ When adding new analytics cards to the session summary panel, **use the `/add-se
 
 ## Updating Model Pricing
 
-When adding a new Anthropic model, update the pricing tables in **both** places (they must stay in sync):
+When adding a new Anthropic OR OpenAI model, update the pricing tables in **both** places (they must stay in sync; `TestPricingTableSync` enforces this):
 
 - **Backend**: `backend/internal/analytics/pricing.go` — `modelPricingTable`
 - **Frontend**: `frontend/src/utils/tokenStats.ts` — `MODEL_PRICING`
 
-Look up current prices on the Anthropic pricing page.
+Anthropic prices: https://www.anthropic.com/pricing
+OpenAI prices: https://developers.openai.com/api/docs/pricing
+
+OpenAI conventions differ from Anthropic:
+- OpenAI's `cached_input_tokens` is a **subset** of `input_tokens` (not a separate count). The Codex adapter subtracts it before applying the uncached rate.
+- OpenAI does NOT charge for cache writes — set `CacheWrite: decimal.NewFromFloat(0)` on every OpenAI entry.
+- OpenAI cache reads are typically ~10% of input (gpt-5 family) — different from Anthropic's 0.1x ratio that uses separate `CacheRead`/`CacheWrite` rates.
+- OpenAI model family keys are passed through unchanged (e.g. `"gpt-5"`, `"gpt-5.5"`, `"o3-mini"`); `stripOpenAIDateSuffix` handles pinned date suffixes like `gpt-5-2026-05-01`.
 
 ## Finding Dead Code
 

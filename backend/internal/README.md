@@ -13,6 +13,7 @@ Internal packages for the Confab backend server. All packages live under
 | `api` | HTTP handlers, routing (chi), middleware wiring, request/response helpers | Adding/changing API endpoints, adjusting rate limits, modifying middleware stack |
 | `auth` | Authentication middleware, OAuth flows (GitHub/Google/OIDC), password auth, API key validation | Adding auth providers, changing session/token logic |
 | `clientip` | Middleware to extract real client IPs (Fly.io, Cloudflare, nginx) | Supporting new reverse proxy headers |
+| `codex` | Parser for OpenAI Codex CLI rollout JSONL — `ParseRollout` returns a normalized `ParsedRollout` (turns, tool calls, token usage, compactions) consumed by analytics | Changing how Codex rollouts are interpreted, adding new event types |
 | `db` | Database connection, shared types (`SessionListItem`, `SessionDetail`), error sentinels, helpers | Changing connection pooling, adding shared DB types |
 | `db/access` | Session access checks and share CRUD | Changing share permissions, access control rules |
 | `db/dbadmincardinvalidations` | Admin card invalidation audit table + smart-recap quota-bypass signal (CF-343) | Changing card invalidation semantics, audit shape |
@@ -50,7 +51,7 @@ have no internal dependencies.
   auth         ─→ db, db/dbauth, db/user, models,
                   clientip, logger, validation
 
-  analytics    ─→ storage, anthropic, db/dbadminsettings, recapquota
+  analytics    ─→ codex, storage, anthropic, db, db/dbadminsettings, recapquota
 
   ratelimit    ─→ clientip, logger
 
@@ -68,7 +69,7 @@ have no internal dependencies.
 
   Leaf packages (zero internal deps):
     clientip, logger, validation, models, anthropic,
-    recapquota, storage
+    recapquota, storage, codex
 
   Test-only:
     testutil   ─→ db, db/migrations, storage, auth, models

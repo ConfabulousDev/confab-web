@@ -1,8 +1,11 @@
-// Renders a Codex user prompt. Plain text in a chat-style row.
+// Renders a Codex user prompt. The body uses the shared `CodexMessageBody`
+// so user + assistant text flow through the same markdown / JSON pretty-print
+// pipeline that Claude's `ContentBlock` uses (CF-358).
 
 import type { CodexUserItem } from '@/types/codexRenderItem';
 import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
+import CodexMessageBody from './CodexMessageBody';
 import styles from './CodexMessage.module.css';
 
 export interface CodexUserMessageProps {
@@ -27,7 +30,7 @@ export default function CodexUserMessage({ item, isSelected, isNewSpeaker }: Cod
         <span className={styles.timestamp}>{formatCodexTimestamp(item.timestamp)}</span>
       </div>
       <div className={styles.body}>
-        <pre className={styles.text}>{item.text}</pre>
+        <CodexMessageBody text={item.text} />
       </div>
     </div>
   );

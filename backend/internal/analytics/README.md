@@ -24,7 +24,10 @@ Session analytics engine: parses Claude Code transcripts and computes, caches, a
 | `cards.go` | Card record types (DB schema), card data types (API response), version constants, `IsValid`/`AllValid` staleness helpers. |
 | `models.go` | `AnalyticsResponse` (API envelope), legacy flat types (`TokenStats`, `CostStats`, `CompactionInfo`). |
 | `store.go` | `Store` -- DB CRUD for all card tables (`session_card_*`), search index, and smart recap. `GetCards`/`UpsertCards` run all queries in parallel. `ToCards` and `ToResponse` handle `ComputeResult <-> Cards <-> AnalyticsResponse` conversions. |
-| `precompute.go` | `Precomputer` -- background worker entry points. `FindStaleSessions`, `PrecomputeRegularCards`, `FindStaleSmartRecapSessions`, `PrecomputeSmartRecapOnly`, `FindStaleSearchIndexSessions`, `BuildSearchIndexOnly`. Stale-session filters target Claude Code sessions only: `WHERE session_type IN ('claude-code', 'Claude Code')` -- matches both the canonical and legacy values until a one-time backfill collapses them. |
+| `precompute.go` | `Precomputer` -- background worker entry points. `FindStaleSessions`, `PrecomputeRegularCards`, `FindStaleSmartRecapSessions`, `PrecomputeSmartRecapOnly`, `FindStaleSearchIndexSessions`, `BuildSearchIndexOnly`. Stale-session filters cover all analytics-eligible providers: `WHERE session_type IN ('claude-code', 'Claude Code', 'codex')`. The three top-level methods dispatch on `StaleSession.Provider` to the Claude-Code branch (`*ClaudeCode` helpers) or the Codex branch (`*Codex` helpers); unsupported providers return a loud error so the SQL filter and switch can't silently drift. |
+| `codex_adapter.go` | `ComputeFromCodexRollout` -- maps a parsed `codex.ParsedRollout` onto the same `ComputeResult` shape produced by `ComputeStreaming` for Claude transcripts. Documents per-card mapping decisions inline (tokens normalize OpenAI's subset-cached-tokens, FilesRead stays 0 since Codex has no Read tool, etc.). |
+| `codex_search.go` | `ExtractCodexUserMessagesText` -- flattens Codex user messages, assistant `final` text, and tool-call summaries (name + truncated args) into the Weight C search-index content. Honors the 500 KB byte cap with UTF-8-safe boundary alignment. |
+| `codex_transcript.go` | `PrepareCodexTranscript` -- builds the XML transcript fed to the smart recap LLM (same `<transcript>`/`<user>`/`<assistant>`/`<tool>` envelope as the Claude path so the existing prompt accepts it). Codex synthesizes ids that the frontend doesn't anchor on — `ClearMessageIDs` flag zeros them post-LLM. |
 | `search_index.go` | `SearchIndexContent`, `UserMessagesBuilder`, `ExtractSearchContent` -- builds weighted tsvector components (metadata=A, recap=B, user messages=C) for full-text search. |
 | `pricing.go` | `ModelPricing`, `modelPricingTable`, `GetPricing`, `CalculateCost`, `CalculateTotalCost`. Per-model, per-million-token pricing with fast-mode and server-tool-use surcharges. |
 | `validation.go` | Schema validation for every transcript line type (user, assistant, system, summary, file-history-snapshot, queue-operation, pr-link). |
@@ -177,6 +180,24 @@ This ensures title/summary matches rank higher than body text matches.
 ### Legacy Flat Format
 
 `AnalyticsResponse` includes both legacy flat fields (`Tokens`, `Cost`, `Compaction`) and the new `Cards` map. This supports frontend migration; the flat fields will be removed once the frontend fully transitions to the cards format.
+
+### Provider-Aware Dispatch (Claude vs Codex)
+
+`PrecomputeRegularCards`, `BuildSearchIndexOnly`, and `PrecomputeSmartRecapOnly` are thin switches on `StaleSession.Provider`. Each branch is a private method:
+
+- `claude-code` / legacy `Claude Code` -> `*ClaudeCode` (existing `TranscriptBuilder` pipeline).
+- `codex` -> `*Codex` (Codex parser in `internal/codex`, mapped via `ComputeFromCodexRollout`).
+- anything else -> loud `unsupported provider` error.
+
+The three stale-session SQL filters use `WHERE session_type IN ('claude-code', 'Claude Code', 'codex')` and each query returns `session_type AS provider`, normalized through `db.NormalizeProvider` at the Scan site. Codex sessions have no agent files, so the existing `sync_files` JOIN returns just the transcript — `loadCodexRollout` reads that row directly and parses via `codex.ParseRollout`.
+
+Per-card mapping decisions for Codex are documented inline in `codex_adapter.go`. Notable points:
+
+- OpenAI `cached_input_tokens` is a SUBSET of `input_tokens` (unlike Anthropic). The adapter subtracts it before applying the uncached input rate; OpenAI cache writes are free (`CacheWrite=0` across all gpt-/o-series entries in `pricing.go`).
+- Reasoning tokens are billed as output by OpenAI; they fold into `OutputTokens`.
+- `FilesRead` stays 0 — Codex has no Read tool; documented inline rather than approximated heuristically.
+- `AssistantTurns` count user-prompt-triggered sequences (not raw Codex `task_started`->`task_complete` cycles) for closer parity with Claude semantics.
+- Smart recap items get empty `MessageID` via `GenerateInput.ClearMessageIDs=true`; the frontend's `SmartRecapCard.tsx` already short-circuits on `!item.message_id` and renders them as plain text (Codex messages have no stable id for deep-linking).
 
 ## Testing
 

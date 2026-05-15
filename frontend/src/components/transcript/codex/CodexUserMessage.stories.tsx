@@ -29,3 +29,11 @@ export const Multiline: Story = {
     ),
   },
 };
+
+// Verifies the JSON pretty-print fallback (CF-358): if the prompt is literal
+// JSON, it renders as a syntax-highlighted code block instead of plain text.
+export const JsonPrompt: Story = {
+  args: {
+    item: item('{"action":"run","cmd":"pwd","workdir":"/tmp/proj"}'),
+  },
+};

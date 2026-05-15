@@ -166,6 +166,13 @@ function extractMessageType(value: unknown): string | undefined {
  *
  * `text` is read via runtime check rather than a type cast because the
  * passthrough block schemas widen unknown variants.
+ *
+ * Image-content gap (CF-358): `input_image` / `output_image` blocks are
+ * silently dropped today — no real Codex transcript we've seen carries them,
+ * and `CodexRenderItem` has no image variant. When images surface, add a
+ * `CodexImageItem` variant in `@/types/codexRenderItem` and either emit a
+ * separate item per image here or attach an `images` array to the user /
+ * assistant item, mirroring `ContentBlock.tsx`'s image render path.
  */
 function joinMessageText(msg: CodexResponseMessage): string {
   return msg.content
