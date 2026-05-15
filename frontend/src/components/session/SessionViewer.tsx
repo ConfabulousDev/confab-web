@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { SessionDetail, TranscriptLine } from '@/types';
 import { isAssistantMessage } from '@/types';
 import { fetchParsedTranscript, fetchNewTranscriptMessages } from '@/services/transcriptService';
+import { fetchCodexSessionMeta } from '@/services/codexTranscriptService';
 import { tilsAPI, type TIL } from '@/services/api';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useTranscriptFilters } from '@/hooks/useTranscriptFilters';
@@ -140,6 +141,27 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, initialMessages, isCodex]);
 
+  // CF-383: Codex sessions don't go through loadTranscript (CodexTranscriptPane
+  // owns the full rollout fetch on the Transcript tab), so the model name has
+  // to come from somewhere else for the header. Fetch only the rollout's
+  // `session_meta` (first line) here. Falls back to undefined on any failure —
+  // SessionHeader renders the provider display name as a fallback.
+  const [codexModel, setCodexModel] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!isCodex || !transcriptFileName) return;
+    let cancelled = false;
+    fetchCodexSessionMeta(session.id, transcriptFileName)
+      .then(({ model }) => {
+        if (!cancelled) setCodexModel(model);
+      })
+      .catch(() => {
+        if (!cancelled) setCodexModel(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCodex, session.id, transcriptFileName]);
+
   async function loadTranscript() {
     setLoading(true);
     setError(null);
@@ -221,9 +243,10 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
 
   // Compute session metadata for header
   const sessionMeta = useMemo(() => {
-    // Find first assistant message to get model
+    // Claude path: first assistant message carries the model. Codex path
+    // (CF-383): `codexModel` is loaded from the rollout's session_meta line.
     const firstAssistant = messages.find(isAssistantMessage);
-    const model = firstAssistant?.message.model;
+    const model = isCodex ? codexModel : firstAssistant?.message.model;
 
     // Compute duration and date from message timestamps (matches analytics calculation)
     const { durationMs, sessionDate } = computeSessionMeta(messages, {
@@ -232,7 +255,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
     });
 
     return { model, durationMs, sessionDate };
-  }, [messages, session.first_seen, session.last_sync_at]);
+  }, [messages, isCodex, codexModel, session.first_seen, session.last_sync_at]);
 
   // The transcript header controls (cost toggle, filter chips) only apply to
   // the Claude transcript view. Codex has no per-message filtering yet, and

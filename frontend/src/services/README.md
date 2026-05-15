@@ -111,6 +111,12 @@ Key exports:
 - `fetchNewCodexLines(sessionId, fileName, currentLineCount)` -- Incremental
   poll, returns `{ newRawLines, newTotalLineCount }`. Callers append raw lines
   to their accumulated state and re-derive items via `useMemo`.
+- `fetchCodexSessionMeta(sessionId, fileName)` -- Header-only fetch (CF-383):
+  returns `{ model }` parsed from the rollout's `session_meta` first line.
+  Used by `SessionViewer` to populate the model meta-item on the Summary tab
+  without triggering the full transcript parse owned by `CodexTranscriptPane`.
+  Returns `{ model: undefined }` defensively for empty files, malformed JSON,
+  non-`session_meta` first lines, or missing/non-string `payload.model`.
 - `parseCodexJSONL`, `normalizeCodexLines` -- Used directly by tests and
   Storybook stories; exposed so consumers don't need to re-fetch to re-derive.
 - `reportCodexTranscriptErrors(sessionId, errors)` -- Sends to
