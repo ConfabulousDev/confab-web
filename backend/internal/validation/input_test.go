@@ -186,3 +186,150 @@ func TestProviderConstants(t *testing.T) {
 		t.Errorf("ProviderCodex = %q, want %q", ProviderCodex, "codex")
 	}
 }
+
+// TestValidateCodexRolloutMetadata locks the field-level contract for the
+// codex_rollout sub-block on POST /api/v1/sync/chunk. The provider-mismatch
+// check (rejecting codex_rollout on a claude-code session) is enforced in
+// the handler, not here.
+func TestValidateCodexRolloutMetadata(t *testing.T) {
+	const validUUID = "11111111-1111-1111-1111-111111111111"
+	const otherUUID = "22222222-2222-2222-2222-222222222222"
+	ptr := func(s string) *string { return &s }
+
+	tests := []struct {
+		name             string
+		threadUUID       string
+		parentThreadUUID *string
+		rolloutPath      string
+		cwd              string
+		model            string
+		source           string
+		threadSource     string
+		agentPath        string
+		agentRole        string
+		agentNickname    string
+		wantErr          bool
+	}{
+		{
+			name:        "happy path root rollout (nil parent)",
+			threadUUID:  validUUID,
+			rolloutPath: "/home/user/.codex/sessions/rollout-2026-05-15-abc.jsonl",
+			cwd:         "/home/user/project",
+			model:       "gpt-5",
+			source:      "codex-cli",
+		},
+		{
+			name:             "happy path child rollout (parent set)",
+			threadUUID:       validUUID,
+			parentThreadUUID: ptr(otherUUID),
+			rolloutPath:      "/home/user/.codex/sessions/rollout-child.jsonl",
+		},
+		{
+			name:        "missing thread_uuid",
+			threadUUID:  "",
+			rolloutPath: "/path",
+			wantErr:     true,
+		},
+		{
+			name:        "thread_uuid not a valid UUID",
+			threadUUID:  "not-a-uuid",
+			rolloutPath: "/path",
+			wantErr:     true,
+		},
+		{
+			name:             "parent_thread_uuid explicit empty string is rejected",
+			threadUUID:       validUUID,
+			parentThreadUUID: ptr(""),
+			rolloutPath:      "/path",
+			wantErr:          true,
+		},
+		{
+			name:             "parent_thread_uuid invalid UUID",
+			threadUUID:       validUUID,
+			parentThreadUUID: ptr("not-a-uuid"),
+			rolloutPath:      "/path",
+			wantErr:          true,
+		},
+		{
+			name:             "parent_thread_uuid equals thread_uuid (self-link)",
+			threadUUID:       validUUID,
+			parentThreadUUID: ptr(validUUID),
+			rolloutPath:      "/path",
+			wantErr:          true,
+		},
+		{
+			name:        "rollout_path empty",
+			threadUUID:  validUUID,
+			rolloutPath: "",
+			wantErr:     true,
+		},
+		{
+			name:        "rollout_path too long",
+			threadUUID:  validUUID,
+			rolloutPath: strings.Repeat("a", MaxCodexRolloutPathLength+1),
+			wantErr:     true,
+		},
+		{
+			name:        "cwd too long",
+			threadUUID:  validUUID,
+			rolloutPath: "/path",
+			cwd:         strings.Repeat("a", MaxCodexCWDLength+1),
+			wantErr:     true,
+		},
+		{
+			name:        "model too long",
+			threadUUID:  validUUID,
+			rolloutPath: "/path",
+			model:       strings.Repeat("a", MaxCodexModelLength+1),
+			wantErr:     true,
+		},
+		{
+			name:        "source too long",
+			threadUUID:  validUUID,
+			rolloutPath: "/path",
+			source:      strings.Repeat("a", MaxCodexSourceLength+1),
+			wantErr:     true,
+		},
+		{
+			name:         "thread_source too long",
+			threadUUID:   validUUID,
+			rolloutPath:  "/path",
+			threadSource: strings.Repeat("a", MaxCodexThreadSourceLength+1),
+			wantErr:      true,
+		},
+		{
+			name:        "agent_path too long",
+			threadUUID:  validUUID,
+			rolloutPath: "/path",
+			agentPath:   strings.Repeat("a", MaxCodexAgentPathLength+1),
+			wantErr:     true,
+		},
+		{
+			name:        "agent_role too long",
+			threadUUID:  validUUID,
+			rolloutPath: "/path",
+			agentRole:   strings.Repeat("a", MaxCodexAgentRoleLength+1),
+			wantErr:     true,
+		},
+		{
+			name:          "agent_nickname too long",
+			threadUUID:    validUUID,
+			rolloutPath:   "/path",
+			agentNickname: strings.Repeat("a", MaxCodexAgentNicknameLength+1),
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCodexRolloutMetadata(
+				tt.threadUUID, tt.parentThreadUUID,
+				tt.rolloutPath, tt.cwd, tt.model, tt.source, tt.threadSource,
+				tt.agentPath, tt.agentRole, tt.agentNickname,
+			)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCodexRolloutMetadata() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

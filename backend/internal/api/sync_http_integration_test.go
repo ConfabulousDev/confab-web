@@ -3894,3 +3894,514 @@ func TestSyncChunk_Provider_HTTP_Integration(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// POST /api/v1/sync/chunk - Codex rollout sidecar (CF-385)
+// =============================================================================
+
+// TestSyncChunk_CodexRollout_HTTP_Integration locks the wire contract for the
+// `metadata.codex_rollout` sub-block on POST /api/v1/sync/chunk. Covers:
+//
+//   - Happy paths: root rollout (parent nil) + child rollout (parent set)
+//   - Validation 400s: missing/invalid thread_uuid, malformed parent, self-link,
+//     empty rollout_path, length overflow, provider mismatch
+//   - Idempotency: same metadata on chunks 1 and 2 yields exactly one row
+//   - Cross-user isolation: user B cannot read user A's row
+//   - Cascade: deleting hosted session removes the rollout
+//   - Forward-compat: unknown fields in the JSON body are ignored
+func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	const rootUUID = "11111111-1111-4111-8111-111111111111"
+	const childUUID = "22222222-2222-4222-8222-222222222222"
+
+	ptr := func(s string) *string { return &s }
+
+	t.Run("accepts root rollout on codex session", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-root@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-root", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "rollout-root.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  rootUUID,
+					RolloutPath: "/home/u/.codex/sessions/rollout-root.jsonl",
+					Model:       "gpt-5",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var parent *string
+		var model string
+		row := env.DB.QueryRow(env.Ctx,
+			`SELECT parent_thread_uuid, COALESCE(model, '')
+			 FROM codex_rollouts WHERE user_id = $1 AND thread_uuid = $2`,
+			user.ID, rootUUID)
+		if err := row.Scan(&parent, &model); err != nil {
+			t.Fatalf("scan rollout row: %v", err)
+		}
+		if parent != nil {
+			t.Errorf("parent_thread_uuid = %v, want NULL", parent)
+		}
+		if model != "gpt-5" {
+			t.Errorf("model = %q, want %q", model, "gpt-5")
+		}
+	})
+
+	t.Run("accepts child rollout with parent", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-child@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-child", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "child.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:       childUUID,
+					ParentThreadUUID: ptr(rootUUID),
+					RolloutPath:      "/home/u/.codex/sessions/child.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var parent *string
+		row := env.DB.QueryRow(env.Ctx,
+			`SELECT parent_thread_uuid FROM codex_rollouts WHERE user_id = $1 AND thread_uuid = $2`,
+			user.ID, childUUID)
+		if err := row.Scan(&parent); err != nil {
+			t.Fatalf("scan child row: %v", err)
+		}
+		if parent == nil || *parent != rootUUID {
+			t.Errorf("parent_thread_uuid = %v, want %q", parent, rootUUID)
+		}
+	})
+
+	t.Run("rejects codex_rollout on claude-code session", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-cc@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "ext-cr-cc") // claude-code (default)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"user"}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  rootUUID,
+					RolloutPath: "/x.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+
+		var result map[string]string
+		testutil.ParseJSON(t, resp, &result)
+		if !strings.Contains(strings.ToLower(result["error"]), "codex") {
+			t.Errorf("expected error mentioning 'codex', got: %s", result["error"])
+		}
+	})
+
+	t.Run("400 on missing thread_uuid", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-mtid@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-mtid", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "x.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					RolloutPath: "/x.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("400 on invalid thread_uuid", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-itid@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-itid", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "x.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  "not-a-uuid",
+					RolloutPath: "/x.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("400 on parent_thread_uuid empty string", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-pe@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-pe", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		empty := ""
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "x.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:       rootUUID,
+					ParentThreadUUID: &empty,
+					RolloutPath:      "/x.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("400 on self-link parent_thread_uuid == thread_uuid", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-self@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-self", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "x.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:       rootUUID,
+					ParentThreadUUID: ptr(rootUUID),
+					RolloutPath:      "/x.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("400 on empty rollout_path", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-rp@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-rp", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "x.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  rootUUID,
+					RolloutPath: "",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("400 on length overflow (model)", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-len@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-len", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "x.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  rootUUID,
+					RolloutPath: "/x.jsonl",
+					Model:       strings.Repeat("a", validation.MaxCodexModelLength+1),
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("idempotent: same metadata on chunks 1 and 2 = one row", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-idem@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-idem", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		mk := func(firstLine int) SyncChunkRequest {
+			return SyncChunkRequest{
+				SessionID: sessionID,
+				FileName:  "rollout.jsonl",
+				FileType:  "transcript",
+				FirstLine: firstLine,
+				Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
+				Metadata: &SyncChunkMetadata{
+					CodexRollout: &SyncCodexRolloutMetadata{
+						ThreadUUID:  rootUUID,
+						RolloutPath: "/r.jsonl",
+						Model:       "gpt-5",
+					},
+				},
+			}
+		}
+
+		resp1, err := client.Post("/api/v1/sync/chunk", mk(1))
+		if err != nil {
+			t.Fatalf("chunk 1: %v", err)
+		}
+		resp1.Body.Close()
+		testutil.RequireStatus(t, resp1, http.StatusOK)
+
+		resp2, err := client.Post("/api/v1/sync/chunk", mk(2))
+		if err != nil {
+			t.Fatalf("chunk 2: %v", err)
+		}
+		resp2.Body.Close()
+		testutil.RequireStatus(t, resp2, http.StatusOK)
+
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			`SELECT COUNT(*) FROM codex_rollouts WHERE user_id = $1 AND thread_uuid = $2`,
+			user.ID, rootUUID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("row count after idempotent upserts = %d, want 1", count)
+		}
+	})
+
+	t.Run("cross-user isolation: user B cannot read user A's row", func(t *testing.T) {
+		env.CleanDB(t)
+
+		userA := testutil.CreateTestUser(t, env, "cr-a@example.com", "A")
+		userB := testutil.CreateTestUser(t, env, "cr-b@example.com", "B")
+		apiKeyA := testutil.CreateTestAPIKeyWithToken(t, env, userA.ID, "A-Key")
+		sessA := testutil.CreateTestSessionWithProvider(t, env, userA.ID, "ext-a", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		clientA := testutil.NewTestClient(t, ts).WithAPIKey(apiKeyA.RawToken)
+
+		resp, err := clientA.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessA,
+			FileName:  "r.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  rootUUID,
+					RolloutPath: "/r.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("A upload: %v", err)
+		}
+		resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// User B owns no rollouts.
+		var countB int
+		row := env.DB.QueryRow(env.Ctx,
+			`SELECT COUNT(*) FROM codex_rollouts WHERE user_id = $1`, userB.ID)
+		if err := row.Scan(&countB); err != nil {
+			t.Fatalf("count B: %v", err)
+		}
+		if countB != 0 {
+			t.Errorf("user B rollouts = %d, want 0", countB)
+		}
+	})
+
+	t.Run("cascade: deleting hosted session removes rollout", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-cas@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-cas", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "r.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  rootUUID,
+					RolloutPath: "/r.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("upload: %v", err)
+		}
+		resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		if _, err := env.DB.Exec(env.Ctx, "DELETE FROM sessions WHERE id = $1", sessionID); err != nil {
+			t.Fatalf("delete session: %v", err)
+		}
+
+		var count int
+		row := env.DB.QueryRow(env.Ctx,
+			`SELECT COUNT(*) FROM codex_rollouts WHERE user_id = $1 AND thread_uuid = $2`,
+			user.ID, rootUUID)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("rollouts after session delete = %d, want 0", count)
+		}
+	})
+
+	t.Run("forward-compat: unknown field in codex_rollout JSON is ignored", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-fwd@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-fwd", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// Send a raw JSON body so we can include a field the Go struct doesn't know about.
+		rawBody := fmt.Sprintf(`{
+			"session_id": %q,
+			"file_name": "r.jsonl",
+			"file_type": "transcript",
+			"first_line": 1,
+			"lines": ["{\"x\":1}"],
+			"metadata": {
+				"codex_rollout": {
+					"thread_uuid": %q,
+					"rollout_path": "/r.jsonl",
+					"future_field_that_does_not_exist_yet": "ignore me"
+				}
+			}
+		}`, sessionID, rootUUID)
+
+		resp, err := client.Post("/api/v1/sync/chunk", []byte(rawBody))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+	})
+}

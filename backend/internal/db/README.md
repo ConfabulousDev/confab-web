@@ -24,6 +24,7 @@ Core database connection, shared types, sentinel errors, and helper functions fo
 | `db/til` | `dbtil` | TIL CRUD |
 | `db/dbadminsettings` | (none needed) | Admin settings key-value store |
 | `db/events` | `dbevents` | Session event insertion |
+| `db/codex` | `dbcodex` | Codex rollout sidecar (parent-child thread tree, recursive CTE) |
 
 All sub-packages follow the same `Store` struct pattern:
 

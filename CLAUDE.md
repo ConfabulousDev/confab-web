@@ -53,6 +53,7 @@ Adding a column to `db.SessionDetail`, `db.SessionListItem`, or any struct loade
 - **Codex rollout parser**: `internal/codex/parser.go` (`ParseRollout`) — produces a `*ParsedRollout` consumed by analytics
 - **Codex → analytics adapter**: `internal/analytics/codex_adapter.go` (`ComputeFromCodexRollout`) — maps a Codex rollout onto the same `ComputeResult` shape as the Claude path. Per-card mapping decisions documented inline (token cache subset, FilesRead=0, etc.)
 - **Provider-aware precompute dispatch**: `internal/analytics/precompute.go` — `PrecomputeRegularCards` / `BuildSearchIndexOnly` / `PrecomputeSmartRecapOnly` switch on `StaleSession.Provider` to call `*ClaudeCode` or `*Codex` branches. Unsupported providers return a loud error.
+- **Codex rollout sidecar store**: `internal/db/codex/` (`UpsertRollout`, `GetRollout`, `ListSubtree` recursive CTE) — records the Codex parent-child thread tree without modifying the `sessions` table. Composite PK `(user_id, thread_uuid)`; no FK on `parent_thread_uuid` (orphan parents allowed); first-write-wins on parent.
 
 #### Before Writing New Code
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	dbcodex "github.com/ConfabulousDev/confab-web/internal/db/codex"
 	dbevents "github.com/ConfabulousDev/confab-web/internal/db/events"
 	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
@@ -79,9 +80,30 @@ type SyncFileStateResp struct {
 // This allows metadata like git info to be updated throughout the session lifecycle,
 // rather than only at init time.
 type SyncChunkMetadata struct {
-	GitInfo          json.RawMessage `json:"git_info,omitempty"`           // Git metadata (repo_url, branch, etc.)
-	Summary          *string         `json:"summary,omitempty"`            // First summary from transcript
-	FirstUserMessage *string         `json:"first_user_message,omitempty"` // First user message
+	GitInfo          json.RawMessage           `json:"git_info,omitempty"`           // Git metadata (repo_url, branch, etc.)
+	Summary          *string                   `json:"summary,omitempty"`            // First summary from transcript
+	FirstUserMessage *string                   `json:"first_user_message,omitempty"` // First user message
+	CodexRollout     *SyncCodexRolloutMetadata `json:"codex_rollout,omitempty"`      // Codex rollout sidecar metadata (codex provider only)
+}
+
+// SyncCodexRolloutMetadata registers a Codex thread (root or child subagent)
+// against its hosted session+file. The chunk endpoint upserts this into
+// codex_rollouts after the S3 chunk and sync_files state writes succeed.
+//
+// ParentThreadUUID is a pointer so omission (nil) is distinguishable from
+// explicit empty (rejected). First-write-wins applies on the parent at the
+// DB layer; non-empty values for other fields are preserved across re-upserts.
+type SyncCodexRolloutMetadata struct {
+	ThreadUUID       string  `json:"thread_uuid"`
+	ParentThreadUUID *string `json:"parent_thread_uuid,omitempty"`
+	RolloutPath      string  `json:"rollout_path"`
+	CWD              string  `json:"cwd,omitempty"`
+	Model            string  `json:"model,omitempty"`
+	Source           string  `json:"source,omitempty"`
+	ThreadSource     string  `json:"thread_source,omitempty"`
+	AgentPath        string  `json:"agent_path,omitempty"`
+	AgentRole        string  `json:"agent_role,omitempty"`
+	AgentNickname    string  `json:"agent_nickname,omitempty"`
 }
 
 // SyncChunkRequest is the request body for POST /api/v1/sync/chunk
@@ -304,6 +326,17 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if req.Metadata.CodexRollout != nil {
+			cr := req.Metadata.CodexRollout
+			if err := validation.ValidateCodexRolloutMetadata(
+				cr.ThreadUUID, cr.ParentThreadUUID,
+				cr.RolloutPath, cr.CWD, cr.Model, cr.Source, cr.ThreadSource,
+				cr.AgentPath, cr.AgentRole, cr.AgentNickname,
+			); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
 	}
 
 	// Verify session ownership and get external_id (needed for S3 key)
@@ -332,6 +365,15 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	if provider == validation.ProviderCodex && req.FileType != "transcript" {
 		respondError(w, http.StatusBadRequest,
 			"file_type must be 'transcript' for codex sessions")
+		return
+	}
+
+	// codex_rollout metadata is only meaningful for codex sessions. Check
+	// after VerifySessionOwnership so we don't leak the existence of someone
+	// else's claude-code session via this validation path.
+	if req.Metadata != nil && req.Metadata.CodexRollout != nil && provider != validation.ProviderCodex {
+		respondError(w, http.StatusBadRequest,
+			"codex_rollout metadata is only supported for codex sessions")
 		return
 	}
 
@@ -472,6 +514,37 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 				"owner", link.Owner,
 				"repo", link.Repo,
 				"ref", link.Ref)
+		}
+	}
+
+	// Codex rollout sidecar (CF-385). Runs after S3 + sync state are
+	// committed so a failure here leaves no orphan content — only a delayed
+	// metadata registration that the next chunk's upsert will reconcile.
+	// Upsert is idempotent (first-write-wins on parent, COALESCE/NULLIF on
+	// the rest), so retries are safe.
+	if req.Metadata != nil && req.Metadata.CodexRollout != nil {
+		cr := req.Metadata.CodexRollout
+		codexStore := &dbcodex.Store{DB: s.db}
+		if err := codexStore.UpsertRollout(updateCtx, userID, dbcodex.UpsertRolloutParams{
+			ThreadUUID:       cr.ThreadUUID,
+			ParentThreadUUID: cr.ParentThreadUUID,
+			HostedSessionID:  req.SessionID,
+			HostedFileName:   req.FileName,
+			RolloutPath:      cr.RolloutPath,
+			CWD:              cr.CWD,
+			Model:            cr.Model,
+			Source:           cr.Source,
+			ThreadSource:     cr.ThreadSource,
+			AgentPath:        cr.AgentPath,
+			AgentRole:        cr.AgentRole,
+			AgentNickname:    cr.AgentNickname,
+		}); err != nil {
+			log.Error("Failed to upsert codex rollout",
+				"error", err,
+				"session_id", req.SessionID,
+				"thread_uuid", cr.ThreadUUID)
+			respondError(w, http.StatusInternalServerError, "Failed to record codex rollout")
+			return
 		}
 	}
 

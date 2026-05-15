@@ -131,7 +131,19 @@ Content-Encoding: zstd  (optional, for compressed payloads)
   "metadata": {
     "git_info": { ... },
     "summary": "Session summary text",
-    "first_user_message": "First user message"
+    "first_user_message": "First user message",
+    "codex_rollout": {
+      "thread_uuid": "uuid",
+      "parent_thread_uuid": "uuid",
+      "rollout_path": "/home/user/.codex/sessions/rollout-...jsonl",
+      "cwd": "/home/user/project",
+      "model": "gpt-5",
+      "source": "codex-cli",
+      "thread_source": "...",
+      "agent_path": "...",
+      "agent_role": "...",
+      "agent_nickname": "..."
+    }
   }
 }
 ```
@@ -147,6 +159,7 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 | `metadata.git_info` | object | No | Git repository metadata |
 | `metadata.summary` | string | No | Session summary (nil=don't update, ""=clear) |
 | `metadata.first_user_message` | string | No | First user message (nil=don't update, ""=clear) |
+| `metadata.codex_rollout` | object | No | Codex rollout sidecar metadata (codex sessions only). See [Codex Rollout Metadata](#codex-rollout-metadata) below. |
 
 **Response:**
 ```json
@@ -159,6 +172,41 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 - Chunks must be contiguous (no gaps or overlaps with previous chunks)
 - Max 30,000 chunks per file
 - Request body supports zstd compression
+
+#### Codex Rollout Metadata
+
+When the session's provider is `codex`, each chunk may carry a `codex_rollout`
+sub-block that registers the chunk's thread (root or child subagent) in a
+metadata sidecar table (`codex_rollouts`). Child rollouts still upload their
+content under the **root's hosted session and file**; this block records the
+parent-child tree shape and per-thread metadata.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `thread_uuid` | string | Yes | UUID identifying the thread. Required, must be a valid UUID. |
+| `parent_thread_uuid` | string | No | UUID of the parent thread. Omit for root rollouts. If provided: must be a valid UUID and must not equal `thread_uuid`. An explicit empty string is rejected. Orphan parents (referencing UUIDs not yet uploaded) are allowed. |
+| `rollout_path` | string | Yes | Filesystem path to the Codex rollout JSONL on the CLI host. ≤ 8192 chars. |
+| `cwd` | string | No | Working directory. ≤ 8192 chars. |
+| `model` | string | No | Model name. ≤ 255 chars. |
+| `source` | string | No | Producer label. ≤ 64 chars. |
+| `thread_source` | string | No | Origin label for the thread. ≤ 255 chars. |
+| `agent_path` | string | No | Agent definition path (subagents only). ≤ 8192 chars. |
+| `agent_role` | string | No | Agent role (subagents only). ≤ 255 chars. |
+| `agent_nickname` | string | No | Agent display name. ≤ 255 chars. |
+
+**Validation errors (400):**
+- `codex_rollout` on a non-codex session
+- Missing or invalid `thread_uuid`
+- Invalid `parent_thread_uuid` (empty string when set, malformed UUID, equal to `thread_uuid`)
+- Missing `rollout_path`
+- Any field exceeding its length limit
+
+**Idempotency:**
+- Repeated upserts (same chunk re-sent, or block included on chunks 1, 2, 3, …) produce a single row.
+- **First-write-wins on `parent_thread_uuid`**: once set, never overwritten. A `nil → set` transition is allowed; a `set → different value` is silently preserved as the original.
+- Other free-form fields: a non-empty incoming value overwrites the stored value; an empty incoming value preserves the stored non-empty value.
+
+**Cascade behavior:** Deleting the hosted session or the owning user removes the row via `ON DELETE CASCADE`.
 
 ---
 
