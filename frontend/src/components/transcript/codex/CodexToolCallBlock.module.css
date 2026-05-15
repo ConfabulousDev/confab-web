@@ -16,6 +16,18 @@
   filter: brightness(1.02);
 }
 
+/* CF-360: deep-link landing target. */
+.deepLinkTarget {
+  composes: deepLinkPulse from '@/styles/animations.module.css';
+}
+
+/* Deep-link wins over selection — drop the brightness boost from .selected so
+   the accent ring reads cleanly. */
+.toolCall.selected.deepLinkTarget {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  filter: none;
+}
+
 .header {
   display: flex;
   align-items: center;

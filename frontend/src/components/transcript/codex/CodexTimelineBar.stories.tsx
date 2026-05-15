@@ -13,16 +13,17 @@ export default meta;
 type Story = StoryObj<typeof CodexTimelineBar>;
 
 function user(timestamp: string, text = 'hi'): CodexRenderItem {
-  return { kind: 'user', timestamp, text };
+  return { kind: 'user', lineId: '0', timestamp, text };
 }
 
 function assistant(timestamp: string): CodexRenderItem {
-  return { kind: 'assistant', timestamp, text: 'response', phase: 'final', model: 'gpt-5' };
+  return { kind: 'assistant', lineId: '0', timestamp, text: 'response', phase: 'final', model: 'gpt-5' };
 }
 
 function toolCall(timestamp: string, callId: string): CodexRenderItem {
   return {
     kind: 'tool_call',
+    lineId: '0',
     timestamp,
     toolName: 'exec_command',
     callId,
@@ -39,7 +40,7 @@ function turnSep(
   durationMs: number,
   timeToFirstTokenMs?: number,
 ): CodexRenderItem {
-  return { kind: 'turn_separator', timestamp, turnIndex, durationMs, timeToFirstTokenMs };
+  return { kind: 'turn_separator', lineId: '0', timestamp, turnIndex, durationMs, timeToFirstTokenMs };
 }
 
 // Three turns of varying duration / item count.

@@ -11,11 +11,11 @@ import CodexTimelineBar from './CodexTimelineBar';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 
 function user(timestamp: string, text = 'hi'): CodexRenderItem {
-  return { kind: 'user', timestamp, text };
+  return { kind: 'user', lineId: '0', timestamp, text };
 }
 
 function assistant(timestamp: string): CodexRenderItem {
-  return { kind: 'assistant', timestamp, text: 'hello', phase: 'final', model: 'gpt-5' };
+  return { kind: 'assistant', lineId: '0', timestamp, text: 'hello', phase: 'final', model: 'gpt-5' };
 }
 
 function turnSep(
@@ -24,7 +24,7 @@ function turnSep(
   durationMs: number,
   timeToFirstTokenMs?: number,
 ): CodexRenderItem {
-  return { kind: 'turn_separator', timestamp, turnIndex, durationMs, timeToFirstTokenMs };
+  return { kind: 'turn_separator', lineId: '0', timestamp, turnIndex, durationMs, timeToFirstTokenMs };
 }
 
 const twoTurnSession: CodexRenderItem[] = [

@@ -4,6 +4,8 @@
 //   - floating scroll-to-top / scroll-to-bottom buttons
 //   - row hover → selection state, fed back into the bar
 //   - >5min idle gaps render a horizontal time-separator divider
+//   - CF-360: deep-link to a row by `lineId`, copy-text/copy-link/skip-nav
+//     chrome on every row.
 //
 // Structure mirrors `components/session/MessageTimeline.tsx`; only the
 // data shape and renderer dispatch are Codex-specific.
@@ -22,11 +24,25 @@ import CodexReasoningHidden from './CodexReasoningHidden';
 import CodexCompactedDivider from './CodexCompactedDivider';
 import CodexUnknownItem from './CodexUnknownItem';
 import CodexTimelineBar from './CodexTimelineBar';
-import { buildVirtualItems } from './codexVirtualItems';
+import { buildVirtualItems, skipNavKey, skipNavLabel } from './codexVirtualItems';
 import styles from './CodexMessageTimeline.module.css';
 
 export interface CodexMessageTimelineProps {
   items: CodexRenderItem[];
+  /** Session ID — used by per-row Copy Link to build deep-link URLs. */
+  sessionId: string;
+  /** Deep-link target row, addressed by its stable `lineId` (CF-360). */
+  targetLineId?: string;
+  /**
+   * RESERVED placeholder for CF-361 — no consumer yet. CF-361 (filter chips)
+   * will set this to `true` when the active filter hides the row at
+   * `targetLineId` so the timeline can show a "filtered out" affordance.
+   * Declared here today only to lock the prop shape across the
+   * CF-360 / CF-361 boundary; the timeline body intentionally does not read
+   * it. Remove this prop along with the matching one on
+   * `CodexTranscriptPane` if CF-361 changes direction.
+   */
+  targetLineIdHidden?: boolean;
 }
 
 // Conservative initial estimate — virtualizer measures real heights after
@@ -34,12 +50,46 @@ export interface CodexMessageTimelineProps {
 const ESTIMATED_ITEM_HEIGHT = 120;
 const ESTIMATED_SEPARATOR_HEIGHT = 40;
 
-export default function CodexMessageTimeline({ items }: CodexMessageTimelineProps) {
+export default function CodexMessageTimeline({
+  items,
+  sessionId,
+  targetLineId,
+}: CodexMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const hasScrolledToTarget = useRef(false);
 
   const virtualItems = useMemo(() => buildVirtualItems(items), [items]);
+
+  // CF-360: map lineId → position in items[] for deep-link lookup. Built off
+  // `items` so it grows naturally as the rawLines array does (polling).
+  const lineIdToItemIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    items.forEach((item, idx) => {
+      map.set(item.lineId, idx);
+    });
+    return map;
+  }, [items]);
+
+  // CF-360: next-/prev-of-same-kind skip-nav maps, keyed by item index. Items
+  // whose `skipNavKey` returns null don't participate (dividers).
+  const { nextOfSameKind, prevOfSameKind } = useMemo(() => {
+    const next = new Map<number, number>();
+    const prev = new Map<number, number>();
+    const lastSeenByKey = new Map<string, number>();
+    items.forEach((item, idx) => {
+      const key = skipNavKey(item);
+      if (key === null) return;
+      const prevIdx = lastSeenByKey.get(key);
+      if (prevIdx !== undefined) {
+        next.set(prevIdx, idx);
+        prev.set(idx, prevIdx);
+      }
+      lastSeenByKey.set(key, idx);
+    });
+    return { nextOfSameKind: next, prevOfSameKind: prev };
+  }, [items]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
   const virtualizer = useVirtualizer({
@@ -96,6 +146,31 @@ export default function CodexMessageTimeline({ items }: CodexMessageTimelineProp
     },
     [itemIndexToVirtualIndex, virtualizer],
   );
+
+  // CF-360: reset the scroll guard when the deep-link target changes. Handles
+  // both initial mount (guard starts false) and intra-page navigation (user
+  // clicks copy-link on a different row).
+  useEffect(() => {
+    hasScrolledToTarget.current = false;
+  }, [targetLineId]);
+
+  // CF-360: scroll-to-target effect. Polling-aware — depends on
+  // `lineIdToItemIndex`, which changes when items grow, so an in-flight
+  // session whose target arrives later still lands. `hasScrolledToTarget`
+  // ensures we only scroll once per target.
+  useEffect(() => {
+    if (!targetLineId || hasScrolledToTarget.current) return;
+    const itemIndex = lineIdToItemIndex.get(targetLineId);
+    if (itemIndex === undefined) return;
+    const virtualIndex = itemIndexToVirtualIndex.get(itemIndex);
+    if (virtualIndex === undefined) return;
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
+      () => false,
+    );
+    setSelectedIndex(itemIndex);
+    hasScrolledToTarget.current = true;
+  }, [targetLineId, lineIdToItemIndex, itemIndexToVirtualIndex, virtualizer]);
 
   const scrollToTop = useCallback(() => {
     retryOnAnimationFrame(
@@ -168,6 +243,15 @@ export default function CodexMessageTimeline({ items }: CodexMessageTimelineProp
             }
 
             const isSelected = vi.index === selectedIndex;
+            const isDeepLinkTarget =
+              targetLineId !== undefined && vi.item.lineId === targetLineId;
+            const nextIdx = nextOfSameKind.get(vi.index);
+            const prevIdx = prevOfSameKind.get(vi.index);
+            const onSkipToNext =
+              nextIdx !== undefined ? () => scrollToItem(nextIdx) : undefined;
+            const onSkipToPrevious =
+              prevIdx !== undefined ? () => scrollToItem(prevIdx) : undefined;
+
             return (
               <div
                 key={virtualItem.key}
@@ -177,7 +261,14 @@ export default function CodexMessageTimeline({ items }: CodexMessageTimelineProp
                 onMouseEnter={() => setSelectedIndex(vi.index)}
                 style={slotStyle}
               >
-                {renderItem(vi.item, { isSelected, isNewSpeaker: vi.isNewSpeaker })}
+                {renderItem(vi.item, {
+                  isSelected,
+                  isNewSpeaker: vi.isNewSpeaker,
+                  isDeepLinkTarget,
+                  sessionId,
+                  onSkipToNext,
+                  onSkipToPrevious,
+                })}
               </div>
             );
           })}
@@ -196,24 +287,64 @@ export default function CodexMessageTimeline({ items }: CodexMessageTimelineProp
 interface RenderFlags {
   isSelected: boolean;
   isNewSpeaker: boolean;
+  isDeepLinkTarget: boolean;
+  sessionId: string;
+  onSkipToNext?: () => void;
+  onSkipToPrevious?: () => void;
 }
 
 function renderItem(item: CodexRenderItem, flags: RenderFlags) {
+  // Per-renderer dispatch. Divider/edge kinds (turn_separator, reasoning_hidden,
+  // compacted, unknown) do not get skip-nav callbacks per CF-360 — only user /
+  // assistant / tool_call participate in skip chains.
+  const kindLabel = skipNavLabel(item);
   switch (item.kind) {
     case 'user':
-      return <CodexUserMessage item={item} {...flags} />;
+      return <CodexUserMessage item={item} {...flags} kindLabel={kindLabel} />;
     case 'assistant':
-      return <CodexAssistantMessage item={item} {...flags} />;
+      return <CodexAssistantMessage item={item} {...flags} kindLabel={kindLabel} />;
     case 'tool_call':
-      return <CodexToolCallBlock item={item} {...flags} />;
+      return <CodexToolCallBlock item={item} {...flags} kindLabel={kindLabel} />;
     case 'turn_separator':
-      return <CodexTurnSeparator item={item} {...flags} />;
+      return (
+        <CodexTurnSeparator
+          item={item}
+          isSelected={flags.isSelected}
+          isNewSpeaker={flags.isNewSpeaker}
+          isDeepLinkTarget={flags.isDeepLinkTarget}
+          sessionId={flags.sessionId}
+        />
+      );
     case 'reasoning_hidden':
-      return <CodexReasoningHidden item={item} {...flags} />;
+      return (
+        <CodexReasoningHidden
+          item={item}
+          isSelected={flags.isSelected}
+          isNewSpeaker={flags.isNewSpeaker}
+          isDeepLinkTarget={flags.isDeepLinkTarget}
+          sessionId={flags.sessionId}
+        />
+      );
     case 'compacted':
-      return <CodexCompactedDivider item={item} {...flags} />;
+      return (
+        <CodexCompactedDivider
+          item={item}
+          isSelected={flags.isSelected}
+          isNewSpeaker={flags.isNewSpeaker}
+          isDeepLinkTarget={flags.isDeepLinkTarget}
+          sessionId={flags.sessionId}
+        />
+      );
     case 'unknown':
-      return <CodexUnknownItem item={item} {...flags} />;
+      return (
+        <CodexUnknownItem
+          item={item}
+          isSelected={flags.isSelected}
+          isNewSpeaker={flags.isNewSpeaker}
+          isDeepLinkTarget={flags.isDeepLinkTarget}
+          sessionId={flags.sessionId}
+        />
+      );
     default: {
       // Exhaustiveness check: if a new variant is added without a case
       // above, TypeScript will catch it here.

@@ -7,7 +7,7 @@ import CodexUserMessage from './CodexUserMessage';
 import type { CodexUserItem } from '@/types/codexRenderItem';
 
 function user(text: string): CodexUserItem {
-  return { kind: 'user', timestamp: '2026-05-13T01:00:00Z', text };
+  return { kind: 'user', lineId: '0', timestamp: '2026-05-13T01:00:00Z', text };
 }
 
 describe('CodexUserMessage', () => {
@@ -39,5 +39,33 @@ describe('CodexUserMessage', () => {
     const { container } = render(<CodexUserMessage item={user('{ unbalanced')} />);
     expect(container.querySelector('code[class*="language-json"]')).toBeNull();
     expect(container.textContent).toContain('{ unbalanced');
+  });
+
+  // ---------------------------------------------------------------------------
+  // CF-360 — deep-link target + row-actions
+  // ---------------------------------------------------------------------------
+
+  it('applies the deepLinkTarget class when isDeepLinkTarget is true', () => {
+    const { container } = render(
+      <CodexUserMessage item={user('hi')} isDeepLinkTarget />,
+    );
+    expect(container.firstChild).toHaveClass(/deepLinkTarget/);
+  });
+
+  it('does not apply deepLinkTarget by default', () => {
+    const { container } = render(<CodexUserMessage item={user('hi')} />);
+    expect(container.firstChild).not.toHaveClass(/deepLinkTarget/);
+  });
+
+  it('renders row-actions (copy-link) when sessionId is provided', () => {
+    const { getByLabelText } = render(
+      <CodexUserMessage item={user('hi')} sessionId="abc" />,
+    );
+    expect(getByLabelText(/copy link/i)).toBeInTheDocument();
+  });
+
+  it('omits row-actions when sessionId is absent', () => {
+    const { queryByLabelText } = render(<CodexUserMessage item={user('hi')} />);
+    expect(queryByLabelText(/copy link/i)).toBeNull();
   });
 });

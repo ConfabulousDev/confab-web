@@ -8,7 +8,7 @@
 
 import type { CodexToolCallItem } from '@/types/codexRenderItem';
 import { tryParseAsJson } from '@/utils';
-import { cx, isRecord } from '@/utils/utils';
+import { cx } from '@/utils/utils';
 import BashOutput from '../BashOutput';
 import CodeBlock from '../CodeBlock';
 import {
@@ -16,10 +16,22 @@ import {
   leafFileName,
   stringifyForDisplay,
 } from './codexFormat';
+import CodexRowActions from './CodexRowActions';
+import {
+  buildToolCallCopyText,
+  readPatchChanges,
+  readStringField,
+  readWebSearchQueries,
+} from './codexToolCallHelpers';
 import styles from './CodexToolCallBlock.module.css';
 
 export interface CodexToolCallBlockProps {
   item: CodexToolCallItem;
+  /**
+   * Session ID for the per-row copy-link URL. Optional so the renderer can
+   * be used in isolation; timeline always passes it in production.
+   */
+  sessionId?: string;
   /** Hover/click selection — adds the .selected ring. */
   isSelected?: boolean;
   /**
@@ -28,16 +40,46 @@ export interface CodexToolCallBlockProps {
    * not affect rendering.
    */
   isNewSpeaker?: boolean;
+  /** CF-360: this row is the deep-link landing target. */
+  isDeepLinkTarget?: boolean;
+  /** Skip to next same-kind tool call (CF-360 — split by toolName). */
+  onSkipToNext?: () => void;
+  /** Skip to previous same-kind tool call (CF-360). */
+  onSkipToPrevious?: () => void;
+  /** Human-readable kind for aria-label (CF-360). */
+  kindLabel?: string;
 }
 
-export default function CodexToolCallBlock({ item, isSelected }: CodexToolCallBlockProps) {
-  const className = cx(styles.toolCall, isSelected && styles.selected);
+export default function CodexToolCallBlock({
+  item,
+  sessionId,
+  isSelected,
+  isDeepLinkTarget,
+  onSkipToNext,
+  onSkipToPrevious,
+  kindLabel,
+}: CodexToolCallBlockProps) {
+  const className = cx(
+    styles.toolCall,
+    isSelected && styles.selected,
+    isDeepLinkTarget && styles.deepLinkTarget,
+  );
   return (
     <div className={className} data-kind="tool_call" data-tool={item.toolName}>
       <div className={styles.header}>
         <span className={styles.toolName}>{toolNameLabel(item)}</span>
         {renderStatusBadge(item)}
         <span className={styles.timestamp}>{formatCodexTimestamp(item.timestamp)}</span>
+        {sessionId && (
+          <CodexRowActions
+            sessionId={sessionId}
+            lineId={item.lineId}
+            copyText={buildToolCallCopyText(item)}
+            onSkipToNext={onSkipToNext}
+            onSkipToPrevious={onSkipToPrevious}
+            kindLabel={kindLabel ?? item.toolName}
+          />
+        )}
       </div>
       {renderBody(item)}
     </div>
@@ -122,11 +164,6 @@ function NoOutputIndicator({ status }: { status: CodexToolCallItem['status'] }) 
 // ----------------------------------------------------------------------------
 // apply_patch
 // ----------------------------------------------------------------------------
-
-interface PatchChange {
-  type: string;
-  content?: string;
-}
 
 function ApplyPatchBody({ item }: { item: CodexToolCallItem }) {
   const changes = readPatchChanges(item.structuredOutput);
@@ -245,42 +282,5 @@ function GenericInputBlock({ input }: { input: unknown }) {
   );
 }
 
-// ----------------------------------------------------------------------------
-// Unknown-shape readers
-// ----------------------------------------------------------------------------
-//
-// `rawInput` and `structuredOutput` are typed `unknown` because the underlying
-// JSONL can carry whatever fields a given tool emits. These helpers extract
-// only the fields each renderer cares about, with runtime guards so unfamiliar
-// payloads degrade gracefully instead of crashing.
-
-function readStringField(value: unknown, key: string): string | null {
-  if (!isRecord(value)) return null;
-  const v = value[key];
-  return typeof v === 'string' ? v : null;
-}
-
-function readPatchChanges(value: unknown): Record<string, PatchChange> {
-  if (!isRecord(value)) return {};
-  const changes = value.changes;
-  if (!isRecord(changes)) return {};
-  const out: Record<string, PatchChange> = {};
-  for (const [path, raw] of Object.entries(changes)) {
-    if (isRecord(raw)) {
-      const type = typeof raw.type === 'string' ? raw.type : 'unknown';
-      const content = typeof raw.content === 'string' ? raw.content : undefined;
-      out[path] = { type, content };
-    }
-  }
-  return out;
-}
-
-function readWebSearchQueries(value: unknown): string[] {
-  if (!isRecord(value)) return [];
-  const queries = value.queries;
-  if (Array.isArray(queries)) {
-    return queries.filter((q): q is string => typeof q === 'string');
-  }
-  const query = value.query;
-  return typeof query === 'string' ? [query] : [];
-}
+// Shape-readers and copy-text composition live in `codexToolCallHelpers.ts`
+// so the component file exports only the component (react-refresh rule).

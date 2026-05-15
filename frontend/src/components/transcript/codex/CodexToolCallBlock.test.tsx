@@ -11,6 +11,7 @@ import type { CodexToolCallItem } from '@/types/codexRenderItem';
 function execCommandItem(overrides: Partial<CodexToolCallItem> = {}): CodexToolCallItem {
   return {
     kind: 'tool_call',
+    lineId: '0',
     timestamp: '2026-05-13T01:00:00Z',
     toolName: 'exec_command',
     callId: 'call_test_001',
@@ -47,6 +48,7 @@ describe('CodexToolCallBlock', () => {
       <CodexToolCallBlock
         item={{
           kind: 'tool_call',
+          lineId: '0',
           timestamp: '2026-05-13T01:00:00Z',
           toolName: 'apply_patch',
           callId: 'call_patch_001',
@@ -74,6 +76,7 @@ describe('CodexToolCallBlock', () => {
       <CodexToolCallBlock
         item={{
           kind: 'tool_call',
+          lineId: '0',
           timestamp: '2026-05-13T01:00:00Z',
           toolName: 'web_search_call',
           callId: 'call_search_001',
@@ -95,6 +98,7 @@ describe('CodexToolCallBlock', () => {
       <CodexToolCallBlock
         item={{
           kind: 'tool_call',
+          lineId: '0',
           timestamp: '2026-05-13T01:00:00Z',
           toolName: 'future_tool_name',
           callId: 'call_unknown_001',
@@ -179,6 +183,7 @@ describe('CodexToolCallBlock', () => {
       <CodexToolCallBlock
         item={{
           kind: 'tool_call',
+          lineId: '0',
           timestamp: '2026-05-13T01:00:00Z',
           toolName: 'apply_patch',
           callId: 'call_patch_diff',
@@ -203,6 +208,7 @@ describe('CodexToolCallBlock', () => {
       <CodexToolCallBlock
         item={{
           kind: 'tool_call',
+          lineId: '0',
           timestamp: '2026-05-13T01:00:00Z',
           toolName: 'future_tool',
           callId: 'call_future',
@@ -223,6 +229,7 @@ describe('CodexToolCallBlock', () => {
       <CodexToolCallBlock
         item={{
           kind: 'tool_call',
+          lineId: '0',
           timestamp: '2026-05-13T01:00:00Z',
           toolName: 'future_tool_str',
           callId: 'call_future_str',
@@ -264,5 +271,26 @@ describe('CodexToolCallBlock', () => {
       />,
     );
     expect(screen.getByText(/pending\s*—\s*no output yet/i)).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // CF-360 — deep-link target + row-actions + copy-text composition
+  // ---------------------------------------------------------------------------
+
+  it('applies the deepLinkTarget class when isDeepLinkTarget is true', () => {
+    const { container } = render(
+      <CodexToolCallBlock item={execCommandItem()} isDeepLinkTarget />,
+    );
+    expect(container.firstChild).toHaveClass(/deepLinkTarget/);
+  });
+
+  it('renders a copy-link button when sessionId is provided', () => {
+    render(<CodexToolCallBlock item={execCommandItem()} sessionId="abc" />);
+    expect(screen.getByLabelText(/copy link/i)).toBeInTheDocument();
+  });
+
+  it('omits row-actions when sessionId is absent', () => {
+    render(<CodexToolCallBlock item={execCommandItem()} />);
+    expect(screen.queryByLabelText(/copy link/i)).toBeNull();
   });
 });

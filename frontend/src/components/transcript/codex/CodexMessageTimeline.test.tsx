@@ -12,16 +12,17 @@ import { buildVirtualItems } from './codexVirtualItems';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 
 function user(timestamp: string, text = 'hi'): CodexRenderItem {
-  return { kind: 'user', timestamp, text };
+  return { kind: 'user', lineId: '0', timestamp, text };
 }
 
 function assistant(timestamp: string, text = 'hello'): CodexRenderItem {
-  return { kind: 'assistant', timestamp, text, phase: 'final', model: 'gpt-5' };
+  return { kind: 'assistant', lineId: '0', timestamp, text, phase: 'final', model: 'gpt-5' };
 }
 
 function toolCall(timestamp: string, callId = 'c1'): CodexRenderItem {
   return {
     kind: 'tool_call',
+    lineId: '0',
     timestamp,
     toolName: 'exec_command',
     callId,
@@ -34,9 +35,16 @@ function toolCall(timestamp: string, callId = 'c1'): CodexRenderItem {
 
 describe('CodexMessageTimeline', () => {
   it('renders the empty-state when items is empty', () => {
-    render(<CodexMessageTimeline items={[]} />);
+    render(<CodexMessageTimeline items={[]} sessionId="test-session" />);
     expect(screen.getByText(/no conversation content/i)).toBeInTheDocument();
   });
+
+  // CF-360 deep-link target highlight is tested at the renderer level
+  // (CodexUserMessage.test.tsx etc.) because the @tanstack virtualizer
+  // doesn't lay out rows under jsdom — see top-of-file note. The contract
+  // tested there: when `isDeepLinkTarget` is true the row gets the
+  // `.deepLinkTarget` class. The timeline's job is only to pass that flag
+  // through, which the integration test (Storybook + manual click) covers.
 });
 
 describe('buildVirtualItems', () => {
@@ -120,7 +128,7 @@ describe('buildVirtualItems', () => {
     it('reasoning_hidden between user and user does not break continuity', () => {
       const items: CodexRenderItem[] = [
         user('2026-05-13T18:00:00Z'),
-        { kind: 'reasoning_hidden', timestamp: '2026-05-13T18:00:01Z' },
+        { kind: 'reasoning_hidden', lineId: '0', timestamp: '2026-05-13T18:00:01Z' },
         user('2026-05-13T18:00:02Z'),
       ];
       const flags = newSpeakerFlags(items);

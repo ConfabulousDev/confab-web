@@ -96,6 +96,14 @@ without re-fetching:
    - Fall back to `CodexUnknownItem` for any top-level or nested type that
      isn't recognized, so forward-compat additions are visible instead of
      silently dropped.
+   - **CF-360 — `lineId`**: stamps every emitted item with `String(idx)`,
+     where `idx` is the item's position in the input `rawLines` array. The
+     id is monotonic, unique per item, and stable across re-renders of the
+     same append-only `rawLines` stream — the contract the `?msg=<lineId>`
+     deep-link relies on. Multi-line items (tool_call + output pairing,
+     compaction) keep the `lineId` of the line that *created* them; output
+     mutations preserve `lineId` through the existing spread-update pattern.
+     See `@/types/codexRenderItem` for the full invariant doc.
 
 Key exports:
 - `fetchParsedCodexTranscript(sessionId, fileName, skipCache?)` -- Initial

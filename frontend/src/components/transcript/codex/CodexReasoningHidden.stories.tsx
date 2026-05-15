@@ -11,6 +11,15 @@ type Story = StoryObj<typeof CodexReasoningHidden>;
 
 export const Default: Story = {
   args: {
-    item: { kind: 'reasoning_hidden', timestamp: '2026-05-13T18:00:01Z' },
+    item: { kind: 'reasoning_hidden', lineId: '0', timestamp: '2026-05-13T18:00:01Z' },
+  },
+};
+
+// CF-360: deep-link landing variant.
+export const WithDeepLinkTarget: Story = {
+  args: {
+    item: { kind: 'reasoning_hidden', lineId: '0', timestamp: '2026-05-13T18:00:01Z' },
+    sessionId: 'story-session',
+    isDeepLinkTarget: true,
   },
 };

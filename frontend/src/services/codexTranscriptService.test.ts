@@ -279,4 +279,111 @@ describe('normalizeCodexLines', () => {
       }
     }
   });
+
+  // -------------------------------------------------------------------------
+  // CF-360: stable line identity (lineId)
+  // -------------------------------------------------------------------------
+
+  describe('lineId', () => {
+    it('assigns a non-empty string lineId to every emitted item', () => {
+      const result = items(fixtureJsonl);
+      expect(result.length).toBeGreaterThan(0);
+      for (const item of result) {
+        expect(typeof item.lineId).toBe('string');
+        expect(item.lineId.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('lineId is unique across all emitted items in the fixture', () => {
+      const result = items(fixtureJsonl);
+      const ids = result.map((i) => i.lineId);
+      expect(new Set(ids).size).toBe(result.length);
+    });
+
+    it('user item lineId equals the String() of its rawLines index', () => {
+      // Single-line JSONL: one response_item.message[role=user] at index 0.
+      const jsonl =
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}';
+      const result = items(jsonl);
+      const userItem = result.find((i) => i.kind === 'user');
+      expect(userItem).toBeDefined();
+      expect(userItem?.lineId).toBe('0');
+    });
+
+    it('compacted item lineId equals its rawLines index', () => {
+      const jsonl = [
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"gpt-5"}}',
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"compacted","payload":{"message":"summary","replacement_history":[{"x":1},{"x":2},{"x":3}]}}',
+      ].join('\n');
+      const result = items(jsonl);
+      const compacted = result.find((i) => i.kind === 'compacted');
+      expect(compacted).toBeDefined();
+      // session_meta is at rawLines[0], compacted at rawLines[1].
+      expect(compacted?.lineId).toBe('1');
+    });
+
+    it('turn_separator lineId equals the task_complete line index', () => {
+      const jsonl = [
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}}',
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}}',
+        '{"timestamp":"2026-05-13T01:00:02Z","type":"event_msg","payload":{"type":"task_complete","duration_ms":2000,"time_to_first_token_ms":500}}',
+      ].join('\n');
+      const result = items(jsonl);
+      const sep = result.find((i) => i.kind === 'turn_separator');
+      expect(sep).toBeDefined();
+      expect(sep?.lineId).toBe('2');
+    });
+
+    it('reasoning_hidden lineId equals its rawLines index', () => {
+      const jsonl = [
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}}',
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"reasoning","encrypted_content":"…"}}',
+      ].join('\n');
+      const result = items(jsonl);
+      const reasoning = result.find((i) => i.kind === 'reasoning_hidden');
+      expect(reasoning).toBeDefined();
+      expect(reasoning?.lineId).toBe('1');
+    });
+
+    it('tool_call lineId tracks the initial function_call line, not its output line', () => {
+      // function_call at rawLines[0], function_call_output at rawLines[1].
+      const jsonl = [
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"response_item","payload":{"type":"function_call","call_id":"c_pair_01","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}"}}',
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c_pair_01","output":"Output:\\n/tmp\\n"}}',
+      ].join('\n');
+      const result = items(jsonl);
+      const toolCall = result.find((i) => i.kind === 'tool_call');
+      expect(toolCall).toBeDefined();
+      // Initial function_call is at index 0; output mutates in place.
+      expect(toolCall?.lineId).toBe('0');
+      // And the call resolved (output was paired in).
+      if (toolCall?.kind === 'tool_call') {
+        expect(toolCall.status).not.toBe('pending');
+      }
+    });
+
+    it('custom_tool_call_output and patch_apply_end do not overwrite the call lineId', () => {
+      // custom_tool_call at [0], output at [1], patch_apply_end at [2].
+      const jsonl = [
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"c_patch_01","name":"apply_patch","input":"*** Begin Patch\\n*** End Patch","status":"in_progress"}}',
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"c_patch_01","output":"{}"}}',
+        '{"timestamp":"2026-05-13T01:00:02Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"c_patch_01","success":true,"changes":{}}}',
+      ].join('\n');
+      const result = items(jsonl);
+      const toolCall = result.find((i) => i.kind === 'tool_call');
+      expect(toolCall).toBeDefined();
+      expect(toolCall?.lineId).toBe('0');
+    });
+
+    it('web_search_call lineId equals its source line index', () => {
+      const jsonl = [
+        '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"gpt-5"}}',
+        '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"web_search_call","status":"completed","action":{"query":"codex"}}}',
+      ].join('\n');
+      const result = items(jsonl);
+      const ws = result.find((i) => i.kind === 'tool_call' && i.toolName === 'web_search_call');
+      expect(ws).toBeDefined();
+      expect(ws?.lineId).toBe('1');
+    });
+  });
 });

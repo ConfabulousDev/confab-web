@@ -22,6 +22,17 @@ const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
 export interface CodexTranscriptPaneProps {
   sessionId: string;
   transcriptFileName: string | undefined;
+  /**
+   * Deep-link target row, addressed by its `lineId` (CF-360). The same URL
+   * `?msg=` parameter that Claude uses for UUID-based deep links; for Codex,
+   * the string is reinterpreted as a lineId.
+   */
+  targetLineId?: string;
+  /**
+   * RESERVED placeholder for CF-361 — no consumer yet. Pass-through to
+   * `CodexMessageTimeline`; see its prop doc for the planned semantics.
+   */
+  targetLineIdHidden?: boolean;
   /** For Storybook: pass raw lines directly instead of fetching from API */
   initialRawLines?: RawCodexLine[];
 }
@@ -29,6 +40,8 @@ export interface CodexTranscriptPaneProps {
 export default function CodexTranscriptPane({
   sessionId,
   transcriptFileName,
+  targetLineId,
+  targetLineIdHidden,
   initialRawLines,
 }: CodexTranscriptPaneProps) {
   // Storybook mode: skip fetching entirely and render whatever was passed in.
@@ -114,5 +127,12 @@ export default function CodexTranscriptPane({
     );
   }
 
-  return <CodexMessageTimeline items={items} />;
+  return (
+    <CodexMessageTimeline
+      items={items}
+      sessionId={sessionId}
+      targetLineId={targetLineId}
+      targetLineIdHidden={targetLineIdHidden}
+    />
+  );
 }

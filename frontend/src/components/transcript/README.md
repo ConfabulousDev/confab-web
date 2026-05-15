@@ -55,22 +55,25 @@ layer.
 
 | File | Role |
 |------|------|
-| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Owns selection state (`firstVisibleIndex`, `selectedIndex`), scroll buttons, the timeline bar, and time-separator injection. Dispatches each item to its renderer by `kind`, threading `isSelected` + `isNewSpeaker` props |
+| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Owns selection state (`firstVisibleIndex`, `selectedIndex`), scroll buttons, the timeline bar, and time-separator injection. Dispatches each item to its renderer by `kind`, threading `isSelected` / `isNewSpeaker` / `isDeepLinkTarget` (CF-360) plus per-row `sessionId` and `onSkipToNext` / `onSkipToPrevious` callbacks (CF-360). Accepts a `targetLineId` prop for `?msg=<lineId>` deep linking and a `targetLineIdHidden` placeholder reserved for CF-361 filter-reset wiring |
 | `CodexTimelineBar.tsx` | Vertical navigation rail. Each turn emits up to two clickable segments — a user thinking-gap stripe and an assistant body stripe — matching the Claude `TimelineBar` color language. Click-to-seek, hover tooltips (`User: 30s, 1 item` / `Codex: 5m, 12 items`), and a position indicator driven by the parent's `selectedIndex`. Consumes `useCodexSegmentLayout` |
 | `codexTimelineSegments.ts` | `CodexSpeaker`, `CodexTimelineSegment`, `computeCodexSegments`, `useCodexSegmentLayout`. Per turn, emits a user segment sized by the wall-clock gap from the prior separator (synthetic 1s for turn 1 / zero-or-negative gaps) and an assistant body segment for the rest of the slice. Slices with no user item (compaction-only) collapse to one assistant segment. Layout math shared via `useBlendedSegmentLayout` |
-| `codexVirtualItems.ts` | Pure `buildVirtualItems(items)` that injects `>5min` time separators and tags each item with `isNewSpeaker`. The speaker rule is Codex-specific: `tool_call` / `reasoning_hidden` / `turn_separator` / `compacted` / `unknown` items do NOT break user/assistant continuity, so `user → tool_call → user` is the same speaker |
-| `CodexUserMessage.tsx` | User prompt in a chat row, with timestamp. Body renders through `CodexMessageBody`. Accepts `isSelected` + `isNewSpeaker` for selection ring and speaker-change spacing |
-| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody`. Accepts `isSelected` + `isNewSpeaker` |
+| `codexVirtualItems.ts` | Pure `buildVirtualItems(items)` that injects `>5min` time separators and tags each item with `isNewSpeaker`. The speaker rule is Codex-specific: `tool_call` / `reasoning_hidden` / `turn_separator` / `compacted` / `unknown` items do NOT break user/assistant continuity, so `user → tool_call → user` is the same speaker. Also exports `skipNavKey` / `skipNavLabel` (CF-360) — the chain-key + aria-label mapping used for skip-to-next-of-same-kind navigation |
+| `CodexRowActions.tsx` | CF-360 per-row chrome shared by all seven renderers. Renders, into the header-right slot, `[prev-skip?] [next-skip?] [copy-text?] [copy-link]`. Copy-link is always rendered; copy-text is hidden when `copyText` is empty/whitespace; skip buttons are hidden when their callbacks are absent. Copy-link URL format: `${origin}/sessions/${sessionId}?tab=transcript&msg=${lineId}` (matches Claude exactly) |
+| `CodexUserMessage.tsx` | User prompt in a chat row, with timestamp. Body renders through `CodexMessageBody`. Accepts `isSelected` + `isNewSpeaker` for selection ring and speaker-change spacing, plus `isDeepLinkTarget`, `sessionId`, `onSkipToNext`, `onSkipToPrevious`, and `kindLabel` for the CF-360 row chrome |
+| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody`. Accepts the same chrome props as `CodexUserMessage` |
 | `CodexMessageBody.tsx` | Shared rendering path for user + assistant text. JSON-shaped text pretty-prints via `CodeBlock` (`language="json"`); everything else flows through `renderMarkdownToHtml`. Mirrors `ContentBlock.tsx`'s text-block contract |
-| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s. Accepts `isSelected` (`isNewSpeaker` is no-op for tool_call per the speaker rule) |
-| `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries. Accepts `isSelected` |
-| `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines. Accepts `isSelected` |
-| `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages. Accepts `isSelected` |
-| `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema. Accepts `isSelected` |
+| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s. Accepts the chrome props (`sessionId`, `isDeepLinkTarget`, `onSkipToNext` / `onSkipToPrevious`, `kindLabel`); `isNewSpeaker` is no-op per the Codex speaker rule |
+| `codexToolCallHelpers.ts` | Pure helpers extracted from `CodexToolCallBlock.tsx` for testability: `buildToolCallCopyText` (per-tool copy-text composition for `CodexRowActions`) plus shape readers `readStringField`, `readPatchChanges`, `readWebSearchQueries`, `stringifyGenericInput` |
+| `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; the CF-360 row chrome renders a copy-link-only button strip |
+| `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-link-only chrome |
+| `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-link-only chrome |
+| `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-text uses `stringifyForDisplay(rawLine)` so users can dump the unknown payload |
 | `codexFormat.ts` | Shared formatters: `formatCodexTimestamp`, `formatDurationMs`, `leafFileName`, `stringifyForDisplay` |
-| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint) and `.newSpeaker` (extra top margin) |
-| `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips). Defines `.selected` |
-| `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, unknown fallback. Defines `.selected` |
+| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint), `.newSpeaker` (extra top margin), and `.deepLinkTarget` (composes `deepLinkPulse` from `@/styles/animations.module.css`; accent ring overrides the grey selection ring on hover) |
+| `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips). Defines `.selected` and `.deepLinkTarget` |
+| `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, unknown fallback. Defines `.selected` and `.deepLinkTarget` |
+| `CodexRowActions.module.css` | CF-360 button-strip chrome (icon button states, copy-success colour) |
 | `CodexMessageTimeline.module.css` | Container (flex with bar on the right), virtualizer slot positioning, scroll chrome, time-separator divider |
 | `CodexTimelineBar.module.css` | Vertical-bar chrome: segments, position indicator, hover tooltip |
 
@@ -78,8 +81,11 @@ CF-349 shipped v1 as read-only display. CF-358 brought rendering parity
 (markdown, Prism, terminal output, diff highlighting) in line with Claude.
 CF-357 added the navigation chrome — turn-based timeline bar, scroll-to-top/
 bottom buttons, row hover → selection state, and `>5min` idle-gap time
-separators. Still deferred: Cmd-F search (CF-359), deep linking (CF-360),
-filter chips (CF-361), and cost mode (CF-362).
+separators. CF-360 added stable per-row `lineId`, `?msg=<lineId>` deep
+linking (polling-aware), and per-row chrome — copy text, copy link, and
+skip-to-next/prev same-kind — for user / assistant / tool_call rows; the
+four divider variants get copy-link only. Still deferred: Cmd-F search
+(CF-359), filter chips (CF-361), and cost mode (CF-362).
 
 **Known gaps (deferred — see TODOs at the referenced sites):**
 - Image content blocks (`input_image` / `output_image`) are dropped in

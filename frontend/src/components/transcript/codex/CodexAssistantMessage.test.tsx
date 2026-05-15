@@ -10,6 +10,7 @@ import type { CodexAssistantItem } from '@/types/codexRenderItem';
 function assistant(overrides: Partial<CodexAssistantItem> = {}): CodexAssistantItem {
   return {
     kind: 'assistant',
+    lineId: '0',
     timestamp: '2026-05-13T01:00:00Z',
     text: 'Hello from the assistant.',
     phase: 'final',

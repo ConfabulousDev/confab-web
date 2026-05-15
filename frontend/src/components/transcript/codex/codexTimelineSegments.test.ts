@@ -11,16 +11,17 @@ import { computeCodexSegments } from './codexTimelineSegments';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 
 function user(timestamp: string, text = 'hi'): CodexRenderItem {
-  return { kind: 'user', timestamp, text };
+  return { kind: 'user', lineId: '0', timestamp, text };
 }
 
 function assistant(timestamp: string, text = 'hello'): CodexRenderItem {
-  return { kind: 'assistant', timestamp, text, phase: 'final', model: 'gpt-5' };
+  return { kind: 'assistant', lineId: '0', timestamp, text, phase: 'final', model: 'gpt-5' };
 }
 
 function toolCall(timestamp: string, callId = 'c1'): CodexRenderItem {
   return {
     kind: 'tool_call',
+    lineId: '0',
     timestamp,
     toolName: 'exec_command',
     callId,
@@ -30,7 +31,7 @@ function toolCall(timestamp: string, callId = 'c1'): CodexRenderItem {
 }
 
 function compacted(timestamp: string, replacementCount = 5): CodexRenderItem {
-  return { kind: 'compacted', timestamp, replacementCount };
+  return { kind: 'compacted', lineId: '0', timestamp, replacementCount };
 }
 
 function turnSep(
@@ -38,7 +39,7 @@ function turnSep(
   turnIndex: number,
   durationMs: number,
 ): CodexRenderItem {
-  return { kind: 'turn_separator', timestamp, turnIndex, durationMs };
+  return { kind: 'turn_separator', lineId: '0', timestamp, turnIndex, durationMs };
 }
 
 describe('computeCodexSegments', () => {
@@ -190,7 +191,7 @@ describe('computeCodexSegments', () => {
   it('messageCount on user is always 1; assistant counts the rest of the slice', () => {
     const items: CodexRenderItem[] = [
       user('2026-05-13T18:00:00Z'),
-      { kind: 'reasoning_hidden', timestamp: '2026-05-13T18:00:01Z' },
+      { kind: 'reasoning_hidden', lineId: '0', timestamp: '2026-05-13T18:00:01Z' },
       assistant('2026-05-13T18:00:02Z'),
       toolCall('2026-05-13T18:00:03Z'),
       assistant('2026-05-13T18:00:04Z'),
@@ -209,7 +210,7 @@ describe('computeCodexSegments', () => {
       user('2026-05-13T18:00:00Z'),
       assistant('2026-05-13T18:00:01Z'),
       // Separator with a TTFT — must be ignored when shaping the segment
-      { kind: 'turn_separator', timestamp: '2026-05-13T18:00:02Z', turnIndex: 1, durationMs: 2000, timeToFirstTokenMs: 500 },
+      { kind: 'turn_separator', lineId: '0', timestamp: '2026-05-13T18:00:02Z', turnIndex: 1, durationMs: 2000, timeToFirstTokenMs: 500 },
     ];
     const segments = computeCodexSegments(items);
     for (const seg of segments) {

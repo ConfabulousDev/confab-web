@@ -3,6 +3,28 @@
 // The Codex rollout JSONL is rich and partially redundant (event_msg events
 // often mirror response_item events). `normalizeCodexLines` collapses that
 // stream into the items below, which the timeline renders one row each.
+//
+// ## `lineId` (CF-360)
+//
+// Every variant carries a stable string identifier so the UI can deep-link to
+// individual rows via `?msg=<lineId>`. The value is `String(idx)` where `idx`
+// is the position of the originating line in the validated `rawLines` array
+// passed to `normalizeCodexLines()`. It is:
+//
+//   - Stable across re-renders of the same `rawLines` (the array is
+//     append-only across polling cycles).
+//   - Monotonic — earlier source lines get smaller numeric ids.
+//   - Unique across emitted items (each render item ties back to exactly
+//     one *initial* source line; output-pairing lines mutate the existing
+//     item and do NOT mint a new id).
+//
+// NOT the literal source-file line number. `parseCodexJSONL` drops empty and
+// schema-invalid lines, so the rawLines index differs from the on-disk row.
+// If a future feature needs the literal file line number, add a separate
+// `originalLineNumber` on `RawCodexLine` rather than redefining `lineId`.
+//
+// The string type is intentional so a future swap (content-hash, server-issued
+// UUID) doesn't break the prop shape.
 
 /** ISO 8601 timestamp string, sourced from the originating JSONL line. */
 export type CodexTimestamp = string;
@@ -10,6 +32,7 @@ export type CodexTimestamp = string;
 /** User prompt — derived from `response_item.message[role=user]`. */
 export interface CodexUserItem {
   kind: 'user';
+  lineId: string;
   timestamp: CodexTimestamp;
   text: string;
 }
@@ -21,6 +44,7 @@ export interface CodexUserItem {
  */
 export interface CodexAssistantItem {
   kind: 'assistant';
+  lineId: string;
   timestamp: CodexTimestamp;
   text: string;
   phase: 'commentary' | 'final';
@@ -40,6 +64,12 @@ export interface CodexAssistantItem {
  */
 export interface CodexToolCallItem {
   kind: 'tool_call';
+  /**
+   * The `rawLines` index of the line that *created* the call
+   * (function_call / custom_tool_call / web_search_call). Subsequent output
+   * lines mutate this item in-place and do not change `lineId`.
+   */
+  lineId: string;
   timestamp: CodexTimestamp;
   toolName: string;
   callId: string;
@@ -57,6 +87,7 @@ export interface CodexToolCallItem {
  */
 export interface CodexReasoningHiddenItem {
   kind: 'reasoning_hidden';
+  lineId: string;
   timestamp: CodexTimestamp;
 }
 
@@ -66,6 +97,7 @@ export interface CodexReasoningHiddenItem {
  */
 export interface CodexTurnSeparatorItem {
   kind: 'turn_separator';
+  lineId: string;
   timestamp: CodexTimestamp;
   turnIndex: number;
   durationMs: number;
@@ -78,6 +110,7 @@ export interface CodexTurnSeparatorItem {
  */
 export interface CodexCompactedItem {
   kind: 'compacted';
+  lineId: string;
   timestamp: CodexTimestamp;
   replacementCount: number;
 }
@@ -89,6 +122,7 @@ export interface CodexCompactedItem {
  */
 export interface CodexUnknownItem {
   kind: 'unknown';
+  lineId: string;
   timestamp: CodexTimestamp;
   rawLine: unknown;
 }

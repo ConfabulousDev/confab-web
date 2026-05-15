@@ -303,12 +303,17 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
   let currentModel = 'unknown';
   let turnIndex = 0;
 
-  for (const line of rawLines) {
+  rawLines.forEach((line, idx) => {
+    // CF-360: `lineId` is the position in the validated `rawLines` array,
+    // stringified. Stable for the lifetime of an append-only rawLines stream
+    // and unique per emitted item. See `codexRenderItem.ts` for invariants.
+    const lineId = String(idx);
+
     // Filter the catch-all branch first so the subsequent switch narrows
     // cleanly to one of the five known shapes.
     if (!isKnownCodexLine(line)) {
-      items.push({ kind: 'unknown', timestamp: line.timestamp, rawLine: line });
-      continue;
+      items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
+      return;
     }
 
     switch (line.type) {
@@ -324,17 +329,18 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
       case 'compacted': {
         items.push({
           kind: 'compacted',
+          lineId,
           timestamp: line.timestamp,
           replacementCount: line.payload.replacement_history?.length ?? 0,
         });
         break;
       }
       case 'response_item': {
-        handleResponseItem(line, items, callIdToDraft, currentModel);
+        handleResponseItem(line, lineId, items, callIdToDraft, currentModel);
         break;
       }
       case 'event_msg': {
-        const { separator, modelUpdate } = handleEventMsg(line, items, callIdToDraft);
+        const { separator, modelUpdate } = handleEventMsg(line, lineId, items, callIdToDraft);
         if (separator) {
           turnIndex += 1;
           separator.turnIndex = turnIndex;
@@ -343,26 +349,27 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
         break;
       }
     }
-  }
+  });
 
   return items;
 }
 
 function handleResponseItem(
   line: CodexResponseItemLine,
+  lineId: string,
   items: CodexRenderItem[],
   callIdToDraft: Map<string, ToolCallDraft>,
   currentModel: string,
 ): void {
   const payload = line.payload;
   if (!isKnownResponseItemPayload(payload)) {
-    items.push({ kind: 'unknown', timestamp: line.timestamp, rawLine: line });
+    items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
     return;
   }
 
   switch (payload.type) {
     case 'message': {
-      handleResponseMessage(line, payload, items, currentModel);
+      handleResponseMessage(line, lineId, payload, items, currentModel);
       break;
     }
 
@@ -371,6 +378,7 @@ function handleResponseItem(
       const toolName = payload.name;
       const item: CodexToolCallItem = {
         kind: 'tool_call',
+        lineId,
         timestamp: line.timestamp,
         toolName,
         callId: payload.call_id,
@@ -386,7 +394,7 @@ function handleResponseItem(
       const draft = callIdToDraft.get(payload.call_id);
       if (!draft) {
         // No matching call — surface as unknown to avoid silent drops.
-        items.push({ kind: 'unknown', timestamp: line.timestamp, rawLine: line });
+        items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
         return;
       }
       const existing = items[draft.index];
@@ -413,6 +421,7 @@ function handleResponseItem(
     case 'custom_tool_call': {
       const item: CodexToolCallItem = {
         kind: 'tool_call',
+        lineId,
         timestamp: line.timestamp,
         toolName: payload.name,
         callId: payload.call_id,
@@ -430,7 +439,7 @@ function handleResponseItem(
     case 'custom_tool_call_output': {
       const draft = callIdToDraft.get(payload.call_id);
       if (!draft) {
-        items.push({ kind: 'unknown', timestamp: line.timestamp, rawLine: line });
+        items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
         return;
       }
       const existing = items[draft.index];
@@ -444,7 +453,7 @@ function handleResponseItem(
     }
 
     case 'reasoning': {
-      items.push({ kind: 'reasoning_hidden', timestamp: line.timestamp });
+      items.push({ kind: 'reasoning_hidden', lineId, timestamp: line.timestamp });
       break;
     }
 
@@ -452,6 +461,7 @@ function handleResponseItem(
       // Treat web search like any other tool call — render as inline summary.
       items.push({
         kind: 'tool_call',
+        lineId,
         timestamp: line.timestamp,
         toolName: 'web_search_call',
         callId: `web-search-${items.length}`,
@@ -465,6 +475,7 @@ function handleResponseItem(
 
 function handleResponseMessage(
   line: CodexResponseItemLine,
+  lineId: string,
   msg: CodexResponseMessage,
   items: CodexRenderItem[],
   currentModel: string,
@@ -477,13 +488,14 @@ function handleResponseMessage(
       const cleaned = stripEnvironmentContext(joinMessageText(msg));
       // An env_context-only message has no remaining text; skip it.
       if (cleaned.length === 0) return;
-      items.push({ kind: 'user', timestamp: line.timestamp, text: cleaned });
+      items.push({ kind: 'user', lineId, timestamp: line.timestamp, text: cleaned });
       return;
     }
     case 'assistant': {
       const phase = msg.phase === 'commentary' ? 'commentary' : 'final';
       items.push({
         kind: 'assistant',
+        lineId,
         timestamp: line.timestamp,
         text: joinMessageText(msg),
         phase,
@@ -493,7 +505,7 @@ function handleResponseMessage(
     }
     default:
       // Unknown role — keep as unknown item so it surfaces in the UI.
-      items.push({ kind: 'unknown', timestamp: line.timestamp, rawLine: line });
+      items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
   }
 }
 
@@ -511,12 +523,13 @@ interface EventMsgResult {
 
 function handleEventMsg(
   line: CodexEventMsgLine,
+  lineId: string,
   items: CodexRenderItem[],
   callIdToDraft: Map<string, ToolCallDraft>,
 ): EventMsgResult {
   const payload = line.payload;
   if (!isKnownEventPayload(payload)) {
-    items.push({ kind: 'unknown', timestamp: line.timestamp, rawLine: line });
+    items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
     return {};
   }
 
@@ -531,6 +544,7 @@ function handleEventMsg(
     case 'task_complete': {
       const separator: CodexTurnSeparatorItem = {
         kind: 'turn_separator',
+        lineId,
         timestamp: line.timestamp,
         turnIndex: 0, // overwritten by caller
         durationMs: payload.duration_ms ?? 0,

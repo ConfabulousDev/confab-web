@@ -10,7 +10,7 @@ Session viewer components for displaying session details, transcript timeline, a
 | `SessionHeader.tsx` | Session header with title, metadata, share/delete actions, and filter controls |
 | `SessionSummaryPanel.tsx` | Summary tab for both providers: renders analytics cards via card registry, GitHub links, smart recap actions. Codex sessions get cards from `ComputeFromCodexRollout` (CF-350); the on-demand cache-miss path calls the same adapter synchronously (CF-364) |
 | `ClaudeTranscriptPane.tsx` | Transcript tab for Claude Code: thin wrapper around `MessageTimeline` that handles loading / error states (parent owns filter + cost state so the header can render chips) |
-| `CodexTranscriptPane.tsx` | Transcript tab for Codex: self-contained fetch + 15s poll + normalize → render `CodexMessageTimeline`. Mirrors the Claude line-offset polling pattern |
+| `CodexTranscriptPane.tsx` | Transcript tab for Codex: self-contained fetch + 15s poll + normalize → render `CodexMessageTimeline`. Mirrors the Claude line-offset polling pattern. Accepts `targetLineId` (CF-360, the `?msg=` URL param reinterpreted as a `lineId` for Codex) plus a reserved `targetLineIdHidden` placeholder for CF-361 filter integration; both are forwarded to the timeline unchanged |
 | `MessageTimeline.tsx` | Claude transcript: virtualized message list with search, timeline bar, cost bar |
 | `TimelineMessage.tsx` | Single message row in the timeline (role badge, content blocks, cost, copy link) |
 | `TranscriptSearchBar.tsx` | Cmd+F search bar with match count and prev/next navigation |
@@ -89,7 +89,7 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - **Transcript polling**: New messages are fetched incrementally using `line_offset` to avoid re-downloading the entire transcript. The `lineCountRef` tracks total JSONL lines (not parsed messages) to stay in sync with the backend. Both `ClaudeTranscriptPane` (via `SessionViewer`) and `CodexTranscriptPane` use the same pattern; the latter just re-derives its render items via `useMemo` after appending raw lines.
 - **Provider branching**: `SessionViewer` dispatches on `session.provider` for the Transcript pane only — `'codex'` → `CodexTranscriptPane`, anything else (including the legacy `'Claude Code'` value backfilled by the API) → `ClaudeTranscriptPane`. The Summary tab uses `SessionSummaryPanel` for both providers (CF-364), backed by Codex analytics from `ComputeFromCodexRollout` (CF-350). TIL badges and smart-recap deep-links remain Claude-only because both anchor to message UUIDs that Codex messages don't carry.
 - **Storybook bypass**: `SessionViewer` and `SessionSummaryPanel` accept `initial*` props to skip API calls in Storybook stories.
-- **Deep linking**: When `targetMessageUuid` is set but the target message is hidden by filters, filters are automatically reset to make it visible.
+- **Deep linking**: When `targetMessageUuid` is set but the target message is hidden by filters, filters are automatically reset to make it visible. The same `?msg=` URL param doubles as a Codex deep-link target (CF-360): `SessionViewer` passes it to `CodexTranscriptPane` as `targetLineId`, which the Codex timeline interprets as a stable `rawLines` index. Codex has no filter state yet, so no auto-reset path runs — CF-361 will wire that in once filter chips ship.
 
 ## Design Decisions
 

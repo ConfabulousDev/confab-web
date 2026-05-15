@@ -12,7 +12,26 @@ const meta: Meta<typeof CodexMessageTimeline> = {
 export default meta;
 type Story = StoryObj<typeof CodexMessageTimeline>;
 
-const sample: CodexRenderItem[] = [
+/**
+ * Helper that stamps a unique `lineId` on each item from its array position,
+ * so deep-link / skip-nav stories can target rows by index. The input type
+ * distributes `Omit<…, 'lineId'>` across the discriminated union so each
+ * variant's required fields stay required after the lineId is removed.
+ */
+type CodexRenderItemNoLineId =
+  | Omit<Extract<CodexRenderItem, { kind: 'user' }>, 'lineId'>
+  | Omit<Extract<CodexRenderItem, { kind: 'assistant' }>, 'lineId'>
+  | Omit<Extract<CodexRenderItem, { kind: 'tool_call' }>, 'lineId'>
+  | Omit<Extract<CodexRenderItem, { kind: 'reasoning_hidden' }>, 'lineId'>
+  | Omit<Extract<CodexRenderItem, { kind: 'turn_separator' }>, 'lineId'>
+  | Omit<Extract<CodexRenderItem, { kind: 'compacted' }>, 'lineId'>
+  | Omit<Extract<CodexRenderItem, { kind: 'unknown' }>, 'lineId'>;
+
+function withLineIds(items: CodexRenderItemNoLineId[]): CodexRenderItem[] {
+  return items.map((item, idx) => ({ ...item, lineId: String(idx) }));
+}
+
+const sample: CodexRenderItem[] = withLineIds([
   {
     kind: 'user',
     timestamp: '2026-05-13T18:00:00Z',
@@ -104,11 +123,11 @@ const sample: CodexRenderItem[] = [
     timestamp: '2026-05-13T18:02:00Z',
     replacementCount: 2,
   },
-];
+]);
 
 // Sample that includes a >5min idle gap between two items so the time
 // separator divider is exercised.
-const sampleWithGap: CodexRenderItem[] = [
+const sampleWithGap: CodexRenderItem[] = withLineIds([
   {
     kind: 'user',
     timestamp: '2026-05-13T18:00:00Z',
@@ -148,7 +167,7 @@ const sampleWithGap: CodexRenderItem[] = [
     durationMs: 3000,
     timeToFirstTokenMs: 600,
   },
-];
+]);
 
 function Frame({ children }: { children: ReactNode }) {
   return <div style={{ height: '600px', width: '100%' }}>{children}</div>;
@@ -157,7 +176,7 @@ function Frame({ children }: { children: ReactNode }) {
 export const FullSession: Story = {
   render: () => (
     <Frame>
-      <CodexMessageTimeline items={sample} />
+      <CodexMessageTimeline items={sample} sessionId="story-session" />
     </Frame>
   ),
 };
@@ -165,7 +184,21 @@ export const FullSession: Story = {
 export const WithTimeGap: Story = {
   render: () => (
     <Frame>
-      <CodexMessageTimeline items={sampleWithGap} />
+      <CodexMessageTimeline items={sampleWithGap} sessionId="story-session" />
+    </Frame>
+  ),
+};
+
+// CF-360: deep-link target lands on the apply_patch tool_call at lineId '4'.
+// The row should scroll into view (centered) and pulse with the accent ring.
+export const WithDeepLinkTarget: Story = {
+  render: () => (
+    <Frame>
+      <CodexMessageTimeline
+        items={sample}
+        sessionId="story-session"
+        targetLineId="4"
+      />
     </Frame>
   ),
 };
@@ -173,7 +206,7 @@ export const WithTimeGap: Story = {
 export const Empty: Story = {
   render: () => (
     <Frame>
-      <CodexMessageTimeline items={[]} />
+      <CodexMessageTimeline items={[]} sessionId="story-session" />
     </Frame>
   ),
 };

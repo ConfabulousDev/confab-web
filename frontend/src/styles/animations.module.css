@@ -1,0 +1,22 @@
+/* Shared transcript animations.
+   `deepLinkPulse` is composed into the per-renderer `.deepLinkTarget`
+   classes (CF-360) so all transcript row variants share the same
+   pulse on deep-link landing. The animation matches Claude's
+   `TimelineMessage.module.css` so the two providers feel consistent. */
+
+@keyframes deepLinkPulse {
+  0% {
+    box-shadow: inset 0 0 0 3px var(--color-accent), 0 0 8px var(--color-accent-light);
+  }
+  50% {
+    box-shadow: inset 0 0 0 3px var(--color-accent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
+}
+
+.deepLinkPulse {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  animation: deepLinkPulse 2s ease-out;
+}

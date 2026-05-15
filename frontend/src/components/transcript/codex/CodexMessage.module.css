@@ -21,6 +21,18 @@
   background: var(--color-bg-secondary);
 }
 
+/* CF-360: deep-link landing target. Composed pulse animation matches the
+   Claude transcript so cross-provider feedback feels consistent. */
+.deepLinkTarget {
+  composes: deepLinkPulse from '@/styles/animations.module.css';
+}
+
+/* Deep-link wins over selection: when both classes are present, the accent
+   ring stays put and the grey selection ring is overridden. */
+.message.selected.deepLinkTarget {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 /* New-speaker spacing cue: extra top margin when the previous speaker
    kind (user|assistant) differs from this one. Codex-specific because
    tool_call is a separate item kind that does NOT break continuity. */

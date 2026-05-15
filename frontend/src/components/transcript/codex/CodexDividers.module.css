@@ -9,6 +9,20 @@
   background: var(--color-bg-primary);
 }
 
+/* CF-360: deep-link landing target. Same pulse as message/tool_call rows,
+   even though dividers are thinner — the visual feedback still reads. */
+.deepLinkTarget {
+  composes: deepLinkPulse from '@/styles/animations.module.css';
+}
+
+/* Deep-link wins over selection on every divider variant. */
+.turnSeparator.selected.deepLinkTarget,
+.reasoningHidden.selected.deepLinkTarget,
+.compacted.selected.deepLinkTarget,
+.unknown.selected.deepLinkTarget {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 .turnSeparator {
   display: flex;
   align-items: center;

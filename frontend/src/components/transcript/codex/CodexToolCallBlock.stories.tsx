@@ -14,6 +14,7 @@ export const ExecSuccess: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'exec_command',
       callId: 'call_exec_ok',
@@ -29,6 +30,7 @@ export const ExecFailure: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'exec_command',
       callId: 'call_exec_fail',
@@ -46,6 +48,7 @@ export const ExecEmptyOutput: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'exec_command',
       callId: 'call_exec_empty',
@@ -64,6 +67,7 @@ export const ExecScrollableOutput: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'exec_command',
       callId: 'call_exec_long',
@@ -81,6 +85,7 @@ export const ExecWithAnsi: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'exec_command',
       callId: 'call_exec_ansi',
@@ -100,6 +105,7 @@ export const ApplyPatch: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'apply_patch',
       callId: 'call_patch',
@@ -123,6 +129,7 @@ export const ApplyPatchDiff: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'apply_patch',
       callId: 'call_patch_diff',
@@ -158,6 +165,7 @@ export const WebSearch: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'web_search_call',
       callId: 'call_search',
@@ -175,6 +183,7 @@ export const Pending: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'exec_command',
       callId: 'call_pending',
@@ -188,6 +197,7 @@ export const UnknownTool: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'future_tool',
       callId: 'call_future',
@@ -204,6 +214,7 @@ export const GenericJsonInput: Story = {
   args: {
     item: {
       kind: 'tool_call',
+      lineId: '0',
       timestamp: '2026-05-13T18:00:00Z',
       toolName: 'future_tool_json',
       callId: 'call_future_json',
@@ -211,5 +222,24 @@ export const GenericJsonInput: Story = {
       rawOutput: 'scanned 42 files',
       status: 'completed',
     } satisfies CodexToolCallItem,
+  },
+};
+
+// CF-360: deep-link landing variant — accent pulse + ring on an exec_command row.
+export const WithDeepLinkTarget: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      lineId: '0',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'exec_command',
+      callId: 'call_deep_link',
+      rawInput: { cmd: 'pwd' },
+      rawOutput: '/Users/dev/example-project',
+      status: 'completed',
+      execMetadata: { exitCode: 0, wallTimeMs: 700 },
+    } satisfies CodexToolCallItem,
+    sessionId: 'story-session',
+    isDeepLinkTarget: true,
   },
 };

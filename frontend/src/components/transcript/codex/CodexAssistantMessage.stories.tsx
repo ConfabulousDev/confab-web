@@ -13,6 +13,7 @@ type Story = StoryObj<typeof CodexAssistantMessage>;
 function item(overrides: Partial<CodexAssistantItem> = {}): CodexAssistantItem {
   return {
     kind: 'assistant',
+    lineId: '0',
     timestamp: '2026-05-13T18:00:00Z',
     text: "I'll check how this repo manages MCP entries so I can add Linear in the same style.",
     phase: 'final',
@@ -31,6 +32,15 @@ export const Commentary: Story = {
 
 // Exercises the full markdown rendering pipeline (CF-358): headings, lists,
 // inline code, fenced code with Prism syntax highlighting.
+// CF-360: deep-link landing variant exercises the .deepLinkTarget pulse.
+export const WithDeepLinkTarget: Story = {
+  args: {
+    item: item({ text: 'this final answer is the deep-link target' }),
+    sessionId: 'story-session',
+    isDeepLinkTarget: true,
+  },
+};
+
 export const MarkdownHeavy: Story = {
   args: {
     item: item({

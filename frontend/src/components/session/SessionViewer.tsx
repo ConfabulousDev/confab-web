@@ -308,6 +308,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
                 <CodexTranscriptPane
                   sessionId={session.id}
                   transcriptFileName={transcriptFileName}
+                  targetLineId={targetMessageUuid}
                   initialRawLines={initialCodexRawLines}
                 />
               ) : (
