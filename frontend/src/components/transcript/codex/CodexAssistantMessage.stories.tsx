@@ -66,3 +66,17 @@ export const MarkdownHeavy: Story = {
     }),
   },
 };
+
+// CF-388: assistant-side image rendering (`output_image` content block).
+// Uses the same 80x80 checkerboard PNG as the user-message story for parity.
+const CHECKERBOARD_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAA6ElEQVR4nO3XwQnDMAAEQdeT/iE9uKmkBcM+7EtGoO8ize+O1/v8XLlXz7/1jqc/8Ok9gAABTvcAAgQ43QMI8GbAX/nIXT2AsQcw9gDGHsDYAxh7AGMPYOwBjD2AsWfKxR5AgACnewABApzuAQQIcLpnysUewNgDGHsAYw9g7AGMPYCxBzD2AMYewNgz5WIPIECA0z2AAAFO9wACBDjdM+ViD2DsAYw9gLEHMPYAxh7A2AMYewBjD2DsmXKxBxAgwOkeQIAAp3sAAQKc7plysQcw9gDGHsDYAxh7AGMPYOwBjD2AsQcw9r7VCh/edp941wAAAABJRU5ErkJggg==';
+
+export const WithImage: Story = {
+  args: {
+    item: item({
+      text: 'Here is the rendered diagram you asked for:',
+      images: [CHECKERBOARD_PNG],
+    }),
+  },
+};

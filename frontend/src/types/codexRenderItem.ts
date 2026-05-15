@@ -29,18 +29,28 @@
 /** ISO 8601 timestamp string, sourced from the originating JSONL line. */
 export type CodexTimestamp = string;
 
-/** User prompt — derived from `response_item.message[role=user]`. */
+/**
+ * User prompt — derived from `response_item.message[role=user]`.
+ *
+ * `images` (CF-388) carries any `input_image.image_url` values from the same
+ * message in document order. Omitted on text-only items so their shape is
+ * byte-identical to pre-CF-388 output.
+ */
 export interface CodexUserItem {
   kind: 'user';
   lineId: string;
   timestamp: CodexTimestamp;
   text: string;
+  images?: string[];
 }
 
 /**
  * Assistant text — derived from `response_item.message[role=assistant]`.
  * `phase: 'commentary'` indicates interim narration; `'final'` is the answer
  * the user is expected to read.
+ *
+ * `images` (CF-388) carries any `output_image.image_url` values from the same
+ * message in document order. Omitted on text-only items.
  */
 export interface CodexAssistantItem {
   kind: 'assistant';
@@ -49,6 +59,7 @@ export interface CodexAssistantItem {
   text: string;
   phase: 'commentary' | 'final';
   model: string;
+  images?: string[];
 }
 
 /**

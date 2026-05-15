@@ -160,31 +160,43 @@ function extractMessageType(value: unknown): string | undefined {
 }
 
 /**
- * Concatenate every `input_text`/`output_text` block on a response message
- * into a single string. Unknown block types are dropped (renderers branch
- * on them upstream if they ever matter).
- *
- * `text` is read via runtime check rather than a type cast because the
- * passthrough block schemas widen unknown variants.
- *
- * Image-content gap (CF-358): `input_image` / `output_image` blocks are
- * silently dropped today — no real Codex transcript we've seen carries them,
- * and `CodexRenderItem` has no image variant. When images surface, add a
- * `CodexImageItem` variant in `@/types/codexRenderItem` and either emit a
- * separate item per image here or attach an `images` array to the user /
- * assistant item, mirroring `ContentBlock.tsx`'s image render path.
+ * Codex injects `<image name=[Image #N]>` / `</image>` sentinel wrappers
+ * around each attached image (see openai/codex
+ * `local_image_content_items_with_label_number`). These are machine-generated,
+ * not user-typed, so stripping them is safe. The regex tolerates any
+ * attribute payload (`<image>`, `<image name=[Image #1]>`, future
+ * `<image id=42>`); the closing tag is always literal `</image>`.
  */
-function joinMessageText(msg: CodexResponseMessage): string {
-  return msg.content
-    .map((block) => {
-      if ((block.type === 'input_text' || block.type === 'output_text') && 'text' in block) {
-        const text = block.text;
-        return typeof text === 'string' ? text : '';
-      }
-      return '';
-    })
-    .filter((text) => text.length > 0)
-    .join('\n');
+const CODEX_IMAGE_SENTINEL_RE = /<image[^>]*>|<\/image>/g;
+
+/**
+ * Walk a response message's content array and split it into rendered text
+ * vs. image URLs (CF-388). `input_text` / `output_text` blocks are joined
+ * after sentinel-wrapper stripping; `input_image` / `output_image` blocks
+ * contribute their `image_url` (typically an inlined base64 data URL).
+ * Unknown block types are dropped — renderers branch on them upstream if
+ * they ever matter.
+ */
+function joinMessageText(msg: CodexResponseMessage): {
+  text: string;
+  images: string[];
+} {
+  const texts: string[] = [];
+  const images: string[] = [];
+  for (const block of msg.content) {
+    if ((block.type === 'input_text' || block.type === 'output_text') && 'text' in block) {
+      const raw = block.text;
+      if (typeof raw !== 'string') continue;
+      const stripped = raw.replace(CODEX_IMAGE_SENTINEL_RE, '').trim();
+      if (stripped.length > 0) texts.push(stripped);
+      continue;
+    }
+    if (block.type === 'input_image' || block.type === 'output_image') {
+      const url = 'image_url' in block ? block.image_url : undefined;
+      if (typeof url === 'string' && url.length > 0) images.push(url);
+    }
+  }
+  return { text: texts.join('\n'), images };
 }
 
 /** Drop `<environment_context>…</environment_context>` blocks from user text. */
@@ -485,21 +497,32 @@ function handleResponseMessage(
       // Drop developer-role messages entirely (sandbox/permissions noise).
       return;
     case 'user': {
-      const cleaned = stripEnvironmentContext(joinMessageText(msg));
-      // An env_context-only message has no remaining text; skip it.
-      if (cleaned.length === 0) return;
-      items.push({ kind: 'user', lineId, timestamp: line.timestamp, text: cleaned });
+      const { text, images } = joinMessageText(msg);
+      const cleaned = stripEnvironmentContext(text);
+      // CF-388: keep image-only messages — sentinel-stripped text may be
+      // empty but the user clearly attached an image and meant to send it.
+      // env_context-only messages (no text, no images) still skip.
+      if (cleaned.length === 0 && images.length === 0) return;
+      items.push({
+        kind: 'user',
+        lineId,
+        timestamp: line.timestamp,
+        text: cleaned,
+        ...(images.length > 0 ? { images } : {}),
+      });
       return;
     }
     case 'assistant': {
+      const { text, images } = joinMessageText(msg);
       const phase = msg.phase === 'commentary' ? 'commentary' : 'final';
       items.push({
         kind: 'assistant',
         lineId,
         timestamp: line.timestamp,
-        text: joinMessageText(msg),
+        text,
         phase,
         model: currentModel,
+        ...(images.length > 0 ? { images } : {}),
       });
       return;
     }

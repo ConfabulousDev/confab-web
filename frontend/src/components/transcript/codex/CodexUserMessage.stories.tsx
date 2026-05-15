@@ -60,3 +60,34 @@ export const WithRowActions: Story = {
     kindLabel: 'user prompt',
   },
 };
+
+// CF-388: image attachments rendered below the message body. The data URL is
+// an 80x80 checkerboard PNG inlined as base64 — same shape Codex writes to the
+// rollout JSONL (`response_item.message.content[input_image]`), just shrunk so
+// the story file stays small.
+const CHECKERBOARD_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAA6ElEQVR4nO3XwQnDMAAEQdeT/iE9uKmkBcM+7EtGoO8ize+O1/v8XLlXz7/1jqc/8Ok9gAABTvcAAgQ43QMI8GbAX/nIXT2AsQcw9gDGHsDYAxh7AGMPYOwBjD2AsWfKxR5AgACnewABApzuAQQIcLpnysUewNgDGHsAYw9g7AGMPYCxBzD2AMYewNgz5WIPIECA0z2AAAFO9wACBDjdM+ViD2DsAYw9gLEHMPYAxh7A2AMYewBjD2DsmXKxBxAgwOkeQIAAp3sAAQKc7plysQcw9gDGHsDYAxh7AGMPYOwBjD2AsQcw9r7VCh/edp941wAAAABJRU5ErkJggg==';
+
+export const WithImage: Story = {
+  args: {
+    item: {
+      kind: 'user',
+      lineId: '0',
+      timestamp: '2026-05-13T18:00:00Z',
+      text: 'see attached — what is this layout doing?',
+      images: [CHECKERBOARD_PNG],
+    },
+  },
+};
+
+export const WithMultipleImages: Story = {
+  args: {
+    item: {
+      kind: 'user',
+      lineId: '0',
+      timestamp: '2026-05-13T18:00:00Z',
+      text: 'two screenshots, before and after',
+      images: [CHECKERBOARD_PNG, CHECKERBOARD_PNG],
+    },
+  },
+};

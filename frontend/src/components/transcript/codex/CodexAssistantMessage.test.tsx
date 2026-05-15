@@ -107,4 +107,45 @@ describe('CodexAssistantMessage', () => {
     expect(codeEl?.textContent).toContain('"action"');
     expect(codeEl?.textContent).toContain('"run"');
   });
+
+  // ---------------------------------------------------------------------------
+  // CF-388 — image rendering
+  // ---------------------------------------------------------------------------
+
+  describe('image rendering', () => {
+    const SRC_1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+    const SRC_2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAcAAc6POE4AAAAASUVORK5CYII=';
+
+    it('renders an <img> with the data URL src when images are present', () => {
+      const { container } = render(
+        <CodexAssistantMessage item={assistant({ images: [SRC_1] })} />,
+      );
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('src')).toBe(SRC_1);
+    });
+
+    it('applies loading="lazy" to the rendered <img>', () => {
+      const { container } = render(
+        <CodexAssistantMessage item={assistant({ images: [SRC_1] })} />,
+      );
+      const img = container.querySelector('img');
+      expect(img?.getAttribute('loading')).toBe('lazy');
+    });
+
+    it('uses an alt text that identifies the image as assistant-generated and 1-indexed', () => {
+      const { container } = render(
+        <CodexAssistantMessage item={assistant({ images: [SRC_1, SRC_2] })} />,
+      );
+      const imgs = Array.from(container.querySelectorAll('img'));
+      expect(imgs.length).toBe(2);
+      expect(imgs[0]?.getAttribute('alt')).toBe('Assistant-generated image #1');
+      expect(imgs[1]?.getAttribute('alt')).toBe('Assistant-generated image #2');
+    });
+
+    it('does not render any <img> when item.images is undefined', () => {
+      const { container } = render(<CodexAssistantMessage item={assistant()} />);
+      expect(container.querySelector('img')).toBeNull();
+    });
+  });
 });

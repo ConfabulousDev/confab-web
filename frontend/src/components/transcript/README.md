@@ -63,6 +63,7 @@ layer.
 | `CodexUserMessage.tsx` | User prompt in a chat row, with timestamp. Body renders through `CodexMessageBody`. Accepts `isSelected` + `isNewSpeaker` for selection ring and speaker-change spacing, plus `isDeepLinkTarget`, `sessionId`, `onSkipToNext`, `onSkipToPrevious`, and `kindLabel` for the CF-360 row chrome |
 | `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody`. Accepts the same chrome props as `CodexUserMessage` |
 | `CodexMessageBody.tsx` | Shared rendering path for user + assistant text. JSON-shaped text pretty-prints via `CodeBlock` (`language="json"`); everything else flows through `renderMarkdownToHtml`. Mirrors `ContentBlock.tsx`'s text-block contract |
+| `CodexMessageImages.tsx` | CF-388 shared image gallery for user + assistant messages. Renders one `<img loading="lazy">` per entry in `images`, parameterized by `altPrefix` (`User-attached image` vs `Assistant-generated image`). Same dimension caps as `ContentBlock`'s image render for cross-provider visual parity |
 | `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s. Accepts the chrome props (`sessionId`, `isDeepLinkTarget`, `onSkipToNext` / `onSkipToPrevious`, `kindLabel`); `isNewSpeaker` is no-op per the Codex speaker rule |
 | `codexToolCallHelpers.ts` | Pure helpers extracted from `CodexToolCallBlock.tsx` for testability: `buildToolCallCopyText` (per-tool copy-text composition for `CodexRowActions`) plus shape readers `readStringField`, `readPatchChanges`, `readWebSearchQueries`, `stringifyGenericInput` |
 | `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; the CF-360 row chrome renders a copy-link-only button strip |
@@ -84,18 +85,24 @@ bottom buttons, row hover → selection state, and `>5min` idle-gap time
 separators. CF-360 added stable per-row `lineId`, `?msg=<lineId>` deep
 linking (polling-aware), and per-row chrome — copy text, copy link, and
 skip-to-next/prev same-kind — for user / assistant / tool_call rows; the
-four divider variants get copy-link only. Still deferred: Cmd-F search
-(CF-359), filter chips (CF-361), and cost mode (CF-362).
+four divider variants get copy-link only. CF-388 added inline rendering of
+`input_image` / `output_image` content blocks: image_url values surface on
+`CodexUserItem.images` / `CodexAssistantItem.images` and render below the
+message body, with Codex's own `<image name=[Image #N]>` / `</image>`
+sentinel wrappers stripped from sibling `input_text` blocks. Still deferred:
+Cmd-F search (CF-359), filter chips (CF-361), and cost mode (CF-362).
 
 **Known gaps (deferred — see TODOs at the referenced sites):**
-- Image content blocks (`input_image` / `output_image`) are dropped in
-  `joinMessageText`; no `CodexImageItem` variant exists yet. Add one when a
-  real transcript surfaces image content.
 - Plaintext `reasoning` is not rendered — every reasoning line emits a
   `reasoning_hidden` item today. When plaintext arrives, extend
   `CodexReasoningHiddenItem` with a `{ decoded: true; text }` discriminator
   and render a 💭 collapsible block mirroring `ContentBlock`'s thinking
   treatment.
+- Tool-call image outputs (`function_call_output.output` JSON carrying
+  embedded `image_url`) are not surfaced. CF-388 covered message-content
+  images only; a screenshot tool that returns a base64 image inside its
+  unstructured `output` string needs its own decoder pass and is filed as a
+  follow-up.
 
 ### TimelineBar / CostBar / CodexTimelineBar
 

@@ -185,6 +185,54 @@ describe('RawCodexLineSchema', () => {
       });
       expect(result.success).toBe(true);
     });
+
+    // CF-388: image content blocks on message[role=user|assistant].
+    it('accepts message[role=user] with an input_image content block', () => {
+      const result = responseItem({
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_image',
+            image_url: 'data:image/png;base64,iVBORw0KGgo=',
+            detail: 'high',
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts message[role=assistant] with an output_image content block', () => {
+      const result = responseItem({
+        type: 'message',
+        role: 'assistant',
+        content: [
+          {
+            type: 'output_image',
+            image_url: 'data:image/png;base64,iVBORw0KGgo=',
+          },
+        ],
+        phase: 'final',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts message whose content mixes input_text and input_image', () => {
+      const result = responseItem({
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: '<image name=[Image #1]>' },
+          {
+            type: 'input_image',
+            image_url: 'data:image/png;base64,iVBORw0KGgo=',
+            detail: 'high',
+          },
+          { type: 'input_text', text: 'this is what I see' },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('event_msg payload variants', () => {

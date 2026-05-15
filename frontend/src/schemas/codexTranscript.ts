@@ -37,12 +37,35 @@ const CodexOutputTextSchema = z
   })
   .passthrough();
 
+// CF-388: image content blocks. `image_url` is an inlined base64 data URL
+// in real Codex rollouts (verified against openai/codex
+// `codex-rs/protocol/src/models.rs` — the CLI writes `image.into_data_url()`
+// directly into the JSONL). We keep validation lenient (`z.string()`) so
+// future schemes (http(s):, blob:, file:) parse without a schema change.
+const CodexInputImageSchema = z
+  .object({
+    type: z.literal('input_image'),
+    image_url: z.string(),
+    detail: z.string().optional(), // 'low' | 'high' | 'auto' | 'original' | future
+  })
+  .passthrough();
+
+const CodexOutputImageSchema = z
+  .object({
+    type: z.literal('output_image'),
+    image_url: z.string(),
+    detail: z.string().optional(),
+  })
+  .passthrough();
+
 // Catch-all for unknown content-block types inside a message.
 const CodexUnknownContentBlockSchema = z.object({ type: z.string() }).passthrough();
 
 const CodexMessageContentSchema = z.union([
   CodexInputTextSchema,
   CodexOutputTextSchema,
+  CodexInputImageSchema,
+  CodexOutputImageSchema,
   CodexUnknownContentBlockSchema,
 ]);
 

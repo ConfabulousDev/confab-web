@@ -68,4 +68,55 @@ describe('CodexUserMessage', () => {
     const { queryByLabelText } = render(<CodexUserMessage item={user('hi')} />);
     expect(queryByLabelText(/copy link/i)).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // CF-388 — image rendering
+  // ---------------------------------------------------------------------------
+
+  describe('image rendering', () => {
+    const SRC_1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+    const SRC_2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAcAAc6POE4AAAAASUVORK5CYII=';
+
+    function userWithImages(images: string[]): CodexUserItem {
+      return {
+        kind: 'user',
+        lineId: '0',
+        timestamp: '2026-05-13T01:00:00Z',
+        text: 'here is a screenshot',
+        images,
+      };
+    }
+
+    it('renders an <img> with the data URL src when images are present', () => {
+      const { container } = render(
+        <CodexUserMessage item={userWithImages([SRC_1])} />,
+      );
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('src')).toBe(SRC_1);
+    });
+
+    it('applies loading="lazy" to the rendered <img>', () => {
+      const { container } = render(
+        <CodexUserMessage item={userWithImages([SRC_1])} />,
+      );
+      const img = container.querySelector('img');
+      expect(img?.getAttribute('loading')).toBe('lazy');
+    });
+
+    it('uses an alt text that identifies the image as user-attached and 1-indexed', () => {
+      const { container } = render(
+        <CodexUserMessage item={userWithImages([SRC_1, SRC_2])} />,
+      );
+      const imgs = Array.from(container.querySelectorAll('img'));
+      expect(imgs.length).toBe(2);
+      expect(imgs[0]?.getAttribute('alt')).toBe('User-attached image #1');
+      expect(imgs[1]?.getAttribute('alt')).toBe('User-attached image #2');
+    });
+
+    it('does not render any <img> when item.images is undefined', () => {
+      const { container } = render(<CodexUserMessage item={user('hi')} />);
+      expect(container.querySelector('img')).toBeNull();
+    });
+  });
 });

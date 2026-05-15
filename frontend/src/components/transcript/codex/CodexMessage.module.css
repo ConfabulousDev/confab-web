@@ -100,3 +100,29 @@
 .markdown {
   composes: markdown from '@/styles/markdown.module.css';
 }
+
+/* CF-388: image gallery (input_image / output_image content blocks).
+ * Stacks below the message body, one image per row, with the same dimension
+ * caps as ContentBlock's `imageBlock` for cross-provider visual parity. */
+.imageList {
+  margin-top: var(--spacing-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.imageBlock {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.imageBlock img {
+  display: block;
+  max-width: 100%;
+  max-height: 500px;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}

@@ -388,6 +388,179 @@ describe('normalizeCodexLines', () => {
       expect(ws?.lineId).toBe('1');
     });
   });
+
+  // -------------------------------------------------------------------------
+  // CF-388: image content blocks
+  //
+  // Codex injects `<image name=[Image #N]>` / `</image>` sentinel wrappers
+  // around each `input_image` block. The normalizer strips those wrappers
+  // and surfaces image_url values onto `images` on the user/assistant item.
+  // -------------------------------------------------------------------------
+
+  describe('image content blocks', () => {
+    const DATA_URL_1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+    const DATA_URL_2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAcAAc6POE4AAAAASUVORK5CYII=';
+
+    function userMessageJsonl(content: unknown[]): string {
+      return JSON.stringify({
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'response_item',
+        payload: { type: 'message', role: 'user', content },
+      });
+    }
+
+    function assistantMessageJsonl(content: unknown[]): string {
+      return JSON.stringify({
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content,
+          phase: 'final',
+        },
+      });
+    }
+
+    it('extracts input_image.image_url onto images on the user item', () => {
+      const jsonl = userMessageJsonl([
+        { type: 'input_text', text: 'look at this screenshot' },
+        { type: 'input_image', image_url: DATA_URL_1, detail: 'high' },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        expect(user.images).toEqual([DATA_URL_1]);
+        expect(user.text).toBe('look at this screenshot');
+      }
+    });
+
+    it('strips <image name=[Image #1]> sentinel wrappers from input_text', () => {
+      const jsonl = userMessageJsonl([
+        { type: 'input_text', text: '<image name=[Image #1]>' },
+        { type: 'input_image', image_url: DATA_URL_1 },
+        { type: 'input_text', text: '</image>' },
+        { type: 'input_text', text: 'what do you see here?' },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        expect(user.text).not.toContain('<image');
+        expect(user.text).not.toContain('</image>');
+        expect(user.text).toContain('what do you see here?');
+      }
+    });
+
+    it('strips bare <image> / </image> sentinel variants (no name attribute)', () => {
+      const jsonl = userMessageJsonl([
+        { type: 'input_text', text: '<image>' },
+        { type: 'input_image', image_url: DATA_URL_1 },
+        { type: 'input_text', text: '</image>\n\nfollow-up question' },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        expect(user.text).not.toContain('<image');
+        expect(user.text).not.toContain('</image>');
+        expect(user.text).toContain('follow-up question');
+      }
+    });
+
+    it('preserves bare [Image #1] references inside ordinary user prose', () => {
+      const jsonl = userMessageJsonl([
+        { type: 'input_text', text: 'as you can see in [Image #1] the layout is broken' },
+        { type: 'input_image', image_url: DATA_URL_1 },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        // Bare `[Image #1]` references must survive — only `<image …>` /
+        // `</image>` wrappers are stripped.
+        expect(user.text).toContain('[Image #1]');
+      }
+    });
+
+    it('emits an image-only user item when text strips to empty but images is non-empty', () => {
+      const jsonl = userMessageJsonl([
+        { type: 'input_text', text: '<image name=[Image #1]>' },
+        { type: 'input_image', image_url: DATA_URL_1 },
+        { type: 'input_text', text: '</image>' },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        expect(user.text).toBe('');
+        expect(user.images).toEqual([DATA_URL_1]);
+      }
+    });
+
+    it('text-only user message produces an item with no images field', () => {
+      const jsonl = userMessageJsonl([
+        { type: 'input_text', text: 'plain user message, no attachments' },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        expect(user.images).toBeUndefined();
+        expect(user.text).toBe('plain user message, no attachments');
+      }
+    });
+
+    it('attaches images to the assistant item from output_image', () => {
+      const jsonl = assistantMessageJsonl([
+        { type: 'output_text', text: 'here is a rendered chart' },
+        { type: 'output_image', image_url: DATA_URL_1 },
+      ]);
+      const result = items(jsonl);
+      const assistant = result.find((i) => i.kind === 'assistant');
+      expect(assistant).toBeDefined();
+      if (assistant?.kind === 'assistant') {
+        expect(assistant.images).toEqual([DATA_URL_1]);
+        expect(assistant.text).toBe('here is a rendered chart');
+      }
+    });
+
+    it('strips sentinel wrappers even when they appear inside fenced code blocks', () => {
+      // Per CF-388 interview: regex runs on raw text before markdown render,
+      // and strips unconditionally. A user documenting the sentinel inside
+      // a code fence is a knowingly-accepted false positive — Codex emits the
+      // sentinel itself, real users do not.
+      const jsonl = userMessageJsonl([
+        {
+          type: 'input_text',
+          text: '```\n<image name=[Image #1]>\n```\nwhat does this tag mean?',
+        },
+        { type: 'input_image', image_url: DATA_URL_1 },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        expect(user.text).not.toContain('<image');
+        expect(user.text).toContain('what does this tag mean?');
+      }
+    });
+
+    it('extracts multiple input_image blocks in order onto a single images array', () => {
+      const jsonl = userMessageJsonl([
+        { type: 'input_text', text: 'two screenshots:' },
+        { type: 'input_image', image_url: DATA_URL_1 },
+        { type: 'input_image', image_url: DATA_URL_2 },
+      ]);
+      const result = items(jsonl);
+      const user = result.find((i) => i.kind === 'user');
+      expect(user).toBeDefined();
+      if (user?.kind === 'user') {
+        expect(user.images).toEqual([DATA_URL_1, DATA_URL_2]);
+      }
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

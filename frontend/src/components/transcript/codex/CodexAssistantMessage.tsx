@@ -6,6 +6,7 @@ import type { CodexAssistantItem } from '@/types/codexRenderItem';
 import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
 import CodexMessageBody from './CodexMessageBody';
+import CodexMessageImages from './CodexMessageImages';
 import CodexRowActions from './CodexRowActions';
 import styles from './CodexMessage.module.css';
 
@@ -76,6 +77,9 @@ export default function CodexAssistantMessage({
       </div>
       <div className={styles.body}>
         <CodexMessageBody text={item.text} />
+        {item.images && (
+          <CodexMessageImages images={item.images} altPrefix="Assistant-generated image" />
+        )}
       </div>
     </div>
   );
