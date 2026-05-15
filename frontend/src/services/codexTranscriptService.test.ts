@@ -4,15 +4,23 @@
 // `parseCodexJSONL` validates input and `normalizeCodexLines` transforms
 // validated raw lines into a clean render-item stream.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   parseCodexJSONL,
   normalizeCodexLines,
+  fetchCodexSessionMeta,
   _resetReportedCodexSessions,
 } from './codexTranscriptService';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
+import { syncFilesAPI } from './api';
+
+vi.mock('./api', () => ({
+  syncFilesAPI: {
+    getContent: vi.fn(),
+  },
+}));
 
 const FIXTURE_PATH = resolve(__dirname, '../test-fixtures/codex-rollout.jsonl');
 const fixtureJsonl = readFileSync(FIXTURE_PATH, 'utf-8');
@@ -385,5 +393,71 @@ describe('normalizeCodexLines', () => {
       expect(ws).toBeDefined();
       expect(ws?.lineId).toBe('1');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchCodexSessionMeta (CF-383)
+// ---------------------------------------------------------------------------
+
+describe('fetchCodexSessionMeta', () => {
+  const mockedGetContent = vi.mocked(syncFilesAPI.getContent);
+
+  beforeEach(() => {
+    mockedGetContent.mockReset();
+  });
+
+  it('returns the model from a session_meta first line', async () => {
+    mockedGetContent.mockResolvedValueOnce(
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"gpt-5-codex"}}\n' +
+      '{"timestamp":"2026-05-13T01:00:01Z","type":"turn_context","payload":{}}',
+    );
+    const result = await fetchCodexSessionMeta('session-1', 'rollout.jsonl');
+    expect(result.model).toBe('gpt-5-codex');
+  });
+
+  it('reads only the first line — model from later session_meta is ignored', async () => {
+    mockedGetContent.mockResolvedValueOnce(
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":"first-model"}}\n' +
+      '{"timestamp":"2026-05-13T01:00:01Z","type":"session_meta","payload":{"id":"y","model":"second-model"}}',
+    );
+    const result = await fetchCodexSessionMeta('session-2', 'rollout.jsonl');
+    expect(result.model).toBe('first-model');
+  });
+
+  it('returns undefined when the first line is not a session_meta envelope', async () => {
+    mockedGetContent.mockResolvedValueOnce(
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"turn_context","payload":{"turn_id":"t1"}}',
+    );
+    const result = await fetchCodexSessionMeta('session-3', 'rollout.jsonl');
+    expect(result.model).toBeUndefined();
+  });
+
+  it('returns undefined for malformed JSON on the first line', async () => {
+    mockedGetContent.mockResolvedValueOnce('not valid json\n{"timestamp":"...","type":"session_meta","payload":{"model":"gpt-5"}}');
+    const result = await fetchCodexSessionMeta('session-4', 'rollout.jsonl');
+    expect(result.model).toBeUndefined();
+  });
+
+  it('returns undefined for an empty file', async () => {
+    mockedGetContent.mockResolvedValueOnce('');
+    const result = await fetchCodexSessionMeta('session-5', 'rollout.jsonl');
+    expect(result.model).toBeUndefined();
+  });
+
+  it('returns undefined when session_meta has no model field', async () => {
+    mockedGetContent.mockResolvedValueOnce(
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","cwd":"/tmp"}}',
+    );
+    const result = await fetchCodexSessionMeta('session-6', 'rollout.jsonl');
+    expect(result.model).toBeUndefined();
+  });
+
+  it('returns undefined when model is non-string (defensive)', async () => {
+    mockedGetContent.mockResolvedValueOnce(
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","model":42}}',
+    );
+    const result = await fetchCodexSessionMeta('session-7', 'rollout.jsonl');
+    expect(result.model).toBeUndefined();
   });
 });

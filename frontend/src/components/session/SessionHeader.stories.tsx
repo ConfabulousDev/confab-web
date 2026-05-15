@@ -437,3 +437,27 @@ export const ProviderIconComparison: DirectStory = {
     );
   },
 };
+
+// CF-383: Codex header rendered without a model — exercises the
+// providerLabel fallback (icon + "Codex" text). This is what the Summary tab
+// shows while the rollout session_meta is loading, or permanently if the
+// rollout's first line lacks a model field.
+export const CodexNoModel: DirectStory = {
+  render: () => (
+    <SessionHeader
+      sessionId="session-codex-no-model"
+      title="Ranked refactoring ideas for Go CLI sync tool"
+      hasCustomTitle={false}
+      autoTitle="Ranked refactoring ideas for Go CLI sync tool"
+      externalId="019e-fixture-codex-no-model"
+      provider="codex"
+      ownerEmail="developer@example.com"
+      model={undefined}
+      durationMs={104000}
+      sessionDate={new Date('2026-05-14T20:43:00')}
+      gitInfo={sampleGitInfo}
+      isOwner={true}
+      isShared={false}
+    />
+  ),
+};

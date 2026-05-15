@@ -1,12 +1,17 @@
 // CF-364 — Summary tab on Codex sessions must render the same
 // SessionSummaryPanel as Claude sessions, not the CodexSummaryEmpty placeholder.
+//
+// CF-383 — SessionViewer must derive the Codex model from the rollout's
+// session_meta line (via fetchCodexSessionMeta) and pass it through to
+// SessionHeader so the provider icon + model meta-item render on Codex sessions.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SessionViewer from './SessionViewer';
 import type { SessionDetail } from '@/schemas/api';
 import type { SessionAnalytics } from '@/schemas/api';
+import { fetchCodexSessionMeta } from '@/services/codexTranscriptService';
 
 // Mock useAnalyticsPolling so SessionSummaryPanel doesn't try to fetch.
 // Passing initialAnalytics disables polling, but the hook is still invoked
@@ -48,9 +53,28 @@ vi.mock('./GitHubLinksCard', () => ({
 }));
 
 // SessionHeader pulls in keyboard-shortcut context; render-only stub.
+// Capture props in `headerProps` so CF-383 tests can assert what model
+// SessionViewer plumbed through.
+const headerProps: { current: Record<string, unknown> | undefined } = { current: undefined };
 vi.mock('./SessionHeader', () => ({
-  default: () => <div data-testid="session-header" />,
+  default: (props: Record<string, unknown>) => {
+    headerProps.current = props;
+    return <div data-testid="session-header" />;
+  },
 }));
+
+// CF-383: SessionViewer fetches Codex model via this helper. Mock it so
+// tests can resolve with different return shapes (model present / absent).
+vi.mock('@/services/codexTranscriptService', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/services/codexTranscriptService')>(
+      '@/services/codexTranscriptService'
+    );
+  return {
+    ...actual,
+    fetchCodexSessionMeta: vi.fn(() => Promise.resolve({ model: undefined })),
+  };
+});
 
 function makeSession(overrides: Partial<SessionDetail> = {}): SessionDetail {
   return {
@@ -112,5 +136,61 @@ describe('SessionViewer / Summary tab on Codex sessions', () => {
     expect(
       screen.queryByText(/Summary not yet available for Codex/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+// CF-383: ensure Codex model derived from session_meta reaches SessionHeader.
+describe('SessionViewer / Codex model plumbing', () => {
+  function renderViewer(session: SessionDetail = makeSession()) {
+    render(
+      <MemoryRouter>
+        <SessionViewer
+          session={session}
+          activeTab="summary"
+          onTabChange={() => {}}
+          initialAnalytics={codexAnalytics}
+        />
+      </MemoryRouter>
+    );
+  }
+
+  it('fetches Codex session_meta and forwards the model prop to SessionHeader', async () => {
+    vi.mocked(fetchCodexSessionMeta).mockResolvedValueOnce({
+      model: 'gpt-5-codex',
+    });
+
+    renderViewer();
+
+    await waitFor(() => {
+      expect(headerProps.current?.model).toBe('gpt-5-codex');
+    });
+    expect(fetchCodexSessionMeta).toHaveBeenCalledWith(
+      'codex-session-uuid',
+      'rollout.jsonl'
+    );
+  });
+
+  it('passes undefined model to SessionHeader when fetchCodexSessionMeta returns no model', async () => {
+    vi.mocked(fetchCodexSessionMeta).mockResolvedValueOnce({
+      model: undefined,
+    });
+
+    renderViewer();
+
+    // The header is rendered immediately with model=undefined; the fetch
+    // resolving with model=undefined must NOT throw or block render.
+    await waitFor(() => {
+      expect(headerProps.current).toBeDefined();
+    });
+    expect(headerProps.current?.model).toBeUndefined();
+  });
+
+  it('does not call fetchCodexSessionMeta for Claude sessions', async () => {
+    renderViewer(makeSession({ provider: 'claude-code' }));
+
+    await waitFor(() => {
+      expect(headerProps.current).toBeDefined();
+    });
+    expect(fetchCodexSessionMeta).not.toHaveBeenCalled();
   });
 });

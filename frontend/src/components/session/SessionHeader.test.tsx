@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SessionHeader from './SessionHeader';
 
@@ -124,6 +124,50 @@ describe('SessionHeader', () => {
       );
       expect(screen.getByTestId('icon-codex')).toBeInTheDocument();
       expect(screen.queryByTestId('icon-claude')).not.toBeInTheDocument();
+    });
+  });
+
+  // CF-383: when `model` is missing the provider icon must still render and
+  // the meta-item value falls back to the provider display name (Codex/Claude).
+  // Queries are scoped to the meta row via `session-meta` data-testid so the
+  // assertions don't collide with any title-row text that happens to contain
+  // "Codex" or "Claude".
+  describe('provider meta-item — model fallback', () => {
+    it('shows Codex brand icon for codex sessions even when model is missing', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} provider="codex" model={undefined} />
+      );
+      const meta = within(screen.getByTestId('session-meta'));
+      expect(meta.getByTestId('icon-codex')).toBeInTheDocument();
+      expect(meta.getByText('Codex')).toBeInTheDocument();
+    });
+
+    it('shows Claude brand icon for claude sessions even when model is missing', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} provider="claude-code" model={undefined} />
+      );
+      const meta = within(screen.getByTestId('session-meta'));
+      expect(meta.getByTestId('icon-claude')).toBeInTheDocument();
+      expect(meta.getByText('Claude')).toBeInTheDocument();
+    });
+
+    it('shows formatted model name for codex sessions when model is present', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} provider="codex" model="gpt-5-codex" />
+      );
+      const meta = within(screen.getByTestId('session-meta'));
+      expect(meta.getByTestId('icon-codex')).toBeInTheDocument();
+      expect(meta.getByText('gpt-5-codex')).toBeInTheDocument();
+      expect(meta.queryByText('Codex')).not.toBeInTheDocument();
+    });
+
+    it('shows formatted model name for claude sessions when model is present', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} provider="claude-code" model="claude-opus-4-7" />
+      );
+      const meta = within(screen.getByTestId('session-meta'));
+      expect(meta.getByTestId('icon-claude')).toBeInTheDocument();
+      expect(meta.queryByText('Claude')).not.toBeInTheDocument();
     });
   });
 });

@@ -21,6 +21,16 @@ import styles from './SessionHeader.module.css';
 
 const MAX_CUSTOM_TITLE_LENGTH = 255;
 
+// CF-383: Display name used in the provider meta-item when no `model` is
+// available (Codex session before its rollout meta resolves, or any session
+// whose first line lacks a model field). Kept file-local — the parallel
+// per-provider branching in `CopyIdDropdown.externalIdMenuStrings` and
+// `getProviderIcon` is already its own thing; a shared helper can land when a
+// fourth surface needs it.
+function providerLabel(provider: string): string {
+  return provider === 'codex' ? 'Codex' : 'Claude';
+}
+
 const DurationIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="10" />
@@ -262,12 +272,13 @@ function SessionHeader({
           )}
           <CopyIdDropdown confabId={sessionId} externalId={externalId} provider={provider} showChip />
         </div>
-        <div className={styles.metadata}>
+        <div className={styles.metadata} data-testid="session-meta">
           <MetaItem icon={PersonIcon} value={ownerEmail} />
           <GitInfoMeta gitInfo={gitInfo} />
-          {model && (
-            <MetaItem icon={getProviderIcon(provider)} value={formatModelName(model)} />
-          )}
+          <MetaItem
+            icon={getProviderIcon(provider)}
+            value={model ? formatModelName(model) : providerLabel(provider)}
+          />
           {durationMs !== undefined && durationMs > 0 && (
             <MetaItem icon={DurationIcon} value={formatDuration(durationMs)} />
           )}

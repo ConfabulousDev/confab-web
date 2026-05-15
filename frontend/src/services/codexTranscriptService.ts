@@ -689,3 +689,37 @@ export async function fetchNewCodexLines(
     newTotalLineCount,
   };
 }
+
+/**
+ * Fetch only the Codex rollout's `session_meta` (first line) and return its
+ * `model` field. Used by SessionViewer to show the model name in the session
+ * header on the Summary tab without paying the cost of parsing the entire
+ * rollout (CF-383). CodexTranscriptPane does the full fetch + parse when the
+ * Transcript tab opens, independently.
+ *
+ * Returns `{ model: undefined }` for any of:
+ *   - empty file
+ *   - first line is not valid JSON
+ *   - first line is not a `session_meta` envelope
+ *   - `session_meta.payload.model` is missing or non-string
+ *
+ * Callers should treat undefined as "show a provider-name fallback".
+ */
+export async function fetchCodexSessionMeta(
+  sessionId: string,
+  fileName: string,
+): Promise<{ model: string | undefined }> {
+  const content = await syncFilesAPI.getContent(sessionId, fileName);
+  const newlineIdx = content.indexOf('\n');
+  const firstLine = newlineIdx === -1 ? content : content.slice(0, newlineIdx);
+  if (!firstLine.trim()) return { model: undefined };
+
+  const parsed = tryParseJSON(firstLine);
+  if (!isRecord(parsed) || parsed.type !== 'session_meta') return { model: undefined };
+
+  const payload = parsed.payload;
+  if (!isRecord(payload)) return { model: undefined };
+
+  const { model } = payload;
+  return { model: typeof model === 'string' && model ? model : undefined };
+}
