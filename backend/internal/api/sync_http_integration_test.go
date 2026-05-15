@@ -3863,34 +3863,78 @@ func TestSyncChunk_Provider_HTTP_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects non-transcript file_type for codex session", func(t *testing.T) {
+	// CF-389: codex sessions accept `file_type=agent` for subagent rollout
+	// sidechain files uploaded under the root's hosted session. The CLI
+	// (CF-387) uploads these alongside the root's transcript. This subtest
+	// previously asserted a 400 rejection (CF-385); it now pins the post-
+	// CF-389 contract that the upload succeeds and that the subagent's
+	// activity does NOT bleed into the root session's last_message_at.
+	t.Run("accepts file_type=agent for codex session (subagent rollout)", func(t *testing.T) {
 		env.CleanDB(t)
 
-		user := testutil.CreateTestUser(t, env, "codex-reject@example.com", "User")
+		user := testutil.CreateTestUser(t, env, "codex-agent@example.com", "User")
 		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
-		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "codex-reject-ext", "codex")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "codex-agent-ext", "codex")
 
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
+		// Subagent rollout fixture. Timestamp is present but file_type=agent
+		// must NOT trigger last_message_at extraction — that gate keys on
+		// file_type=="transcript" so subagent activity stays out of the
+		// root session's last-activity field.
 		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
 			SessionID: sessionID,
-			FileName:  "agent.jsonl",
+			FileName:  "rollout-019e2ce8-subagent.jsonl",
 			FileType:  "agent",
 			FirstLine: 1,
-			Lines:     []string{`{"x":1}`},
+			Lines: []string{
+				`{"timestamp":"2026-05-15T10:00:00Z","type":"session_meta","payload":{"id":"019e2ce8"}}`,
+			},
 		})
 		if err != nil {
 			t.Fatalf("request: %v", err)
 		}
 		defer resp.Body.Close()
-		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result map[string]string
-		testutil.ParseJSON(t, resp, &result)
-		errMsg := strings.ToLower(result["error"])
-		if !strings.Contains(errMsg, "transcript") || !strings.Contains(errMsg, "codex") {
-			t.Errorf("expected error mentioning 'transcript' and 'codex', got: %s", result["error"])
+		// sync_files row records file_type='agent' and the chunk's last line.
+		var storedFileType string
+		var lastSyncedLine int
+		if err := env.DB.QueryRow(env.Ctx,
+			`SELECT file_type, last_synced_line FROM sync_files
+			 WHERE session_id = $1 AND file_name = $2`,
+			sessionID, "rollout-019e2ce8-subagent.jsonl").
+			Scan(&storedFileType, &lastSyncedLine); err != nil {
+			t.Fatalf("query sync_files: %v", err)
+		}
+		if storedFileType != "agent" {
+			t.Errorf("sync_files.file_type = %q, want %q", storedFileType, "agent")
+		}
+		if lastSyncedLine != 1 {
+			t.Errorf("sync_files.last_synced_line = %d, want 1", lastSyncedLine)
+		}
+
+		// Subagent activity must NOT advance the root session's last_message_at.
+		var lastMessageAt *time.Time
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT last_message_at FROM sessions WHERE id = $1", sessionID).
+			Scan(&lastMessageAt); err != nil {
+			t.Fatalf("query last_message_at: %v", err)
+		}
+		if lastMessageAt != nil {
+			t.Errorf("last_message_at = %v, want NULL (subagent agent-file upload must not advance root activity)", lastMessageAt)
+		}
+
+		// last_sync_at must be set — chunk uploads always touch it.
+		var lastSyncAt *time.Time
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT last_sync_at FROM sessions WHERE id = $1", sessionID).
+			Scan(&lastSyncAt); err != nil {
+			t.Fatalf("query last_sync_at: %v", err)
+		}
+		if lastSyncAt == nil {
+			t.Error("last_sync_at is NULL after chunk upload")
 		}
 	})
 }
@@ -4009,6 +4053,106 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		}
 		if parent == nil || *parent != rootUUID {
 			t.Errorf("parent_thread_uuid = %v, want %q", parent, rootUUID)
+		}
+	})
+
+	// CF-389: end-to-end happy path for the CLI's CF-387 sidechain model.
+	// Uploads the root transcript first, then the subagent rollout as
+	// file_type=agent under the SAME hosted session. Pins:
+	//   - Both rollouts land as sync_files rows with the right file_type.
+	//   - codex_rollouts captures both threads with correct parent linkage.
+	t.Run("links subagent rollout to root via parent_thread_uuid", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-pair@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-pair", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// 1. Root transcript chunk with codex_rollout metadata.
+		rootResp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "rollout-root.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:  rootUUID,
+					RolloutPath: "/home/u/.codex/sessions/rollout-root.jsonl",
+					Model:       "gpt-5",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("root request: %v", err)
+		}
+		defer rootResp.Body.Close()
+		testutil.RequireStatus(t, rootResp, http.StatusOK)
+
+		// 2. Subagent rollout chunk as file_type=agent under the same session,
+		//    declaring parent_thread_uuid = rootUUID.
+		childResp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "rollout-child.jsonl",
+			FileType:  "agent",
+			FirstLine: 1,
+			Lines:     []string{`{"timestamp":"2026-05-15T10:00:05Z"}`},
+			Metadata: &SyncChunkMetadata{
+				CodexRollout: &SyncCodexRolloutMetadata{
+					ThreadUUID:       childUUID,
+					ParentThreadUUID: ptr(rootUUID),
+					RolloutPath:      "/home/u/.codex/sessions/rollout-child.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("child request: %v", err)
+		}
+		defer childResp.Body.Close()
+		testutil.RequireStatus(t, childResp, http.StatusOK)
+
+		// Two sync_files rows: one transcript, one agent.
+		var transcriptCount, agentCount int
+		if err := env.DB.QueryRow(env.Ctx,
+			`SELECT
+				COUNT(*) FILTER (WHERE file_type = 'transcript'),
+				COUNT(*) FILTER (WHERE file_type = 'agent')
+			 FROM sync_files WHERE session_id = $1`,
+			sessionID).Scan(&transcriptCount, &agentCount); err != nil {
+			t.Fatalf("count sync_files: %v", err)
+		}
+		if transcriptCount != 1 {
+			t.Errorf("transcript sync_files count = %d, want 1", transcriptCount)
+		}
+		if agentCount != 1 {
+			t.Errorf("agent sync_files count = %d, want 1", agentCount)
+		}
+
+		// codex_rollouts: root row has NULL parent.
+		var rootParent *string
+		if err := env.DB.QueryRow(env.Ctx,
+			`SELECT parent_thread_uuid FROM codex_rollouts
+			 WHERE user_id = $1 AND thread_uuid = $2`,
+			user.ID, rootUUID).Scan(&rootParent); err != nil {
+			t.Fatalf("scan root rollout: %v", err)
+		}
+		if rootParent != nil {
+			t.Errorf("root parent_thread_uuid = %v, want NULL", *rootParent)
+		}
+
+		// codex_rollouts: child row points at root.
+		var childParent *string
+		if err := env.DB.QueryRow(env.Ctx,
+			`SELECT parent_thread_uuid FROM codex_rollouts
+			 WHERE user_id = $1 AND thread_uuid = $2`,
+			user.ID, childUUID).Scan(&childParent); err != nil {
+			t.Fatalf("scan child rollout: %v", err)
+		}
+		if childParent == nil || *childParent != rootUUID {
+			t.Errorf("child parent_thread_uuid = %v, want %q", childParent, rootUUID)
 		}
 	})
 

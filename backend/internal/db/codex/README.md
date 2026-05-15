@@ -1,8 +1,10 @@
 # codex
 
 Metadata sidecar for Codex parent-child rollout trees. Child rollouts upload
-their chunk content under the root's hosted session (file_type=`"transcript"`);
-this package only records the thread tree shape and per-thread metadata.
+their chunk content under the root's hosted session as `sync_files` rows with
+`file_type='agent'` (CF-389), alongside their per-thread `codex_rollouts`
+metadata row. The root's own rollout lands as `file_type='transcript'`. This
+package only records the thread tree shape and per-thread metadata.
 
 ## Files
 
