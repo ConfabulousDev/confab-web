@@ -3,6 +3,8 @@ package validation
 import (
 	"fmt"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 )
 
 // Field size limits (must match DB VARCHAR constraints in migration 000010, 000011)
@@ -147,4 +149,74 @@ func ValidateProvider(p string) error {
 	}
 	return fmt.Errorf("unknown provider %q: must be %q or %q",
 		p, ProviderClaudeCode, ProviderCodex)
+}
+
+// Codex rollout metadata length limits. Match codex_rollouts column widths
+// in migration 000044.
+const (
+	MaxCodexSourceLength        = 64
+	MaxCodexModelLength         = 255
+	MaxCodexThreadSourceLength  = 255
+	MaxCodexAgentRoleLength     = 255
+	MaxCodexAgentNicknameLength = 255
+	MaxCodexRolloutPathLength   = 8192
+	MaxCodexCWDLength           = 8192
+	MaxCodexAgentPathLength     = 8192
+)
+
+// ValidateCodexRolloutMetadata enforces the codex_rollout sub-block contract
+// from POST /api/v1/sync/chunk. The handler calls this only when the request
+// carries the block; the provider-mismatch check (codex sessions only) is
+// handled separately in the handler after session ownership is verified.
+//
+// parentThreadUUID is a pointer: nil means "field omitted" (root rollout);
+// a pointer to an empty string is treated as a client bug and rejected.
+func ValidateCodexRolloutMetadata(
+	threadUUID string,
+	parentThreadUUID *string,
+	rolloutPath, cwd, model, source, threadSource,
+	agentPath, agentRole, agentNickname string,
+) error {
+	if threadUUID == "" {
+		return fmt.Errorf("thread_uuid is required")
+	}
+	if _, err := uuid.Parse(threadUUID); err != nil {
+		return fmt.Errorf("thread_uuid must be a valid UUID")
+	}
+	if parentThreadUUID != nil {
+		if *parentThreadUUID == "" {
+			return fmt.Errorf("parent_thread_uuid must not be empty when provided (omit the field for root rollouts)")
+		}
+		if _, err := uuid.Parse(*parentThreadUUID); err != nil {
+			return fmt.Errorf("parent_thread_uuid must be a valid UUID")
+		}
+		if *parentThreadUUID == threadUUID {
+			return fmt.Errorf("parent_thread_uuid must not equal thread_uuid")
+		}
+	}
+	if rolloutPath == "" {
+		return fmt.Errorf("rollout_path is required")
+	}
+	// Length checks ordered to match the wire field order. Each pair is
+	// (field-name-in-error, value, max).
+	maxChecks := []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"rollout_path", rolloutPath, MaxCodexRolloutPathLength},
+		{"cwd", cwd, MaxCodexCWDLength},
+		{"model", model, MaxCodexModelLength},
+		{"source", source, MaxCodexSourceLength},
+		{"thread_source", threadSource, MaxCodexThreadSourceLength},
+		{"agent_path", agentPath, MaxCodexAgentPathLength},
+		{"agent_role", agentRole, MaxCodexAgentRoleLength},
+		{"agent_nickname", agentNickname, MaxCodexAgentNicknameLength},
+	}
+	for _, c := range maxChecks {
+		if len(c.value) > c.max {
+			return fmt.Errorf("%s exceeds maximum length of %d characters", c.name, c.max)
+		}
+	}
+	return nil
 }

@@ -36,4 +36,7 @@ var (
 
 	// TIL errors
 	ErrTILNotFound = errors.New("TIL not found")
+
+	// Codex rollout errors
+	ErrRolloutNotFound = errors.New("rollout not found")
 )
