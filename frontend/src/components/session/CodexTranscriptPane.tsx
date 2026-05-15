@@ -8,7 +8,7 @@
 
 import CodexMessageTimeline from '@/components/transcript/codex/CodexMessageTimeline';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
-import styles from './CodexTranscriptPane.module.css';
+import TranscriptPaneStatus from './TranscriptPaneStatus';
 
 export interface CodexTranscriptPaneProps {
   sessionId: string;
@@ -43,15 +43,8 @@ export default function CodexTranscriptPane({
   error,
   targetLineId,
 }: CodexTranscriptPaneProps) {
-  if (loading) {
-    return <div className={styles.loading}>Loading transcript...</div>;
-  }
-  if (error) {
-    return (
-      <div className={styles.error}>
-        <strong>Error:</strong> {error}
-      </div>
-    );
+  if (loading || error) {
+    return <TranscriptPaneStatus loading={loading} error={error} />;
   }
 
   return (
