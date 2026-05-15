@@ -9,7 +9,7 @@
 import type { TranscriptLine } from '@/types';
 import type { TIL } from '@/schemas/api';
 import MessageTimeline from './MessageTimeline';
-import styles from './ClaudeTranscriptPane.module.css';
+import TranscriptPaneStatus from './TranscriptPaneStatus';
 
 export interface ClaudeTranscriptPaneProps {
   loading: boolean;
@@ -32,15 +32,8 @@ export default function ClaudeTranscriptPane({
   isCostMode,
   tilsByMessageUuid,
 }: ClaudeTranscriptPaneProps) {
-  if (loading) {
-    return <div className={styles.loading}>Loading transcript...</div>;
-  }
-  if (error) {
-    return (
-      <div className={styles.error}>
-        <strong>Error:</strong> {error}
-      </div>
-    );
+  if (loading || error) {
+    return <TranscriptPaneStatus loading={loading} error={error} />;
   }
 
   return (
