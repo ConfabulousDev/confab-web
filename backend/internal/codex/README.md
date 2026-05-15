@@ -33,7 +33,11 @@ and applies the following rules:
    lines — only for stream-level errors.
 2. **Top-level types**: `session_meta`, `turn_context`, `response_item`,
    `event_msg`, `compacted`. Unknown top-level types are skipped silently
-   (forward-compat); they are NOT recorded as errors.
+   (forward-compat); they are NOT recorded as errors. `turn_context` is
+   inspected only for its `model` field — Codex CLI ~0.130+ moved `model`
+   out of `session_meta` into `turn_context`, so the first `turn_context`
+   fills session-level `Model` when `session_meta.model` is absent, and
+   fills `Turn.Model` when `task_started` carried no model.
 3. **Turn boundaries**: a new turn begins on `event_msg.task_started` (or
    implicitly on the first response_item if no task_started has fired).
    Closes on `event_msg.task_complete`. Files ending mid-turn leave the last

@@ -17,7 +17,7 @@ import "time"
 type ParsedRollout struct {
 	Turns            []Turn
 	TokenUsage       TokenUsage
-	Model            string                 // from session_meta
+	Model            string                 // from session_meta.model (older CLIs) or the first turn_context.model
 	ModelProvider    string                 // from session_meta (e.g. "openai")
 	CWD              string                 // from session_meta
 	GitInfo          map[string]interface{} // from session_meta (passthrough)
@@ -34,7 +34,7 @@ type Turn struct {
 	CompletedAt        *time.Time // from task_complete.completed_at
 	DurationMs         *int64     // task_complete.duration_ms
 	TimeToFirstTokenMs *int64     // task_complete.time_to_first_token_ms
-	Model              string     // task_started.model; falls back to session_meta.Model
+	Model              string     // task_started.model or turn_context.model; falls back to ParsedRollout.Model
 	UserMessages       []Message
 	AssistantMessages  []Message
 	ToolCalls          []ToolCall

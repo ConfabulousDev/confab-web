@@ -306,3 +306,82 @@ func TestParseRollout_ImplicitTurn(t *testing.T) {
 		t.Errorf("Turns = %d, want 1 (implicit)", len(rollout.Turns))
 	}
 }
+
+// TestParseRollout_ModelFromTurnContext covers the Codex CLI ~0.130+ layout
+// where `model` is absent from session_meta and lives in the per-turn
+// turn_context envelope instead. Without this, rollout.Model stays empty and
+// GetPricing returns zero — surfacing as $0.00 in the cost card.
+func TestParseRollout_ModelFromTurnContext(t *testing.T) {
+	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s1","model_provider":"openai","cwd":"/x"}}
+{"timestamp":"2026-05-13T01:00:00.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1}}
+{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}
+{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`)
+
+	rollout, err := ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	if rollout.Model != "gpt-5.5" {
+		t.Errorf("Model = %q, want gpt-5.5 (from turn_context)", rollout.Model)
+	}
+	if rollout.ModelProvider != "openai" {
+		t.Errorf("ModelProvider = %q, want openai", rollout.ModelProvider)
+	}
+	if len(rollout.Turns) != 1 {
+		t.Fatalf("Turns = %d, want 1", len(rollout.Turns))
+	}
+	if rollout.Turns[0].Model != "gpt-5.5" {
+		t.Errorf("Turns[0].Model = %q, want gpt-5.5", rollout.Turns[0].Model)
+	}
+}
+
+// TestParseRollout_TaskStartedModelWinsOverTurnContext ensures task_started.model
+// remains authoritative for Turn.Model when both task_started and turn_context
+// carry a model. This preserves CF-350's per-turn model contract.
+func TestParseRollout_TaskStartedModelWinsOverTurnContext(t *testing.T) {
+	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s1","model_provider":"openai"}}
+{"timestamp":"2026-05-13T01:00:00.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1,"model":"gpt-5"}}
+{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}
+{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`)
+
+	rollout, err := ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	if len(rollout.Turns) != 1 {
+		t.Fatalf("Turns = %d, want 1", len(rollout.Turns))
+	}
+	if rollout.Turns[0].Model != "gpt-5" {
+		t.Errorf("Turns[0].Model = %q, want gpt-5 (task_started wins)", rollout.Turns[0].Model)
+	}
+	// Session-level Model was empty until turn_context filled it.
+	if rollout.Model != "gpt-5.5" {
+		t.Errorf("Model = %q, want gpt-5.5 (turn_context filled empty session-level)", rollout.Model)
+	}
+}
+
+// TestParseRollout_SessionMetaModelWinsOverTurnContext ensures back-compat
+// with older rollouts: when session_meta carries `model`, it stays as the
+// session-level Model even if a later turn_context advertises a different one.
+// Per-turn switches still flow into Turn.Model.
+func TestParseRollout_SessionMetaModelWinsOverTurnContext(t *testing.T) {
+	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s1","model":"gpt-5","model_provider":"openai"}}
+{"timestamp":"2026-05-13T01:00:00.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1}}
+{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}
+{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`)
+
+	rollout, err := ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	if rollout.Model != "gpt-5" {
+		t.Errorf("Model = %q, want gpt-5 (session_meta wins)", rollout.Model)
+	}
+	if len(rollout.Turns) != 1 {
+		t.Fatalf("Turns = %d, want 1", len(rollout.Turns))
+	}
+	// task_started carried no model, but turn_context did → Turn picks it up.
+	if rollout.Turns[0].Model != "gpt-5.5" {
+		t.Errorf("Turns[0].Model = %q, want gpt-5.5 (per-turn override)", rollout.Turns[0].Model)
+	}
+}
