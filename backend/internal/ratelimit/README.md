@@ -8,7 +8,8 @@ In-memory token-bucket rate limiter with HTTP middleware for per-IP and per-user
 |------|------|
 | `ratelimit.go` | `RateLimiter` interface and `InMemoryRateLimiter` implementation with background cleanup |
 | `middleware.go` | HTTP middleware and handler wrappers that enforce rate limits |
-| `middleware_test.go` | Tests for middleware, `MiddlewareWithKey`, and `HandlerFunc` |
+| `middleware_test.go` | Tests for `clientip` integration and rate-limit key derivation |
+| `ratelimit_test.go` | Tests for the token-bucket implementation (`Allow`, `AllowN`, burst, per-key isolation, concurrent `getLimiter`, `cleanupOldLimiters`, `Stop`) plus middleware behavior (`Middleware`, `MiddlewareWithKey`, `HandlerFunc`, `UserKeyFunc`) |
 
 ## Key Types
 
@@ -65,7 +66,7 @@ In-memory token-bucket rate limiter with HTTP middleware for per-IP and per-user
 go test ./internal/ratelimit/...
 ```
 
-Tests cover middleware behavior (allowed and blocked requests), the `MiddlewareWithKey` custom key path, and the `HandlerFunc` wrapper.
+Tests cover the token-bucket implementation (burst handling, per-key isolation, the `LoadOrStore` race in `getLimiter`, `cleanupOldLimiters` eviction, and `Stop` termination), middleware behavior (allowed and blocked requests), the `MiddlewareWithKey` custom-key path and IP fallback, the `HandlerFunc` wrapper, and `UserKeyFunc` extraction.
 
 ## Dependencies
 

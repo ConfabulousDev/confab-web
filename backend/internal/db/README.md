@@ -68,7 +68,8 @@ Each sub-package depends on the root `db` package for the `DB` handle, shared ty
 
 ## Testing
 
-Integration tests use `testutil.SetupTestEnvironment(t)` which spins up containerized Postgres and MinIO via Docker/Orbstack. See `connect_test.go` for connection-level tests.
+- Unit tests: `helpers_test.go` (`ExtractRepoName`, `IsInvalidUUIDError`, `IsUniqueViolation`, `UnmarshalSessionGitInfo`), `redaction_test.go` (`SessionDetail.RedactForSharing` field completeness via reflection).
+- Integration tests: `helpers_integration_test.go` (`LoadSessionSyncFiles` happy path + todo exclusion + empty result, plus a `Connect`/`Exec`/`QueryRow`/`Conn` lifecycle check) and `connect_test.go` (`ConnectWithRetry` context cancellation). All integration tests use `testutil.SetupTestEnvironment(t)`, which spins up containerized Postgres and MinIO via Docker/Orbstack.
 
 ## Dependencies
 
