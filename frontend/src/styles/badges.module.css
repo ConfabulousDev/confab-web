@@ -1,0 +1,32 @@
+/* Shared per-message badge styling for cost-mode chrome (CF-362).
+   Consumed via `composes:` from TimelineMessage.module.css (Claude) and
+   CodexMessage.module.css (Codex). Keeps the two providers visually
+   identical — tweak in one place, both update. */
+
+.costBadge {
+  font-size: var(--font-xs);
+  color: var(--color-cost);
+  padding: 1px var(--spacing-xs);
+  background: var(--color-cost-bg);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.tokenPill {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  padding: 1px var(--spacing-xs);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.cachePill {
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+  padding: 1px var(--spacing-xs);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, monospace;
+  opacity: 0.7;
+}

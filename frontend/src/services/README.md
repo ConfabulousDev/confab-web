@@ -75,9 +75,15 @@ without re-fetching:
 2. **`normalizeCodexLines(rawLines)`** -- Pure synchronous transform that
    collapses the rich, partially-redundant Codex stream into a clean
    `CodexRenderItem[]` for the timeline. Responsibilities:
-   - Drop noise: `session_meta`, `turn_context`, `event_msg.token_count`,
+   - Drop noise: `session_meta`, `turn_context`,
      `event_msg.task_started`, `event_msg.user_message`,
      `event_msg.agent_message`, `response_item.message[role=developer]`.
+   - **CF-362 — `event_msg.token_count`**: never emits a render item, but
+     walks `items` backwards to find the most-recent assistant item whose
+     `usage` is still undefined and attaches `info.last_token_usage` to it
+     (handles multi-API-call turns: each `token_count` binds to its own
+     assistant message). No-op if the delta is missing or no assistant has
+     been emitted yet.
    - Strip `<environment_context>…</environment_context>` blocks from user
      message text.
    - Strip the Codex exec output preamble (`Chunk ID:`, `Wall time:`,

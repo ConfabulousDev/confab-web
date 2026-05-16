@@ -13,7 +13,7 @@ consume a separate render-item model produced by `services/codexTranscriptServic
 | `ContentBlock.tsx` | Dispatcher that renders content blocks by type (text, thinking, tool_use, tool_result, image, unknown). Uses the shared `renderMarkdownToHtml` helper from `@/utils/markdown` |
 | `CodeBlock.tsx` | Syntax-highlighted code with Prism.js, copy button, line truncation, and search highlighting |
 | `BashOutput.tsx` | Terminal-style bash command output with error styling |
-| `CostBar.tsx` | Vertical cost heatmap bar alongside the transcript (intensity = cost per API call) |
+| `CostBar.tsx` | Provider-agnostic vertical cost heatmap bar. Driven by `{ layout, costByIndex, segmentUniqueCounts, totalCost, onSeek }` — caller computes the layout (via `useSegmentLayout` / `useCodexSegmentLayout`) and the per-segment unique-call counts (`message.id` dedup for Claude; assistant-kind count for Codex). Intensity = cost per API call (CF-362) |
 | `TimelineBar.tsx` | Vertical timeline bar showing user/assistant turn segments with duration tooltips |
 | `timelineFormat.ts` | `formatDuration` — shared `1h 15m` / `5m 30s` / `500ms` formatter for both Claude and Codex tooltip prose |
 | `timelineSegments.ts` | Claude segment compute (`useSegmentLayout`) + generic `useBlendedSegmentLayout` hook (size + position math, also consumed by Codex's bar) |
@@ -55,14 +55,14 @@ layer.
 
 | File | Role |
 |------|------|
-| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Owns selection state (`firstVisibleIndex`, `selectedIndex`), scroll buttons, the timeline bar, and time-separator injection. Dispatches each item to its renderer by `kind`, threading `isSelected` / `isNewSpeaker` / `isDeepLinkTarget` (CF-360) plus per-row `sessionId` and `onSkipToNext` / `onSkipToPrevious` callbacks (CF-360). Accepts a `targetLineId` prop for `?msg=<lineId>` deep linking and a `targetLineIdHidden` placeholder reserved for CF-361 filter-reset wiring |
-| `CodexTimelineBar.tsx` | Vertical navigation rail. Each turn emits up to two clickable segments — a user thinking-gap stripe and an assistant body stripe — matching the Claude `TimelineBar` color language. Click-to-seek, hover tooltips (`User: 30s, 1 item` / `Codex: 5m, 12 items`), and a position indicator driven by the parent's `selectedIndex`. Consumes `useCodexSegmentLayout` |
+| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Owns selection state (`firstVisibleIndex`, `selectedIndex`), scroll buttons, the timeline bar, and time-separator injection. Dispatches each item to its renderer by `kind`, threading `isSelected` / `isNewSpeaker` / `isDeepLinkTarget` (CF-360) plus per-row `sessionId` and `onSkipToNext` / `onSkipToPrevious` callbacks (CF-360). Accepts a `targetLineId` prop for `?msg=<lineId>` deep linking. CF-362: also computes `segmentLayout` once via `useCodexSegmentLayout` and feeds it to BOTH `CodexTimelineBar` and `CostBar` so the two rails line up row-for-row; when `isCostMode` is true, builds `costByIndex` from `assistant.usage` via `calculateCodexAssistantCost`, renders the slide-in `CostBar` to the left of the timeline bar, and forwards `messageCost` to `CodexAssistantMessage` |
+| `CodexTimelineBar.tsx` | Vertical navigation rail. Each turn emits up to two clickable segments — a user thinking-gap stripe and an assistant body stripe — matching the Claude `TimelineBar` color language. Click-to-seek, hover tooltips (`User: 30s, 1 item` / `Codex: 5m, 12 items`), and a position indicator. CF-362: takes the precomputed `BlendedSegmentLayout<CodexTimelineSegment>` as a prop instead of calling the hook itself, so the cost bar and timeline bar share one layout instance |
 | `codexTimelineSegments.ts` | `CodexSpeaker`, `CodexTimelineSegment`, `computeCodexSegments`, `useCodexSegmentLayout`. Per turn, emits a user segment sized by the wall-clock gap from the prior separator (synthetic 1s for turn 1 / zero-or-negative gaps) and an assistant body segment for the rest of the slice. Slices with no user item (compaction-only) collapse to one assistant segment. Layout math shared via `useBlendedSegmentLayout` |
 | `codexVirtualItems.ts` | Pure `buildVirtualItems(items)` that injects `>5min` time separators and tags each item with `isNewSpeaker`. The speaker rule is Codex-specific: `tool_call` / `reasoning_hidden` / `turn_separator` / `compacted` / `unknown` items do NOT break user/assistant continuity, so `user → tool_call → user` is the same speaker. Also exports `skipNavKey` / `skipNavLabel` (CF-360) — the chain-key + aria-label mapping used for skip-to-next-of-same-kind navigation |
 | `extractCodexItemText.ts` | CF-359 per-kind text projection (`(item: CodexRenderItem) => string`) consumed by the generic `useTranscriptSearch` hook. Returns user/assistant `text`, exec `cmd` + output, apply_patch diff + file paths, web_search queries, generic rawInput + rawOutput, the visible `compacted` label, and stringified `unknown` raw JSON. `turn_separator` and `reasoning_hidden` return `""` so they never match |
 | `CodexRowActions.tsx` | CF-360 per-row chrome shared by all seven renderers. Renders, into the header-right slot, `[prev-skip?] [next-skip?] [copy-text?] [copy-link]`. Copy-link is always rendered; copy-text is hidden when `copyText` is empty/whitespace; skip buttons are hidden when their callbacks are absent. Copy-link URL format: `${origin}/sessions/${sessionId}?tab=transcript&msg=${lineId}` (matches Claude exactly) |
 | `CodexUserMessage.tsx` | User prompt in a chat row, with timestamp. Body renders through `CodexMessageBody`. Accepts `isSelected` + `isNewSpeaker` for selection ring and speaker-change spacing, plus `isDeepLinkTarget`, `sessionId`, `onSkipToNext`, `onSkipToPrevious`, and `kindLabel` for the CF-360 row chrome |
-| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody`. Accepts the same chrome props as `CodexUserMessage` |
+| `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody`. Accepts the same chrome props as `CodexUserMessage`. CF-362: when `isCostMode && messageCost > 0 && item.usage`, renders `$cost` / `N in · N out` / `N hit` (when cached) badges in the header right-slot, all sharing a verbose `buildCodexCostTooltip` title attribute |
 | `CodexMessageBody.tsx` | Shared rendering path for user + assistant text. JSON-shaped text pretty-prints via `CodeBlock` (`language="json"`); everything else flows through `renderMarkdownToHtml`. Mirrors `ContentBlock.tsx`'s text-block contract |
 | `CodexMessageImages.tsx` | CF-388 shared image gallery for user + assistant messages. Renders one `<img loading="lazy">` per entry in `images`, parameterized by `altPrefix` (`User-attached image` vs `Assistant-generated image`). Same dimension caps as `ContentBlock`'s image render for cross-provider visual parity |
 | `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s. Accepts the chrome props (`sessionId`, `isDeepLinkTarget`, `onSkipToNext` / `onSkipToPrevious`, `kindLabel`); `isNewSpeaker` is no-op per the Codex speaker rule |
@@ -72,11 +72,11 @@ layer.
 | `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-link-only chrome |
 | `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-text uses `stringifyForDisplay(rawLine)` so users can dump the unknown payload |
 | `codexFormat.ts` | Shared formatters: `formatCodexTimestamp`, `formatDurationMs`, `leafFileName`, `stringifyForDisplay` |
-| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint), `.newSpeaker` (extra top margin), `.deepLinkTarget` (composes `deepLinkPulse` from `@/styles/animations.module.css`; accent ring overrides the grey selection ring on hover), and `.searchMatch` (amber ring — CF-359; source-ordered after `.selected` / `.deepLinkTarget` so it wins via the cascade) |
+| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint), `.newSpeaker` (extra top margin), `.deepLinkTarget` (composes `deepLinkPulse` from `@/styles/animations.module.css`; accent ring overrides the grey selection ring on hover), `.searchMatch` (amber ring — CF-359; source-ordered after `.selected` / `.deepLinkTarget` so it wins via the cascade), and `.costBadge` / `.tokenPill` / `.cachePill` composed from `@/styles/badges.module.css` (CF-362; shared with Claude `TimelineMessage.module.css`) |
 | `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips). Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
 | `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, unknown fallback. Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
 | `CodexRowActions.module.css` | CF-360 button-strip chrome (icon button states, copy-success colour) |
-| `CodexMessageTimeline.module.css` | Container (flex with bar on the right), virtualizer slot positioning, scroll chrome, time-separator divider |
+| `CodexMessageTimeline.module.css` | Container (flex with bar on the right), virtualizer slot positioning, scroll chrome, time-separator divider, and CF-362 `.costBarWrapper` / `.costBarWrapperVisible` slide-in for the cost bar |
 | `CodexTimelineBar.module.css` | Vertical-bar chrome: segments, position indicator, hover tooltip |
 
 CF-349 shipped v1 as read-only display. CF-358 brought rendering parity
@@ -100,8 +100,14 @@ or `renderTextWithHighlight` (command line, file paths, query chips,
 divider labels), `CodexUnknownItem` auto-opens its `<details>` when a
 match lands inside, and `CodeBlock`'s search-driven auto-expand fires
 on truncated `apply_patch` / generic tool blocks (now opt-in via
-`truncateLines={100}`). Still deferred: filter chips (CF-361), and
-cost mode (CF-362).
+`truncateLines={100}`). CF-362 added Codex cost mode: `event_msg.token_count`
+now writes `last_token_usage` onto the preceding assistant render-item's
+new `usage` field (`normalizeCodexLines` walks backwards to find the
+most-recent unannotated assistant of any phase, so multi-call turns get
+per-call attribution), `CodexAssistantMessage` renders `$cost` / `N in · N
+out` / `N hit` badges with a verbose tooltip, and a slide-in `CostBar`
+appears next to `CodexTimelineBar` driven by the same `BlendedSegmentLayout`
+instance so the two rails line up.
 
 **Known gaps (deferred — see TODOs at the referenced sites):**
 - Plaintext `reasoning` is not rendered — every reasoning line emits a
@@ -120,8 +126,8 @@ cost mode (CF-362).
 Vertical navigation bars displayed alongside the transcript:
 - **TimelineBar** (Claude) shows user (blue) and assistant (warm orange) turn segments derived from user-prompt boundaries, sized by a blended time+message-count metric. Clicking a segment scrolls to those messages.
 - **CodexTimelineBar** (Codex) renders the same user (blue) + assistant (warm orange) palette per turn. The user segment is sized by the wall-clock gap from the prior separator to the current user prompt (synthetic 1s for turn 1 or zero-gap turns); the assistant segment is sized by the separator's `durationMs`. Tooltip wording is `User: <dur>, 1 item` / `Codex: <dur>, N items` — no TTFT, no turn index. Same sizing math and position indicator as Claude.
-- **CostBar** (Claude only) shows cost density as green intensity (per-API-call cost, not total segment cost). Only visible in cost mode.
-- All three share layout computation via `useBlendedSegmentLayout` (in `timelineSegments.ts`) to guarantee identical sizing and position-indicator placement. Each provider supplies its own segment-derivation function (`useSegmentLayout` / `useCodexSegmentLayout`).
+- **CostBar** (CF-362: both providers) shows cost density as green intensity (per-API-call cost, not total segment cost). Only visible in cost mode. Provider-agnostic by design — caller supplies the `BlendedSegmentLayout`, the per-index cost map, and the per-segment unique-API-call count (Claude dedupes by `message.id`; Codex counts `assistant`-kind items).
+- All four share layout computation via `useBlendedSegmentLayout` (in `timelineSegments.ts`) to guarantee identical sizing and position-indicator placement. Each provider supplies its own segment-derivation function (`useSegmentLayout` / `useCodexSegmentLayout`). For Codex, `CodexMessageTimeline` calls the hook ONCE and passes the result to both `CodexTimelineBar` and `CostBar` so the rails line up row-for-row.
 
 ## Key Types
 

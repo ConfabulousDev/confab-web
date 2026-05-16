@@ -323,12 +323,12 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
   }, [messages, isCodex, codexRawLines, session.first_seen, session.last_sync_at]);
 
   // The transcript header controls (filter chips) apply to both providers on
-  // the Transcript tab (CF-361 added Codex filter chips). Cost mode is still
-  // Claude-only.
+  // the Transcript tab (CF-361 added Codex filter chips). CF-362 enables the
+  // cost-mode toggle for Codex too once per-message usage is wired.
   const showTranscriptControls = activeTab === 'transcript';
   const showClaudeFilters = showTranscriptControls && !isCodex;
   const showCodexFilters = showTranscriptControls && isCodex;
-  const showCostToggle = showTranscriptControls && !isCodex;
+  const showCostToggle = showTranscriptControls;
 
   return (
     <div className={styles.sessionViewer}>
@@ -409,6 +409,7 @@ function SessionViewer({ session, onShare, onDelete, onSessionUpdate, isOwner = 
                   loading={loading}
                   error={error}
                   targetLineId={targetMessageUuid}
+                  isCostMode={isCostMode}
                 />
               ) : (
                 <ClaudeTranscriptPane

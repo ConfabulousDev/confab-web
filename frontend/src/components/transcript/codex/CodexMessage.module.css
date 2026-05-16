@@ -133,3 +133,17 @@
 .message.searchMatch {
   box-shadow: inset 0 0 0 2px var(--color-warning);
 }
+
+/* CF-362: cost-mode chrome composed from the shared badges module so Claude
+   and Codex stay visually identical. */
+.costBadge {
+  composes: costBadge from '@/styles/badges.module.css';
+}
+
+.tokenPill {
+  composes: tokenPill from '@/styles/badges.module.css';
+}
+
+.cachePill {
+  composes: cachePill from '@/styles/badges.module.css';
+}

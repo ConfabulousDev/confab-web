@@ -658,3 +658,112 @@ describe('extractCodexModel', () => {
     expect(extractCodexModel(lines)).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// CF-362 — token_count → assistant item usage attribution.
+//
+// `event_msg.token_count` carries `info.last_token_usage` (per-call delta).
+// On each occurrence, attach the delta to the most-recent assistant render-item
+// whose `usage` is still undefined — walking backwards from the end of the
+// items array. Multi-call turns yield multiple token_count events; each
+// attributes to its own assistant item.
+// ---------------------------------------------------------------------------
+
+describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
+  const USAGE_1000_500 = `{"input_tokens":1000,"cached_input_tokens":0,"output_tokens":500,"reasoning_output_tokens":0,"total_tokens":1500}`;
+  const USAGE_2000_700 = `{"input_tokens":2000,"cached_input_tokens":300,"output_tokens":700,"reasoning_output_tokens":100,"total_tokens":2800}`;
+
+  it('attaches last_token_usage to the preceding assistant final', () => {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5"}}',
+      '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}}',
+      '{"timestamp":"2026-05-13T01:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final","content":[{"type":"output_text","text":"hello"}]}}',
+      `{"timestamp":"2026-05-13T01:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${USAGE_1000_500},"total_token_usage":${USAGE_1000_500}}}}`,
+    ].join('\n');
+    const result = items(jsonl);
+    const assistantItems = result.filter((i) => i.kind === 'assistant');
+    expect(assistantItems).toHaveLength(1);
+    const a = assistantItems[0];
+    if (a?.kind !== 'assistant') throw new Error('expected assistant');
+    expect(a.usage).toEqual({
+      input_tokens: 1000,
+      output_tokens: 500,
+      cached_input_tokens: 0,
+      reasoning_output_tokens: 0,
+    });
+  });
+
+  it('attaches usage to the most-recent assistant of ANY phase when no final exists yet', () => {
+    // First API call ends with commentary + a function_call_output, then a
+    // token_count event. That commentary should carry the usage.
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5"}}',
+      '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"thinking out loud"}]}}',
+      `{"timestamp":"2026-05-13T01:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${USAGE_1000_500}}}}`,
+    ].join('\n');
+    const result = items(jsonl);
+    const a = result.find((i) => i.kind === 'assistant');
+    if (a?.kind !== 'assistant') throw new Error('expected assistant');
+    expect(a.phase).toBe('commentary');
+    expect(a.usage?.input_tokens).toBe(1000);
+  });
+
+  it('gives each multi-call assistant item its own usage (commentary then final)', () => {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5"}}',
+      '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"first call"}]}}',
+      `{"timestamp":"2026-05-13T01:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${USAGE_1000_500}}}}`,
+      '{"timestamp":"2026-05-13T01:00:03Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final","content":[{"type":"output_text","text":"second call"}]}}',
+      `{"timestamp":"2026-05-13T01:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${USAGE_2000_700}}}}`,
+    ].join('\n');
+    const result = items(jsonl);
+    const [first, second] = result.filter((i) => i.kind === 'assistant');
+    if (first?.kind !== 'assistant' || second?.kind !== 'assistant') {
+      throw new Error('expected two assistant items');
+    }
+    expect(first.phase).toBe('commentary');
+    expect(first.usage?.input_tokens).toBe(1000);
+    expect(second.phase).toBe('final');
+    expect(second.usage?.input_tokens).toBe(2000);
+    expect(second.usage?.cached_input_tokens).toBe(300);
+    expect(second.usage?.reasoning_output_tokens).toBe(100);
+  });
+
+  it('is a no-op when token_count arrives before any assistant message', () => {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5"}}',
+      `{"timestamp":"2026-05-13T01:00:01Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${USAGE_1000_500}}}}`,
+      '{"timestamp":"2026-05-13T01:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final","content":[{"type":"output_text","text":"hi"}]}}',
+    ].join('\n');
+    // Must not throw; later assistant must NOT inherit the orphan usage.
+    const result = items(jsonl);
+    const a = result.find((i) => i.kind === 'assistant');
+    if (a?.kind !== 'assistant') throw new Error('expected assistant');
+    expect(a.usage).toBeUndefined();
+  });
+
+  it('is a no-op when info or last_token_usage is null/missing', () => {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5"}}',
+      '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final","content":[{"type":"output_text","text":"hi"}]}}',
+      '{"timestamp":"2026-05-13T01:00:02Z","type":"event_msg","payload":{"type":"token_count","info":null}}',
+      `{"timestamp":"2026-05-13T01:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":${USAGE_1000_500}}}}`,
+    ].join('\n');
+    const result = items(jsonl);
+    const a = result.find((i) => i.kind === 'assistant');
+    if (a?.kind !== 'assistant') throw new Error('expected assistant');
+    expect(a.usage).toBeUndefined();
+  });
+
+  it('does NOT emit a render item for the token_count event itself', () => {
+    // token_count is a side-channel — it should never produce a row.
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5"}}',
+      '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final","content":[{"type":"output_text","text":"hi"}]}}',
+      `{"timestamp":"2026-05-13T01:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${USAGE_1000_500}}}}`,
+    ].join('\n');
+    const result = items(jsonl);
+    // Only the assistant item; no unknown / extra row from the token_count.
+    expect(result.map((i) => i.kind)).toEqual(['assistant']);
+  });
+});

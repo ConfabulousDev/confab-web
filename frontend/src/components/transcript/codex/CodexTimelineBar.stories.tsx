@@ -1,7 +1,23 @@
 import { useState, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import CodexTimelineBar from './CodexTimelineBar';
+import { useCodexSegmentLayout } from './codexTimelineSegments';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
+
+// CF-362: CodexTimelineBar now takes a precomputed layout. Stories drive
+// it via this thin wrapper to keep the story bodies focused on item shapes.
+function Bar({
+  items,
+  selectedIndex = 0,
+  onSeek,
+}: {
+  items: CodexRenderItem[];
+  selectedIndex?: number;
+  onSeek: (idx: number) => void;
+}) {
+  const layout = useCodexSegmentLayout(items, selectedIndex);
+  return <CodexTimelineBar layout={layout} onSeek={onSeek} />;
+}
 
 const meta: Meta<typeof CodexTimelineBar> = {
   title: 'Transcript/Codex/CodexTimelineBar',
@@ -95,7 +111,7 @@ function MultipleTurnsDemo() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   return (
     <BarFrame label="Multiple turns — hover segments to see tooltip; click to update selectedIndex.">
-      <CodexTimelineBar
+      <Bar
         items={multipleTurns}
         selectedIndex={selectedIndex}
         onSeek={(idx) => setSelectedIndex(idx)}
@@ -111,7 +127,7 @@ export const MultipleTurns: Story = {
 export const SingleTurn: Story = {
   render: () => (
     <BarFrame label="Single completed turn.">
-      <CodexTimelineBar items={singleTurn} selectedIndex={0} onSeek={() => undefined} />
+      <Bar items={singleTurn} selectedIndex={0} onSeek={() => undefined} />
     </BarFrame>
   ),
 };
@@ -119,7 +135,7 @@ export const SingleTurn: Story = {
 export const InFlight: Story = {
   render: () => (
     <BarFrame label="In-flight turn (no separator yet).">
-      <CodexTimelineBar items={inFlight} selectedIndex={0} onSeek={() => undefined} />
+      <Bar items={inFlight} selectedIndex={0} onSeek={() => undefined} />
     </BarFrame>
   ),
 };
@@ -127,7 +143,7 @@ export const InFlight: Story = {
 export const Empty: Story = {
   render: () => (
     <BarFrame label="Empty items — bar renders nothing.">
-      <CodexTimelineBar items={[]} selectedIndex={0} onSeek={() => undefined} />
+      <Bar items={[]} selectedIndex={0} onSeek={() => undefined} />
     </BarFrame>
   ),
 };
@@ -146,7 +162,7 @@ const longUserGap: CodexRenderItem[] = [
 export const LongUserGap: Story = {
   render: () => (
     <BarFrame label="Two turns with a long user thinking gap between them — note the dominant blue stripe.">
-      <CodexTimelineBar items={longUserGap} selectedIndex={0} onSeek={() => undefined} />
+      <Bar items={longUserGap} selectedIndex={0} onSeek={() => undefined} />
     </BarFrame>
   ),
 };

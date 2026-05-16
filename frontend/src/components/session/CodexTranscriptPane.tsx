@@ -32,6 +32,8 @@ export interface CodexTranscriptPaneProps {
    * the string is reinterpreted as a lineId.
    */
   targetLineId?: string;
+  /** CF-362: cost mode (per-message badges + CostBar side rail). */
+  isCostMode?: boolean;
 }
 
 export default function CodexTranscriptPane({
@@ -42,6 +44,7 @@ export default function CodexTranscriptPane({
   loading,
   error,
   targetLineId,
+  isCostMode,
 }: CodexTranscriptPaneProps) {
   if (loading || error) {
     return <TranscriptPaneStatus loading={loading} error={error} />;
@@ -54,6 +57,7 @@ export default function CodexTranscriptPane({
       visibleIndices={visibleIndices}
       sessionId={sessionId}
       targetLineId={targetLineId}
+      isCostMode={isCostMode}
     />
   );
 }

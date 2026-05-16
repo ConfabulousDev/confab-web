@@ -4,10 +4,12 @@
 // regardless of provider; the difference is entirely in the parse layer.
 
 import type {
+  CodexAssistantUsage,
   CodexRenderItem,
   CodexToolCallItem,
   CodexTurnSeparatorItem,
 } from '@/types/codexRenderItem';
+import type { CodexTokenUsageDetails } from '@/schemas/codexTranscript';
 import {
   type TranscriptValidationError,
   formatValidationErrorsForLog,
@@ -264,6 +266,36 @@ function tryParseJSON(raw: string): unknown {
     return JSON.parse(raw);
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * CF-362: attach a `last_token_usage` delta to the most-recent assistant
+ * item that doesn't already have usage. Walking backwards handles multi-call
+ * turns (commentary → token_count → final → token_count) where each
+ * inference's cost lands on its own assistant message. No-op if the delta is
+ * missing or no assistant has been emitted yet.
+ */
+function attachTokenCountToAssistant(
+  items: CodexRenderItem[],
+  delta: CodexTokenUsageDetails | undefined,
+): void {
+  if (!delta) return;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (!item || item.kind !== 'assistant' || item.usage !== undefined) continue;
+    const usage: CodexAssistantUsage = {
+      input_tokens: delta.input_tokens,
+      output_tokens: delta.output_tokens,
+    };
+    if (delta.cached_input_tokens !== undefined) {
+      usage.cached_input_tokens = delta.cached_input_tokens;
+    }
+    if (delta.reasoning_output_tokens !== undefined) {
+      usage.reasoning_output_tokens = delta.reasoning_output_tokens;
+    }
+    items[i] = { ...item, usage };
+    return;
   }
 }
 
@@ -559,8 +591,15 @@ function handleEventMsg(
   switch (payload.type) {
     case 'user_message':
     case 'agent_message':
+      // Dropped: redundant with response_item.
+      return {};
     case 'token_count':
-      // Dropped: redundant with response_item, or pure metadata.
+      // CF-362: per-API-call usage. Attach `last_token_usage` to the most-
+      // recent unannotated assistant render-item (any phase). One model
+      // inference produces a group of response_items; the assistant message
+      // among them is the natural anchor for cost. Multi-call turns produce
+      // multiple token_count events, each binding to its own assistant item.
+      attachTokenCountToAssistant(items, payload.info?.last_token_usage);
       return {};
     case 'task_started':
       return payload.model ? { modelUpdate: payload.model } : {};

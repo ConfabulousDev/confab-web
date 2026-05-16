@@ -8,6 +8,19 @@
   height: 100%;
 }
 
+/* CF-362: slide-in cost bar wrapper to the LEFT of CodexTimelineBar.
+   Mirrors `MessageTimeline.module.css` for visual parity across providers. */
+.costBarWrapper {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.2s ease;
+  flex-shrink: 0;
+}
+
+.costBarWrapperVisible {
+  width: 22px;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;

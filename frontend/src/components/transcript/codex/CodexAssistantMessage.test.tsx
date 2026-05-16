@@ -148,4 +148,126 @@ describe('CodexAssistantMessage', () => {
       expect(container.querySelector('img')).toBeNull();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // CF-362 — cost-mode badges
+  // ---------------------------------------------------------------------------
+
+  describe('cost mode', () => {
+    const usage = {
+      input_tokens: 12_345,
+      output_tokens: 1_200,
+      cached_input_tokens: 200,
+      reasoning_output_tokens: 250,
+    };
+
+    it('renders the $ cost badge when isCostMode is on and messageCost is provided', () => {
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage })}
+          isCostMode
+          messageCost={0.42}
+        />,
+      );
+      expect(screen.getByText('$0.42')).toBeInTheDocument();
+    });
+
+    it('renders a token pill showing gross input and (output + reasoning) output', () => {
+      // Use a reasoning value that produces a crisp rounded display.
+      const pillUsage = {
+        input_tokens: 12_345,
+        output_tokens: 1_200,
+        reasoning_output_tokens: 300, // 1200 + 300 = 1500 -> "1.5k"
+      };
+      const { container } = render(
+        <CodexAssistantMessage
+          item={assistant({ usage: pillUsage })}
+          isCostMode
+          messageCost={0.42}
+        />,
+      );
+      // The pill is a single <span> with `{N} in · {N} out` JSX that yields
+      // multiple text nodes; assert on the merged textContent instead of
+      // relying on getByText to walk across text-node boundaries.
+      const pill = Array.from(container.querySelectorAll('span')).find((el) =>
+        /\bin\b/.test(el.textContent ?? '') && /\bout\b/.test(el.textContent ?? ''),
+      );
+      expect(pill).toBeTruthy();
+      expect(pill?.textContent).toMatch(/12\.3k\s*in/);
+      expect(pill?.textContent).toMatch(/1\.5k\s*out/);
+    });
+
+    it('renders a cache pill when cached_input_tokens > 0', () => {
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage })}
+          isCostMode
+          messageCost={0.42}
+        />,
+      );
+      expect(screen.getByText(/200 hit/)).toBeInTheDocument();
+    });
+
+    it('omits the cache pill when cached_input_tokens is 0', () => {
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage: { ...usage, cached_input_tokens: 0 } })}
+          isCostMode
+          messageCost={0.42}
+        />,
+      );
+      expect(screen.queryByText(/hit/)).not.toBeInTheDocument();
+    });
+
+    it('does not render any cost badges when isCostMode is false', () => {
+      const { container } = render(
+        <CodexAssistantMessage
+          item={assistant({ usage })}
+          isCostMode={false}
+          messageCost={0.42}
+        />,
+      );
+      expect(screen.queryByText('$0.42')).not.toBeInTheDocument();
+      // No span carries the "N in · N out" pill text.
+      const pill = Array.from(container.querySelectorAll('span')).find((el) =>
+        /\bin\b/.test(el.textContent ?? '') && /\bout\b/.test(el.textContent ?? ''),
+      );
+      expect(pill).toBeUndefined();
+    });
+
+    it('does not render badges when usage is undefined (no token_count seen yet)', () => {
+      render(
+        <CodexAssistantMessage item={assistant()} isCostMode messageCost={0.42} />,
+      );
+      expect(screen.queryByText('$0.42')).not.toBeInTheDocument();
+    });
+
+    it('does not render badges when messageCost is 0 (zero-cost no-op call)', () => {
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage })}
+          isCostMode
+          messageCost={0}
+        />,
+      );
+      expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+    });
+
+    it('attaches a verbose multi-line tooltip on the cost badge', () => {
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage })}
+          isCostMode
+          messageCost={0.42}
+        />,
+      );
+      const costBadge = screen.getByText('$0.42');
+      const tooltip = costBadge.getAttribute('title');
+      expect(tooltip).toBeTruthy();
+      expect(tooltip).toContain('$0.42');
+      expect(tooltip).toContain('Input tokens (in): 12,345');
+      expect(tooltip).toContain('Cached (hit): 200');
+      expect(tooltip).toContain('Reasoning: 250');
+    });
+  });
 });

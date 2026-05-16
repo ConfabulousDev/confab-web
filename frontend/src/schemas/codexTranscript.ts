@@ -221,10 +221,36 @@ const CodexEventTaskCompleteSchema = z
   })
   .passthrough();
 
+// CF-362: per-API-call token usage. `cached_input_tokens` is a SUBSET of
+// `input_tokens` (OpenAI semantics — verified against
+// backend/internal/analytics/codex_adapter.go:56-83). Reasoning tokens are
+// billed at the output rate. Total is informational; we don't depend on it.
+const CodexTokenUsageDetailsSchema = z
+  .object({
+    input_tokens: z.number(),
+    cached_input_tokens: z.number().optional(),
+    output_tokens: z.number(),
+    reasoning_output_tokens: z.number().optional(),
+    total_tokens: z.number().optional(),
+  })
+  .passthrough();
+
+export type CodexTokenUsageDetails = z.infer<typeof CodexTokenUsageDetailsSchema>;
+
+// `info` is `null` in real rollouts when the model didn't report usage (e.g.
+// the first task_started before any model response). Keep the parent
+// `.nullable()` so those lines still validate.
+const CodexTokenCountInfoSchema = z
+  .object({
+    last_token_usage: CodexTokenUsageDetailsSchema.optional(),
+    total_token_usage: CodexTokenUsageDetailsSchema.optional(),
+  })
+  .passthrough();
+
 const CodexEventTokenCountSchema = z
   .object({
     type: z.literal('token_count'),
-    info: z.unknown().nullable().optional(),
+    info: CodexTokenCountInfoSchema.nullable().optional(),
     rate_limits: z.unknown().optional(),
   })
   .passthrough();

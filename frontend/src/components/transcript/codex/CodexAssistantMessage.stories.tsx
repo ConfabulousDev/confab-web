@@ -80,3 +80,48 @@ export const WithImage: Story = {
     }),
   },
 };
+
+// ---------------------------------------------------------------------------
+// CF-362 — cost-mode badges
+// ---------------------------------------------------------------------------
+
+export const CostModeFinal: Story = {
+  args: {
+    item: item({
+      usage: { input_tokens: 12_345, output_tokens: 1_200 },
+    }),
+    isCostMode: true,
+    messageCost: 0.0274,
+  },
+};
+
+export const CostModeWithCache: Story = {
+  args: {
+    item: item({
+      usage: {
+        input_tokens: 80_000,
+        cached_input_tokens: 50_000,
+        output_tokens: 3_500,
+      },
+    }),
+    isCostMode: true,
+    messageCost: 0.0469,
+  },
+};
+
+export const CostModeWithReasoning: Story = {
+  args: {
+    item: item({
+      phase: 'commentary',
+      text: '*Thinking through the configuration changes...*',
+      model: 'o3',
+      usage: {
+        input_tokens: 5_000,
+        output_tokens: 400,
+        reasoning_output_tokens: 2_000,
+      },
+    }),
+    isCostMode: true,
+    messageCost: 0.029,
+  },
+};

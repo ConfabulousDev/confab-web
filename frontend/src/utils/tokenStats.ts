@@ -1,5 +1,6 @@
 import type { TranscriptLine } from '@/types';
 import { isAssistantMessage } from '@/types';
+import type { CodexAssistantUsage } from '@/types/codexRenderItem';
 
 // Pricing per million tokens (5-minute cache pricing)
 // Source: https://www.anthropic.com/pricing
@@ -138,6 +139,58 @@ export function calculateMessageCost(message: TranscriptLine): number {
   cost += (usage.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_COST_PER_REQUEST;
 
   return cost;
+}
+
+/**
+ * CF-362: per-API-call cost for a Codex assistant message.
+ *
+ * Mirrors `applyCodexTokens` in backend/internal/analytics/codex_adapter.go:
+ *   uncached = max(0, input_tokens - cached_input_tokens)
+ *   output   = output_tokens + reasoning_output_tokens
+ *   cost     = uncached * input_rate
+ *            + cached   * cache_read_rate
+ *            + output   * output_rate
+ *
+ * OpenAI cache writes are free, so `cacheWrite` is unused. Unknown models
+ * fall through `getPricing`'s zero-pricing path, returning $0 with a warning.
+ */
+export function calculateCodexAssistantCost(
+  model: string,
+  usage: CodexAssistantUsage,
+): number {
+  const pricing = getPricing(model);
+  const cached = usage.cached_input_tokens ?? 0;
+  const uncached = Math.max(0, usage.input_tokens - cached);
+  const output = usage.output_tokens + (usage.reasoning_output_tokens ?? 0);
+  return (
+    (uncached * pricing.input + cached * pricing.cacheRead + output * pricing.output) /
+    1_000_000
+  );
+}
+
+/**
+ * CF-362: verbose multi-line tooltip for a Codex cost badge.
+ *
+ * Mirrors `buildCostTooltip` in `TimelineMessage.tsx` for visual parity, but
+ * omits Claude-only lines (speed, service_tier, server_tool_use) and adds
+ * Codex-specific sub-lines for cached input and reasoning output. Same first
+ * three lines (`$cost`, blank, `Input tokens (in): N`) so the formatting
+ * feels consistent across providers when toggling between sessions.
+ */
+export function buildCodexCostTooltip(
+  usage: CodexAssistantUsage,
+  cost: number,
+): string {
+  const lines: string[] = [formatCost(cost), ''];
+  lines.push(`Input tokens (in): ${usage.input_tokens.toLocaleString()}`);
+  if (usage.cached_input_tokens && usage.cached_input_tokens > 0) {
+    lines.push(`  Cached (hit): ${usage.cached_input_tokens.toLocaleString()}`);
+  }
+  lines.push(`Output tokens (out): ${usage.output_tokens.toLocaleString()}`);
+  if (usage.reasoning_output_tokens && usage.reasoning_output_tokens > 0) {
+    lines.push(`  Reasoning: ${usage.reasoning_output_tokens.toLocaleString()}`);
+  }
+  return lines.join('\n');
 }
 
 /**

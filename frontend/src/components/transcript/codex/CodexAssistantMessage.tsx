@@ -3,6 +3,11 @@
 // to the final answer in the same turn.
 
 import type { CodexAssistantItem } from '@/types/codexRenderItem';
+import {
+  buildCodexCostTooltip,
+  formatCost,
+  formatTokenCount,
+} from '@/utils/tokenStats';
 import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
 import CodexMessageBody from './CodexMessageBody';
@@ -33,6 +38,10 @@ export interface CodexAssistantMessageProps {
   searchQuery?: string;
   /** CF-359: this row is the active (n-of-N) search match — adds the amber ring. */
   isCurrentSearchMatch?: boolean;
+  /** CF-362: cost mode toggle — when true, render $ / token / cache badges. */
+  isCostMode?: boolean;
+  /** CF-362: precomputed cost for this row. Badges suppress when 0/missing. */
+  messageCost?: number;
 }
 
 export default function CodexAssistantMessage({
@@ -46,6 +55,8 @@ export default function CodexAssistantMessage({
   kindLabel,
   searchQuery,
   isCurrentSearchMatch,
+  isCostMode,
+  messageCost,
 }: CodexAssistantMessageProps) {
   const phaseClass = item.phase === 'commentary' ? styles.commentary : styles.final;
   const className = cx(
@@ -59,6 +70,20 @@ export default function CodexAssistantMessage({
   );
   const defaultLabel =
     item.phase === 'commentary' ? 'assistant commentary' : 'assistant answer';
+
+  // CF-362: badges render only when cost mode is on AND we have both usage
+  // and a positive cost. Zero-cost rows / rows missing usage stay clean.
+  const costBadges =
+    isCostMode && item.usage !== undefined && messageCost !== undefined && messageCost > 0
+      ? {
+          usage: item.usage,
+          cost: messageCost,
+          tooltip: buildCodexCostTooltip(item.usage, messageCost),
+          outputDisplay: item.usage.output_tokens + (item.usage.reasoning_output_tokens ?? 0),
+          cachedHit: item.usage.cached_input_tokens ?? 0,
+        }
+      : null;
+
   return (
     <div
       className={className}
@@ -71,6 +96,22 @@ export default function CodexAssistantMessage({
         </span>
         <span className={styles.modelBadge}>{item.model}</span>
         <span className={styles.timestamp}>{formatCodexTimestamp(item.timestamp)}</span>
+        {costBadges && (
+          <>
+            <span className={styles.costBadge} title={costBadges.tooltip}>
+              {formatCost(costBadges.cost)}
+            </span>
+            <span className={styles.tokenPill} title={costBadges.tooltip}>
+              {formatTokenCount(costBadges.usage.input_tokens)} in &middot;{' '}
+              {formatTokenCount(costBadges.outputDisplay)} out
+            </span>
+            {costBadges.cachedHit > 0 && (
+              <span className={styles.cachePill} title={costBadges.tooltip}>
+                {formatTokenCount(costBadges.cachedHit)} hit
+              </span>
+            )}
+          </>
+        )}
         {sessionId && (
           <CodexRowActions
             sessionId={sessionId}

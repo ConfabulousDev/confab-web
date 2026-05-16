@@ -8,7 +8,23 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import CodexTimelineBar from './CodexTimelineBar';
+import { useCodexSegmentLayout } from './codexTimelineSegments';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
+
+// CF-362: CodexTimelineBar now takes a precomputed layout (shared with
+// CostBar). Tests pass items via this thin wrapper that calls the hook.
+function Bar({
+  items,
+  selectedIndex = 0,
+  onSeek,
+}: {
+  items: CodexRenderItem[];
+  selectedIndex?: number;
+  onSeek: (idx: number) => void;
+}) {
+  const layout = useCodexSegmentLayout(items, selectedIndex);
+  return <CodexTimelineBar layout={layout} onSeek={onSeek} />;
+}
 
 function user(timestamp: string, text = 'hi'): CodexRenderItem {
   return { kind: 'user', lineId: '0', timestamp, text };
@@ -39,14 +55,14 @@ const twoTurnSession: CodexRenderItem[] = [
 describe('CodexTimelineBar', () => {
   it('renders nothing when there are no items', () => {
     const { container } = render(
-      <CodexTimelineBar items={[]} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={[]} selectedIndex={0} onSeek={() => undefined} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it('renders 2N segments for N completed turns (user + assistant alternating)', () => {
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     expect(segments).toHaveLength(4);
@@ -55,7 +71,7 @@ describe('CodexTimelineBar', () => {
   it('click on a user segment seeks to the user item index', () => {
     const onSeek = vi.fn();
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     // Order: [turn1 user, turn1 assistant, turn2 user, turn2 assistant]
@@ -66,7 +82,7 @@ describe('CodexTimelineBar', () => {
   it('click on an assistant segment seeks to the first item after the user', () => {
     const onSeek = vi.fn();
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={onSeek} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     fireEvent.click(segments[1]!); // turn 1 assistant
@@ -75,7 +91,7 @@ describe('CodexTimelineBar', () => {
 
   it('hover on a user segment shows "User: <dur>, 1 item"', () => {
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     fireEvent.mouseEnter(segments[2]!); // turn 2 user (real 54s gap)
@@ -84,7 +100,7 @@ describe('CodexTimelineBar', () => {
 
   it('hover on an assistant segment shows "Codex: <dur>, N items"', () => {
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     fireEvent.mouseEnter(segments[1]!); // turn 1 assistant: 6s, 2 items
@@ -93,7 +109,7 @@ describe('CodexTimelineBar', () => {
 
   it('tooltips do not show TTFT', () => {
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     fireEvent.mouseEnter(segments[1]!);
@@ -102,7 +118,7 @@ describe('CodexTimelineBar', () => {
 
   it('tooltips do not show turn index', () => {
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     fireEvent.mouseEnter(segments[1]!);
@@ -115,7 +131,7 @@ describe('CodexTimelineBar', () => {
       assistant('2026-05-13T18:00:05Z'),
     ];
     const { container } = render(
-      <CodexTimelineBar items={items} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={items} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     expect(segments).toHaveLength(2);
@@ -127,7 +143,7 @@ describe('CodexTimelineBar', () => {
       turnSep('2026-05-13T18:00:01Z', 1, 1000),
     ];
     const { container } = render(
-      <CodexTimelineBar items={items} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={items} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll('[data-codex-segment]');
     expect(segments).toHaveLength(1);
@@ -136,7 +152,7 @@ describe('CodexTimelineBar', () => {
 
   it('applies separate CSS classes to user vs assistant segments', () => {
     const { container } = render(
-      <CodexTimelineBar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
+      <Bar items={twoTurnSession} selectedIndex={0} onSeek={() => undefined} />,
     );
     const segments = container.querySelectorAll<HTMLElement>('[data-codex-segment]');
     // turn1 user, turn1 assistant should have different class lists

@@ -102,7 +102,10 @@ without erroring.
 - `event_msg.payload` is a union with six known shapes
   (`user_message`, `agent_message`, `task_started`, `task_complete`,
   `token_count`, `patch_apply_end`) plus a catch-all. Exported branch
-  types: `CodexEventPatchApplyEnd`, `CodexEventTaskComplete`.
+  types: `CodexEventPatchApplyEnd`, `CodexEventTaskComplete`,
+  `CodexTokenUsageDetails` (CF-362 — typed `info.last_token_usage` /
+  `info.total_token_usage` shape, consumed by the normalizer to attach
+  per-call usage to assistant render items).
 
 **Type predicates** (each narrows away the catch-all so a subsequent
 `switch` on `.type` discriminates cleanly between the known branches):

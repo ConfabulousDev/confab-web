@@ -8,16 +8,19 @@
 // segment's items are visible.
 
 import { useCallback, useState, useRef } from 'react';
-import type { CodexRenderItem } from '@/types/codexRenderItem';
 import { cx } from '@/utils/utils';
 import { formatDuration } from '../timelineFormat';
-import { useCodexSegmentLayout, type CodexTimelineSegment } from './codexTimelineSegments';
+import type { BlendedSegmentLayout } from '../timelineSegments';
+import type { CodexTimelineSegment } from './codexTimelineSegments';
 import styles from './CodexTimelineBar.module.css';
 
 export interface CodexTimelineBarProps {
-  items: CodexRenderItem[];
-  /** Index (into items) of the currently selected/active row — drives indicator. */
-  selectedIndex: number;
+  /**
+   * Precomputed segment layout. CF-362: the same layout instance feeds both
+   * `CodexTimelineBar` and `CostBar` so the two side-by-side rails line up
+   * row-for-row. Caller derives via `useCodexSegmentLayout(items, idx)`.
+   */
+  layout: BlendedSegmentLayout<CodexTimelineSegment>;
   /**
    * CF-361: indices into `items` whose category is currently visible under
    * the active filter. `undefined` means "no filter applied" — every segment
@@ -29,13 +32,12 @@ export interface CodexTimelineBarProps {
   onSeek: (startIndex: number) => void;
 }
 
-export default function CodexTimelineBar({ items, selectedIndex, visibleIndices, onSeek }: CodexTimelineBarProps) {
+export default function CodexTimelineBar({ layout, visibleIndices, onSeek }: CodexTimelineBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [hoveredSegment, setHoveredSegment] = useState<CodexTimelineSegment | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
-  const { segments, heightPercents, totalSize, indicatorPosition } =
-    useCodexSegmentLayout(items, selectedIndex);
+  const { segments, heightPercents, totalSize, indicatorPosition } = layout;
 
   const isSegmentFiltered = useCallback(
     (segment: CodexTimelineSegment): boolean => {

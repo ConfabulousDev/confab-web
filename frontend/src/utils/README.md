@@ -39,15 +39,17 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `calculateMessageCost` | `(message: TranscriptLine) => number` | Per-message USD cost from token usage (returns 0 for non-assistant messages) |
+| `calculateMessageCost` | `(message: TranscriptLine) => number` | Claude per-message USD cost from token usage (returns 0 for non-assistant messages) |
+| `calculateCodexAssistantCost` | `(model: string, usage: CodexAssistantUsage) => number` | Codex per-API-call USD cost. Mirrors `applyCodexTokens` in `backend/internal/analytics/codex_adapter.go`: subtract `cached_input_tokens` from `input_tokens` before applying input rate; fold `reasoning_output_tokens` into output billing; cache writes are free for OpenAI |
+| `buildCodexCostTooltip` | `(usage: CodexAssistantUsage, cost: number) => string` | Verbose multi-line tooltip for the Codex cost badge. Omits Claude-only lines (speed, service_tier, server_tool_use); adds Codex-specific sub-lines for cached input and reasoning output |
 | `formatCost` | `(usd: number) => string` | Format as "$0.42" or "<$0.01" |
 | `formatTokenCount` | `(count: number) => string` | Format as "500", "1.5k", "1.5M" |
 
-**Model pricing table** (`MODEL_PRICING`): Maps model families to per-million-token prices for input, output, cache write (1.25x input), and cache read (0.1x input). Unknown models use zero pricing (cost underreported rather than wrong).
+**Model pricing table** (`MODEL_PRICING`): Maps model families to per-million-token prices for input, output, cache write, and cache read. Covers Claude (Opus/Sonnet/Haiku families) and OpenAI/Codex models (gpt-5*, gpt-4o*, o1/o3/o4*). OpenAI entries set `cacheWrite: 0` (caching is free to write) and use the documented cached-input rate as `cacheRead`. Unknown models use zero pricing (cost underreported rather than wrong).
 
 **Server tool pricing**: `WEB_SEARCH_COST_PER_REQUEST = $0.01`
 
-**Fast mode**: 6x multiplier on all token costs when `speed === 'fast'`.
+**Fast mode**: 6x multiplier on all token costs when `speed === 'fast'` (Claude only — Codex has no equivalent toggle).
 
 ### sessionMeta.ts
 
@@ -98,11 +100,11 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 3. Add a `.test.ts` file with test cases
 
 ### Updating model pricing
-When adding a new Anthropic model, update `MODEL_PRICING` in **both**:
+When adding a new Anthropic OR OpenAI model, update `MODEL_PRICING` in **both**:
 - `frontend/src/utils/tokenStats.ts` (this file)
 - `backend/internal/analytics/pricing.go` (backend)
 
-These tables must stay in sync. Look up current prices on the Anthropic pricing page.
+These tables must stay in sync; `TestPricingTableSync` enforces this. Look up current prices on the Anthropic pricing page or OpenAI's developer pricing page. For OpenAI entries set `cacheWrite: 0` (writes are free) and put the documented cached-input rate in `cacheRead`.
 
 ## Invariants / Conventions
 

@@ -13,6 +13,7 @@ import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
 import { addCmdFListener, formatTimeSeparator, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import { useSegmentLayout } from '@/components/transcript/timelineSegments';
 import styles from './MessageTimeline.module.css';
 
 // Right offset for ScrollNavButtons when CostBar is visible.
@@ -66,6 +67,43 @@ function buildToolNameMap(messages: TranscriptLine[]): Map<string, string> {
   }
 
   return map;
+}
+
+// CF-362: CostBar moved to a provider-agnostic API. The Claude wrapper here
+// owns the dedup-by-message.id math (multiple JSONL lines per logical call)
+// so CostBar itself stays transcript-shape-free.
+interface CostBarSlotProps {
+  messages: TranscriptLine[];
+  messageCosts: Map<number, number>;
+  totalCost: number;
+  selectedIndex: number;
+  onSeek: (startIndex: number, endIndex: number) => void;
+}
+
+function CostBarSlot({ messages, messageCosts, totalCost, selectedIndex, onSeek }: CostBarSlotProps) {
+  const layout = useSegmentLayout(messages, selectedIndex);
+  const segmentUniqueCounts = useMemo(() => {
+    return layout.segments.map((seg) => {
+      const seen = new Set<string>();
+      for (let i = seg.startIndex; i <= seg.endIndex; i++) {
+        const msg = messages[i];
+        if (msg && isAssistantMessage(msg)) {
+          seen.add(msg.message.id);
+        }
+      }
+      return seen.size;
+    });
+  }, [layout.segments, messages]);
+
+  return (
+    <CostBar
+      layout={layout}
+      costByIndex={messageCosts}
+      segmentUniqueCounts={segmentUniqueCounts}
+      totalCost={totalCost}
+      onSeek={onSeek}
+    />
+  );
 }
 
 function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, tilsByMessageUuid }: MessageTimelineProps) {
@@ -495,7 +533,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
 
       <div className={`${styles.costBarWrapper} ${isCostMode ? styles.costBarWrapperVisible : ''}`}>
         {isCostMode && (
-          <CostBar
+          <CostBarSlot
             messages={allMessages}
             messageCosts={messageCosts}
             totalCost={totalCost}

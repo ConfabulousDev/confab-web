@@ -45,12 +45,33 @@ export interface CodexUserItem {
 }
 
 /**
+ * Per-API-call token usage attached to an assistant item (CF-362).
+ *
+ * Sourced from `event_msg.token_count.info.last_token_usage`, written into
+ * `CodexAssistantItem.usage` by `normalizeCodexLines`. `cached_input_tokens`
+ * is a SUBSET of `input_tokens` (OpenAI semantics, mirrors
+ * `backend/internal/analytics/codex_adapter.go:56-83`). Reasoning tokens are
+ * billed at the output rate.
+ */
+export interface CodexAssistantUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens?: number;
+  reasoning_output_tokens?: number;
+}
+
+/**
  * Assistant text — derived from `response_item.message[role=assistant]`.
  * `phase: 'commentary'` indicates interim narration; `'final'` is the answer
  * the user is expected to read.
  *
  * `images` (CF-388) carries any `output_image.image_url` values from the same
  * message in document order. Omitted on text-only items.
+ *
+ * `usage` (CF-362) is attached after-the-fact when an `event_msg.token_count`
+ * line is processed — the most-recent unannotated assistant item (any phase)
+ * gets the `last_token_usage` delta. Tool calls never carry usage because the
+ * model API attributes one call's cost to the response group as a whole.
  */
 export interface CodexAssistantItem {
   kind: 'assistant';
@@ -60,6 +81,7 @@ export interface CodexAssistantItem {
   phase: 'commentary' | 'final';
   model: string;
   images?: string[];
+  usage?: CodexAssistantUsage;
 }
 
 /**

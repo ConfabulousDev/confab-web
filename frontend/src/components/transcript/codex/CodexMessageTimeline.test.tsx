@@ -45,6 +45,74 @@ describe('CodexMessageTimeline', () => {
   // tested there: when `isDeepLinkTarget` is true the row gets the
   // `.deepLinkTarget` class. The timeline's job is only to pass that flag
   // through, which the integration test (Storybook + manual click) covers.
+
+  // ---------------------------------------------------------------------------
+  // CF-362 — cost mode wiring.
+  //
+  // The virtualizer doesn't lay out rows under jsdom, so we can't assert per-
+  // row badge text here. What IS visible: the CostBar side-rail rendered
+  // outside the virtualized region. The test marks coverage of the cost-mode
+  // wiring (toggle reaches the bar, bar renders only when there is data).
+  // ---------------------------------------------------------------------------
+
+  describe('cost mode', () => {
+    const assistantWithUsage: CodexRenderItem = {
+      kind: 'assistant',
+      lineId: '1',
+      timestamp: '2026-05-13T18:00:01Z',
+      text: 'hi',
+      phase: 'final',
+      model: 'gpt-5',
+      usage: { input_tokens: 1_000_000, output_tokens: 100_000 },
+    };
+
+    it('renders the CostBar side rail when isCostMode is on and items have usage', () => {
+      render(
+        <CodexMessageTimeline
+          items={[assistantWithUsage]}
+          filteredItems={[assistantWithUsage]}
+          sessionId="test-session"
+          isCostMode
+        />,
+      );
+      // The CostBar root carries a recognisable title attribute.
+      const bar = document.querySelector('[title*="Color intensity"]');
+      expect(bar).not.toBeNull();
+    });
+
+    it('does NOT render the CostBar when isCostMode is off', () => {
+      render(
+        <CodexMessageTimeline
+          items={[assistantWithUsage]}
+          filteredItems={[assistantWithUsage]}
+          sessionId="test-session"
+          isCostMode={false}
+        />,
+      );
+      expect(document.querySelector('[title*="Color intensity"]')).toBeNull();
+    });
+
+    it('does NOT render the CostBar when isCostMode is on but no item has usage', () => {
+      const itemNoUsage: CodexRenderItem = {
+        kind: 'assistant',
+        lineId: '1',
+        timestamp: '2026-05-13T18:00:01Z',
+        text: 'hi',
+        phase: 'final',
+        model: 'gpt-5',
+      };
+      render(
+        <CodexMessageTimeline
+          items={[itemNoUsage]}
+          filteredItems={[itemNoUsage]}
+          sessionId="test-session"
+          isCostMode
+        />,
+      );
+      // CostBar returns null when totalCost === 0.
+      expect(document.querySelector('[title*="Color intensity"]')).toBeNull();
+    });
+  });
 });
 
 describe('buildVirtualItems', () => {

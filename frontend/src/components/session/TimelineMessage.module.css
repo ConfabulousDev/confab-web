@@ -173,35 +173,18 @@
   font-family: 'SF Mono', Monaco, monospace;
 }
 
-/* Cost pill — shows dollar amount */
+/* Cost-mode pills are defined in `styles/badges.module.css` and composed in
+   so Claude and Codex share visual tokens. CF-362. */
 .costBadge {
-  font-size: var(--font-xs);
-  color: var(--color-cost);
-  padding: 1px var(--spacing-xs);
-  background: var(--color-cost-bg);
-  border-radius: var(--radius-sm);
-  font-family: 'SF Mono', Monaco, monospace;
+  composes: costBadge from '@/styles/badges.module.css';
 }
 
-/* Token pill — shows input/output token counts */
 .tokenPill {
-  font-size: var(--font-xs);
-  color: var(--color-text-muted);
-  padding: 1px var(--spacing-xs);
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-sm);
-  font-family: 'SF Mono', Monaco, monospace;
+  composes: tokenPill from '@/styles/badges.module.css';
 }
 
-/* Cache pill — shows cache write/hit counts */
 .cachePill {
-  font-size: var(--font-xs);
-  color: var(--color-text-tertiary);
-  padding: 1px var(--spacing-xs);
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-sm);
-  font-family: 'SF Mono', Monaco, monospace;
-  opacity: 0.7;
+  composes: cachePill from '@/styles/badges.module.css';
 }
 
 /* Fast mode badge */

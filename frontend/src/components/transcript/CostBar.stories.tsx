@@ -2,8 +2,12 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState, useMemo } from 'react';
 import { CostBar } from './CostBar';
 import { TimelineBar } from './TimelineBar';
+import { useSegmentLayout } from './timelineSegments';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
-import { calculateMessageCost } from '@/utils/tokenStats';
+import { isAssistantMessage } from '@/types';
+import { calculateMessageCost, calculateCodexAssistantCost } from '@/utils/tokenStats';
+import { useCodexSegmentLayout } from './codex/codexTimelineSegments';
+import type { CodexRenderItem } from '@/types/codexRenderItem';
 
 const meta: Meta<typeof CostBar> = {
   title: 'Transcript/CostBar',
@@ -127,6 +131,24 @@ function buildCostMap(messages: TranscriptLine[]): { messageCosts: Map<number, n
   return { messageCosts, totalCost };
 }
 
+// Mirrors `CostBarSlot` in MessageTimeline.tsx: dedup by message.id so the
+// density math reflects unique API calls, not raw row counts.
+function useClaudeSegmentUniqueCounts(
+  messages: TranscriptLine[],
+  segments: ReturnType<typeof useSegmentLayout>['segments'],
+): number[] {
+  return useMemo(() => {
+    return segments.map((seg) => {
+      const seen = new Set<string>();
+      for (let i = seg.startIndex; i <= seg.endIndex; i++) {
+        const msg = messages[i];
+        if (msg && isAssistantMessage(msg)) seen.add(msg.message.id);
+      }
+      return seen.size;
+    });
+  }, [messages, segments]);
+}
+
 /**
  * Side-by-side with TimelineBar, showing both bars as they appear in the real UI.
  */
@@ -134,6 +156,8 @@ function IntegratedDemo() {
   const messages = useMemo(() => createConversation(), []);
   const { messageCosts, totalCost } = useMemo(() => buildCostMap(messages), [messages]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const layout = useSegmentLayout(messages, selectedIndex);
+  const uniqueCounts = useClaudeSegmentUniqueCounts(messages, layout.segments);
 
   return (
     <div style={{ padding: '24px', background: 'var(--color-bg)', minHeight: '100vh' }}>
@@ -144,10 +168,10 @@ function IntegratedDemo() {
 
       <div style={{ display: 'flex', gap: '4px', height: '500px', width: '60px' }}>
         <CostBar
-          messages={messages}
-          messageCosts={messageCosts}
+          layout={layout}
+          costByIndex={messageCosts}
+          segmentUniqueCounts={uniqueCounts}
           totalCost={totalCost}
-          selectedIndex={selectedIndex}
           onSeek={(startIndex) => setSelectedIndex(startIndex)}
         />
         <TimelineBar
@@ -185,6 +209,8 @@ function IsolatedDemo() {
   const messages = useMemo(() => createConversation(), []);
   const { messageCosts, totalCost } = useMemo(() => buildCostMap(messages), [messages]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const layout = useSegmentLayout(messages, selectedIndex);
+  const uniqueCounts = useClaudeSegmentUniqueCounts(messages, layout.segments);
 
   return (
     <div style={{ padding: '24px', background: 'var(--color-bg)', minHeight: '100vh' }}>
@@ -193,10 +219,10 @@ function IsolatedDemo() {
       <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
         <div style={{ height: '400px', width: '40px', padding: '0 8px' }}>
           <CostBar
-            messages={messages}
-            messageCosts={messageCosts}
+            layout={layout}
+            costByIndex={messageCosts}
+            segmentUniqueCounts={uniqueCounts}
             totalCost={totalCost}
-            selectedIndex={selectedIndex}
             onSeek={(startIndex) => setSelectedIndex(startIndex)}
           />
         </div>
@@ -229,24 +255,26 @@ export const Isolated: Story = {
 /**
  * Zero cost — CostBar renders null.
  */
+function ZeroCostDemo() {
+  const layout = useSegmentLayout([], 0);
+  return (
+    <div style={{ height: '400px', padding: '24px' }}>
+      <CostBar
+        layout={layout}
+        costByIndex={new Map()}
+        segmentUniqueCounts={[]}
+        totalCost={0}
+        onSeek={() => { /* no-op */ }}
+      />
+      <p style={{ marginTop: '16px', color: '#666' }}>
+        (Nothing renders when total cost is zero)
+      </p>
+    </div>
+  );
+}
+
 export const ZeroCost: Story = {
-  args: {
-    messages: [],
-    messageCosts: new Map(),
-    totalCost: 0,
-    selectedIndex: 0,
-    onSeek: () => { /* no-op */ },
-  },
-  decorators: [
-    (Story) => (
-      <div style={{ height: '400px', padding: '24px' }}>
-        <Story />
-        <p style={{ marginTop: '16px', color: '#666' }}>
-          (Nothing renders when total cost is zero)
-        </p>
-      </div>
-    ),
-  ],
+  render: () => <ZeroCostDemo />,
 };
 
 /**
@@ -266,16 +294,18 @@ function SingleExpensiveDemo() {
   }, []);
   const { messageCosts, totalCost } = useMemo(() => buildCostMap(messages), [messages]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const layout = useSegmentLayout(messages, selectedIndex);
+  const uniqueCounts = useClaudeSegmentUniqueCounts(messages, layout.segments);
 
   return (
     <div style={{ padding: '24px', background: 'var(--color-bg)', minHeight: '100vh' }}>
       <h3 style={{ marginBottom: '16px', color: 'var(--color-text-primary)' }}>Single Expensive Turn</h3>
       <div style={{ display: 'flex', gap: '4px', height: '400px', width: '60px' }}>
         <CostBar
-          messages={messages}
-          messageCosts={messageCosts}
+          layout={layout}
+          costByIndex={messageCosts}
+          segmentUniqueCounts={uniqueCounts}
           totalCost={totalCost}
-          selectedIndex={selectedIndex}
           onSeek={(startIndex) => setSelectedIndex(startIndex)}
         />
         <TimelineBar
@@ -290,4 +320,110 @@ function SingleExpensiveDemo() {
 
 export const SingleExpensiveTurn: Story = {
   render: () => <SingleExpensiveDemo />,
+};
+
+// ---------------------------------------------------------------------------
+// CF-362 — Codex CostBar (same component, different segment shape).
+// ---------------------------------------------------------------------------
+
+function makeCodexItems(): CodexRenderItem[] {
+  // Three turns of varying expense. Each turn ends with task_complete; each
+  // assistant message carries a `usage` populated as if `event_msg.token_count`
+  // had been processed by the normalizer.
+  const base = new Date('2026-05-15T10:00:00Z').getTime();
+  const ts = (offsetMs: number) => new Date(base + offsetMs).toISOString();
+
+  return [
+    { kind: 'user', lineId: '0', timestamp: ts(0), text: 'cheap query' },
+    {
+      kind: 'assistant', lineId: '1', timestamp: ts(2000),
+      phase: 'final', model: 'gpt-5', text: 'ok',
+      usage: { input_tokens: 1000, output_tokens: 100 },
+    },
+    { kind: 'turn_separator', lineId: '2', timestamp: ts(3000), turnIndex: 1, durationMs: 3000 },
+
+    { kind: 'user', lineId: '3', timestamp: ts(8000), text: 'mid' },
+    {
+      kind: 'assistant', lineId: '4', timestamp: ts(10000),
+      phase: 'commentary', model: 'gpt-5', text: 'thinking',
+      usage: { input_tokens: 20000, output_tokens: 1500, cached_input_tokens: 5000 },
+    },
+    {
+      kind: 'assistant', lineId: '5', timestamp: ts(11000),
+      phase: 'final', model: 'gpt-5', text: 'answer',
+      usage: { input_tokens: 25000, output_tokens: 2000, cached_input_tokens: 10000 },
+    },
+    { kind: 'turn_separator', lineId: '6', timestamp: ts(12000), turnIndex: 2, durationMs: 4000 },
+
+    { kind: 'user', lineId: '7', timestamp: ts(20000), text: 'expensive' },
+    {
+      kind: 'assistant', lineId: '8', timestamp: ts(40000),
+      phase: 'final', model: 'gpt-5.5', text: 'big response',
+      usage: {
+        input_tokens: 200000, output_tokens: 25000,
+        cached_input_tokens: 50000, reasoning_output_tokens: 5000,
+      },
+    },
+    { kind: 'turn_separator', lineId: '9', timestamp: ts(45000), turnIndex: 3, durationMs: 25000 },
+  ];
+}
+
+function buildCodexCostMap(items: CodexRenderItem[]): {
+  costByIndex: Map<number, number>;
+  totalCost: number;
+} {
+  const costByIndex = new Map<number, number>();
+  let totalCost = 0;
+  items.forEach((item, idx) => {
+    if (item.kind !== 'assistant' || !item.usage) return;
+    const cost = calculateCodexAssistantCost(item.model, item.usage);
+    if (cost > 0) {
+      costByIndex.set(idx, cost);
+      totalCost += cost;
+    }
+  });
+  return { costByIndex, totalCost };
+}
+
+function CodexIntegratedDemo() {
+  const items = useMemo(() => makeCodexItems(), []);
+  const { costByIndex, totalCost } = useMemo(() => buildCodexCostMap(items), [items]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const layout = useCodexSegmentLayout(items, selectedIndex);
+  const segmentUniqueCounts = useMemo(() => {
+    return layout.segments.map((seg) => {
+      let n = 0;
+      for (let i = seg.startIndex; i <= seg.endIndex; i++) {
+        if (items[i]?.kind === 'assistant') n++;
+      }
+      return n;
+    });
+  }, [items, layout.segments]);
+
+  return (
+    <div style={{ padding: '24px', background: 'var(--color-bg)', minHeight: '100vh' }}>
+      <h3 style={{ marginBottom: '16px', color: 'var(--color-text-primary)' }}>CostBar (Codex) — three turns</h3>
+      <p style={{ marginBottom: '16px', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+        Same `CostBar` component driven by Codex render-items. Each assistant
+        item carries a `usage` block written by `normalizeCodexLines` from
+        `event_msg.token_count.info.last_token_usage`.
+      </p>
+      <div style={{ display: 'flex', gap: '4px', height: '500px', width: '60px' }}>
+        <CostBar
+          layout={layout}
+          costByIndex={costByIndex}
+          segmentUniqueCounts={segmentUniqueCounts}
+          totalCost={totalCost}
+          onSeek={(start) => setSelectedIndex(start)}
+        />
+      </div>
+      <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+        Total cost: ${totalCost.toFixed(4)} — selected unfiltered index {selectedIndex}
+      </div>
+    </div>
+  );
+}
+
+export const CodexIntegrated: Story = {
+  render: () => <CodexIntegratedDemo />,
 };

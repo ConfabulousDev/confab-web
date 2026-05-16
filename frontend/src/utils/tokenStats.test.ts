@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import type { AssistantMessage } from '@/types';
-import { calculateMessageCost, formatTokenCount, formatCost } from './tokenStats';
+import type { CodexAssistantUsage } from '@/types/codexRenderItem';
+import {
+  calculateMessageCost,
+  formatTokenCount,
+  formatCost,
+  calculateCodexAssistantCost,
+  buildCodexCostTooltip,
+} from './tokenStats';
 
 // Helper to create a minimal assistant message with token usage
 function createAssistantMessage(
@@ -127,6 +134,142 @@ describe('calculateMessageCost', () => {
   it('should return 0 for unknown models', () => {
     const msg = createAssistantMessage(1_000_000, 0, 0, 0, 'claude-unknown-model');
     expect(calculateMessageCost(msg)).toBe(0);
+  });
+});
+
+// CF-362 — Codex per-assistant-message cost.
+// Mirrors `applyCodexTokens` in backend/internal/analytics/codex_adapter.go:
+//   uncached = max(0, input - cached); output += reasoning; cache_write = 0.
+describe('calculateCodexAssistantCost', () => {
+  function usage(overrides: Partial<CodexAssistantUsage> = {}): CodexAssistantUsage {
+    return { input_tokens: 0, output_tokens: 0, ...overrides };
+  }
+
+  it('bills gpt-5 input + output at documented rates (no cache)', () => {
+    // gpt-5: input=$1.25/M, output=$10/M
+    // 1,000,000 in -> $1.25; 100,000 out -> $1.00; total $2.25.
+    const cost = calculateCodexAssistantCost(
+      'gpt-5',
+      usage({ input_tokens: 1_000_000, output_tokens: 100_000 }),
+    );
+    expect(cost).toBeCloseTo(2.25, 4);
+  });
+
+  it('subtracts cached_input_tokens from input_tokens before applying input rate', () => {
+    // gpt-5: input=$1.25/M, cache_read=$0.125/M.
+    // input_tokens=1,000,000 with cached_input_tokens=200,000
+    //   -> 800k uncached * $1.25/M = $1.00
+    //   -> 200k cache hit  * $0.125/M = $0.025
+    //   -> output 0 (skipped)
+    // total $1.025
+    const cost = calculateCodexAssistantCost(
+      'gpt-5',
+      usage({
+        input_tokens: 1_000_000,
+        cached_input_tokens: 200_000,
+        output_tokens: 0,
+      }),
+    );
+    expect(cost).toBeCloseTo(1.025, 4);
+  });
+
+  it('bills reasoning_output_tokens at the output rate (folded into output total)', () => {
+    // gpt-5: output=$10/M.
+    // output 0 + reasoning 50,000 -> 50k * $10/M = $0.50.
+    const cost = calculateCodexAssistantCost(
+      'gpt-5',
+      usage({ output_tokens: 0, reasoning_output_tokens: 50_000 }),
+    );
+    expect(cost).toBeCloseTo(0.5, 4);
+  });
+
+  it('returns 0 for zero usage', () => {
+    expect(calculateCodexAssistantCost('gpt-5', usage())).toBe(0);
+  });
+
+  it('returns 0 for unknown models (no throw)', () => {
+    const cost = calculateCodexAssistantCost(
+      'unknown',
+      usage({ input_tokens: 1_000_000, output_tokens: 100_000 }),
+    );
+    expect(cost).toBe(0);
+  });
+
+  it('does not charge for cache writes (OpenAI cache is free to write)', () => {
+    // Even if a callsite accidentally tries to claim cache_creation tokens,
+    // the API for Codex usage has no such field — the function only knows
+    // about cached_input_tokens (= cache reads). A pure-input call with
+    // cached=0 charges only at the uncached input rate.
+    const cost = calculateCodexAssistantCost(
+      'gpt-5-mini',
+      usage({ input_tokens: 1_000_000, cached_input_tokens: 0 }),
+    );
+    // gpt-5-mini: input=$0.25/M -> $0.25 for 1M uncached.
+    expect(cost).toBeCloseTo(0.25, 4);
+  });
+});
+
+describe('buildCodexCostTooltip', () => {
+  it('starts with the dollar amount and an empty separator line', () => {
+    const tip = buildCodexCostTooltip(
+      { input_tokens: 100, output_tokens: 50 },
+      0.42,
+    );
+    const lines = tip.split('\n');
+    expect(lines[0]).toBe('$0.42');
+    expect(lines[1]).toBe('');
+  });
+
+  it('includes input + output token lines with localized formatting', () => {
+    const tip = buildCodexCostTooltip(
+      { input_tokens: 12_345, output_tokens: 1_200 },
+      0.01,
+    );
+    expect(tip).toContain('Input tokens (in): 12,345');
+    expect(tip).toContain('Output tokens (out): 1,200');
+  });
+
+  it('shows the Cached (hit) sub-line only when cached_input_tokens > 0', () => {
+    const without = buildCodexCostTooltip(
+      { input_tokens: 100, output_tokens: 0 },
+      0,
+    );
+    expect(without).not.toContain('Cached (hit)');
+
+    const withCache = buildCodexCostTooltip(
+      { input_tokens: 100, output_tokens: 0, cached_input_tokens: 25 },
+      0,
+    );
+    expect(withCache).toContain('Cached (hit): 25');
+  });
+
+  it('shows the Reasoning sub-line only when reasoning_output_tokens > 0', () => {
+    const without = buildCodexCostTooltip(
+      { input_tokens: 0, output_tokens: 100 },
+      0,
+    );
+    expect(without).not.toContain('Reasoning');
+
+    const withReasoning = buildCodexCostTooltip(
+      { input_tokens: 0, output_tokens: 100, reasoning_output_tokens: 250 },
+      0,
+    );
+    expect(withReasoning).toContain('Reasoning: 250');
+  });
+
+  it('omits Claude-only lines (speed / service_tier / server_tool_use)', () => {
+    const tip = buildCodexCostTooltip(
+      {
+        input_tokens: 100,
+        output_tokens: 100,
+        cached_input_tokens: 10,
+        reasoning_output_tokens: 10,
+      },
+      0.01,
+    );
+    expect(tip).not.toMatch(/Speed:/);
+    expect(tip).not.toMatch(/Tier:/);
+    expect(tip).not.toMatch(/Web searches:/);
   });
 });
 

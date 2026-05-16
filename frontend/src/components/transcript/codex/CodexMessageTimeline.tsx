@@ -16,8 +16,10 @@ import type { CodexRenderItem } from '@/types/codexRenderItem';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
+import { calculateCodexAssistantCost } from '@/utils/tokenStats';
 import { cx } from '@/utils/utils';
 import { addCmdFListener, formatTimeSeparator, retryOnAnimationFrame } from '../timelineUtils';
+import { CostBar } from '../CostBar';
 import CodexUserMessage from './CodexUserMessage';
 import CodexAssistantMessage from './CodexAssistantMessage';
 import CodexToolCallBlock from './CodexToolCallBlock';
@@ -26,6 +28,7 @@ import CodexReasoningHidden from './CodexReasoningHidden';
 import CodexCompactedDivider from './CodexCompactedDivider';
 import CodexUnknownItem from './CodexUnknownItem';
 import CodexTimelineBar from './CodexTimelineBar';
+import { useCodexSegmentLayout } from './codexTimelineSegments';
 import { buildVirtualItems, skipNavKey, skipNavLabel } from './codexVirtualItems';
 import { extractCodexItemText } from './extractCodexItemText';
 import styles from './CodexMessageTimeline.module.css';
@@ -51,6 +54,11 @@ export interface CodexMessageTimelineProps {
   sessionId: string;
   /** Deep-link target row, addressed by its stable `lineId` (CF-360). */
   targetLineId?: string;
+  /**
+   * CF-362: when true, render per-assistant-message cost badges and the
+   * green CostBar side rail. Mirrors the Claude transcript's cost mode.
+   */
+  isCostMode?: boolean;
 }
 
 // Conservative initial estimate — virtualizer measures real heights after
@@ -64,6 +72,7 @@ export default function CodexMessageTimeline({
   visibleIndices,
   sessionId,
   targetLineId,
+  isCostMode,
 }: CodexMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
@@ -139,6 +148,55 @@ export default function CodexMessageTimeline({
     items.forEach((item, idx) => map.set(item.lineId, idx));
     return map;
   }, [items]);
+
+  // Selection plumbing. `selectedIndex` is keyed off filteredItems but the
+  // segment layout indexes the unfiltered items array, so we translate the
+  // active row's `lineId` back. Lifted above the early-return so the layout
+  // hook below has a stable input across renders.
+  const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
+  const selectedUnfilteredIndex = useMemo(() => {
+    const selected = filteredItems[effectiveSelectedIndex];
+    if (!selected) return 0;
+    return lineIdToUnfilteredIndex.get(selected.lineId) ?? 0;
+  }, [filteredItems, effectiveSelectedIndex, lineIdToUnfilteredIndex]);
+
+  // CF-362: one segment layout instance feeds both `CodexTimelineBar` and
+  // `CostBar` so the two side-by-side rails line up row-for-row.
+  const segmentLayout = useCodexSegmentLayout(items, selectedUnfilteredIndex);
+
+  // CF-362: cost map keyed by unfiltered items index. Built only when cost
+  // mode is on (avoids paying for `getPricing` on every render otherwise).
+  // Reasoning tokens fold into output billing; cache writes are 0 for
+  // OpenAI. `costByIndex` only records strictly-positive costs — zero-cost
+  // rows render no badge, matching Claude's behavior.
+  const { costByIndex, totalCost } = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!isCostMode) return { costByIndex: map, totalCost: 0 };
+    let total = 0;
+    items.forEach((item, idx) => {
+      if (item.kind !== 'assistant' || !item.usage) return;
+      const cost = calculateCodexAssistantCost(item.model, item.usage);
+      if (cost > 0) {
+        map.set(idx, cost);
+        total += cost;
+      }
+    });
+    return { costByIndex: map, totalCost: total };
+  }, [items, isCostMode]);
+
+  // CF-362: assistant-items-per-segment for density math. Each assistant
+  // render-item corresponds to one OpenAI inference call, so no dedup is
+  // needed (cf. Claude where multiple lines share `message.id`).
+  const costSegmentUniqueCounts = useMemo<number[]>(() => {
+    if (!isCostMode) return [];
+    return segmentLayout.segments.map((seg) => {
+      let n = 0;
+      for (let i = seg.startIndex; i <= seg.endIndex; i++) {
+        if (items[i]?.kind === 'assistant') n++;
+      }
+      return n;
+    });
+  }, [isCostMode, segmentLayout.segments, items]);
 
   // Track first visible item index (skipping separator rows) so the bar
   // indicator has something to point at when the user hasn't explicitly
@@ -288,19 +346,11 @@ export default function CodexMessageTimeline({
     );
   }
 
-  const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
-
-  // Translate the filteredItems-keyed selection back to an unfiltered-items
-  // index for the bar's position indicator. The selected row is always
-  // visible, so its lineId is guaranteed to be in `lineIdToUnfilteredIndex`.
-  const selectedFilteredItem = filteredItems[effectiveSelectedIndex];
-  const selectedUnfilteredIndex = selectedFilteredItem
-    ? (lineIdToUnfilteredIndex.get(selectedFilteredItem.lineId) ?? 0)
-    : 0;
-
   // CF-361: bar click → scroll to first visible item at or after `unfilteredStart`.
   // We only get clicks on un-filtered segments (the bar gates filtered ones),
   // so at least one item in the segment range is in `lineIdToItemIndex`.
+  // CF-362: CostBar.onSeek passes (start, end) but we only care about start —
+  // the second arg drops via TS parameter contravariance.
   const onSeekFromBar = (unfilteredStart: number): void => {
     for (let i = unfilteredStart; i < items.length; i++) {
       const candidate = items[i];
@@ -363,6 +413,11 @@ export default function CodexMessageTimeline({
               nextIdx !== undefined ? () => scrollToItem(nextIdx) : undefined;
             const onSkipToPrevious =
               prevIdx !== undefined ? () => scrollToItem(prevIdx) : undefined;
+            // CF-362: assistant rows look up cost by unfiltered index.
+            const unfilteredIdx = lineIdToUnfilteredIndex.get(vi.item.lineId);
+            const messageCost = isCostMode && unfilteredIdx !== undefined
+              ? costByIndex.get(unfilteredIdx)
+              : undefined;
 
             return (
               <div
@@ -382,6 +437,8 @@ export default function CodexMessageTimeline({
                   onSkipToPrevious,
                   searchQuery: search.isOpen ? search.highlightQuery : undefined,
                   isCurrentSearchMatch,
+                  isCostMode,
+                  messageCost,
                 })}
               </div>
             );
@@ -389,9 +446,25 @@ export default function CodexMessageTimeline({
         </div>
       </div>
 
+      <div
+        className={cx(
+          styles.costBarWrapper,
+          isCostMode && styles.costBarWrapperVisible,
+        )}
+      >
+        {isCostMode && (
+          <CostBar
+            layout={segmentLayout}
+            costByIndex={costByIndex}
+            segmentUniqueCounts={costSegmentUniqueCounts}
+            totalCost={totalCost}
+            onSeek={onSeekFromBar}
+          />
+        )}
+      </div>
+
       <CodexTimelineBar
-        items={items}
-        selectedIndex={selectedUnfilteredIndex}
+        layout={segmentLayout}
         visibleIndices={visibleIndices}
         onSeek={onSeekFromBar}
       />
@@ -423,6 +496,10 @@ interface RenderFlags {
   searchQuery?: string;
   /** CF-359: this row is the active (n-of-N) match. */
   isCurrentSearchMatch: boolean;
+  /** CF-362: cost mode on — assistant rows render badges. */
+  isCostMode?: boolean;
+  /** CF-362: pre-computed $ cost for this row (assistant only). */
+  messageCost?: number;
 }
 
 function renderItem(item: CodexRenderItem, flags: RenderFlags) {
@@ -442,7 +519,15 @@ function renderItem(item: CodexRenderItem, flags: RenderFlags) {
     case 'user':
       return <CodexUserMessage item={item} {...flags} kindLabel={kindLabel} />;
     case 'assistant':
-      return <CodexAssistantMessage item={item} {...flags} kindLabel={kindLabel} />;
+      return (
+        <CodexAssistantMessage
+          item={item}
+          {...flags}
+          kindLabel={kindLabel}
+          isCostMode={flags.isCostMode}
+          messageCost={flags.messageCost}
+        />
+      );
     case 'tool_call':
       return <CodexToolCallBlock item={item} {...flags} kindLabel={kindLabel} />;
     case 'turn_separator':
