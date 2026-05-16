@@ -54,16 +54,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 				},
 			},
 		}),
-		testcontainers.WithWaitStrategy(
-			wait.ForAll(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(10*time.Second).
-					WithPollInterval(100*time.Millisecond),
-				wait.ForListeningPort("5432/tcp").
-					WithStartupTimeout(5*time.Second).
-					WithPollInterval(50*time.Millisecond),
-			)),
+		testcontainers.WithWaitStrategy(PostgresWaitStrategy()),
 	)
 	if err != nil {
 		t.Fatalf("Failed to start postgres container: %v", err)
@@ -93,6 +84,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		"minio/minio:RELEASE.2024-12-18T13-15-44Z",
 		minio.WithUsername("minioadmin"),
 		minio.WithPassword("minioadmin"),
+		testcontainers.WithWaitStrategy(MinioWaitStrategy()),
 	)
 	if err != nil {
 		t.Fatalf("Failed to start minio container: %v", err)
@@ -206,4 +198,33 @@ func (e *TestEnvironment) CleanDB(t *testing.T) {
 			t.Fatalf("Failed to truncate table %s: %v", table, err)
 		}
 	}
+}
+
+// PostgresWaitStrategy returns the wait strategy used when starting the
+// Postgres test container. Timeouts are deliberately generous (60s log,
+// 30s port) because go test ./... starts many container instances in
+// parallel across packages and a loaded docker daemon can lag well past
+// the testcontainers defaults. Healthy starts still complete within ~1s
+// thanks to the tight poll intervals. Pinned by TestPostgresWaitStrategy_Timeouts.
+func PostgresWaitStrategy() wait.Strategy {
+	return wait.ForAll(
+		wait.ForLog("database system is ready to accept connections").
+			WithOccurrence(2).
+			WithStartupTimeout(60*time.Second).
+			WithPollInterval(100*time.Millisecond),
+		wait.ForListeningPort("5432/tcp").
+			WithStartupTimeout(30*time.Second).
+			WithPollInterval(50*time.Millisecond),
+	)
+}
+
+// MinioWaitStrategy returns the wait strategy used when starting the MinIO
+// test container. Same rationale as PostgresWaitStrategy: a 90s ceiling
+// absorbs cross-package docker contention without slowing the common
+// healthy-start case. Pinned by TestMinioWaitStrategy_Timeout.
+func MinioWaitStrategy() wait.Strategy {
+	return wait.ForHTTP("/minio/health/live").
+		WithPort("9000/tcp").
+		WithStartupTimeout(90 * time.Second).
+		WithPollInterval(100 * time.Millisecond)
 }

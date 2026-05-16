@@ -110,6 +110,9 @@ See `internal/db/db.go` for the complete schema.
 # Run tests
 go test ./...
 
+# Run full test coverage (sharded, reliable — see internal/testutil/README.md)
+make coverage
+
 # Build binary
 go build -o bin/confab-backend cmd/server/main.go
 

@@ -1,4 +1,4 @@
-.PHONY: help dev build test clean docker-up docker-down docker-logs
+.PHONY: help dev build test coverage clean docker-up docker-down docker-logs
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -14,6 +14,9 @@ build: ## Build binary
 
 test: ## Run tests
 	go test -v ./...
+
+coverage: ## Run full backend test coverage (sharded, reliable)
+	./scripts/coverage.sh
 
 clean: ## Clean build artifacts
 	rm -rf bin/
