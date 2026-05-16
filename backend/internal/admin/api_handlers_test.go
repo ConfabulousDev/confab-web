@@ -14,7 +14,6 @@ import (
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
-	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // setupTestServer creates a test HTTP server with the full middleware stack.
@@ -414,12 +413,12 @@ func TestAdminDeleteUserAPI(t *testing.T) {
 
 		// Upload S3 chunks for target
 		transcript := testutil.MinimalTranscript()
-		testutil.UploadTestChunk(t, env, target.ID, validation.ProviderClaudeCode, "target-ext-1", "transcript.jsonl", 1, 3, transcript)
-		testutil.UploadTestChunk(t, env, target.ID, validation.ProviderClaudeCode, "target-ext-2", "transcript.jsonl", 1, 3, transcript)
+		testutil.UploadTestChunk(t, env, target.ID, models.ProviderClaudeCode, "target-ext-1", "transcript.jsonl", 1, 3, transcript)
+		testutil.UploadTestChunk(t, env, target.ID, models.ProviderClaudeCode, "target-ext-2", "transcript.jsonl", 1, 3, transcript)
 
 		// Create session with S3 data for bystander (must survive)
 		_ = testutil.CreateTestSessionFull(t, env, bystander.ID, "bystander-ext-1", testutil.TestSessionFullOpts{})
-		testutil.UploadTestChunk(t, env, bystander.ID, validation.ProviderClaudeCode, "bystander-ext-1", "transcript.jsonl", 1, 3, transcript)
+		testutil.UploadTestChunk(t, env, bystander.ID, models.ProviderClaudeCode, "bystander-ext-1", "transcript.jsonl", 1, 3, transcript)
 
 		// Verify S3 data exists before deletion
 		targetS3Key := fmt.Sprintf("%d/claude-code/target-ext-1/chunks/transcript.jsonl/chunk_00000001_00000003.jsonl", target.ID)

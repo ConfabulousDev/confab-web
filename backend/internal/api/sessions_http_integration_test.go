@@ -8,6 +8,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -116,7 +117,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		// the fact so the row stays visible (has content) and is tagged as codex.
 		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-session", testutil.TestSessionFullOpts{Summary: "codex"})
 		if _, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", models.ProviderCodex, cxID); err != nil {
 			t.Fatalf("set codex session_type: %v", err)
 		}
 
@@ -158,8 +159,8 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		} else if !cc.LastSyncTime.Equal(ccWant) {
 			t.Errorf("claude-code last_sync_time = %v, want %v", cc.LastSyncTime, ccWant)
 		}
-		if cc.Provider != db.ProviderClaudeCode {
-			t.Errorf("claude-code provider = %q, want %q", cc.Provider, db.ProviderClaudeCode)
+		if cc.Provider != models.ProviderClaudeCode {
+			t.Errorf("claude-code provider = %q, want %q", cc.Provider, models.ProviderClaudeCode)
 		}
 
 		cx, ok := byExtID["cx-session"]
@@ -171,8 +172,8 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		} else if !cx.LastSyncTime.Equal(cxWant) {
 			t.Errorf("codex last_sync_time = %v, want %v", cx.LastSyncTime, cxWant)
 		}
-		if cx.Provider != db.ProviderCodex {
-			t.Errorf("codex provider = %q, want %q", cx.Provider, db.ProviderCodex)
+		if cx.Provider != models.ProviderCodex {
+			t.Errorf("codex provider = %q, want %q", cx.Provider, models.ProviderCodex)
 		}
 	})
 
@@ -186,7 +187,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
 		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
 		if _, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", models.ProviderCodex, cxID); err != nil {
 			t.Fatalf("set codex session_type: %v", err)
 		}
 
@@ -219,7 +220,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
 		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
 		if _, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", models.ProviderCodex, cxID); err != nil {
 			t.Fatalf("set codex session_type: %v", err)
 		}
 
@@ -252,7 +253,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		legacyID := testutil.CreateTestSessionFull(t, env, user.ID, "legacy-1", testutil.TestSessionFullOpts{Summary: "legacy"})
 		if _, err := env.DB.Exec(env.Ctx,
 			"UPDATE sessions SET session_type = $1 WHERE id = $2",
-			db.ProviderClaudeCodeLegacy, legacyID); err != nil {
+			models.ProviderClaudeCodeLegacy, legacyID); err != nil {
 			t.Fatalf("set legacy session_type: %v", err)
 		}
 
@@ -271,9 +272,9 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		if len(result.Sessions) != 1 {
 			t.Fatalf("expected 1 legacy session matched by claude-code filter, got %d", len(result.Sessions))
 		}
-		if result.Sessions[0].Provider != db.ProviderClaudeCode {
+		if result.Sessions[0].Provider != models.ProviderClaudeCode {
 			t.Errorf("provider on wire = %q, want canonical %q",
-				result.Sessions[0].Provider, db.ProviderClaudeCode)
+				result.Sessions[0].Provider, models.ProviderClaudeCode)
 		}
 	})
 
@@ -286,7 +287,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
 		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
 		if _, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", models.ProviderCodex, cxID); err != nil {
 			t.Fatalf("set codex session_type: %v", err)
 		}
 
@@ -316,7 +317,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
 		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
 		if _, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", models.ProviderCodex, cxID); err != nil {
 			t.Fatalf("set codex session_type: %v", err)
 		}
 
@@ -346,7 +347,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
 		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
 		if _, err := env.DB.Exec(env.Ctx,
-			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", models.ProviderCodex, cxID); err != nil {
 			t.Fatalf("set codex session_type: %v", err)
 		}
 
@@ -426,7 +427,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		var result db.SessionListResult
 		testutil.ParseJSON(t, resp, &result)
 
-		want := map[string]bool{db.ProviderClaudeCode: false, db.ProviderCodex: false}
+		want := map[string]bool{models.ProviderClaudeCode: false, models.ProviderCodex: false}
 		for _, p := range result.FilterOptions.Providers {
 			if _, ok := want[p]; ok {
 				want[p] = true
@@ -534,9 +535,9 @@ func TestGetSession_HTTP_Integration(t *testing.T) {
 			stored    string // what goes into sessions.session_type
 			canonical string // what the API must echo
 		}{
-			{name: "claude-code", stored: db.ProviderClaudeCode, canonical: db.ProviderClaudeCode},
-			{name: "codex", stored: db.ProviderCodex, canonical: db.ProviderCodex},
-			{name: "legacy Claude Code row", stored: db.ProviderClaudeCodeLegacy, canonical: db.ProviderClaudeCode},
+			{name: "claude-code", stored: models.ProviderClaudeCode, canonical: models.ProviderClaudeCode},
+			{name: "codex", stored: models.ProviderCodex, canonical: models.ProviderCodex},
+			{name: "legacy Claude Code row", stored: models.ProviderClaudeCodeLegacy, canonical: models.ProviderClaudeCode},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {

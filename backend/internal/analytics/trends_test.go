@@ -1122,7 +1122,7 @@ func TestGetTrends_TopSessionsEmpty(t *testing.T) {
 // TestGetTrends_TopSessions_PerProvider pins that the /trends top_sessions
 // response carries a canonical `provider` value per row, regardless of which
 // session_type variant exists in the database. Legacy 'Claude Code' rows
-// must surface as 'claude-code' — db.NormalizeProvider runs at the Scan site
+// must surface as 'claude-code' — models.NormalizeProvider runs at the Scan site
 // per CLAUDE.md.
 func TestGetTrends_TopSessions_PerProvider(t *testing.T) {
 	if testing.Short() {

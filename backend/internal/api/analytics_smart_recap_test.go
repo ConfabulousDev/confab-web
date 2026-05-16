@@ -15,7 +15,7 @@ import (
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
-	"github.com/ConfabulousDev/confab-web/internal/validation"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // =============================================================================
@@ -54,7 +54,7 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 		// Upload JSONL content (1 line to make the card outdated)
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-stale", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-stale", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Pre-populate an "outdated" smart recap card:
@@ -147,7 +147,7 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 		// Upload JSONL content
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, owner.ID, validation.ProviderClaudeCode, "test-session-shared", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, owner.ID, models.ProviderClaudeCode, "test-session-shared", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Pre-populate smart recap card (stale)
@@ -215,7 +215,7 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 		// Upload JSONL content
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, owner.ID, validation.ProviderClaudeCode, "test-session-quota", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, owner.ID, models.ProviderClaudeCode, "test-session-quota", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Pre-populate smart recap card
@@ -282,7 +282,7 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 		// Upload JSONL content
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-structure", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-structure", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Pre-populate smart recap card with all fields
@@ -387,7 +387,7 @@ func TestSmartRecap_ErrorPropagation(t *testing.T) {
 		// Upload JSONL content (required to trigger smart recap generation attempt)
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-error", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-error", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Note: We do NOT insert a cached smart recap card, so generation will be attempted
@@ -468,7 +468,7 @@ func TestSmartRecap_CacheHitVsMissPath(t *testing.T) {
 		// Upload JSONL content
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-cachehit", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-cachehit", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// First, trigger card computation by making a request (this caches the regular analytics cards)
@@ -547,7 +547,7 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 		// Upload JSONL content
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-title", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-title", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Set suggested title in DB (simulates prior smart recap generation)
@@ -591,7 +591,7 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 		// Upload JSONL content
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-notitle", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-notitle", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Do NOT set suggested title
@@ -638,7 +638,7 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 		// Upload JSONL content
 		jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-		testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-cachetitle", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-cachetitle", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 		// Pre-populate smart recap card (cache hit path - card is valid/current)
@@ -756,7 +756,7 @@ func TestSmartRecap_CacheMissTriggersGeneration(t *testing.T) {
 	// Upload JSONL content (required for analytics computation and smart recap)
 	jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 `
-	testutil.UploadTestChunk(t, env, user.ID, validation.ProviderClaudeCode, "test-session-gen", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+	testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-gen", "transcript.jsonl", 1, 1, []byte(jsonlContent))
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
 
 	// No pre-populated smart recap card → triggers generation

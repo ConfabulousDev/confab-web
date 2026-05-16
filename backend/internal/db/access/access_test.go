@@ -10,6 +10,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db/access"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -762,9 +763,9 @@ func TestSessionDetailReaders_Equivalent(t *testing.T) {
 		stored    string
 		canonical string
 	}{
-		{"claude-code", db.ProviderClaudeCode, db.ProviderClaudeCode},
-		{"codex", db.ProviderCodex, db.ProviderCodex},
-		{"legacy Claude Code", db.ProviderClaudeCodeLegacy, db.ProviderClaudeCode},
+		{"claude-code", models.ProviderClaudeCode, models.ProviderClaudeCode},
+		{"codex", models.ProviderCodex, models.ProviderCodex},
+		{"legacy Claude Code", models.ProviderClaudeCodeLegacy, models.ProviderClaudeCode},
 	}
 
 	for _, p := range providers {

@@ -352,7 +352,7 @@ func CreateTestGitHubLink(t *testing.T, env *TestEnvironment, sessionID, linkTyp
 
 // UploadTestChunk uploads a JSONL chunk to S3 storage for testing. The
 // provider argument is the canonical typed provider segment that ends up in
-// the S3 path; pass validation.ProviderClaudeCode for tests that don't care
+// the S3 path; pass models.ProviderClaudeCode for tests that don't care
 // about the provider dimension.
 func UploadTestChunk(t *testing.T, env *TestEnvironment, userID int64, provider string, externalID, fileName string, firstLine, lastLine int, data []byte) {
 	t.Helper()

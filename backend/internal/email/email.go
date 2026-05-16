@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // ShareInvitationParams contains the parameters for a share invitation email
@@ -22,8 +22,8 @@ type ShareInvitationParams struct {
 	SessionTitle string
 	ShareURL     string
 	ExpiresAt    *time.Time
-	// Provider is the canonical session type (db.ProviderClaudeCode /
-	// db.ProviderCodex). Empty or unknown values fall back to neutral
+	// Provider is the canonical session type (models.ProviderClaudeCode /
+	// models.ProviderCodex). Empty or unknown values fall back to neutral
 	// wording in the subject/body and emit an ERROR log so the operator
 	// notices unrecognised providers.
 	Provider string
@@ -165,18 +165,18 @@ type resendRequest struct {
 // Defensive: legacy "Claude Code" (display form, pre-CF-347) is treated as
 // the canonical claude-code value here so the email layer is robust even if
 // a caller forgot to normalise. New callers should still call
-// db.NormalizeProvider at the boundary; this helper just refuses to silently
+// models.NormalizeProvider at the boundary; this helper just refuses to silently
 // emit the wrong wording or spurious unknown-provider logs for known legacy
 // values.
 //
 // Local to the email package today; if a second surface needs the same
-// mapping, lift this next to db.NormalizeProvider per CLAUDE.md's "Where
+// mapping, lift this next to models.NormalizeProvider per CLAUDE.md's "Where
 // shared code lives" guidance.
 func humanProviderLabel(ctx context.Context, provider, shareID, toEmail string) string {
-	switch db.NormalizeProvider(provider) {
-	case db.ProviderClaudeCode:
+	switch models.NormalizeProvider(provider) {
+	case models.ProviderClaudeCode:
 		return "Claude Code session"
-	case db.ProviderCodex:
+	case models.ProviderCodex:
 		return "Codex session"
 	default:
 		logger.Ctx(ctx).Error("email: unknown provider, using neutral wording",

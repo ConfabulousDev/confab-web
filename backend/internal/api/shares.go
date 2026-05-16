@@ -18,6 +18,7 @@ import (
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/email"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
@@ -174,7 +175,7 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			// the canonical form (per CLAUDE.md, every Scan site normalises),
 			// but applying NormalizeProvider here is defensive and matches
 			// the project convention for boundary-layer code.
-			provider := db.NormalizeProvider(session.Provider)
+			provider := models.NormalizeProvider(session.Provider)
 			shareIDStr := strconv.FormatInt(share.ID, 10)
 			for _, toEmail := range req.Recipients {
 				// Include recipient email in URL so login flow can guide them to the right account

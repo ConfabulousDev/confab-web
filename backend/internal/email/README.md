@@ -53,7 +53,7 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 
 **Resend as the email provider.** The `Service` interface abstracts the provider, so switching from Resend to another API only requires a new implementation.
 
-**`humanProviderLabel` is local.** The provider→phrase mapping lives in this package rather than next to `db.NormalizeProvider`, since email is the only consumer today. The helper still calls `db.NormalizeProvider` internally so legacy `"Claude Code"` rows do not trigger the unknown-provider log. If a second caller needs the same mapping, lift it to `internal/db/provider.go` per CLAUDE.md's "Where shared code lives" rule.
+**`humanProviderLabel` is local.** The provider→phrase mapping lives in this package rather than next to `models.NormalizeProvider`, since email is the only consumer today. The helper still calls `models.NormalizeProvider` internally so legacy `"Claude Code"` rows do not trigger the unknown-provider log. If a second caller needs the same mapping, lift it to `internal/models/provider.go` per CLAUDE.md's "Where shared code lives" rule.
 
 ## Testing
 

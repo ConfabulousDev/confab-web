@@ -27,7 +27,7 @@ type SessionListItem struct {
 	FirstUserMessage      *string    `json:"first_user_message,omitempty"`      // First user message
 	// Provider is the canonical agent identifier ("claude-code" or "codex").
 	// Legacy 'Claude Code' DB values are normalized to "claude-code" at Scan
-	// time via db.NormalizeProvider so the public API never exposes the
+	// time via models.NormalizeProvider so the public API never exposes the
 	// historical display form.
 	Provider              string     `json:"provider"`
 	TotalLines            int64      `json:"total_lines"`                       // Sum of last_synced_line across all files
@@ -80,7 +80,7 @@ type SessionDetail struct {
 	ExternalID            string           `json:"external_id"`                       // External system's session ID
 	// Provider is the canonical agent identifier ("claude-code" or "codex").
 	// Legacy 'Claude Code' DB values are normalized to "claude-code" at Scan
-	// time via db.NormalizeProvider.
+	// time via models.NormalizeProvider.
 	Provider              string           `json:"provider"`
 	CustomTitle           *string          `json:"custom_title,omitempty"`            // User-set title override
 	SuggestedSessionTitle *string          `json:"suggested_session_title,omitempty"` // AI-suggested title from Smart Recap

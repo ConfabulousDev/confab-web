@@ -162,7 +162,7 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
-	session.Provider = db.NormalizeProvider(session.Provider)
+	session.Provider = models.NormalizeProvider(session.Provider)
 
 	// Check if session owner is deactivated
 	if ownerStatus == models.UserStatusInactive {

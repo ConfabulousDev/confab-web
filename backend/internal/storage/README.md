@@ -17,7 +17,7 @@ S3/MinIO object storage client for session file chunks: upload, download, list, 
 
 ## Key API
 
-All chunk methods take a `provider validation.Provider` argument (one of `validation.ProviderClaudeCode` or `validation.ProviderCodex`). The provider becomes a segment of every S3 key so that the same `(userID, externalID)` pair under two different agents resolves to two distinct subtrees. Storage validates the provider value before touching S3 — passing an unknown or legacy value (e.g. `"Claude Code"`) errors out immediately. Callers reading from the DB get the canonical typed value via `db/session`'s `VerifySessionOwnership` / `GetSessionOwnerExternalIDAndProvider` so no further normalization is needed.
+All chunk methods take a `provider string` argument (one of `models.ProviderClaudeCode` or `models.ProviderCodex`, defined in `internal/models/provider.go`). The provider becomes a segment of every S3 key so that the same `(userID, externalID)` pair under two different agents resolves to two distinct subtrees. Storage validates the provider value via `validation.ValidateProvider` before touching S3 — passing an unknown or legacy value (e.g. `"Claude Code"`) errors out immediately. Callers reading from the DB get the canonical value via `db/session`'s `VerifySessionOwnership` / `GetSessionOwnerExternalIDAndProvider` so no further normalization is needed.
 
 - **`NewS3Storage(config)`** -- Creates a MinIO client and verifies the bucket exists. Fails fast if the bucket is missing.
 - **`UploadChunk(ctx, userID, provider, externalID, fileName, firstLine, lastLine, data)`** -- Uploads a chunk with a deterministic key: `{userID}/{provider}/{externalID}/chunks/{fileName}/chunk_{first:08d}_{last:08d}.jsonl`.

@@ -176,17 +176,6 @@ func TestValidateProvider(t *testing.T) {
 	}
 }
 
-// TestProviderConstants asserts that the public provider constants hold
-// the exact canonical lowercase forms required by the API contract.
-func TestProviderConstants(t *testing.T) {
-	if ProviderClaudeCode != "claude-code" {
-		t.Errorf("ProviderClaudeCode = %q, want %q", ProviderClaudeCode, "claude-code")
-	}
-	if ProviderCodex != "codex" {
-		t.Errorf("ProviderCodex = %q, want %q", ProviderCodex, "codex")
-	}
-}
-
 // TestValidateCodexRolloutMetadata locks the field-level contract for the
 // codex_rollout sub-block on POST /api/v1/sync/chunk. The provider-mismatch
 // check (rejecting codex_rollout on a claude-code session) is enforced in

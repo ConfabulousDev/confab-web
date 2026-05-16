@@ -2,9 +2,13 @@ package validation
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // Field size limits (must match DB VARCHAR constraints in migration 000010, 000011)
@@ -21,7 +25,7 @@ const (
 
 	// Filter parameter limits to prevent memory exhaustion from oversized query strings.
 	MaxFilterCount    = 50   // max number of values per filter param
-	FilterMaxLen = 512  // maxLen of a single filter value
+	FilterMaxLen      = 512  // maxLen of a single filter value
 	MaxSearchQueryLen = 1024 // max length of the search query
 )
 
@@ -125,30 +129,19 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
-// Provider name constants. These are the canonical lowercase values stored
-// in sessions.session_type for new rows. Legacy rows may still hold the
-// display form 'Claude Code' until a future one-time backfill PR; see
-// db.NormalizeProvider in db/provider.go.
-//
-// These are intentionally duplicated with db.ProviderClaudeCode /
-// db.ProviderCodex (which carry the same string values) to keep the
-// validation and db layers free of cross-imports. Keep them in lockstep.
-const (
-	ProviderClaudeCode = "claude-code"
-	ProviderCodex      = "codex"
-)
-
 // ValidateProvider returns an error unless p exactly equals one of the
-// canonical provider values. The handler is responsible for defaulting a
-// missing API field to ProviderClaudeCode before calling this — an explicit
-// empty string is not accepted here. No trimming or case folding.
+// canonical provider values in models.CanonicalProviders. The handler is
+// responsible for defaulting a missing API field to
+// models.ProviderClaudeCode before calling this — an explicit empty
+// string is not accepted here. No trimming or case folding. Legacy DB
+// values like "Claude Code" are NOT accepted on the wire; they exist
+// only at the persistence layer via models.LegacyAliases.
 func ValidateProvider(p string) error {
-	switch p {
-	case ProviderClaudeCode, ProviderCodex:
+	if slices.Contains(models.CanonicalProviders, p) {
 		return nil
 	}
-	return fmt.Errorf("unknown provider %q: must be %q or %q",
-		p, ProviderClaudeCode, ProviderCodex)
+	return fmt.Errorf("unknown provider %q: must be one of %s",
+		p, strings.Join(models.CanonicalProviders, ", "))
 }
 
 // Codex rollout metadata length limits. Match codex_rollouts column widths

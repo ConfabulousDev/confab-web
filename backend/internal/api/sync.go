@@ -182,7 +182,7 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 	// rejected — distinct from "field omitted entirely".
 	var provider string
 	if req.Provider == nil {
-		provider = validation.ProviderClaudeCode
+		provider = models.ProviderClaudeCode
 	} else {
 		provider = *req.Provider
 	}
@@ -362,7 +362,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	// codex_rollout metadata is only meaningful for codex sessions. Check
 	// after VerifySessionOwnership so we don't leak the existence of someone
 	// else's claude-code session via this validation path.
-	if req.Metadata != nil && req.Metadata.CodexRollout != nil && provider != validation.ProviderCodex {
+	if req.Metadata != nil && req.Metadata.CodexRollout != nil && provider != models.ProviderCodex {
 		respondError(w, http.StatusBadRequest,
 			"codex_rollout metadata is only supported for codex sessions")
 		return
@@ -418,7 +418,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	//
 	//   2. PR-link extraction is Claude-Code-specific (assistant_message
 	//      envelope, tool_use blocks). Gated on provider AND file_type.
-	parseClaudeCode := provider == validation.ProviderClaudeCode && req.FileType == "transcript"
+	parseClaudeCode := provider == models.ProviderClaudeCode && req.FileType == "transcript"
 	extractTimestamps := req.FileType == "transcript"
 
 	var content bytes.Buffer

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/attribute"
@@ -548,8 +548,8 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 
 		// Normalize legacy 'Claude Code' → canonical 'claude-code' (CLAUDE.md
 		// invariant: every Scan site reading sessions.session_type must call
-		// db.NormalizeProvider so the API surface only exposes canonical values).
-		item.Provider = db.NormalizeProvider(providerRaw)
+		// models.NormalizeProvider so the API surface only exposes canonical values).
+		item.Provider = models.NormalizeProvider(providerRaw)
 
 		if title != nil {
 			item.Title = *title

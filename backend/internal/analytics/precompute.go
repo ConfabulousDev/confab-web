@@ -10,8 +10,10 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/lib/pq"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -20,13 +22,28 @@ import (
 // ErrQuotaExceeded is returned when a user has exceeded their smart recap quota for the month.
 var ErrQuotaExceeded = errors.New("smart recap quota exceeded")
 
+// providerSupported reports whether the precompute dispatch switches have a
+// case for the given session_type value. TestDispatchCoversAllowedProviders
+// asserts that every value in models.AllowedProviders is supported here — if
+// a new alias / provider is added to AllowedProviders but the dispatch
+// switches aren't updated, that test fails loudly so the bug never reaches
+// production. Phase 2 (CF-402) replaces this helper and the dispatch
+// switches together with a SessionProvider registry.
+func providerSupported(p string) bool {
+	switch p {
+	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy, models.ProviderCodex:
+		return true
+	}
+	return false
+}
+
 // StaleSession represents a session that needs analytics precomputation.
 type StaleSession struct {
 	SessionID  string
 	UserID     int64
 	ExternalID string
 	// Provider is the canonical session_type ("claude-code" or "codex"),
-	// scanned from sessions.session_type and normalized via db.NormalizeProvider.
+	// scanned from sessions.session_type and normalized via models.NormalizeProvider.
 	// Two consumers:
 	//   1. Chunk-storage calls — chunks are read from the provider-scoped S3 prefix.
 	//   2. Dispatch switch in PrecomputeRegularCards / PrecomputeSmartRecapOnly /
@@ -215,10 +232,12 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 			LEFT JOIN session_card_conversation cv ON sl.session_id = cv.session_id
 			LEFT JOIN session_card_agents_and_skills as_card ON sl.session_id = as_card.session_id
 			LEFT JOIN session_card_redactions rd ON sl.session_id = rd.session_id
-			-- Include all provider types eligible for analytics computation.
-			-- TODO(post-Codex-rollout): collapse 'Claude Code' legacy after backfill;
-			-- 'codex' is canonical from day one (no legacy variant).
-			WHERE s.session_type IN ('claude-code', 'Claude Code', 'codex')
+			-- Provider filter: pq.Array(models.AllowedProviders) is the
+			-- permanent allowlist (canonical forms + legacy aliases). See
+			-- internal/models/provider.go for the OSS self-hosted aliasing
+			-- rationale; TestDispatchCoversAllowedProviders is the guard
+			-- against drift between this list and the dispatch switches.
+			WHERE s.session_type = ANY($14)
 		),
 		stale_sessions AS (
 			SELECT
@@ -266,19 +285,20 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 	`
 
 	rows, err := p.db.QueryContext(ctx, query,
-		TokensCardVersion,           // $1
-		SessionCardVersion,          // $2
-		ToolsCardVersion,            // $3
-		CodeActivityCardVersion,     // $4
-		ConversationCardVersion,     // $5
-		AgentsAndSkillsCardVersion,  // $6
-		RedactionsCardVersion,       // $7
-		th.BaseMinLines,             // $8
-		th.ThresholdPct,             // $9
-		th.BaseMinTime.Seconds(),    // $10
-		th.MinInitialLines,          // $11
-		th.MinSessionAge.Seconds(),  // $12
-		limit,                       // $13
+		TokensCardVersion,                 // $1
+		SessionCardVersion,                // $2
+		ToolsCardVersion,                  // $3
+		CodeActivityCardVersion,           // $4
+		ConversationCardVersion,           // $5
+		AgentsAndSkillsCardVersion,        // $6
+		RedactionsCardVersion,             // $7
+		th.BaseMinLines,                   // $8
+		th.ThresholdPct,                   // $9
+		th.BaseMinTime.Seconds(),          // $10
+		th.MinInitialLines,                // $11
+		th.MinSessionAge.Seconds(),        // $12
+		limit,                             // $13
+		pq.Array(models.AllowedProviders), // $14
 	)
 	if err != nil {
 		span.RecordError(err)
@@ -296,7 +316,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
-		s.Provider = db.NormalizeProvider(rawProvider)
+		s.Provider = models.NormalizeProvider(rawProvider)
 		sessions = append(sessions, s)
 	}
 
@@ -320,9 +340,9 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 //   - anything else: loud error (the SQL filter and switch must stay in sync)
 func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleSession) error {
 	switch session.Provider {
-	case db.ProviderClaudeCode, db.ProviderClaudeCodeLegacy:
+	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy:
 		return p.precomputeRegularCardsClaudeCode(ctx, session)
-	case db.ProviderCodex:
+	case models.ProviderCodex:
 		return p.precomputeRegularCardsCodex(ctx, session)
 	default:
 		return fmt.Errorf("unsupported provider for analytics precompute: %q", session.Provider)
@@ -657,9 +677,11 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 				AND sq.quota_month = TO_CHAR(NOW() AT TIME ZONE 'UTC', 'YYYY-MM')
 			LEFT JOIN regen_ts rt ON TRUE
 			LEFT JOIN admin_invalidations ai ON ai.session_id = sl.session_id
-			-- Include all provider types eligible for analytics computation.
-			-- TODO(post-Codex-rollout): collapse 'Claude Code' legacy after backfill.
-			WHERE s.session_type IN ('claude-code', 'Claude Code', 'codex')
+			-- Provider filter: pq.Array(models.AllowedProviders) is the
+			-- permanent allowlist (canonical forms + legacy aliases). See
+			-- internal/models/provider.go for the OSS self-hosted aliasing
+			-- rationale.
+			WHERE s.session_type = ANY($16)
 				-- Quota check: skip for category 4 (global admin regen) and for
 				-- per-session admin invalidations (CF-343). Bypass clauses OR together.
 				AND (
@@ -701,21 +723,22 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	`
 
 	rows, err := p.db.QueryContext(ctx, query,
-		TokensCardVersion,             // $1
-		SessionCardVersion,            // $2
-		ToolsCardVersion,              // $3
-		CodeActivityCardVersion,       // $4
-		ConversationCardVersion,       // $5
-		AgentsAndSkillsCardVersion,    // $6
-		RedactionsCardVersion,         // $7
-		SmartRecapCardVersion,         // $8
-		th.BaseMinLines,               // $9
-		th.ThresholdPct,               // $10
-		th.BaseMinTime.Seconds(),      // $11
-		th.MinInitialLines,            // $12
-		th.MinSessionAge.Seconds(),    // $13
-		limit,                         // $14
-		p.config.SmartRecapQuota,      // $15
+		TokensCardVersion,                 // $1
+		SessionCardVersion,                // $2
+		ToolsCardVersion,                  // $3
+		CodeActivityCardVersion,           // $4
+		ConversationCardVersion,           // $5
+		AgentsAndSkillsCardVersion,        // $6
+		RedactionsCardVersion,             // $7
+		SmartRecapCardVersion,             // $8
+		th.BaseMinLines,                   // $9
+		th.ThresholdPct,                   // $10
+		th.BaseMinTime.Seconds(),          // $11
+		th.MinInitialLines,                // $12
+		th.MinSessionAge.Seconds(),        // $13
+		limit,                             // $14
+		p.config.SmartRecapQuota,          // $15
+		pq.Array(models.AllowedProviders), // $16
 	)
 	if err != nil {
 		span.RecordError(err)
@@ -733,7 +756,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
-		s.Provider = db.NormalizeProvider(rawProvider)
+		s.Provider = models.NormalizeProvider(rawProvider)
 		sessions = append(sessions, s)
 	}
 
@@ -787,9 +810,11 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 			AND rd.version = $7 AND rd.up_to_line = sl.total_lines
 		LEFT JOIN session_search_index si ON sl.session_id = si.session_id
 		LEFT JOIN session_card_smart_recap sr ON sl.session_id = sr.session_id
-		-- Include all provider types eligible for analytics computation.
-		-- TODO(post-Codex-rollout): collapse 'Claude Code' legacy after backfill.
-		WHERE s.session_type IN ('claude-code', 'Claude Code', 'codex')
+		-- Provider filter: pq.Array(models.AllowedProviders) is the
+		-- permanent allowlist (canonical forms + legacy aliases). See
+		-- internal/models/provider.go for the OSS self-hosted aliasing
+		-- rationale.
+		WHERE s.session_type = ANY($10)
 		  AND (
 			-- 1. Never indexed
 			si.session_id IS NULL
@@ -807,15 +832,16 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 	`
 
 	rows, err := p.db.QueryContext(ctx, query,
-		TokensCardVersion,          // $1
-		SessionCardVersion,         // $2
-		ToolsCardVersion,           // $3
-		CodeActivityCardVersion,    // $4
-		ConversationCardVersion,    // $5
-		AgentsAndSkillsCardVersion, // $6
-		RedactionsCardVersion,      // $7
-		SearchIndexVersion,         // $8
-		limit,                      // $9
+		TokensCardVersion,                 // $1
+		SessionCardVersion,                // $2
+		ToolsCardVersion,                  // $3
+		CodeActivityCardVersion,           // $4
+		ConversationCardVersion,           // $5
+		AgentsAndSkillsCardVersion,        // $6
+		RedactionsCardVersion,             // $7
+		SearchIndexVersion,                // $8
+		limit,                             // $9
+		pq.Array(models.AllowedProviders), // $10
 	)
 	if err != nil {
 		span.RecordError(err)
@@ -833,7 +859,7 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
-		s.Provider = db.NormalizeProvider(rawProvider)
+		s.Provider = models.NormalizeProvider(rawProvider)
 		sessions = append(sessions, s)
 	}
 	if err := rows.Err(); err != nil {
@@ -850,9 +876,9 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 // by session.Provider — see PrecomputeRegularCards for the dispatch contract.
 func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSession) error {
 	switch session.Provider {
-	case db.ProviderClaudeCode, db.ProviderClaudeCodeLegacy:
+	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy:
 		return p.buildSearchIndexClaudeCode(ctx, session)
-	case db.ProviderCodex:
+	case models.ProviderCodex:
 		return p.buildSearchIndexCodex(ctx, session)
 	default:
 		return fmt.Errorf("unsupported provider for search index: %q", session.Provider)
@@ -947,9 +973,9 @@ func (p *Precomputer) loadRecapIndexedAt(ctx context.Context, sessionID string) 
 // Dispatches by session.Provider — see PrecomputeRegularCards for the contract.
 func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session StaleSession) error {
 	switch session.Provider {
-	case db.ProviderClaudeCode, db.ProviderClaudeCodeLegacy:
+	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy:
 		return p.precomputeSmartRecapClaudeCode(ctx, session)
-	case db.ProviderCodex:
+	case models.ProviderCodex:
 		return p.precomputeSmartRecapCodex(ctx, session)
 	default:
 		return fmt.Errorf("unsupported provider for smart recap: %q", session.Provider)

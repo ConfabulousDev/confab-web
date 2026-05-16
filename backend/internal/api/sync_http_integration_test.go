@@ -1471,7 +1471,7 @@ func TestSyncFileRead_HTTP_Integration(t *testing.T) {
 {"line":4,"chunk":"old"}
 {"line":5,"chunk":"old"}
 `)
-		_, err := env.Storage.UploadChunk(env.Ctx, user.ID, validation.ProviderClaudeCode, externalID, "transcript.jsonl", 1, 5, chunk1Data)
+		_, err := env.Storage.UploadChunk(env.Ctx, user.ID, models.ProviderClaudeCode, externalID, "transcript.jsonl", 1, 5, chunk1Data)
 		if err != nil {
 			t.Fatalf("failed to upload chunk 1: %v", err)
 		}
@@ -1488,7 +1488,7 @@ func TestSyncFileRead_HTTP_Integration(t *testing.T) {
 {"line":9,"chunk":"new"}
 {"line":10,"chunk":"new"}
 `)
-		_, err = env.Storage.UploadChunk(env.Ctx, user.ID, validation.ProviderClaudeCode, externalID, "transcript.jsonl", 1, 10, chunk2Data)
+		_, err = env.Storage.UploadChunk(env.Ctx, user.ID, models.ProviderClaudeCode, externalID, "transcript.jsonl", 1, 10, chunk2Data)
 		if err != nil {
 			t.Fatalf("failed to upload chunk 2: %v", err)
 		}
@@ -1549,7 +1549,7 @@ func TestSyncFileRead_HTTP_Integration(t *testing.T) {
 {"line":4,"source":"A"}
 {"line":5,"source":"A"}
 `)
-		_, err := env.Storage.UploadChunk(env.Ctx, user.ID, validation.ProviderClaudeCode, externalID, "transcript.jsonl", 1, 5, chunk1Data)
+		_, err := env.Storage.UploadChunk(env.Ctx, user.ID, models.ProviderClaudeCode, externalID, "transcript.jsonl", 1, 5, chunk1Data)
 		if err != nil {
 			t.Fatalf("failed to upload chunk 1: %v", err)
 		}
@@ -1564,7 +1564,7 @@ func TestSyncFileRead_HTTP_Integration(t *testing.T) {
 {"line":9,"source":"B"}
 {"line":10,"source":"B"}
 `)
-		_, err = env.Storage.UploadChunk(env.Ctx, user.ID, validation.ProviderClaudeCode, externalID, "transcript.jsonl", 3, 10, chunk2Data)
+		_, err = env.Storage.UploadChunk(env.Ctx, user.ID, models.ProviderClaudeCode, externalID, "transcript.jsonl", 3, 10, chunk2Data)
 		if err != nil {
 			t.Fatalf("failed to upload chunk 2: %v", err)
 		}
@@ -2546,7 +2546,7 @@ func TestDeleteSession_HTTP_Integration(t *testing.T) {
 		// Verify chunks exist in S3 before deletion. The provider-scoped path
 		// is what handleSyncChunk just wrote for a default (claude-code) session.
 		s3Key := fmt.Sprintf("%d/%s/delete-test-session/chunks/transcript.jsonl/chunk_%08d_%08d.jsonl",
-			user.ID, validation.ProviderClaudeCode, 1, 1)
+			user.ID, models.ProviderClaudeCode, 1, 1)
 		testutil.VerifyFileInS3(t, env, s3Key)
 
 		// Need session auth for delete endpoint (web dashboard endpoint)
@@ -2737,7 +2737,7 @@ func TestSyncFileRead_SelfHealing_HTTP_Integration(t *testing.T) {
 			firstLine := (i-1)*10 + 1
 			lastLine := i * 10
 			data := []byte(`{"chunk":` + string(rune('0'+i)) + `}` + "\n")
-			_, err := env.Storage.UploadChunk(env.Ctx, user.ID, validation.ProviderClaudeCode, externalID, "transcript.jsonl", firstLine, lastLine, data)
+			_, err := env.Storage.UploadChunk(env.Ctx, user.ID, models.ProviderClaudeCode, externalID, "transcript.jsonl", firstLine, lastLine, data)
 			if err != nil {
 				t.Fatalf("failed to upload chunk %d: %v", i, err)
 			}
@@ -2790,7 +2790,7 @@ func TestSyncFileRead_SelfHealing_HTTP_Integration(t *testing.T) {
 			firstLine := (i-1)*10 + 1
 			lastLine := i * 10
 			data := []byte(`{"chunk":` + string(rune('0'+i)) + `}` + "\n")
-			_, err := env.Storage.UploadChunk(env.Ctx, user.ID, validation.ProviderClaudeCode, externalID, "transcript.jsonl", firstLine, lastLine, data)
+			_, err := env.Storage.UploadChunk(env.Ctx, user.ID, models.ProviderClaudeCode, externalID, "transcript.jsonl", firstLine, lastLine, data)
 			if err != nil {
 				t.Fatalf("failed to upload chunk %d: %v", i, err)
 			}
@@ -2843,7 +2843,7 @@ func TestSyncFileRead_SelfHealing_HTTP_Integration(t *testing.T) {
 			firstLine := (i-1)*10 + 1
 			lastLine := i * 10
 			data := []byte(`{"chunk":` + string(rune('0'+i)) + `}` + "\n")
-			_, err := env.Storage.UploadChunk(env.Ctx, user.ID, validation.ProviderClaudeCode, externalID, "transcript.jsonl", firstLine, lastLine, data)
+			_, err := env.Storage.UploadChunk(env.Ctx, user.ID, models.ProviderClaudeCode, externalID, "transcript.jsonl", firstLine, lastLine, data)
 			if err != nil {
 				t.Fatalf("failed to upload chunk %d: %v", i, err)
 			}

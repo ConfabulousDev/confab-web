@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // paramBuilder tracks $N indices for dynamic SQL parameter construction.
@@ -58,27 +59,6 @@ func lowercaseSlice(ss []string) []string {
 		result[i] = strings.ToLower(s)
 	}
 	return result
-}
-
-// expandProviderLegacy returns a slice that contains each canonical provider
-// value plus its legacy DB form (currently only `claude-code` has the legacy
-// form `'Claude Code'`). Callers feed the result into `s.session_type = ANY(...)`
-// so legacy rows match the canonical request.
-//
-// Sibling of db.NormalizeProvider; both are deleted together by the
-// post-rollout backfill PR that collapses 'Claude Code' rows to 'claude-code'.
-func expandProviderLegacy(canonical []string) []string {
-	if len(canonical) == 0 {
-		return []string{}
-	}
-	out := make([]string, 0, len(canonical)+1)
-	for _, v := range canonical {
-		out = append(out, v)
-		if v == db.ProviderClaudeCode {
-			out = append(out, db.ProviderClaudeCodeLegacy)
-		}
-	}
-	return out
 }
 
 // ListUserSessions returns all sessions visible to a user (owned + shared) with deduplication.
@@ -125,7 +105,7 @@ func scanSessionListItems(rows *sql.Rows) ([]db.SessionListItem, error) {
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
-		session.Provider = db.NormalizeProvider(session.Provider)
+		session.Provider = models.NormalizeProvider(session.Provider)
 		if gitRepoURL != nil && *gitRepoURL != "" {
 			session.GitRepo = db.ExtractRepoName(*gitRepoURL)
 			session.GitRepoURL = gitRepoURL
@@ -257,19 +237,12 @@ func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.Sessio
 	return s.queryFilterOptionsScoped(ctx, userID)
 }
 
-// staticProviderOptions returns the closed enum of provider values surfaced
-// in the filter UI. The list intentionally does NOT depend on the requesting
-// user's data — the chip should always be selectable for both providers.
-func staticProviderOptions() []string {
-	return []string{db.ProviderClaudeCode, db.ProviderCodex}
-}
-
 func (s *Store) queryFilterOptionsGlobal(ctx context.Context) (db.SessionFilterOptions, error) {
 	opts := db.SessionFilterOptions{
 		Repos:     make([]string, 0),
 		Branches:  make([]string, 0),
 		Owners:    make([]string, 0),
-		Providers: staticProviderOptions(),
+		Providers: models.CanonicalProviders,
 	}
 
 	rows, err := s.conn().QueryContext(ctx, "SELECT repo_name FROM session_repos ORDER BY repo_name")
@@ -361,7 +334,7 @@ func (s *Store) queryFilterOptionsScoped(ctx context.Context, userID int64) (db.
 		Repos:     nonNilSlice(repos),
 		Branches:  nonNilSlice(branches),
 		Owners:    nonNilSlice(owners),
-		Providers: staticProviderOptions(),
+		Providers: models.CanonicalProviders,
 	}, nil
 }
 
@@ -399,7 +372,7 @@ func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (common
 		commonFilters += "\n\t\t\t\tAND s.git_info->>'branch' = ANY(" + p + ")"
 	}
 	if len(params.Providers) > 0 {
-		p := pb.addArray(expandProviderLegacy(params.Providers))
+		p := pb.addArray(models.ExpandWithAliases(params.Providers))
 		commonFilters += "\n\t\t\t\tAND s.session_type = ANY(" + p + ")"
 	}
 	if len(params.Owners) > 0 {
@@ -648,7 +621,7 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
-	session.Provider = db.NormalizeProvider(session.Provider)
+	session.Provider = models.NormalizeProvider(session.Provider)
 
 	if err := db.UnmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
 		span.RecordError(err)
@@ -725,7 +698,7 @@ func (s *Store) VerifySessionOwnership(ctx context.Context, sessionID string, us
 		span.SetStatus(codes.Error, err.Error())
 		return "", "", fmt.Errorf("failed to verify session ownership: %w", err)
 	}
-	provider = db.NormalizeProvider(provider)
+	provider = models.NormalizeProvider(provider)
 	span.SetAttributes(
 		attribute.String("result", "owner"),
 		attribute.String("session.provider", provider),
@@ -829,10 +802,10 @@ func (s *Store) UpdateSessionSuggestedTitle(ctx context.Context, sessionID strin
 
 // GetSessionOwnerExternalIDAndProvider returns the user_id, external_id, and
 // canonical provider for a session. Legacy 'Claude Code' rows are normalized
-// to db.ProviderClaudeCode via db.NormalizeProvider so callers can pass the
-// returned provider straight into the chunk-storage methods without further
-// massaging. Used by canonical-access read paths (analytics, sync file read,
-// transcript download) that don't go through the owner-only
+// to models.ProviderClaudeCode via models.NormalizeProvider so callers can
+// pass the returned provider straight into the chunk-storage methods without
+// further massaging. Used by canonical-access read paths (analytics, sync
+// file read, transcript download) that don't go through the owner-only
 // VerifySessionOwnership route.
 func (s *Store) GetSessionOwnerExternalIDAndProvider(ctx context.Context, sessionID string) (userID int64, externalID string, provider string, err error) {
 	ctx, span := tracer.Start(ctx, "db.get_session_owner_external_id_and_provider",
@@ -849,7 +822,7 @@ func (s *Store) GetSessionOwnerExternalIDAndProvider(ctx context.Context, sessio
 		span.SetStatus(codes.Error, err.Error())
 		return 0, "", "", fmt.Errorf("failed to get session: %w", err)
 	}
-	provider = db.NormalizeProvider(provider)
+	provider = models.NormalizeProvider(provider)
 	span.SetAttributes(
 		attribute.Int64("user.id", userID),
 		attribute.String("session.provider", provider),

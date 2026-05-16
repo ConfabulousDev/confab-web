@@ -7,7 +7,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"github.com/ConfabulousDev/confab-web/internal/validation"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // TestContainsAny tests the helper function for network error detection
@@ -198,7 +198,7 @@ func TestUploadChunkLineBounds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := s.UploadChunk(t.Context(), 1, validation.ProviderClaudeCode, "ext-123", "transcript.jsonl", tt.firstLine, tt.lastLine, []byte("data"))
+			_, err := s.UploadChunk(t.Context(), 1, models.ProviderClaudeCode, "ext-123", "transcript.jsonl", tt.firstLine, tt.lastLine, []byte("data"))
 			if err == nil {
 				t.Errorf("expected error for invalid range [%d, %d]", tt.firstLine, tt.lastLine)
 			} else if !strings.Contains(err.Error(), "invalid line range") {

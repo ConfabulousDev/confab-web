@@ -33,11 +33,12 @@ const SessionDetailColumns = `
 // `gitInfoBytes` is scanned as raw bytes; callers are responsible for
 // unmarshaling via `UnmarshalSessionGitInfo` after a successful Scan.
 //
-// Callers must invoke `NormalizeProvider` on `session.Provider` after
-// scanning to map the legacy `'Claude Code'` display value to the
-// canonical lowercase form. This step is intentionally not folded into
-// the helper so that the caller's error handling sits between Scan and
-// the value mutation.
+// Callers must invoke `models.NormalizeProvider` on `session.Provider`
+// after scanning to map the legacy `'Claude Code'` display value to the
+// canonical lowercase form (the permanent aliasing layer — see
+// internal/models/provider.go for the OSS self-hosted rationale). This
+// step is intentionally not folded into the helper so that the caller's
+// error handling sits between Scan and the value mutation.
 func SessionDetailScanTargets(session *SessionDetail, gitInfoBytes *[]byte) []any {
 	return []any{
 		&session.ID, &session.ExternalID, &session.Provider, &session.CustomTitle,

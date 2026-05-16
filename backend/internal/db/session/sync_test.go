@@ -9,8 +9,8 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
-	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // =============================================================================
@@ -813,8 +813,8 @@ func TestGetSessionOwnerExternalIDAndProvider_Success(t *testing.T) {
 	if externalID != "test-external-id" {
 		t.Errorf("externalID = %s, want test-external-id", externalID)
 	}
-	if provider != validation.ProviderClaudeCode {
-		t.Errorf("provider = %q, want %q", provider, validation.ProviderClaudeCode)
+	if provider != models.ProviderClaudeCode {
+		t.Errorf("provider = %q, want %q", provider, models.ProviderClaudeCode)
 	}
 }
 
@@ -838,7 +838,7 @@ func TestGetSessionOwnerExternalIDAndProvider_NotFound(t *testing.T) {
 
 // TestGetSessionOwnerExternalIDAndProvider_NormalizesLegacy asserts that a
 // session row written with the legacy display value 'Claude Code' is
-// surfaced as canonical validation.ProviderClaudeCode. This is the CF-351
+// surfaced as canonical models.ProviderClaudeCode. This is the CF-351
 // contract that downstream chunk-storage paths can rely on without doing
 // their own normalization.
 func TestGetSessionOwnerExternalIDAndProvider_NormalizesLegacy(t *testing.T) {
@@ -866,8 +866,8 @@ func TestGetSessionOwnerExternalIDAndProvider_NormalizesLegacy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSessionOwnerExternalIDAndProvider failed: %v", err)
 	}
-	if provider != validation.ProviderClaudeCode {
-		t.Errorf("provider = %q, want canonical %q (legacy 'Claude Code' should normalize)", provider, validation.ProviderClaudeCode)
+	if provider != models.ProviderClaudeCode {
+		t.Errorf("provider = %q, want canonical %q (legacy 'Claude Code' should normalize)", provider, models.ProviderClaudeCode)
 	}
 }
 
@@ -969,8 +969,9 @@ func TestFindOrCreateSyncSession_DefaultsParamsToClaudeCode(t *testing.T) {
 // older binary has already written a session with session_type = 'Claude Code'
 // (the historical display form), a subsequent FindOrCreate call from new code
 // with Provider = "claude-code" returns the SAME row rather than creating a
-// duplicate. This is required because the migration intentionally does not
-// backfill legacy values (deploy gap invariant).
+// duplicate. This is required because Confab is OSS self-hosted and never
+// runs a backfill across operator databases — 'Claude Code' is a permanent
+// alias via models.LegacyAliases.
 func TestFindOrCreateSyncSession_FindsLegacyClaudeCodeRow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

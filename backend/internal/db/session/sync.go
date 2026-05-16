@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // FindOrCreateSyncSession finds an existing session by (user_id, provider,
@@ -22,17 +24,16 @@ import (
 //   - An empty params.Provider is defaulted to "claude-code" so the DB layer
 //     is robust to callers that forgot to set it. The HTTP handler validates
 //     and supplies the canonical value before reaching here.
-//   - The SELECT-side lookup for "claude-code" matches BOTH the canonical
-//     form and the legacy display value "Claude Code". The migration in
-//     000043 intentionally does not backfill legacy rows (see
-//     project-deploy-migration-ordering); without the dual-value match a
-//     freshly-deployed binary would fail to find a row written moments
-//     earlier by an older binary and create a duplicate.
+//   - The SELECT-side lookup uses `session_type = ANY($3)` with
+//     models.ExpandWithAliases so a "claude-code" lookup also matches
+//     pre-CF-347 rows that still hold the legacy "Claude Code" display
+//     form. This is the permanent aliasing layer (Confab is OSS
+//     self-hosted, no one-time backfill) — see internal/models/provider.go.
 //   - The INSERT writes the canonical form parameterized — never a hardcoded
 //     legacy literal.
 func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, params db.SyncSessionParams) (sessionID string, files map[string]db.SyncFileState, err error) {
 	if params.Provider == "" {
-		params.Provider = db.ProviderClaudeCode
+		params.Provider = models.ProviderClaudeCode
 	}
 
 	ctx, span := tracer.Start(ctx, "db.find_or_create_sync_session",
@@ -43,9 +44,6 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 		))
 	defer span.End()
 
-	// Build a provider-scoped SELECT. claude-code lookups must also match
-	// the legacy "Claude Code" value left over from older binaries; codex
-	// is new, so a single-value match is sufficient.
 	selectQuery, selectArgs := buildSessionLookupQuery(userID, params.ExternalID, params.Provider)
 
 	err = s.conn().QueryRowContext(ctx, selectQuery, selectArgs...).Scan(&sessionID)
@@ -108,18 +106,14 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 	return "", nil, fmt.Errorf("failed to create session: %w", err)
 }
 
-// buildSessionLookupQuery returns the SELECT-by-provider query and its args.
-// For "claude-code" the WHERE matches both the canonical form and the legacy
-// "Claude Code" display form so a freshly-deployed binary still finds rows
-// written by an older binary during the deploy gap. For any other provider
-// (currently only "codex") a plain equality match is used.
+// buildSessionLookupQuery returns the SELECT-by-provider query and its
+// args. Uses `session_type = ANY($3)` with models.ExpandWithAliases so
+// legacy session_type rows (e.g. the pre-CF-347 'Claude Code' display
+// form) match canonical-form requests. This is the permanent
+// provider-aliasing layer — see internal/models/provider.go.
 func buildSessionLookupQuery(userID int64, externalID, provider string) (string, []any) {
-	if provider == db.ProviderClaudeCode {
-		return `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type IN ('claude-code', 'Claude Code')`,
-			[]any{userID, externalID}
-	}
-	return `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = $3`,
-		[]any{userID, externalID, provider}
+	return `SELECT id FROM sessions WHERE user_id = $1 AND external_id = $2 AND session_type = ANY($3)`,
+		[]any{userID, externalID, pq.Array(models.ExpandWithAliases([]string{provider}))}
 }
 
 func (s *Store) updateSessionMetadata(ctx context.Context, sessionID string, params db.SyncSessionParams) error {

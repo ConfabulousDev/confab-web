@@ -507,7 +507,7 @@ func TestComposeSubject_ProviderAware(t *testing.T) {
 
 func TestComposeSubject_NormalizesLegacyClaudeCode(t *testing.T) {
 	// Defense in depth: even if a caller forgets to call
-	// db.NormalizeProvider, the legacy display form "Claude Code" must not
+	// models.NormalizeProvider, the legacy display form "Claude Code" must not
 	// produce a different brand phrase or trigger the unknown-provider log.
 	params := ShareInvitationParams{
 		SharerName: "Alice",

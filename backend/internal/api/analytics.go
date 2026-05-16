@@ -15,6 +15,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
@@ -101,7 +102,7 @@ func (c SmartRecapConfig) generatorConfig() analytics.SmartRecapGeneratorConfig 
 // normalizes to the Codex canonical value. Centralizes the normalize-and-compare
 // pattern used at every Codex dispatch point in this file.
 func isCodexSession(provider string) bool {
-	return db.NormalizeProvider(provider) == db.ProviderCodex
+	return models.NormalizeProvider(provider) == models.ProviderCodex
 }
 
 // classifiedFiles holds the transcript and agent files from a session,
