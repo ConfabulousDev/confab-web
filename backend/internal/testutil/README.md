@@ -32,6 +32,38 @@ go test ./internal/api/... -v -run "_HTTP_Integration"
 go test ./internal/api/... -v -run "TestSyncInit_HTTP_Integration/creates_new"
 ```
 
+## Coverage
+
+The canonical end-to-end coverage command is:
+
+```bash
+make coverage
+# or, equivalently:
+./scripts/coverage.sh
+```
+
+This runs `go test ... -coverprofile=...` one package at a time and merges
+the per-package profiles into `backend/coverage.out`. Running sequentially
+avoids a cross-package docker stampede: every integration test starts fresh
+Postgres + MinIO containers (see `SetupTestEnvironment`), and `go test ./...`
+running many package binaries in parallel can outpace a laptop's docker
+daemon and trip the MinIO health probe.
+
+After a run:
+- Merged profile: `backend/coverage.out`
+- Per-package profiles: `backend/build/coverage/<slug>.cover` (gitignored,
+  persist after the run for `go tool cover -html=<file>` inspection)
+- Headline total: `go tool cover -func=coverage.out | tail -n 1`
+
+The plain `go test` form also works:
+
+```bash
+go test ./... -coverprofile=coverage.out -covermode=atomic
+```
+
+It is faster on a healthy machine but may occasionally flake under heavy
+docker load. If it flakes, use `make coverage`.
+
 ## Architecture
 
 ### Test Infrastructure Components
