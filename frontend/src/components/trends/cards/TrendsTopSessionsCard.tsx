@@ -1,5 +1,6 @@
 import { TrendsCard } from './TrendsCard';
-import { ChatIcon, ClaudeCodeIcon, CodexIcon, TrendingUpIcon } from '@/components/icons';
+import { ChatIcon, TrendingUpIcon } from '@/components/icons';
+import { getProviderMetadataOrFallback } from '@/utils/providers';
 import { formatDuration } from '@/utils';
 import { formatCost } from '@/utils/tokenStats';
 import type { TrendsTopSessionsCard as TrendsTopSessionsCardData } from '@/schemas/api';
@@ -19,9 +20,7 @@ function formatRepoName(repo: string): string {
 // unknown values). The Costliest Sessions card must not assert Claude
 // identity for empty/unknown providers — surface a neutral ChatIcon instead.
 function getRowProviderIcon(provider: string) {
-  if (provider === 'codex') return CodexIcon;
-  if (provider === 'claude-code' || provider === 'Claude Code') return ClaudeCodeIcon;
-  return ChatIcon;
+  return getProviderMetadataOrFallback(provider, 'neutral')?.icon ?? ChatIcon;
 }
 
 export function TrendsTopSessionsCard({ data }: TrendsTopSessionsCardProps) {

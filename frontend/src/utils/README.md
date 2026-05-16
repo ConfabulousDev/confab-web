@@ -19,7 +19,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `agentSkillChart.ts` | Shared agent/skill chart constants, types, and name truncation |
 | `utils.ts` | Low-level utilities: `stripAnsi`, `isRecord` (runtime guard for plain objects, used wherever an `unknown` needs its fields read without an `as` cast), `formatBytes` |
 | `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. `tryParseAsJson` — if a string is a JSON object/array, return a pretty-printed version (used as the JSON fallback before markdown rendering). Used by `ContentBlock`, the Codex message renderers, `AwaySummary`, and `QueuedCommand` |
-| `providers.ts` | CF-393 — `PROVIDER_VALUES` (canonical agent identifiers as a `const` tuple), `providerLabel(value)` returning the display label (`"Claude Code"`, `"Codex"`, or the canonical value verbatim for unknown providers). Used by `FilterChipsBar`'s Provider chip and active-filter pill |
+| `providers.ts` | CF-416 — `PROVIDER_METADATA` registry (icon, label, brandDisplayName, brandColor, resumeCommand) keyed by `ProviderId` (`'claude-code' \| 'codex'`). `getProviderMetadata(id)` strict canonical lookup; `getProviderMetadataOrFallback(value, 'claude' \| 'neutral')` codifies the unknown-provider policy in one place. `PROVIDER_VALUES`, `providerLabel(value)` preserved for back-compat with surfaces that render arbitrary backend values. Used by `providerIcon`, `SessionHeader`, `CopyIdDropdown`, `TrendsTopSessionsCard`, `FilterChipsBar` |
 | `index.ts` | Barrel re-exports of commonly used functions |
 
 ## Key Functions
@@ -131,6 +131,7 @@ These tables must stay in sync; `TestPricingTableSync` enforces this. Look up cu
 - `git.test.ts` -- Repo/branch URL conversion across SSH, HTTPS, GitHub, GitLab
 - `sorting.test.ts` -- Generic sort by string/number/date with null handling and filter
 - `utils.test.ts` -- ANSI stripping, byte formatting
+- `providers.test.ts` -- Registry drift guard, canonical/fallback lookups, legacy `'Claude Code'` normalization, `providerLabel` passthrough
 
 ## Dependencies
 

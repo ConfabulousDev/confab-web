@@ -33,7 +33,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `HeroCards.tsx` | Landing page hero section cards |
 | `HowItWorksModal.tsx` | Onboarding modal explaining the product |
 | `icons.tsx` | SVG icon components (ClaudeCodeIcon, CodexIcon, GitHubIcon, etc.) |
-| `providerIcon.ts` | `getProviderIcon(provider)` -- picks ClaudeCodeIcon or CodexIcon for chip avatars |
+| `providerIcon.ts` | `getProviderIcon(provider)` -- thin delegate to `getProviderMetadataOrFallback(provider, 'claude').icon` (see `@/utils/providers`). Lives in its own file to keep `icons.tsx` JSX-only for HMR fast-refresh |
 | `LoadingSkeleton.tsx` | Animated loading placeholder |
 | `Modal.tsx` | Base modal component with backdrop and close handling |
 | `PageHeader.tsx` | Page-level header with title and optional actions |

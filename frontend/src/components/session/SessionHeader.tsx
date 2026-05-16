@@ -20,6 +20,7 @@ import type {
 } from './codexCategories';
 import { PersonIcon } from '@/components/icons';
 import { getProviderIcon } from '@/components/providerIcon';
+import { getProviderMetadataOrFallback } from '@/utils/providers';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
 import FilterDropdown from './FilterDropdown';
@@ -28,16 +29,6 @@ import CopyIdDropdown from '@/components/CopyIdDropdown';
 import styles from './SessionHeader.module.css';
 
 const MAX_CUSTOM_TITLE_LENGTH = 255;
-
-// CF-383: Display name used in the provider meta-item when no `model` is
-// available (Codex session before its rollout meta resolves, or any session
-// whose first line lacks a model field). Kept file-local — the parallel
-// per-provider branching in `CopyIdDropdown.externalIdMenuStrings` and
-// `getProviderIcon` is already its own thing; a shared helper can land when a
-// fourth surface needs it.
-function providerLabel(provider: string): string {
-  return provider === 'codex' ? 'Codex' : 'Claude';
-}
 
 const DurationIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -297,7 +288,7 @@ function SessionHeader({
           <GitInfoMeta gitInfo={gitInfo} />
           <MetaItem
             icon={getProviderIcon(provider)}
-            value={model ? formatModelName(model) : providerLabel(provider)}
+            value={model ? formatModelName(model) : getProviderMetadataOrFallback(provider, 'claude').brandDisplayName}
           />
           {durationMs !== undefined && durationMs > 0 && (
             <MetaItem icon={DurationIcon} value={formatDuration(durationMs)} />

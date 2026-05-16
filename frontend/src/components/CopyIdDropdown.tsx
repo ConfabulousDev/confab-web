@@ -1,6 +1,7 @@
 import { useState, type MouseEvent } from 'react';
 import { useDropdown } from '@/hooks';
 import { CopyIcon, CheckIcon } from '@/components/icons';
+import { getProviderMetadataOrFallback } from '@/utils/providers';
 import styles from './CopyIdDropdown.module.css';
 
 interface CopyIdDropdownProps {
@@ -18,21 +19,10 @@ interface CopyIdDropdownProps {
   showChip?: boolean;
 }
 
-// Per-provider strings for the "Copy <agent> ID" menu item. We intentionally
-// keep this local to CopyIdDropdown (rather than a shared util) because no
-// other surface today needs the resume-command hint; adding a provider here
-// is a one-line change.
-function externalIdMenuStrings(provider: string): { label: string; hint: string } {
-  if (provider === 'codex') {
-    return { label: 'Copy Codex ID', hint: 'for codex resume' };
-  }
-  return { label: 'Copy Claude Code ID', hint: 'for /resume' };
-}
-
 function CopyIdDropdown({ confabId, externalId, provider = 'claude-code', showChip = false }: CopyIdDropdownProps) {
   const { isOpen, setIsOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
-  const externalStrings = externalIdMenuStrings(provider);
+  const { resumeCommand } = getProviderMetadataOrFallback(provider, 'claude');
 
   function handleToggle(e: MouseEvent) {
     e.stopPropagation();
@@ -90,8 +80,8 @@ function CopyIdDropdown({ confabId, externalId, provider = 'claude-code', showCh
             onClick={(e) => handleCopy(externalId, 'external', e)}
           >
             <span className={styles.menuLabel}>
-              {externalStrings.label}
-              <span className={styles.menuHint}>{externalStrings.hint}</span>
+              {resumeCommand.idLabel}
+              <span className={styles.menuHint}>{resumeCommand.commandHint}</span>
             </span>
             {copiedLabel === 'external' && <span className={styles.menuCheck}>{CheckIcon}</span>}
           </button>

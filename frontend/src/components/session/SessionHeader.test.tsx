@@ -128,10 +128,10 @@ describe('SessionHeader', () => {
   });
 
   // CF-383: when `model` is missing the provider icon must still render and
-  // the meta-item value falls back to the provider display name (Codex/Claude).
-  // Queries are scoped to the meta row via `session-meta` data-testid so the
-  // assertions don't collide with any title-row text that happens to contain
-  // "Codex" or "Claude".
+  // the meta-item value falls back to the provider brandDisplayName from
+  // PROVIDER_METADATA (Codex / Claude Code). Queries are scoped to the meta
+  // row via `session-meta` data-testid so the assertions don't collide with
+  // any title-row text that happens to contain "Codex" or "Claude Code".
   describe('provider meta-item — model fallback', () => {
     it('shows Codex brand icon for codex sessions even when model is missing', () => {
       renderWithRouter(
@@ -142,13 +142,13 @@ describe('SessionHeader', () => {
       expect(meta.getByText('Codex')).toBeInTheDocument();
     });
 
-    it('shows Claude brand icon for claude sessions even when model is missing', () => {
+    it('shows Claude Code brand icon for claude sessions even when model is missing', () => {
       renderWithRouter(
         <SessionHeader {...defaultProps} provider="claude-code" model={undefined} />
       );
       const meta = within(screen.getByTestId('session-meta'));
       expect(meta.getByTestId('icon-claude')).toBeInTheDocument();
-      expect(meta.getByText('Claude')).toBeInTheDocument();
+      expect(meta.getByText('Claude Code')).toBeInTheDocument();
     });
 
     it('shows formatted model name for codex sessions when model is present', () => {
@@ -167,7 +167,7 @@ describe('SessionHeader', () => {
       );
       const meta = within(screen.getByTestId('session-meta'));
       expect(meta.getByTestId('icon-claude')).toBeInTheDocument();
-      expect(meta.queryByText('Claude')).not.toBeInTheDocument();
+      expect(meta.queryByText('Claude Code')).not.toBeInTheDocument();
     });
   });
 });
