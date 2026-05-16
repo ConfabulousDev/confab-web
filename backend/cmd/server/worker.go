@@ -28,11 +28,23 @@ type WorkerConfig struct {
 	DryRun                 bool // If true, log what would be done without actually precomputing
 }
 
+// precomputerAPI is the narrow surface Worker calls on the precomputer.
+// *analytics.Precomputer satisfies this interface in production; tests pass a
+// fake to exercise the worker loop without a real DB or S3 backend.
+type precomputerAPI interface {
+	FindStaleSessions(ctx context.Context, limit int) ([]analytics.StaleSession, error)
+	FindStaleSmartRecapSessions(ctx context.Context, limit int) ([]analytics.StaleSession, error)
+	FindStaleSearchIndexSessions(ctx context.Context, limit int) ([]analytics.StaleSession, error)
+	PrecomputeRegularCards(ctx context.Context, session analytics.StaleSession) error
+	PrecomputeSmartRecapOnly(ctx context.Context, session analytics.StaleSession) error
+	BuildSearchIndexOnly(ctx context.Context, session analytics.StaleSession) error
+}
+
 // Worker is the background analytics precompute worker.
 type Worker struct {
 	db          *db.DB
 	store       *storage.S3Storage
-	precomputer *analytics.Precomputer
+	precomputer precomputerAPI
 	config      WorkerConfig
 }
 
@@ -64,7 +76,7 @@ func runWorker() {
 	// Load required database/storage configuration
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		logger.Fatal("missing required env var", "var", "DATABASE_URL")
+		logFatal("missing required env var", "var", "DATABASE_URL")
 	}
 
 	// Initialize database connection with retry (handles DB not yet ready in containers)
@@ -72,7 +84,7 @@ func runWorker() {
 	database, err := db.ConnectWithRetry(dbCtx, databaseURL)
 	dbCancel()
 	if err != nil {
-		logger.Fatal("failed to connect to database after retries", "error", err)
+		logFatal("failed to connect to database after retries", "error", err)
 	}
 	defer database.Close()
 
@@ -80,7 +92,7 @@ func runWorker() {
 	s3Config := loadS3Config()
 	store, err := storage.NewS3Storage(s3Config)
 	if err != nil {
-		logger.Fatal("failed to initialize storage", "error", err)
+		logFatal("failed to initialize storage", "error", err)
 	}
 
 	// Load smart recap configuration
@@ -351,11 +363,11 @@ func loadWorkerConfig() WorkerConfig {
 	// MaxSessions is mandatory
 	maxSessions := os.Getenv("WORKER_MAX_SESSIONS")
 	if maxSessions == "" {
-		logger.Fatal("missing required env var", "var", "WORKER_MAX_SESSIONS")
+		logFatal("missing required env var", "var", "WORKER_MAX_SESSIONS")
 	}
 	parsed, err := strconv.Atoi(maxSessions)
 	if err != nil || parsed <= 0 {
-		logger.Fatal("invalid WORKER_MAX_SESSIONS", "value", maxSessions)
+		logFatal("invalid WORKER_MAX_SESSIONS", "value", maxSessions)
 	}
 	config.MaxSessions = parsed
 
@@ -379,22 +391,22 @@ func loadWorkerConfig() WorkerConfig {
 func loadS3Config() storage.S3Config {
 	s3Endpoint := os.Getenv("S3_ENDPOINT")
 	if s3Endpoint == "" {
-		logger.Fatal("missing required env var", "var", "S3_ENDPOINT")
+		logFatal("missing required env var", "var", "S3_ENDPOINT")
 	}
 
 	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 	if awsAccessKeyID == "" {
-		logger.Fatal("missing required env var", "var", "AWS_ACCESS_KEY_ID")
+		logFatal("missing required env var", "var", "AWS_ACCESS_KEY_ID")
 	}
 
 	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	if awsSecretAccessKey == "" {
-		logger.Fatal("missing required env var", "var", "AWS_SECRET_ACCESS_KEY")
+		logFatal("missing required env var", "var", "AWS_SECRET_ACCESS_KEY")
 	}
 
 	bucketName := os.Getenv("BUCKET_NAME")
 	if bucketName == "" {
-		logger.Fatal("missing required env var", "var", "BUCKET_NAME")
+		logFatal("missing required env var", "var", "BUCKET_NAME")
 	}
 
 	return storage.S3Config{
@@ -419,7 +431,7 @@ func loadPrecomputeConfig() analytics.PrecomputeConfig {
 	if quotaStr := os.Getenv("SMART_RECAP_QUOTA_LIMIT"); quotaStr != "" {
 		quota, err := strconv.Atoi(quotaStr)
 		if err != nil || quota < 0 {
-			logger.Fatal("invalid SMART_RECAP_QUOTA_LIMIT", "value", quotaStr, "error", "must be a non-negative integer")
+			logFatal("invalid SMART_RECAP_QUOTA_LIMIT", "value", quotaStr, "error", "must be a non-negative integer")
 		}
 		config.SmartRecapQuota = quota
 	}

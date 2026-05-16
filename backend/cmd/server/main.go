@@ -24,6 +24,10 @@ import (
 
 var version string
 
+// logFatal is a test seam over logger.Fatal so fatal branches are reachable
+// without os.Exit(1). Production keeps the real Fatal.
+var logFatal = logger.Fatal
+
 func main() {
 	// Check for worker mode
 	if len(os.Args) > 1 && os.Args[1] == "worker" {
@@ -57,7 +61,7 @@ func main() {
 	database, err := db.ConnectWithRetry(dbCtx, config.DatabaseURL)
 	dbCancel()
 	if err != nil {
-		logger.Fatal("failed to connect to database after retries", "error", err)
+		logFatal("failed to connect to database after retries", "error", err)
 	}
 	defer database.Close()
 
@@ -81,14 +85,14 @@ func main() {
 	if config.OAuthConfig.PasswordEnabled {
 		ctx := context.Background()
 		if err := auth.BootstrapAdmin(ctx, database, config.OAuthConfig.AllowedEmailDomains); err != nil {
-			logger.Fatal("failed to bootstrap admin user", "error", err)
+			logFatal("failed to bootstrap admin user", "error", err)
 		}
 	}
 
 	// Initialize S3/MinIO storage
 	store, err := storage.NewS3Storage(config.S3Config)
 	if err != nil {
-		logger.Fatal("failed to initialize storage", "error", err)
+		logFatal("failed to initialize storage", "error", err)
 	}
 
 	// Initialize email service (optional)
@@ -127,7 +131,7 @@ func main() {
 	go func() {
 		logger.Info("starting server", "port", config.Port, "version", version)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("server failed", "error", err)
+			logFatal("server failed", "error", err)
 		}
 	}()
 
@@ -141,7 +145,7 @@ func main() {
 	defer cancel()
 
 	if err := httpServer.Shutdown(ctx); err != nil {
-		logger.Fatal("server forced to shutdown", "error", err)
+		logFatal("server forced to shutdown", "error", err)
 	}
 
 	logger.Info("server stopped")
@@ -248,7 +252,7 @@ func loadConfig() Config {
 			}
 		}
 		if err := validation.ValidateDomainList(domains); err != nil {
-			logger.Fatal("invalid ALLOWED_EMAIL_DOMAINS", "error", err)
+			logFatal("invalid ALLOWED_EMAIL_DOMAINS", "error", err)
 		}
 		oauthConfig.AllowedEmailDomains = domains
 		logger.Info("email domain restrictions configured", "allowed_domains", domains)
@@ -256,31 +260,31 @@ func loadConfig() Config {
 
 	// Require at least one authentication method
 	if !oauthConfig.PasswordEnabled && !oauthConfig.GitHubEnabled && !oauthConfig.GoogleEnabled && !oauthConfig.OIDCEnabled {
-		logger.Fatal("no authentication method configured",
+		logFatal("no authentication method configured",
 			"hint", "set AUTH_PASSWORD_ENABLED=true, or configure GitHub OAuth (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL), or configure Google OAuth, or configure OIDC (OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL)")
 	}
 
 	// Validate required security configuration
 	csrfSecretKey := os.Getenv("CSRF_SECRET_KEY")
 	if csrfSecretKey == "" {
-		logger.Fatal("missing required env var", "var", "CSRF_SECRET_KEY", "hint", "must be at least 32 characters")
+		logFatal("missing required env var", "var", "CSRF_SECRET_KEY", "hint", "must be at least 32 characters")
 	}
 	if len(csrfSecretKey) < 32 {
-		logger.Fatal("invalid env var", "var", "CSRF_SECRET_KEY", "error", "must be at least 32 characters")
+		logFatal("invalid env var", "var", "CSRF_SECRET_KEY", "error", "must be at least 32 characters")
 	}
 
 	// Validate required database configuration
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		logger.Fatal("missing required env var", "var", "DATABASE_URL")
+		logFatal("missing required env var", "var", "DATABASE_URL")
 	}
 
 	// Validate required frontend configuration
 	if os.Getenv("FRONTEND_URL") == "" {
-		logger.Fatal("missing required env var", "var", "FRONTEND_URL")
+		logFatal("missing required env var", "var", "FRONTEND_URL")
 	}
 	if os.Getenv("ALLOWED_ORIGINS") == "" {
-		logger.Fatal("missing required env var", "var", "ALLOWED_ORIGINS", "hint", "comma-separated list of allowed origins")
+		logFatal("missing required env var", "var", "ALLOWED_ORIGINS", "hint", "comma-separated list of allowed origins")
 	}
 
 	// Email configuration (optional)
@@ -316,6 +320,27 @@ func loadConfig() Config {
 	}
 }
 
+// buildPprofMux constructs the pprof debug mux. Split out from startPprofServer
+// so tests can exercise the handlers without binding a real port.
+func buildPprofMux() *http.ServeMux {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
+	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+
+	return mux
+}
+
 // startPprofServer starts a pprof debug server on localhost:6060.
 // This server is only accessible locally (127.0.0.1) and is intended
 // for use with `fly proxy 6060:6060` for remote debugging.
@@ -327,27 +352,10 @@ func loadConfig() Config {
 //   - /debug/pprof/profile   - CPU profile (30s default)
 //   - /debug/pprof/trace     - execution trace
 func startPprofServer() {
-	mux := http.NewServeMux()
-
-	// Register pprof handlers
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
-	// Register specific profile handlers
-	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
-	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
-	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
-	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
-	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
-	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
-
 	addr := "127.0.0.1:6060"
 	logger.Info("pprof debug server starting", "addr", addr)
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, buildPprofMux()); err != nil {
 		logger.Warn("pprof server failed", "error", err)
 	}
 }
