@@ -26,6 +26,23 @@ export function formatTimeSeparator(timestamp: string): string {
 }
 
 /**
+ * Attach a document-level Cmd/Ctrl+F intercept that calls `onCmdF` and
+ * preventDefaults the browser find dialog. Returns the cleanup. Used by
+ * both timeline views to open the transcript search bar with the same
+ * keybinding the browser would otherwise hijack.
+ */
+export function addCmdFListener(onCmdF: () => void): () => void {
+  function handleKeyDown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      onCmdF();
+    }
+  }
+  document.addEventListener('keydown', handleKeyDown);
+  return () => document.removeEventListener('keydown', handleKeyDown);
+}
+
+/**
  * Repeatedly call `action` across animation frames until `shouldStop` returns
  * true or `maxAttempts` is reached. Used by both timeline views for virtual
  * scroll positioning, where item sizes are estimated until measured and a

@@ -14,8 +14,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
+import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
+import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { cx } from '@/utils/utils';
-import { formatTimeSeparator, retryOnAnimationFrame } from '../timelineUtils';
+import { addCmdFListener, formatTimeSeparator, retryOnAnimationFrame } from '../timelineUtils';
 import CodexUserMessage from './CodexUserMessage';
 import CodexAssistantMessage from './CodexAssistantMessage';
 import CodexToolCallBlock from './CodexToolCallBlock';
@@ -25,6 +27,7 @@ import CodexCompactedDivider from './CodexCompactedDivider';
 import CodexUnknownItem from './CodexUnknownItem';
 import CodexTimelineBar from './CodexTimelineBar';
 import { buildVirtualItems, skipNavKey, skipNavLabel } from './codexVirtualItems';
+import { extractCodexItemText } from './extractCodexItemText';
 import styles from './CodexMessageTimeline.module.css';
 
 export interface CodexMessageTimelineProps {
@@ -66,6 +69,12 @@ export default function CodexMessageTimeline({
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const hasScrolledToTarget = useRef(false);
+
+  // CF-359: Cmd-F transcript search, parameterized over filteredItems so
+  // matches respect the active filter (natural consequence of indexing the
+  // filtered list).
+  const search = useTranscriptSearch(filteredItems, extractCodexItemText);
+  useEffect(() => addCmdFListener(search.open), [search.open]);
 
   const virtualItems = useMemo(() => buildVirtualItems(filteredItems), [filteredItems]);
 
@@ -191,6 +200,53 @@ export default function CodexMessageTimeline({
     hasScrolledToTarget.current = true;
   }, [targetLineId, lineIdToItemIndex, itemIndexToVirtualIndex, virtualizer]);
 
+  // CF-359: scroll to current search match, then scroll first <mark> into
+  // view within the row. Structurally mirrors `MessageTimeline.tsx`'s
+  // post-scroll mark-into-view dance — `scrollToIndex` retries across
+  // frames as virtualizer measurements settle, so we wait a few frames
+  // before locating the <mark> to avoid the bring-mark-into-view being
+  // immediately overridden by a retry.
+  useEffect(() => {
+    if (search.currentMatchFilteredIndex === null) return;
+    const itemIndex = search.currentMatchFilteredIndex;
+    const virtualIndex = itemIndexToVirtualIndex.get(itemIndex);
+    if (virtualIndex === undefined) return;
+
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
+      () => false,
+    );
+    setSelectedIndex(itemIndex);
+
+    let cancelled = false;
+    const scrollToIndexFrames = 6;
+    const maxMarkRetries = 10;
+    function scrollToMark(attempt: number) {
+      if (cancelled || attempt >= maxMarkRetries) return;
+      const scrollEl = parentRef.current;
+      if (!scrollEl) return;
+      const rowEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
+      if (!rowEl) {
+        requestAnimationFrame(() => scrollToMark(attempt + 1));
+        return;
+      }
+      const mark = rowEl.querySelector('mark');
+      if (mark) {
+        mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        requestAnimationFrame(() => scrollToMark(attempt + 1));
+      }
+    }
+    function delayThenScroll(framesLeft: number) {
+      if (cancelled) return;
+      if (framesLeft <= 0) { scrollToMark(0); return; }
+      requestAnimationFrame(() => delayThenScroll(framesLeft - 1));
+    }
+    delayThenScroll(scrollToIndexFrames);
+
+    return () => { cancelled = true; };
+  }, [search.currentMatchFilteredIndex, itemIndexToVirtualIndex, virtualizer]);
+
   const scrollToTop = useCallback(() => {
     retryOnAnimationFrame(
       () => virtualizer.scrollToIndex(0, { align: 'start' }),
@@ -265,6 +321,7 @@ export default function CodexMessageTimeline({
           onScrollToTop={scrollToTop}
           onScrollToBottom={scrollToBottom}
           contentDependency={items.length}
+          onSearchClick={search.open}
         />
         <div
           className={styles.virtualizer}
@@ -298,6 +355,8 @@ export default function CodexMessageTimeline({
             const isSelected = vi.index === selectedIndex;
             const isDeepLinkTarget =
               targetLineId !== undefined && vi.item.lineId === targetLineId;
+            const isCurrentSearchMatch =
+              search.currentMatchFilteredIndex === vi.index;
             const nextIdx = nextOfSameKind.get(vi.index);
             const prevIdx = prevOfSameKind.get(vi.index);
             const onSkipToNext =
@@ -321,6 +380,8 @@ export default function CodexMessageTimeline({
                   sessionId,
                   onSkipToNext,
                   onSkipToPrevious,
+                  searchQuery: search.isOpen ? search.highlightQuery : undefined,
+                  isCurrentSearchMatch,
                 })}
               </div>
             );
@@ -334,6 +395,19 @@ export default function CodexMessageTimeline({
         visibleIndices={visibleIndices}
         onSeek={onSeekFromBar}
       />
+
+      {search.isOpen && (
+        <TranscriptSearchBar
+          query={search.query}
+          onQueryChange={search.setQuery}
+          currentMatch={search.matches.length > 0 ? search.currentMatchIndex + 1 : 0}
+          totalMatches={search.matches.length}
+          onNext={search.goToNextMatch}
+          onPrev={search.goToPreviousMatch}
+          onClose={search.close}
+          inputRef={search.inputRef}
+        />
+      )}
     </div>
   );
 }
@@ -345,6 +419,10 @@ interface RenderFlags {
   sessionId: string;
   onSkipToNext?: () => void;
   onSkipToPrevious?: () => void;
+  /** CF-359: search query (when the search bar is open). */
+  searchQuery?: string;
+  /** CF-359: this row is the active (n-of-N) match. */
+  isCurrentSearchMatch: boolean;
 }
 
 function renderItem(item: CodexRenderItem, flags: RenderFlags) {
@@ -352,6 +430,14 @@ function renderItem(item: CodexRenderItem, flags: RenderFlags) {
   // compacted, unknown) do not get skip-nav callbacks per CF-360 — only user /
   // assistant / tool_call participate in skip chains.
   const kindLabel = skipNavLabel(item);
+  const dividerFlags = {
+    isSelected: flags.isSelected,
+    isNewSpeaker: flags.isNewSpeaker,
+    isDeepLinkTarget: flags.isDeepLinkTarget,
+    sessionId: flags.sessionId,
+    searchQuery: flags.searchQuery,
+    isCurrentSearchMatch: flags.isCurrentSearchMatch,
+  };
   switch (item.kind) {
     case 'user':
       return <CodexUserMessage item={item} {...flags} kindLabel={kindLabel} />;
@@ -360,45 +446,13 @@ function renderItem(item: CodexRenderItem, flags: RenderFlags) {
     case 'tool_call':
       return <CodexToolCallBlock item={item} {...flags} kindLabel={kindLabel} />;
     case 'turn_separator':
-      return (
-        <CodexTurnSeparator
-          item={item}
-          isSelected={flags.isSelected}
-          isNewSpeaker={flags.isNewSpeaker}
-          isDeepLinkTarget={flags.isDeepLinkTarget}
-          sessionId={flags.sessionId}
-        />
-      );
+      return <CodexTurnSeparator item={item} {...dividerFlags} />;
     case 'reasoning_hidden':
-      return (
-        <CodexReasoningHidden
-          item={item}
-          isSelected={flags.isSelected}
-          isNewSpeaker={flags.isNewSpeaker}
-          isDeepLinkTarget={flags.isDeepLinkTarget}
-          sessionId={flags.sessionId}
-        />
-      );
+      return <CodexReasoningHidden item={item} {...dividerFlags} />;
     case 'compacted':
-      return (
-        <CodexCompactedDivider
-          item={item}
-          isSelected={flags.isSelected}
-          isNewSpeaker={flags.isNewSpeaker}
-          isDeepLinkTarget={flags.isDeepLinkTarget}
-          sessionId={flags.sessionId}
-        />
-      );
+      return <CodexCompactedDivider item={item} {...dividerFlags} />;
     case 'unknown':
-      return (
-        <CodexUnknownItem
-          item={item}
-          isSelected={flags.isSelected}
-          isNewSpeaker={flags.isNewSpeaker}
-          isDeepLinkTarget={flags.isDeepLinkTarget}
-          sessionId={flags.sessionId}
-        />
-      );
+      return <CodexUnknownItem item={item} {...dividerFlags} />;
     default: {
       // Exhaustiveness check: if a new variant is added without a case
       // above, TypeScript will catch it here.

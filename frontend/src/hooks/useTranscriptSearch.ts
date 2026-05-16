@@ -1,6 +1,4 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { TranscriptLine } from '@/types';
-import { parseMessage, extractTextContent } from '@/services/messageParser';
 
 interface TranscriptSearchResult {
   isOpen: boolean;
@@ -24,10 +22,17 @@ const HIGHLIGHT_DEBOUNCE_MS = 300;
 const EMPTY_MATCHES: number[] = [];
 
 /**
- * Hook for searching transcript messages with debounced query and match navigation.
- * Builds a lowercased search index from all message content (text, thinking, tool_use, tool_result).
+ * Hook for searching a virtualized item list with a debounced query and
+ * match navigation. Generic over the item type so it can drive both the
+ * Claude (`TranscriptLine`) and Codex (`CodexRenderItem`) timelines —
+ * each call site passes an `extractText` that maps an item to its
+ * searchable plain text. The hook lowercases the returned string when
+ * building the index, so callers don't have to.
  */
-export function useTranscriptSearch(messages: TranscriptLine[]): TranscriptSearchResult {
+export function useTranscriptSearch<T>(
+  items: T[],
+  extractText: (item: T) => string,
+): TranscriptSearchResult {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQueryState] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -38,13 +43,11 @@ export function useTranscriptSearch(messages: TranscriptLine[]): TranscriptSearc
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Build search index: lowercased text for each filtered message
-  const searchIndex = useMemo(() => {
-    return messages.map((msg) => {
-      const parsed = parseMessage(msg);
-      return extractTextContent(parsed.content).toLowerCase();
-    });
-  }, [messages]);
+  // Build search index: lowercased text for each item
+  const searchIndex = useMemo(
+    () => items.map((it) => extractText(it).toLowerCase()),
+    [items, extractText],
+  );
 
   // Compute matches from searchIndex + debouncedQuery (auto-recomputes on filter change)
   const matches = useMemo(() => {

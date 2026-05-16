@@ -140,3 +140,11 @@
   font-size: 0.85em;
   color: var(--color-text-primary);
 }
+
+/* CF-359: active (n-of-N) search match — amber ring. MUST stay after
+   `.selected` so equal-specificity source order makes it win. `filter: none`
+   cancels the brightness boost the selection rule adds. */
+.toolCall.searchMatch {
+  box-shadow: inset 0 0 0 2px var(--color-warning);
+  filter: none;
+}

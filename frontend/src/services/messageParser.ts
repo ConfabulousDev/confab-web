@@ -98,6 +98,15 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
 }
 
 /**
+ * Plain-text search projection for one transcript message — bridges a
+ * `TranscriptLine` to the generic `useTranscriptSearch` hook (which
+ * lowercases when building its index, so callers don't have to).
+ */
+export function extractMessageText(message: TranscriptLine): string {
+  return extractTextContent(parseMessage(message).content);
+}
+
+/**
  * Extract plain text content from a message for copying
  */
 export function extractTextContent(content: ContentBlock[]): string {

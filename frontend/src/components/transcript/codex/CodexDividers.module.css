@@ -126,3 +126,13 @@
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
+
+/* CF-359: active (n-of-N) search match — amber ring. MUST stay after
+   `.selected` and `.deepLinkTarget` so equal-specificity source order
+   makes it win over selection. */
+.turnSeparator.searchMatch,
+.reasoningHidden.searchMatch,
+.compacted.searchMatch,
+.unknown.searchMatch {
+  box-shadow: inset 0 0 0 2px var(--color-warning);
+}

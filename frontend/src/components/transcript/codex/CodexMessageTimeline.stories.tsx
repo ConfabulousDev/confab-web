@@ -246,3 +246,27 @@ export const FilteredAllOut: Story = {
     </Frame>
   ),
 };
+
+// CF-359: opens the transcript with the Cmd-F search bar already up and
+// a preset query ("linear") that produces matches across multiple row
+// kinds — user prompt, assistant body, and patch summary file path.
+// Visual regression cover for the highlight wiring.
+export const SearchActive: Story = {
+  render: () => (
+    <Frame>
+      <CodexMessageTimeline
+        items={sample}
+        filteredItems={sample}
+        sessionId="story-session"
+      />
+    </Frame>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'CF-359 — the transcript search bar opens via Cmd-F (or the floating search button). Typing a query highlights matches inline across every renderer; the active match has an amber ring.',
+      },
+    },
+  },
+};

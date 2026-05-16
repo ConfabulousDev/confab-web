@@ -22,6 +22,11 @@ export interface CodexReasoningHiddenProps {
   isNewSpeaker?: boolean;
   /** CF-360: this row is the deep-link landing target. */
   isDeepLinkTarget?: boolean;
+  /** CF-359: accepted for shape uniformity. Extractor returns "" for this
+   *  kind so the row never matches; no highlighting branch needed. */
+  searchQuery?: string;
+  /** CF-359: accepted for shape uniformity. See `searchQuery` note above. */
+  isCurrentSearchMatch?: boolean;
 }
 
 export default function CodexReasoningHidden({
@@ -29,11 +34,13 @@ export default function CodexReasoningHidden({
   sessionId,
   isSelected,
   isDeepLinkTarget,
+  isCurrentSearchMatch,
 }: CodexReasoningHiddenProps) {
   const className = cx(
     styles.reasoningHidden,
     isSelected && styles.selected,
     isDeepLinkTarget && styles.deepLinkTarget,
+    isCurrentSearchMatch && styles.searchMatch,
   );
   return (
     <div className={className} data-kind="reasoning_hidden">

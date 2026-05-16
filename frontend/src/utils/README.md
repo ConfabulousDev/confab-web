@@ -11,6 +11,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `sessionMeta.ts` | Session duration and date computation from transcript timestamps |
 | `compactionStats.ts` | Compaction event counting, average compaction time, and response time formatting |
 | `highlightSearch.ts` | Search match highlighting in HTML and plain text |
+| `renderHighlight.tsx` | React-JSX companion to `highlightSearch.ts`: `renderTextWithHighlight(text, query, isActiveMatch) => ReactNode` for text-node surfaces (command lines, file paths, chips, divider labels) where `dangerouslySetInnerHTML` is overkill. Stays in its own `.tsx` file so plain-text utilities can keep React out of their import graph |
 | `sorting.ts` | Generic array sorting by key with type support |
 | `dateRange.ts` | Date range types, presets (This Week, Last 30 Days, etc.), URL parsing |
 | `git.ts` | Git URL conversion (SSH to HTTPS, branch URLs) |
@@ -63,6 +64,12 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `splitTextByQuery` | `(text, query) => Segment[]` | Split plain text into match/non-match segments for React rendering |
 | `escapeHtml` | `(text: string) => string` | HTML entity escaping |
 | `escapeRegExp` | `(str: string) => string` | Regex special character escaping |
+
+### renderHighlight.tsx
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `renderTextWithHighlight` | `(text, query, isActiveMatch) => ReactNode` | Wraps `splitTextByQuery` with React `<mark>` elements; no-op when `query` is falsy so callers can pipe through unconditionally |
 
 ### dateRange.ts
 

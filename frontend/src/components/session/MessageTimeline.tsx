@@ -4,6 +4,7 @@ import type { TranscriptLine, AssistantMessage } from '@/types';
 import type { TIL } from '@/schemas/api';
 import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
+import { extractMessageText } from '@/services/messageParser';
 import { calculateMessageCost } from '@/utils/tokenStats';
 import TimelineMessage from './TimelineMessage';
 import TranscriptSearchBar from './TranscriptSearchBar';
@@ -11,7 +12,7 @@ import { getRoleLabel } from './messageCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
-import { formatTimeSeparator, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import { addCmdFListener, formatTimeSeparator, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import styles from './MessageTimeline.module.css';
 
 // Right offset for ScrollNavButtons when CostBar is visible.
@@ -74,7 +75,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
   const hasScrolledToTarget = useRef(false);
 
   // Transcript search
-  const search = useTranscriptSearch(messages);
+  const search = useTranscriptSearch(messages, extractMessageText);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
@@ -262,17 +263,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
   }, [targetMessageAllIndex, messageIndexToVirtualIndex, virtualizer]);
 
   // Intercept Cmd/Ctrl+F to open transcript search
-  const openSearch = search.open;
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-        e.preventDefault();
-        openSearch();
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [openSearch]);
+  useEffect(() => addCmdFListener(search.open), [search.open]);
 
   // Scroll to current search match, then scroll first <mark> into view within the message
   useEffect(() => {

@@ -136,6 +136,7 @@ Transforms raw `TranscriptLine` objects into display-ready `ParsedMessageData`:
 Key exports:
 - `parseMessage(message)` -- Returns `ParsedMessageData`
 - `extractTextContent(content)` -- Plain text extraction for search indexing and clipboard
+- `extractMessageText(message)` -- CF-359 — bridges a `TranscriptLine` to the generic `useTranscriptSearch` hook (composes `parseMessage` + `extractTextContent`). Stable module reference so passing it as an effect-dependency doesn't churn the search index
 - `getRoleLabel(role, isToolResult)` -- Display label for message role
 
 ## How to Extend

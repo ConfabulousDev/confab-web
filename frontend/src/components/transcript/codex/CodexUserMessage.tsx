@@ -30,6 +30,10 @@ export interface CodexUserMessageProps {
   onSkipToPrevious?: () => void;
   /** Human-readable kind for aria-label (CF-360). */
   kindLabel?: string;
+  /** CF-359: transcript search query — wraps matches in `<mark>` in the body. */
+  searchQuery?: string;
+  /** CF-359: this row is the active (n-of-N) search match — adds the amber ring. */
+  isCurrentSearchMatch?: boolean;
 }
 
 export default function CodexUserMessage({
@@ -41,6 +45,8 @@ export default function CodexUserMessage({
   onSkipToNext,
   onSkipToPrevious,
   kindLabel,
+  searchQuery,
+  isCurrentSearchMatch,
 }: CodexUserMessageProps) {
   const className = cx(
     styles.message,
@@ -48,6 +54,7 @@ export default function CodexUserMessage({
     isSelected && styles.selected,
     isNewSpeaker && styles.newSpeaker,
     isDeepLinkTarget && styles.deepLinkTarget,
+    isCurrentSearchMatch && styles.searchMatch,
   );
   return (
     <div className={className} data-kind="user">
@@ -66,7 +73,11 @@ export default function CodexUserMessage({
         )}
       </div>
       <div className={styles.body}>
-        <CodexMessageBody text={item.text} />
+        <CodexMessageBody
+          text={item.text}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
         {item.images && (
           <CodexMessageImages images={item.images} altPrefix="User-attached image" />
         )}

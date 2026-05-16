@@ -8,6 +8,7 @@
 
 import type { CodexToolCallItem } from '@/types/codexRenderItem';
 import { tryParseAsJson } from '@/utils';
+import { renderTextWithHighlight } from '@/utils/renderHighlight';
 import { cx } from '@/utils/utils';
 import BashOutput from '../BashOutput';
 import CodeBlock from '../CodeBlock';
@@ -48,6 +49,10 @@ export interface CodexToolCallBlockProps {
   onSkipToPrevious?: () => void;
   /** Human-readable kind for aria-label (CF-360). */
   kindLabel?: string;
+  /** CF-359: transcript search query — wraps matches in `<mark>` inside the body. */
+  searchQuery?: string;
+  /** CF-359: this row is the active (n-of-N) search match — adds the amber ring. */
+  isCurrentSearchMatch?: boolean;
 }
 
 export default function CodexToolCallBlock({
@@ -58,11 +63,14 @@ export default function CodexToolCallBlock({
   onSkipToNext,
   onSkipToPrevious,
   kindLabel,
+  searchQuery,
+  isCurrentSearchMatch,
 }: CodexToolCallBlockProps) {
   const className = cx(
     styles.toolCall,
     isSelected && styles.selected,
     isDeepLinkTarget && styles.deepLinkTarget,
+    isCurrentSearchMatch && styles.searchMatch,
   );
   return (
     <div className={className} data-kind="tool_call" data-tool={item.toolName}>
@@ -81,7 +89,7 @@ export default function CodexToolCallBlock({
           />
         )}
       </div>
-      {renderBody(item)}
+      {renderBody(item, { searchQuery, isCurrentSearchMatch })}
     </div>
   );
 }
@@ -118,16 +126,28 @@ function renderStatusBadge(item: CodexToolCallItem) {
   return null;
 }
 
-function renderBody(item: CodexToolCallItem) {
+// Search-highlight props threaded through every body renderer (CF-359).
+// Kept as a separate interface so the no-`item` `GenericInputBlock` can share
+// the exact same shape.
+interface SearchHighlightProps {
+  searchQuery?: string;
+  isCurrentSearchMatch?: boolean;
+}
+
+interface BodyProps extends SearchHighlightProps {
+  item: CodexToolCallItem;
+}
+
+function renderBody(item: CodexToolCallItem, search: SearchHighlightProps) {
   switch (item.toolName) {
     case 'exec_command':
-      return <ExecCommandBody item={item} />;
+      return <ExecCommandBody item={item} {...search} />;
     case 'apply_patch':
-      return <ApplyPatchBody item={item} />;
+      return <ApplyPatchBody item={item} {...search} />;
     case 'web_search_call':
-      return <WebSearchBody item={item} />;
+      return <WebSearchBody item={item} {...search} />;
     default:
-      return <GenericToolBody item={item} />;
+      return <GenericToolBody item={item} {...search} />;
   }
 }
 
@@ -135,7 +155,7 @@ function renderBody(item: CodexToolCallItem) {
 // exec_command
 // ----------------------------------------------------------------------------
 
-function ExecCommandBody({ item }: { item: CodexToolCallItem }) {
+function ExecCommandBody({ item, searchQuery, isCurrentSearchMatch }: BodyProps) {
   const cmd = readStringField(item.rawInput, 'cmd');
   const output = item.rawOutput;
   // Empty stdout falls through to NoOutputIndicator — otherwise BashOutput
@@ -143,11 +163,17 @@ function ExecCommandBody({ item }: { item: CodexToolCallItem }) {
   const hasOutput = typeof output === 'string' && output !== '';
   return (
     <div className={styles.body}>
-      {cmd ? <pre className={styles.commandLine}>$ {cmd}</pre> : null}
+      {cmd ? (
+        <pre className={styles.commandLine}>
+          $ {renderTextWithHighlight(cmd, searchQuery, isCurrentSearchMatch)}
+        </pre>
+      ) : null}
       {hasOutput ? (
         <BashOutput
           output={output}
           exitCode={item.execMetadata?.exitCode ?? null}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
         />
       ) : (
         <NoOutputIndicator status={item.status} />
@@ -165,7 +191,7 @@ function NoOutputIndicator({ status }: { status: CodexToolCallItem['status'] }) 
 // apply_patch
 // ----------------------------------------------------------------------------
 
-function ApplyPatchBody({ item }: { item: CodexToolCallItem }) {
+function ApplyPatchBody({ item, searchQuery, isCurrentSearchMatch }: BodyProps) {
   const changes = readPatchChanges(item.structuredOutput);
   const filePaths = Object.keys(changes);
 
@@ -182,7 +208,9 @@ function ApplyPatchBody({ item }: { item: CodexToolCallItem }) {
                   <span className={styles.fileChangeType}>
                     {patchOpLabel(change?.type ?? 'unknown')}
                   </span>{' '}
-                  <span className={styles.filePath}>{leafFileName(path)}</span>
+                  <span className={styles.filePath}>
+                    {renderTextWithHighlight(leafFileName(path), searchQuery, isCurrentSearchMatch)}
+                  </span>
                 </li>
               );
             })}
@@ -191,10 +219,24 @@ function ApplyPatchBody({ item }: { item: CodexToolCallItem }) {
       ) : null}
 
       {typeof item.rawInput === 'string' ? (
-        <CodeBlock code={item.rawInput} language="diff" maxHeight="500px" />
+        <CodeBlock
+          code={item.rawInput}
+          language="diff"
+          maxHeight="500px"
+          truncateLines={100}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
       ) : null}
       {item.rawOutput ? (
-        <CodeBlock code={item.rawOutput} language="plain" maxHeight="300px" />
+        <CodeBlock
+          code={item.rawOutput}
+          language="plain"
+          maxHeight="300px"
+          truncateLines={100}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
       ) : null}
     </div>
   );
@@ -217,7 +259,7 @@ function patchOpLabel(type: string): string {
 // web_search_call
 // ----------------------------------------------------------------------------
 
-function WebSearchBody({ item }: { item: CodexToolCallItem }) {
+function WebSearchBody({ item, searchQuery, isCurrentSearchMatch }: BodyProps) {
   const queries = readWebSearchQueries(item.rawInput);
 
   return (
@@ -228,7 +270,7 @@ function WebSearchBody({ item }: { item: CodexToolCallItem }) {
         ) : (
           queries.map((q) => (
             <span key={q} className={styles.queryChip}>
-              {q}
+              {renderTextWithHighlight(q, searchQuery, isCurrentSearchMatch)}
             </span>
           ))
         )}
@@ -241,7 +283,7 @@ function WebSearchBody({ item }: { item: CodexToolCallItem }) {
 // generic / unknown tool
 // ----------------------------------------------------------------------------
 
-function GenericToolBody({ item }: { item: CodexToolCallItem }) {
+function GenericToolBody({ item, searchQuery, isCurrentSearchMatch }: BodyProps) {
   // Treat `null` as "no input" so unknown tools don't render a tiny `null`
   // code block. `undefined` is also absent; non-null values render.
   const hasInput = item.rawInput !== undefined && item.rawInput !== null;
@@ -254,9 +296,22 @@ function GenericToolBody({ item }: { item: CodexToolCallItem }) {
 
   return (
     <div className={styles.body}>
-      {hasInput ? <GenericInputBlock input={item.rawInput} /> : null}
+      {hasInput ? (
+        <GenericInputBlock
+          input={item.rawInput}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
+      ) : null}
       {hasOutput ? (
-        <CodeBlock code={output} language="plain" maxHeight="400px" />
+        <CodeBlock
+          code={output}
+          language="plain"
+          maxHeight="400px"
+          truncateLines={100}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
       ) : null}
       {showNoOutput ? <NoOutputIndicator status={item.status} /> : null}
     </div>
@@ -266,7 +321,11 @@ function GenericToolBody({ item }: { item: CodexToolCallItem }) {
 // Render `rawInput` as a CodeBlock. Object/array inputs are always JSON.
 // String inputs pretty-print as JSON when parseable, otherwise stay as-is in
 // a plain block.
-function GenericInputBlock({ input }: { input: unknown }) {
+function GenericInputBlock({
+  input,
+  searchQuery,
+  isCurrentSearchMatch,
+}: SearchHighlightProps & { input: unknown }) {
   if (typeof input === 'string') {
     const jsonPretty = tryParseAsJson(input);
     return (
@@ -274,11 +333,21 @@ function GenericInputBlock({ input }: { input: unknown }) {
         code={jsonPretty ?? input}
         language={jsonPretty ? 'json' : 'plain'}
         maxHeight="400px"
+        truncateLines={100}
+        searchQuery={searchQuery}
+        isCurrentSearchMatch={isCurrentSearchMatch}
       />
     );
   }
   return (
-    <CodeBlock code={stringifyForDisplay(input)} language="json" maxHeight="400px" />
+    <CodeBlock
+      code={stringifyForDisplay(input)}
+      language="json"
+      maxHeight="400px"
+      truncateLines={100}
+      searchQuery={searchQuery}
+      isCurrentSearchMatch={isCurrentSearchMatch}
+    />
   );
 }
 

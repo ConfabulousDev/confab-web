@@ -29,6 +29,10 @@ export interface CodexAssistantMessageProps {
   onSkipToPrevious?: () => void;
   /** Human-readable kind for aria-label (CF-360). */
   kindLabel?: string;
+  /** CF-359: transcript search query — wraps matches in `<mark>` in the body. */
+  searchQuery?: string;
+  /** CF-359: this row is the active (n-of-N) search match — adds the amber ring. */
+  isCurrentSearchMatch?: boolean;
 }
 
 export default function CodexAssistantMessage({
@@ -40,6 +44,8 @@ export default function CodexAssistantMessage({
   onSkipToNext,
   onSkipToPrevious,
   kindLabel,
+  searchQuery,
+  isCurrentSearchMatch,
 }: CodexAssistantMessageProps) {
   const phaseClass = item.phase === 'commentary' ? styles.commentary : styles.final;
   const className = cx(
@@ -49,6 +55,7 @@ export default function CodexAssistantMessage({
     isSelected && styles.selected,
     isNewSpeaker && styles.newSpeaker,
     isDeepLinkTarget && styles.deepLinkTarget,
+    isCurrentSearchMatch && styles.searchMatch,
   );
   const defaultLabel =
     item.phase === 'commentary' ? 'assistant commentary' : 'assistant answer';
@@ -76,7 +83,11 @@ export default function CodexAssistantMessage({
         )}
       </div>
       <div className={styles.body}>
-        <CodexMessageBody text={item.text} />
+        <CodexMessageBody
+          text={item.text}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
         {item.images && (
           <CodexMessageImages images={item.images} altPrefix="Assistant-generated image" />
         )}
