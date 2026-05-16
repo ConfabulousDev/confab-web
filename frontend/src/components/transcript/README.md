@@ -214,7 +214,11 @@ interface BlendedSegmentLayout<S extends BlendedSegment> {
 
 ## Testing
 
-Content block rendering is tested indirectly through `TimelineMessage.test.tsx` and Storybook stories (`ContentBlock.stories.tsx`, `CostBar.stories.tsx`, `TimelineBar.stories.tsx`).
+- `ContentBlock.test.tsx` -- Block-type dispatch (text/JSON/thinking/tool_use/tool_result/image/tool_reference/unknown). `CodeBlock` and `BashOutput` are stubbed via `vi.mock` so the dispatch logic is asserted without paying the Prism cost.
+- `codex/CodexUnknownItem.test.tsx` -- Raw-line render, search auto-open + stay-open contract, click-to-toggle, row-actions gating.
+- `codex/CodexReasoningHidden.test.tsx` -- Marker render, row-actions gating, selection class table.
+- `codex/CodexTurnSeparator.test.tsx` -- Turn label, duration + TTFT segments, row-actions gating.
+- Additional integration via `TimelineMessage.test.tsx` and Storybook stories (`ContentBlock.stories.tsx`, `CostBar.stories.tsx`, `TimelineBar.stories.tsx`).
 
 ## Dependencies
 

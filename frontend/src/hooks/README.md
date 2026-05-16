@@ -111,9 +111,14 @@ const { data, state, refetch, loading, error } = useSmartPolling(fetchFn, {
 
 Most hooks have co-located test files:
 - `useAuth.test.tsx`, `useAutoRetry.test.ts`, `useDropdown.test.ts`
+- `useColumnCount.test.tsx`
 - `useLoadSession.test.ts`, `useSessionFilters.test.ts`, `useSessionsFetch.test.ts`
+- `useOrgAnalytics.test.tsx`
 - `useShareDialog.test.ts`, `useSmartPolling.test.ts`
+- `useSuccessMessage.test.tsx`
+- `useTILs.test.tsx`
 - `useTranscriptSearch.test.ts`, `useRelativeTime.test.ts`
+- `useTrends.test.tsx`
 - `useVisibility.test.ts`, `useUserActivity.test.ts`
 - `useServerRecovery.test.tsx`
 - `useURLFilters.test.ts`

@@ -133,6 +133,9 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - `SessionViewer.test.tsx` -- Summary-tab routing across providers (CF-364)
 - `TimelineMessage.test.tsx` -- Message rendering by role, cost display
 - `TranscriptSearchBar.test.tsx` -- Search open/close, match navigation
+- `FilterDropdown.test.tsx` -- Open/close, tri-state rollup, subcategory expand, callback wiring
+- `CodexFilterDropdown.test.tsx` -- Same surface, tuned to Codex categories
+- `TILBadge.test.tsx` -- Label pluralization, popover open + link to /tils, click-propagation guard
 - `messageCategories.test.ts` -- Message classification and filter matching logic
 - `codexCategories.test.ts` -- Codex categorization rules + `codexItemMatchesFilter` contract (CF-361)
 - `CodexTranscriptPane.test.tsx` -- Loading/error/empty prop contract after CF-361 lifted normalization to `SessionViewer`

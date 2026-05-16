@@ -88,6 +88,16 @@ See the `/add-session-card` skill for a full step-by-step playbook including bac
 - `TokensCard.test.tsx` -- Token formatting, cost display
 - `SmartRecapCard.test.tsx` -- Recap display, quota exceeded state, deep link handling
 - `registry.test.ts` -- Registry ordering, `shouldRender` logic
+- `SessionCard.test.tsx` -- Duration/model/messages formatting, compaction rows
+- `ConversationCard.test.tsx` -- Per-field nullability and duration formatting
+- `ToolsCard.test.tsx` -- Subtitle pluralization, empty-state hiding, tooltip payload
+- `AgentsAndSkillsCard.test.tsx` -- Loading/error/empty paths, agent+skill legend
+- `RedactionsCard.test.tsx` -- Sort-by-count ordering, singular/plural tooltip
+- `CodeActivityCard.test.tsx` -- Stat rows and conditional File extensions section
+
+Chart-based card tests run under a global `recharts` mock in `src/test/setup.ts`
+that invokes inline `tickFormatter` and `Tooltip.content` callbacks with a
+synthetic payload so per-card `CustomTooltip` logic is exercised.
 
 ## Dependencies
 

@@ -128,6 +128,8 @@ These tables must stay in sync; `TestPricingTableSync` enforces this. Look up cu
 - `compactionStats.test.ts` -- Compaction event counting, average time calculation
 - `highlightSearch.test.ts` -- HTML highlighting, text splitting, edge cases
 - `dateRange.test.ts` -- Date range presets, URL parsing
+- `git.test.ts` -- Repo/branch URL conversion across SSH, HTTPS, GitHub, GitLab
+- `sorting.test.ts` -- Generic sort by string/number/date with null handling and filter
 - `utils.test.ts` -- ANSI stripping, byte formatting
 
 ## Dependencies
