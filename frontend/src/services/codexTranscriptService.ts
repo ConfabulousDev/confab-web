@@ -328,7 +328,7 @@ type ToolCallDraft = {
  * Responsibilities:
  *   - Drop noise: session_meta, turn_context, event_msg.token_count,
  *     event_msg.task_started, event_msg.user_message, event_msg.agent_message,
- *     response_item.message[role=developer]
+ *     event_msg.mcp_tool_call_end, response_item.message[role=developer]
  *   - Strip `<environment_context>…</environment_context>` from user messages
  *   - Strip exec output preamble; surface exit code + wall time as execMetadata
  *   - Pair function_call ↔ function_call_output by call_id
@@ -633,6 +633,10 @@ function handleEventMsg(
       };
       return {};
     }
+    case 'mcp_tool_call_end':
+      // Redundant with the paired response_item.function_call_output for the
+      // same call_id. Keep the schema current, but do not render a duplicate row.
+      return {};
   }
 }
 

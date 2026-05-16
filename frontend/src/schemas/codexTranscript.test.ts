@@ -302,6 +302,25 @@ describe('RawCodexLineSchema', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts mcp_tool_call_end', () => {
+      const result = eventMsg({
+        type: 'mcp_tool_call_end',
+        call_id: 'call_mcp_001',
+        invocation: {
+          server: 'linear',
+          tool: 'save_issue',
+          arguments: { team: 'Confabulous' },
+        },
+        duration: { secs: 1, nanos: 250000000 },
+        result: {
+          Ok: {
+            content: [{ type: 'text', text: '{"id":"CF-404"}' }],
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
     it('accepts unknown event_msg payload.type via catch-all', () => {
       const result = eventMsg({ type: 'future_event_msg_payload', any: 'thing' });
       expect(result.success).toBe(true);

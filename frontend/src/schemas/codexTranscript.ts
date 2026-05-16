@@ -274,6 +274,29 @@ const CodexEventPatchApplyEndSchema = z
   })
   .passthrough();
 
+const CodexMCPToolCallEndSchema = z
+  .object({
+    type: z.literal('mcp_tool_call_end'),
+    call_id: z.string(),
+    invocation: z
+      .object({
+        server: z.string().optional(),
+        tool: z.string().optional(),
+        arguments: z.unknown().optional(),
+      })
+      .passthrough()
+      .optional(),
+    duration: z
+      .object({
+        secs: z.number().optional(),
+        nanos: z.number().optional(),
+      })
+      .passthrough()
+      .optional(),
+    result: z.unknown().optional(),
+  })
+  .passthrough();
+
 // Catch-all for unknown event_msg.payload.type variants.
 const CodexUnknownEventPayloadSchema = z
   .object({ type: z.string() })
@@ -286,6 +309,7 @@ const KnownEventPayloadSchema = z.union([
   CodexEventTaskCompleteSchema,
   CodexEventTokenCountSchema,
   CodexEventPatchApplyEndSchema,
+  CodexMCPToolCallEndSchema,
 ]);
 
 const CodexEventPayloadSchema = z.union([
@@ -302,6 +326,7 @@ const KNOWN_EVENT_PAYLOAD_TYPES = new Set<string>([
   'task_complete',
   'token_count',
   'patch_apply_end',
+  'mcp_tool_call_end',
 ]);
 
 export function isKnownEventPayload(

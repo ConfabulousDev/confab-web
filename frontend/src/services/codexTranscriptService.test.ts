@@ -101,6 +101,62 @@ describe('normalizeCodexLines', () => {
     expect(userOccurrences.length).toBe(1);
   });
 
+  it('drops event_msg.mcp_tool_call_end as redundant with function_call_output', () => {
+    const jsonl = [
+      {
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          call_id: 'call_mcp_001',
+          name: 'save_issue',
+          namespace: 'mcp__linear__',
+          arguments: '{"team":"Confabulous"}',
+        },
+      },
+      {
+        timestamp: '2026-05-13T01:00:01Z',
+        type: 'event_msg',
+        payload: {
+          type: 'mcp_tool_call_end',
+          call_id: 'call_mcp_001',
+          invocation: {
+            server: 'linear',
+            tool: 'save_issue',
+            arguments: { team: 'Confabulous' },
+          },
+          duration: { secs: 1, nanos: 250000000 },
+          result: {
+            Ok: {
+              content: [{ type: 'text', text: '{"id":"CF-404"}' }],
+            },
+          },
+        },
+      },
+      {
+        timestamp: '2026-05-13T01:00:02Z',
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          call_id: 'call_mcp_001',
+          output: 'Wall time: 1.2500 seconds\nOutput:\n[{"type":"text","text":"{\\"id\\":\\"CF-404\\"}"}]',
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    expect(result).toHaveLength(1);
+    const toolCall = result[0];
+    expect(toolCall?.kind).toBe('tool_call');
+    if (toolCall?.kind === 'tool_call') {
+      expect(toolCall.callId).toBe('call_mcp_001');
+      expect(toolCall.status).toBe('completed');
+      expect(toolCall.rawOutput).toContain('CF-404');
+    }
+  });
+
   it('drops response_item.message[role=developer]', () => {
     const result = items(fixtureJsonl);
     // Developer messages start with `<permissions instructions>` in the fixture.
