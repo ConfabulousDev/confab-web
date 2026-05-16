@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useDropdown } from '@/hooks';
-import { SearchIcon, RepoIcon, BranchIcon, UserIcon, CheckIcon } from './icons';
+import { SearchIcon, RepoIcon, BranchIcon, UserIcon, CheckIcon, RobotIcon } from './icons';
+import { getProviderIcon } from './providerIcon';
 import type { SessionFilterOptions } from '@/schemas/api';
+import { PROVIDER_VALUES, providerLabel } from '@/utils/providers';
 import styles from './FilterChipsBar.module.css';
 
 interface FilterChipsBarProps {
@@ -9,16 +11,23 @@ interface FilterChipsBarProps {
     repos: string[];
     branches: string[];
     owners: string[];
+    providers: string[];
     query: string;
   };
-  filterOptions: SessionFilterOptions | null;
+  // Provider options are static and live on the frontend; only the
+  // data-driven dimensions (repos/branches/owners) come from the backend.
+  filterOptions: Pick<SessionFilterOptions, 'repos' | 'branches' | 'owners'> | null;
   currentUserEmail: string | null;
   onToggleRepo: (value: string) => void;
   onToggleBranch: (value: string) => void;
   onToggleOwner: (value: string) => void;
+  onToggleProvider: (value: string) => void;
   onQueryChange: (value: string) => void;
   onClearAll: () => void;
   onCommitHistory?: () => void;
+  // CF-393: Provider chip is opt-in. The session-listing endpoint supports
+  // ?provider= filtering; the TILs endpoint does not, so TILsPage omits it.
+  showProviderFilter?: boolean;
 }
 
 interface DimensionDropdownProps {
@@ -28,9 +37,22 @@ interface DimensionDropdownProps {
   selected: string[];
   currentUserEmail?: string | null;
   onToggle: (value: string) => void;
+  // Optional per-option icon and display-label overrides. When omitted,
+  // rows render exactly as before (no icon column, raw option as label).
+  iconFor?: (option: string) => React.ReactNode;
+  labelFor?: (option: string) => string;
 }
 
-function DimensionDropdown({ label, icon, options, selected, currentUserEmail, onToggle }: DimensionDropdownProps) {
+function DimensionDropdown({
+  label,
+  icon,
+  options,
+  selected,
+  currentUserEmail,
+  onToggle,
+  iconFor,
+  labelFor,
+}: DimensionDropdownProps) {
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
   const [search, setSearch] = useState('');
 
@@ -43,12 +65,14 @@ function DimensionDropdown({ label, icon, options, selected, currentUserEmail, o
     ? options.filter((o) => o.toLowerCase().includes(search.toLowerCase()))
     : options;
 
-  // Sort: selected first, then alphabetical
+  // Sort: selected first, then alphabetical by display label
   const sorted = [...filtered].sort((a, b) => {
     const aSelected = selected.includes(a) ? 0 : 1;
     const bSelected = selected.includes(b) ? 0 : 1;
     if (aSelected !== bSelected) return aSelected - bSelected;
-    return a.localeCompare(b);
+    const aLabel = labelFor ? labelFor(a) : a;
+    const bLabel = labelFor ? labelFor(b) : b;
+    return aLabel.localeCompare(bLabel);
   });
 
   return (
@@ -79,9 +103,10 @@ function DimensionDropdown({ label, icon, options, selected, currentUserEmail, o
           <div className={styles.dimensionList}>
             {sorted.map((opt) => {
               const isSelected = selected.includes(opt);
+              const baseLabel = labelFor ? labelFor(opt) : opt;
               const displayLabel = currentUserEmail && opt.toLowerCase() === currentUserEmail.toLowerCase()
-                ? `${opt} (you)`
-                : opt;
+                ? `${baseLabel} (you)`
+                : baseLabel;
               return (
                 <button
                   key={opt}
@@ -91,6 +116,7 @@ function DimensionDropdown({ label, icon, options, selected, currentUserEmail, o
                   <span className={`${styles.checkbox} ${isSelected ? styles.checked : ''}`}>
                     {CheckIcon}
                   </span>
+                  {iconFor && <span className={styles.dimensionIcon}>{iconFor(opt)}</span>}
                   <span className={styles.dimensionLabel}>{displayLabel}</span>
                 </button>
               );
@@ -112,9 +138,11 @@ function FilterChipsBar({
   onToggleRepo,
   onToggleBranch,
   onToggleOwner,
+  onToggleProvider,
   onQueryChange,
   onClearAll,
   onCommitHistory,
+  showProviderFilter = true,
 }: FilterChipsBarProps) {
   // Debounce search: keep local state responsive, defer URL/API update
   const [localQuery, setLocalQuery] = useState(filters.query);
@@ -140,10 +168,12 @@ function FilterChipsBar({
   // Cleanup timer on unmount
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
+  const showProviderActive = showProviderFilter && filters.providers.length > 0;
   const hasActiveFilters =
     filters.repos.length > 0 ||
     filters.branches.length > 0 ||
     filters.owners.length > 0 ||
+    showProviderActive ||
     filters.query !== '';
 
   return (
@@ -161,6 +191,18 @@ function FilterChipsBar({
           />
         </div>
         <div className={styles.dimensionButtons}>
+          {/* CF-393: Provider chip first — coarsest cut. */}
+          {showProviderFilter && (
+            <DimensionDropdown
+              label="Provider"
+              icon={RobotIcon}
+              options={[...PROVIDER_VALUES]}
+              selected={filters.providers}
+              onToggle={onToggleProvider}
+              iconFor={getProviderIcon}
+              labelFor={providerLabel}
+            />
+          )}
           {filterOptions && filterOptions.repos.length > 0 && (
             <DimensionDropdown
               label="Repo"
@@ -194,6 +236,18 @@ function FilterChipsBar({
 
       {hasActiveFilters && (
         <div className={styles.chipsRow}>
+          {showProviderActive && filters.providers.map((p) => (
+            <button
+              key={`provider:${p}`}
+              className={styles.chip}
+              onClick={() => onToggleProvider(p)}
+              aria-label={`provider: ${providerLabel(p)}`}
+            >
+              <span className={styles.dimensionIcon}>{getProviderIcon(p)}</span>
+              <span className={styles.chipDimension}>provider:</span> {providerLabel(p)}{' '}
+              <span className={styles.chipRemove}>&times;</span>
+            </button>
+          ))}
           {filters.repos.map((repo) => (
             <button key={`repo:${repo}`} className={styles.chip} onClick={() => onToggleRepo(repo)}>
               <span className={styles.chipDimension}>repo:</span> {repo} <span className={styles.chipRemove}>&times;</span>

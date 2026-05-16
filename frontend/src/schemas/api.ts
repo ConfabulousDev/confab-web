@@ -58,6 +58,7 @@ const SessionFilterOptionsSchema = z.object({
   repos: z.array(z.string()),
   branches: z.array(z.string()),
   owners: z.array(z.string()),
+  providers: z.array(z.string()),
 });
 
 export const SessionListResponseSchema = z.object({

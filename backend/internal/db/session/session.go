@@ -60,6 +60,27 @@ func lowercaseSlice(ss []string) []string {
 	return result
 }
 
+// expandProviderLegacy returns a slice that contains each canonical provider
+// value plus its legacy DB form (currently only `claude-code` has the legacy
+// form `'Claude Code'`). Callers feed the result into `s.session_type = ANY(...)`
+// so legacy rows match the canonical request.
+//
+// Sibling of db.NormalizeProvider; both are deleted together by the
+// post-rollout backfill PR that collapses 'Claude Code' rows to 'claude-code'.
+func expandProviderLegacy(canonical []string) []string {
+	if len(canonical) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, len(canonical)+1)
+	for _, v := range canonical {
+		out = append(out, v)
+		if v == db.ProviderClaudeCode {
+			out = append(out, db.ProviderClaudeCodeLegacy)
+		}
+	}
+	return out
+}
+
 // ListUserSessions returns all sessions visible to a user (owned + shared) with deduplication.
 func (s *Store) ListUserSessions(ctx context.Context, userID int64) ([]db.SessionListItem, error) {
 	ctx, span := tracer.Start(ctx, "db.list_user_sessions",
@@ -236,8 +257,20 @@ func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.Sessio
 	return s.queryFilterOptionsScoped(ctx, userID)
 }
 
+// staticProviderOptions returns the closed enum of provider values surfaced
+// in the filter UI. The list intentionally does NOT depend on the requesting
+// user's data — the chip should always be selectable for both providers.
+func staticProviderOptions() []string {
+	return []string{db.ProviderClaudeCode, db.ProviderCodex}
+}
+
 func (s *Store) queryFilterOptionsGlobal(ctx context.Context) (db.SessionFilterOptions, error) {
-	opts := db.SessionFilterOptions{Repos: make([]string, 0), Branches: make([]string, 0), Owners: make([]string, 0)}
+	opts := db.SessionFilterOptions{
+		Repos:     make([]string, 0),
+		Branches:  make([]string, 0),
+		Owners:    make([]string, 0),
+		Providers: staticProviderOptions(),
+	}
 
 	rows, err := s.conn().QueryContext(ctx, "SELECT repo_name FROM session_repos ORDER BY repo_name")
 	if err != nil {
@@ -325,9 +358,10 @@ func (s *Store) queryFilterOptionsScoped(ctx context.Context, userID int64) (db.
 		return db.SessionFilterOptions{}, fmt.Errorf("failed to query scoped filter options: %w", err)
 	}
 	return db.SessionFilterOptions{
-		Repos:    nonNilSlice(repos),
-		Branches: nonNilSlice(branches),
-		Owners:   nonNilSlice(owners),
+		Repos:     nonNilSlice(repos),
+		Branches:  nonNilSlice(branches),
+		Owners:    nonNilSlice(owners),
+		Providers: staticProviderOptions(),
 	}, nil
 }
 
@@ -363,6 +397,10 @@ func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (common
 	if len(params.Branches) > 0 {
 		p := pb.addArray(params.Branches)
 		commonFilters += "\n\t\t\t\tAND s.git_info->>'branch' = ANY(" + p + ")"
+	}
+	if len(params.Providers) > 0 {
+		p := pb.addArray(expandProviderLegacy(params.Providers))
+		commonFilters += "\n\t\t\t\tAND s.session_type = ANY(" + p + ")"
 	}
 	if len(params.Owners) > 0 {
 		p := pb.addArray(lowercaseSlice(params.Owners))

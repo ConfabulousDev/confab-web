@@ -29,13 +29,13 @@ function SessionsPage() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const {
-    repos, branches, owners, query,
-    toggleRepo, toggleBranch, toggleOwner,
+    repos, branches, owners, providers, query,
+    toggleRepo, toggleBranch, toggleOwner, toggleProvider,
     setQuery, clearAll, commitHistory,
   } = useSessionFilters();
 
   const { sessions, hasMore, filterOptions, loading, error, refetch, goNext, goPrev, canGoPrev } = useSessionsFetch({
-    repos, branches, owners, query,
+    repos, branches, owners, providers, query,
   });
   const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
@@ -74,12 +74,13 @@ function SessionsPage() {
         />
         <div className={styles.filterBar}>
           <FilterChipsBar
-            filters={{ repos, branches, owners, query }}
+            filters={{ repos, branches, owners, providers, query }}
             filterOptions={filterOptions}
             currentUserEmail={user?.email ?? null}
             onToggleRepo={toggleRepo}
             onToggleBranch={toggleBranch}
             onToggleOwner={toggleOwner}
+            onToggleProvider={toggleProvider}
             onQueryChange={setQuery}
             onClearAll={clearAll}
             onCommitHistory={commitHistory}

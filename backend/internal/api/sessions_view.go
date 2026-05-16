@@ -33,6 +33,27 @@ func parseCommaSeparated(value string) []string {
 	return result
 }
 
+// parseProviders parses the `?provider=` filter into canonical values.
+// Accepts case-insensitive input (e.g. `Claude-Code`, `CODEX`) and lowercases
+// before strict-enum validation. The legacy DB form `Claude Code` (with a
+// space) is intentionally rejected — it is a DB artifact, not a wire value.
+// Returns nil for an empty/missing param.
+func parseProviders(value string) ([]string, error) {
+	raw := parseCommaSeparated(value)
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		canonical := strings.ToLower(v)
+		if err := validation.ValidateProvider(canonical); err != nil {
+			return nil, err
+		}
+		out = append(out, canonical)
+	}
+	return out, nil
+}
+
 // HandleListSessions lists all sessions visible to the authenticated user.
 // Supports server-side filtering, cursor-based pagination, and returns pre-materialized filter options.
 func HandleListSessions(database *db.DB) http.HandlerFunc {
@@ -48,13 +69,19 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		}
 
 		// Parse filter query parameters
+		providers, perr := parseProviders(r.URL.Query().Get("provider"))
+		if perr != nil {
+			respondError(w, http.StatusBadRequest, perr.Error())
+			return
+		}
 		params := db.SessionListParams{
-			Repos:    parseCommaSeparated(r.URL.Query().Get("repo")),
-			Branches: parseCommaSeparated(r.URL.Query().Get("branch")),
-			Owners:   parseCommaSeparated(r.URL.Query().Get("owner")),
-			PRs:      parseCommaSeparated(r.URL.Query().Get("pr")),
-			Cursor:   r.URL.Query().Get("cursor"),
-			PageSize: db.DefaultPageSize,
+			Repos:     parseCommaSeparated(r.URL.Query().Get("repo")),
+			Branches:  parseCommaSeparated(r.URL.Query().Get("branch")),
+			Owners:    parseCommaSeparated(r.URL.Query().Get("owner")),
+			PRs:       parseCommaSeparated(r.URL.Query().Get("pr")),
+			Providers: providers,
+			Cursor:    r.URL.Query().Get("cursor"),
+			PageSize:  db.DefaultPageSize,
 		}
 
 		// Parse search query
@@ -66,6 +93,7 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		for name, values := range map[string][]string{
 			"repo": params.Repos, "branch": params.Branches,
 			"owner": params.Owners, "pr": params.PRs,
+			"provider": params.Providers,
 		} {
 			if err := validation.ValidateFilterValues(name, values); err != nil {
 				respondError(w, http.StatusBadRequest, err.Error())

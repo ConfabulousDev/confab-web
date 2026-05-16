@@ -46,11 +46,12 @@ type SessionListItem struct {
 
 // SessionListParams contains filtering and pagination parameters for listing sessions
 type SessionListParams struct {
-	Repos    []string // org/repo values (multi-select, OR within dimension)
-	Branches []string // branch names (multi-select)
-	Owners   []string // email addresses (multi-select)
-	PRs      []string // PR number strings (multi-select)
-	Query    *string  // search across titles + commit SHA prefix
+	Repos     []string // org/repo values (multi-select, OR within dimension)
+	Branches  []string // branch names (multi-select)
+	Owners    []string // email addresses (multi-select)
+	PRs       []string // PR number strings (multi-select)
+	Providers []string // canonical agent identifiers ("claude-code", "codex"); multi-select
+	Query     *string  // search across titles + commit SHA prefix
 
 	Cursor   string // opaque cursor for keyset pagination (empty = first page)
 	PageSize int    // fixed 50
@@ -67,9 +68,10 @@ type SessionListResult struct {
 
 // SessionFilterOptions contains pre-materialized filter dropdown values
 type SessionFilterOptions struct {
-	Repos    []string `json:"repos"`
-	Branches []string `json:"branches"`
-	Owners   []string `json:"owners"`
+	Repos     []string `json:"repos"`
+	Branches  []string `json:"branches"`
+	Owners    []string `json:"owners"`
+	Providers []string `json:"providers"` // Static enum: ["claude-code", "codex"]
 }
 
 // SessionDetail represents detailed session information (sync-based model)

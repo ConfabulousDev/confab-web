@@ -147,4 +147,55 @@ describe('useSessionFilters', () => {
       expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true });
     });
   });
+
+  // CF-393: AI Provider filter
+  describe('providers (CF-393)', () => {
+    it('returns empty providers when URL has no provider param', () => {
+      const { result } = renderHook(() => useSessionFilters());
+      expect(result.current.providers).toEqual([]);
+    });
+
+    it('parses comma-separated provider values from URL', () => {
+      setParams({ provider: 'claude-code,codex' });
+      const { result } = renderHook(() => useSessionFilters());
+      expect(result.current.providers).toEqual(['claude-code', 'codex']);
+    });
+
+    it('parses a single provider from URL', () => {
+      setParams({ provider: 'codex' });
+      const { result } = renderHook(() => useSessionFilters());
+      expect(result.current.providers).toEqual(['codex']);
+    });
+
+    it('toggleProvider adds provider when not present', () => {
+      const { result } = renderHook(() => useSessionFilters());
+      act(() => result.current.toggleProvider('claude-code'));
+
+      expect(currentParams.get('provider')).toBe('claude-code');
+    });
+
+    it('toggleProvider removes provider when already present', () => {
+      setParams({ provider: 'claude-code,codex' });
+      const { result } = renderHook(() => useSessionFilters());
+      act(() => result.current.toggleProvider('claude-code'));
+
+      expect(currentParams.get('provider')).toBe('codex');
+    });
+
+    it('toggleProvider clears param when last provider is removed', () => {
+      setParams({ provider: 'codex' });
+      const { result } = renderHook(() => useSessionFilters());
+      act(() => result.current.toggleProvider('codex'));
+
+      expect(currentParams.has('provider')).toBe(false);
+    });
+
+    it('clearAll wipes providers along with other filters', () => {
+      setParams({ provider: 'codex', repo: 'confab-web' });
+      const { result } = renderHook(() => useSessionFilters());
+      act(() => result.current.clearAll());
+
+      expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true });
+    });
+  });
 });

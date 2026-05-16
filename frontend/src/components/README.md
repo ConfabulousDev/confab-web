@@ -26,7 +26,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `DeployCTA.tsx` | Call-to-action for self-hosted deployment |
 | `ErrorBoundary.tsx` | React error boundary with fallback UI |
 | `ErrorDisplay.tsx` | Styled error message display |
-| `FilterChipsBar.tsx` | Horizontal bar of active filter chips with clear-all and optional history commit on blur |
+| `FilterChipsBar.tsx` | Horizontal bar of dimension dropdowns + active filter chips with clear-all and optional history commit on blur. Dimensions: Provider (static enum, opt out via `showProviderFilter={false}`), Repo, Branch, Owner. `DimensionDropdown` accepts optional `iconFor` / `labelFor` for per-option icons and display labels (used by Provider) |
 | `Footer.tsx` | App footer (SaaS mode only) |
 | `FormField.tsx` | Form field wrapper with label and validation error display |
 | `Header.tsx` | App header with navigation and auth state |

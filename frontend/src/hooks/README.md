@@ -10,7 +10,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useSessionsFetch.ts` | Paginated session list with server-side filtering and debounced search |
 | `useURLFilters.ts` | Generic URL-synced filter state hook (string, string[], boolean, dateRange fields) |
 | `useURLFilters.test.ts` | Tests for `useURLFilters` |
-| `useSessionFilters.ts` | URL-synced session filter state (repos, branches, owners, query) via `useURLFilters` |
+| `useSessionFilters.ts` | URL-synced session filter state (repos, branches, owners, providers, query) via `useURLFilters` |
 | `useTranscriptFilters.ts` | URL-synced Claude transcript message category filters via `useURLFilters` |
 | `useCodexTranscriptFilters.ts` | URL-synced Codex transcript category filters (CF-361) via `useURLFilters`. Shares the `?hide=` slot with `useTranscriptFilters`; foreign tokens are no-ops on read |
 | `useCodexTranscriptFilters.test.ts` | Tests for the Codex transcript filter hook (default state, round-trip, toggles, foreign-token tolerance) |
@@ -54,7 +54,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | Hook | Signature | Description |
 |------|-----------|-------------|
 | `useURLFilters` | `<T>(config) => URLFiltersResult<T>` | Generic URL filter persistence. Supports string, string[], boolean, and dateRange fields. Provides `setFilter`, `setAll`, `toggleArrayValue`, `clearAll`, and `commitHistory`. |
-| `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, query) to URL search params via `useURLFilters`. |
+| `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, providers, query) to URL search params via `useURLFilters`. |
 | `useTranscriptFilters` | `() => TranscriptFiltersResult` | Reads/writes Claude transcript message category visibility to URL `hide` param via `useURLFilters`. Provides toggle helpers for categories and subcategories. |
 | `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel of `useTranscriptFilters`. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |
 | `useTranscriptSearch` | `<T>(items, extractText) => TranscriptSearchResult` | Generic over item type. Builds a lowercased search index via `extractText`, debounces query (150ms search, 300ms highlight), provides match navigation. Shared by the Claude (`extractMessageText` from `services/messageParser`) and Codex (`extractCodexItemText` from `components/transcript/codex`) timelines. |

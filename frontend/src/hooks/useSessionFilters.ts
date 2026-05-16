@@ -5,6 +5,7 @@ export interface SessionFilters {
   repos: string[];
   branches: string[];
   owners: string[];
+  providers: string[];
   query: string;
 }
 
@@ -12,6 +13,7 @@ interface SessionFiltersActions {
   toggleRepo: (value: string) => void;
   toggleBranch: (value: string) => void;
   toggleOwner: (value: string) => void;
+  toggleProvider: (value: string) => void;
   setQuery: (value: string) => void;
   clearAll: () => void;
   commitHistory: () => void;
@@ -21,6 +23,7 @@ const SESSION_FILTERS_CONFIG: URLFiltersConfig = {
   repos: { type: 'string[]', default: [], paramName: 'repo' },
   branches: { type: 'string[]', default: [], paramName: 'branch' },
   owners: { type: 'string[]', default: [], paramName: 'owner' },
+  providers: { type: 'string[]', default: [], paramName: 'provider' },
   query: { type: 'string', default: '', paramName: 'q' },
 };
 
@@ -43,6 +46,11 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     [toggleArrayValue],
   );
 
+  const toggleProvider = useCallback(
+    (value: string) => toggleArrayValue('providers', value),
+    [toggleArrayValue],
+  );
+
   const setQuery = useCallback(
     (value: string) => setFilter('query', value, { replace: true }),
     [setFilter],
@@ -53,6 +61,7 @@ export function useSessionFilters(): SessionFilters & SessionFiltersActions {
     toggleRepo,
     toggleBranch,
     toggleOwner,
+    toggleProvider,
     setQuery,
     clearAll,
     commitHistory,

@@ -176,6 +176,272 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		}
 	})
 
+	// CF-393: provider filter
+	t.Run("filters by provider=claude-code", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
+		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			t.Fatalf("set codex session_type: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions?provider=claude-code")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+		if len(result.Sessions) != 1 {
+			t.Fatalf("expected 1 session, got %d", len(result.Sessions))
+		}
+		if result.Sessions[0].ExternalID != "cc-1" {
+			t.Errorf("expected cc-1, got %s", result.Sessions[0].ExternalID)
+		}
+	})
+
+	t.Run("filters by provider=codex", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
+		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			t.Fatalf("set codex session_type: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions?provider=codex")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+		if len(result.Sessions) != 1 {
+			t.Fatalf("expected 1 session, got %d", len(result.Sessions))
+		}
+		if result.Sessions[0].ExternalID != "cx-1" {
+			t.Errorf("expected cx-1, got %s", result.Sessions[0].ExternalID)
+		}
+	})
+
+	t.Run("provider=claude-code matches legacy 'Claude Code' rows", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		legacyID := testutil.CreateTestSessionFull(t, env, user.ID, "legacy-1", testutil.TestSessionFullOpts{Summary: "legacy"})
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET session_type = $1 WHERE id = $2",
+			db.ProviderClaudeCodeLegacy, legacyID); err != nil {
+			t.Fatalf("set legacy session_type: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions?provider=claude-code")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+		if len(result.Sessions) != 1 {
+			t.Fatalf("expected 1 legacy session matched by claude-code filter, got %d", len(result.Sessions))
+		}
+		if result.Sessions[0].Provider != db.ProviderClaudeCode {
+			t.Errorf("provider on wire = %q, want canonical %q",
+				result.Sessions[0].Provider, db.ProviderClaudeCode)
+		}
+	})
+
+	t.Run("provider=claude-code,codex returns both", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
+		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			t.Fatalf("set codex session_type: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions?provider=claude-code,codex")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+		if len(result.Sessions) != 2 {
+			t.Fatalf("expected 2 sessions, got %d", len(result.Sessions))
+		}
+	})
+
+	t.Run("empty provider param returns all sessions", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
+		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			t.Fatalf("set codex session_type: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions?provider=")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+		if len(result.Sessions) != 2 {
+			t.Errorf("expected 2 sessions (empty filter = no filter), got %d", len(result.Sessions))
+		}
+	})
+
+	t.Run("case-insensitive accept", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		testutil.CreateTestSessionFull(t, env, user.ID, "cc-1", testutil.TestSessionFullOpts{Summary: "cc"})
+		cxID := testutil.CreateTestSessionFull(t, env, user.ID, "cx-1", testutil.TestSessionFullOpts{Summary: "cx"})
+		if _, err := env.DB.Exec(env.Ctx,
+			"UPDATE sessions SET session_type = $1 WHERE id = $2", db.ProviderCodex, cxID); err != nil {
+			t.Fatalf("set codex session_type: %v", err)
+		}
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		// Mixed case canonical values must be accepted and applied as canonical.
+		resp, err := client.Get("/api/v1/sessions?provider=Claude-Code,CODEX")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+		if len(result.Sessions) != 2 {
+			t.Errorf("expected 2 sessions (case-insensitive match), got %d", len(result.Sessions))
+		}
+	})
+
+	t.Run("legacy DB form rejected as URL value", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		// `Claude Code` (with space) is a DB artifact, not a valid wire value.
+		// URL-encoded space comes through as `Claude%20Code`.
+		resp, err := client.Get("/api/v1/sessions?provider=Claude%20Code")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("unknown provider value returns 400", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions?provider=gpt-4")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("filter_options includes static providers list", func(t *testing.T) {
+		env.CleanDB(t)
+
+		// Even with no sessions at all, both canonical providers must be
+		// present in filter_options.providers — the list is a static enum,
+		// not derived from user data.
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/sessions")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result db.SessionListResult
+		testutil.ParseJSON(t, resp, &result)
+
+		want := map[string]bool{db.ProviderClaudeCode: false, db.ProviderCodex: false}
+		for _, p := range result.FilterOptions.Providers {
+			if _, ok := want[p]; ok {
+				want[p] = true
+			}
+		}
+		for p, seen := range want {
+			if !seen {
+				t.Errorf("filter_options.providers missing %q (got %v)", p, result.FilterOptions.Providers)
+			}
+		}
+		if len(result.FilterOptions.Providers) != 2 {
+			t.Errorf("filter_options.providers = %v, want exactly 2 entries", result.FilterOptions.Providers)
+		}
+	})
+
 	t.Run("isolates sessions between users", func(t *testing.T) {
 		env.CleanDB(t)
 

@@ -17,6 +17,7 @@ const defaultFilters: SessionFilters = {
   repos: [],
   branches: [],
   owners: [],
+  providers: [],
   query: '',
 };
 
@@ -47,6 +48,7 @@ const mockResponse: SessionListResponse = {
     repos: ['test/repo'],
     branches: ['main'],
     owners: ['user@test.com'],
+    providers: ['claude-code', 'codex'],
   },
 };
 
@@ -55,7 +57,7 @@ const emptyResponse: SessionListResponse = {
   has_more: false,
   next_cursor: '',
   page_size: 50,
-  filter_options: { repos: [], branches: [], owners: [] },
+  filter_options: { repos: [], branches: [], owners: [], providers: ['claude-code', 'codex'] },
 };
 
 describe('useSessionsFetch', () => {
@@ -99,6 +101,7 @@ describe('useSessionsFetch', () => {
       repos: ['confab-web'],
       branches: ['main'],
       owners: [],
+      providers: [],
       query: '',
     };
 

@@ -14,7 +14,7 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 
 ## Key API
 
-- **`ListUserSessionsPaginated(ctx, userID, params)`** -- Returns filtered, cursor-paginated sessions with pre-materialized filter dropdown values (repos, branches, owners). Supports `ShareAllSessions` mode.
+- **`ListUserSessionsPaginated(ctx, userID, params)`** -- Returns filtered, cursor-paginated sessions with pre-materialized filter dropdown values (repos, branches, owners, providers). Supports `ShareAllSessions` mode.
 - **`ListUserSessions(ctx, userID)`** -- Returns all visible sessions (owned + shared) without pagination. Used for non-paginated views.
 - **`GetSessionDetail(ctx, sessionID, userID)`** -- Returns full session detail for an owner. Returns `ErrSessionNotFound` for non-owners.
 - **`FindOrCreateSyncSession(ctx, userID, params)`** -- Idempotent session creation for the sync API, keyed by `(user_id, provider, external_id)`. Returns existing sync file state so the client can resume from the last checkpoint. Handles unique-violation races. The `claude-code` lookup matches both canonical and legacy `'Claude Code'` rows so a freshly-deployed binary still finds rows written by an older one during the deploy gap.
@@ -42,7 +42,7 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 ## Design Decisions
 
 - **CTE-based SharedWithMe query**: Owned, shared, and system-shared sessions are computed as separate CTEs then UNION ALL + DISTINCT ON to deduplicate while preserving access type priority.
-- **Pushdown filters**: Filters (repo, branch, owner, PR, full-text search) are applied inside each CTE rather than on the outer query to enable index usage and avoid scanning all rows.
+- **Pushdown filters**: Filters (repo, branch, owner, PR, provider, full-text search) are applied inside each CTE rather than on the outer query to enable index usage and avoid scanning all rows. The provider clause uses `expandProviderLegacy` so a `claude-code` request also matches the legacy `'Claude Code'` display form in `session_type`; this helper is deleted together with `db.NormalizeProvider` in the eventual post-rollout backfill PR.
 - **`ShareAllSessions` fast path**: When enabled, the paginated query skips share-row JOINs entirely and queries `sessions` directly, joined only to `users`.
 - **`paramBuilder`**: Internal helper that tracks `$N` placeholder indices for dynamic SQL construction. Avoids off-by-one errors when building queries with variable filter clauses.
 

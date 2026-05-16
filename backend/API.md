@@ -539,7 +539,7 @@ DELETE /api/v1/keys/{id}
 
 #### List Sessions
 ```
-GET /api/v1/sessions?repo=<repos>&branch=<branches>&owner=<owners>&pr=<prs>&q=<search>&cursor=<cursor>
+GET /api/v1/sessions?repo=<repos>&branch=<branches>&owner=<owners>&pr=<prs>&provider=<providers>&q=<search>&cursor=<cursor>
 ```
 
 Returns cursor-paginated sessions visible to the user (owned + shared) with server-side filtering and pre-materialized filter options.
@@ -551,6 +551,7 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
 | `branch` | string | No | all | Comma-separated branch names |
 | `owner` | string | No | all | Comma-separated owner emails |
 | `pr` | string | No | all | Comma-separated PR numbers |
+| `provider` | string | No | all | Comma-separated canonical agent identifiers: `claude-code`, `codex`. Case-insensitive (`CODEX`, `Claude-Code` accepted; lowercased before matching). Any other value (including the legacy display form `Claude Code` with a space) returns 400. When `claude-code` is requested, rows with the legacy `session_type='Claude Code'` value also match. |
 | `q` | string | No | none | Full-text search with prefix matching. Searches session metadata (titles, summary, first message), smart recap, and user transcript messages via PostgreSQL FTS. Multiple words use AND semantics. Prefix matching is automatic (e.g., `auth` matches `authentication`). Also matches commit SHA prefixes as fallback. |
 | `cursor` | string | No | none | Opaque cursor for pagination (from `next_cursor` of previous response) |
 
@@ -587,7 +588,8 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
   "filter_options": {
     "repos": ["org/repo1", "org/repo2"],
     "branches": ["main", "feature-x"],
-    "owners": ["alice@example.com", "bob@example.com"]
+    "owners": ["alice@example.com", "bob@example.com"],
+    "providers": ["claude-code", "codex"]
   }
 }
 ```
@@ -600,7 +602,7 @@ Returns cursor-paginated sessions visible to the user (owned + shared) with serv
 - **Page size** is fixed at 50 sessions per page.
 - **Cursor pagination**: Pass `next_cursor` from the response as `cursor` param to get the next page. When `has_more` is false, there are no more results. `next_cursor` is only present when `has_more` is true.
 - **Visibility filter**: Only sessions with `total_lines > 0` and at least one of `summary` or `first_user_message` are included.
-- **Filter options** are pre-materialized from lookup tables and the users table. They show all possible values (not affected by active filters). Repos and branches come from append-only lookup tables populated during sync; owners come from all users.
+- **Filter options** are pre-materialized from lookup tables and the users table. They show all possible values (not affected by active filters). Repos and branches come from append-only lookup tables populated during sync; owners come from all users. `providers` is a static enum (`["claude-code", "codex"]`) returned regardless of which providers the requesting user has rows for, so the filter chip stays selectable in all cases.
 - **Multiple values** within a filter dimension use OR logic (e.g., `repo=a,b` matches either). Across dimensions, filters use AND logic.
 
 #### Get Session Detail (Canonical Access)

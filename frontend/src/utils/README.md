@@ -19,6 +19,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `agentSkillChart.ts` | Shared agent/skill chart constants, types, and name truncation |
 | `utils.ts` | Low-level utilities: `stripAnsi`, `isRecord` (runtime guard for plain objects, used wherever an `unknown` needs its fields read without an `as` cast), `formatBytes` |
 | `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. `tryParseAsJson` — if a string is a JSON object/array, return a pretty-printed version (used as the JSON fallback before markdown rendering). Used by `ContentBlock`, the Codex message renderers, `AwaySummary`, and `QueuedCommand` |
+| `providers.ts` | CF-393 — `PROVIDER_VALUES` (canonical agent identifiers as a `const` tuple), `providerLabel(value)` returning the display label (`"Claude Code"`, `"Codex"`, or the canonical value verbatim for unknown providers). Used by `FilterChipsBar`'s Provider chip and active-filter pill |
 | `index.ts` | Barrel re-exports of commonly used functions |
 
 ## Key Functions

@@ -21,8 +21,10 @@ function TILsPage() {
     setQuery, clearAll, commitHistory,
   } = useSessionFilters();
 
+  // TILs endpoint does not support provider filtering; the Provider chip is
+  // hidden on this page (FilterChipsBar showProviderFilter={false}).
   const { tils, hasMore, filterOptions, loading, error, refetch, goNext, goPrev, canGoPrev, deleteTIL } = useTILsFetch({
-    repos, branches, owners, query,
+    repos, branches, owners, providers: [], query,
   });
   const { user } = useAuth();
   const columnCount = useColumnCount();
@@ -70,15 +72,17 @@ function TILsPage() {
         />
         <div className={styles.filterBar}>
           <FilterChipsBar
-            filters={{ repos, branches, owners, query }}
+            filters={{ repos, branches, owners, providers: [], query }}
             filterOptions={filterOptions}
             currentUserEmail={user?.email ?? null}
             onToggleRepo={toggleRepo}
             onToggleBranch={toggleBranch}
             onToggleOwner={toggleOwner}
+            onToggleProvider={() => {}}
             onQueryChange={setQuery}
             onClearAll={clearAll}
             onCommitHistory={commitHistory}
+            showProviderFilter={false}
           />
         </div>
 
