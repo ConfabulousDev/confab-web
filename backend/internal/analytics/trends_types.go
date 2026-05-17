@@ -70,13 +70,33 @@ type TrendsOverviewCard struct {
 }
 
 // TrendsTokensCard provides token usage and cost summary.
+//
+// CF-435: PerProvider holds per-canonical-provider breakdowns of the same
+// metrics, populated server-side regardless of how many providers are in the
+// filtered range. Always non-nil ({} when empty range). Cross-provider total
+// fields stay populated for non-UI consumers; the frontend switches to a
+// per-provider table when len(PerProvider) >= 2.
 type TrendsTokensCard struct {
-	TotalInputTokens         int64             `json:"total_input_tokens"`
-	TotalOutputTokens        int64             `json:"total_output_tokens"`
-	TotalCacheCreationTokens int64             `json:"total_cache_creation_tokens"`
-	TotalCacheReadTokens     int64             `json:"total_cache_read_tokens"`
-	TotalCostUSD             string            `json:"total_cost_usd"` // Decimal as string
-	DailyCosts               []DailyCostPoint  `json:"daily_costs"`
+	TotalInputTokens         int64                               `json:"total_input_tokens"`
+	TotalOutputTokens        int64                               `json:"total_output_tokens"`
+	TotalCacheCreationTokens int64                               `json:"total_cache_creation_tokens"`
+	TotalCacheReadTokens     int64                               `json:"total_cache_read_tokens"`
+	TotalCostUSD             string                              `json:"total_cost_usd"` // Decimal as string
+	DailyCosts               []DailyCostPoint                    `json:"daily_costs"`
+	PerProvider              map[string]*TrendsTokensPerProvider `json:"per_provider"`
+}
+
+// TrendsTokensPerProvider holds aggregated token usage and cost for one
+// canonical provider (e.g. "claude-code", "codex"). No per-provider daily
+// costs — the chart stays a single combined-cost line. Legacy session_type
+// aliases are folded into the canonical key at the Scan site via
+// models.NormalizeProvider before reaching this struct.
+type TrendsTokensPerProvider struct {
+	TotalInputTokens         int64  `json:"total_input_tokens"`
+	TotalOutputTokens        int64  `json:"total_output_tokens"`
+	TotalCacheCreationTokens int64  `json:"total_cache_creation_tokens"`
+	TotalCacheReadTokens     int64  `json:"total_cache_read_tokens"`
+	TotalCostUSD             string `json:"total_cost_usd"` // Decimal as string
 }
 
 // DailyCostPoint represents a single day's cost for charting.

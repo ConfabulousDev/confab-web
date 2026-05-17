@@ -8,7 +8,7 @@ Trend analytics cards for the Trends dashboard. Each card visualizes aggregated 
 |------|------|
 | `TrendsCard.tsx` | Base card wrapper (`TrendsCard`) and stat row (`StatRow`) shared by all trend cards |
 | `TrendsOverviewCard.tsx` | Session count, total/avg duration, assistant utilization |
-| `TrendsTokensCard.tsx` | Aggregated token usage and daily cost chart. Cache row is tri-state (CF-436): `Cache (Create / Read)` when create > 0; `Cache Read` only when create is 0 and read > 0; hidden when both are 0 — accommodates Codex-only filtered windows where OpenAI doesn't bill cache writes. |
+| `TrendsTokensCard.tsx` | Aggregated token usage and daily cost chart. Switches layout on `Object.keys(per_provider).length >= 2` (CF-435): multi-provider sets render a per-provider table (alphabetical, with a bold Total row whose four token columns dash out — tokens aren't comparable across providers — and a rolled-up Cost). Single-provider sets keep the StatRow stack and the tri-state cache row from CF-436 (`Cache (Create / Read)` when create > 0; `Cache Read` only when create is 0 and read > 0; hidden when both are 0 — accommodates Codex-only windows where OpenAI doesn't bill cache writes). Per-row, Codex's Cache Create cell renders `—` (structural N/A) via the `providerHasCacheWrite` helper. |
 | `TrendsActivityCard.tsx` | Code activity totals and daily session count chart |
 | `TrendsToolsCard.tsx` | Aggregated tool usage with per-tool success/error breakdown |
 | `TrendsUtilizationCard.tsx` | Daily assistant utilization percentage chart |
