@@ -186,7 +186,7 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
           extraProps.isRefreshing = isRegenerating;
         }
       }
-      if (cardDef.key === 'conversation') {
+      if (cardDef.key === 'conversation' || cardDef.key === 'code_activity') {
         extraProps.provider = provider;
       }
 

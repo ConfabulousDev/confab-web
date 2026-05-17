@@ -2,6 +2,7 @@ import { CardWrapper, CardLoading, CardError, StatRow, SectionHeader } from './C
 import { CodeIcon, SearchIcon, FileIcon } from '@/components/icons';
 import type { CodeActivityCardData } from '@/schemas/api';
 import type { CardProps } from './types';
+import { getProviderMetadataOrFallback } from '@/utils/providers';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import styles from './CodeActivityCard.module.css';
 
@@ -74,7 +75,30 @@ const MinusIcon = (
   </svg>
 );
 
-export function CodeActivityCard({ data, loading, error }: CardProps<CodeActivityCardData>) {
+/**
+ * Props for CodeActivityCard. `provider` is required so the card can hide
+ * the Files-read row for Codex (no Read tool — the metric is always zero)
+ * and surface a Codex-specific tooltip on the Searches row explaining the
+ * web_search_call exclusion (CF-439). See `CodeActivityCardForRegistry`
+ * for the registry call site which defaults `provider` to claude-code.
+ */
+interface CodeActivityCardProps extends CardProps<CodeActivityCardData> {
+  provider: string;
+}
+
+/**
+ * Registry-friendly wrapper. The card registry's generic component type
+ * doesn't model `provider`; SessionSummaryPanel injects it at runtime via
+ * extraProps. This wrapper defaults provider to "claude-code" if it ever
+ * arrives unset. Mirrors `ConversationCardForRegistry` (CF-441).
+ */
+export function CodeActivityCardForRegistry(
+  props: Omit<CodeActivityCardProps, 'provider'> & { provider?: string }
+) {
+  return <CodeActivityCard {...props} provider={props.provider ?? 'claude-code'} />;
+}
+
+export function CodeActivityCard({ data, loading, error, provider }: CodeActivityCardProps) {
   if (error && !data) {
     return <CardError title="Code Activity" error={error} icon={CodeIcon} />;
   }
@@ -103,9 +127,15 @@ export function CodeActivityCard({ data, loading, error }: CardProps<CodeActivit
   const maxLabelLength = hasLanguages ? Math.max(...chartData.map((d) => d.extension.length)) : 0;
   const yAxisWidth = Math.max(30, maxLabelLength * 8 + 8);
 
+  const providerMeta = getProviderMetadataOrFallback(provider, 'claude');
+  const isCodex = providerMeta.id === 'codex';
+  const searchesTooltip = providerMeta.cardTooltips?.codeActivity?.searches;
+
   return (
     <CardWrapper title="Code Activity" icon={CodeIcon}>
-      <StatRow label="Files read" value={data.files_read} icon={FileReadIcon} />
+      {!isCodex && (
+        <StatRow label="Files read" value={data.files_read} icon={FileReadIcon} />
+      )}
       <StatRow label="Files modified" value={data.files_modified} icon={FileEditIcon} />
       <StatRow
         label="Lines added"
@@ -119,7 +149,12 @@ export function CodeActivityCard({ data, loading, error }: CardProps<CodeActivit
         icon={MinusIcon}
         valueClassName={styles.linesRemoved}
       />
-      <StatRow label="Searches" value={data.search_count} icon={SearchIcon} />
+      <StatRow
+        label="Searches"
+        value={data.search_count}
+        icon={SearchIcon}
+        tooltip={searchesTooltip}
+      />
 
       {hasLanguages && (
         <>

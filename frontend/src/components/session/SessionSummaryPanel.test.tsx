@@ -219,6 +219,75 @@ describe('SessionSummaryPanel', () => {
     });
   });
 
+  describe('provider wiring for cards (CF-439)', () => {
+    it('passes provider through to CodeActivityCard (codex hides Files read + sets Searches tooltip)', () => {
+      const codexAnalytics: SessionAnalytics = {
+        ...baseAnalytics,
+        cards: {
+          ...baseAnalytics.cards,
+          code_activity: {
+            files_read: 0,
+            files_modified: 5,
+            lines_added: 120,
+            lines_removed: 30,
+            search_count: 0,
+            language_breakdown: { go: 5 },
+          },
+        },
+      };
+
+      render(
+        <SessionSummaryPanel
+          sessionId="s1"
+          isOwner={false}
+          provider="codex"
+          initialAnalytics={codexAnalytics}
+        />
+      );
+
+      // Files read row is hidden for Codex.
+      expect(screen.queryByText('Files read')).toBeNull();
+
+      // Searches row carries the Codex tooltip.
+      const row = screen.getByText('Searches').closest('[title]');
+      expect(row).toHaveAttribute(
+        'title',
+        "Codex's web_search_call is not counted as file search"
+      );
+    });
+
+    it('claude-code provider keeps Files read row and omits Codex tooltip', () => {
+      const claudeAnalytics: SessionAnalytics = {
+        ...baseAnalytics,
+        cards: {
+          ...baseAnalytics.cards,
+          code_activity: {
+            files_read: 10,
+            files_modified: 5,
+            lines_added: 120,
+            lines_removed: 30,
+            search_count: 3,
+            language_breakdown: { ts: 5 },
+          },
+        },
+      };
+
+      render(
+        <SessionSummaryPanel
+          sessionId="s1"
+          isOwner={false}
+          provider="claude-code"
+          initialAnalytics={claudeAnalytics}
+        />
+      );
+
+      expect(screen.getByText('Files read')).toBeInTheDocument();
+      const title =
+        screen.getByText('Searches').closest('[title]')?.getAttribute('title') ?? '';
+      expect(title).not.toMatch(/Codex/);
+    });
+  });
+
   describe('regeneration', () => {
     it('calls analyticsAPI.regenerateSmartRecap and forceRefetch', async () => {
       const regenerateSpy = vi.spyOn(analyticsAPI, 'regenerateSmartRecap').mockResolvedValue(baseAnalytics);

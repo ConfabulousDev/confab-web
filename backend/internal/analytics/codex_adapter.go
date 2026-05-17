@@ -18,6 +18,8 @@ import "github.com/ConfabulousDev/confab-web/internal/codex"
 //   - Tools: standard success/error breakdown; orphan "<unknown>" tools counted.
 //   - Code activity: apply_patch envelopes drive FilesModified/LinesAdded/Removed
 //     and LanguageBreakdown. FilesRead stays 0 (Codex has no Read tool).
+//     SearchCount stays 0 — web_search_call is a web search, not file search
+//     (CF-439).
 //   - Conversation: UserTurns / AssistantTurns plus the five timing fields
 //     (CF-441). Reasoning extends the assistant window via a synthetic event
 //     at Turn.CompletedAt — a Codex-specific divergence from Claude that's

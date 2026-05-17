@@ -24,6 +24,21 @@ import { ClaudeCodeIcon, CodexIcon } from '@/components/icons';
 export const PROVIDER_VALUES = ['claude-code', 'codex'] as const;
 export type ProviderId = (typeof PROVIDER_VALUES)[number];
 
+/**
+ * Per-card provider-specific tooltip strings. Keyed by card name, then by row.
+ * Undefined entries are interpreted as "no provider-specific tooltip on this
+ * row" — the card falls back to whatever default tooltip (if any) the row has.
+ *
+ * Currently only Codex declares any entries; Claude leaves `cardTooltips`
+ * undefined since its row labels are self-explanatory for that provider.
+ * Added in CF-439 for the Code Activity card's Searches row.
+ */
+export interface ProviderCardTooltips {
+  codeActivity?: {
+    searches?: string;
+  };
+}
+
 export interface ProviderMetadata {
   id: ProviderId;
   /** Filter chip / dropdown label (e.g. "Claude Code"). */
@@ -39,6 +54,8 @@ export interface ProviderMetadata {
     idLabel: string;
     commandHint: string;
   };
+  /** Optional per-card tooltip overrides. See `ProviderCardTooltips`. */
+  cardTooltips?: ProviderCardTooltips;
 }
 
 export const PROVIDER_METADATA: Record<ProviderId, ProviderMetadata> = {
@@ -57,6 +74,11 @@ export const PROVIDER_METADATA: Record<ProviderId, ProviderMetadata> = {
     icon: CodexIcon,
     brandColor: '#10a37f',
     resumeCommand: { idLabel: 'Copy Codex ID', commandHint: 'for codex resume' },
+    cardTooltips: {
+      codeActivity: {
+        searches: "Codex's web_search_call is not counted as file search",
+      },
+    },
   },
 };
 
