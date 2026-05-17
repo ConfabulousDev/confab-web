@@ -21,8 +21,8 @@ type SmartRecapGeneratorConfig struct {
 	APIKey              string
 	Model               string
 	GenerationTimeout   time.Duration
-	MaxOutputTokens     int // 0 means use DefaultMaxOutputTokens
-	MaxTranscriptTokens int // 0 means use DefaultMaxTranscriptTokens
+	MaxOutputTokens     int    // 0 means use DefaultMaxOutputTokens
+	MaxTranscriptTokens int    // 0 means use DefaultMaxTranscriptTokens
 	BaseURL             string // Custom base URL for the Anthropic API (for testing)
 }
 
@@ -73,12 +73,6 @@ type GenerateInput struct {
 	Transcript     string          // pre-built XML transcript (streaming path)
 	IDMap          map[int]string  // sequential ID -> UUID map (streaming path)
 	CardStats      map[string]interface{}
-	// ClearMessageIDs, when true, zeroes the MessageID on every annotated
-	// item in the LLM response before the card is saved. Used by the Codex
-	// branch: Codex messages have no stable id and the frontend's
-	// `if (!item.message_id)` short-circuit renders items as plain text,
-	// avoiding broken anchor links. Defaults to false for Claude.
-	ClearMessageIDs bool
 }
 
 // GenerateResult contains the result of a generation attempt.
@@ -95,6 +89,17 @@ type GenerateResult struct {
 // The caller is responsible for checking staleness and quota before calling this.
 // If skipQuota is true, the quota increment is skipped (used for admin-triggered regeneration).
 func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput, lockTimeoutSeconds int, skipQuota bool) *GenerateResult {
+	return g.generate(ctx, input, lockTimeoutSeconds, skipQuota, false)
+}
+
+// GenerateWithMessageIDClearing generates a smart recap and clears annotated
+// item message IDs before saving. Use this for providers that lack stable
+// frontend anchors.
+func (g *SmartRecapGenerator) GenerateWithMessageIDClearing(ctx context.Context, input GenerateInput, lockTimeoutSeconds int, skipQuota bool) *GenerateResult {
+	return g.generate(ctx, input, lockTimeoutSeconds, skipQuota, true)
+}
+
+func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput, lockTimeoutSeconds int, skipQuota bool, clearIDs bool) *GenerateResult {
 	ctx, span := tracer.Start(ctx, "smart_recap.generate",
 		trace.WithAttributes(
 			attribute.String("session.id", input.SessionID),
@@ -149,7 +154,7 @@ func (g *SmartRecapGenerator) Generate(ctx context.Context, input GenerateInput,
 	// Codex sessions have no stable per-message id. Zero MessageID on every
 	// annotated item so the frontend's SmartRecapCard short-circuit renders
 	// items as plain text instead of broken anchor links.
-	if input.ClearMessageIDs {
+	if clearIDs {
 		clearMessageIDs(result)
 	}
 

@@ -5,10 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
-	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
@@ -22,21 +20,6 @@ import (
 // ErrQuotaExceeded is returned when a user has exceeded their smart recap quota for the month.
 var ErrQuotaExceeded = errors.New("smart recap quota exceeded")
 
-// providerSupported reports whether the precompute dispatch switches have a
-// case for the given session_type value. TestDispatchCoversAllowedProviders
-// asserts that every value in models.AllowedProviders is supported here — if
-// a new alias / provider is added to AllowedProviders but the dispatch
-// switches aren't updated, that test fails loudly so the bug never reaches
-// production. Phase 2 (CF-402) replaces this helper and the dispatch
-// switches together with a SessionProvider registry.
-func providerSupported(p string) bool {
-	switch p {
-	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy, models.ProviderCodex:
-		return true
-	}
-	return false
-}
-
 // StaleSession represents a session that needs analytics precomputation.
 type StaleSession struct {
 	SessionID  string
@@ -46,8 +29,7 @@ type StaleSession struct {
 	// scanned from sessions.session_type and normalized via models.NormalizeProvider.
 	// Two consumers:
 	//   1. Chunk-storage calls — chunks are read from the provider-scoped S3 prefix.
-	//   2. Dispatch switch in PrecomputeRegularCards / PrecomputeSmartRecapOnly /
-	//      BuildSearchIndexOnly — routes to the right per-provider parser.
+	//   2. ProviderFor registry lookup — routes to the right per-provider parser.
 	Provider   string
 	TotalLines int64
 	// RegenRequestedAt is non-nil when this session was surfaced due to an
@@ -235,8 +217,8 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 			-- Provider filter: pq.Array(models.AllowedProviders) is the
 			-- permanent allowlist (canonical forms + legacy aliases). See
 			-- internal/models/provider.go for the OSS self-hosted aliasing
-			-- rationale; TestDispatchCoversAllowedProviders is the guard
-			-- against drift between this list and the dispatch switches.
+			-- rationale; TestRegistryCoversAllowedProviders is the guard
+			-- against drift between this list and the analytics registry.
 			WHERE s.session_type = ANY($14)
 		),
 		stale_sessions AS (
@@ -330,27 +312,10 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 	return sessions, nil
 }
 
-// PrecomputeRegularCards computes only the regular analytics cards for a session.
-// Smart recap is handled separately via PrecomputeSmartRecapOnly with its own staleness thresholds.
-// Agent files are streamed one at a time to avoid O(all agents) memory usage.
-//
-// Dispatches by session.Provider:
-//   - claude-code (canonical or legacy): existing TranscriptBuilder pipeline
-//   - codex: Codex parser + ComputeFromCodexRollout adapter
-//   - anything else: loud error (the SQL filter and switch must stay in sync)
+// PrecomputeRegularCards computes only the regular analytics cards for a
+// session. Smart recap is handled separately via PrecomputeSmartRecapOnly with
+// its own staleness thresholds.
 func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleSession) error {
-	switch session.Provider {
-	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy:
-		return p.precomputeRegularCardsClaudeCode(ctx, session)
-	case models.ProviderCodex:
-		return p.precomputeRegularCardsCodex(ctx, session)
-	default:
-		return fmt.Errorf("unsupported provider for analytics precompute: %q", session.Provider)
-	}
-}
-
-// precomputeRegularCardsClaudeCode is the Claude-Code branch of PrecomputeRegularCards.
-func (p *Precomputer) precomputeRegularCardsClaudeCode(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.regular_cards",
 		trace.WithAttributes(
 			attribute.String("session.id", session.SessionID),
@@ -360,32 +325,35 @@ func (p *Precomputer) precomputeRegularCardsClaudeCode(ctx context.Context, sess
 		))
 	defer span.End()
 
-	// Download and parse main transcript
-	main, agentInfos, err := p.downloadMainAndListAgents(ctx, session)
+	sp, err := ProviderFor(session.Provider)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if main == nil {
+
+	rollout, err := sp.Parse(ctx, p.parseInput(session))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if rollout == nil {
 		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
 
-	// Compute standard cards via streaming
-	agentProvider := p.newAgentProvider(session, agentInfos)
-	computed, err := ComputeStreaming(ctx, main, agentProvider)
-	if err != nil {
+	computed := sp.ComputeCards(ctx, rollout)
+	if computed == nil {
+		err := fmt.Errorf("provider %q returned nil compute result", session.Provider)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-
 	if computed.SkippedAgentFiles > 0 {
 		span.SetAttributes(attribute.Int("agent_files.skipped", computed.SkippedAgentFiles))
 	}
 
-	// Convert to Cards and upsert
 	cards := computed.ToCards(session.SessionID, session.TotalLines)
 	if err := p.analyticsStore.UpsertCards(ctx, cards); err != nil {
 		span.RecordError(err)
@@ -397,102 +365,20 @@ func (p *Precomputer) precomputeRegularCardsClaudeCode(ctx context.Context, sess
 	return nil
 }
 
-// newAgentProvider creates an AgentProvider that streams agent files from storage.
-func (p *Precomputer) newAgentProvider(session StaleSession, agentInfos []AgentFileInfo) AgentProvider {
-	download := func(ctx context.Context, fileName string) ([]byte, error) {
-		return p.store.DownloadAndMergeChunks(ctx, session.UserID, session.Provider, session.ExternalID, fileName)
+func (p *Precomputer) parseInput(session StaleSession) ParseInput {
+	return ParseInput{
+		DB:         p.db,
+		Store:      p.store,
+		SessionID:  session.SessionID,
+		UserID:     session.UserID,
+		Provider:   session.Provider,
+		ExternalID: session.ExternalID,
 	}
-	return NewAgentProvider(agentInfos, download, storage.MaxAgentFiles)
-}
-
-// drainAgentProvider reads all files from an AgentProvider, calling fn for each.
-// Errors from the provider are silently skipped (the provider already logs them).
-func drainAgentProvider(ctx context.Context, provider AgentProvider, fn func(*TranscriptFile)) {
-	for {
-		agent, err := provider(ctx)
-		if err == io.EOF {
-			return
-		}
-		if err != nil {
-			continue
-		}
-		fn(agent)
-	}
-}
-
-// downloadMainAndListAgents downloads the main transcript and returns agent file metadata.
-// The main file is parsed immediately; agent files are NOT downloaded (use NewAgentProvider to stream them).
-// Returns nil main if no transcript data exists.
-func (p *Precomputer) downloadMainAndListAgents(ctx context.Context, session StaleSession) (*TranscriptFile, []AgentFileInfo, error) {
-	ctx, span := tracer.Start(ctx, "precompute.download_main_and_list_agents",
-		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
-	defer span.End()
-
-	// Get sync files for this session
-	filesQuery := `
-		SELECT file_name, file_type
-		FROM sync_files
-		WHERE session_id = $1 AND file_type IN ('transcript', 'agent')
-	`
-	rows, err := p.db.QueryContext(ctx, filesQuery, session.SessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, nil, err
-	}
-	defer rows.Close()
-
-	var mainFileName string
-	var agentInfos []AgentFileInfo
-	for rows.Next() {
-		var fileName, fileType string
-		if err := rows.Scan(&fileName, &fileType); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return nil, nil, err
-		}
-		switch fileType {
-		case "transcript":
-			mainFileName = fileName
-		case "agent":
-			agentID := ExtractAgentID(fileName)
-			if agentID != "" {
-				agentInfos = append(agentInfos, AgentFileInfo{FileName: fileName, AgentID: agentID})
-			}
-		}
-	}
-	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, nil, err
-	}
-
-	if mainFileName == "" {
-		return nil, nil, nil
-	}
-
-	// Download and parse main transcript
-	mainContent, err := p.store.DownloadAndMergeChunks(ctx, session.UserID, session.Provider, session.ExternalID, mainFileName)
-	if err != nil || mainContent == nil {
-		return nil, nil, err
-	}
-
-	main, err := parseTranscriptFile(mainContent, "")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	span.SetAttributes(
-		attribute.Int("agent_files.count", len(agentInfos)),
-		attribute.Int64("main.lines", int64(len(main.Lines))),
-	)
-
-	return main, agentInfos, nil
 }
 
 // precomputeSmartRecap handles smart recap generation with line count and quota checks.
 // Returns an error if smart recap generation fails. Returns nil if skipped (up-to-date, quota exceeded, lock held).
-func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSession, input GenerateInput) error {
+func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSession, input GenerateInput, clearMessageIDs bool) error {
 	ctx, span := tracer.Start(ctx, "precompute.smart_recap",
 		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
 	defer span.End()
@@ -537,7 +423,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 	}
 
 	// Use the shared generator for the actual generation (handles lock, LLM call, save, quota increment)
-	result := p.smartRecapGenerator.Generate(ctx, input, p.config.LockTimeoutSeconds, isAdminRegen)
+	result := p.smartRecapGenerator.generate(ctx, input, p.config.LockTimeoutSeconds, isAdminRegen, clearMessageIDs)
 
 	if result.Skipped {
 		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "lock_held"))
@@ -872,23 +758,8 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 	return sessions, nil
 }
 
-// BuildSearchIndexOnly builds the search index for a session. Dispatches
-// by session.Provider — see PrecomputeRegularCards for the dispatch contract.
+// BuildSearchIndexOnly builds the search index for a session.
 func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSession) error {
-	switch session.Provider {
-	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy:
-		return p.buildSearchIndexClaudeCode(ctx, session)
-	case models.ProviderCodex:
-		return p.buildSearchIndexCodex(ctx, session)
-	default:
-		return fmt.Errorf("unsupported provider for search index: %q", session.Provider)
-	}
-}
-
-// buildSearchIndexClaudeCode is the Claude-Code branch of BuildSearchIndexOnly.
-// Downloads transcript, extracts content, queries recap timestamp, and upserts the index.
-// Agent files are streamed one at a time using UserMessagesBuilder.
-func (p *Precomputer) buildSearchIndexClaudeCode(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.build_search_index",
 		trace.WithAttributes(
 			attribute.String("session.id", session.SessionID),
@@ -897,28 +768,25 @@ func (p *Precomputer) buildSearchIndexClaudeCode(ctx context.Context, session St
 		))
 	defer span.End()
 
-	// Download main transcript and list agents
-	main, agentInfos, err := p.downloadMainAndListAgents(ctx, session)
+	sp, err := ProviderFor(session.Provider)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if main == nil {
+
+	rollout, err := sp.Parse(ctx, p.parseInput(session))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if rollout == nil {
 		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
 
-	// Stream agents through UserMessagesBuilder
-	var umb UserMessagesBuilder
-	umb.ProcessFile(main)
-
-	drainAgentProvider(ctx, p.newAgentProvider(session, agentInfos), func(agent *TranscriptFile) {
-		umb.ProcessFile(agent)
-	})
-
-	// Extract metadata + recap from DB, user messages from streaming
-	content, err := ExtractSearchContentWithUserMessages(ctx, p.db, session.SessionID, umb.Finish())
+	content, err := ExtractSearchContentWithUserMessages(ctx, p.db, session.SessionID, sp.SearchText(ctx, rollout))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -951,8 +819,8 @@ func (p *Precomputer) buildSearchIndexClaudeCode(ctx context.Context, session St
 }
 
 // loadRecapIndexedAt fetches session_card_smart_recap.computed_at (UTC) for the
-// given session, returning nil if the row does not exist. Used by both Claude
-// and Codex search-index builders to populate SearchIndexRecord.RecapIndexedAt.
+// given session, returning nil if the row does not exist. Used when building
+// SearchIndexRecord.RecapIndexedAt.
 func (p *Precomputer) loadRecapIndexedAt(ctx context.Context, sessionID string) (*time.Time, error) {
 	var computedAt sql.NullTime
 	err := p.db.QueryRowContext(ctx,
@@ -970,22 +838,7 @@ func (p *Precomputer) loadRecapIndexedAt(ctx context.Context, sessionID string) 
 }
 
 // PrecomputeSmartRecapOnly computes only the smart recap for a session.
-// Dispatches by session.Provider — see PrecomputeRegularCards for the contract.
 func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session StaleSession) error {
-	switch session.Provider {
-	case models.ProviderClaudeCode, models.ProviderClaudeCodeLegacy:
-		return p.precomputeSmartRecapClaudeCode(ctx, session)
-	case models.ProviderCodex:
-		return p.precomputeSmartRecapCodex(ctx, session)
-	default:
-		return fmt.Errorf("unsupported provider for smart recap: %q", session.Provider)
-	}
-}
-
-// precomputeSmartRecapClaudeCode is the Claude-Code branch of PrecomputeSmartRecapOnly.
-// Use this when regular cards are already up-to-date but smart recap is stale.
-// Downloads main transcript, streams agents through TranscriptBuilder, then generates smart recap.
-func (p *Precomputer) precomputeSmartRecapClaudeCode(ctx context.Context, session StaleSession) error {
 	ctx, span := tracer.Start(ctx, "precompute.smart_recap_only",
 		trace.WithAttributes(
 			attribute.String("session.id", session.SessionID),
@@ -995,33 +848,29 @@ func (p *Precomputer) precomputeSmartRecapClaudeCode(ctx context.Context, sessio
 		))
 	defer span.End()
 
-	if !p.config.SmartRecapEnabled {
-		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
-		return nil
-	}
-
-	// Download main transcript and list agents
-	main, agentInfos, err := p.downloadMainAndListAgents(ctx, session)
+	sp, err := ProviderFor(session.Provider)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if main == nil {
+
+	if !p.config.SmartRecapEnabled {
+		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
+		return nil
+	}
+
+	rollout, err := sp.Parse(ctx, p.parseInput(session))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if rollout == nil {
 		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
 
-	// Stream agents through TranscriptBuilder
-	tb := NewTranscriptBuilder(DefaultFormatConfig())
-	tb.ProcessFile(main)
-
-	drainAgentProvider(ctx, p.newAgentProvider(session, agentInfos), func(agent *TranscriptFile) {
-		tb.ProcessFile(agent)
-	})
-	transcript, idMap := tb.Finish()
-
-	// Fetch existing card stats from DB (regular cards are already up-to-date)
 	cards, err := p.analyticsStore.GetCards(ctx, session.SessionID)
 	if err != nil {
 		span.RecordError(err)
@@ -1034,7 +883,12 @@ func (p *Precomputer) precomputeSmartRecapClaudeCode(ctx context.Context, sessio
 		cardStats = cards.ToResponse().Cards
 	}
 
-	// Generate smart recap with pre-built transcript
+	transcript, idMap, err := sp.PrepareTranscript(ctx, rollout)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
 	if err := p.precomputeSmartRecap(ctx, session, GenerateInput{
 		SessionID:  session.SessionID,
 		UserID:     session.UserID,
@@ -1042,164 +896,12 @@ func (p *Precomputer) precomputeSmartRecapClaudeCode(ctx context.Context, sessio
 		Transcript: transcript,
 		IDMap:      idMap,
 		CardStats:  cardStats,
-	}); err != nil {
+	}, sp.ClearMessageIDs()); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
-	span.SetAttributes(attribute.Bool("session.computed", true))
-	return nil
-}
-
-// =============================================================================
-// Codex provider branches (CF-350)
-// =============================================================================
-//
-// Each *Codex variant mirrors the Claude-Code counterpart but routes the raw
-// transcript bytes through codex.ParseRollout + the analytics adapter
-// (ComputeFromCodexRollout) and the Codex-specific search/recap helpers.
-// Codex has no agent files — the sync_files JOIN returns just the transcript.
-
-// loadCodexRollout wraps the package-level LoadCodexRollout for use from the
-// precompute worker, which carries session context in a StaleSession value.
-// The on-demand API handler calls LoadCodexRollout directly (CF-364).
-func (p *Precomputer) loadCodexRollout(ctx context.Context, session StaleSession) (*codex.ParsedRollout, error) {
-	return LoadCodexRollout(ctx, p.db, p.store, session.SessionID, session.UserID, session.Provider, session.ExternalID)
-}
-
-// codexSpanAttrs is the standard attribute set used for Codex precompute spans.
-func codexSpanAttrs(session StaleSession) []attribute.KeyValue {
-	return []attribute.KeyValue{
-		attribute.String("session.id", session.SessionID),
-		attribute.String("session.provider", session.Provider),
-		attribute.Int64("session.user_id", session.UserID),
-		attribute.Int64("session.total_lines", session.TotalLines),
-	}
-}
-
-// precomputeRegularCardsCodex is the Codex branch of PrecomputeRegularCards.
-func (p *Precomputer) precomputeRegularCardsCodex(ctx context.Context, session StaleSession) error {
-	ctx, span := tracer.Start(ctx, "precompute.regular_cards.codex",
-		trace.WithAttributes(codexSpanAttrs(session)...))
-	defer span.End()
-
-	rollout, err := p.loadCodexRollout(ctx, session)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	if rollout == nil {
-		span.SetAttributes(attribute.Bool("session.empty", true))
-		return nil
-	}
-
-	cards := ComputeFromCodexRollout(rollout).ToCards(session.SessionID, session.TotalLines)
-	if err := p.analyticsStore.UpsertCards(ctx, cards); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	span.SetAttributes(attribute.Bool("session.computed", true))
-	return nil
-}
-
-// buildSearchIndexCodex is the Codex branch of BuildSearchIndexOnly.
-func (p *Precomputer) buildSearchIndexCodex(ctx context.Context, session StaleSession) error {
-	ctx, span := tracer.Start(ctx, "precompute.build_search_index.codex",
-		trace.WithAttributes(codexSpanAttrs(session)...))
-	defer span.End()
-
-	rollout, err := p.loadCodexRollout(ctx, session)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	if rollout == nil {
-		span.SetAttributes(attribute.Bool("session.empty", true))
-		return nil
-	}
-
-	content, err := ExtractSearchContentWithUserMessages(ctx, p.db, session.SessionID, ExtractCodexUserMessagesText(rollout))
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	recapIndexedAt, err := p.loadRecapIndexedAt(ctx, session.SessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	record := &SearchIndexRecord{
-		SessionID:       session.SessionID,
-		Version:         SearchIndexVersion,
-		IndexedUpToLine: session.TotalLines,
-		RecapIndexedAt:  recapIndexedAt,
-		MetadataHash:    content.MetadataHash,
-	}
-	if err := p.analyticsStore.UpsertSearchIndex(ctx, record, content); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	span.SetAttributes(attribute.Bool("session.indexed", true))
-	return nil
-}
-
-// precomputeSmartRecapCodex is the Codex branch of PrecomputeSmartRecapOnly.
-func (p *Precomputer) precomputeSmartRecapCodex(ctx context.Context, session StaleSession) error {
-	ctx, span := tracer.Start(ctx, "precompute.smart_recap_only.codex",
-		trace.WithAttributes(codexSpanAttrs(session)...))
-	defer span.End()
-
-	if !p.config.SmartRecapEnabled {
-		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
-		return nil
-	}
-
-	rollout, err := p.loadCodexRollout(ctx, session)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	if rollout == nil {
-		span.SetAttributes(attribute.Bool("session.empty", true))
-		return nil
-	}
-
-	// Reuse already-computed regular cards as stats for the LLM prompt.
-	cards, err := p.analyticsStore.GetCards(ctx, session.SessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	var cardStats map[string]interface{}
-	if cards != nil {
-		cardStats = cards.ToResponse().Cards
-	}
-
-	transcript, idMap := PrepareCodexTranscript(rollout)
-	if err := p.precomputeSmartRecap(ctx, session, GenerateInput{
-		SessionID:       session.SessionID,
-		UserID:          session.UserID,
-		LineCount:       session.TotalLines,
-		Transcript:      transcript,
-		IDMap:           idMap,
-		CardStats:       cardStats,
-		ClearMessageIDs: true, // Codex messages have no stable id for frontend deep-linking
-	}); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
 	span.SetAttributes(attribute.Bool("session.computed", true))
 	return nil
 }

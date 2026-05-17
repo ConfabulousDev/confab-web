@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
@@ -18,6 +17,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/go-chi/chi/v5"
 )
 
 // Smart recap configuration constants
@@ -374,11 +374,11 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			return
 		}
 
-		// CF-364: Codex sessions bypass the Claude file/agent/streaming pipeline.
-		// The synchronous Codex branch mirrors precomputeRegularCardsCodex:
+		// CF-364: Codex sessions bypass the Claude file/agent/streaming
+		// pipeline. The synchronous Codex branch mirrors codexProvider:
 		// load the rollout, compute via the adapter, upsert cards. If smart
-		// recap is enabled the rollout (already in memory) feeds
-		// PrepareCodexTranscript so we don't re-download it.
+		// recap is enabled the rollout feeds PrepareCodexTranscript so we
+		// don't re-download it.
 		if isCodexSession(sessionProvider) {
 			handleCodexCacheMiss(r.Context(), w, &codexCacheMissArgs{
 				database:         database,
@@ -505,12 +505,11 @@ type codexCacheMissArgs struct {
 	log              *slog.Logger
 }
 
-// handleCodexCacheMiss is the synchronous Codex branch of HandleGetSessionAnalytics.
-// It mirrors precomputeRegularCardsCodex: load rollout, compute via the codex
-// adapter, upsert cards, respond. When smart recap is enabled, the rollout
-// is reused for PrepareCodexTranscript so we don't re-download it; the
-// resulting recap has ClearMessageIDs=true so the SmartRecapCard renders
-// items as plain text (Codex has no stable per-message UUIDs).
+// handleCodexCacheMiss is the synchronous Codex branch of
+// HandleGetSessionAnalytics. It mirrors codexProvider: load rollout, compute
+// via the codex adapter, upsert cards, respond. When smart recap is enabled,
+// the rollout is reused for PrepareCodexTranscript so we don't re-download it;
+// message IDs are cleared so SmartRecapCard renders items as plain text.
 func handleCodexCacheMiss(ctx context.Context, w http.ResponseWriter, args *codexCacheMissArgs) {
 	rollout, err := analytics.LoadCodexRollout(ctx, args.database.Conn(), args.store, args.sessionID, args.sessionUserID, args.sessionProvider, args.externalID)
 	if err != nil {
@@ -519,8 +518,7 @@ func handleCodexCacheMiss(ctx context.Context, w http.ResponseWriter, args *code
 		return
 	}
 	if rollout == nil {
-		// Empty session — same shape precomputeRegularCardsCodex would leave
-		// behind. Frontend renders the empty/no-data state.
+		// Empty session. Frontend renders the empty/no-data state.
 		respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 		return
 	}
@@ -678,16 +676,21 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 		}
 	}
 
+	input := analytics.GenerateInput{
+		SessionID:  sc.sessionID,
+		UserID:     sc.sessionUserID,
+		LineCount:  sc.lineCount,
+		Transcript: transcript,
+		IDMap:      idMap,
+		CardStats:  sc.cardStats,
+	}
 	// Generate synchronously (first-time generation)
-	genResult := sc.generator.Generate(ctx, analytics.GenerateInput{
-		SessionID:       sc.sessionID,
-		UserID:          sc.sessionUserID,
-		LineCount:       sc.lineCount,
-		Transcript:      transcript,
-		IDMap:           idMap,
-		CardStats:       sc.cardStats,
-		ClearMessageIDs: sc.clearMessageIDs,
-	}, sc.config.LockTimeoutSeconds, false)
+	var genResult *analytics.GenerateResult
+	if sc.clearMessageIDs {
+		genResult = sc.generator.GenerateWithMessageIDClearing(ctx, input, sc.config.LockTimeoutSeconds, false)
+	} else {
+		genResult = sc.generator.Generate(ctx, input, sc.config.LockTimeoutSeconds, false)
+	}
 	if genResult.Error != nil {
 		sc.log.Error("Failed to generate smart recap", "error", genResult.Error, "session_id", sc.sessionID)
 		addCardError("Failed to generate smart recap")
@@ -851,16 +854,21 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
+		input := analytics.GenerateInput{
+			SessionID:  sessionID,
+			UserID:     sessionUserID,
+			LineCount:  totalLineCount,
+			Transcript: transcript,
+			IDMap:      idMap,
+			CardStats:  cardStats,
+		}
 		// Generate synchronously (this acquires the lock internally)
-		genResult := smartRecapGenerator.Generate(r.Context(), analytics.GenerateInput{
-			SessionID:       sessionID,
-			UserID:          sessionUserID,
-			LineCount:       totalLineCount,
-			Transcript:      transcript,
-			IDMap:           idMap,
-			CardStats:       cardStats,
-			ClearMessageIDs: codex,
-		}, smartRecapConfig.LockTimeoutSeconds, false)
+		var genResult *analytics.GenerateResult
+		if codex {
+			genResult = smartRecapGenerator.GenerateWithMessageIDClearing(r.Context(), input, smartRecapConfig.LockTimeoutSeconds, false)
+		} else {
+			genResult = smartRecapGenerator.Generate(r.Context(), input, smartRecapConfig.LockTimeoutSeconds, false)
+		}
 		if genResult.Error != nil {
 			log.Error("Failed to generate smart recap", "error", genResult.Error, "session_id", sessionID)
 			respondError(w, http.StatusInternalServerError, "Failed to generate smart recap")

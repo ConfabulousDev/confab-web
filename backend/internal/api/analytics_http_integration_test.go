@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
-	"github.com/ConfabulousDev/confab-web/internal/testutil"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
 // =============================================================================
@@ -483,9 +483,9 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 // Codex Session Analytics HTTP Integration Tests (CF-364)
 //
 // Exercises the Codex provider branch in HandleGetSessionAnalytics. The branch
-// must mirror precomputeRegularCardsCodex synchronously: download the rollout
-// via storage, parse via codex.ParseRollout, compute via ComputeFromCodexRollout,
-// upsert via Cards, respond.
+// must mirror codexProvider synchronously: download the rollout via storage,
+// parse via codex.ParseRollout, compute via ComputeFromCodexRollout, upsert via
+// Cards, respond.
 // =============================================================================
 
 // codexExactFixture is a hand-crafted minimal Codex rollout that exercises one

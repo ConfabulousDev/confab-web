@@ -20,11 +20,9 @@ import (
 // slog but do not fail the call — the rollout is still returned. Storage and
 // SQL errors are propagated.
 //
-// Shared by the precompute worker (precomputeRegularCardsCodex,
-// buildSearchIndexCodex, precomputeSmartRecapCodex) and the on-demand API
-// handler (HandleGetSessionAnalytics, CF-364). Both paths must produce the
-// same rollout from the same bytes, so the download → parse → log path is
-// centralized here.
+// Shared by codexProvider and the on-demand API handler
+// (HandleGetSessionAnalytics, CF-364). Both paths must produce the same rollout
+// from the same bytes, so the download → parse → log path is centralized here.
 func LoadCodexRollout(
 	ctx context.Context,
 	db *sql.DB,

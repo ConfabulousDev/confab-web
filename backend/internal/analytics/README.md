@@ -24,11 +24,14 @@ Session analytics engine: parses Claude Code transcripts and computes, caches, a
 | `cards.go` | Card record types (DB schema), card data types (API response), version constants, `IsValid`/`AllValid` staleness helpers. |
 | `models.go` | `AnalyticsResponse` (API envelope), legacy flat types (`TokenStats`, `CostStats`, `CompactionInfo`). |
 | `store.go` | `Store` -- DB CRUD for all card tables (`session_card_*`), search index, and smart recap. `GetCards`/`UpsertCards` run all queries in parallel. `ToCards` and `ToResponse` handle `ComputeResult <-> Cards <-> AnalyticsResponse` conversions. |
-| `precompute.go` | `Precomputer` -- background worker entry points. `FindStaleSessions`, `PrecomputeRegularCards`, `FindStaleSmartRecapSessions`, `PrecomputeSmartRecapOnly`, `FindStaleSearchIndexSessions`, `BuildSearchIndexOnly`. Stale-session filters cover all analytics-eligible providers: `WHERE session_type IN ('claude-code', 'Claude Code', 'codex')`. The three top-level methods dispatch on `StaleSession.Provider` to the Claude-Code branch (`*ClaudeCode` helpers) or the Codex branch (`*Codex` helpers); unsupported providers return a loud error so the SQL filter and switch can't silently drift. |
+| `precompute.go` | `Precomputer` -- background worker entry points. `FindStaleSessions`, `PrecomputeRegularCards`, `FindStaleSmartRecapSessions`, `PrecomputeSmartRecapOnly`, `FindStaleSearchIndexSessions`, `BuildSearchIndexOnly`. Stale-session filters cover all analytics-eligible providers via `models.AllowedProviders`; the three top-level compute methods dispatch through `ProviderFor(StaleSession.Provider)`. |
+| `provider.go` | `SessionProvider`, `ParseInput`, `RegisterProvider`, and `ProviderFor` -- provider registry contract used by the precomputer. Providers register a canonical name plus aliases at init time; unknown providers return loud errors. |
+| `claude_provider.go` | `claudeProvider` -- Claude-Code implementation of `SessionProvider`. Registers canonical `claude-code` plus legacy `Claude Code`, loads main transcripts and agent file metadata, streams agents through `ComputeStreaming`, `UserMessagesBuilder`, and `TranscriptBuilder`, and keeps smart recap message IDs. |
+| `codex_provider.go` | `codexProvider` -- Codex implementation of `SessionProvider`. Registers `codex`, delegates loading to `LoadCodexRollout`, cards to `ComputeFromCodexRollout`, search text to `ExtractCodexUserMessagesText`, transcript XML to `PrepareCodexTranscript`, and requests message-ID clearing for smart recaps. |
 | `codex_adapter.go` | `ComputeFromCodexRollout` -- maps a parsed `codex.ParsedRollout` onto the same `ComputeResult` shape produced by `ComputeStreaming` for Claude transcripts. Documents per-card mapping decisions inline (tokens normalize OpenAI's subset-cached-tokens, FilesRead stays 0 since Codex has no Read tool, etc.). |
-| `codex_rollout_loader.go` | `LoadCodexRollout` -- package-level helper that queries `sync_files` for the transcript filename, downloads via `storage.DownloadAndMergeChunks`, parses via `codex.ParseRollout`, and logs validation warnings. Shared by the precompute worker (`Precomputer.loadCodexRollout`) and the on-demand API handler (`HandleGetSessionAnalytics`, CF-364) so both paths produce the same rollout from the same bytes. |
+| `codex_rollout_loader.go` | `LoadCodexRollout` -- package-level helper that queries `sync_files` for the transcript filename, downloads via `storage.DownloadAndMergeChunks`, parses via `codex.ParseRollout`, and logs validation warnings. Shared by the Codex provider and the on-demand API handler (`HandleGetSessionAnalytics`, CF-364) so both paths produce the same rollout from the same bytes. |
 | `codex_search.go` | `ExtractCodexUserMessagesText` -- flattens Codex user messages, assistant `final` text, and tool-call summaries (name + truncated args) into the Weight C search-index content. Honors the 500 KB byte cap with UTF-8-safe boundary alignment. |
-| `codex_transcript.go` | `PrepareCodexTranscript` -- builds the XML transcript fed to the smart recap LLM (same `<transcript>`/`<user>`/`<assistant>`/`<tool>` envelope as the Claude path so the existing prompt accepts it). Codex synthesizes ids that the frontend doesn't anchor on — `ClearMessageIDs` flag zeros them post-LLM. |
+| `codex_transcript.go` | `PrepareCodexTranscript` -- builds the XML transcript fed to the smart recap LLM (same `<transcript>`/`<user>`/`<assistant>`/`<tool>` envelope as the Claude path so the existing prompt accepts it). Codex synthesizes ids that the frontend doesn't anchor on; `codexProvider.ClearMessageIDs()` requests post-LLM zeroing. |
 | `search_index.go` | `SearchIndexContent`, `UserMessagesBuilder`, `ExtractSearchContent` -- builds weighted tsvector components (metadata=A, recap=B, user messages=C) for full-text search. |
 | `pricing.go` | `ModelPricing`, `modelPricingTable`, `GetPricing`, `CalculateCost`, `CalculateTotalCost`. Per-model, per-million-token pricing with fast-mode and server-tool-use surcharges. |
 | `validation.go` | Schema validation for every transcript line type (user, assistant, system, summary, file-history-snapshot, queue-operation, pr-link). |
@@ -182,15 +185,19 @@ This ensures title/summary matches rank higher than body text matches.
 
 `AnalyticsResponse` includes both legacy flat fields (`Tokens`, `Cost`, `Compaction`) and the new `Cards` map. This supports frontend migration; the flat fields will be removed once the frontend fully transitions to the cards format.
 
-### Provider-Aware Dispatch (Claude vs Codex)
+### Provider Registry (Claude vs Codex)
 
-`PrecomputeRegularCards`, `BuildSearchIndexOnly`, and `PrecomputeSmartRecapOnly` are thin switches on `StaleSession.Provider`. Each branch is a private method:
+`PrecomputeRegularCards`, `BuildSearchIndexOnly`, and `PrecomputeSmartRecapOnly` resolve `StaleSession.Provider` with `ProviderFor` and then call the `SessionProvider` interface:
 
-- `claude-code` / legacy `Claude Code` -> `*ClaudeCode` (existing `TranscriptBuilder` pipeline).
-- `codex` -> `*Codex` (Codex parser in `internal/codex`, mapped via `ComputeFromCodexRollout`).
-- anything else -> loud `unsupported provider` error.
+- `Parse(ctx, ParseInput) (Rollout, error)` loads provider-specific session data and returns nil for empty sessions.
+- `ComputeCards(ctx, Rollout) *ComputeResult` maps the provider rollout to the canonical card aggregate.
+- `SearchText(ctx, Rollout) string` returns Weight C transcript text for search indexing.
+- `PrepareTranscript(ctx, Rollout) (string, map[int]string, error)` builds smart recap XML and the message-id map.
+- `ClearMessageIDs() bool` reports whether smart recap annotations should drop frontend anchors.
 
-The three stale-session SQL filters use `WHERE session_type = ANY($N)` with `pq.Array(models.AllowedProviders)` (canonical + legacy aliases) and each query returns `session_type AS provider`, normalized through `models.NormalizeProvider` at the Scan site. The `providerSupported` helper plus `TestDispatchCoversAllowedProviders` jointly guarantee that every value in `AllowedProviders` is also routable by the dispatch switches — a forgotten case fails the test loudly instead of silently skipping sessions. Codex sessions may have subagent sidechain files (CF-389 — `sync_files` rows with `file_type='agent'`), but `LoadCodexRollout` (in `codex_rollout_loader.go`) currently filters `file_type='transcript'` only and reads just the root rollout. Extending Codex analytics to fold in subagent rollouts is a follow-up; today the existing `sync_files` JOIN returns only the transcript and `codex.ParseRollout` parses that row. The on-demand API handler reuses the same helper to keep the worker and request paths bit-identical.
+Providers register at init time with `RegisterProvider`. Claude registers both canonical `claude-code` and legacy `Claude Code` to the same provider instance; Codex registers `codex`. Duplicate registrations panic during startup/tests. Unknown providers return a loud `unsupported provider for analytics` error.
+
+The three stale-session SQL filters use `WHERE session_type = ANY($N)` with `pq.Array(models.AllowedProviders)` (canonical + legacy aliases) and each query returns `session_type AS provider`, normalized through `models.NormalizeProvider` at the Scan site. `TestRegistryCoversAllowedProviders` guarantees that every value in `AllowedProviders` resolves through the registry, and `TestPrecomputeGoHasNoProviderSwitchOrLiterals` guards against reintroducing provider-literal dispatch in `precompute.go`. Codex sessions may have subagent sidechain files (CF-389 -- `sync_files` rows with `file_type='agent'`), but `LoadCodexRollout` currently filters `file_type='transcript'` only and reads just the root rollout. Extending Codex analytics to fold in subagent rollouts is a follow-up; today the existing `sync_files` JOIN returns only the transcript and `codex.ParseRollout` parses that row. The on-demand API handler reuses the same helper to keep the worker and request paths bit-identical.
 
 Per-card mapping decisions for Codex are documented inline in `codex_adapter.go`. Notable points:
 
@@ -198,7 +205,15 @@ Per-card mapping decisions for Codex are documented inline in `codex_adapter.go`
 - Reasoning tokens are billed as output by OpenAI; they fold into `OutputTokens`.
 - `FilesRead` stays 0 — Codex has no Read tool; documented inline rather than approximated heuristically.
 - `AssistantTurns` count user-prompt-triggered sequences (not raw Codex `task_started`->`task_complete` cycles) for closer parity with Claude semantics.
-- Smart recap items get empty `MessageID` via `GenerateInput.ClearMessageIDs=true`; the frontend's `SmartRecapCard.tsx` already short-circuits on `!item.message_id` and renders them as plain text (Codex messages have no stable id for deep-linking).
+- Smart recap items get empty `MessageID` when the provider reports `ClearMessageIDs() == true`; the frontend's `SmartRecapCard.tsx` already short-circuits on `!item.message_id` and renders them as plain text (Codex messages have no stable id for deep-linking).
+
+### Adding a New Provider
+
+1. Add the canonical provider and any permanent aliases in `internal/models/provider.go`.
+2. Implement `SessionProvider` in a provider-specific file in this package.
+3. Register the provider in `init()` with `RegisterProvider(&newProvider{}, canonical, aliases...)`.
+4. Keep provider-specific parsing, card mapping, search text, transcript XML, and message-id capability behind that implementation.
+5. Add provider tests for parsing/mapping behavior and ensure `TestRegistryCoversAllowedProviders` passes.
 
 ## Testing
 

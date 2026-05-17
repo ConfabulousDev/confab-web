@@ -14,10 +14,10 @@ import (
 //
 // The returned idMap maps sequential integer ids to synthetic
 // "codex-<seq>" placeholders. These ids are NOT used by the frontend for
-// deep-linking — Codex messages have no stable id. The Codex precompute
-// path sets GenerateInput.ClearMessageIDs=true so the resulting card has
-// empty message_ids, and SmartRecapCard.tsx's `if (!item.message_id)`
-// short-circuit renders items as plain text.
+// deep-linking — Codex messages have no stable id. codexProvider reports
+// ClearMessageIDs=true so the resulting card has empty message_ids, and
+// SmartRecapCard.tsx's `if (!item.message_id)` short-circuit renders items as
+// plain text.
 //
 // Truncation honors DefaultFormatConfig() for parity with the Claude path.
 func PrepareCodexTranscript(rollout *codex.ParsedRollout) (string, map[int]string) {
