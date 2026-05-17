@@ -112,6 +112,15 @@ const TokenUsageSchema = z.object({
   iterations: z.array(z.unknown()).optional(),
 }).passthrough(); // forward-compat for future usage fields
 
+// CF-418: canonical TokenUsage shape stamped by the parse layer onto
+// assistant messages after wire validation. Not a wire field.
+const NormalizedTokenUsageSchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cacheWrite: z.number(),
+  cacheRead: z.number(),
+});
+
 // ============================================================================
 // Message Schemas
 // ============================================================================
@@ -179,6 +188,8 @@ const AssistantMessageSchema = BaseMessageSchema.extend({
     stop_sequence: z.string().nullable(),
     usage: TokenUsageSchema,
   }),
+  // CF-418: parse-layer-stamped canonical token usage. Not present on the wire.
+  tokenUsage: NormalizedTokenUsageSchema.optional(),
 });
 
 const FileBackupSchema = z.object({

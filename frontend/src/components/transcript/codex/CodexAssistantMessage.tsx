@@ -4,10 +4,11 @@
 
 import type { CodexAssistantItem } from '@/types/codexRenderItem';
 import {
-  buildCodexCostTooltip,
+  buildCostTooltip,
   formatCost,
   formatTokenCount,
 } from '@/utils/tokenStats';
+import { codexAdapter } from '@/providers/codexAdapter';
 import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
 import CodexMessageBody from './CodexMessageBody';
@@ -73,14 +74,16 @@ export default function CodexAssistantMessage({
 
   // CF-362: badges render only when cost mode is on AND we have both usage
   // and a positive cost. Zero-cost rows / rows missing usage stay clean.
+  // CF-418: usage is canonical TokenUsage; reasoning is already folded into
+  // output, cacheRead is the hit count.
   const costBadges =
     isCostMode && item.usage !== undefined && messageCost !== undefined && messageCost > 0
       ? {
           usage: item.usage,
           cost: messageCost,
-          tooltip: buildCodexCostTooltip(item.usage, messageCost),
-          outputDisplay: item.usage.output_tokens + (item.usage.reasoning_output_tokens ?? 0),
-          cachedHit: item.usage.cached_input_tokens ?? 0,
+          tooltip: buildCostTooltip(codexAdapter, item.usage, messageCost, item),
+          outputDisplay: item.usage.output,
+          cachedHit: item.usage.cacheRead,
         }
       : null;
 
@@ -102,7 +105,7 @@ export default function CodexAssistantMessage({
               {formatCost(costBadges.cost)}
             </span>
             <span className={styles.tokenPill} title={costBadges.tooltip}>
-              {formatTokenCount(costBadges.usage.input_tokens)} in &middot;{' '}
+              {formatTokenCount(costBadges.usage.input + costBadges.cachedHit)} in &middot;{' '}
               {formatTokenCount(costBadges.outputDisplay)} out
             </span>
             {costBadges.cachedHit > 0 && (

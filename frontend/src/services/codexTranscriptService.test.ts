@@ -741,11 +741,13 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
     expect(assistantItems).toHaveLength(1);
     const a = assistantItems[0];
     if (a?.kind !== 'assistant') throw new Error('expected assistant');
+    // CF-418: parse layer normalizes to canonical TokenUsage.
+    // input=1000 - cached=0 → uncached=1000; output=500+reasoning=0 → 500.
     expect(a.usage).toEqual({
-      input_tokens: 1000,
-      output_tokens: 500,
-      cached_input_tokens: 0,
-      reasoning_output_tokens: 0,
+      input: 1000,
+      output: 500,
+      cacheWrite: 0,
+      cacheRead: 0,
     });
   });
 
@@ -761,7 +763,8 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
     const a = result.find((i) => i.kind === 'assistant');
     if (a?.kind !== 'assistant') throw new Error('expected assistant');
     expect(a.phase).toBe('commentary');
-    expect(a.usage?.input_tokens).toBe(1000);
+    // CF-418: canonical `.input` is uncached (1000 - 0 = 1000).
+    expect(a.usage?.input).toBe(1000);
   });
 
   it('gives each multi-call assistant item its own usage (commentary then final)', () => {
@@ -778,11 +781,14 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
       throw new Error('expected two assistant items');
     }
     expect(first.phase).toBe('commentary');
-    expect(first.usage?.input_tokens).toBe(1000);
+    // CF-418: canonical `.input` is uncached; `.cacheRead` is the cache hit.
+    // first: 1000 - 0 = 1000 uncached, 0 cacheRead, output 500+0.
+    expect(first.usage?.input).toBe(1000);
     expect(second.phase).toBe('final');
-    expect(second.usage?.input_tokens).toBe(2000);
-    expect(second.usage?.cached_input_tokens).toBe(300);
-    expect(second.usage?.reasoning_output_tokens).toBe(100);
+    // second: 2000 - 300 = 1700 uncached, 300 cacheRead, output 700+100.
+    expect(second.usage?.input).toBe(1700);
+    expect(second.usage?.cacheRead).toBe(300);
+    expect(second.usage?.output).toBe(800);
   });
 
   it('is a no-op when token_count arrives before any assistant message', () => {

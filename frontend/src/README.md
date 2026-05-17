@@ -17,13 +17,14 @@ with Storybook.
 | `contexts/` | React contexts: ThemeContext, AppConfigContext, KeyboardShortcutContext | Adding app-wide state, changing context providers |
 | `hooks/` | Custom React hooks: data fetching, polling, auth, UI state | Adding data-fetching logic, changing state management |
 | `pages/` | Route-level page components (SessionsPage, TrendsPage, LoginPage, etc.) | Adding new pages/routes, changing page layout |
-| `providers/` | Per-provider transcript adapters: `ProviderAdapter` interface, `getAdapter()` registry, `useTranscriptData` / `useSessionTILs` shared hooks. SessionViewer dispatches through this layer instead of branching on `session.provider` (CF-417) | Adding a new provider's transcript pipeline; changing how SessionViewer fetches / filters / renders per provider |
+| `providers/` | Per-provider transcript adapters: `ProviderAdapter` interface, `getAdapter()` registry, `useTranscriptData` / `useSessionTILs` shared hooks, per-provider `calculateMessageCost` / `extendCostTooltip` (CF-418). SessionViewer dispatches through this layer instead of branching on `session.provider` (CF-417) | Adding a new provider's transcript pipeline; changing how SessionViewer fetches / filters / renders per provider |
 | `schemas/` | Zod schemas for API response validation and transcript parsing | Changing API contracts, adding new response types |
-| `services/` | API client (fetch wrapper + Zod validation), transcript/message parsing | Changing API calls, adding new endpoints |
+| `services/` | API client (fetch wrapper + Zod validation), transcript/message parsing. Both transcript services stamp canonical `TokenUsage` (`input`/`output`/`cacheWrite`/`cacheRead`) on assistant messages at parse time (CF-418) | Changing API calls, adding new endpoints |
 | `styles/` | CSS variables for theme support (light/dark), shared CSS module base styles | Changing theme colors, adding design tokens, extracting shared component styles |
 | `test/` | Test setup (Vitest configuration) | Changing test infrastructure |
+| `test-fixtures/` | Shared per-provider fixtures: `codex-rollout.jsonl`, plus `makeSessionFixture(provider, overrides)` / `makeSessionDetailFixture(provider, overrides)` (CF-420) | Adding per-provider default test data; reducing fixture churn when a new provider lands |
 | `types/` | Shared TypeScript type definitions | Adding cross-module types |
-| `utils/` | Pure utility functions: formatting, date ranges, token stats, sorting | Adding helper functions, changing display formatting |
+| `utils/` | Pure utility functions: formatting, date ranges, canonical `TokenUsage` + provider-keyed pricing (CF-418), sorting | Adding helper functions, changing display formatting |
 
 ## Data Flow
 

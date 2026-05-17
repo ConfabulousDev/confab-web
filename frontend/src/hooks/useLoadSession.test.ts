@@ -2,12 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useLoadSession } from './useLoadSession';
 import type { SessionDetail } from '@/types';
+import { makeSessionDetailFixture } from '@/test-fixtures/session';
 
-// Sample session data
-const mockSession: SessionDetail = {
+const mockSession: SessionDetail = makeSessionDetailFixture('claude-code', {
   id: '1',
   external_id: 'ext-1',
-  provider: 'claude-code',
   summary: 'Test session',
   first_user_message: 'Hello',
   first_seen: '2025-01-01T10:00:00Z',
@@ -28,7 +27,7 @@ const mockSession: SessionDetail = {
     },
   ],
   owner_email: 'test@example.com',
-};
+});
 
 describe('useLoadSession', () => {
   beforeEach(() => {

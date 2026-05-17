@@ -26,6 +26,8 @@
 // The string type is intentional so a future swap (content-hash, server-issued
 // UUID) doesn't break the prop shape.
 
+import type { TokenUsage } from '@/utils/tokenStats';
+
 /** ISO 8601 timestamp string, sourced from the originating JSONL line. */
 export type CodexTimestamp = string;
 
@@ -45,22 +47,6 @@ export interface CodexUserItem {
 }
 
 /**
- * Per-API-call token usage attached to an assistant item (CF-362).
- *
- * Sourced from `event_msg.token_count.info.last_token_usage`, written into
- * `CodexAssistantItem.usage` by `normalizeCodexLines`. `cached_input_tokens`
- * is a SUBSET of `input_tokens` (OpenAI semantics, mirrors
- * `backend/internal/analytics/codex_adapter.go:56-83`). Reasoning tokens are
- * billed at the output rate.
- */
-export interface CodexAssistantUsage {
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens?: number;
-  reasoning_output_tokens?: number;
-}
-
-/**
  * Assistant text — derived from `response_item.message[role=assistant]`.
  * `phase: 'commentary'` indicates interim narration; `'final'` is the answer
  * the user is expected to read.
@@ -68,10 +54,18 @@ export interface CodexAssistantUsage {
  * `images` (CF-388) carries any `output_image.image_url` values from the same
  * message in document order. Omitted on text-only items.
  *
- * `usage` (CF-362) is attached after-the-fact when an `event_msg.token_count`
- * line is processed — the most-recent unannotated assistant item (any phase)
- * gets the `last_token_usage` delta. Tool calls never carry usage because the
- * model API attributes one call's cost to the response group as a whole.
+ * `usage` (CF-362, CF-418) is attached after-the-fact when an
+ * `event_msg.token_count` line is processed — the most-recent unannotated
+ * assistant item (any phase) gets the `last_token_usage` delta, normalized
+ * to canonical `TokenUsage` at parse time (uncached input, output with
+ * reasoning folded in, cacheRead = cached_input_tokens, cacheWrite = 0).
+ *
+ * `reasoningTokens` (CF-418) preserves the raw reasoning count so the cost
+ * tooltip can show a "Reasoning: N" sub-line even though `usage.output`
+ * already includes it for billing.
+ *
+ * Tool calls never carry usage because the model API attributes one call's
+ * cost to the response group as a whole.
  */
 export interface CodexAssistantItem {
   kind: 'assistant';
@@ -81,7 +75,8 @@ export interface CodexAssistantItem {
   phase: 'commentary' | 'final';
   model: string;
   images?: string[];
-  usage?: CodexAssistantUsage;
+  usage?: TokenUsage;
+  reasoningTokens?: number;
 }
 
 /**

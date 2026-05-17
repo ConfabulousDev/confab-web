@@ -16,7 +16,7 @@ import type { CodexRenderItem } from '@/types/codexRenderItem';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
-import { calculateCodexAssistantCost } from '@/utils/tokenStats';
+import { codexAdapter } from '@/providers/codexAdapter';
 import { cx } from '@/utils/utils';
 import { addCmdFListener, formatTimeSeparator, retryOnAnimationFrame } from '../timelineUtils';
 import { CostBar } from '../CostBar';
@@ -175,7 +175,7 @@ export default function CodexMessageTimeline({
     let total = 0;
     items.forEach((item, idx) => {
       if (item.kind !== 'assistant' || !item.usage) return;
-      const cost = calculateCodexAssistantCost(item.model, item.usage);
+      const cost = codexAdapter.calculateMessageCost(item.model, item.usage, item);
       if (cost > 0) {
         map.set(idx, cost);
         total += cost;

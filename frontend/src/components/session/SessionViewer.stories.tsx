@@ -4,14 +4,13 @@ import type { SessionDetail, AssistantMessage, UserMessage, TranscriptLine } fro
 import type { SessionAnalytics, GitHubLink } from '@/services/api';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
+import { makeSessionDetailFixture } from '@/test-fixtures/session';
 import SessionViewer from './SessionViewer';
 import { buildCodexAnalyticsFixture } from './codexAnalyticsFixture';
 
-// Mock session detail
-const mockSession: SessionDetail = {
+const mockSession: SessionDetail = makeSessionDetailFixture('claude-code', {
   id: 'test-session-uuid',
   external_id: 'abc123def456',
-  provider: 'claude-code',
   custom_title: null,
   summary: 'Building a session analytics feature',
   first_user_message: 'Help me build analytics for my app',
@@ -39,7 +38,7 @@ const mockSession: SessionDetail = {
   username: 'developer',
   is_owner: true,
   owner_email: 'developer@example.com',
-};
+});
 
 // Mock transcript messages
 const mockUserMessage: UserMessage = {
@@ -513,13 +512,16 @@ const codexFixtureLines: RawCodexLine[] = [
 
 export const CodexSession: Story = {
   args: {
-    session: {
-      ...mockSession,
-      provider: 'codex',
+    session: makeSessionDetailFixture('codex', {
+      id: mockSession.id,
       external_id: '019e-codex-fixture',
       summary: 'Add the Linear MCP to my Codex config',
       first_user_message: 'add the linear mcp to my codex config',
-    },
+      cwd: mockSession.cwd,
+      git_info: mockSession.git_info,
+      is_owner: true,
+      owner_email: mockSession.owner_email,
+    }),
     isOwner: true,
     isShared: false,
     activeTab: 'summary',

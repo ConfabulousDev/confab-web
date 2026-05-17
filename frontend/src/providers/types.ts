@@ -16,6 +16,7 @@
 
 import type { FC } from 'react';
 import type { ProviderId } from '@/utils/providers';
+import type { TokenUsage } from '@/utils/tokenStats';
 import type { TIL } from '@/schemas/api';
 import type { TranscriptLine } from '@/types';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
@@ -103,6 +104,24 @@ export interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
     targetId: string | undefined,
     filters: FilterAPI<TFilterState, TToggles>,
   ): void;
+
+  /**
+   * Per-message cost in USD. The base implementation is just
+   * `calculateCost(id, model, usage)`. Claude overrides to apply the fast
+   * multiplier (6x) and add per-request web-search dollars on top.
+   */
+  calculateMessageCost(model: string, usage: TokenUsage, message: TItem): number;
+
+  /**
+   * Optional. Append provider-specific lines to a cost-tooltip's base lines
+   * (`$cost`, blank, input, output). Claude appends Cache/Speed/Tier/Web search
+   * lines; Codex appends Cached (hit) and Reasoning sub-lines.
+   *
+   * Receives the `message` so subclasses can reach Claude wire-shape extras
+   * (speed, service_tier, server_tool_use) or Codex per-item reasoning count
+   * that don't live on the canonical `TokenUsage`.
+   */
+  extendCostTooltip?(base: string[], usage: TokenUsage, message: TItem): string[];
 
   FilterDropdown: FC<{
     counts: TCounts;

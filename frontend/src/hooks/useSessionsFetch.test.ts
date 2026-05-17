@@ -3,6 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { useSessionsFetch } from './useSessionsFetch';
 import type { SessionFilters } from './useSessionFilters';
 import type { SessionListResponse } from '@/schemas/api';
+import { makeSessionFixture } from '@/test-fixtures/session';
 
 // Mock the API
 vi.mock('@/services/api', () => ({
@@ -23,7 +24,7 @@ const defaultFilters: SessionFilters = {
 
 const mockResponse: SessionListResponse = {
   sessions: [
-    {
+    makeSessionFixture('claude-code', {
       id: '1',
       external_id: 'ext-1',
       first_seen: '2025-01-01T10:00:00Z',
@@ -31,7 +32,6 @@ const mockResponse: SessionListResponse = {
       last_sync_time: '2025-01-01T12:00:00Z',
       summary: 'Test session 1',
       first_user_message: 'Hello',
-      provider: 'claude-code',
       total_lines: 100,
       git_repo: 'test/repo',
       git_branch: 'main',
@@ -39,7 +39,7 @@ const mockResponse: SessionListResponse = {
       access_type: 'owner',
       shared_by_email: null,
       owner_email: 'test@example.com',
-    },
+    }),
   ],
   has_more: false,
   next_cursor: '',

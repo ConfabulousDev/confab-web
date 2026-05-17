@@ -7,6 +7,8 @@ import {
   validateParsedTranscriptLine,
   formatValidationErrorsForLog,
 } from '@/schemas/transcript';
+import { isAssistantMessage } from '@/types';
+import { normalizeClaudeUsage } from '@/utils/tokenStats';
 import { syncFilesAPI } from './api';
 
 // Maximum errors per report (must match backend maxClientErrors)
@@ -154,7 +156,12 @@ export function parseJSONL(jsonl: string): TranscriptParseResult {
     const result = validateParsedTranscriptLine(parsed, line, index);
 
     if (result.success) {
-      messages.push(result.data);
+      // CF-418: stamp canonical TokenUsage on assistant messages so every
+      // downstream consumer reads one shape, regardless of provider.
+      const data = isAssistantMessage(result.data)
+        ? { ...result.data, tokenUsage: normalizeClaudeUsage(result.data.message.usage) }
+        : result.data;
+      messages.push(data);
     } else {
       errors.push(result.error);
     }

@@ -63,7 +63,8 @@ describe('CodexMessageTimeline', () => {
       text: 'hi',
       phase: 'final',
       model: 'gpt-5',
-      usage: { input_tokens: 1_000_000, output_tokens: 100_000 },
+      // CF-418: canonical TokenUsage (parse layer already normalized).
+      usage: { input: 1_000_000, output: 100_000, cacheWrite: 0, cacheRead: 0 },
     };
 
     it('renders the CostBar side rail when isCostMode is on and items have usage', () => {
