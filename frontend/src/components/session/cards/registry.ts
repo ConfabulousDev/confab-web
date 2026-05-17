@@ -1,5 +1,5 @@
 import { TokensCard } from './TokensCard';
-import { SessionCard } from './SessionCard';
+import { SessionCardForRegistry } from './SessionCard';
 import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
 import { ConversationCardForRegistry } from './ConversationCard';
@@ -48,7 +48,7 @@ export const cardRegistry: CardDefinition[] = [
   {
     key: 'session',
     title: 'Session',
-    component: SessionCard,
+    component: SessionCardForRegistry,
     order: 2,
     size: 'standard',
   },

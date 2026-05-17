@@ -10,47 +10,22 @@ import {
 import type { SessionCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { prepareBreakdownData, type BreakdownEntry } from './sessionCardBreakdown';
 import styles from './SessionCard.module.css';
 
 const TOOLTIPS = {
   totalMessages: 'Total transcript lines in the session',
-  userMessages: 'All user-role messages (human prompts + tool results)',
   assistantMessages: 'All assistant-role messages',
   duration: 'Time from first to last message',
   models: 'AI models used in this session',
   compactionAuto: 'Compactions triggered automatically when context limit reached',
   compactionManual: 'Compactions triggered manually by user',
   compactionAvgTime: 'Average time for server-side summarization (auto compactions only)',
+  // userMessages varies by provider (CF-437) — see userMessagesTooltip below.
+  userMessagesClaude: 'All user-role messages (human prompts + tool results)',
+  userMessagesCodex:
+    'User-role messages (human prompts only; tool outputs counted separately)',
 };
-
-// Colors for the bar chart
-const BREAKDOWN_COLORS = {
-  humanPrompts: '#3b82f6', // blue
-  toolResults: '#8b5cf6', // purple
-  textResponses: '#22c55e', // green
-  toolCalls: '#f59e0b', // amber
-  thinkingBlocks: '#ec4899', // pink
-};
-
-interface BreakdownEntry {
-  name: string;
-  fullName: string;
-  value: number;
-  color: string;
-  [key: string]: string | number; // Index signature for Recharts compatibility
-}
-
-function prepareBreakdownData(data: SessionCardData): BreakdownEntry[] {
-  const entries: BreakdownEntry[] = [
-    { name: 'Prompts', fullName: 'Human prompts', value: data.human_prompts, color: BREAKDOWN_COLORS.humanPrompts },
-    { name: 'Tool res', fullName: 'Tool results', value: data.tool_results, color: BREAKDOWN_COLORS.toolResults },
-    { name: 'Txt resp', fullName: 'Text responses', value: data.text_responses, color: BREAKDOWN_COLORS.textResponses },
-    { name: 'Tool calls', fullName: 'Tool calls', value: data.tool_calls, color: BREAKDOWN_COLORS.toolCalls },
-    { name: 'Thinking', fullName: 'Thinking blocks', value: data.thinking_blocks, color: BREAKDOWN_COLORS.thinkingBlocks },
-  ];
-  // Filter out zero values and sort by value descending
-  return entries.filter((e) => e.value > 0).sort((a, b) => b.value - a.value);
-}
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -98,33 +73,83 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
+// Strict trailing `-YYYY-MM-DD` only. Avoids accidentally eating a variant
+// suffix that happens to start with digits.
+const OPENAI_DATE_SUFFIX = /-20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+function stripOpenAIDateSuffix(model: string): string {
+  return model.replace(OPENAI_DATE_SUFFIX, '');
+}
+
 /**
- * Format model name for user-friendly display.
- *
- * NOTE: This differs from utils/formatting.ts formatModelName which returns
- * technical format ("claude-sonnet-4"). This version returns friendly format
- * ("Sonnet 4") for the session card UI.
+ * Format model name for user-friendly display (CF-437 extends this to OpenAI).
  *
  * Examples:
- *   "claude-sonnet-4-20241022" -> "Sonnet 4"
- *   "claude-opus-4-5-20251101" -> "Opus 4.5"
+ *   claude-sonnet-4-20241022  -> Sonnet 4
+ *   claude-opus-4-5-20251101  -> Opus 4.5
+ *   gpt-5                     -> GPT-5
+ *   gpt-5-codex               -> GPT-5 Codex
+ *   gpt-5-codex-2025-01-01    -> GPT-5 Codex   (date suffix stripped)
+ *   gpt-4o                    -> GPT-4o
+ *   gpt-4o-mini               -> GPT-4o Mini
+ *   o3-mini                   -> o3-mini       (OpenAI brands o-series lowercase)
+ *   mistral-7b                -> mistral-7b    (passthrough)
  */
 function formatModelName(model: string): string {
-  const match = model.match(/claude-(\w+)-(\d+)(?:-(\d+))?/);
-  if (match) {
-    const family = match[1];
-    const major = match[2];
-    const minor = match[3];
+  // Claude — preserve existing behavior
+  const claude = model.match(/claude-(\w+)-(\d+)(?:-(\d+))?/);
+  if (claude) {
+    const [, family, major, minor] = claude;
     if (family && major) {
       const familyName = family.charAt(0).toUpperCase() + family.slice(1);
       const version = minor ? `${major}.${minor}` : major;
       return `${familyName} ${version}`;
     }
   }
+
+  const stripped = stripOpenAIDateSuffix(model);
+
+  // OpenAI GPT family — Title Case rest, special-case `gpt` → `GPT`.
+  // Family identifier (e.g. `5`, `4o`) stays attached via dash; variant
+  // suffixes (`codex`, `mini`) get space-separated and title-cased.
+  if (stripped.startsWith('gpt-')) {
+    const parts = stripped.split('-');
+    // parts[0] === 'gpt'; parts[1] is the family identifier (5, 4o, …).
+    if (parts.length < 2) return model;
+    const family = `GPT-${parts[1]}`;
+    const variants = parts.slice(2).map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+    return [family, ...variants].join(' ');
+  }
+
+  // OpenAI o-series — preserve lowercase as OpenAI brands them.
+  if (/^o\d/.test(stripped)) {
+    return stripped;
+  }
+
+  // Unknown — passthrough.
   return model;
 }
 
-export function SessionCard({ data, loading, error }: CardProps<SessionCardData>) {
+interface SessionCardProps extends CardProps<SessionCardData> {
+  /** Session provider (CF-437). Drives reasoning bar label, tool-results bar
+   *  visibility, and Messages tooltip wording. */
+  provider: string;
+}
+
+/**
+ * Registry-friendly wrapper. The card registry's generic component type
+ * doesn't model `provider`; SessionSummaryPanel injects it at runtime via
+ * extraProps. This wrapper defaults provider to "claude-code" if it ever
+ * arrives unset — defensive against a runtime hole. Direct callers of
+ * SessionCard still get the TS-enforced required prop.
+ */
+export function SessionCardForRegistry(
+  props: Omit<SessionCardProps, 'provider'> & { provider?: string }
+) {
+  return <SessionCard {...props} provider={props.provider ?? 'claude-code'} />;
+}
+
+export function SessionCard({ data, loading, error, provider }: SessionCardProps) {
   if (error && !data) {
     return <CardError title="Session" error={error} icon={TerminalIcon} />;
   }
@@ -139,8 +164,11 @@ export function SessionCard({ data, loading, error }: CardProps<SessionCardData>
 
   if (!data) return null;
 
+  const isCodex = provider === 'codex';
+  const userMessagesTooltip = isCodex ? TOOLTIPS.userMessagesCodex : TOOLTIPS.userMessagesClaude;
+
   const hasCompaction = data.compaction_auto > 0 || data.compaction_manual > 0;
-  const breakdownData = prepareBreakdownData(data);
+  const breakdownData = prepareBreakdownData(data, provider);
 
   return (
     <CardWrapper title="Session" icon={TerminalIcon}>
@@ -169,7 +197,7 @@ export function SessionCard({ data, loading, error }: CardProps<SessionCardData>
         label="Messages"
         value={`${data.total_messages} (${data.user_messages}/${data.assistant_messages})`}
         icon={ChatIcon}
-        tooltip={`${TOOLTIPS.totalMessages}; ${TOOLTIPS.userMessages}; ${TOOLTIPS.assistantMessages}`}
+        tooltip={`${TOOLTIPS.totalMessages}; ${userMessagesTooltip}; ${TOOLTIPS.assistantMessages}`}
       />
 
       {/* Message type breakdown bar chart */}
