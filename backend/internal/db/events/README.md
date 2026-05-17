@@ -8,6 +8,7 @@ Session event insertion for recording timestamped events with JSON payloads.
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
 | `events.go` | `InsertSessionEvent` -- inserts a row into `session_events` |
+| `events_integration_test.go` | Integration tests for the happy path, nil-payload JSONB-null path, FK violation, and CHECK-constraint rejection of unknown `event_type` values |
 
 ## Key API
 
@@ -32,7 +33,7 @@ Session event insertion for recording timestamped events with JSON payloads.
 
 ## Testing
 
-- No dedicated test file; event insertion is tested through API-level integration tests.
+- Integration tests in `events_integration_test.go` cover `InsertSessionEvent`: happy path (round-trip including JSONB payload), nil-payload column-NULL handling, FK violation when `session_id` does not match an existing session, and the CHECK constraint that limits `event_type` to the documented allow-list. Uses `testutil.SetupTestEnvironment`.
 
 ## Dependencies
 

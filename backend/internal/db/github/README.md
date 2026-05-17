@@ -8,6 +8,7 @@ GitHub link CRUD for associating pull requests and commits with sessions.
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
 | `links.go` | `CreateGitHubLink`, `GetGitHubLinksForSession`, `GetGitHubLinkByID`, `DeleteGitHubLink` |
+| `links_integration_test.go` | Integration tests for insert, upsert source/URL update, the three `overwriteTitle` branches, list ordering, empty-result, invalid-UUID → `ErrSessionNotFound`, FK violation, and the shared `ErrGitHubLinkNotFound` paths on Get/Delete |
 
 ## Key API
 
@@ -35,7 +36,7 @@ GitHub link CRUD for associating pull requests and commits with sessions.
 
 ## Testing
 
-- No dedicated test file in this package; GitHub link operations are tested through the API-level integration tests and session list tests that exercise PR/commit aggregation.
+- Integration tests in `links_integration_test.go` cover the four store functions: insert, upsert (source/URL change preserves ID), the three `overwriteTitle` branches (overwrite, preserve, fill-null), list ordering by `created_at DESC`, empty list, invalid-UUID → `ErrSessionNotFound`, FK violation on Create, and the `ErrGitHubLinkNotFound` sentinel on both `GetGitHubLinkByID` and `DeleteGitHubLink`. Uses `testutil.SetupTestEnvironment`. End-to-end PR/commit aggregation continues to be exercised by the API-level session list tests.
 
 ## Dependencies
 
