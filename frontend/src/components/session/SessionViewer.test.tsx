@@ -12,6 +12,7 @@ import { MemoryRouter } from 'react-router-dom';
 import SessionViewer from './SessionViewer';
 import type { SessionDetail } from '@/schemas/api';
 import type { SessionAnalytics } from '@/schemas/api';
+import { makeSessionDetailFixture } from '@/test-fixtures/session';
 import {
   fetchParsedCodexTranscript,
   parseCodexJSONL,
@@ -93,23 +94,17 @@ vi.mock('@/services/codexTranscriptService', async () => {
   };
 });
 
+// Use the shared `makeSessionDetailFixture` helper but override id/external_id
+// so the long-standing `codex-session-uuid` literal that tests assert on is
+// preserved. Default provider stays codex since most assertions exercise the
+// Codex render path.
 function makeSession(overrides: Partial<SessionDetail> = {}): SessionDetail {
-  return {
+  return makeSessionDetailFixture('codex', {
     id: 'codex-session-uuid',
     external_id: 'codex-ext-id',
-    provider: 'codex',
-    first_seen: '2026-05-13T01:00:00Z',
-    files: [
-      {
-        file_name: 'rollout.jsonl',
-        file_type: 'transcript',
-        last_synced_line: 10,
-        updated_at: '2026-05-13T01:00:00Z',
-      },
-    ],
     owner_email: 'codex@example.com',
     ...overrides,
-  };
+  });
 }
 
 const codexAnalytics: SessionAnalytics = {

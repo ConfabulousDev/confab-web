@@ -17,6 +17,11 @@ import {
 } from '@/components/session/messageCategories';
 import { isAssistantMessage } from '@/types';
 import { computeSessionMeta } from '@/utils/sessionMeta';
+import {
+  calculateCost,
+  FAST_MODE_MULTIPLIER,
+  WEB_SEARCH_COST_PER_REQUEST,
+} from '@/utils/tokenStats';
 import FilterDropdown from '@/components/session/FilterDropdown';
 import ClaudeTranscriptPane from '@/components/session/ClaudeTranscriptPane';
 import type { ClaudeAdapter } from './types';
@@ -71,6 +76,48 @@ export const claudeAdapter: ClaudeAdapter = {
 
   countCategories: countHierarchicalCategories,
   itemMatchesFilter: messageMatchesFilter,
+
+  calculateMessageCost(model, usage, message) {
+    let cost = calculateCost('claude-code', model, usage);
+    // Fast mode (Claude-only) and server-tool dollars live on the wire
+    // payload, not the canonical TokenUsage.
+    const wire = isAssistantMessage(message) ? message.message.usage : undefined;
+    if (wire?.speed === 'fast') cost *= FAST_MODE_MULTIPLIER;
+    const stu = wire?.server_tool_use;
+    if (stu?.web_search_requests) {
+      cost += stu.web_search_requests * WEB_SEARCH_COST_PER_REQUEST;
+    }
+    return cost;
+  },
+
+  extendCostTooltip(base, usage, message) {
+    const lines = [...base];
+    if (usage.cacheWrite) {
+      lines.push(`Cache write tokens (write): ${usage.cacheWrite.toLocaleString()}`);
+    }
+    if (usage.cacheRead) {
+      lines.push(`Cache read tokens (hit): ${usage.cacheRead.toLocaleString()}`);
+    }
+    const wire = isAssistantMessage(message) ? message.message.usage : undefined;
+    if (wire?.speed) {
+      lines.push('');
+      lines.push(`Speed: ${wire.speed}${wire.speed === 'fast' ? ' (6x pricing)' : ''}`);
+    }
+    if (wire?.service_tier) {
+      lines.push(`Tier: ${wire.service_tier}`);
+    }
+    const stu = wire?.server_tool_use;
+    if (stu && (stu.web_search_requests || stu.web_fetch_requests || stu.code_execution_requests)) {
+      lines.push('');
+      if (stu.web_search_requests) {
+        const dollars = (stu.web_search_requests * WEB_SEARCH_COST_PER_REQUEST).toFixed(2);
+        lines.push(`Web searches: ${stu.web_search_requests} ($${dollars})`);
+      }
+      if (stu.web_fetch_requests) lines.push(`Web fetches: ${stu.web_fetch_requests}`);
+      if (stu.code_execution_requests) lines.push(`Code executions: ${stu.code_execution_requests}`);
+    }
+    return lines;
+  },
 
   useDeepLinkFilterReset(items, targetId, filters) {
     useEffect(() => {

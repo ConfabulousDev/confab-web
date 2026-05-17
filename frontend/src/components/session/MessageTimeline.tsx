@@ -1,11 +1,13 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TranscriptLine, AssistantMessage } from '@/types';
+import type { TranscriptLine } from '@/types';
 import type { TIL } from '@/schemas/api';
+import type { TokenUsage } from '@/utils/tokenStats';
 import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { extractMessageText } from '@/services/messageParser';
-import { calculateMessageCost } from '@/utils/tokenStats';
+import { claudeAdapter } from '@/providers/claudeAdapter';
+import { normalizeClaudeUsage } from '@/utils/tokenStats';
 import TimelineMessage from './TimelineMessage';
 import TranscriptSearchBar from './TranscriptSearchBar';
 import { getRoleLabel } from './messageCategories';
@@ -124,7 +126,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
   // Cost is assigned only at the first occurrence, using the final (last) usage values.
   const { messageCosts, correctedUsageByIndex } = useMemo(() => {
     const costMap = new Map<number, number>();
-    const usageMap = new Map<number, AssistantMessage['message']['usage']>();
+    const usageMap = new Map<number, TokenUsage>();
     if (!isCostMode) return { messageCosts: costMap, correctedUsageByIndex: usageMap };
 
     // Pass 1: Build map of messageId → { firstIndex, lastIndex }
@@ -145,10 +147,11 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
     for (const [, info] of messageIdInfo) {
       const finalMsg = allMessages[info.lastIndex]!;
       if (!isAssistantMessage(finalMsg)) continue;
-      const cost = calculateMessageCost(finalMsg);
+      const usage = finalMsg.tokenUsage ?? normalizeClaudeUsage(finalMsg.message.usage);
+      const cost = claudeAdapter.calculateMessageCost(finalMsg.message.model, usage, finalMsg);
       if (cost > 0) costMap.set(info.firstIndex, cost);
-      // Store corrected usage for tooltip display
-      usageMap.set(info.firstIndex, finalMsg.message.usage);
+      // Store canonical usage for tooltip display.
+      usageMap.set(info.firstIndex, usage);
     }
 
     return { messageCosts: costMap, correctedUsageByIndex: usageMap };

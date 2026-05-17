@@ -56,6 +56,8 @@ Adding a column to `db.SessionDetail`, `db.SessionListItem`, or any struct loade
 - **Codex rollout sidecar store**: `internal/db/codex/` (`UpsertRollout`, `GetRollout`, `ListSubtree` recursive CTE) — records the Codex parent-child thread tree without modifying the `sessions` table. Composite PK `(user_id, thread_uuid)`; no FK on `parent_thread_uuid` (orphan parents allowed); first-write-wins on parent.
 - **Frontend provider abstraction (cosmetic)**: `frontend/src/utils/providers.ts` — `PROVIDER_VALUES`, `PROVIDER_METADATA`, `getProviderMetadata*`, `providerLabel`. Single source of truth for per-provider labels, icons, brand colors, and copy-id menu strings. Mirrors the backend's `models.NormalizeProvider` (CF-416).
 - **Frontend provider abstraction (transcript)**: `frontend/src/providers/` — `ProviderAdapter` interface + `getAdapter()` registry + shared `useTranscriptData` / `useSessionTILs` hooks. `SessionViewer` and `SessionHeader` are provider-agnostic and dispatch through the adapter. Adding a third provider's transcript pipeline means writing one adapter file and registering it; no edits to `SessionViewer.tsx` / `SessionHeader.tsx` (CF-417). See `frontend/src/providers/README.md` for the third-provider checklist.
+- **Frontend provider abstraction (cost)**: `frontend/src/utils/tokenStats.ts` — canonical `TokenUsage` (`input`/`output`/`cacheWrite`/`cacheRead`) stamped by both transcript services at parse time. Provider-keyed `MODEL_PRICING` (`Record<ProviderId, Record<family, ModelPricing>>`) plus `calculateCost(provider, model, usage)` base arithmetic. Provider-specific cost adjustments (Claude fast multiplier, web-search dollars; Codex tooltip extras) live on `ProviderAdapter.calculateMessageCost` / `extendCostTooltip` in `providers/` (CF-418).
+- **Frontend test fixtures (per-provider defaults)**: `frontend/src/test-fixtures/session.ts` — `makeSessionFixture(provider, overrides)` / `makeSessionDetailFixture(provider, overrides)`. `DEFAULTS_BY_PROVIDER` centralizes per-provider default values (external-id prefix, transcript file name) so a third provider extends the fixture coverage by adding one entry rather than touching every story (CF-420).
 
 #### Before Writing New Code
 
@@ -241,7 +243,7 @@ When adding new analytics cards to the session summary panel, **use the `/add-se
 When adding a new Anthropic OR OpenAI model, update the pricing tables in **both** places (they must stay in sync; `TestPricingTableSync` enforces this):
 
 - **Backend**: `backend/internal/analytics/pricing.go` — `modelPricingTable`
-- **Frontend**: `frontend/src/utils/tokenStats.ts` — `MODEL_PRICING`
+- **Frontend**: `frontend/src/utils/tokenStats.ts` — `MODEL_PRICING['claude-code']` or `MODEL_PRICING['codex']` (provider-keyed nested record since CF-418)
 
 Anthropic prices: https://www.anthropic.com/pricing
 OpenAI prices: https://developers.openai.com/api/docs/pricing

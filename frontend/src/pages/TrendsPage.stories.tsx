@@ -12,7 +12,13 @@ import {
 import Alert from '@/components/Alert';
 import CardGrid from '@/components/CardGrid';
 import type { TrendsResponse } from '@/schemas/api';
+import { PROVIDER_VALUES, type ProviderId } from '@/utils/providers';
 import styles from './TrendsPage.module.css';
+
+// Top-sessions fixture rows cycle through `PROVIDER_VALUES` so a third
+// provider extends the preview without touching every story.
+const rotateProvider = (i: number): ProviderId =>
+  PROVIDER_VALUES[i % PROVIDER_VALUES.length]!;
 
 // Presentational component for Storybook
 interface TrendsPagePresentationalProps {
@@ -185,11 +191,11 @@ const defaultMockData: TrendsResponse = {
     },
     top_sessions: {
       sessions: [
-        { id: '1', title: 'Implement dark mode with theme system', provider: 'codex', estimated_cost_usd: '45.20', duration_ms: 7200000, git_repo: 'org/repo-web' },
-        { id: '2', title: 'Debug OAuth redirect loop', provider: 'claude-code', estimated_cost_usd: '32.15', duration_ms: 5400000, git_repo: 'org/repo-api' },
-        { id: '3', title: 'Refactor API validation middleware', provider: 'claude-code', estimated_cost_usd: '28.90', duration_ms: 3600000, git_repo: 'org/repo-api' },
-        { id: '4', title: 'Add session analytics dashboard', provider: 'codex', estimated_cost_usd: '22.50', duration_ms: 4800000, git_repo: 'org/repo-web' },
-        { id: '5', title: 'Write integration tests', provider: 'claude-code', estimated_cost_usd: '18.75', duration_ms: 2700000 },
+        { id: '1', title: 'Implement dark mode with theme system', provider: rotateProvider(0), estimated_cost_usd: '45.20', duration_ms: 7200000, git_repo: 'org/repo-web' },
+        { id: '2', title: 'Debug OAuth redirect loop', provider: rotateProvider(1), estimated_cost_usd: '32.15', duration_ms: 5400000, git_repo: 'org/repo-api' },
+        { id: '3', title: 'Refactor API validation middleware', provider: rotateProvider(2), estimated_cost_usd: '28.90', duration_ms: 3600000, git_repo: 'org/repo-api' },
+        { id: '4', title: 'Add session analytics dashboard', provider: rotateProvider(3), estimated_cost_usd: '22.50', duration_ms: 4800000, git_repo: 'org/repo-web' },
+        { id: '5', title: 'Write integration tests', provider: rotateProvider(4), estimated_cost_usd: '18.75', duration_ms: 2700000 },
       ],
     },
   },

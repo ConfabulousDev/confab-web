@@ -5,7 +5,9 @@ import { TimelineBar } from './TimelineBar';
 import { useSegmentLayout } from './timelineSegments';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
 import { isAssistantMessage } from '@/types';
-import { calculateMessageCost, calculateCodexAssistantCost } from '@/utils/tokenStats';
+import { normalizeClaudeUsage } from '@/utils/tokenStats';
+import { claudeAdapter } from '@/providers/claudeAdapter';
+import { codexAdapter } from '@/providers/codexAdapter';
 import { useCodexSegmentLayout } from './codex/codexTimelineSegments';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 
@@ -122,7 +124,10 @@ function buildCostMap(messages: TranscriptLine[]): { messageCosts: Map<number, n
   const messageCosts = new Map<number, number>();
   let totalCost = 0;
   for (let i = 0; i < messages.length; i++) {
-    const cost = calculateMessageCost(messages[i]!);
+    const msg = messages[i]!;
+    if (!isAssistantMessage(msg)) continue;
+    const usage = msg.tokenUsage ?? normalizeClaudeUsage(msg.message.usage);
+    const cost = claudeAdapter.calculateMessageCost(msg.message.model, usage, msg);
     if (cost > 0) {
       messageCosts.set(i, cost);
       totalCost += cost;
@@ -338,7 +343,7 @@ function makeCodexItems(): CodexRenderItem[] {
     {
       kind: 'assistant', lineId: '1', timestamp: ts(2000),
       phase: 'final', model: 'gpt-5', text: 'ok',
-      usage: { input_tokens: 1000, output_tokens: 100 },
+      usage: { input: 1000, output: 100, cacheWrite: 0, cacheRead: 0 },
     },
     { kind: 'turn_separator', lineId: '2', timestamp: ts(3000), turnIndex: 1, durationMs: 3000 },
 
@@ -346,12 +351,14 @@ function makeCodexItems(): CodexRenderItem[] {
     {
       kind: 'assistant', lineId: '4', timestamp: ts(10000),
       phase: 'commentary', model: 'gpt-5', text: 'thinking',
-      usage: { input_tokens: 20000, output_tokens: 1500, cached_input_tokens: 5000 },
+      // Pre-normalization: input=20000 cached=5000 → input=15000, cacheRead=5000.
+      usage: { input: 15000, output: 1500, cacheWrite: 0, cacheRead: 5000 },
     },
     {
       kind: 'assistant', lineId: '5', timestamp: ts(11000),
       phase: 'final', model: 'gpt-5', text: 'answer',
-      usage: { input_tokens: 25000, output_tokens: 2000, cached_input_tokens: 10000 },
+      // Pre-normalization: input=25000 cached=10000 → input=15000, cacheRead=10000.
+      usage: { input: 15000, output: 2000, cacheWrite: 0, cacheRead: 10000 },
     },
     { kind: 'turn_separator', lineId: '6', timestamp: ts(12000), turnIndex: 2, durationMs: 4000 },
 
@@ -359,10 +366,10 @@ function makeCodexItems(): CodexRenderItem[] {
     {
       kind: 'assistant', lineId: '8', timestamp: ts(40000),
       phase: 'final', model: 'gpt-5.5', text: 'big response',
-      usage: {
-        input_tokens: 200000, output_tokens: 25000,
-        cached_input_tokens: 50000, reasoning_output_tokens: 5000,
-      },
+      // Pre-normalization: input=200000 cached=50000 → input=150000, cacheRead=50000.
+      // Reasoning=5000 folded into output: 25000+5000=30000.
+      usage: { input: 150000, output: 30000, cacheWrite: 0, cacheRead: 50000 },
+      reasoningTokens: 5000,
     },
     { kind: 'turn_separator', lineId: '9', timestamp: ts(45000), turnIndex: 3, durationMs: 25000 },
   ];
@@ -376,7 +383,7 @@ function buildCodexCostMap(items: CodexRenderItem[]): {
   let totalCost = 0;
   items.forEach((item, idx) => {
     if (item.kind !== 'assistant' || !item.usage) return;
-    const cost = calculateCodexAssistantCost(item.model, item.usage);
+    const cost = codexAdapter.calculateMessageCost(item.model, item.usage, item);
     if (cost > 0) {
       costByIndex.set(idx, cost);
       totalCost += cost;

@@ -154,17 +154,22 @@ describe('CodexAssistantMessage', () => {
   // ---------------------------------------------------------------------------
 
   describe('cost mode', () => {
+    // CF-418: canonical TokenUsage (parse layer has already split gross input
+    // into uncached + cacheRead and folded reasoning into output).
+    // Original wire shape mapped: input_tokens 12_345 with cached 200 →
+    // input 12_145, cacheRead 200. Output 1_200 + reasoning 250 → 1_450.
     const usage = {
-      input_tokens: 12_345,
-      output_tokens: 1_200,
-      cached_input_tokens: 200,
-      reasoning_output_tokens: 250,
+      input: 12_145,
+      output: 1_450,
+      cacheWrite: 0,
+      cacheRead: 200,
     };
+    const reasoningTokens = 250;
 
     it('renders the $ cost badge when isCostMode is on and messageCost is provided', () => {
       render(
         <CodexAssistantMessage
-          item={assistant({ usage })}
+          item={assistant({ usage, reasoningTokens })}
           isCostMode
           messageCost={0.42}
         />,
@@ -173,15 +178,18 @@ describe('CodexAssistantMessage', () => {
     });
 
     it('renders a token pill showing gross input and (output + reasoning) output', () => {
-      // Use a reasoning value that produces a crisp rounded display.
+      // Choose reasoning so 1200 + 300 = 1500 → "1.5k". Wire mapping:
+      //   input 12_345 (gross, uncached only since cached=0 implicit) → input 12_345.
+      //   output 1_200 + reasoning 300 → output 1_500.
       const pillUsage = {
-        input_tokens: 12_345,
-        output_tokens: 1_200,
-        reasoning_output_tokens: 300, // 1200 + 300 = 1500 -> "1.5k"
+        input: 12_345,
+        output: 1_500,
+        cacheWrite: 0,
+        cacheRead: 0,
       };
       const { container } = render(
         <CodexAssistantMessage
-          item={assistant({ usage: pillUsage })}
+          item={assistant({ usage: pillUsage, reasoningTokens: 300 })}
           isCostMode
           messageCost={0.42}
         />,
@@ -197,10 +205,10 @@ describe('CodexAssistantMessage', () => {
       expect(pill?.textContent).toMatch(/1\.5k\s*out/);
     });
 
-    it('renders a cache pill when cached_input_tokens > 0', () => {
+    it('renders a cache pill when cacheRead > 0', () => {
       render(
         <CodexAssistantMessage
-          item={assistant({ usage })}
+          item={assistant({ usage, reasoningTokens })}
           isCostMode
           messageCost={0.42}
         />,
@@ -208,10 +216,10 @@ describe('CodexAssistantMessage', () => {
       expect(screen.getByText(/200 hit/)).toBeInTheDocument();
     });
 
-    it('omits the cache pill when cached_input_tokens is 0', () => {
+    it('omits the cache pill when cacheRead is 0', () => {
       render(
         <CodexAssistantMessage
-          item={assistant({ usage: { ...usage, cached_input_tokens: 0 } })}
+          item={assistant({ usage: { ...usage, cacheRead: 0 }, reasoningTokens })}
           isCostMode
           messageCost={0.42}
         />,
@@ -222,7 +230,7 @@ describe('CodexAssistantMessage', () => {
     it('does not render any cost badges when isCostMode is false', () => {
       const { container } = render(
         <CodexAssistantMessage
-          item={assistant({ usage })}
+          item={assistant({ usage, reasoningTokens })}
           isCostMode={false}
           messageCost={0.42}
         />,
@@ -245,7 +253,7 @@ describe('CodexAssistantMessage', () => {
     it('does not render badges when messageCost is 0 (zero-cost no-op call)', () => {
       render(
         <CodexAssistantMessage
-          item={assistant({ usage })}
+          item={assistant({ usage, reasoningTokens })}
           isCostMode
           messageCost={0}
         />,
@@ -256,7 +264,7 @@ describe('CodexAssistantMessage', () => {
     it('attaches a verbose multi-line tooltip on the cost badge', () => {
       render(
         <CodexAssistantMessage
-          item={assistant({ usage })}
+          item={assistant({ usage, reasoningTokens })}
           isCostMode
           messageCost={0.42}
         />,
@@ -265,7 +273,11 @@ describe('CodexAssistantMessage', () => {
       const tooltip = costBadge.getAttribute('title');
       expect(tooltip).toBeTruthy();
       expect(tooltip).toContain('$0.42');
+      // CF-418: tooltip preserves the pre-refactor gross-input / raw-output
+      // presentation by reversing the canonical normalization at display time.
+      // Cached and Reasoning sub-lines are interleaved under their parents.
       expect(tooltip).toContain('Input tokens (in): 12,345');
+      expect(tooltip).toContain('Output tokens (out): 1,200');
       expect(tooltip).toContain('Cached (hit): 200');
       expect(tooltip).toContain('Reasoning: 250');
     });

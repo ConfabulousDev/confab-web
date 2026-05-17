@@ -4,11 +4,11 @@
 // regardless of provider; the difference is entirely in the parse layer.
 
 import type {
-  CodexAssistantUsage,
   CodexRenderItem,
   CodexToolCallItem,
   CodexTurnSeparatorItem,
 } from '@/types/codexRenderItem';
+import type { TokenUsage } from '@/utils/tokenStats';
 import type { CodexTokenUsageDetails } from '@/schemas/codexTranscript';
 import {
   type TranscriptValidationError,
@@ -284,17 +284,23 @@ function attachTokenCountToAssistant(
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
     if (!item || item.kind !== 'assistant' || item.usage !== undefined) continue;
-    const usage: CodexAssistantUsage = {
-      input_tokens: delta.input_tokens,
-      output_tokens: delta.output_tokens,
+    // CF-418: normalize the OpenAI wire shape to canonical TokenUsage.
+    //   - `cached_input_tokens` is a SUBSET of `input_tokens` per OpenAI's
+    //     semantics; subtract it out so `input` carries only uncached tokens.
+    //   - Reasoning tokens are folded into `output` (they bill at the output
+    //     rate). Preserve the raw count on the item for the tooltip.
+    //   - OpenAI does not charge for cache writes.
+    const cached = delta.cached_input_tokens ?? 0;
+    const reasoning = delta.reasoning_output_tokens ?? 0;
+    const usage: TokenUsage = {
+      input: Math.max(0, delta.input_tokens - cached),
+      output: delta.output_tokens + reasoning,
+      cacheWrite: 0,
+      cacheRead: cached,
     };
-    if (delta.cached_input_tokens !== undefined) {
-      usage.cached_input_tokens = delta.cached_input_tokens;
-    }
-    if (delta.reasoning_output_tokens !== undefined) {
-      usage.reasoning_output_tokens = delta.reasoning_output_tokens;
-    }
-    items[i] = { ...item, usage };
+    items[i] = reasoning > 0
+      ? { ...item, usage, reasoningTokens: reasoning }
+      : { ...item, usage };
     return;
   }
 }

@@ -38,19 +38,31 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 
 ### tokenStats.ts
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `calculateMessageCost` | `(message: TranscriptLine) => number` | Claude per-message USD cost from token usage (returns 0 for non-assistant messages) |
-| `calculateCodexAssistantCost` | `(model: string, usage: CodexAssistantUsage) => number` | Codex per-API-call USD cost. Mirrors `applyCodexTokens` in `backend/internal/analytics/codex_adapter.go`: subtract `cached_input_tokens` from `input_tokens` before applying input rate; fold `reasoning_output_tokens` into output billing; cache writes are free for OpenAI |
-| `buildCodexCostTooltip` | `(usage: CodexAssistantUsage, cost: number) => string` | Verbose multi-line tooltip for the Codex cost badge. Omits Claude-only lines (speed, service_tier, server_tool_use); adds Codex-specific sub-lines for cached input and reasoning output |
-| `formatCost` | `(usd: number) => string` | Format as "$0.42" or "<$0.01" |
-| `formatTokenCount` | `(count: number) => string` | Format as "500", "1.5k", "1.5M" |
+CF-418 made the cost surface provider-agnostic. Both transcript services
+normalize their wire shape into the canonical `TokenUsage` at parse time;
+components and arithmetic all read one shape downstream.
 
-**Model pricing table** (`MODEL_PRICING`): Maps model families to per-million-token prices for input, output, cache write, and cache read. Covers Claude (Opus/Sonnet/Haiku families) and OpenAI/Codex models (gpt-5*, gpt-4o*, o1/o3/o4*). OpenAI entries set `cacheWrite: 0` (caching is free to write) and use the documented cached-input rate as `cacheRead`. Unknown models use zero pricing (cost underreported rather than wrong).
+| Export | Signature | Description |
+|--------|-----------|-------------|
+| `TokenUsage` (type) | `{ input, output, cacheWrite, cacheRead }` | Canonical per-message token usage. `input` is uncached; `output` includes reasoning where applicable; `cacheRead`/`cacheWrite` are split out (cacheWrite is `0` for Codex models, which don't charge for writes). |
+| `calculateCost` | `(provider: ProviderId, model: string, usage: TokenUsage) => number` | Base arithmetic. Pure: no fast multiplier, no server-tool add-on (those live on the provider adapter). Throws on unknown provider; warns and returns 0 on unknown model within a known provider. |
+| `getModelFamily` | `(provider: ProviderId, modelName: string) => string` | Strip date suffixes / `claude-` prefix to produce a pricing-table key. Claude branch matches `opus|sonnet|haiku-N(-N)?`; Codex branch strips OpenAI's pinned `-YYYY-MM-DD` suffix. |
+| `buildCostTooltip` | `(adapter, usage, cost, message) => string` | Cost-badge tooltip. Base lines (`$cost`, blank, input, output) plus the adapter's optional `extendCostTooltip` (Claude: Cache/Speed/Tier/Web-search; Codex: rebuilds the body to show gross input + interleaved cached / reasoning sub-lines for byte-identical pre-refactor formatting). |
+| `normalizeClaudeUsage` | `(wire) => TokenUsage` | Bridge from Claude's wire shape (`input_tokens`, `cache_creation_input_tokens`, …) to canonical `TokenUsage`. Used by `transcriptService` at parse time and as the fallback for cached entries written before the parse-time stamping. |
+| `formatCost` | `(usd: number) => string` | Format as "$0.42" or "<$0.01". |
+| `formatTokenCount` | `(count: number) => string` | Format as "500", "1.5k", "1.5M". |
 
-**Server tool pricing**: `WEB_SEARCH_COST_PER_REQUEST = $0.01`
+**Model pricing table** (`MODEL_PRICING`): provider-keyed nested
+`Record<ProviderId, Record<family, ModelPricing>>`. Adding a third provider
+is one outer key plus N inner rows — no code branches. OpenAI entries set
+`cacheWrite: 0` (writes are free) and put the documented cached-input rate
+in `cacheRead`. Unknown families fall back to zero pricing with a warning.
 
-**Fast mode**: 6x multiplier on all token costs when `speed === 'fast'` (Claude only — Codex has no equivalent toggle).
+**Server tool pricing**: `WEB_SEARCH_COST_PER_REQUEST = $0.01`, applied by
+the Claude adapter's `calculateMessageCost`. Not multiplied by fast mode.
+
+**Fast mode**: `FAST_MODE_MULTIPLIER = 6` applied by the Claude adapter when
+`message.message.usage.speed === 'fast'`. Codex has no equivalent toggle.
 
 ### sessionMeta.ts
 
@@ -118,7 +130,8 @@ These tables must stay in sync; `TestPricingTableSync` enforces this. Look up cu
 
 - **Frontend cost calculation**: Token costs are computed client-side from the pricing table + transcript token usage data. This avoids adding cost computation to the backend transcript parser and allows instant cost display as messages stream in.
 - **HTML-aware search highlighting**: `highlightTextInHtml` splits HTML into tag/text segments and only applies highlighting to text nodes. This prevents breaking HTML structure when highlighting inside rendered markdown.
-- **Model family extraction over full name matching**: The internal `getModelFamily()` normalizes model names like "claude-opus-4-5-20251101" to "opus-4-5" so pricing works regardless of date suffix or "claude-" prefix variations.
+- **Model family extraction over full name matching**: `getModelFamily(provider, modelName)` normalizes names like "claude-opus-4-5-20251101" to "opus-4-5" or "gpt-5-2026-05-01" to "gpt-5" so pricing works regardless of date suffix or "claude-" prefix variations.
+- **Parse-layer normalization to a canonical token shape** (CF-418): both transcript services stamp `TokenUsage` (`input`/`output`/`cacheWrite`/`cacheRead`) on assistant messages at parse time. Downstream components and cost arithmetic read one shape. Provider-specific cost adjustments (Claude fast multiplier, web-search dollars; Codex reasoning-token display) live on the `ProviderAdapter` (`providers/types.ts`).
 
 ## Testing
 

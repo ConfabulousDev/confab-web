@@ -32,6 +32,11 @@ interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
   countCategories(items): TCounts;
   itemMatchesFilter(item, state): boolean;
   useDeepLinkFilterReset(items, targetId, filters): void;  // hook-on-adapter
+  // CF-418: provider-specific cost adjustments. Base `calculateCost` is in
+  // utils/tokenStats; the adapter applies fast multiplier / server-tool
+  // dollars (Claude) or just returns base arithmetic (Codex).
+  calculateMessageCost(model, usage: TokenUsage, message: TItem): number;
+  extendCostTooltip?(base: string[], usage: TokenUsage, message: TItem): string[];
   FilterDropdown: FC<{ counts; filters }>;
   TranscriptPane: FC<TranscriptPaneProps>;
 }
@@ -61,13 +66,21 @@ segment starts with `use`.
 ## Adding a third provider
 
 1. Register the canonical id in `PROVIDER_VALUES` (Phase 1 / `utils/providers.ts`).
-2. Write `frontend/src/providers/<id>Adapter.tsx`:
+2. Add pricing rows to `MODEL_PRICING['<id>']` in `utils/tokenStats.ts`
+   (CF-418); add the same families to `backend/internal/analytics/pricing.go`
+   so `TestPricingTableSync` passes.
+3. Write `frontend/src/providers/<id>Adapter.tsx`:
    - Type it as `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>`.
    - Wrap an existing transcript service, filter hook, dropdown component, and pane component.
    - Decide `supportsTILs`; pick `useDeepLinkFilterReset` semantics.
-3. Register it in `registry.ts`'s `REGISTRY` map (one entry, one widening cast).
-4. Run `registry.test.ts` to confirm the drift guard accepts the new id.
-5. Update story fixtures and `frontend/src/utils/providers.ts` cosmetic metadata.
+   - Implement `calculateMessageCost(model, usage, message)` (typically just
+     `calculateCost('<id>', model, usage)` plus any provider-specific
+     adjustments) and an `extendCostTooltip` if the tooltip needs extra lines.
+4. Register the adapter in `registry.ts`'s `REGISTRY` map (one entry, one widening cast).
+5. Run `registry.test.ts` to confirm the drift guard accepts the new id.
+6. Add a `DEFAULTS_BY_PROVIDER` entry in `frontend/src/test-fixtures/session.ts`
+   so `makeSessionFixture('<id>')` / `makeSessionDetailFixture('<id>')` produce
+   sensible default test data; also extend `utils/providers.ts` cosmetic metadata.
 
 `SessionViewer.tsx` and `SessionHeader.tsx` should require **zero edits**.
 
@@ -89,6 +102,8 @@ segment starts with `use`.
 
 - Cosmetic per-provider strings (label, icon, brand color, copy-id menu) —
   see `frontend/src/utils/providers.ts` (CF-416).
-- Pricing normalization — Phase 3 / CF-418.
+- Canonical `TokenUsage` shape, pricing table, base `calculateCost` — see
+  `frontend/src/utils/tokenStats.ts` (CF-418). The adapter's
+  `calculateMessageCost` / `extendCostTooltip` build on those primitives.
 - Backend provider identity — see `backend/internal/models/provider.go`
   (CF-401).

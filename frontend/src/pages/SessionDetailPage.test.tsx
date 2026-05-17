@@ -4,12 +4,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { SessionDetail } from '@/types';
 import SessionDetailPage from './SessionDetailPage';
+import { makeSessionDetailFixture } from '@/test-fixtures/session';
 
-// Mock session data
-const mockSession: SessionDetail = {
+const mockSession: SessionDetail = makeSessionDetailFixture('claude-code', {
   id: 'test-session-uuid',
   external_id: 'abc123def456',
-  provider: 'claude-code',
   custom_title: null,
   summary: 'Test session summary',
   first_user_message: 'Help me test',
@@ -23,7 +22,7 @@ const mockSession: SessionDetail = {
   username: 'tester',
   is_owner: true,
   owner_email: 'test@example.com',
-};
+});
 
 // Mock hooks
 vi.mock('@/hooks', () => ({

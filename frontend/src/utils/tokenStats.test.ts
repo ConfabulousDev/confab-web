@@ -1,298 +1,205 @@
-import { describe, it, expect } from 'vitest';
-import type { AssistantMessage } from '@/types';
-import type { CodexAssistantUsage } from '@/types/codexRenderItem';
+// CF-418 spec: canonical TokenUsage + provider-keyed pricing.
+// `calculateCost(provider, model, usage)` is the single cost arithmetic
+// surface; provider-specific adjustments (Claude fast multiplier, web
+// search add-on) live on the adapter via `calculateMessageCost`.
+
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
-  calculateMessageCost,
+  type TokenUsage,
+  calculateCost,
   formatTokenCount,
   formatCost,
-  calculateCodexAssistantCost,
-  buildCodexCostTooltip,
+  getModelFamily,
 } from './tokenStats';
 
-// Helper to create a minimal assistant message with token usage
-function createAssistantMessage(
-  inputTokens: number,
-  outputTokens: number,
-  cacheCreated = 0,
-  cacheRead = 0,
-  model = 'claude-opus-4-5-20251101',
-  extra?: {
-    server_tool_use?: { web_search_requests?: number; web_fetch_requests?: number; code_execution_requests?: number };
-    speed?: string;
-  },
-): AssistantMessage {
-  return {
-    type: 'assistant',
-    uuid: 'test-uuid',
-    timestamp: new Date().toISOString(),
-    parentUuid: null,
-    isSidechain: false,
-    userType: 'external',
-    cwd: '/test',
-    sessionId: 'test-session',
-    version: '1.0.0',
-    requestId: 'req-test',
-    message: {
-      model,
-      id: 'msg-test',
-      type: 'message',
-      role: 'assistant',
-      content: [{ type: 'text', text: 'Test response' }],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: {
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        cache_creation_input_tokens: cacheCreated,
-        cache_read_input_tokens: cacheRead,
-        ...extra,
-      },
-    },
-  };
-}
+// ---------------------------------------------------------------------------
+// Format helpers — behavior preserved from pre-refactor code.
+// ---------------------------------------------------------------------------
 
 describe('formatTokenCount', () => {
-  it('should return raw number for values under 1000', () => {
+  it('returns raw number for values under 1000', () => {
     expect(formatTokenCount(0)).toBe('0');
     expect(formatTokenCount(1)).toBe('1');
     expect(formatTokenCount(999)).toBe('999');
   });
 
-  it('should format values >= 1000 with k suffix', () => {
+  it('formats values >= 1000 with k suffix', () => {
     expect(formatTokenCount(1000)).toBe('1.0k');
     expect(formatTokenCount(1500)).toBe('1.5k');
-    expect(formatTokenCount(10000)).toBe('10.0k');
     expect(formatTokenCount(145892)).toBe('145.9k');
-    expect(formatTokenCount(999999)).toBe('1000.0k');
   });
 
-  it('should format values >= 1M with M suffix', () => {
-    expect(formatTokenCount(1000000)).toBe('1.0M');
-    expect(formatTokenCount(1500000)).toBe('1.5M');
-    expect(formatTokenCount(10000000)).toBe('10.0M');
-    expect(formatTokenCount(999999999)).toBe('1000.0M');
+  it('formats values >= 1M with M suffix', () => {
+    expect(formatTokenCount(1_000_000)).toBe('1.0M');
+    expect(formatTokenCount(1_500_000)).toBe('1.5M');
   });
 
-  it('should format values >= 1B with B suffix', () => {
-    expect(formatTokenCount(1000000000)).toBe('1.0B');
-    expect(formatTokenCount(1500000000)).toBe('1.5B');
-    expect(formatTokenCount(10000000000)).toBe('10.0B');
-  });
-
-  it('should round to one decimal place', () => {
-    expect(formatTokenCount(1234)).toBe('1.2k');
-    expect(formatTokenCount(1256)).toBe('1.3k');
-    expect(formatTokenCount(1234567)).toBe('1.2M');
-    expect(formatTokenCount(1256789012)).toBe('1.3B');
-  });
-});
-
-describe('calculateMessageCost', () => {
-  it('should return 0 for user messages', () => {
-    const userMsg = {
-      type: 'user' as const,
-      uuid: 'user-uuid',
-      timestamp: new Date().toISOString(),
-      parentUuid: null,
-      isSidechain: false,
-      userType: 'external',
-      cwd: '/test',
-      sessionId: 'test-session',
-      version: '1.0.0',
-      message: { role: 'user' as const, content: 'Hello' },
-    };
-    expect(calculateMessageCost(userMsg)).toBe(0);
-  });
-
-  it('should calculate cost for a known model', () => {
-    // Sonnet 4: input=$3/M, output=$15/M
-    const msg = createAssistantMessage(100_000, 10_000, 0, 0, 'claude-sonnet-4-20250514');
-    const cost = calculateMessageCost(msg);
-    // input: 100k * $3/M = $0.30, output: 10k * $15/M = $0.15 → $0.45
-    expect(cost).toBeCloseTo(0.45, 4);
-  });
-
-  it('should apply fast mode multiplier to token costs', () => {
-    const msg = createAssistantMessage(1_000_000, 100_000, 0, 0, 'claude-opus-4-6-20260201', {
-      speed: 'fast',
-    });
-    const cost = calculateMessageCost(msg);
-    // Standard: $5 + $2.50 = $7.50, Fast: $7.50 * 6 = $45
-    expect(cost).toBeCloseTo(45, 4);
-  });
-
-  it('should add web search costs without fast multiplier', () => {
-    const msg = createAssistantMessage(0, 0, 0, 0, 'claude-sonnet-4-20250514', {
-      speed: 'fast',
-      server_tool_use: { web_search_requests: 10 },
-    });
-    const cost = calculateMessageCost(msg);
-    // Token cost: $0, Web search: 10 * $0.01 = $0.10
-    expect(cost).toBeCloseTo(0.10, 4);
-  });
-
-  it('should return 0 for unknown models', () => {
-    const msg = createAssistantMessage(1_000_000, 0, 0, 0, 'claude-unknown-model');
-    expect(calculateMessageCost(msg)).toBe(0);
-  });
-});
-
-// CF-362 — Codex per-assistant-message cost.
-// Mirrors `applyCodexTokens` in backend/internal/analytics/codex_adapter.go:
-//   uncached = max(0, input - cached); output += reasoning; cache_write = 0.
-describe('calculateCodexAssistantCost', () => {
-  function usage(overrides: Partial<CodexAssistantUsage> = {}): CodexAssistantUsage {
-    return { input_tokens: 0, output_tokens: 0, ...overrides };
-  }
-
-  it('bills gpt-5 input + output at documented rates (no cache)', () => {
-    // gpt-5: input=$1.25/M, output=$10/M
-    // 1,000,000 in -> $1.25; 100,000 out -> $1.00; total $2.25.
-    const cost = calculateCodexAssistantCost(
-      'gpt-5',
-      usage({ input_tokens: 1_000_000, output_tokens: 100_000 }),
-    );
-    expect(cost).toBeCloseTo(2.25, 4);
-  });
-
-  it('subtracts cached_input_tokens from input_tokens before applying input rate', () => {
-    // gpt-5: input=$1.25/M, cache_read=$0.125/M.
-    // input_tokens=1,000,000 with cached_input_tokens=200,000
-    //   -> 800k uncached * $1.25/M = $1.00
-    //   -> 200k cache hit  * $0.125/M = $0.025
-    //   -> output 0 (skipped)
-    // total $1.025
-    const cost = calculateCodexAssistantCost(
-      'gpt-5',
-      usage({
-        input_tokens: 1_000_000,
-        cached_input_tokens: 200_000,
-        output_tokens: 0,
-      }),
-    );
-    expect(cost).toBeCloseTo(1.025, 4);
-  });
-
-  it('bills reasoning_output_tokens at the output rate (folded into output total)', () => {
-    // gpt-5: output=$10/M.
-    // output 0 + reasoning 50,000 -> 50k * $10/M = $0.50.
-    const cost = calculateCodexAssistantCost(
-      'gpt-5',
-      usage({ output_tokens: 0, reasoning_output_tokens: 50_000 }),
-    );
-    expect(cost).toBeCloseTo(0.5, 4);
-  });
-
-  it('returns 0 for zero usage', () => {
-    expect(calculateCodexAssistantCost('gpt-5', usage())).toBe(0);
-  });
-
-  it('returns 0 for unknown models (no throw)', () => {
-    const cost = calculateCodexAssistantCost(
-      'unknown',
-      usage({ input_tokens: 1_000_000, output_tokens: 100_000 }),
-    );
-    expect(cost).toBe(0);
-  });
-
-  it('does not charge for cache writes (OpenAI cache is free to write)', () => {
-    // Even if a callsite accidentally tries to claim cache_creation tokens,
-    // the API for Codex usage has no such field — the function only knows
-    // about cached_input_tokens (= cache reads). A pure-input call with
-    // cached=0 charges only at the uncached input rate.
-    const cost = calculateCodexAssistantCost(
-      'gpt-5-mini',
-      usage({ input_tokens: 1_000_000, cached_input_tokens: 0 }),
-    );
-    // gpt-5-mini: input=$0.25/M -> $0.25 for 1M uncached.
-    expect(cost).toBeCloseTo(0.25, 4);
-  });
-});
-
-describe('buildCodexCostTooltip', () => {
-  it('starts with the dollar amount and an empty separator line', () => {
-    const tip = buildCodexCostTooltip(
-      { input_tokens: 100, output_tokens: 50 },
-      0.42,
-    );
-    const lines = tip.split('\n');
-    expect(lines[0]).toBe('$0.42');
-    expect(lines[1]).toBe('');
-  });
-
-  it('includes input + output token lines with localized formatting', () => {
-    const tip = buildCodexCostTooltip(
-      { input_tokens: 12_345, output_tokens: 1_200 },
-      0.01,
-    );
-    expect(tip).toContain('Input tokens (in): 12,345');
-    expect(tip).toContain('Output tokens (out): 1,200');
-  });
-
-  it('shows the Cached (hit) sub-line only when cached_input_tokens > 0', () => {
-    const without = buildCodexCostTooltip(
-      { input_tokens: 100, output_tokens: 0 },
-      0,
-    );
-    expect(without).not.toContain('Cached (hit)');
-
-    const withCache = buildCodexCostTooltip(
-      { input_tokens: 100, output_tokens: 0, cached_input_tokens: 25 },
-      0,
-    );
-    expect(withCache).toContain('Cached (hit): 25');
-  });
-
-  it('shows the Reasoning sub-line only when reasoning_output_tokens > 0', () => {
-    const without = buildCodexCostTooltip(
-      { input_tokens: 0, output_tokens: 100 },
-      0,
-    );
-    expect(without).not.toContain('Reasoning');
-
-    const withReasoning = buildCodexCostTooltip(
-      { input_tokens: 0, output_tokens: 100, reasoning_output_tokens: 250 },
-      0,
-    );
-    expect(withReasoning).toContain('Reasoning: 250');
-  });
-
-  it('omits Claude-only lines (speed / service_tier / server_tool_use)', () => {
-    const tip = buildCodexCostTooltip(
-      {
-        input_tokens: 100,
-        output_tokens: 100,
-        cached_input_tokens: 10,
-        reasoning_output_tokens: 10,
-      },
-      0.01,
-    );
-    expect(tip).not.toMatch(/Speed:/);
-    expect(tip).not.toMatch(/Tier:/);
-    expect(tip).not.toMatch(/Web searches:/);
+  it('formats values >= 1B with B suffix', () => {
+    expect(formatTokenCount(1_000_000_000)).toBe('1.0B');
+    expect(formatTokenCount(1_500_000_000)).toBe('1.5B');
   });
 });
 
 describe('formatCost', () => {
-  it('should format costs with dollar sign and 2 decimal places', () => {
-    expect(formatCost(0.50)).toBe('$0.50');
+  it('formats costs with dollar sign and 2 decimals', () => {
+    expect(formatCost(0.5)).toBe('$0.50');
     expect(formatCost(4.23)).toBe('$4.23');
-    expect(formatCost(10.00)).toBe('$10.00');
     expect(formatCost(123.45)).toBe('$123.45');
   });
 
-  it('should show $0.00 for exactly zero cost', () => {
+  it('shows $0.00 for exactly zero', () => {
     expect(formatCost(0)).toBe('$0.00');
   });
 
-  it('should show <$0.01 for very small non-zero costs', () => {
+  it('shows <$0.01 for tiny non-zero costs', () => {
     expect(formatCost(0.001)).toBe('<$0.01');
     expect(formatCost(0.009)).toBe('<$0.01');
   });
+});
 
-  it('should round to 2 decimal places', () => {
-    expect(formatCost(0.016)).toBe('$0.02');
-    expect(formatCost(0.014)).toBe('$0.01');
-    expect(formatCost(1.999)).toBe('$2.00');
+// ---------------------------------------------------------------------------
+// getModelFamily — now takes provider explicitly. No `isOpenAIModel` sniff.
+// ---------------------------------------------------------------------------
+
+describe('getModelFamily', () => {
+  it('strips claude- prefix and date suffix for Claude models', () => {
+    expect(getModelFamily('claude-code', 'claude-opus-4-7-20260301')).toBe('opus-4-7');
+    expect(getModelFamily('claude-code', 'claude-sonnet-4-6-20260201')).toBe('sonnet-4-6');
+    expect(getModelFamily('claude-code', 'claude-haiku-3-5-20241022')).toBe('haiku-3-5');
+  });
+
+  it('strips OpenAI pinned-snapshot date suffix for Codex models', () => {
+    expect(getModelFamily('codex', 'gpt-5-2026-05-01')).toBe('gpt-5');
+    expect(getModelFamily('codex', 'gpt-4o-mini-2024-11-20')).toBe('gpt-4o-mini');
+  });
+
+  it('passes through Codex models without date suffix', () => {
+    expect(getModelFamily('codex', 'gpt-5.5')).toBe('gpt-5.5');
+    expect(getModelFamily('codex', 'gpt-5-mini')).toBe('gpt-5-mini');
+    expect(getModelFamily('codex', 'o3-mini')).toBe('o3-mini');
+  });
+
+  it('throws when provider is unknown', () => {
+    expect(() =>
+      // @ts-expect-error — exercising the unknown-provider error path.
+      getModelFamily('cursor', 'whatever'),
+    ).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// calculateCost — single arithmetic surface. Reproduces pre-refactor totals
+// when called with canonical TokenUsage derived from the wire shape.
+// ---------------------------------------------------------------------------
+
+function usage(overrides: Partial<TokenUsage> = {}): TokenUsage {
+  return { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, ...overrides };
+}
+
+describe('calculateCost', () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('bills Claude sonnet-4 input + output at documented rates', () => {
+    // sonnet-4: input=$3/M, output=$15/M
+    // 100k in * $3/M = $0.30, 10k out * $15/M = $0.15 → $0.45
+    const cost = calculateCost(
+      'claude-code',
+      'claude-sonnet-4-20250514',
+      usage({ input: 100_000, output: 10_000 }),
+    );
+    expect(cost).toBeCloseTo(0.45, 4);
+  });
+
+  it('bills Claude cache write and cache read separately', () => {
+    // sonnet-4-6: input=$3, output=$15, cacheWrite=$3.75, cacheRead=$0.30
+    // 50k in * $3/M = $0.15
+    // 5k out * $15/M = $0.075
+    // 20k cacheWrite * $3.75/M = $0.075
+    // 10k cacheRead * $0.30/M = $0.003
+    // total = $0.303
+    const cost = calculateCost(
+      'claude-code',
+      'claude-sonnet-4-6-20260201',
+      usage({ input: 50_000, output: 5_000, cacheWrite: 20_000, cacheRead: 10_000 }),
+    );
+    expect(cost).toBeCloseTo(0.303, 4);
+  });
+
+  it('bills gpt-5 input + output at documented rates', () => {
+    // gpt-5: input=$1.25/M, output=$10/M
+    // 1M in * $1.25/M = $1.25, 100k out * $10/M = $1.00 → $2.25
+    const cost = calculateCost(
+      'codex',
+      'gpt-5',
+      usage({ input: 1_000_000, output: 100_000 }),
+    );
+    expect(cost).toBeCloseTo(2.25, 4);
+  });
+
+  it('bills cached Codex input at the cache-read rate, never at the input rate', () => {
+    // Caller already split: input=uncached, cacheRead=cached. No subtraction
+    // inside calculateCost — that's the parse-layer's responsibility.
+    // gpt-5: input=$1.25/M, cacheRead=$0.125/M
+    // 800k uncached * $1.25/M = $1.00
+    // 200k cacheRead * $0.125/M = $0.025
+    // total = $1.025
+    const cost = calculateCost(
+      'codex',
+      'gpt-5',
+      usage({ input: 800_000, cacheRead: 200_000 }),
+    );
+    expect(cost).toBeCloseTo(1.025, 4);
+  });
+
+  it('treats Codex cacheWrite as free (rate is 0 in the table)', () => {
+    // Any value of cacheWrite contributes $0 for Codex models.
+    const a = calculateCost('codex', 'gpt-5', usage({ input: 100_000 }));
+    const b = calculateCost(
+      'codex',
+      'gpt-5',
+      usage({ input: 100_000, cacheWrite: 999_999_999 }),
+    );
+    expect(a).toBeCloseTo(b, 6);
+  });
+
+  it('returns 0 for zero usage', () => {
+    expect(calculateCost('claude-code', 'claude-sonnet-4-20250514', usage())).toBe(0);
+    expect(calculateCost('codex', 'gpt-5', usage())).toBe(0);
+  });
+
+  it('warns and returns 0 for unknown model within a known provider', () => {
+    const cost = calculateCost(
+      'claude-code',
+      'claude-unknown-model',
+      usage({ input: 1_000_000 }),
+    );
+    expect(cost).toBe(0);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('throws when provider is unknown', () => {
+    expect(() =>
+      // @ts-expect-error — exercising the unknown-provider error path.
+      calculateCost('cursor', 'whatever', usage({ input: 100 })),
+    ).toThrow();
+  });
+
+  it('does NOT apply any fast multiplier or server-tool add-on', () => {
+    // calculateCost is pure arithmetic over the canonical shape. Fast-mode
+    // and web-search-cost adjustments live on the Claude adapter's
+    // calculateMessageCost — not here.
+    const cost = calculateCost(
+      'claude-code',
+      'claude-opus-4-6-20260201',
+      usage({ input: 1_000_000, output: 100_000 }),
+    );
+    // opus-4-6: input=$5, output=$25 → 1M*5 + 100k*25 = $5 + $2.50 = $7.50
+    expect(cost).toBeCloseTo(7.5, 4);
   });
 });

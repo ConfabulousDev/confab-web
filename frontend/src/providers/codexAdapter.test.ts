@@ -15,6 +15,8 @@ import {
   countCodexCategories,
 } from '@/components/session/codexCategories';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
+import type { TokenUsage } from '@/utils/tokenStats';
+import type { CodexAssistantItem } from '@/types/codexRenderItem';
 import { codexAdapter } from './codexAdapter';
 
 vi.mock('@/services/codexTranscriptService', async () => {
@@ -163,5 +165,98 @@ describe('codexAdapter', () => {
   it('exposes useFilters and useDeepLinkFilterReset as functions', () => {
     expect(typeof codexAdapter.useFilters).toBe('function');
     expect(typeof codexAdapter.useDeepLinkFilterReset).toBe('function');
+  });
+});
+
+// CF-418: Codex adapter's calculateMessageCost is base arithmetic only —
+// no fast multiplier (Codex has no `speed`), no web-search add-on.
+// Caller (parse layer) has already split `input` into uncached + cacheRead
+// and folded reasoning into `output`.
+describe('codexAdapter.calculateMessageCost', () => {
+  function item(model: string, usage: TokenUsage): CodexAssistantItem {
+    return {
+      kind: 'assistant',
+      lineId: '0',
+      timestamp: '2026-05-13T01:00:00Z',
+      text: 'x',
+      phase: 'final',
+      model,
+      usage,
+    };
+  }
+
+  function usage(overrides: Partial<TokenUsage> = {}): TokenUsage {
+    return { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, ...overrides };
+  }
+
+  it('bills gpt-5 input + output at documented rates', () => {
+    // gpt-5: input=$1.25/M, output=$10/M → 1M*$1.25 + 100k*$10 = $2.25
+    const it = item('gpt-5', usage({ input: 1_000_000, output: 100_000 }));
+    expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it))
+      .toBeCloseTo(2.25, 4);
+  });
+
+  it('charges cache reads at the documented cache-read rate', () => {
+    // gpt-5 cacheRead=$0.125/M → 200k*$0.125 = $0.025
+    const it = item('gpt-5', usage({ cacheRead: 200_000 }));
+    expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it))
+      .toBeCloseTo(0.025, 6);
+  });
+
+  it('does NOT charge for cache writes (table rate is 0 for Codex models)', () => {
+    const it = item('gpt-5', usage({ cacheWrite: 999_999_999 }));
+    expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it)).toBe(0);
+  });
+
+  it('returns 0 for zero usage', () => {
+    const it = item('gpt-5', usage());
+    expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it)).toBe(0);
+  });
+
+  it('returns 0 for unknown Codex model (no throw)', () => {
+    const it = item('unknown-gpt', usage({ input: 1_000_000, output: 100_000 }));
+    expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it)).toBe(0);
+  });
+});
+
+// CF-418: Codex adapter's tooltip appends Cached (hit) / Reasoning sub-lines.
+// Claude-only labels (Speed, Tier, Web searches) never appear.
+describe('codexAdapter.extendCostTooltip', () => {
+  // Reasoning total is preserved on the item via `reasoningTokens` so the
+  // tooltip can show it even though it's already folded into `usage.output`
+  // for billing.
+  function item(usage: TokenUsage, reasoningTokens = 0): CodexAssistantItem {
+    return {
+      kind: 'assistant',
+      lineId: '0',
+      timestamp: '2026-05-13T01:00:00Z',
+      text: 'x',
+      phase: 'final',
+      model: 'gpt-5',
+      usage,
+      reasoningTokens,
+    };
+  }
+
+  const baseLines = ['$0.10', '', 'Input tokens (in): 0', 'Output tokens (out): 0'];
+
+  it('appends Cached (hit) sub-line when cacheRead > 0', () => {
+    const i = item({ input: 100, output: 0, cacheWrite: 0, cacheRead: 25 });
+    const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
+    expect(out.some((l) => /Cached \(hit\):\s*25/.test(l))).toBe(true);
+  });
+
+  it('omits Cached (hit) sub-line when cacheRead is 0', () => {
+    const i = item({ input: 100, output: 0, cacheWrite: 0, cacheRead: 0 });
+    const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
+    expect(out.every((l) => !l.includes('Cached (hit)'))).toBe(true);
+  });
+
+  it('does NOT emit Claude-only labels (Speed, Tier, Web searches)', () => {
+    const i = item({ input: 1000, output: 1000, cacheWrite: 0, cacheRead: 100 }, 50);
+    const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
+    expect(out.every((l) => !/^Speed:/.test(l))).toBe(true);
+    expect(out.every((l) => !/^Tier:/.test(l))).toBe(true);
+    expect(out.every((l) => !/Web searches:/.test(l))).toBe(true);
   });
 });

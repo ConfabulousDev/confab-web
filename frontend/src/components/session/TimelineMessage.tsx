@@ -1,12 +1,14 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
 import type { TIL } from '@/schemas/api';
+import type { TokenUsage } from '@/utils/tokenStats';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
 import { AttachmentContent, AwaySummary } from '@/components/transcript/attachments';
 import TILBadge from './TILBadge';
-import { formatCost, formatTokenCount, WEB_SEARCH_COST_PER_REQUEST } from '@/utils/tokenStats';
+import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage } from '@/utils/tokenStats';
+import { claudeAdapter } from '@/providers/claudeAdapter';
 import { getRoleLabel } from './messageCategories';
 import styles from './TimelineMessage.module.css';
 
@@ -65,81 +67,34 @@ function formatTimestamp(timestamp: string): string {
   });
 }
 
-interface ServerToolUsage {
+// CF-418: canonical `TokenUsage` (input/output/cacheWrite/cacheRead) now
+// drives the cost badges and is shared with Codex. Wire-shape extras
+// (speed, service_tier, server_tool_use) live on `message.message.usage`
+// and are read directly when rendering Claude-specific badges/tooltips.
+
+interface ClaudeServerToolUsage {
   web_search_requests?: number;
   web_fetch_requests?: number;
   code_execution_requests?: number;
 }
 
-interface TokenUsage {
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_input_tokens?: number;
-  cache_read_input_tokens?: number;
-  service_tier?: string | null;
-  server_tool_use?: ServerToolUsage;
-  speed?: string;
-}
+// (count, singular, plural) tuples for each server-tool counter on the
+// Claude wire payload. Order drives the rendered badge order.
+const SERVER_TOOL_LABELS: ReadonlyArray<readonly [keyof ClaudeServerToolUsage, string, string]> = [
+  ['web_search_requests', 'search', 'searches'],
+  ['web_fetch_requests', 'fetch', 'fetches'],
+  ['code_execution_requests', 'exec', 'execs'],
+];
 
-/**
- * Build verbose cost tooltip that maps inline abbreviations to full labels
- */
-function buildCostTooltip(usage: TokenUsage, cost: number): string {
-  const lines: string[] = [];
-
-  lines.push(formatCost(cost));
-  lines.push('');
-  lines.push(`Input tokens (in): ${usage.input_tokens.toLocaleString()}`);
-  lines.push(`Output tokens (out): ${usage.output_tokens.toLocaleString()}`);
-
-  if (usage.cache_creation_input_tokens) {
-    lines.push(`Cache write tokens (write): ${usage.cache_creation_input_tokens.toLocaleString()}`);
-  }
-  if (usage.cache_read_input_tokens) {
-    lines.push(`Cache read tokens (hit): ${usage.cache_read_input_tokens.toLocaleString()}`);
-  }
-
-  if (usage.speed) {
-    lines.push('');
-    lines.push(`Speed: ${usage.speed}${usage.speed === 'fast' ? ' (6x pricing)' : ''}`);
-  }
-  if (usage.service_tier) {
-    lines.push(`Tier: ${usage.service_tier}`);
-  }
-
-  const stu = usage.server_tool_use;
-  if (stu && (stu.web_search_requests || stu.web_fetch_requests || stu.code_execution_requests)) {
-    lines.push('');
-    if (stu.web_search_requests) {
-      lines.push(`Web searches: ${stu.web_search_requests} ($${(stu.web_search_requests * WEB_SEARCH_COST_PER_REQUEST).toFixed(2)})`);
-    }
-    if (stu.web_fetch_requests) {
-      lines.push(`Web fetches: ${stu.web_fetch_requests}`);
-    }
-    if (stu.code_execution_requests) {
-      lines.push(`Code executions: ${stu.code_execution_requests}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Build server tool badge labels from usage
- */
-function getServerToolBadges(usage: TokenUsage): string[] {
+/** Server-tool badge labels read straight from the wire payload. */
+function getServerToolBadges(stu: ClaudeServerToolUsage | undefined): string[] {
+  if (!stu) return [];
   const badges: string[] = [];
-  const stu = usage.server_tool_use;
-  if (!stu) return badges;
-
-  if (stu.web_search_requests) {
-    badges.push(`${stu.web_search_requests} ${stu.web_search_requests === 1 ? 'search' : 'searches'}`);
-  }
-  if (stu.web_fetch_requests) {
-    badges.push(`${stu.web_fetch_requests} ${stu.web_fetch_requests === 1 ? 'fetch' : 'fetches'}`);
-  }
-  if (stu.code_execution_requests) {
-    badges.push(`${stu.code_execution_requests} ${stu.code_execution_requests === 1 ? 'exec' : 'execs'}`);
+  for (const [key, singular, plural] of SERVER_TOOL_LABELS) {
+    const count = stu[key];
+    if (count) {
+      badges.push(`${count} ${count === 1 ? singular : plural}`);
+    }
   }
   return badges;
 }
@@ -246,10 +201,20 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
   // Get timestamp if available
   const timestamp = 'timestamp' in message && typeof message.timestamp === 'string' ? message.timestamp : undefined;
 
-  // Get token usage for assistant messages
-  const tokenUsage = isAssistantMessage(message) ? message.message.usage : undefined;
-  // Use corrected usage (from final line of deduplicated message group) when available
-  const displayUsage = correctedTokenUsage ?? tokenUsage;
+  // CF-418: canonical TokenUsage stamped by the Claude transcript service.
+  // `correctedTokenUsage` (from the final line of a dedup'd group) overrides
+  // when present, since intermediate streamed lines carry partial counts.
+  // Fall back to live normalization for older cached entries that pre-date
+  // the parse-time stamping.
+  const wireUsage = isAssistantMessage(message) ? message.message.usage : undefined;
+  const messageUsage = isAssistantMessage(message)
+    ? message.tokenUsage ?? normalizeClaudeUsage(message.message.usage)
+    : undefined;
+  const displayUsage: TokenUsage | undefined = correctedTokenUsage ?? messageUsage;
+
+  const tooltipText = isAssistantMessage(message) && displayUsage && messageCost != null
+    ? buildCostTooltip(claudeAdapter, displayUsage, messageCost, message)
+    : '';
 
   // Get model for assistant messages
   const model = isAssistantMessage(message) ? message.message.model : undefined;
@@ -300,31 +265,22 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
         <div className={styles.headerRight}>
           {displayUsage && isCostMode && messageCost != null && (
             <>
-              <span
-                className={styles.costBadge}
-                title={buildCostTooltip(displayUsage, messageCost)}
-              >
+              <span className={styles.costBadge} title={tooltipText}>
                 {formatCost(messageCost)}
               </span>
-              <span
-                className={styles.tokenPill}
-                title={buildCostTooltip(displayUsage, messageCost)}
-              >
-                {formatTokenCount(displayUsage.input_tokens)} in · {formatTokenCount(displayUsage.output_tokens)} out
+              <span className={styles.tokenPill} title={tooltipText}>
+                {formatTokenCount(displayUsage.input)} in · {formatTokenCount(displayUsage.output)} out
               </span>
-              {(displayUsage.cache_creation_input_tokens || displayUsage.cache_read_input_tokens) ? (
-                <span
-                  className={styles.cachePill}
-                  title={buildCostTooltip(displayUsage, messageCost)}
-                >
-                  {displayUsage.cache_creation_input_tokens ? `${formatTokenCount(displayUsage.cache_creation_input_tokens)} write` : null}
-                  {displayUsage.cache_creation_input_tokens && displayUsage.cache_read_input_tokens ? ' · ' : null}
-                  {displayUsage.cache_read_input_tokens ? `${formatTokenCount(displayUsage.cache_read_input_tokens)} hit` : null}
+              {(displayUsage.cacheWrite || displayUsage.cacheRead) ? (
+                <span className={styles.cachePill} title={tooltipText}>
+                  {displayUsage.cacheWrite ? `${formatTokenCount(displayUsage.cacheWrite)} write` : null}
+                  {displayUsage.cacheWrite && displayUsage.cacheRead ? ' · ' : null}
+                  {displayUsage.cacheRead ? `${formatTokenCount(displayUsage.cacheRead)} hit` : null}
                 </span>
               ) : null}
             </>
           )}
-          {tokenUsage?.speed === 'fast' && (
+          {wireUsage?.speed === 'fast' && (
             <span className={styles.fastBadge} title="Fast mode (6x pricing)">
               <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8.5 1L3 9h4.5L6.5 15 13 7H8.5L10 1H8.5z" />
@@ -332,7 +288,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
               fast
             </span>
           )}
-          {tokenUsage && getServerToolBadges(tokenUsage).map((badge) => (
+          {getServerToolBadges(wireUsage?.server_tool_use).map((badge) => (
             <span key={badge} className={styles.serverToolBadge}>{badge}</span>
           ))}
           {model && <span className={styles.model}>{extractModelVariant(model)}</span>}
