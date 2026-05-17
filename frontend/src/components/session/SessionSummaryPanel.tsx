@@ -26,6 +26,9 @@ const SIZE_CLASSES: Record<string, string | undefined> = {
 interface SessionSummaryPanelProps {
   sessionId: string;
   isOwner: boolean;
+  /** Session provider (e.g. "claude-code" | "codex"). Forwarded to cards that
+   *  render provider-aware copy (currently ConversationCard for tooltips). */
+  provider: string;
   /** For Storybook: pass analytics directly instead of fetching from API */
   initialAnalytics?: SessionAnalytics;
   /** For Storybook: pass GitHub links directly instead of fetching from API */
@@ -34,7 +37,7 @@ interface SessionSummaryPanelProps {
   onSuggestedTitleChange?: (title: string) => void;
 }
 
-function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGithubLinks, onSuggestedTitleChange }: SessionSummaryPanelProps) {
+function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, initialGithubLinks, onSuggestedTitleChange }: SessionSummaryPanelProps) {
   // Use polling hook for live updates (disabled in Storybook mode)
   const { analytics: polledAnalytics, loading, error, forceRefetch } = useAnalyticsPolling(
     sessionId,
@@ -182,6 +185,9 @@ function SessionSummaryPanel({ sessionId, isOwner, initialAnalytics, initialGith
           extraProps.onRefresh = handleRegenerateSmartRecap;
           extraProps.isRefreshing = isRegenerating;
         }
+      }
+      if (cardDef.key === 'conversation') {
+        extraProps.provider = provider;
       }
 
       return (

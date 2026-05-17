@@ -352,6 +352,11 @@ const mockCommitLinks: GitHubLink[] = [
 const meta = {
   title: 'Session/SessionSummaryPanel',
   component: SessionSummaryPanel,
+  args: {
+    // Default provider for all stories. The CodexSession story overrides
+    // this; everything else inherits the Claude default.
+    provider: 'claude-code',
+  },
   parameters: {
     layout: 'padded',
   },
@@ -600,6 +605,7 @@ export const CodexSession: Story = {
   args: {
     sessionId: 'codex-session-id',
     isOwner: true,
+    provider: 'codex',
     initialAnalytics: buildCodexAnalyticsFixture(),
   },
 };

@@ -1,6 +1,23 @@
 # analytics
 
-Session analytics engine: parses Claude Code transcripts and computes, caches, and serves analytics cards.
+Session analytics engine: parses Claude Code and Codex transcripts, then computes, caches, and serves analytics cards.
+
+## Per-card / per-provider naming convention (CF-441)
+
+Per-card compute logic lives in `analyzer_<card>_<provider>.go` files. One file per (card, provider) pair makes the matrix scannable — `ls analyzer_*.go` shows the full grid at a glance:
+
+| Card | Claude file | Codex file |
+|---|---|---|
+| Tokens | `analyzer_tokens_claude.go` | `analyzer_tokens_codex.go` |
+| Session | `analyzer_session_claude.go` | `analyzer_session_codex.go` |
+| Tools | `analyzer_tools_claude.go` | `analyzer_tools_codex.go` |
+| Code Activity | `analyzer_code_activity_claude.go` | `analyzer_code_activity_codex.go` |
+| Conversation | `analyzer_conversation_claude.go` | `analyzer_conversation_codex.go` |
+| Agents and Skills | `analyzer_agents.go` + `analyzer_skills.go` (two `FileProcessor`s feeding one combined card) | `analyzer_agents_and_skills_codex.go` (no-op stub; Codex has no agent/skill concept) |
+| Redactions | `analyzer_redactions_claude.go` | `analyzer_redactions_codex.go` |
+| Smart Recap | `analyzer_smart_recap.go` (shared infrastructure; Claude transcript prep lives here) | `codex_transcript.go` |
+
+> Follow-up cleanup: merge `analyzer_agents.go` + `analyzer_skills.go` into `analyzer_agents_and_skills_claude.go`; split `analyzer_smart_recap.go` into shared + Claude-specific pieces. Not part of CF-441's scope.
 
 ## Files
 
@@ -8,27 +25,34 @@ Session analytics engine: parses Claude Code transcripts and computes, caches, a
 |------|------|
 | `parser.go` | JSONL transcript line parser. Defines `TranscriptLine`, `MessageContent`, `TokenUsage`, `ContentBlock`, and helper predicates (`IsHumanMessage`, `GetToolUses`, etc.). |
 | `file_collection.go` | `TranscriptFile` and `FileCollection` types. Parses raw JSONL bytes, validates lines, deduplicates assistant messages via `AssistantMessageGroups()`, and builds helper maps (timestamp, tool-use-ID-to-name). |
-| `file_processor.go` | `FileProcessor` interface: the contract every analyzer implements (`ProcessFile` + `Finalize`). |
-| `compute.go` | Orchestration layer. Defines the `AgentProvider` function type and `ComputeResult` aggregate struct. `ComputeStreaming` runs all eight analyzers through a three-phase pipeline (main file, streamed agents, finalize). Also provides `ComputeFromJSONL` and `ComputeFromFileCollection` convenience wrappers. |
-| `analyzer_tokens.go` | `TokensAnalyzer` -- token counts and estimated cost via `pricing.go` functions. Falls back to `toolUseResult.usage` for agents without files. |
-| `analyzer_session.go` | `SessionAnalyzer` -- message counts, message-type breakdown, duration, models used, compaction stats. |
-| `analyzer_tools.go` | `ToolsAnalyzer` -- per-tool success/error counts. Attributes `tool_result` errors back to the originating tool via ID mapping. |
-| `analyzer_code_activity.go` | `CodeActivityAnalyzer` -- files read/modified, lines added/removed, search count, language breakdown by extension. Inspects `Read`/`Write`/`Edit`/`Glob`/`Grep` tool inputs. |
-| `analyzer_conversation.go` | `ConversationAnalyzer` -- user/assistant turn counts, turn timing, utilization percentage. Main-only (no agent files). |
-| `analyzer_agents.go` | `AgentsAnalyzer` -- Agent/Task tool invocations grouped by `subagent_type`. Main-only. |
-| `analyzer_skills.go` | `SkillsAnalyzer` -- Skill tool invocations plus command-expansion (`<command-name>`) detection. Main-only. |
-| `analyzer_redactions.go` | `RedactionsAnalyzer` -- counts `[REDACTED:TYPE]` markers by recursively walking `RawData`. Processes all files. |
-| `analyzer_smart_recap.go` | `SmartRecapAnalyzer` -- calls Anthropic LLM to generate session recaps. Handles transcript preparation (`PrepareTranscript`, `TranscriptBuilder`), stats formatting, response parsing, and message-ID resolution. Contains the system prompt sections and `BuildSmartRecapSystemPrompt` assembly function. |
-| `smart_recap_generator.go` | `SmartRecapGenerator` -- full lifecycle for smart recap: lock acquisition, LLM call, quota increment, card persistence, and suggested-title update. Resolves custom system prompt from `dbadminsettings` at generation time. Used by both the precomputer and the on-demand API handler. |
-| `agent_provider.go` | `AgentFileInfo`, `AgentDownloader`, and `NewAgentProvider()` -- streams agent files from storage one at a time, capping at `maxAgents` (0 = unlimited). |
+| `file_processor.go` | `FileProcessor` interface: the contract every Claude-side analyzer implements (`ProcessFile` + `Finalize`). |
+| `compute.go` | Orchestration layer for Claude. Defines the `AgentProvider` function type and `ComputeResult` aggregate struct. `ComputeStreaming` runs all eight Claude analyzers through a three-phase pipeline (main file, streamed agents, finalize). Also provides `ComputeFromJSONL` and `ComputeFromFileCollection` convenience wrappers. |
+| `analyzer_tokens_claude.go` | `TokensAnalyzer` — token counts and estimated cost via `pricing.go` functions. Falls back to `toolUseResult.usage` for agents without files. |
+| `analyzer_session_claude.go` | `SessionAnalyzer` — message counts, message-type breakdown, duration, models used, compaction stats. |
+| `analyzer_tools_claude.go` | `ToolsAnalyzer` — per-tool success/error counts. Attributes `tool_result` errors back to the originating tool via ID mapping. |
+| `analyzer_code_activity_claude.go` | `CodeActivityAnalyzer` — files read/modified, lines added/removed, search count, language breakdown by extension. Inspects `Read`/`Write`/`Edit`/`Glob`/`Grep` tool inputs. |
+| `analyzer_conversation_claude.go` | `ConversationAnalyzer` — user/assistant turn counts, turn timing, utilization percentage. Main-only (no agent files). |
+| `analyzer_agents.go` | `AgentsAnalyzer` — Agent/Task tool invocations grouped by `subagent_type`. Main-only. (To be merged with skills into `analyzer_agents_and_skills_claude.go`.) |
+| `analyzer_skills.go` | `SkillsAnalyzer` — Skill tool invocations plus command-expansion (`<command-name>`) detection. Main-only. |
+| `analyzer_redactions_claude.go` | `RedactionsAnalyzer` — counts `[REDACTED:TYPE]` markers by recursively walking `RawData`. Processes all files. |
+| `analyzer_smart_recap.go` | `SmartRecapAnalyzer` — calls Anthropic LLM to generate session recaps. Handles transcript preparation (`PrepareTranscript`, `TranscriptBuilder`), stats formatting, response parsing, and message-ID resolution. Contains the system prompt sections and `BuildSmartRecapSystemPrompt` assembly function. |
+| `smart_recap_generator.go` | `SmartRecapGenerator` — full lifecycle for smart recap: lock acquisition, LLM call, quota increment, card persistence, and suggested-title update. Resolves custom system prompt from `dbadminsettings` at generation time. Used by both the precomputer and the on-demand API handler. |
+| `agent_provider.go` | `AgentFileInfo`, `AgentDownloader`, and `NewAgentProvider()` — streams agent files from storage one at a time, capping at `maxAgents` (0 = unlimited). |
 | `cards.go` | Card record types (DB schema), card data types (API response), version constants, `IsValid`/`AllValid` staleness helpers. |
 | `models.go` | `AnalyticsResponse` (API envelope), legacy flat types (`TokenStats`, `CostStats`, `CompactionInfo`). |
-| `store.go` | `Store` -- DB CRUD for all card tables (`session_card_*`), search index, and smart recap. `GetCards`/`UpsertCards` run all queries in parallel. `ToCards` and `ToResponse` handle `ComputeResult <-> Cards <-> AnalyticsResponse` conversions. |
-| `precompute.go` | `Precomputer` -- background worker entry points. `FindStaleSessions`, `PrecomputeRegularCards`, `FindStaleSmartRecapSessions`, `PrecomputeSmartRecapOnly`, `FindStaleSearchIndexSessions`, `BuildSearchIndexOnly`. Stale-session filters cover all analytics-eligible providers via `models.AllowedProviders`; the three top-level compute methods dispatch through `ProviderFor(StaleSession.Provider)`. |
-| `provider.go` | `SessionProvider`, `ParseInput`, `RegisterProvider`, and `ProviderFor` -- provider registry contract used by the precomputer. Providers register a canonical name plus aliases at init time; unknown providers return loud errors. |
-| `claude_provider.go` | `claudeProvider` -- Claude-Code implementation of `SessionProvider`. Registers canonical `claude-code` plus legacy `Claude Code`, loads main transcripts and agent file metadata, streams agents through `ComputeStreaming`, `UserMessagesBuilder`, and `TranscriptBuilder`, and keeps smart recap message IDs. |
-| `codex_provider.go` | `codexProvider` -- Codex implementation of `SessionProvider`. Registers `codex`, delegates loading to `LoadCodexRollout`, cards to `ComputeFromCodexRollout`, search text to `ExtractCodexUserMessagesText`, transcript XML to `PrepareCodexTranscript`, and requests message-ID clearing for smart recaps. |
-| `codex_adapter.go` | `ComputeFromCodexRollout` -- maps a parsed `codex.ParsedRollout` onto the same `ComputeResult` shape produced by `ComputeStreaming` for Claude transcripts. Documents per-card mapping decisions inline (tokens normalize OpenAI's subset-cached-tokens, FilesRead stays 0 since Codex has no Read tool, etc.). |
+| `store.go` | `Store` — DB CRUD for all card tables (`session_card_*`), search index, and smart recap. `GetCards`/`UpsertCards` run all queries in parallel. `ToCards` and `ToResponse` handle `ComputeResult <-> Cards <-> AnalyticsResponse` conversions. |
+| `precompute.go` | `Precomputer` — background worker entry points. `FindStaleSessions`, `PrecomputeRegularCards`, `FindStaleSmartRecapSessions`, `PrecomputeSmartRecapOnly`, `FindStaleSearchIndexSessions`, `BuildSearchIndexOnly`. Stale-session filters cover all analytics-eligible providers via `models.AllowedProviders`; the three top-level compute methods dispatch through `ProviderFor(StaleSession.Provider)`. |
+| `provider.go` | `SessionProvider`, `ParseInput`, `RegisterProvider`, and `ProviderFor` — provider registry contract used by the precomputer. Providers register a canonical name plus aliases at init time; unknown providers return loud errors. |
+| `claude_provider.go` | `claudeProvider` — Claude-Code implementation of `SessionProvider`. Registers canonical `claude-code` plus legacy `Claude Code`, loads main transcripts and agent file metadata, streams agents through `ComputeStreaming`, `UserMessagesBuilder`, and `TranscriptBuilder`, and keeps smart recap message IDs. |
+| `codex_provider.go` | `codexProvider` — Codex implementation of `SessionProvider`. Registers `codex`, delegates loading to `LoadCodexRollout`, cards to `ComputeFromCodexRollout`, search text to `ExtractCodexUserMessagesText`, transcript XML to `PrepareCodexTranscript`, and requests message-ID clearing for smart recaps. |
+| `codex_adapter.go` | `ComputeFromCodexRollout` — orchestrator only. Initializes `ComputeResult` and dispatches each `analyzer_*_codex.go` function in order. Per-card mapping decisions for Codex are documented in the orchestrator docstring. |
+| `analyzer_tokens_codex.go` | `computeCodexTokens` — OpenAI-aware token math (cached tokens subset of input, no cache-write charge, reasoning tokens fold into output). |
+| `analyzer_session_codex.go` | `computeCodexSession` — message counts, breakdown, models used, duration, compactions (all classified as "auto"; Codex doesn't distinguish auto vs manual). |
+| `analyzer_tools_codex.go` | `computeCodexTools` — per-tool success/error breakdown; orphan `<unknown>` synthesized tools counted as-is. |
+| `analyzer_code_activity_codex.go` | `computeCodexCodeActivity` — apply_patch envelope parsing for `FilesModified` / `LinesAdded` / `LinesRemoved` / `LanguageBreakdown`. `FilesRead` stays 0 (Codex has no Read tool). |
+| `analyzer_conversation_codex.go` | `computeCodexConversation` — UserTurns / AssistantTurns plus the five timing fields (CF-441). Flattens all message events across turns and walks them in timestamp order, mirroring Claude's `analyzer_conversation_claude.go` semantics. Reasoning extends the assistant window via a synthetic event at `Turn.CompletedAt` (Codex-specific divergence documented inline). |
+| `analyzer_agents_and_skills_codex.go` | `computeCodexAgentsAndSkills` — intentional no-op. Documents the empty (agents, codex) and (skills, codex) quadrants. CF-443 will decide whether to skip upserting the empty record entirely. |
+| `analyzer_redactions_codex.go` | `computeCodexRedactions` — walks parser-surfaced strings for `[REDACTED:TYPE]` markers. Uses the same `redactionPattern` and TYPE-placeholder exclusion as the Claude path. Note (CF-445): relies on the Confab CLI redacting at upload time. |
 | `codex_rollout_loader.go` | `LoadCodexRollout` -- package-level helper that queries `sync_files` for the transcript filename, downloads via `storage.DownloadAndMergeChunks`, parses via `codex.ParseRollout`, and logs validation warnings. Shared by the Codex provider and the on-demand API handler (`HandleGetSessionAnalytics`, CF-364) so both paths produce the same rollout from the same bytes. |
 | `codex_search.go` | `ExtractCodexUserMessagesText` -- flattens Codex user messages, assistant `final` text, and tool-call summaries (name + truncated args) into the Weight C search-index content. Honors the 500 KB byte cap with UTF-8-safe boundary alignment. |
 | `codex_transcript.go` | `PrepareCodexTranscript` -- builds the XML transcript fed to the smart recap LLM (same `<transcript>`/`<user>`/`<assistant>`/`<tool>` envelope as the Claude path so the existing prompt accepts it). Codex synthesizes ids that the frontend doesn't anchor on; `codexProvider.ClearMessageIDs()` requests post-LLM zeroing. |

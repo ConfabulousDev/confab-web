@@ -8,16 +8,8 @@ import {
 } from '@/components/icons';
 import type { ConversationCardData } from '@/schemas/api';
 import type { CardProps } from './types';
+import { providerLabel } from '@/utils/providers';
 import styles from '../SessionSummaryPanel.module.css';
-
-const TOOLTIPS = {
-  userPrompts: 'Number of user prompts in the conversation',
-  avgClaudeTime: 'Average time Claude spent responding per prompt',
-  avgUserTime: 'Average time between Claude finishing and user responding',
-  totalClaudeTime: 'Total time Claude spent working across all prompts',
-  totalUserTime: 'Total time user spent between prompts',
-  claudeUtilization: 'Percentage of session time Claude was actively working',
-};
 
 /**
  * Format duration for conversation timing display.
@@ -26,7 +18,7 @@ const TOOLTIPS = {
  * - Shows "5m 30s" (includes seconds for timing precision)
  * - Shows "500ms" for sub-second durations (useful for response times)
  *
- * Used for Claude/user turn times where precision matters.
+ * Used for assistant/user turn times where precision matters.
  */
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -47,7 +39,29 @@ function formatDuration(ms: number): string {
   return `${ms}ms`;
 }
 
-export function ConversationCard({ data, loading, error }: CardProps<ConversationCardData>) {
+/**
+ * Props for ConversationCard. `provider` is required so tooltips render the
+ * correct agent name (e.g. "Average time Codex spent responding…"). Labels
+ * stay provider-neutral ("Assistant utilization") to keep stat rows compact.
+ */
+interface ConversationCardProps extends CardProps<ConversationCardData> {
+  provider: string;
+}
+
+/**
+ * Registry-friendly wrapper. The card registry's generic component type
+ * doesn't model `provider`; SessionSummaryPanel injects it at runtime via
+ * extraProps. This wrapper defaults provider to "claude-code" if it ever
+ * arrives unset — defensive against a runtime hole. Direct callers of
+ * ConversationCard still get the TS-enforced required prop.
+ */
+export function ConversationCardForRegistry(
+  props: Omit<ConversationCardProps, 'provider'> & { provider?: string }
+) {
+  return <ConversationCard {...props} provider={props.provider ?? 'claude-code'} />;
+}
+
+export function ConversationCard({ data, loading, error, provider }: ConversationCardProps) {
   if (error && !data) {
     return <CardError title="Conversation" error={error} icon={ConversationIcon} />;
   }
@@ -62,23 +76,33 @@ export function ConversationCard({ data, loading, error }: CardProps<Conversatio
 
   if (!data) return null;
 
+  const agent = providerLabel(provider);
+  const tooltips = {
+    userPrompts: 'Number of user prompts in the conversation',
+    avgAssistantTime: `Average time ${agent} spent responding per prompt`,
+    avgUserTime: `Average time between ${agent} finishing and user responding`,
+    totalAssistantTime: `Total time ${agent} spent working across all prompts`,
+    totalUserTime: 'Total time user spent between prompts',
+    assistantUtilization: `Percentage of session time ${agent} was actively working`,
+  };
+
   return (
     <CardWrapper title="Conversation" icon={ConversationIcon}>
       {data.assistant_utilization_pct != null && (
         <StatRow
-          label="Claude utilization"
+          label="Assistant utilization"
           value={`${data.assistant_utilization_pct.toFixed(0)}%`}
           icon={ZapIcon}
-          tooltip={TOOLTIPS.claudeUtilization}
+          tooltip={tooltips.assistantUtilization}
           valueClassName={styles.utilization}
         />
       )}
       {data.total_assistant_duration_ms != null && (
         <StatRow
-          label="Total Claude time"
+          label="Total assistant time"
           value={formatDuration(data.total_assistant_duration_ms)}
           icon={DurationIcon}
-          tooltip={TOOLTIPS.totalClaudeTime}
+          tooltip={tooltips.totalAssistantTime}
         />
       )}
       {data.total_user_duration_ms != null && (
@@ -86,21 +110,21 @@ export function ConversationCard({ data, loading, error }: CardProps<Conversatio
           label="Total user time"
           value={formatDuration(data.total_user_duration_ms)}
           icon={UserIcon}
-          tooltip={TOOLTIPS.totalUserTime}
+          tooltip={tooltips.totalUserTime}
         />
       )}
       <StatRow
         label="User prompts"
         value={data.user_turns}
         icon={RefreshIcon}
-        tooltip={TOOLTIPS.userPrompts}
+        tooltip={tooltips.userPrompts}
       />
       {data.avg_assistant_turn_ms != null && (
         <StatRow
-          label="Avg Claude time"
+          label="Avg assistant time"
           value={formatDuration(data.avg_assistant_turn_ms)}
           icon={DurationIcon}
-          tooltip={TOOLTIPS.avgClaudeTime}
+          tooltip={tooltips.avgAssistantTime}
         />
       )}
       {data.avg_user_thinking_ms != null && (
@@ -108,7 +132,7 @@ export function ConversationCard({ data, loading, error }: CardProps<Conversatio
           label="Avg user time"
           value={formatDuration(data.avg_user_thinking_ms)}
           icon={UserIcon}
-          tooltip={TOOLTIPS.avgUserTime}
+          tooltip={tooltips.avgUserTime}
         />
       )}
     </CardWrapper>

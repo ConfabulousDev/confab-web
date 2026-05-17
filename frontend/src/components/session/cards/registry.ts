@@ -2,7 +2,7 @@ import { TokensCard } from './TokensCard';
 import { SessionCard } from './SessionCard';
 import { CodeActivityCard } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
-import { ConversationCard } from './ConversationCard';
+import { ConversationCardForRegistry } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
 import { RedactionsCard } from './RedactionsCard';
 import { SmartRecapCard } from './SmartRecapCard';
@@ -24,6 +24,9 @@ import type {
  *
  * Note: Cost is now included in the Tokens card, and
  * Compaction stats are now included in the Session card.
+ *
+ * ConversationCardForRegistry wraps ConversationCard to default the required
+ * `provider` prop the registry shape can't model (CF-441).
  */
 export const cardRegistry: CardDefinition[] = [
   {
@@ -52,7 +55,7 @@ export const cardRegistry: CardDefinition[] = [
   {
     key: 'conversation',
     title: 'Conversation',
-    component: ConversationCard,
+    component: ConversationCardForRegistry,
     order: 3,
     size: 'compact',
   },

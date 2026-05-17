@@ -85,7 +85,7 @@ describe('SessionSummaryPanel', () => {
         refetch: vi.fn(),
       });
 
-      render(<SessionSummaryPanel sessionId="s1" isOwner={true} />);
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       expect(screen.getByText('Loading analytics...')).toBeInTheDocument();
     });
@@ -100,13 +100,13 @@ describe('SessionSummaryPanel', () => {
         refetch: vi.fn(),
       });
 
-      render(<SessionSummaryPanel sessionId="s1" isOwner={true} />);
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       expect(screen.getByText('Failed to load analytics')).toBeInTheDocument();
     });
 
     it('shows empty message when no analytics and not loading', () => {
-      render(<SessionSummaryPanel sessionId="s1" isOwner={true} />);
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       expect(screen.getByText('No analytics available')).toBeInTheDocument();
     });
@@ -119,6 +119,7 @@ describe('SessionSummaryPanel', () => {
         <SessionSummaryPanel
           sessionId="s1"
           isOwner={false}
+          provider="claude-code"
           initialAnalytics={baseAnalytics}
         />
       );
@@ -141,6 +142,7 @@ describe('SessionSummaryPanel', () => {
         <SessionSummaryPanel
           sessionId="s1"
           isOwner={true}
+          provider="claude-code"
           initialAnalytics={analyticsWithMissing}
         />
       );
@@ -172,6 +174,7 @@ describe('SessionSummaryPanel', () => {
         <SessionSummaryPanel
           sessionId="s1"
           isOwner={true}
+          provider="claude-code"
           initialAnalytics={analyticsWithQuota}
         />
       );
@@ -204,6 +207,7 @@ describe('SessionSummaryPanel', () => {
         <SessionSummaryPanel
           sessionId="s1"
           isOwner={false}
+          provider="claude-code"
           initialAnalytics={analyticsWithQuota}
         />
       );
@@ -244,7 +248,7 @@ describe('SessionSummaryPanel', () => {
         refetch: vi.fn(),
       });
 
-      render(<SessionSummaryPanel sessionId="s1" isOwner={true} />);
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       const refreshButton = screen.getByRole('button', { name: 'Regenerate recap' });
       await act(async () => {
@@ -288,7 +292,7 @@ describe('SessionSummaryPanel', () => {
         refetch: vi.fn(),
       });
 
-      render(<SessionSummaryPanel sessionId="s1" isOwner={true} />);
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       await act(async () => {
         screen.getByRole('button', { name: 'Regenerate recap' }).click();
@@ -331,7 +335,7 @@ describe('SessionSummaryPanel', () => {
         refetch: vi.fn(),
       });
 
-      render(<SessionSummaryPanel sessionId="s1" isOwner={true} />);
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       await act(async () => {
         screen.getByRole('button', { name: 'Regenerate recap' }).click();
@@ -372,7 +376,7 @@ describe('SessionSummaryPanel', () => {
         refetch: vi.fn(),
       });
 
-      render(<SessionSummaryPanel sessionId="s1" isOwner={true} />);
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       await act(async () => {
         screen.getByRole('button', { name: 'Regenerate recap' }).click();

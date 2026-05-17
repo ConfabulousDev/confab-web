@@ -4,6 +4,11 @@ import { ConversationCard } from './ConversationCard';
 const meta: Meta<typeof ConversationCard> = {
   title: 'Session/Cards/ConversationCard',
   component: ConversationCard,
+  args: {
+    // Default provider; CodexFull story overrides. Tooltips reflect the
+    // selected provider via providerLabel() (CF-441).
+    provider: 'claude-code',
+  },
   parameters: {
     layout: 'centered',
   },
@@ -158,5 +163,25 @@ export const Loading: Story = {
   args: {
     data: undefined,
     loading: true,
+  },
+};
+
+/**
+ * Codex session with the same fully-populated timing data as Default.
+ * Tooltips swap "Claude Code" → "Codex" via the provider prop (CF-441).
+ */
+export const CodexFull: Story = {
+  args: {
+    provider: 'codex',
+    data: {
+      user_turns: 15,
+      assistant_turns: 15,
+      avg_assistant_turn_ms: 45000,
+      avg_user_thinking_ms: 120000,
+      total_assistant_duration_ms: 675000,
+      total_user_duration_ms: 1800000,
+      assistant_utilization_pct: 27.3,
+    },
+    loading: false,
   },
 };

@@ -190,6 +190,7 @@ function SessionViewer({
             <SessionSummaryPanel
               sessionId={session.id}
               isOwner={isOwner}
+              provider={session.provider}
               initialAnalytics={initialAnalytics}
               initialGithubLinks={initialGithubLinks}
               onSuggestedTitleChange={handleSuggestedTitleChange}
