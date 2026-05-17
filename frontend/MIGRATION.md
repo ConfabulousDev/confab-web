@@ -1,5 +1,7 @@
 # Migration Guide: Svelte → React
 
+> **Historical document.** The Svelte → React migration is complete; the React app now lives at `frontend/` (the old `frontend-new/` directory). This guide is retained for context only. Many of the API endpoints, file paths, and test checkboxes listed below predate the current codebase and do not reflect current behavior. For up-to-date architecture see [`README.md`](README.md) and [`src/README.md`](src/README.md); for the live API surface see [`../backend/API.md`](../backend/API.md).
+
 This document provides a step-by-step guide for migrating from the Svelte 5 frontend (`/frontend`) to the React frontend (`/frontend-new`).
 
 ## Table of Contents

@@ -1,281 +1,57 @@
-# Confab Frontend (React)
+# Confab Frontend
 
-This is the React-based frontend for Confab, migrated from Svelte 5 to achieve better virtual scrolling performance and ecosystem compatibility.
+React + TypeScript single-page application for the Confab dashboard. For an architectural overview, see [`src/README.md`](src/README.md).
 
 ## Tech Stack
 
-- **React 18.3** - Modern React with hooks
-- **TypeScript 5.6** - Type safety
-- **Vite 7.2** - Fast build tool and dev server
-- **React Router v6** - Client-side routing
-- **TanStack Virtual** - High-performance virtual scrolling for large transcript lists
-- **TanStack Query** - Server state management
-- **Prism.js** - Syntax highlighting for code blocks
-- **CSS Modules** - Scoped component styling
+- **React 18** with hooks
+- **TypeScript** with strict mode
+- **Vite** — dev server and build
+- **React Router** — client-side routing with `lazy()` code splitting
+- **TanStack Virtual** — virtual scrolling for large transcripts
+- **TanStack Query** — server state management
+- **Zod** — runtime validation of API responses (single source of truth for response types via `z.infer<>`)
+- **CSS Modules** — scoped component styling, theme-aware variables in `src/styles/variables.css`
+- **Storybook** — component stories alongside components
+- **Vitest** — unit tests
 
-## Why React?
+## Project Layout
 
-The migration from Svelte 5 to React was motivated by:
+See [`src/README.md`](src/README.md) for the module-by-module index and data-flow diagram. Highlights:
 
-1. **Virtual Scrolling Performance**: TanStack Virtual provides battle-tested virtual scrolling for large transcript lists (1000+ messages)
-2. **Ecosystem Maturity**: Better tooling, libraries, and Claude Code compatibility
-3. **Svelte 5 Limitations**: Limited virtual scrolling libraries with compatibility issues
-
-## Project Structure
-
-```
-frontend-new/
-├── src/
-│   ├── components/          # Reusable components
-│   │   ├── RunCard.tsx
-│   │   └── transcript/      # Transcript viewer components
-│   │       ├── TranscriptViewer.tsx
-│   │       ├── MessageList.tsx      # Virtual scrolling implementation
-│   │       ├── Message.tsx
-│   │       ├── ContentBlock.tsx
-│   │       ├── CodeBlock.tsx
-│   │       ├── BashOutput.tsx
-│   │       └── AgentPanel.tsx       # Recursive agent tree
-│   ├── pages/               # Route pages
-│   │   ├── HomePage.tsx
-│   │   ├── SessionsPage.tsx
-│   │   ├── SessionDetailPage.tsx
-│   │   ├── SharedSessionPage.tsx
-│   │   └── APIKeysPage.tsx
-│   ├── services/            # API and business logic
-│   │   ├── api.ts
-│   │   ├── csrf.ts
-│   │   ├── transcriptService.ts
-│   │   └── agentTreeBuilder.ts
-│   ├── types/               # TypeScript type definitions
-│   │   ├── index.ts
-│   │   └── transcript.ts
-│   ├── utils/               # Utility functions
-│   │   └── index.ts
-│   ├── App.tsx              # Root component with providers
-│   ├── router.tsx           # Route configuration
-│   └── main.tsx             # Entry point
-├── public/                  # Static assets
-├── vite.config.ts          # Vite configuration
-├── tsconfig.json           # TypeScript configuration
-└── package.json            # Dependencies
-```
-
-## Key Features
-
-### Virtual Scrolling (Primary Goal)
-
-The `MessageList` component uses TanStack Virtual to efficiently render large transcript lists:
-
-```typescript
-const virtualizer = useVirtualizer({
-  count: virtualItems.length,
-  getScrollElement: () => parentRef.current,
-  estimateSize: () => 150,
-  overscan: 5,
-});
-```
-
-This enables smooth scrolling with thousands of messages without performance degradation.
-
-### Recursive Agent Trees
-
-The `AgentPanel` component recursively renders agent trees with:
-- Depth-based indentation (20px per level, max 100px)
-- Color-coded borders (6 colors cycling)
-- Auto-expansion of first 2 levels
-- Agent metadata (duration, tokens, tool use count)
-
-### Code Highlighting
-
-`CodeBlock` component uses Prism.js for syntax highlighting with:
-- 20+ language support
-- Line truncation with expand toggle
-- Copy to clipboard
-- Custom scrollbars
-
-### Bash Output Rendering
-
-`BashOutput` component provides terminal-style output:
-- Dark theme styling
-- ANSI escape sequence stripping
-- Command prompt display
-- Exit code display for errors
+- `src/pages/` — route components, lazy-imported in `router.tsx`.
+- `src/hooks/` — data fetching, polling, auth, UI state.
+- `src/services/` — API client wrapper (Zod-validated).
+- `src/schemas/` — Zod schemas for API responses.
+- `src/components/` — shared UI; session/cards live under `components/session/cards/`.
+- `src/providers/` — per-provider transcript adapters (Claude, Codex) behind a shared `ProviderAdapter` interface.
+- `src/utils/` — pure helpers (formatting, date ranges, pricing, providers).
 
 ## Development
 
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-
-### Setup
-
 ```bash
-cd frontend-new
 npm install
-npm run dev
+npm run dev          # Vite dev server at http://localhost:5173 (proxies /api → :8080)
+npm run build        # type-check + Vite production build
+npm run lint         # ESLint (must have 0 errors)
+npm test             # Vitest unit tests
+npm run storybook    # local Storybook
+npm run build-storybook
+npm run knip         # dead-code detection
 ```
 
-The dev server will start on http://localhost:5173 (or another port if 5173 is in use).
+Always run `npm run build && npm run lint && npm test` before declaring work done; see `../CLAUDE.md` for the project-wide testing rules and the Storybook expectation for new components.
 
-### Build
+## Theming
 
-```bash
-npm run build
-```
-
-Outputs to `dist/` directory with optimized bundles:
-- Minified JS/CSS
-- Code splitting
-- Tree shaking
-- Gzip compression
-
-### Preview Production Build
-
-```bash
-npm run preview
-```
-
-## Path Aliases
-
-The project uses TypeScript path aliases for clean imports:
-
-- `@/` → `src/`
-- `@/components` → `src/components`
-- `@/types` → `src/types`
-- `@/services` → `src/services`
-- `@/utils` → `src/utils`
-
-Example:
-```typescript
-import { SessionDetail } from '@/types';
-import { formatDate } from '@/utils';
-import RunCard from '@/components/RunCard';
-```
+The app supports light and dark themes via the `[data-theme]` attribute on `<html>`. Always use CSS custom properties from `src/styles/variables.css` (`--color-bg-primary`, `--color-text-secondary`, `--color-accent`, etc.) — never hardcode colors.
 
 ## API Integration
 
-The frontend proxies API requests to the backend:
+The dev server proxies `/api/*` to the Go backend at `http://localhost:8080` (configured in `vite.config.ts`). All API calls go through `src/services/api.ts`, which validates every response with Zod schemas from `src/schemas/`. Type definitions are inferred from those schemas via `z.infer<>`.
 
-```typescript
-// vite.config.ts
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
-  },
-}
-```
-
-All API calls to `/api/*` are automatically proxied to the Go backend at `localhost:8080`.
-
-## CSRF Protection
-
-The app uses CSRF tokens for authenticated requests:
-
-```typescript
-import { fetchWithCSRF } from '@/services/csrf';
-
-// Automatically includes CSRF token
-const response = await fetchWithCSRF('/api/v1/sessions', {
-  method: 'POST',
-  body: JSON.stringify(data),
-});
-```
-
-## Styling
-
-Components use CSS Modules for scoped styling:
-
-```typescript
-// Component.tsx
-import styles from './Component.module.css';
-
-function Component() {
-  return <div className={styles.container}>...</div>;
-}
-```
-
-```css
-/* Component.module.css */
-.container {
-  padding: 1rem;
-}
-```
-
-## Migration Notes
-
-### Svelte → React Pattern Conversions
-
-| Svelte | React |
-|--------|-------|
-| `$:` reactive declarations | `useMemo`, `useEffect` |
-| Svelte stores | `useState` |
-| `onMount` | `useEffect` |
-| `{#if}...{:else}` | Ternary operators, `&&` |
-| `on:click` | `onClick` |
-| `bind:value` | Controlled components |
-| `$lib` imports | `@/` path aliases |
-| Built-in scoped styles | CSS Modules |
-
-### Type Definitions
-
-All TypeScript types were ported verbatim from the Svelte version as they had no framework dependencies.
-
-### Service Layer
-
-Services (`api.ts`, `transcriptService.ts`, `agentTreeBuilder.ts`, `csrf.ts`) were ported with minimal changes - only import path updates from `$lib` to `@/`.
-
-## Performance Optimizations
-
-1. **Virtual Scrolling**: Only renders visible messages
-2. **Code Splitting**: Automatic route-based splitting
-3. **Lazy Loading**: Components loaded on demand
-4. **Memoization**: `useMemo` for expensive computations
-5. **CSS Modules**: Scoped styles, no global pollution
-
-## Browser Support
-
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-
-## Production Deployment
-
-The production build is optimized and ready for deployment:
-
-```bash
-npm run build
-# Outputs to dist/
-# Serve dist/ with any static file server
-```
-
-For the Confab backend integration, the `dist/` directory should be served by the Go backend's static file handler.
-
-## Future Enhancements
-
-Potential improvements:
-
-- [ ] Add React.lazy() for route-level code splitting
-- [ ] Implement service worker for offline support
-- [ ] Add E2E tests with Playwright
-- [ ] Optimize bundle size with tree-shaking analysis
-- [ ] Add dark mode support
-- [ ] Implement keyboard shortcuts for navigation
-
-## Contributing
-
-When adding new components:
-
-1. Use functional components with hooks
-2. Add TypeScript types for all props
-3. Use CSS Modules for styling
-4. Follow existing naming conventions (camelCase for files/components)
-5. Update this README if adding major features
+CSRF protection is server-side via Fetch metadata headers — there is no client-side token to manage.
 
 ## License
 
-Same as Confab backend - see repository root.
+MIT — see the repository root.

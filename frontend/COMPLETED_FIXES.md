@@ -1,4 +1,6 @@
-# High Priority Fixes - Completion Report
+# High Priority Fixes — Completion Report
+
+> **Historical document.** This is a snapshot of fixes completed during an earlier code-review pass. Treat it as a changelog entry, not as a description of current code — file paths, component names, and line counts may no longer match the codebase. For the current architecture see [`src/README.md`](src/README.md).
 
 ## Status: ✅ ALL COMPLETE
 

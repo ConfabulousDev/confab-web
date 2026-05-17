@@ -1,5 +1,7 @@
 # Frontend Refactoring Summary
 
+> **Historical document.** Snapshot of an earlier refactoring pass. Names, file paths, and module structure described here may differ from the current code — see [`src/README.md`](src/README.md) for the present-day architecture.
+
 ## High Priority Issues Fixed
 
 This document summarizes all the high-priority refactoring changes made to improve code quality, maintainability, and TypeScript safety.

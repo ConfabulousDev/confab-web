@@ -1,5 +1,7 @@
 # Zod Validation Implementation Summary
 
+> **Historical document.** This describes Zod's initial introduction to the frontend. The current schemas live in [`src/schemas/`](src/schemas/) and are the source of truth — refer to them, not this summary, for the present-day shape.
+
 ## Status: ✅ COMPLETE
 
 Comprehensive validation has been added to the frontend using Zod for runtime type safety and form validation.

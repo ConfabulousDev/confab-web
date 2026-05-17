@@ -26,6 +26,7 @@ Internal packages for the Confab backend server. All packages live under
 | `db/til` | TIL CRUD | Changing TIL storage or queries |
 | `db/user` | User CRUD, admin user listing | Changing user schema, adding user fields |
 | `email` | Email service interface + Resend implementation (share invitations) | Adding email types, changing email provider |
+| `httputil` | HTTP response helpers shared between `api` and `admin` (e.g., `RespondJSON`) | Adding new shared response/render helpers |
 | `logger` | Structured JSON logging (slog), request-scoped context logger | Changing log format, adding log fields |
 | `models` | Domain types shared across packages (`User`, `OAuthProvider`) and provider identity (`ProviderClaudeCode`, `ProviderCodex`, `LegacyAliases`, `AllowedProviders`, `NormalizeProvider`, `ExpandWithAliases` in `provider.go`) | Adding domain-wide types, adding/renaming a provider, or registering a permanent legacy alias |
 | `ratelimit` | Rate limiter interface + in-memory token bucket implementation | Changing rate limit strategies, adding distributed limiter |
