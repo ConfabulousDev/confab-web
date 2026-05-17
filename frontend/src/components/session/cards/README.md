@@ -9,7 +9,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `registry.ts` | Central card registry -- ordered list of all cards with render conditions |
 | `types.ts` | `CardProps<T>`, `CardDefinition` interfaces |
 | `Card.tsx` | Shared building blocks: `CardWrapper`, `StatRow`, `CardLoading`, `CardError`, `SectionHeader` |
-| `TokensCard.tsx` | Token usage breakdown (input, output, cache) with estimated cost |
+| `TokensCard.tsx` | Token usage breakdown (input, output, cache) with estimated cost. Provider-aware via `getAdapter(provider)`: cost / fast-mode tooltips come from `tokensCostTooltip` / `tokensFastTooltip` on the adapter. "Cache created" row hidden when value is 0 (CF-436). Direct callers pass required `provider`; the registry uses `TokensCardForRegistry` (mirrors `ConversationCardForRegistry`). |
 | `SessionCard.tsx` | Session metadata: message counts, duration, models, compaction stats |
 | `ConversationCard.tsx` | Turn-based metrics: user/assistant turns, avg response time, utilization |
 | `CodeActivityCard.tsx` | Code activity: files read/modified, lines added/removed, language breakdown |

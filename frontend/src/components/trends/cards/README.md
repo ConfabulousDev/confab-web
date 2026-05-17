@@ -8,7 +8,7 @@ Trend analytics cards for the Trends dashboard. Each card visualizes aggregated 
 |------|------|
 | `TrendsCard.tsx` | Base card wrapper (`TrendsCard`) and stat row (`StatRow`) shared by all trend cards |
 | `TrendsOverviewCard.tsx` | Session count, total/avg duration, assistant utilization |
-| `TrendsTokensCard.tsx` | Aggregated token usage and daily cost chart |
+| `TrendsTokensCard.tsx` | Aggregated token usage and daily cost chart. Cache row is tri-state (CF-436): `Cache (Create / Read)` when create > 0; `Cache Read` only when create is 0 and read > 0; hidden when both are 0 — accommodates Codex-only filtered windows where OpenAI doesn't bill cache writes. |
 | `TrendsActivityCard.tsx` | Code activity totals and daily session count chart |
 | `TrendsToolsCard.tsx` | Aggregated tool usage with per-tool success/error breakdown |
 | `TrendsUtilizationCard.tsx` | Daily assistant utilization percentage chart |

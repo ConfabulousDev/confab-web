@@ -27,7 +27,7 @@ interface SessionSummaryPanelProps {
   sessionId: string;
   isOwner: boolean;
   /** Session provider (e.g. "claude-code" | "codex"). Forwarded to cards that
-   *  render provider-aware copy (currently ConversationCard for tooltips). */
+   *  render provider-aware copy (ConversationCard, TokensCard). */
   provider: string;
   /** For Storybook: pass analytics directly instead of fetching from API */
   initialAnalytics?: SessionAnalytics;
@@ -186,7 +186,7 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
           extraProps.isRefreshing = isRegenerating;
         }
       }
-      if (cardDef.key === 'conversation') {
+      if (cardDef.key === 'conversation' || cardDef.key === 'tokens') {
         extraProps.provider = provider;
       }
 

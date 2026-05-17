@@ -37,6 +37,10 @@ interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
   // dollars (Claude) or just returns base arithmetic (Codex).
   calculateMessageCost(model, usage: TokenUsage, message: TItem): number;
   extendCostTooltip?(base: string[], usage: TokenUsage, message: TItem): string[];
+  // CF-436: static tooltip strings for the per-session Tokens summary card.
+  // Claude defines both; Codex defines only `tokensCostTooltip` (no fast tier).
+  readonly tokensCostTooltip: string;
+  readonly tokensFastTooltip?: string;
   FilterDropdown: FC<{ counts; filters }>;
   TranscriptPane: FC<TranscriptPaneProps>;
 }
@@ -76,6 +80,9 @@ segment starts with `use`.
    - Implement `calculateMessageCost(model, usage, message)` (typically just
      `calculateCost('<id>', model, usage)` plus any provider-specific
      adjustments) and an `extendCostTooltip` if the tooltip needs extra lines.
+   - Supply `tokensCostTooltip` (and `tokensFastTooltip` if the provider has a
+     fast/priority tier). These render as the title attribute on the
+     per-session Tokens summary card's "Estimated cost" / "Fast mode" rows.
 4. Register the adapter in `registry.ts`'s `REGISTRY` map (one entry, one widening cast).
 5. Run `registry.test.ts` to confirm the drift guard accepts the new id.
 6. Add a `DEFAULTS_BY_PROVIDER` entry in `frontend/src/test-fixtures/session.ts`

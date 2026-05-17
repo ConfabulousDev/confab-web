@@ -260,3 +260,17 @@ describe('codexAdapter.extendCostTooltip', () => {
     expect(out.every((l) => !/Web searches:/.test(l))).toBe(true);
   });
 });
+
+// CF-436: Codex defines tokensCostTooltip with OpenAI-flavored copy, and
+// does NOT define tokensFastTooltip (no fast/priority tier on OpenAI).
+describe('codexAdapter Tokens-card tooltips (CF-436)', () => {
+  it('defines tokensCostTooltip referencing OpenAI model pricing', () => {
+    expect(codexAdapter.tokensCostTooltip).toBe(
+      'Estimated API cost based on token usage and OpenAI model pricing.',
+    );
+  });
+
+  it('does not define tokensFastTooltip (no fast tier on OpenAI)', () => {
+    expect(codexAdapter.tokensFastTooltip).toBeUndefined();
+  });
+});

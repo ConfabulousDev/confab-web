@@ -77,6 +77,10 @@ export const claudeAdapter: ClaudeAdapter = {
   countCategories: countHierarchicalCategories,
   itemMatchesFilter: messageMatchesFilter,
 
+  tokensCostTooltip:
+    'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
+  tokensFastTooltip: 'Cost from turns using Anthropic priority tier (~6x base rate)',
+
   calculateMessageCost(model, usage, message) {
     let cost = calculateCost('claude-code', model, usage);
     // Fast mode (Claude-only) and server-tool dollars live on the wire

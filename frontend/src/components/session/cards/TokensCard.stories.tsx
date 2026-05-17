@@ -29,6 +29,7 @@ export const Default: Story = {
       estimated_usd: '1.85',
     },
     loading: false,
+    provider: 'claude-code',
   },
 };
 
@@ -44,6 +45,7 @@ export const WithFastMode: Story = {
       fast_cost_usd: '9.60',
     },
     loading: false,
+    provider: 'claude-code',
   },
 };
 
@@ -59,6 +61,7 @@ export const AllFastMode: Story = {
       fast_cost_usd: '11.10',
     },
     loading: false,
+    provider: 'claude-code',
   },
 };
 
@@ -72,6 +75,7 @@ export const LowUsage: Story = {
       estimated_usd: '0.02',
     },
     loading: false,
+    provider: 'claude-code',
   },
 };
 
@@ -85,9 +89,12 @@ export const HighUsage: Story = {
       estimated_usd: '45.50',
     },
     loading: false,
+    provider: 'claude-code',
   },
 };
 
+// CF-436: Claude session with no prompt caching. The "Cache created" row
+// is hidden (value-based gate); "Cache read" still shows 0.
 export const NoCaching: Story = {
   args: {
     data: {
@@ -98,6 +105,7 @@ export const NoCaching: Story = {
       estimated_usd: '0.75',
     },
     loading: false,
+    provider: 'claude-code',
   },
 };
 
@@ -111,6 +119,24 @@ export const ZeroCost: Story = {
       estimated_usd: '0.00',
     },
     loading: false,
+    provider: 'claude-code',
+  },
+};
+
+// CF-436: Codex sessions always have cache_creation === 0 (OpenAI doesn't
+// bill cache writes) and never expose fast_turns. The card renders 4 rows:
+// Estimated cost, Input, Output, Cache read.
+export const Codex: Story = {
+  args: {
+    data: {
+      input: 80_000,
+      output: 5_000,
+      cache_creation: 0,
+      cache_read: 12_000,
+      estimated_usd: '0.42',
+    },
+    loading: false,
+    provider: 'codex',
   },
 };
 
@@ -118,5 +144,6 @@ export const Loading: Story = {
   args: {
     data: undefined,
     loading: true,
+    provider: 'claude-code',
   },
 };

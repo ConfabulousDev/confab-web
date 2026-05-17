@@ -134,6 +134,46 @@ export const WithoutCaveat: Story = {
   },
 };
 
+// CF-436: Codex-only filtered window has no cache writes. The cache row
+// collapses to a single "Cache Read" line.
+export const CodexOnlyNoCacheWrites: Story = {
+  args: {
+    data: {
+      total_input_tokens: 800_000,
+      total_output_tokens: 150_000,
+      total_cache_creation_tokens: 0,
+      total_cache_read_tokens: 120_000,
+      total_cost_usd: '4.25',
+      daily_costs: [
+        { date: '2024-01-08', cost_usd: '1.10' },
+        { date: '2024-01-09', cost_usd: '1.50' },
+        { date: '2024-01-10', cost_usd: '0.85' },
+        { date: '2024-01-11', cost_usd: '0.80' },
+      ],
+    },
+    providersPresent: ['codex'],
+  },
+};
+
+// CF-436: window where no caching happened at all. The entire cache row is
+// hidden.
+export const NoCachingAtAll: Story = {
+  args: {
+    data: {
+      total_input_tokens: 200_000,
+      total_output_tokens: 80_000,
+      total_cache_creation_tokens: 0,
+      total_cache_read_tokens: 0,
+      total_cost_usd: '3.10',
+      daily_costs: [
+        { date: '2024-01-08', cost_usd: '1.00' },
+        { date: '2024-01-09', cost_usd: '2.10' },
+      ],
+    },
+    providersPresent: ['claude-code'],
+  },
+};
+
 // CF-424: multi-provider data → renders the muted caveat line beneath the
 // headline numbers. Tokens across Claude and Codex aren't directly comparable.
 export const WithCaveat: Story = {

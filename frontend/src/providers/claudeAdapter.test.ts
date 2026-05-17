@@ -318,3 +318,19 @@ describe('claudeAdapter.extendCostTooltip', () => {
     expect(out.every((l) => !l.includes('Reasoning'))).toBe(true);
   });
 });
+
+// CF-436: Per-provider tooltip strings for the Tokens summary card live on
+// the adapter as static fields. Claude defines both cost + fast tooltips.
+describe('claudeAdapter Tokens-card tooltips (CF-436)', () => {
+  it('defines tokensCostTooltip mentioning 5-minute prompt caching', () => {
+    expect(claudeAdapter.tokensCostTooltip).toBe(
+      'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
+    );
+  });
+
+  it('defines tokensFastTooltip naming Anthropic priority tier', () => {
+    expect(claudeAdapter.tokensFastTooltip).toBe(
+      'Cost from turns using Anthropic priority tier (~6x base rate)',
+    );
+  });
+});

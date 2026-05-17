@@ -92,10 +92,22 @@ export function TrendsTokensCard({ data, providersPresent = [] }: TrendsTokensCa
         label="Input / Output"
         value={`${formatTokenCount(data.total_input_tokens)} / ${formatTokenCount(data.total_output_tokens)}`}
       />
-      <StatRow
-        label="Cache (Create / Read)"
-        value={`${formatTokenCount(data.total_cache_creation_tokens)} / ${formatTokenCount(data.total_cache_read_tokens)}`}
-      />
+      {/* CF-436: Tri-state cache row. OpenAI doesn't bill cache writes, so a
+          Codex-only filtered window has total_cache_creation_tokens === 0.
+          Collapse to "Cache Read" when creation is 0 and read > 0; hide
+          entirely when both are 0. */}
+      {data.total_cache_creation_tokens > 0 && (
+        <StatRow
+          label="Cache (Create / Read)"
+          value={`${formatTokenCount(data.total_cache_creation_tokens)} / ${formatTokenCount(data.total_cache_read_tokens)}`}
+        />
+      )}
+      {data.total_cache_creation_tokens === 0 && data.total_cache_read_tokens > 0 && (
+        <StatRow
+          label="Cache Read"
+          value={formatTokenCount(data.total_cache_read_tokens)}
+        />
+      )}
 
       {showMultiProviderCaveat && (
         <p className={styles.providerCaveat}>
