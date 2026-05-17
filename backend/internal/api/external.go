@@ -342,8 +342,34 @@ func (s *Server) serveSessionFileDownload(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	// Force download (don't render inline). Combined with the global
+	// X-Content-Type-Options: nosniff header, this prevents a user-uploaded
+	// transcript whose content looks like HTML/JS from being rendered by a
+	// browser when fetched directly.
+	w.Header().Set("Content-Disposition", `attachment; filename="`+sanitizeContentDispositionFilename(fileName)+`"`)
 	w.WriteHeader(http.StatusOK)
 	w.Write(content)
+}
+
+// sanitizeContentDispositionFilename strips characters that could break the
+// Content-Disposition header syntax. Keeps ASCII letters, digits, dot, dash,
+// and underscore; everything else becomes '_'. Falls back to "download.txt"
+// if the result is empty.
+func sanitizeContentDispositionFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r == '.', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "download.txt"
+	}
+	return b.String()
 }
 
 // truncateTranscriptFromStart truncates a transcript XML string from the beginning,

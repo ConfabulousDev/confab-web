@@ -810,14 +810,19 @@ GITHUB_CLIENT_SECRET=your_github_client_secret
 
 # Security
 CSRF_SECRET_KEY=$(openssl rand -base64 32)
-SESSION_SECRET=$(openssl rand -base64 32)
+# Note: web sessions use a cryptographically random 32-byte session ID per
+# session; there is no app-wide SESSION_SECRET to configure.
 
 # CORS/Frontend
+# Must be an explicit list — wildcard '*' is rejected at startup because
+# cookie-based auth requires AllowCredentials=true.
 ALLOWED_ORIGINS=https://confab.yourdomain.com
 FRONTEND_URL=https://confab.yourdomain.com
 
 # Production flags
-INSECURE_DEV_MODE=  # Must be unset or false in production
+# Leave unset in production. If set to "true", session/CSRF cookies will not
+# require HTTPS, HSTS is disabled, and the server logs a WARN at startup.
+INSECURE_DEV_MODE=
 ```
 
 ### Optional Environment Variables
@@ -834,14 +839,22 @@ S3_BUCKET_NAME=confab-sessions
 
 # Static file serving (if bundling frontend)
 STATIC_FILES_DIR=/app/frontend/build
+
+# Debug profiling (localhost:6060 only — never exposed publicly)
+ENABLE_PPROF=  # Set to "true" only when actively profiling
 ```
+
+> **MinIO defaults:** local Docker Compose examples use `minioadmin/minioadmin`.
+> These are the upstream MinIO demo credentials — **change them before any
+> production deployment** and re-run with `MINIO_ROOT_USER` /
+> `MINIO_ROOT_PASSWORD` (and matching `AWS_ACCESS_KEY_ID` /
+> `AWS_SECRET_ACCESS_KEY`) set to strong random values.
 
 ### Pre-Deployment Checklist
 
 - [ ] `INSECURE_DEV_MODE` is unset or `false`
 - [ ] `CSRF_SECRET_KEY` is set (32+ random bytes)
-- [ ] `SESSION_SECRET` is set (32+ random bytes)
-- [ ] `ALLOWED_ORIGINS` contains only trusted domains
+- [ ] `ALLOWED_ORIGINS` contains only trusted domains (no wildcard `*`)
 - [ ] `FRONTEND_URL` points to production frontend
 - [ ] `DATABASE_URL` uses SSL (`sslmode=require`)
 - [ ] GitHub OAuth callback URL is registered

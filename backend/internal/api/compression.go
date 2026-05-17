@@ -8,6 +8,13 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+// maxDecompressedBody bounds the size of any decompressed request body produced
+// by decompressMiddleware. Per-route withMaxBody wrappers (MaxBodyXL = 16MB for
+// sync chunks) also enforce a limit, but binding decompressed output here
+// prevents a zstd bomb (small compressed payload, huge decompressed output)
+// from being read into memory if a future route forgets the per-route wrapper.
+const maxDecompressedBody = MaxBodyXL
+
 // decompressMiddleware handles decompression of request bodies based on Content-Encoding header
 // Supports: zstd
 // Falls back to uncompressed if no Content-Encoding header (backward compatible)
@@ -31,8 +38,8 @@ func decompressMiddleware() func(http.Handler) http.Handler {
 				}
 				defer decoder.Close()
 
-				// Replace request body with decompressed reader
-				r.Body = io.NopCloser(decoder)
+				// Bound decompressed output (defense against zstd bombs).
+				r.Body = http.MaxBytesReader(w, io.NopCloser(decoder), maxDecompressedBody)
 
 				// Remove Content-Encoding header so downstream handlers see uncompressed data
 				r.Header.Del("Content-Encoding")

@@ -54,6 +54,10 @@ func main() {
 	// Load configuration from environment
 	config := loadConfig()
 
+	if os.Getenv("INSECURE_DEV_MODE") == "true" {
+		logger.Warn("INSECURE_DEV_MODE=true: session/CSRF cookies will not require HTTPS and HSTS is disabled — do NOT use in production")
+	}
+
 	// Initialize database connection with retry (handles DB not yet ready in containers)
 	// Note: Migrations are run separately via CLI before starting the server
 	// See: migrate -database "$DATABASE_URL" -path internal/db/migrations up
@@ -283,8 +287,18 @@ func loadConfig() Config {
 	if os.Getenv("FRONTEND_URL") == "" {
 		logFatal("missing required env var", "var", "FRONTEND_URL")
 	}
-	if os.Getenv("ALLOWED_ORIGINS") == "" {
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
 		logFatal("missing required env var", "var", "ALLOWED_ORIGINS", "hint", "comma-separated list of allowed origins")
+	}
+	// CORS spec forbids wildcard origin with AllowCredentials=true (which we use
+	// for cookie-based sessions). Browsers should refuse this combination, but
+	// some lenient clients honor it — fail loudly at startup so an operator
+	// can't silently expose authenticated endpoints to every origin.
+	for _, o := range strings.Split(allowedOrigins, ",") {
+		if strings.TrimSpace(o) == "*" {
+			logFatal("invalid env var", "var", "ALLOWED_ORIGINS", "error", "wildcard '*' is not allowed: AllowCredentials=true requires an explicit origin list")
+		}
 	}
 
 	// Email configuration (optional)

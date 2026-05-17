@@ -12,6 +12,30 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
+// TestSanitizeContentDispositionFilename pins the CF-425 behavior that the
+// download endpoint emits a safe filename in the Content-Disposition header —
+// stripping characters that could break header syntax (CR/LF/quotes) or be
+// misinterpreted as a path by client tools (/, \, ..).
+func TestSanitizeContentDispositionFilename(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"transcript.jsonl", "transcript.jsonl"},
+		{"file with spaces.jsonl", "file_with_spaces.jsonl"},
+		{"../../etc/passwd", ".._.._etc_passwd"},
+		{"name\r\nInjected: yes", "name__Injected__yes"},
+		{`evil";X-Injected: 1`, "evil__X-Injected__1"},
+		{"", "download.txt"},
+		{"中文.txt", "__.txt"},
+	}
+	for _, tc := range cases {
+		got := sanitizeContentDispositionFilename(tc.in)
+		if got != tc.want {
+			t.Errorf("sanitize(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 // =============================================================================
 // Condensed Transcript API — HTTP Integration Tests
 //

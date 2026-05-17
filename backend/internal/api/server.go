@@ -115,22 +115,27 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 	}
 }
 
-// parseAllowedOrigins parses ALLOWED_ORIGINS env var into CORS and CSRF formats
-// Returns (corsOrigins, csrfTrustedOrigins)
-// CORS needs full URLs like "https://example.com"
-// CSRF needs just host:port like "example.com:443"
+// parseAllowedOrigins parses ALLOWED_ORIGINS env var into CORS and CSRF formats.
+// Returns (corsOrigins, csrfTrustedOrigins).
+// CORS needs full URLs like "https://example.com"; CSRF needs host:port like
+// "example.com:443". A "*" entry is rejected because CORS spec forbids
+// wildcard with AllowCredentials=true (which this server uses for cookie auth).
+// Startup validation in main.go rejects "*" before reaching here; this is
+// defense-in-depth.
 func parseAllowedOrigins() ([]string, []string) {
 	var allowedOrigins []string
 	var trustedOrigins []string
 
 	originsEnv := os.Getenv("ALLOWED_ORIGINS")
 	for _, origin := range strings.Split(originsEnv, ",") {
-		if trimmed := strings.TrimSpace(origin); trimmed != "" {
-			allowedOrigins = append(allowedOrigins, trimmed)
-			// Extract host for CSRF TrustedOrigins (expects "host:port" not "http://host:port")
-			host := strings.TrimPrefix(strings.TrimPrefix(trimmed, "https://"), "http://")
-			trustedOrigins = append(trustedOrigins, host)
+		trimmed := strings.TrimSpace(origin)
+		if trimmed == "" || trimmed == "*" {
+			continue
 		}
+		allowedOrigins = append(allowedOrigins, trimmed)
+		// Extract host for CSRF TrustedOrigins (expects "host:port" not "http://host:port")
+		host := strings.TrimPrefix(strings.TrimPrefix(trimmed, "https://"), "http://")
+		trustedOrigins = append(trustedOrigins, host)
 	}
 
 	return allowedOrigins, trustedOrigins

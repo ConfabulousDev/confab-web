@@ -461,3 +461,44 @@ func TestZstdRequestDecompression(t *testing.T) {
 		}
 	})
 }
+
+// TestZstdBombBounded pins the CF-425 guard that decompressMiddleware caps the
+// decompressed body at maxDecompressedBody. A "zstd bomb" — a small compressed
+// payload whose decompressed form is far larger — must not let a handler
+// consume unbounded memory.
+func TestZstdBombBounded(t *testing.T) {
+	// Build a payload larger than maxDecompressedBody. Zero bytes compress to
+	// a tiny zstd frame, so this gives us a high compression ratio.
+	const oversizedLen = maxDecompressedBody + 1024
+	oversized := make([]byte, oversizedLen)
+	encoder, err := zstd.NewWriter(nil)
+	if err != nil {
+		t.Fatalf("create zstd encoder: %v", err)
+	}
+	compressed := encoder.EncodeAll(oversized, nil)
+	_ = encoder.Close()
+	if len(compressed) >= maxDecompressedBody {
+		t.Skipf("zstd produced %d compressed bytes from %d-byte zero payload; bomb test only meaningful with high compression", len(compressed), oversizedLen)
+	}
+	t.Logf("zstd bomb: %d compressed → %d decompressed (ratio %.0fx)", len(compressed), oversizedLen, float64(oversizedLen)/float64(len(compressed)))
+
+	var readErr error
+	captured := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, readErr = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := decompressMiddleware()(captured)
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewReader(compressed))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "zstd")
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	// MaxBytesReader returns an error when the limit is exceeded; the handler's
+	// ReadAll should surface it rather than silently consuming the full payload.
+	if readErr == nil {
+		t.Fatal("expected ReadAll to fail when decompressed body exceeds maxDecompressedBody, got nil")
+	}
+}
