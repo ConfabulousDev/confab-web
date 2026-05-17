@@ -50,7 +50,7 @@ func minimalRollout() *codex.ParsedRollout {
 
 func TestComputeFromCodexRollout_HappyPath(t *testing.T) {
 	r := minimalRollout()
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -101,7 +101,7 @@ func TestComputeFromCodexRollout_HappyPath(t *testing.T) {
 }
 
 func TestComputeFromCodexRollout_EmptyRollout(t *testing.T) {
-	out := ComputeFromCodexRollout(&codex.ParsedRollout{})
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{{}})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -117,9 +117,9 @@ func TestComputeFromCodexRollout_EmptyRollout(t *testing.T) {
 func TestComputeFromCodexRollout_OnlyEnvContext(t *testing.T) {
 	// Parser drops env-context-only messages, so this represents a rollout
 	// that, after parser stripping, has no user messages remaining.
-	out := ComputeFromCodexRollout(&codex.ParsedRollout{
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{{
 		Turns: []codex.Turn{{TurnID: "t1"}},
-	})
+	}})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -150,7 +150,7 @@ func TestComputeFromCodexRollout_ApplyPatch(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -181,7 +181,7 @@ func TestComputeFromCodexRollout_Compaction(t *testing.T) {
 			{ReplacementCount: 3},
 		},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -205,7 +205,7 @@ func TestComputeFromCodexRollout_TokenCost_GPT5(t *testing.T) {
 			TotalTokens:           12500,
 		},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -245,7 +245,7 @@ func TestComputeFromCodexRollout_UnknownModel(t *testing.T) {
 			TotalTokens:  1500,
 		},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -271,7 +271,7 @@ func TestComputeFromCodexRollout_AssistantTurns_MidStreamUserPrompts(t *testing.
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -295,7 +295,7 @@ func TestComputeFromCodexRollout_Redactions_Recursive(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -323,7 +323,7 @@ func TestComputeFromCodexRollout_OrphanToolCallSkipped(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -352,7 +352,7 @@ func TestComputeFromCodexRollout_FailedTool(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}

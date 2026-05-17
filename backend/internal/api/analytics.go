@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"database/sql"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,7 +13,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
-	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/go-chi/chi/v5"
@@ -98,166 +96,66 @@ func (c SmartRecapConfig) generatorConfig() analytics.SmartRecapGeneratorConfig 
 	}
 }
 
-// isCodexSession returns true when the (possibly legacy) provider string
-// normalizes to the Codex canonical value. Centralizes the normalize-and-compare
-// pattern used at every Codex dispatch point in this file.
-func isCodexSession(provider string) bool {
-	return models.NormalizeProvider(provider) == models.ProviderCodex
-}
-
-// classifiedFiles holds the transcript and agent files from a session,
-// along with the total line count used for cache validation.
-type classifiedFiles struct {
-	transcript *db.SyncFileDetail
-	agents     []db.SyncFileDetail
-	lineCount  int64
-}
-
-// classifySessionFiles separates session files into transcript and agent files
-// and computes the total line count. Returns nil if no transcript file exists.
-func classifySessionFiles(files []db.SyncFileDetail) *classifiedFiles {
-	var result classifiedFiles
-	for i := range files {
-		switch files[i].FileType {
-		case "transcript":
-			result.transcript = &files[i]
-		case "agent":
-			result.agents = append(result.agents, files[i])
+// totalTranscriptAndAgentLines sums LastSyncedLine across transcript + agent
+// files in a session. Used as the cache-validation line count: when a session
+// grows (new lines synced), cached cards become stale at the same count.
+func totalTranscriptAndAgentLines(files []db.SyncFileDetail) int64 {
+	var total int64
+	for _, f := range files {
+		if f.FileType == "transcript" || f.FileType == "agent" {
+			total += int64(f.LastSyncedLine)
 		}
 	}
-	if result.transcript == nil {
-		return nil
-	}
-	result.lineCount = int64(result.transcript.LastSyncedLine)
-	for _, af := range result.agents {
-		result.lineCount += int64(af.LastSyncedLine)
-	}
-	return &result
+	return total
 }
 
-// downloadMainFromFiles downloads and parses the main transcript from storage.
-// Returns nil TranscriptFile if download fails or content is empty.
-func downloadMainFromFiles(
-	ctx context.Context,
-	store *storage.S3Storage,
-	files *classifiedFiles,
-	sessionUserID int64,
-	sessionProvider string,
-	externalID string,
-) (*analytics.TranscriptFile, error) {
-	storageCtx, storageCancel := context.WithTimeout(ctx, StorageTimeout)
-	defer storageCancel()
+// providerParseInput builds the analytics.ParseInput passed to provider
+// methods. Centralized so all dispatch sites populate it identically.
+func providerParseInput(database *db.DB, store *storage.S3Storage, sessionID string, sessionUserID int64, sessionProvider, externalID string) analytics.ParseInput {
+	return analytics.ParseInput{
+		DB:         database.Conn(),
+		Store:      store,
+		SessionID:  sessionID,
+		UserID:     sessionUserID,
+		Provider:   sessionProvider,
+		ExternalID: externalID,
+	}
+}
 
-	mainContent, err := store.DownloadAndMergeChunks(storageCtx, sessionUserID, sessionProvider, externalID, files.transcript.FileName)
+// providerTranscriptForRecap walks the provider through Parse →
+// PrepareTranscript and returns the XML + idMap for the smart-recap LLM.
+// Returns ("", nil) on any error or empty session.
+func providerTranscriptForRecap(ctx context.Context, database *db.DB, store *storage.S3Storage, sessionID string, sessionUserID int64, sessionProvider, externalID string, log *slog.Logger) (string, map[int]string) {
+	sp, err := analytics.ProviderFor(sessionProvider)
 	if err != nil {
-		return nil, err
-	}
-	if mainContent == nil {
-		return nil, nil
-	}
-
-	fc, err := analytics.NewFileCollection(mainContent)
-	if err != nil {
-		return nil, err
-	}
-	return fc.Main, nil
-}
-
-// agentInfosFromFiles extracts AgentFileInfo descriptors from classified agent files.
-func agentInfosFromFiles(files *classifiedFiles) []analytics.AgentFileInfo {
-	infos := make([]analytics.AgentFileInfo, 0, len(files.agents))
-	for _, af := range files.agents {
-		agentID := analytics.ExtractAgentID(af.FileName)
-		if agentID != "" {
-			infos = append(infos, analytics.AgentFileInfo{FileName: af.FileName, AgentID: agentID})
-		}
-	}
-	return infos
-}
-
-// newAPIAgentDownloader creates an AgentDownloader for the API handler.
-func newAPIAgentDownloader(store *storage.S3Storage, sessionUserID int64, sessionProvider string, externalID string) analytics.AgentDownloader {
-	return func(ctx context.Context, fileName string) ([]byte, error) {
-		return store.DownloadAndMergeChunks(ctx, sessionUserID, sessionProvider, externalID, fileName)
-	}
-}
-
-// downloadAndBuildTranscript downloads transcript files and builds the XML transcript
-// for smart recap generation via streaming. Agent files are streamed one at a time.
-func downloadAndBuildTranscript(
-	ctx context.Context,
-	database *db.DB,
-	store *storage.S3Storage,
-	sessionID string,
-	sessionUserID int64,
-	sessionProvider string,
-	externalID string,
-	log *slog.Logger,
-) (string, map[int]string) {
-	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
-	defer cancel()
-
-	sessionStore := &dbsession.Store{DB: database}
-	session, err := sessionStore.GetSessionDetail(dbCtx, sessionID, sessionUserID)
-	if err != nil {
-		log.Error("Failed to get session for smart recap", "error", err, "session_id", sessionID)
+		log.Error("provider lookup failed for smart recap transcript", "error", err, "session_id", sessionID)
 		return "", nil
 	}
-
-	files := classifySessionFiles(session.Files)
-	if files == nil {
-		return "", nil
-	}
-
-	mainTF, err := downloadMainFromFiles(ctx, store, files, sessionUserID, sessionProvider, externalID)
-	if err != nil || mainTF == nil {
-		log.Error("Failed to download transcript", "error", err)
-		return "", nil
-	}
-
-	tb := analytics.NewTranscriptBuilder(analytics.DefaultFormatConfig())
-	tb.ProcessFile(mainTF)
-
-	download := newAPIAgentDownloader(store, sessionUserID, sessionProvider, externalID)
-	agentProvider := analytics.NewAgentProvider(agentInfosFromFiles(files), download, storage.MaxAgentFiles)
-	for {
-		agent, err := agentProvider(ctx)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			continue
-		}
-		tb.ProcessFile(agent)
-	}
-
-	return tb.Finish()
-}
-
-// downloadCodexTranscriptForRecap is the Codex counterpart to
-// downloadAndBuildTranscript. It loads the rollout via analytics.LoadCodexRollout
-// and runs analytics.PrepareCodexTranscript to produce the XML transcript and
-// idMap consumed by the smart-recap LLM prompt. Returns ("", nil) on any
-// error so the caller can short-circuit; errors are logged here.
-func downloadCodexTranscriptForRecap(
-	ctx context.Context,
-	database *db.DB,
-	store *storage.S3Storage,
-	sessionID string,
-	sessionUserID int64,
-	sessionProvider string,
-	externalID string,
-	log *slog.Logger,
-) (string, map[int]string) {
-	rollout, err := analytics.LoadCodexRollout(ctx, database.Conn(), store, sessionID, sessionUserID, sessionProvider, externalID)
+	rollout, err := sp.Parse(ctx, providerParseInput(database, store, sessionID, sessionUserID, sessionProvider, externalID))
 	if err != nil {
-		log.Error("Failed to load codex rollout for smart recap", "error", err, "session_id", sessionID)
+		log.Error("Failed to parse session for smart recap", "error", err, "session_id", sessionID)
 		return "", nil
 	}
 	if rollout == nil {
 		return "", nil
 	}
-	return analytics.PrepareCodexTranscript(rollout)
+	transcript, idMap, err := sp.PrepareTranscript(ctx, rollout)
+	if err != nil {
+		log.Error("Failed to prepare transcript for smart recap", "error", err, "session_id", sessionID)
+		return "", nil
+	}
+	return transcript, idMap
+}
+
+// providerClearMessageIDs reports whether the smart recap card should clear
+// per-item MessageIDs. Unregistered providers default to false (preserves
+// historical Claude behavior).
+func providerClearMessageIDs(provider string) bool {
+	sp, err := analytics.ProviderFor(provider)
+	if err != nil {
+		return false
+	}
+	return sp.ClearMessageIDs()
 }
 
 // HandleGetSessionAnalytics returns computed analytics for a session.
@@ -267,7 +165,9 @@ func downloadCodexTranscriptForRecap(
 // - System share: any authenticated user
 // - Recipient share: authenticated user who is a share recipient
 //
-// Analytics are cached in the database and recomputed when stale.
+// Analytics are cached in the database and recomputed when stale. CF-403
+// unified the dispatch: all provider-specific behavior is reached through
+// analytics.ProviderFor + the SessionProvider interface.
 func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	analyticsStore := analytics.NewStore(database.Conn())
 	sessionStore := &dbsession.Store{DB: database}
@@ -293,13 +193,12 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		session := result.Session
 
-		// Classify session files and compute total line count
-		files := classifySessionFiles(session.Files)
-		if files == nil {
+		// Empty session (no transcript file yet) → empty response.
+		totalLineCount := totalTranscriptAndAgentLines(session.Files)
+		if totalLineCount == 0 {
 			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 			return
 		}
-		totalLineCount := files.lineCount
 
 		// Parse optional as_of_line query parameter for conditional requests
 		// If client already has analytics up to the current line count, return 304
@@ -313,7 +212,6 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				respondError(w, http.StatusBadRequest, "as_of_line must be non-negative")
 				return
 			}
-			// Client already has analytics up to or past current line count - no new data
 			if asOfLine >= totalLineCount {
 				w.WriteHeader(http.StatusNotModified)
 				return
@@ -333,7 +231,6 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 			// Handle smart recap (if enabled) even for cached responses
 			if smartRecapConfig.Enabled {
-				// Get session owner ID and provider for quota + storage lookup
 				sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 				if err == nil {
 					attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
@@ -351,22 +248,17 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 						response:        response,
 						log:             log,
 						isOwner:         result.AccessInfo.AccessType == db.SessionAccessOwner,
-						// CF-364: Codex recap items have no stable message UUID,
-						// so the SmartRecapCard renders them as plain text.
-						clearMessageIDs: isCodexSession(sessionProvider),
+						clearMessageIDs: providerClearMessageIDs(sessionProvider),
 					})
 				}
 			}
 
-			// Include suggested session title if available
 			attachSuggestedTitle(database, sessionID, response)
-
 			respondJSON(w, http.StatusOK, response)
 			return
 		}
 
-		// Cache miss or stale - need to recompute
-		// Get the session's user_id, external_id, and provider for the S3 path
+		// Cache miss or stale — recompute via the provider registry.
 		sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get session info", "error", err, "session_id", sessionID)
@@ -374,67 +266,25 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			return
 		}
 
-		// CF-364: Codex sessions bypass the Claude file/agent/streaming
-		// pipeline. The synchronous Codex branch mirrors codexProvider:
-		// load the rollout, compute via the adapter, upsert cards. If smart
-		// recap is enabled the rollout feeds PrepareCodexTranscript so we
-		// don't re-download it.
-		if isCodexSession(sessionProvider) {
-			handleCodexCacheMiss(r.Context(), w, &codexCacheMissArgs{
-				database:         database,
-				store:            store,
-				analyticsStore:   analyticsStore,
-				smartRecapConfig: smartRecapConfig,
-				generator:        smartRecapGenerator,
-				sessionID:        sessionID,
-				sessionUserID:    sessionUserID,
-				sessionProvider:  sessionProvider,
-				externalID:       externalID,
-				totalLineCount:   totalLineCount,
-				isOwner:          result.AccessInfo.AccessType == db.SessionAccessOwner,
-				log:              log,
-			})
-			return
-		}
-
-		// Download and parse main transcript
-		mainTF, dlErr := downloadMainFromFiles(r.Context(), store, files, sessionUserID, sessionProvider, externalID)
-		if dlErr != nil || mainTF == nil {
-			log.Error("Failed to download transcript", "error", dlErr, "session_id", sessionID)
+		sp, err := analytics.ProviderFor(sessionProvider)
+		if err != nil {
+			log.Error("provider lookup failed for analytics", "error", err, "session_id", sessionID, "provider", sessionProvider)
 			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 			return
 		}
 
-		// Stream agent files through analyzers (one at a time to avoid OOM)
-		agentInfos := agentInfosFromFiles(files)
-		download := newAPIAgentDownloader(store, sessionUserID, sessionProvider, externalID)
-		provider := analytics.NewAgentProvider(agentInfos, download, storage.MaxAgentFiles)
-
-		// If smart recap enabled, tee agent files through TranscriptBuilder
-		tb := analytics.NewTranscriptBuilder(analytics.DefaultFormatConfig())
-		var buildingTranscript bool
-		if smartRecapConfig.Enabled {
-			buildingTranscript = true
-			tb.ProcessFile(mainTF)
-			baseProvider := provider
-			provider = func(ctx context.Context) (*analytics.TranscriptFile, error) {
-				tf, err := baseProvider(ctx)
-				if err != nil {
-					return tf, err
-				}
-				tb.ProcessFile(tf)
-				return tf, nil
-			}
-		}
-
-		computed, err := analytics.ComputeStreaming(r.Context(), mainTF, provider)
+		rollout, err := sp.Parse(r.Context(), providerParseInput(database, store, sessionID, sessionUserID, sessionProvider, externalID))
 		if err != nil {
-			log.Error("Failed to compute analytics", "error", err, "session_id", sessionID)
-			respondError(w, http.StatusInternalServerError, "Failed to compute analytics")
+			log.Error("Failed to parse session for analytics", "error", err, "session_id", sessionID)
+			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
+			return
+		}
+		if rollout == nil {
+			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
 			return
 		}
 
-		// Log validation errors if any
+		computed := sp.ComputeCards(r.Context(), rollout)
 		if computed.ValidationErrorCount > 0 {
 			log.Warn("Transcript validation errors detected",
 				"session_id", sessionID,
@@ -444,22 +294,20 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 
 		// Convert to Cards and cache
 		cards := computed.ToCards(sessionID, totalLineCount)
-
-		// Store in cache (errors logged but not returned - we can still return computed result)
 		if err := analyticsStore.UpsertCards(dbCtx, cards); err != nil {
 			log.Error("Failed to cache cards", "error", err, "session_id", sessionID)
 		}
 
-		// Build response with validation error count
 		response := cards.ToResponse()
 		response.ValidationErrorCount = computed.ValidationErrorCount
 
-		// Handle smart recap (if enabled)
+		// Smart recap. The rollout is reused for PrepareTranscript so
+		// providers with lazy-materialize caches (Claude, Codex) don't
+		// re-download agent / subagent files.
 		if smartRecapConfig.Enabled {
-			var transcript string
-			var idMap map[int]string
-			if buildingTranscript {
-				transcript, idMap = tb.Finish()
+			transcript, idMap, terr := sp.PrepareTranscript(r.Context(), rollout)
+			if terr != nil {
+				log.Error("Failed to prepare transcript for smart recap", "error", terr, "session_id", sessionID)
 			}
 			attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
 				database:        database,
@@ -478,87 +326,13 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 				response:        response,
 				log:             log,
 				isOwner:         result.AccessInfo.AccessType == db.SessionAccessOwner,
+				clearMessageIDs: sp.ClearMessageIDs(),
 			})
 		}
 
-		// Include suggested session title if available
 		attachSuggestedTitle(database, sessionID, response)
-
 		respondJSON(w, http.StatusOK, response)
 	}
-}
-
-// codexCacheMissArgs bundles the parameters needed to compute and respond to
-// an on-demand analytics request for a Codex session (CF-364).
-type codexCacheMissArgs struct {
-	database         *db.DB
-	store            *storage.S3Storage
-	analyticsStore   *analytics.Store
-	smartRecapConfig SmartRecapConfig
-	generator        *analytics.SmartRecapGenerator
-	sessionID        string
-	sessionUserID    int64
-	sessionProvider  string
-	externalID       string
-	totalLineCount   int64
-	isOwner          bool
-	log              *slog.Logger
-}
-
-// handleCodexCacheMiss is the synchronous Codex branch of
-// HandleGetSessionAnalytics. It mirrors codexProvider: load rollout, compute
-// via the codex adapter, upsert cards, respond. When smart recap is enabled,
-// the rollout is reused for PrepareCodexTranscript so we don't re-download it;
-// message IDs are cleared so SmartRecapCard renders items as plain text.
-func handleCodexCacheMiss(ctx context.Context, w http.ResponseWriter, args *codexCacheMissArgs) {
-	rollout, err := analytics.LoadCodexRollout(ctx, args.database.Conn(), args.store, args.sessionID, args.sessionUserID, args.sessionProvider, args.externalID)
-	if err != nil {
-		args.log.Error("Failed to load codex rollout", "error", err, "session_id", args.sessionID)
-		respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
-		return
-	}
-	if rollout == nil {
-		// Empty session. Frontend renders the empty/no-data state.
-		respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
-		return
-	}
-
-	computed := analytics.ComputeFromCodexRollout(rollout)
-	cards := computed.ToCards(args.sessionID, args.totalLineCount)
-
-	dbCtx, dbCancel := context.WithTimeout(ctx, DatabaseTimeout)
-	defer dbCancel()
-	if err := args.analyticsStore.UpsertCards(dbCtx, cards); err != nil {
-		args.log.Error("Failed to cache codex cards", "error", err, "session_id", args.sessionID)
-	}
-
-	response := cards.ToResponse()
-
-	if args.smartRecapConfig.Enabled {
-		transcript, idMap := analytics.PrepareCodexTranscript(rollout)
-		attachOrGenerateSmartRecap(ctx, &smartRecapContext{
-			database:        args.database,
-			analyticsStore:  args.analyticsStore,
-			store:           args.store,
-			config:          args.smartRecapConfig,
-			generator:       args.generator,
-			sessionID:       args.sessionID,
-			sessionUserID:   args.sessionUserID,
-			sessionProvider: args.sessionProvider,
-			externalID:      args.externalID,
-			lineCount:       args.totalLineCount,
-			transcript:      transcript,
-			idMap:           idMap,
-			cardStats:       response.Cards,
-			response:        response,
-			log:             args.log,
-			isOwner:         args.isOwner,
-			clearMessageIDs: true,
-		})
-	}
-
-	attachSuggestedTitle(args.database, args.sessionID, response)
-	respondJSON(w, http.StatusOK, response)
 }
 
 // smartRecapContext groups the parameters needed for smart recap attachment/generation.
@@ -580,9 +354,9 @@ type smartRecapContext struct {
 	log             *slog.Logger
 	isOwner         bool
 	// clearMessageIDs zeroes out the per-item MessageID in the generated recap.
-	// Codex messages have no stable UUID the frontend can deep-link to, so the
-	// Codex path (CF-364) sets this true; the SmartRecapCard renders such items
-	// as plain text instead of a hyperlink.
+	// Set from SessionProvider.ClearMessageIDs() — providers without stable
+	// frontend anchors (Codex) request this so the SmartRecapCard renders
+	// items as plain text instead of broken deep-links.
 	clearMessageIDs bool
 }
 
@@ -595,7 +369,6 @@ type smartRecapContext struct {
 // cardStats contains the computed analytics cards to include in the LLM prompt for context.
 // If smart recap generation fails, an error is added to response.CardErrors for graceful degradation.
 func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
-	// Helper to add smart recap error to response for graceful degradation
 	addCardError := func(errMsg string) {
 		if sc.response.CardErrors == nil {
 			sc.response.CardErrors = make(map[string]string)
@@ -606,7 +379,6 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 	dbCtx, cancel := context.WithTimeout(ctx, DatabaseTimeout)
 	defer cancel()
 
-	// Get current smart recap card
 	smartCard, err := sc.analyticsStore.GetSmartRecapCard(dbCtx, sc.sessionID)
 	if err != nil {
 		sc.log.Error("Failed to get smart recap card", "error", err, "session_id", sc.sessionID)
@@ -614,14 +386,13 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 		return
 	}
 
-	// Get quota info - needed for generation decisions, but only expose to owner.
+	// Get quota info — needed for generation decisions, but only expose to owner.
 	// Quota is tracked against the session owner, not the viewer.
 	// GetOrCreate atomically resets count if month is stale.
 	quota, err := recapquota.GetOrCreate(dbCtx, sc.database.Conn(), sc.sessionUserID)
 	if err != nil {
 		sc.log.Error("Failed to get smart recap quota", "error", err, "user_id", sc.sessionUserID)
 	} else if sc.config.QuotaEnabled() && sc.isOwner {
-		// Only include quota in response when capped and viewer is the session owner
 		sc.response.SmartRecapQuota = &analytics.SmartRecapQuotaInfo{
 			Used:     quota.ComputeCount,
 			Limit:    sc.config.QuotaLimit,
@@ -629,21 +400,16 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 		}
 	}
 
-	// If we have a cached card with valid version, return it (no regeneration, worker handles updates)
 	if smartCard.HasValidVersion() {
 		addSmartRecapToResponse(sc.response, smartCard)
 		return
 	}
 
-	// No valid card exists - generate first-time if quota allows
-
-	// Check quota (skip when unlimited)
+	// No valid card exists — generate first-time if quota allows.
 	if sc.config.QuotaEnabled() && quota != nil && quota.ComputeCount >= sc.config.QuotaLimit {
-		// Quota exceeded - return whatever cached data we have (even if invalid version)
 		if smartCard != nil {
 			addSmartRecapToResponse(sc.response, smartCard)
 		} else {
-			// No card data at all -- tell the frontend why
 			reason := "unavailable"
 			if sc.isOwner {
 				reason = "quota_exceeded"
@@ -653,23 +419,14 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 		return
 	}
 
-	// Check if another process is already generating (lock held)
 	if smartCard != nil && !smartCard.CanAcquireLock(sc.config.LockTimeoutSeconds) {
-		// Lock held by another request - graceful degradation, skip smart recap
 		return
 	}
 
-	// Get transcript (pre-built from compute streaming, or download now).
-	// The fallback dispatches on provider: Claude uses the streaming JSONL
-	// builder; Codex (CF-364) loads the rollout and runs PrepareCodexTranscript.
 	transcript := sc.transcript
 	idMap := sc.idMap
 	if transcript == "" {
-		if isCodexSession(sc.sessionProvider) {
-			transcript, idMap = downloadCodexTranscriptForRecap(ctx, sc.database, sc.store, sc.sessionID, sc.sessionUserID, sc.sessionProvider, sc.externalID, sc.log)
-		} else {
-			transcript, idMap = downloadAndBuildTranscript(ctx, sc.database, sc.store, sc.sessionID, sc.sessionUserID, sc.sessionProvider, sc.externalID, sc.log)
-		}
+		transcript, idMap = providerTranscriptForRecap(ctx, sc.database, sc.store, sc.sessionID, sc.sessionUserID, sc.sessionProvider, sc.externalID, sc.log)
 		if transcript == "" {
 			addCardError("Failed to download transcript for smart recap")
 			return
@@ -684,7 +441,6 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 		IDMap:      idMap,
 		CardStats:  sc.cardStats,
 	}
-	// Generate synchronously (first-time generation)
 	var genResult *analytics.GenerateResult
 	if sc.clearMessageIDs {
 		genResult = sc.generator.GenerateWithMessageIDClearing(ctx, input, sc.config.LockTimeoutSeconds, false)
@@ -697,13 +453,9 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 		return
 	}
 	if genResult.Skipped {
-		// Lock held by another request - graceful degradation
 		return
 	}
 	addSmartRecapToResponse(sc.response, genResult.Card)
-	// Set the title directly from the LLM result to avoid a separate DB round-trip.
-	// This is more reliable than re-querying via attachSuggestedTitle, which can fail
-	// if the request context is near its deadline after a long LLM generation.
 	if genResult.SuggestedTitle != "" {
 		sc.response.SuggestedSessionTitle = &genResult.SuggestedTitle
 	}
@@ -714,7 +466,6 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 // is near its deadline (e.g., after a long smart recap generation).
 // Skips the query if the title is already set on the response (e.g., from fresh generation).
 func attachSuggestedTitle(database *db.DB, sessionID string, response *analytics.AnalyticsResponse) {
-	// Skip if title was already set directly (e.g., from freshly generated smart recap)
 	if response.SuggestedSessionTitle != nil {
 		return
 	}
@@ -755,20 +506,17 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 
-		// Feature must be enabled
 		if !smartRecapConfig.Enabled {
 			respondError(w, http.StatusNotFound, "Smart recap not available")
 			return
 		}
 
-		// Get session ID from URL
 		sessionID := chi.URLParam(r, "id")
 		if sessionID == "" {
 			respondError(w, http.StatusBadRequest, "Invalid session ID")
 			return
 		}
 
-		// Get authenticated user (RequireSession middleware ensures this exists)
 		userID, ok := requireUserID(w, r)
 		if !ok {
 			return
@@ -777,7 +525,6 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		dbCtx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
-		// Get session and verify ownership
 		sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get session", "error", err, "session_id", sessionID)
@@ -790,7 +537,6 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
-		// Get session files and compute total line count
 		session, err := sessionStore.GetSessionDetail(dbCtx, sessionID, userID)
 		if err != nil {
 			log.Error("Failed to get session detail", "error", err, "session_id", sessionID)
@@ -798,14 +544,13 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
-		files := classifySessionFiles(session.Files)
-		if files == nil {
+		totalLineCount := totalTranscriptAndAgentLines(session.Files)
+		if totalLineCount == 0 {
 			respondError(w, http.StatusBadRequest, "No transcript available")
 			return
 		}
-		totalLineCount := files.lineCount
 
-		// Check quota (GetOrCreate atomically resets count if month is stale)
+		// Check quota
 		quota, err := recapquota.GetOrCreate(dbCtx, database.Conn(), userID)
 		if err != nil {
 			log.Error("Failed to get quota", "error", err, "user_id", userID)
@@ -818,7 +563,6 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
-		// Check if generation is already in progress (lock check) - return 409 Conflict
 		smartCard, err := analyticsStore.GetSmartRecapCard(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get smart recap card", "error", err, "session_id", sessionID)
@@ -828,7 +572,6 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
-		// Get cached cards for stats context
 		cached, err := analyticsStore.GetCards(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get cached cards", "error", err, "session_id", sessionID)
@@ -838,17 +581,14 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			cardStats = cached.ToResponse().Cards
 		}
 
-		// Build transcript via streaming. The Codex branch (CF-364) loads the
-		// rollout and runs PrepareCodexTranscript so the LLM prompt receives
-		// Codex-shaped data instead of failing to parse the JSONL as Claude.
-		codex := isCodexSession(sessionProvider)
-		var transcript string
-		var idMap map[int]string
-		if codex {
-			transcript, idMap = downloadCodexTranscriptForRecap(r.Context(), database, store, sessionID, sessionUserID, sessionProvider, externalID, log)
-		} else {
-			transcript, idMap = downloadAndBuildTranscript(r.Context(), database, store, sessionID, sessionUserID, sessionProvider, externalID, log)
+		sp, err := analytics.ProviderFor(sessionProvider)
+		if err != nil {
+			log.Error("provider lookup failed for smart recap regenerate", "error", err, "session_id", sessionID, "provider", sessionProvider)
+			respondError(w, http.StatusInternalServerError, "unsupported provider")
+			return
 		}
+
+		transcript, idMap := providerTranscriptForRecap(r.Context(), database, store, sessionID, sessionUserID, sessionProvider, externalID, log)
 		if transcript == "" {
 			respondError(w, http.StatusInternalServerError, "Failed to download transcript")
 			return
@@ -862,9 +602,8 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			IDMap:      idMap,
 			CardStats:  cardStats,
 		}
-		// Generate synchronously (this acquires the lock internally)
 		var genResult *analytics.GenerateResult
-		if codex {
+		if sp.ClearMessageIDs() {
 			genResult = smartRecapGenerator.GenerateWithMessageIDClearing(r.Context(), input, smartRecapConfig.LockTimeoutSeconds, false)
 		} else {
 			genResult = smartRecapGenerator.Generate(r.Context(), input, smartRecapConfig.LockTimeoutSeconds, false)
@@ -879,13 +618,12 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 			return
 		}
 
-		// Return the generated card using the shared helper
 		response := &analytics.AnalyticsResponse{
 			Cards: make(map[string]interface{}),
 		}
 		if smartRecapConfig.QuotaEnabled() {
 			response.SmartRecapQuota = &analytics.SmartRecapQuotaInfo{
-				Used:     quota.ComputeCount + 1, // Increment since we just generated
+				Used:     quota.ComputeCount + 1,
 				Limit:    smartRecapConfig.QuotaLimit,
 				Exceeded: quota.ComputeCount+1 >= smartRecapConfig.QuotaLimit,
 			}

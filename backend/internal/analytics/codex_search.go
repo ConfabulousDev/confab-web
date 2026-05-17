@@ -7,23 +7,17 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 )
 
-// codexToolArgPreviewBytes is how many bytes of a Codex tool-call arg string
-// we surface to the search index. Short enough to keep the index lean, long
-// enough to catch file paths and short flags.
+// codexToolArgPreviewBytes caps how many bytes of a Codex tool-call argument
+// string we surface to the search index.
 const codexToolArgPreviewBytes = 200
 
 // ExtractCodexUserMessagesText builds the Weight C search-index content for
-// a Codex session. Per CF-350 §2e the index includes:
-//
-//   - User messages (the parser already stripped <environment_context>)
-//   - Assistant `final`-phase text (commentary is filler — excluded)
-//   - Tool call summaries: "<tool_name> <args truncated to 200 chars>"
-//
-// Honors maxUserMessagesBytes (500 KB) so a long rollout doesn't blow the
-// index up disproportionately. Mirrors UserMessagesBuilder's byte-cap
-// truncation semantics, including UTF-8-safe boundary alignment.
-func ExtractCodexUserMessagesText(rollout *codex.ParsedRollout) string {
-	if rollout == nil {
+// a Codex session: user messages, assistant final-phase text, and tool-call
+// summaries ("<tool_name> <args>") across all rollouts. Honors
+// maxUserMessagesBytes with UTF-8-safe truncation, mirroring
+// UserMessagesBuilder.
+func ExtractCodexUserMessagesText(rollouts []*codex.ParsedRollout) string {
+	if len(rollouts) == 0 {
 		return ""
 	}
 	var b strings.Builder
@@ -60,21 +54,26 @@ func ExtractCodexUserMessagesText(rollout *codex.ParsedRollout) string {
 		totalBytes += len(text)
 	}
 
-	for _, turn := range rollout.Turns {
-		for _, m := range turn.UserMessages {
-			add(m.Text)
+	for _, rollout := range rollouts {
+		if rollout == nil {
+			continue
 		}
-		for _, m := range turn.AssistantMessages {
-			if m.Phase == "final" && m.Text != "" {
+		for _, turn := range rollout.Turns {
+			for _, m := range turn.UserMessages {
 				add(m.Text)
 			}
-		}
-		for _, tc := range turn.ToolCalls {
-			args := tc.Arguments
-			if len(args) > codexToolArgPreviewBytes {
-				args = args[:codexToolArgPreviewBytes]
+			for _, m := range turn.AssistantMessages {
+				if m.Phase == "final" && m.Text != "" {
+					add(m.Text)
+				}
 			}
-			add(tc.Name + " " + args)
+			for _, tc := range turn.ToolCalls {
+				args := tc.Arguments
+				if len(args) > codexToolArgPreviewBytes {
+					args = args[:codexToolArgPreviewBytes]
+				}
+				add(tc.Name + " " + args)
+			}
 		}
 	}
 	return b.String()

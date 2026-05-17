@@ -5,24 +5,36 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// computeCodexTokens fills InputTokens/OutputTokens/cache fields and cost.
-//
+// computeCodexTokens sums token usage across rollouts and computes cost.
 // OpenAI semantics: CachedInputTokens is a subset of InputTokens, so we
-// subtract it before billing the uncached portion at the full input rate.
-// Reasoning tokens are billed as output (same rate), so they fold in there.
-// CacheCreationTokens stays 0 — OpenAI doesn't charge for cache writes.
-func computeCodexTokens(out *ComputeResult, r *codex.ParsedRollout) {
-	tu := r.TokenUsage
-	uncached := tu.InputTokens - tu.CachedInputTokens
-	if uncached < 0 {
-		uncached = 0
+// subtract it before billing the uncached portion at the input rate.
+// Reasoning tokens bill as output. CacheCreationTokens stays 0 (OpenAI
+// doesn't charge for cache writes). Pricing uses the main rollout's model.
+func computeCodexTokens(out *ComputeResult, rollouts []*codex.ParsedRollout) {
+	var totalUncached, totalCached, totalOutput int64
+	for _, r := range rollouts {
+		if r == nil {
+			continue
+		}
+		tu := r.TokenUsage
+		uncached := tu.InputTokens - tu.CachedInputTokens
+		if uncached < 0 {
+			uncached = 0
+		}
+		totalUncached += uncached
+		totalCached += tu.CachedInputTokens
+		totalOutput += tu.OutputTokens + tu.ReasoningOutputTokens
 	}
-	out.InputTokens = uncached
-	out.CacheReadTokens = tu.CachedInputTokens
+	out.InputTokens = totalUncached
+	out.CacheReadTokens = totalCached
 	out.CacheCreationTokens = 0
-	out.OutputTokens = tu.OutputTokens + tu.ReasoningOutputTokens
+	out.OutputTokens = totalOutput
 
-	pricing := GetPricing(r.Model)
+	pricingModel := ""
+	if len(rollouts) > 0 && rollouts[0] != nil {
+		pricingModel = rollouts[0].Model
+	}
+	pricing := GetPricing(pricingModel)
 	out.EstimatedCostUSD = CalculateCost(
 		pricing,
 		out.InputTokens,
@@ -30,7 +42,6 @@ func computeCodexTokens(out *ComputeResult, r *codex.ParsedRollout) {
 		out.CacheCreationTokens,
 		out.CacheReadTokens,
 	)
-	// Codex doesn't expose a "fast mode" toggle.
 	out.FastTurns = 0
 	out.FastCostUSD = decimal.Zero
 }
