@@ -159,3 +159,27 @@ export const Empty: Story = {
     loading: false,
   },
 };
+
+// Codex provider: spawn_agent calls bucket by agent_role ("default", "explorer")
+// per CF-443. Codex skill names match SKILL.md frontmatter (e.g. "interview").
+// Errors on the agent side come from wait_agent reporting non-"completed" status
+// or orphan spawns; skills always count as Success (Codex emits no per-skill
+// error signal).
+export const CodexProvider: Story = {
+  args: {
+    data: {
+      agent_invocations: 4,
+      skill_invocations: 3,
+      agent_stats: {
+        default: { success: 2, errors: 0 },
+        explorer: { success: 1, errors: 1 },
+      },
+      skill_stats: {
+        'audit-documentation': { success: 1, errors: 0 },
+        'execute-linear-ticket': { success: 1, errors: 0 },
+        interview: { success: 1, errors: 0 },
+      },
+    },
+    loading: false,
+  },
+};

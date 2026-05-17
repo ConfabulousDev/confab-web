@@ -674,3 +674,93 @@ func jsonNumber(v interface{}) int64 {
 		return -1
 	}
 }
+
+// TestGetSessionAnalytics_Codex_HTTP_Integration_AgentsAndSkills (CF-443)
+// uploads the parent-with-spawns fixture and asserts the agents_and_skills
+// card payload is populated with non-zero counts bucketed by agent_role.
+func TestGetSessionAnalytics_Codex_HTTP_Integration_AgentsAndSkills(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	rollout, err := os.ReadFile("../codex/testdata/sample_rollout_parent_with_spawns.jsonl")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	lineCount := bytes.Count(rollout, []byte{'\n'})
+	if len(rollout) > 0 && rollout[len(rollout)-1] != '\n' {
+		lineCount++
+	}
+
+	user := testutil.CreateTestUser(t, env, "codex-agents@example.com", "Codex User")
+	sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+	externalID := "codex-spawns-session"
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, externalID, models.ProviderCodex)
+
+	testutil.UploadTestChunk(t, env, user.ID, models.ProviderCodex, externalID, "rollout.jsonl", 1, lineCount, rollout)
+	testutil.CreateTestSyncFile(t, env, sessionID, "rollout.jsonl", "transcript", lineCount)
+
+	ts := setupTestServerWithEnv(t, env)
+	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+	resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	testutil.RequireStatus(t, resp, http.StatusOK)
+
+	var result analytics.AnalyticsResponse
+	testutil.ParseJSON(t, resp, &result)
+
+	raw, ok := result.Cards["agents_and_skills"]
+	if !ok {
+		t.Fatal("Cards[\"agents_and_skills\"] missing for Codex session with spawns")
+	}
+	payload, ok := raw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Cards[\"agents_and_skills\"] = %T, want map[string]interface{}", raw)
+	}
+	if got := jsonNumber(payload["agent_invocations"]); got != 2 {
+		t.Errorf("agent_invocations = %d, want 2 (one completed default + one failed explorer)", got)
+	}
+	if got := jsonNumber(payload["skill_invocations"]); got != 0 {
+		t.Errorf("skill_invocations = %d, want 0 (fixture has no skills)", got)
+	}
+	agentStats, ok := payload["agent_stats"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("agent_stats = %T, want map (keyed by agent_role)", payload["agent_stats"])
+	}
+	for _, role := range []string{"default", "explorer"} {
+		if _, present := agentStats[role]; !present {
+			t.Errorf("agent_stats[%q] missing; agent_stats keys = %v", role, mapKeys(agentStats))
+		}
+	}
+	// Tools card must NOT contain spawn_agent / wait_agent.
+	if toolsRaw, ok := result.Cards["tools"]; ok {
+		if toolsCard, ok := toolsRaw.(map[string]interface{}); ok {
+			if ts, ok := toolsCard["tool_stats"].(map[string]interface{}); ok {
+				if _, present := ts["spawn_agent"]; present {
+					t.Error("tools.tool_stats[spawn_agent] present — should be routed to AgentsAndSkills only")
+				}
+				if _, present := ts["wait_agent"]; present {
+					t.Error("tools.tool_stats[wait_agent] present — should be excluded from Tools card")
+				}
+			}
+		}
+	}
+}
+
+func mapKeys(m map[string]interface{}) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

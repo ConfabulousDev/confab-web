@@ -14,7 +14,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `ConversationCard.tsx` | Turn-based metrics: user/assistant turns, avg response time, utilization |
 | `CodeActivityCard.tsx` | Code activity: files read/modified, lines added/removed, language breakdown |
 | `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts. Exports `prepareChartData` for testing. Defensively filters orphan `<unknown>` entries so a literal `<unknown>` bar never paints, even for stale ComputeResults predating the CF-438 backend skip. |
-| `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown |
+| `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown. Provider-agnostic copy: Claude buckets by `subagent_type`, Codex (CF-443) buckets by `agent_role` (`"default"`, `"explorer"`). Renders for both providers via the registry's `agent_invocations + skill_invocations > 0` gate. |
 | `RedactionsCard.tsx` | Redaction counts by type (shown only when redactions exist) |
 | `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links |
 | `index.ts` | Barrel export: `getOrderedCards()` |
