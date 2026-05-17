@@ -1,15 +1,10 @@
 # Database Migration Strategy for Confab
 
-## Current State
+> **Status (2026):** Confab uses [`golang-migrate`](https://github.com/golang-migrate/migrate) with versioned SQL migrations embedded in the binary. See [`internal/db/migrations/`](internal/db/migrations/) for the current migration set and [`migrate_db.sh`](../migrate_db.sh) for the deployment wrapper. The remainder of this document records the original decision context — the tool comparison and the "why golang-migrate" rationale — and is retained for historical reference.
 
-The Confab backend currently initializes the PostgreSQL schema on startup using a `CREATE TABLE IF NOT EXISTS` approach in `backend/internal/db/db.go:59-170`. While this works for initial development, it has significant limitations for production deployments.
+## Original Problem Statement
 
-### Schema Overview
-
-- **8 tables**: users, web_sessions, api_keys, sessions, runs, files, session_shares, session_share_invites
-- **12 indexes**: Covering common query patterns
-- **Foreign keys**: Proper referential integrity with CASCADE deletes
-- **JSONB column**: git_info in runs table for flexible metadata
+The Confab backend used to initialize the PostgreSQL schema on startup using a `CREATE TABLE IF NOT EXISTS` approach. While this worked for initial development, it had significant limitations for production deployments.
 
 ### Current Limitations
 
@@ -392,14 +387,6 @@ psql "$MIGRATE_DATABASE_URL" -c "SELECT * FROM schema_migrations"
 # 4. Rollback if needed (emergency only)
 migrate -database "$MIGRATE_DATABASE_URL" -path migrations down 1
 ```
-
-## Next Steps
-
-1. **Decision**: Confirm golang-migrate as the chosen solution
-2. **Setup**: Install tools and create initial migration
-3. **Testing**: Validate migration on local/staging environments
-4. **Documentation**: Update deployment docs with migration procedures
-5. **Training**: Brief team on migration workflow
 
 ## References
 

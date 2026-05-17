@@ -1,8 +1,6 @@
 # Security Guide
 
-**Last Updated:** 2025-01-21
-
-Complete security documentation for the Confab backend application. This document consolidates all security features, configurations, and best practices.
+Complete security documentation for the Confab backend application. This document consolidates all security features, configurations, and best practices. For the canonical environment variable reference see [`../CONFIGURATION.md`](../CONFIGURATION.md).
 
 ## Table of Contents
 
@@ -70,24 +68,22 @@ Confab implements defense-in-depth with multiple security layers:
 
 ## Authentication & Authorization
 
-### OAuth 2.0 (GitHub)
+### OAuth 2.0 and OIDC
 
-**Flow:** Authorization Code Grant with PKCE-like protection
+**Supported providers:** GitHub, Google, and generic OIDC (Okta, Auth0, Azure AD, Keycloak, etc.). Password auth is also supported. At least one method must be configured or the server refuses to start.
 
-**Endpoints:**
-- `GET /auth/github/login` - Initiates OAuth flow
-- `GET /auth/github/callback` - Handles GitHub redirect
-- `GET /auth/logout` - Terminates session
+**Flow:** Authorization Code Grant.
 
-**Configuration:**
-```bash
-# Required environment variables
-GITHUB_CLIENT_ID=your_client_id
-GITHUB_CLIENT_SECRET=your_client_secret
-FRONTEND_URL=https://confab.yourdomain.com
-```
+**Endpoints (per provider):**
+- `GET /auth/github/login`, `GET /auth/github/callback`
+- `GET /auth/google/login`, `GET /auth/google/callback`
+- `GET /auth/oidc/login`, `GET /auth/oidc/callback`
+- `GET /auth/logout` — terminates session
+- `POST /auth/password/login`, `POST /auth/password/register` — password auth (when `AUTH_PASSWORD_ENABLED=true`)
 
-**Security Features:**
+**Configuration:** see [`../CONFIGURATION.md`](../CONFIGURATION.md) for the full env-var reference (per-provider `*_CLIENT_ID` / `*_CLIENT_SECRET` / `*_REDIRECT_URL`).
+
+**Security features:**
 - ✅ State parameter validation (CSRF protection)
 - ✅ One-time code exchange
 - ✅ HttpOnly session cookies
@@ -97,7 +93,7 @@ FRONTEND_URL=https://confab.yourdomain.com
 
 **Email Whitelist (Optional):**
 
-Restrict access to specific email domains:
+Restrict access across all auth methods to specific email domains:
 
 ```bash
 # Allow only @company.com emails
@@ -107,7 +103,7 @@ ALLOWED_EMAIL_DOMAINS=company.com
 ALLOWED_EMAIL_DOMAINS=company.com,partner.com
 ```
 
-Implementation: `internal/auth/oauth.go:isEmailAllowed()`
+Implementation lives in `internal/auth/` per provider; the domain allow-list is applied consistently across GitHub, Google, OIDC, and password auth.
 
 ### API Keys (CLI Authentication)
 
@@ -140,12 +136,13 @@ curl -H "Authorization: Bearer confab_abc123..." \
 
 **Authorization Flow:**
 
-1. User visits `/auth/cli/authorize` in browser (requires GitHub login)
-2. Server generates API key and displays once
-3. User copies key to CLI: `confab cloud configure --api-key <key>`
-4. CLI stores key locally (encrypted on disk)
-5. CLI sends `Authorization: Bearer <key>` on every request
-6. Server validates key and retrieves user ID
+1. User visits `/auth/cli/authorize` in browser (requires an authenticated web session via any configured provider).
+2. Server generates API key and displays it once.
+3. User copies the key into the [Confab CLI](https://github.com/ConfabulousDev/confab).
+4. CLI sends `Authorization: Bearer <key>` on every sync request.
+5. Server validates key and retrieves user ID.
+
+Headless flow: the same key can also be obtained via the OAuth 2.0 device-code flow (`POST /auth/device/code` + `POST /auth/device/token`) — useful for CI runners and remote dev environments where no browser is available on the same host.
 
 ---
 
@@ -276,7 +273,7 @@ if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
 **Attack Prevented:**
 ```bash
 # Attacker tries to send XML/form data to JSON endpoint
-curl -X POST https://confab.dev/api/v1/sessions/save \
+curl -X POST https://confab.dev/api/v1/sync/chunk \
      -H "Content-Type: application/xml" \
      -d "<malicious>...</malicious>"
 # ❌ Rejected with 415 Unsupported Media Type
@@ -284,66 +281,21 @@ curl -X POST https://confab.dev/api/v1/sessions/save \
 
 ### URL Parameter Validation
 
-**Purpose:** Prevent injection and malformed input
-
-**Validated Parameters:**
-
-**Session ID:**
-```go
-// internal/validation/input.go:ValidateSessionID()
-- Length: 1-256 characters
-- Must be valid UTF-8
-- Used in: /api/v1/sessions/{sessionId}
-```
-
-**Email:**
-```go
-// internal/validation/email.go:ValidateEmail()
-- Max length: 254 characters
-- Regex: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
-- Used in: Share invites
-```
-
-**File ID:**
-```go
-// Parsed as int64 via strconv.ParseInt()
-- Must be valid integer
-- Used in: /api/v1/files/{fileId}
-```
+UUIDs are parsed and validated by chi + Postgres; external IDs and emails go through helpers in [`internal/validation/`](internal/validation/). Email normalization and the canonical domain allow-list both live there.
 
 ### Request Body Validation
 
-**Session Upload:**
-```go
-// internal/api/sessions.go
-MaxRequestBodySize: 200 MB  // Total request
-MaxFileSize:        50 MB   // Per file
-MaxFiles:           100     // Files per session
-MaxSessionIDLength: 256
-MaxPathLength:      1024
-MaxReasonLength:    10000
-MaxCWDLength:       4096
-```
+Every route in [`internal/api/server.go`](internal/api/server.go) is wrapped with `withMaxBody(limit, handler)`. T-shirt-sized constants are defined in `server.go`:
 
-**Share Creation:**
-```go
-// internal/api/shares.go
-Visibility: Must be "public" or "private"
-ExpiresInDays: 1-365 (optional)
-InvitedEmails: Max 50 emails, each validated
-```
+| Constant | Size | Typical use |
+|---|---|---|
+| `MaxBodyXS` | 2 KB | GETs, simple lookups |
+| `MaxBodyS` | 16 KB | Small POSTs (login, share create) |
+| `MaxBodyM` | 128 KB | Mid-sized writes (sync init/event, summary patch) |
+| `MaxBodyL` | 2 MB | Admin smart-recap prompt body |
+| `MaxBodyXL` | 16 MB | Sync chunk upload |
 
-**Attack Prevention:**
-```bash
-# Attacker tries to upload 500MB file
-curl -X POST https://confab.dev/api/v1/sessions/save \
-     -d '{"files":[{"content":"<500MB>"}]}'
-# ❌ Rejected: 413 Request Entity Too Large
-
-# Attacker tries SQL injection in session_id
-curl https://confab.dev/api/v1/sessions/'; DROP TABLE sessions; --
-# ❌ Rejected: 400 Bad Request (invalid session_id)
-```
+Per-endpoint validation (share visibility, expiration window, invited-email list size, etc.) lives in the corresponding handler file.
 
 ### Path Traversal Protection
 
@@ -592,19 +544,9 @@ if session.ExpiresAt.Before(time.Now()) {
 - Automatic: `db.CleanupExpiredSessions()` removes sessions older than 7 days
 - Manual: `DELETE /auth/logout` deletes session immediately
 
-### CSRF Cookie
+### CSRF Protection
 
-**Cookie Name:** `_gorilla_csrf`
-
-**Purpose:** Internal state for the CSRF middleware (Fetch metadata validation)
-
-**Settings:**
-- HttpOnly: `true`
-- Secure: `true` (HTTPS only in production)
-- SameSite: `Lax`
-- Path: `/`
-
-**Note:** The frontend does not need to read or manage this cookie. CSRF protection is fully server-side using Fetch metadata headers (`Sec-Fetch-Site`, `Origin`).
+CSRF is enforced by [`filippo.io/csrf`](https://pkg.go.dev/filippo.io/csrf) via browser-supplied Fetch metadata headers (`Sec-Fetch-Site`, `Origin`). The frontend does not read or manage a CSRF token cookie — protection is fully server-side. State-changing requests from cross-origin contexts are rejected with 403.
 
 ---
 
@@ -620,43 +562,16 @@ if session.ExpiresAt.Before(time.Now()) {
 
 ### Rate Limit Tiers
 
-**1. Global Rate Limiter (All Endpoints)**
-```go
-Requests: 100 per second
-Burst: 200
-Key: Client IP address
-Scope: All requests
-```
+| Limiter | Rate | Burst | Key | Scope |
+|---|---|---|---|---|
+| Global | 100 req/s | 200 | Client IP | All requests |
+| Auth | 1 req/s | 30 | Client IP | OAuth login/callback (GitHub, Google, OIDC), password login/register, device-code flow, CLI authorize |
+| Upload (sync) | 2.78 req/s | 2000 | User ID | `POST /api/v1/sync/{init,chunk,event}` |
+| Validation | 0.5 req/s | 10 | Client IP | `GET /api/v1/auth/validate` |
+| Client error | 0.5 req/s | 5 | Client IP | `POST /api/v1/client-errors` |
+| External read | 30 req/s | 60 | API key user | External read endpoints (condensed transcript, file list/download, TIL export) |
 
-**2. Auth Rate Limiter (OAuth Endpoints)**
-```go
-Requests: 10 per minute (0.167/sec)
-Burst: 5
-Key: Client IP address
-Endpoints:
-  - GET /auth/github/login
-  - GET /auth/github/callback
-  - GET /auth/logout
-  - GET /auth/cli/authorize
-```
-
-**3. Upload Rate Limiter (Session Uploads)**
-```go
-Requests: 1000 per hour (0.278/sec)
-Burst: 200
-Key: User ID (not IP!)
-Endpoints:
-  - POST /api/v1/sessions/save
-```
-
-**4. Validation Rate Limiter (API Key Checks)**
-```go
-Requests: 30 per minute (0.5/sec)
-Burst: 10
-Key: Client IP address
-Endpoints:
-  - GET /api/v1/auth/validate
-```
+Numbers come from `NewServer()` in `internal/api/server.go` — see [`PERFORMANCE.md`](PERFORMANCE.md) for the rationale and tuning notes.
 
 ### IP Address Detection
 
@@ -798,51 +713,20 @@ go test -v ./internal/ratelimit -run TestRateLimit
 
 ## Deployment Checklist
 
-### Required Environment Variables
+### Environment Variables
 
-```bash
-# Database
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
+See [`../CONFIGURATION.md`](../CONFIGURATION.md) for the canonical reference. The security-critical settings are:
 
-# GitHub OAuth
-GITHUB_CLIENT_ID=your_github_client_id
-GITHUB_CLIENT_SECRET=your_github_client_secret
+- `CSRF_SECRET_KEY` — must be ≥ 32 chars; required.
+- `DATABASE_URL` — should use `sslmode=require` (or stricter) in production.
+- `FRONTEND_URL` / `ALLOWED_ORIGINS` — must list only trusted production domains; wildcard `*` is rejected at startup because cookie-based auth requires `AllowCredentials=true`.
+- `INSECURE_DEV_MODE` — leave unset or `false` in production. When `true`, session/CSRF cookies skip the Secure flag, HSTS is disabled, and the server logs a WARN at startup.
+- `S3_USE_SSL` — must be `true` (default) for any non-local-MinIO deployment.
+- At least one auth provider (`AUTH_PASSWORD_ENABLED`, `GITHUB_*`, `GOOGLE_*`, or `OIDC_*`) must be configured.
 
-# Security
-CSRF_SECRET_KEY=$(openssl rand -base64 32)
-# Note: web sessions use a cryptographically random 32-byte session ID per
-# session; there is no app-wide SESSION_SECRET to configure.
+Note: web sessions use a cryptographically random 32-byte session ID per session; there is no app-wide `SESSION_SECRET` to configure.
 
-# CORS/Frontend
-# Must be an explicit list — wildcard '*' is rejected at startup because
-# cookie-based auth requires AllowCredentials=true.
-ALLOWED_ORIGINS=https://confab.yourdomain.com
-FRONTEND_URL=https://confab.yourdomain.com
-
-# Production flags
-# Leave unset in production. If set to "true", session/CSRF cookies will not
-# require HTTPS, HSTS is disabled, and the server logs a WARN at startup.
-INSECURE_DEV_MODE=
-```
-
-### Optional Environment Variables
-
-```bash
-# Email whitelist (restrict to specific domains)
-ALLOWED_EMAIL_DOMAINS=company.com
-
-# S3 storage (if using)
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-S3_BUCKET_NAME=confab-sessions
-
-# Static file serving (if bundling frontend)
-STATIC_FILES_DIR=/app/frontend/build
-
-# Debug profiling (localhost:6060 only — never exposed publicly)
-ENABLE_PPROF=  # Set to "true" only when actively profiling
-```
+For optional settings (email allow-list, S3 credentials, `STATIC_FILES_DIR`, `ENABLE_PPROF` — bound to `localhost:6060` only, never publicly exposed), see [`../CONFIGURATION.md`](../CONFIGURATION.md).
 
 > **MinIO defaults:** local Docker Compose examples use `minioadmin/minioadmin`.
 > These are the upstream MinIO demo credentials — **change them before any
@@ -857,7 +741,7 @@ ENABLE_PPROF=  # Set to "true" only when actively profiling
 - [ ] `ALLOWED_ORIGINS` contains only trusted domains (no wildcard `*`)
 - [ ] `FRONTEND_URL` points to production frontend
 - [ ] `DATABASE_URL` uses SSL (`sslmode=require`)
-- [ ] GitHub OAuth callback URL is registered
+- [ ] OAuth callback URLs are registered for every configured provider
 - [ ] All secrets are rotated from development values
 - [ ] HTTPS is enforced at load balancer/proxy level
 - [ ] Database backups are configured
@@ -895,32 +779,6 @@ for i in {1..150}; do curl https://confab.yourdomain.com/health; done
 
 ---
 
-## Security Contacts
+## Reporting Vulnerabilities
 
-**Report vulnerabilities to:** security@yourcompany.com
-
-**Response SLA:**
-- Critical: 24 hours
-- High: 72 hours
-- Medium: 1 week
-- Low: 2 weeks
-
----
-
-## Changelog
-
-### 2025-01-21: Documentation Consolidation
-- Consolidated 8 security documents into single SECURITY.md
-- Added deployment checklist
-- Added testing procedures
-- Updated rate limiting documentation (now implemented)
-
-### 2025-01-16: Initial Security Implementation
-- Added CORS configuration
-- Added CSRF protection
-- Fixed cookie security
-- Fixed open redirect vulnerability
-- Added input validation
-- Added content-type validation
-- Added security headers
-- Added rate limiting
+Report suspected vulnerabilities by opening a GitHub issue or contacting the project maintainers via the channels listed in the root [`README.md`](../README.md).

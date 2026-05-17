@@ -1,7 +1,5 @@
 # Performance Optimization Guide
 
-**Last Updated:** 2025-01-21
-
 Complete documentation for performance features in the Confab backend, including rate limiting and response compression.
 
 ## Table of Contents
@@ -98,60 +96,29 @@ Complete documentation for performance features in the Confab backend, including
 
 #### 2. Auth Rate Limiter
 
-**Scope:** OAuth endpoints
+**Scope:** Authentication endpoints (OAuth callbacks, password login/register, device flow, CLI authorize)
 **Key:** Client IP address
-**Rate:** 10 requests/minute (0.167/sec)
-**Burst:** 5
-
-**Endpoints:**
-- `GET /auth/github/login`
-- `GET /auth/github/callback`
-- `GET /auth/logout`
-- `GET /auth/cli/authorize`
+**Rate:** 1 request/second
+**Burst:** 30
 
 **Purpose:** Prevent brute force on authentication
 
-**Example:**
-```bash
-# Normal user: 1 login attempt every 6 seconds ✅
-# Attacker: 100 login attempts in 10 seconds ❌
-
-# First 5: ✅ Allowed (burst)
-# Next 1 per 6 seconds: ✅ Allowed (rate = 10/min)
-# Any faster: ❌ Rejected (429)
-```
-
 #### 3. Upload Rate Limiter
 
-**Scope:** Session uploads
+**Scope:** Sync endpoints (CLI session uploads)
 **Key:** User ID (not IP!)
-**Rate:** 1000 requests/hour (0.278/sec)
-**Burst:** 200
+**Rate:** 2.78 requests/second (~10,000/hour)
+**Burst:** 2000
 
 **Endpoints:**
-- `POST /api/v1/sessions/save`
+- `POST /api/v1/sync/init`, `/api/v1/sync/chunk`, `/api/v1/sync/event`
 
 **Purpose:** Prevent storage abuse while allowing backfill
 
 **Why User ID?**
-- User backfilling 500 sessions needs high burst
+- User backfilling thousands of sessions needs high burst
 - IP-based limiting would block legitimate backfill
 - User-based allows burst but prevents abuse per account
-
-**Example:**
-```bash
-# Backfill scenario (legitimate)
-confab cloud backfill ~/.claude/sessions/
-# 500 sessions uploaded
-# First 200: ✅ Immediate (burst)
-# Remaining 300: ✅ At 0.278/sec (~18 minutes)
-
-# Abuse scenario (malicious bot)
-# Same user tries to upload 10,000 sessions
-# First 200: ✅ Immediate (burst)
-# Next 1000/hour: ✅ Allowed by rate
-# Beyond 1000/hour: ❌ Rejected (429)
-```
 
 #### 4. Validation Rate Limiter
 
@@ -271,13 +238,14 @@ func (l *InMemoryRateLimiter) cleanup() {
 
 ### Configuration
 
-**Current (hardcoded):**
+**Current (hardcoded in `internal/api/server.go:NewServer()`):**
 ```go
-// internal/api/server.go:NewServer()
-globalLimiter: NewInMemoryRateLimiter(100, 200)
-authLimiter: NewInMemoryRateLimiter(0.167, 5)
-uploadLimiter: NewInMemoryRateLimiter(2.78, 2000)
-validationLimiter: NewInMemoryRateLimiter(0.5, 10)
+globalLimiter:       ratelimit.NewInMemoryRateLimiter(100, 200)
+authLimiter:         ratelimit.NewInMemoryRateLimiter(1, 30)
+uploadLimiter:       ratelimit.NewInMemoryRateLimiter(2.78, 2000)
+validationLimiter:   ratelimit.NewInMemoryRateLimiter(0.5, 10)
+clientErrorLimiter:  ratelimit.NewInMemoryRateLimiter(0.5, 5)
+externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60)
 ```
 
 **Future (configurable):**
@@ -668,17 +636,12 @@ export COMPRESSION_ENABLED=true   # Toggle on/off
 **Configuration:**
 ```go
 // internal/db/db.go:Connect()
-conn.SetMaxOpenConns(25)            // Max concurrent connections
-conn.SetMaxIdleConns(5)             // Keep 5 ready for reuse
-conn.SetConnMaxLifetime(5 * time.Minute)  // Recycle after 5 minutes
+conn.SetMaxOpenConns(500)               // Max concurrent connections
+conn.SetMaxIdleConns(100)               // Keep 100 ready for reuse
+conn.SetConnMaxLifetime(20 * time.Minute)  // Recycle after 20 minutes
 ```
 
-**Why these numbers?**
-- 25 max open: Prevents overwhelming single PostgreSQL instance
-- 5 idle: Balance between ready connections and resource usage
-- 5 min lifetime: Prevents stale connections, allows database restarts
-
-**Future:** Make configurable via environment variables
+Tuned for a multi-tenant web backend with bursty sync traffic. See [`internal/db/README.md`](internal/db/README.md) for rationale.
 
 ### Query Optimization
 

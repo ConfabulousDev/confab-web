@@ -1,5 +1,7 @@
 # Frontend Design Refresh Plan
 
+> **Historical planning document.** This captures the design direction proposed during an earlier refresh. The actual implemented values live in [`src/styles/variables.css`](src/styles/variables.css) — consult that file (not this plan) for current typography and color tokens.
+
 **Goal:** Dive watch aesthetic - functional, precise, smaller fonts, no decoration, but slick and well-built.
 
 ## Phase 1: Global Foundation

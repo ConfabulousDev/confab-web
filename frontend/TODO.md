@@ -3,12 +3,11 @@
 ## Pending
 
 - [ ] Create `/og-image.png` (1200x630px) for social sharing previews
-- [ ] Update GitHub URL in footer (`https://github.com/anthropics/confab` is placeholder)
-- [x] Update Discord URL in footer (`https://discord.gg/confab` is placeholder)
+- [ ] Verify GitHub and Discord URLs in the footer match the current canonical project links
 - [ ] Create `/privacy` page or update link to external URL
 - [ ] Create `/terms` page or update link to external URL
 
-## Completed
+## Completed (historical)
 
 - [x] Build hero section with tagline
 - [x] Add value proposition bullets

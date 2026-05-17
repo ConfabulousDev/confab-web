@@ -2,146 +2,69 @@
 
 ## Prerequisites
 
-- Docker & Docker Compose installed
-- Go 1.21+ installed
-- Confab CLI built
+- Docker / Orbstack (integration tests run Postgres + MinIO in containers)
+- Go 1.21+
 
-## Step 1: Start Backend Services
+## Running Tests
 
-```bash
-cd backend
-docker-compose up -d
-```
+Run from the `backend/` directory.
 
-Wait for services to be healthy:
-- PostgreSQL: `localhost:5432`
-- MinIO API: `localhost:9000`
-- MinIO Console: `localhost:9001` (minioadmin/minioadmin)
-
-## Step 2: Start Backend Server
+### Unit tests (fast — no Docker)
 
 ```bash
-cd backend
-go run cmd/server/main.go
+go test -short ./...
 ```
 
-Server will start on `http://localhost:8080`
-
-## Step 3: Create API Key
+### Full test suite (unit + integration, requires Docker)
 
 ```bash
-cd backend
-go run scripts/create-api-key.go my-test-key
+DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./...
 ```
 
-Save the API key that is printed.
+The `DOCKER_HOST` path matches the Orbstack default on macOS. Adjust as needed for your container runtime.
 
-## Step 4: Configure Confab CLI
+### Sharded test runs (faster)
+
+CI shards by package using [`scripts/list-test-packages.sh`](scripts/list-test-packages.sh). Locally:
 
 ```bash
-cd ..
-./confab cloud configure \
-  --backend-url http://localhost:8080 \
-  --api-key <your-api-key-from-step-3> \
-  --enable
+./scripts/list-test-packages.sh
+# emits one Go package per line; run each in parallel with `go test <package>`
 ```
 
-Check configuration:
-```bash
-./confab cloud status
-```
+See `CLAUDE.md` for the rationale and sharding rules.
 
-## Step 5: Test Session Upload
+## Test Patterns
 
-Create a test session file:
-```bash
-cat > /tmp/test-session.jsonl << 'EOF'
-{"type":"message","id":"msg_01","content":[{"type":"text","text":"test"}]}
-EOF
-```
+- **Unit tests** (`*_test.go`) cover pure logic (parsers, validators, formatters, pricing).
+- **Integration tests** (`*_integration_test.go`, `*_http_integration_test.go`) spin up containerized Postgres and MinIO via `testutil.SetupTestEnvironment(t)`.
+- Helpers in [`internal/testutil/`](internal/testutil/) provide common fixtures — see that package's `README.md`.
 
-Create a test hook input:
-```bash
-cat > /tmp/test-hook.json << 'EOF'
-{
-  "session_id": "test-session-123",
-  "transcript_path": "/tmp/test-session.jsonl",
-  "cwd": "/tmp",
-  "reason": "user_exit"
-}
-EOF
-```
+## Manual End-to-End Smoke Test
 
-Run the save command:
-```bash
-./confab save < /tmp/test-hook.json
-```
-
-## Step 6: Verify Upload
-
-Check backend logs - you should see:
-- Session metadata saved to PostgreSQL
-- File uploaded to MinIO
-
-Access MinIO Console at `http://localhost:9001`:
-- Username: `minioadmin`
-- Password: `minioadmin`
-- Browse bucket: `confab`
-- You should see: `1/test-session-123/test-session.jsonl`
-
-## Step 7: Query Database
+To exercise the CLI ⇄ backend sync path against a local stack:
 
 ```bash
-docker exec -it confab-postgres psql -U confab -d confab
+# 1. Start the stack
+docker compose up -d
+
+# 2. Create an API key (via the web UI at http://localhost:8080, or by hitting POST /api/v1/keys
+#    with an authenticated web session). The seeded admin account is admin@local.dev / localdevpassword.
+
+# 3. Configure the Confab CLI (separate repo: https://github.com/ConfabulousDev/confab)
+#    to point at http://localhost:8080 with the API key from step 2.
+
+# 4. Run a Claude Code session. The CLI uploads chunks via /api/v1/sync/{init,chunk,event}.
+
+# 5. Verify in the web UI or directly in Postgres:
+docker exec -it confab-postgres psql -U confab -d confab \
+  -c "SELECT external_id, session_type, total_lines FROM sessions ORDER BY created_at DESC LIMIT 5;"
 ```
 
-Run queries:
-```sql
--- View all sessions
-SELECT * FROM sessions;
-
--- View all runs
-SELECT * FROM runs;
-
--- View all files
-SELECT * FROM files;
-
--- Join to see complete data
-SELECT
-  s.session_id,
-  r.reason,
-  r.end_timestamp,
-  f.file_type,
-  f.s3_key
-FROM sessions s
-JOIN runs r ON s.session_id = r.session_id
-JOIN files f ON r.id = f.run_id;
-```
-
-## Cleanup
+## Coverage
 
 ```bash
-# Stop backend server (Ctrl+C)
-
-# Stop docker services
-cd backend
-docker-compose down
-
-# Optional: Remove volumes (deletes all data)
-docker-compose down -v
+make coverage
 ```
 
-## Troubleshooting
-
-### Backend won't start
-- Check if PostgreSQL is running: `docker ps`
-- Check logs: `docker-compose logs postgres`
-
-### Upload fails
-- Verify API key is correct: `./confab cloud status`
-- Check backend logs for errors
-- Verify MinIO is running: `docker ps`
-
-### Database connection issues
-- Ensure PostgreSQL is healthy: `docker-compose ps`
-- Check connection string in backend logs
+Runs sharded coverage via [`scripts/coverage.sh`](scripts/coverage.sh).
