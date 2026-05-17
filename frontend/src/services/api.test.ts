@@ -81,6 +81,7 @@ const validTrendsResponse = {
   session_count: 5,
   repos_included: [],
   include_no_repo: true,
+  providers_present: [],
   cards: {
     overview: null,
     tokens: null,
@@ -321,5 +322,35 @@ describe('trendsAPI.get', () => {
     const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
     const parsed = new URL(url, 'http://localhost');
     expect(parsed.searchParams.has('repos')).toBe(false);
+  });
+
+  // CF-424: providers serializes to the singular `?provider=` wire key.
+  it('with providers: serializes to singular ?provider= key, comma-joined', async () => {
+    fetchSpy.mockResolvedValue(fakeResponse({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(validTrendsResponse),
+    }));
+
+    await trendsAPI.get({ providers: ['claude-code', 'codex'] });
+
+    const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
+    const parsed = new URL(url, 'http://localhost');
+    expect(parsed.searchParams.get('provider')).toBe('claude-code,codex');
+    expect(parsed.searchParams.has('providers')).toBe(false);
+  });
+
+  it('empty providers array is not included', async () => {
+    fetchSpy.mockResolvedValue(fakeResponse({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(validTrendsResponse),
+    }));
+
+    await trendsAPI.get({ providers: [] });
+
+    const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
+    const parsed = new URL(url, 'http://localhost');
+    expect(parsed.searchParams.has('provider')).toBe(false);
   });
 });

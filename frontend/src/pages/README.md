@@ -77,7 +77,8 @@ The most complex page. It:
 
 - Date range picker with presets (This Week, Last 7 Days, Last 30 Days, etc.)
 - Repo filter multi-select
-- Renders trend cards from `@/components/trends/cards/`
+- AI provider filter (CF-424): canonical values `claude-code` / `codex`; URL-persisted via singular `?provider=` key; empty state = aggregate across all providers
+- Renders trend cards from `@/components/trends/cards/`. Passes `data.providers_present` to `TrendsTokensCard` so it can render a multi-provider caveat when the filtered set spans 2+ providers
 
 ## How to Extend
 

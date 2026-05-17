@@ -13,6 +13,10 @@ type TrendsRequest struct {
 	TZOffset      int      // Client timezone offset in minutes (from JS getTimezoneOffset: positive=behind UTC, negative=ahead)
 	Repos         []string // Filter by extracted repo names (e.g., "org/repo", not full URL)
 	IncludeNoRepo bool     // Include sessions without a git repo
+	// Providers filters sessions by canonical session_type (claude-code, codex).
+	// nil/empty aggregates across models.AllowedProviders; resolveProviderFilter
+	// expands canonical values with legacy aliases before the SQL ANY clause.
+	Providers []string
 }
 
 // =============================================================================
@@ -21,12 +25,17 @@ type TrendsRequest struct {
 
 // TrendsResponse is the API response for trends data.
 type TrendsResponse struct {
-	ComputedAt    time.Time             `json:"computed_at"`
-	DateRange     DateRange             `json:"date_range"`
-	SessionCount  int                   `json:"session_count"`
-	ReposIncluded []string              `json:"repos_included"`
-	IncludeNoRepo bool                  `json:"include_no_repo"`
-	Cards         TrendsCards           `json:"cards"`
+	ComputedAt    time.Time `json:"computed_at"`
+	DateRange     DateRange `json:"date_range"`
+	SessionCount  int       `json:"session_count"`
+	ReposIncluded []string  `json:"repos_included"`
+	IncludeNoRepo bool      `json:"include_no_repo"`
+	// ProvidersPresent enumerates the distinct canonical providers in the
+	// filtered result set, sorted alphabetically. Always non-nil ([] when
+	// empty). Drives the Tokens card's multi-provider caveat when len >= 2
+	// (CF-424).
+	ProvidersPresent []string    `json:"providers_present"`
+	Cards            TrendsCards `json:"cards"`
 }
 
 // DateRange specifies the start and end dates (inclusive).

@@ -46,7 +46,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useLoadSession` | `({ fetchSession, deps }) => UseLoadSessionResult` | Loads a single session with typed error states (`not_found`, `expired`, `forbidden`, `auth_required`, `general`). |
 | `useAnalyticsPolling` | `(sessionId, enabled?) => UseAnalyticsPollingReturn` | Polls session analytics. Sends `as_of_line` for 304 Not Modified support. |
 | `useSmartPolling` | `(fetchFn, options?) => UseSmartPollingReturn<T>` | Generic polling: suspended (tab hidden), passive (idle, 60s), active (30s). Supports merge functions and interval overrides. |
-| `useTrends` | `(initialParams?) => UseTrendsReturn` | Fetches aggregated trends data. Single fetch on mount with manual refetch. |
+| `useTrends` | `(initialParams?) => UseTrendsReturn` | Fetches aggregated trends data. Single fetch on mount with manual refetch. `TrendsParams.providers` (CF-424) serializes to the singular `?provider=` wire key. |
 | `useOrgAnalytics` | `(initialParams) => UseOrgAnalyticsReturn` | Fetches org-level analytics. Single fetch on mount with manual refetch. |
 
 ### UI State

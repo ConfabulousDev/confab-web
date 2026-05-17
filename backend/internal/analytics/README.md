@@ -35,8 +35,8 @@ Session analytics engine: parses Claude Code transcripts and computes, caches, a
 | `search_index.go` | `SearchIndexContent`, `UserMessagesBuilder`, `ExtractSearchContent` -- builds weighted tsvector components (metadata=A, recap=B, user messages=C) for full-text search. |
 | `pricing.go` | `ModelPricing`, `modelPricingTable`, `GetPricing`, `CalculateCost`, `CalculateTotalCost`. Per-model, per-million-token pricing with fast-mode and server-tool-use surcharges. |
 | `validation.go` | Schema validation for every transcript line type (user, assistant, system, summary, file-history-snapshot, queue-operation, pr-link). |
-| `trends.go` | `Store.GetTrends` -- single-user, date-range analytics dashboard. Runs five parallel aggregation queries (overview+activity, tokens, tools, agents+skills, top sessions). |
-| `trends_types.go` | Request/response types for the trends API (`TrendsRequest`, `TrendsResponse`, `TrendsCards`, daily breakdown types). |
+| `trends.go` | `Store.GetTrends` -- single-user, date-range analytics dashboard. Runs six parallel aggregation queries (overview+activity, tokens, tools, agents+skills, top sessions, providers-present). `resolveProviderFilter` expands canonical provider values with legacy aliases and defaults to `models.AllowedProviders` so the `session_type = ANY` clause is always present (guards CF-352-style silent omission). |
+| `trends_types.go` | Request/response types for the trends API (`TrendsRequest` with `Providers` filter, `TrendsResponse` with top-level `ProvidersPresent`, `TrendsCards`, daily breakdown types). |
 | `org_analytics.go` | `Store.GetOrgAnalytics` -- per-user aggregated analytics for admin org view. |
 | `org_analytics_types.go` | Request/response types for org analytics (`OrgAnalyticsRequest`, `OrgAnalyticsResponse`, `OrgUserAnalytics`). |
 | `utils.go` | `ExtractAgentID` -- extracts agent ID from filenames like `agent-{id}.jsonl`. |

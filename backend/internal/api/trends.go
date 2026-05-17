@@ -71,7 +71,7 @@ func parseDateRangeParams(w http.ResponseWriter, r *http.Request) *dateRangePara
 }
 
 // HandleGetTrends returns aggregated analytics across sessions for the authenticated user.
-// Supports filtering by date range and repos.
+// Supports filtering by date range, repos, and AI provider.
 //
 // Query parameters:
 //   - start_ts: Start of date range as epoch seconds (inclusive, typically local midnight)
@@ -79,6 +79,8 @@ func parseDateRangeParams(w http.ResponseWriter, r *http.Request) *dateRangePara
 //   - tz_offset: Client timezone offset in minutes (from JS getTimezoneOffset(); positive=behind UTC)
 //   - repos: Comma-separated repo names to filter by
 //   - include_no_repo: Include sessions without a repo (default: true)
+//   - provider: Comma-separated canonical providers (claude-code, codex). Case-insensitive.
+//     Omitted/empty = aggregate across all AllowedProviders.
 func HandleGetTrends(database *db.DB) http.HandlerFunc {
 	analyticsStore := analytics.NewStore(database.Conn())
 
@@ -111,12 +113,19 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			includeNoRepo = includeStr == "true" || includeStr == "1"
 		}
 
+		providers, perr := parseProviders(r.URL.Query().Get("provider"))
+		if perr != nil {
+			respondError(w, http.StatusBadRequest, perr.Error())
+			return
+		}
+
 		req := analytics.TrendsRequest{
 			StartTS:       dr.StartTS,
 			EndTS:         dr.EndTS,
 			TZOffset:      dr.TZOffset,
 			Repos:         repos,
 			IncludeNoRepo: includeNoRepo,
+			Providers:     providers,
 		}
 
 		response, err := analyticsStore.GetTrends(r.Context(), userID, req)

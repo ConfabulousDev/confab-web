@@ -14,6 +14,9 @@ import styles from './TrendsTokensCard.module.css';
 
 interface TrendsTokensCardProps {
   data: TrendsTokensCardData | null;
+  // CF-424: distinct canonical providers in the filtered result set. When 2+,
+  // the card shows a muted caveat that totals mix model-specific token counts.
+  providersPresent?: string[];
 }
 
 // Format date for chart axis
@@ -51,10 +54,11 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   );
 }
 
-export function TrendsTokensCard({ data }: TrendsTokensCardProps) {
+export function TrendsTokensCard({ data, providersPresent = [] }: TrendsTokensCardProps) {
   if (!data) return null;
 
   const totalTokens = data.total_input_tokens + data.total_output_tokens;
+  const showMultiProviderCaveat = providersPresent.length >= 2;
 
   // Prepare chart data
   const chartData = data.daily_costs.map((d) => ({
@@ -92,6 +96,12 @@ export function TrendsTokensCard({ data }: TrendsTokensCardProps) {
         label="Cache (Create / Read)"
         value={`${formatTokenCount(data.total_cache_creation_tokens)} / ${formatTokenCount(data.total_cache_read_tokens)}`}
       />
+
+      {showMultiProviderCaveat && (
+        <p className={styles.providerCaveat}>
+          Totals include sessions across multiple AI providers.
+        </p>
+      )}
 
       {hasChartData && (
         <div className={styles.chartContainer}>

@@ -32,6 +32,7 @@ function TrendsPagePresentational({
     dateRange: { startDate: '2024-01-08', endDate: '2024-01-14', label: 'Last 7 Days' },
     repos: [],
     includeNoRepo: true,
+    providers: [],
   },
 }: TrendsPagePresentationalProps) {
   const showEmptyState = !loading && data && data.session_count === 0;
@@ -130,6 +131,7 @@ const defaultMockData: TrendsResponse = {
   session_count: 42,
   repos_included: ['org/repo-web', 'org/repo-api'],
   include_no_repo: true,
+  providers_present: ['claude-code'],
   cards: {
     overview: {
       session_count: 42,
@@ -210,6 +212,7 @@ export const HighUsage: Story = {
       session_count: 250,
       repos_included: ['org/repo-web', 'org/repo-api', 'org/repo-cli'],
       include_no_repo: true,
+      providers_present: ['claude-code'],
       cards: {
         overview: {
           session_count: 250,
@@ -284,6 +287,7 @@ export const HighUsage: Story = {
       dateRange: { startDate: '2023-12-15', endDate: '2024-01-14', label: 'Last 30 Days' },
       repos: [],
       includeNoRepo: true,
+    providers: [],
     },
   },
 };
@@ -296,6 +300,7 @@ export const SingleSession: Story = {
       session_count: 1,
       repos_included: ['org/repo-web'],
       include_no_repo: false,
+      providers_present: ['claude-code'],
       cards: {
         overview: {
           session_count: 1,
@@ -341,6 +346,7 @@ export const SingleSession: Story = {
       dateRange: { startDate: '2024-01-14', endDate: '2024-01-14', label: 'This Week' },
       repos: ['org/repo-web'],
       includeNoRepo: false,
+    providers: [],
     },
   },
 };
@@ -378,6 +384,7 @@ export const EmptyState: Story = {
       session_count: 0,
       repos_included: [],
       include_no_repo: true,
+      providers_present: ['claude-code'],
       cards: {
         overview: null,
         tokens: null,
@@ -415,6 +422,7 @@ export const FilteredByRepo: Story = {
       session_count: 15,
       repos_included: ['org/repo-api'],
       include_no_repo: false,
+      providers_present: ['claude-code'],
       cards: {
         ...defaultMockData.cards,
         overview: {
@@ -432,6 +440,7 @@ export const FilteredByRepo: Story = {
       dateRange: { startDate: '2024-01-08', endDate: '2024-01-14', label: 'Last 7 Days' },
       repos: ['org/repo-api'],
       includeNoRepo: false,
+    providers: [],
     },
   },
 };

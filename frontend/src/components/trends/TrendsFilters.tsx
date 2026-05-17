@@ -2,13 +2,18 @@ import { useMemo } from 'react';
 import { useDropdown } from '@/hooks';
 import type { DateRange } from '@/utils/dateRange';
 import { getDatePresets } from '@/utils/dateRange';
-import { CalendarIcon, RepoIcon, CheckIcon } from '@/components/icons';
+import { CalendarIcon, RepoIcon, CheckIcon, RobotIcon } from '@/components/icons';
+import { getProviderIcon } from '@/components/providerIcon';
+import { PROVIDER_VALUES, providerLabel } from '@/utils/providers';
 import styles from './TrendsFilters.module.css';
 
 export interface TrendsFiltersValue {
   dateRange: DateRange;
   repos: string[];
   includeNoRepo: boolean;
+  // CF-424: canonical providers (`claude-code`, `codex`). Empty array =
+  // aggregate across all providers (distinct from selecting every provider).
+  providers: string[];
 }
 
 interface TrendsFiltersProps {
@@ -18,6 +23,11 @@ interface TrendsFiltersProps {
 }
 
 function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
+  const {
+    isOpen: providerIsOpen,
+    toggle: toggleProvider,
+    containerRef: providerContainerRef,
+  } = useDropdown<HTMLDivElement>();
   const {
     isOpen: dateIsOpen,
     setIsOpen: setDateIsOpen,
@@ -33,7 +43,8 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
   const datePresets = useMemo(() => getDatePresets(), []);
 
   // Determine if we're showing a filtered subset
-  const isFiltered = (value.repos.length > 0 && value.repos.length < repos.length) || !value.includeNoRepo;
+  const isRepoFiltered =
+    (value.repos.length > 0 && value.repos.length < repos.length) || !value.includeNoRepo;
 
   const handleDateRangeChange = (preset: DateRange) => {
     onChange({ ...value, dateRange: preset });
@@ -59,6 +70,13 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
     onChange({ ...value, repos: [] });
   };
 
+  const handleProviderToggle = (provider: string) => {
+    const next = value.providers.includes(provider)
+      ? value.providers.filter((p) => p !== provider)
+      : [...value.providers, provider];
+    onChange({ ...value, providers: next });
+  };
+
   const allReposSelected = repos.length > 0 && value.repos.length === repos.length;
 
   function getRepoLabel(): string {
@@ -68,8 +86,48 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
     return `${count} repo${count > 1 ? 's' : ''}`;
   }
 
+  function getProviderButtonLabel(): string {
+    if (value.providers.length === 0) return 'All Providers';
+    if (value.providers.length === 1) return providerLabel(value.providers[0] ?? '');
+    return `${value.providers.length} providers`;
+  }
+
   return (
     <div className={styles.container}>
+      {/* Provider Filter (CF-424) — leftmost, mirroring FilterChipsBar's coarsest-cut ordering */}
+      <div className={styles.filterWrapper} ref={providerContainerRef}>
+        <button
+          className={`${styles.filterBtn} ${value.providers.length > 0 ? styles.active : ''}`}
+          onClick={toggleProvider}
+          title="Provider Filter"
+          aria-label="Provider Filter"
+          aria-expanded={providerIsOpen}
+        >
+          {RobotIcon}
+          <span className={styles.filterLabel}>{getProviderButtonLabel()}</span>
+        </button>
+
+        {providerIsOpen && (
+          <div className={styles.dropdown}>
+            <div className={styles.dropdownContent}>
+              <div className={styles.section}>
+                {PROVIDER_VALUES.map((p) => (
+                  <label key={p} className={styles.checkboxItem}>
+                    <input
+                      type="checkbox"
+                      checked={value.providers.includes(p)}
+                      onChange={() => handleProviderToggle(p)}
+                    />
+                    <span className={styles.providerIcon}>{getProviderIcon(p)}</span>
+                    <span>{providerLabel(p)}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Date Range Filter */}
       <div className={styles.filterWrapper} ref={dateContainerRef}>
         <button
@@ -108,7 +166,7 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
       {/* Repo Filter */}
       <div className={styles.filterWrapper} ref={repoContainerRef}>
         <button
-          className={`${styles.filterBtn} ${isFiltered ? styles.active : ''}`}
+          className={`${styles.filterBtn} ${isRepoFiltered ? styles.active : ''}`}
           onClick={toggleRepo}
           title="Repository Filter"
           aria-label="Repository Filter"

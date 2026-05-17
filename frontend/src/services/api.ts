@@ -560,6 +560,10 @@ export interface TrendsParams {
   endDate?: string;   // YYYY-MM-DD (local date, inclusive)
   repos?: string[];
   includeNoRepo?: boolean;
+  // CF-424: canonical providers ('claude-code', 'codex'). Empty / omitted =
+  // aggregate across all. Serialized as the singular `?provider=` query key
+  // to match the session-listing wire format (CF-393).
+  providers?: string[];
 }
 
 // Convert a local YYYY-MM-DD date string to epoch seconds at local midnight
@@ -595,6 +599,9 @@ export const trendsAPI = {
     }
     if (params.includeNoRepo !== undefined) {
       searchParams.set('include_no_repo', String(params.includeNoRepo));
+    }
+    if (params.providers && params.providers.length > 0) {
+      searchParams.set('provider', params.providers.join(','));
     }
 
     const queryString = searchParams.toString();

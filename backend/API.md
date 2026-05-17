@@ -1107,7 +1107,7 @@ Returns all TILs for a session. Uses canonical access model (CF-132) — anyone 
 
 #### Get Trends
 ```
-GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>
+GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>&provider=<providers>
 ```
 
 Returns aggregated analytics across multiple sessions for the authenticated user.
@@ -1120,6 +1120,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | tz_offset | integer | No | 0 | Client timezone offset in minutes (from JS `getTimezoneOffset()`; positive = behind UTC, e.g. 480 for PST) |
 | repos | string | No | all | Comma-separated repo names to filter |
 | include_no_repo | boolean | No | true | Include sessions without a git repo |
+| provider | string | No | all | Comma-separated canonical AI providers (`claude-code`, `codex`). Case-insensitive; the legacy DB form `Claude Code` is rejected on the wire. Returns `400` for unknown values. Omitted/empty aggregates across all providers. |
 
 **Constraints:**
 - Maximum date range: 90 days
@@ -1135,6 +1136,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
   "session_count": 42,
   "repos_included": ["org/repo1"],
   "include_no_repo": true,
+  "providers_present": ["claude-code", "codex"],
   "cards": {
     "overview": {
       "session_count": 42,
@@ -1216,6 +1218,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | `session_count` | int | Total sessions in the date range |
 | `repos_included` | string[] | Repos that were included in the filter |
 | `include_no_repo` | bool | Whether sessions without repos were included |
+| `providers_present` | string[] | Distinct canonical AI providers in the filtered result set, sorted alphabetically. Always present; `[]` when no sessions match. Used by the Tokens card to render a multi-provider caveat when `length >= 2` (CF-424). |
 | `cards.overview.session_count` | int | Total session count |
 | `cards.overview.total_duration_ms` | int | Sum of all session durations |
 | `cards.overview.avg_duration_ms` | int\|null | Average session duration |

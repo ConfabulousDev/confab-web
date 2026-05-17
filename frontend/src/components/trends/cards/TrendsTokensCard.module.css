@@ -3,3 +3,12 @@
 .tooltip { composes: tooltip from './trendsChart.module.css'; }
 .tooltipDate { composes: tooltipDate from './trendsChart.module.css'; }
 .tooltipValue { composes: tooltipValue from './trendsChart.module.css'; }
+
+/* CF-424: muted caveat shown when the filtered set spans 2+ providers —
+   token counts across Claude and OpenAI aren't directly comparable. */
+.providerCaveat {
+  margin: var(--spacing-sm) 0 0;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}

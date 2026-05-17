@@ -26,6 +26,10 @@ function TrendsPage() {
     dateRange: { type: 'dateRange', default: getDefaultDateRange(), paramName: { start: 'start', end: 'end' } },
     repos: { type: 'string[]', default: [], paramName: 'repo' },
     includeNoRepo: { type: 'boolean', default: true, paramName: 'includeNoRepo' },
+    // CF-424: singular `provider` wire key matches the session-list endpoint.
+    // Empty default = "all providers"; we deliberately do not auto-select-all
+    // like repos so the URL stays clean for the common case.
+    providers: { type: 'string[]', default: [], paramName: 'provider' },
   };
 
   const { filters, setAll } = useURLFilters<TrendsFiltersValue>(config);
@@ -50,6 +54,7 @@ function TrendsPage() {
     endDate: filters.dateRange.endDate,
     repos: filters.repos,
     includeNoRepo: filters.includeNoRepo,
+    providers: filters.providers,
   });
 
   const refetchRef = useRef(refetch);
@@ -71,8 +76,9 @@ function TrendsPage() {
       endDate: filters.dateRange.endDate,
       repos: newRepos,
       includeNoRepo: filters.includeNoRepo,
+      providers: filters.providers,
     });
-  }, [availableRepos, filters.dateRange, filters.includeNoRepo, setAll]);
+  }, [availableRepos, filters.dateRange, filters.includeNoRepo, filters.providers, setAll]);
 
   // Handle filter changes from TrendsFilters component
   const handleFilterChange = useCallback((newFilters: TrendsFiltersValue) => {
@@ -82,6 +88,7 @@ function TrendsPage() {
       endDate: newFilters.dateRange.endDate,
       repos: newFilters.repos,
       includeNoRepo: newFilters.includeNoRepo,
+      providers: newFilters.providers,
     });
   }, [setAll, refetch]);
 
@@ -112,7 +119,7 @@ function TrendsPage() {
             <div className={styles.emptyState}>
               <div className={styles.emptyStateTitle}>No sessions found</div>
               <div className={styles.emptyStateText}>
-                No sessions match the selected filters. Try adjusting the date range or repo filter.
+                No sessions match the selected filters. Try adjusting the date range, repo filter, or provider filter.
               </div>
             </div>
           )}
@@ -120,7 +127,10 @@ function TrendsPage() {
           {data && data.session_count > 0 && (
             <CardGrid>
               <TrendsOverviewCard data={data.cards.overview} />
-              <TrendsTokensCard data={data.cards.tokens} />
+              <TrendsTokensCard
+                data={data.cards.tokens}
+                providersPresent={data.providers_present}
+              />
               <TrendsTopSessionsCard data={data.cards.top_sessions} />
               <TrendsActivityCard data={data.cards.activity} />
               <TrendsToolsCard data={data.cards.tools} />

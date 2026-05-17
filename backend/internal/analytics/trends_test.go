@@ -1211,3 +1211,201 @@ func TestGetTrends_TopSessions_PerProvider(t *testing.T) {
 func int64Ptr(v int64) *int64 {
 	return &v
 }
+
+// TestGetTrends_ProviderFilter (CF-424) covers the wire and SQL semantics
+// of TrendsRequest.Providers across the five card aggregations and the
+// new top-level ProvidersPresent field.
+//
+// Scenarios:
+//  1. nil filter, mixed dataset → all sessions, ProvidersPresent = ["claude-code","codex"].
+//  2. ["claude-code"] → only claude-code; ProvidersPresent = ["claude-code"].
+//  3. ["codex"] → only codex; ProvidersPresent = ["codex"].
+//  4. ["claude-code"] with a legacy 'Claude Code' row → expansion includes it; deduped to "claude-code".
+//  5. ["claude-code","codex"] → same result as nil (full set).
+func TestGetTrends_ProviderFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-provider-filter@test.com", "Trends Provider User")
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Three sessions: one Claude (canonical), one Claude (legacy form), one Codex.
+	// Distinct costs make TopSessions order deterministic.
+	claudeSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "trends-pf-claude", "claude-code")
+	legacySession := testutil.CreateTestSessionLegacyClaudeCode(t, env, user.ID, "trends-pf-legacy")
+	codexSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "trends-pf-codex", "codex")
+
+	seedTokens := func(t *testing.T, sessionID string, input, output int64, cost float64) {
+		t.Helper()
+		err := store.UpsertCards(ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:        sessionID,
+				Version:          analytics.TokensCardVersion,
+				ComputedAt:       time.Now().UTC(),
+				UpToLine:         100,
+				InputTokens:      input,
+				OutputTokens:     output,
+				EstimatedCostUSD: decimal.NewFromFloat(cost),
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sessionID, err)
+		}
+	}
+	// Costs are distinct and sorted so we can assert ordering by indexing.
+	seedTokens(t, codexSession, 3000, 1500, 9.00)  // Codex: cost #1
+	seedTokens(t, claudeSession, 2000, 1000, 6.00) // Claude canonical: cost #2
+	seedTokens(t, legacySession, 1000, 500, 3.00)  // Claude legacy: cost #3
+
+	now := time.Now().UTC()
+	baseReq := analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+
+	cases := []struct {
+		name                 string
+		providers            []string
+		wantSessionCount     int
+		wantInputTokens      int64
+		wantProvidersPresent []string
+		// wantTopProviders is the expected Provider values on TopSessions rows,
+		// in descending cost order (after normalization).
+		wantTopProviders []string
+	}{
+		{
+			name:                 "nil filter — all sessions",
+			providers:            nil,
+			wantSessionCount:     3,
+			wantInputTokens:      6000,
+			wantProvidersPresent: []string{"claude-code", "codex"},
+			wantTopProviders:     []string{"codex", "claude-code", "claude-code"},
+		},
+		{
+			name:                 "claude-code only — excludes codex, includes legacy",
+			providers:            []string{"claude-code"},
+			wantSessionCount:     2,
+			wantInputTokens:      3000,
+			wantProvidersPresent: []string{"claude-code"},
+			wantTopProviders:     []string{"claude-code", "claude-code"},
+		},
+		{
+			name:                 "codex only — excludes claude-code and legacy",
+			providers:            []string{"codex"},
+			wantSessionCount:     1,
+			wantInputTokens:      3000,
+			wantProvidersPresent: []string{"codex"},
+			wantTopProviders:     []string{"codex"},
+		},
+		{
+			name:                 "both providers selected — same as nil filter",
+			providers:            []string{"claude-code", "codex"},
+			wantSessionCount:     3,
+			wantInputTokens:      6000,
+			wantProvidersPresent: []string{"claude-code", "codex"},
+			wantTopProviders:     []string{"codex", "claude-code", "claude-code"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := baseReq
+			req.Providers = tc.providers
+
+			resp, err := store.GetTrends(ctx, user.ID, req)
+			if err != nil {
+				t.Fatalf("GetTrends: %v", err)
+			}
+
+			if resp.SessionCount != tc.wantSessionCount {
+				t.Errorf("SessionCount = %d, want %d", resp.SessionCount, tc.wantSessionCount)
+			}
+
+			if resp.Cards.Overview == nil {
+				t.Fatal("expected Overview card")
+			}
+			if resp.Cards.Overview.SessionCount != tc.wantSessionCount {
+				t.Errorf("Overview.SessionCount = %d, want %d", resp.Cards.Overview.SessionCount, tc.wantSessionCount)
+			}
+
+			if resp.Cards.Tokens == nil {
+				t.Fatal("expected Tokens card")
+			}
+			if resp.Cards.Tokens.TotalInputTokens != tc.wantInputTokens {
+				t.Errorf("Tokens.TotalInputTokens = %d, want %d", resp.Cards.Tokens.TotalInputTokens, tc.wantInputTokens)
+			}
+
+			if !equalStringSlices(resp.ProvidersPresent, tc.wantProvidersPresent) {
+				t.Errorf("ProvidersPresent = %v, want %v", resp.ProvidersPresent, tc.wantProvidersPresent)
+			}
+
+			if resp.Cards.TopSessions == nil {
+				t.Fatal("expected TopSessions card")
+			}
+			gotTopProviders := make([]string, 0, len(resp.Cards.TopSessions.Sessions))
+			for _, s := range resp.Cards.TopSessions.Sessions {
+				gotTopProviders = append(gotTopProviders, s.Provider)
+			}
+			if !equalStringSlices(gotTopProviders, tc.wantTopProviders) {
+				t.Errorf("TopSessions providers = %v, want %v", gotTopProviders, tc.wantTopProviders)
+			}
+		})
+	}
+}
+
+// TestGetTrends_ProvidersPresent_EmptyRange pins that ProvidersPresent is a
+// non-nil empty slice (not nil) when the filtered range contains zero sessions,
+// so JSON serialization yields `[]` rather than `null`.
+func TestGetTrends_ProvidersPresent_EmptyRange(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-pp-empty@test.com", "Trends PP Empty User")
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+
+	resp, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+
+	if resp.ProvidersPresent == nil {
+		t.Fatal("ProvidersPresent must be non-nil even when empty (JSON []) ")
+	}
+	if len(resp.ProvidersPresent) != 0 {
+		t.Errorf("ProvidersPresent = %v, want empty slice", resp.ProvidersPresent)
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

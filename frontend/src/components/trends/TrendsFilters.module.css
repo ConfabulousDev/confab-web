@@ -81,3 +81,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* CF-424: per-provider row icon in the provider dropdown. Sized to match
+   the brand icons used elsewhere (FilterChipsBar, SessionHeader). */
+.providerIcon {
+  display: inline-flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+}

@@ -459,6 +459,10 @@ export const TrendsResponseSchema = z.object({
   session_count: z.number(),
   repos_included: z.array(z.string()),
   include_no_repo: z.boolean(),
+  // CF-424: distinct canonical providers present in the filtered result set,
+  // sorted alphabetically. Always present; empty range yields []. Used by the
+  // Tokens card to render a multi-provider caveat when len >= 2.
+  providers_present: z.array(z.string()),
   cards: TrendsCardsSchema,
 });
 

@@ -15,6 +15,7 @@ function makeResponse(overrides: Partial<TrendsResponse> = {}): TrendsResponse {
     session_count: 5,
     repos_included: [],
     include_no_repo: true,
+    providers_present: [],
     cards: {
       overview: null,
       tokens: null,
@@ -87,6 +88,19 @@ describe('useTrends', () => {
     expect(trendsAPI.get).toHaveBeenLastCalledWith({
       startDate: '2025-02-01',
       endDate: '2025-02-28',
+    });
+  });
+
+  // CF-424: provider filter is forwarded verbatim to the trends API client.
+  it('refetch with providers forwards the array to trendsAPI.get', async () => {
+    vi.mocked(trendsAPI.get).mockResolvedValue(makeResponse());
+    const { result } = renderHook(() => useTrends({ startDate: '2025-01-01' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await result.current.refetch({ startDate: '2025-01-01', providers: ['claude-code'] });
+    expect(trendsAPI.get).toHaveBeenLastCalledWith({
+      startDate: '2025-01-01',
+      providers: ['claude-code'],
     });
   });
 });
