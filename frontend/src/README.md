@@ -9,7 +9,7 @@ with Storybook.
 | Directory | Purpose | Change this when... |
 |-----------|---------|---------------------|
 | `components/` | Shared UI components (Button, Alert, Modal, Header, etc.) | Adding reusable UI elements, changing design system |
-| `components/session/` | Session detail view: provider-aware shell that branches the Transcript pane (`ClaudeTranscriptPane` / `CodexTranscriptPane`) on `session.provider`. The Summary tab is provider-agnostic — both providers render `SessionSummaryPanel` (CF-364) | Changing session detail layout, adding session UI features |
+| `components/session/` | Session detail view: provider-agnostic shell (`SessionViewer`, `SessionHeader`) that delegates per-provider transcript fetch / filter / rendering to `providers/` adapters (CF-417). The Summary tab is shared (`SessionSummaryPanel`, CF-364) | Changing session detail layout, adding session UI features |
 | `components/session/cards/` | Analytics card components + registry (TokensCard, ToolsCard, SmartRecapCard, etc.) | Adding new analytics cards, changing card layout |
 | `components/transcript/` | Claude transcript rendering: content blocks, code blocks, timeline/cost bars, and `attachments/` renderers for `attachment.*` side-channel rows + `away_summary` | Changing how Claude transcript messages are displayed |
 | `components/transcript/codex/` | Codex transcript rendering: virtualized timeline + turn-based navigation rail (`CodexTimelineBar`) + per-item renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback) with `isSelected` / `isNewSpeaker` hover/selection state | Changing how Codex transcript items are displayed |
@@ -17,6 +17,7 @@ with Storybook.
 | `contexts/` | React contexts: ThemeContext, AppConfigContext, KeyboardShortcutContext | Adding app-wide state, changing context providers |
 | `hooks/` | Custom React hooks: data fetching, polling, auth, UI state | Adding data-fetching logic, changing state management |
 | `pages/` | Route-level page components (SessionsPage, TrendsPage, LoginPage, etc.) | Adding new pages/routes, changing page layout |
+| `providers/` | Per-provider transcript adapters: `ProviderAdapter` interface, `getAdapter()` registry, `useTranscriptData` / `useSessionTILs` shared hooks. SessionViewer dispatches through this layer instead of branching on `session.provider` (CF-417) | Adding a new provider's transcript pipeline; changing how SessionViewer fetches / filters / renders per provider |
 | `schemas/` | Zod schemas for API response validation and transcript parsing | Changing API contracts, adding new response types |
 | `services/` | API client (fetch wrapper + Zod validation), transcript/message parsing | Changing API calls, adding new endpoints |
 | `styles/` | CSS variables for theme support (light/dark), shared CSS module base styles | Changing theme colors, adding design tokens, extracting shared component styles |

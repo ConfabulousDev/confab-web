@@ -1,30 +1,13 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { GitInfo, SessionDetail } from '@/types';
 import { formatDuration, formatDateTime, formatModelName } from '@/utils/formatting';
 import { sessionsAPI } from '@/services/api';
-import type {
-  MessageCategory,
-  UserSubcategory,
-  AssistantSubcategory,
-  AttachmentSubcategory,
-  HierarchicalCounts,
-  FilterState,
-} from './messageCategories';
-import type {
-  CodexCategory,
-  CodexAssistantSubcategory,
-  CodexToolCallSubcategory,
-  CodexHierarchicalCounts,
-  CodexFilterState,
-} from './codexCategories';
 import { PersonIcon } from '@/components/icons';
 import { getProviderIcon } from '@/components/providerIcon';
 import { getProviderMetadataOrFallback } from '@/utils/providers';
 import MetaItem from './MetaItem';
 import GitInfoMeta from './GitInfoMeta';
-import FilterDropdown from './FilterDropdown';
-import CodexFilterDropdown from './CodexFilterDropdown';
 import CopyIdDropdown from '@/components/CopyIdDropdown';
 import styles from './SessionHeader.module.css';
 
@@ -68,12 +51,6 @@ const CloseIcon = (
   </svg>
 );
 
-// NOTE: This component has a large prop list (18 props). This is acceptable for now
-// as it serves as the main session header orchestrating multiple concerns. If this
-// grows further or filter-related props are needed elsewhere, consider:
-// - Extracting filter state to a React context (SessionFilterContext)
-// - Using a compound component pattern for the header sections
-// - Grouping related props into objects (e.g., filterProps: { counts, visible, onToggle })
 interface SessionHeaderProps {
   sessionId: string;
   title?: string;
@@ -94,22 +71,10 @@ interface SessionHeaderProps {
   isOwner?: boolean;
   isShared?: boolean;
   sharedByEmail?: string | null; // Email of session owner (for non-owner access)
-  // Claude filter props - optional, only shown on Claude transcript tab.
-  // Drilled from SessionViewer -> SessionHeader -> FilterDropdown.
-  categoryCounts?: HierarchicalCounts;
-  filterState?: FilterState;
-  onToggleCategory?: (category: MessageCategory) => void;
-  onToggleUserSubcategory?: (subcategory: UserSubcategory) => void;
-  onToggleAssistantSubcategory?: (subcategory: AssistantSubcategory) => void;
-  onToggleAttachmentSubcategory?: (subcategory: AttachmentSubcategory) => void;
-  // Codex filter props (CF-361) - optional, only shown on Codex transcript tab.
-  // Mutually exclusive with the Claude filter props at the call site.
-  codexCategoryCounts?: CodexHierarchicalCounts;
-  codexFilterState?: CodexFilterState;
-  onToggleCodexCategory?: (category: CodexCategory) => void;
-  onToggleCodexAssistantSubcategory?: (sub: CodexAssistantSubcategory) => void;
-  onToggleCodexToolCallSubcategory?: (sub: CodexToolCallSubcategory) => void;
-  // Cost mode toggle - only shown on transcript tab
+  /** Provider-specific filter dropdown rendered into the header's actions row.
+   *  SessionViewer composes the right one via the active provider's adapter;
+   *  SessionHeader stays agnostic. Pass `null` to hide. */
+  filterSlot?: ReactNode;
   isCostMode?: boolean;
   onToggleCostMode?: () => void;
 }
@@ -131,17 +96,7 @@ function SessionHeader({
   onSessionUpdate,
   isOwner = true,
   isShared = false,
-  categoryCounts,
-  filterState,
-  onToggleCategory,
-  onToggleUserSubcategory,
-  onToggleAssistantSubcategory,
-  onToggleAttachmentSubcategory,
-  codexCategoryCounts,
-  codexFilterState,
-  onToggleCodexCategory,
-  onToggleCodexAssistantSubcategory,
-  onToggleCodexToolCallSubcategory,
+  filterSlot,
   isCostMode,
   onToggleCostMode,
 }: SessionHeaderProps) {
@@ -311,25 +266,7 @@ function SessionHeader({
             $
           </button>
         )}
-        {categoryCounts && filterState && onToggleCategory && onToggleUserSubcategory && onToggleAssistantSubcategory && onToggleAttachmentSubcategory && (
-          <FilterDropdown
-            counts={categoryCounts}
-            filterState={filterState}
-            onToggleCategory={onToggleCategory}
-            onToggleUserSubcategory={onToggleUserSubcategory}
-            onToggleAssistantSubcategory={onToggleAssistantSubcategory}
-            onToggleAttachmentSubcategory={onToggleAttachmentSubcategory}
-          />
-        )}
-        {codexCategoryCounts && codexFilterState && onToggleCodexCategory && onToggleCodexAssistantSubcategory && onToggleCodexToolCallSubcategory && (
-          <CodexFilterDropdown
-            counts={codexCategoryCounts}
-            filterState={codexFilterState}
-            onToggleCategory={onToggleCodexCategory}
-            onToggleAssistantSubcategory={onToggleCodexAssistantSubcategory}
-            onToggleToolCallSubcategory={onToggleCodexToolCallSubcategory}
-          />
-        )}
+        {filterSlot}
         {isShared ? (
           isOwner ? (
             // Owner viewing their own share link - clickable to switch to owner view

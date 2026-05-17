@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import SessionHeader from './SessionHeader';
+import FilterDropdown from './FilterDropdown';
+import CodexFilterDropdown from './CodexFilterDropdown';
 import type {
   MessageCategory,
   UserSubcategory,
@@ -33,18 +35,14 @@ const sampleGitInfo: GitInfo = {
   commit_sha: 'abc123',
 };
 
-// Interactive wrapper for filter state
-function SessionHeaderInteractive(
-  props: Omit<
-    React.ComponentProps<typeof SessionHeader>,
-    'categoryCounts' | 'filterState' | 'onToggleCategory' | 'onToggleUserSubcategory' | 'onToggleAssistantSubcategory' | 'onToggleAttachmentSubcategory'
-  > & {
-    counts?: HierarchicalCounts;
-    initialFilterState?: FilterState;
-  }
+// Composes the Claude FilterDropdown locally and drives its state via React.
+// Used by stories that want an interactive filter chip. Mirrors what
+// SessionViewer does at runtime via the claude provider adapter.
+function useClaudeFilterSlot(
+  counts: HierarchicalCounts = sampleCounts,
+  initial: FilterState = DEFAULT_FILTER_STATE,
 ) {
-  const { counts = sampleCounts, initialFilterState = DEFAULT_FILTER_STATE, ...rest } = props;
-  const [filterState, setFilterState] = useState(initialFilterState);
+  const [filterState, setFilterState] = useState(initial);
 
   const handleToggleCategory = (category: MessageCategory) => {
     setFilterState((prev) => {
@@ -72,31 +70,16 @@ function SessionHeaderInteractive(
     });
   };
 
-  const handleToggleUserSubcategory = (subcategory: UserSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
-    }));
-  };
-
-  const handleToggleAssistantSubcategory = (subcategory: AssistantSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
-    }));
-  };
-
-  const handleToggleAttachmentSubcategory = (subcategory: AttachmentSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      attachment: { ...prev.attachment, [subcategory]: !prev.attachment[subcategory] },
-    }));
-  };
+  const handleToggleUserSubcategory = (sub: UserSubcategory) =>
+    setFilterState((prev) => ({ ...prev, user: { ...prev.user, [sub]: !prev.user[sub] } }));
+  const handleToggleAssistantSubcategory = (sub: AssistantSubcategory) =>
+    setFilterState((prev) => ({ ...prev, assistant: { ...prev.assistant, [sub]: !prev.assistant[sub] } }));
+  const handleToggleAttachmentSubcategory = (sub: AttachmentSubcategory) =>
+    setFilterState((prev) => ({ ...prev, attachment: { ...prev.attachment, [sub]: !prev.attachment[sub] } }));
 
   return (
-    <SessionHeader
-      {...rest}
-      categoryCounts={counts}
+    <FilterDropdown
+      counts={counts}
       filterState={filterState}
       onToggleCategory={handleToggleCategory}
       onToggleUserSubcategory={handleToggleUserSubcategory}
@@ -104,6 +87,19 @@ function SessionHeaderInteractive(
       onToggleAttachmentSubcategory={handleToggleAttachmentSubcategory}
     />
   );
+}
+
+// Interactive wrapper that mirrors how SessionViewer composes the header:
+// builds the FilterDropdown locally and forwards it as `filterSlot`.
+function SessionHeaderInteractive(
+  props: Omit<React.ComponentProps<typeof SessionHeader>, 'filterSlot'> & {
+    counts?: HierarchicalCounts;
+    initialFilterState?: FilterState;
+  },
+) {
+  const { counts, initialFilterState, ...rest } = props;
+  const filterSlot = useClaudeFilterSlot(counts, initialFilterState);
+  return <SessionHeader {...rest} filterSlot={filterSlot} />;
 }
 
 const meta: Meta<typeof SessionHeaderInteractive> = {
@@ -140,7 +136,7 @@ export const Default: Story = {
     externalId: 'abc123def456',
     ownerEmail: 'developer@example.com',
     model: 'claude-opus-4-5-20251101',
-    durationMs: 4980000, // ~1h 23m
+    durationMs: 4980000,
     sessionDate: new Date('2025-12-06T22:09:00'),
     gitInfo: sampleGitInfo,
     isOwner: true,
@@ -160,7 +156,7 @@ export const SharedSession: Story = {
     externalId: 'xyz789abc123',
     ownerEmail: 'alice@example.com',
     model: 'claude-sonnet-4-20250514',
-    durationMs: 1800000, // 30 min
+    durationMs: 1800000,
     sessionDate: new Date('2025-12-05T14:30:00'),
     gitInfo: { repo_url: 'https://github.com/user/project', branch: 'feature/dark-mode' },
     isOwner: false,
@@ -169,7 +165,6 @@ export const SharedSession: Story = {
   },
 };
 
-// Shared session without email (legacy shares or edge case)
 export const SharedSessionWithoutEmail: Story = {
   args: {
     sessionId: 'session-456-legacy',
@@ -179,16 +174,15 @@ export const SharedSessionWithoutEmail: Story = {
     externalId: 'legacy789abc',
     ownerEmail: 'bob@example.com',
     model: 'claude-sonnet-4-20250514',
-    durationMs: 1200000, // 20 min
+    durationMs: 1200000,
     sessionDate: new Date('2025-12-04T09:00:00'),
     gitInfo: { repo_url: 'https://github.com/user/project', branch: 'main' },
     isOwner: false,
     isShared: true,
-    sharedByEmail: null, // Falls back to "Shared Session"
+    sharedByEmail: null,
   },
 };
 
-// Owner viewing their own share link - indicator is clickable
 export const OwnerViewingShareLink: Story = {
   args: {
     sessionId: 'session-owner-share',
@@ -198,11 +192,11 @@ export const OwnerViewingShareLink: Story = {
     externalId: 'owner123share456',
     ownerEmail: 'developer@example.com',
     model: 'claude-opus-4-5-20251101',
-    durationMs: 3600000, // 1 hour
+    durationMs: 3600000,
     sessionDate: new Date('2025-12-06T10:00:00'),
     gitInfo: { repo_url: 'https://github.com/user/project', branch: 'feature/auth' },
     isOwner: true,
-    isShared: true, // Owner viewing via share link
+    isShared: true,
   },
 };
 
@@ -215,7 +209,7 @@ export const NoGitInfo: Story = {
     externalId: 'def456ghi789',
     ownerEmail: 'developer@example.com',
     model: 'claude-haiku-3-5-20241022',
-    durationMs: 300000, // 5 min
+    durationMs: 300000,
     sessionDate: new Date(),
     isOwner: true,
     isShared: false,
@@ -236,7 +230,7 @@ export const LongTitle: Story = {
       'This is a very long session title that might need to wrap or be truncated depending on the available space in the header component',
     externalId: 'long123title456',
     model: 'claude-opus-4-5-20251101',
-    durationMs: 7200000, // 2 hours
+    durationMs: 7200000,
     sessionDate: new Date('2025-12-01T09:00:00'),
     gitInfo: sampleGitInfo,
     isOwner: true,
@@ -258,7 +252,7 @@ export const CodexSession: Story = {
     provider: 'codex',
     ownerEmail: 'developer@example.com',
     model: 'gpt-5',
-    durationMs: 1800000, // 30 min
+    durationMs: 1800000,
     sessionDate: new Date('2026-05-13T01:00:00'),
     gitInfo: sampleGitInfo,
     isOwner: true,
@@ -288,54 +282,7 @@ export const FallbackTitle: Story = {
 // Interactive cost mode toggle
 function CostModeDemo() {
   const [isCostMode, setIsCostMode] = useState(false);
-  const [filterState, setFilterState] = useState(DEFAULT_FILTER_STATE);
-
-  const handleToggleCategory = (category: MessageCategory) => {
-    setFilterState((prev) => {
-      const next = { ...prev };
-      if (category === 'user') {
-        const allVisible = prev.user.prompt && prev.user['tool-result'] && prev.user.skill;
-        next.user = { prompt: !allVisible, 'tool-result': !allVisible, skill: !allVisible };
-      } else if (category === 'assistant') {
-        const allVisible = prev.assistant.text && prev.assistant['tool-use'] && prev.assistant.thinking;
-        next.assistant = { text: !allVisible, 'tool-use': !allVisible, thinking: !allVisible };
-      } else if (category === 'attachment') {
-        const a = prev.attachment;
-        const allVisible = a.hook && a['file-edit'] && a['queued-command'] && a['deferred-tools'] && a['mcp-instructions'];
-        next.attachment = {
-          hook: !allVisible,
-          'file-edit': !allVisible,
-          'queued-command': !allVisible,
-          'deferred-tools': !allVisible,
-          'mcp-instructions': !allVisible,
-        };
-      } else {
-        next[category] = !prev[category];
-      }
-      return next;
-    });
-  };
-
-  const handleToggleUserSubcategory = (subcategory: UserSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
-    }));
-  };
-
-  const handleToggleAssistantSubcategory = (subcategory: AssistantSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
-    }));
-  };
-
-  const handleToggleAttachmentSubcategory = (subcategory: AttachmentSubcategory) => {
-    setFilterState((prev) => ({
-      ...prev,
-      attachment: { ...prev.attachment, [subcategory]: !prev.attachment[subcategory] },
-    }));
-  };
+  const filterSlot = useClaudeFilterSlot();
 
   return (
     <SessionHeader
@@ -357,12 +304,7 @@ function CostModeDemo() {
       onSessionUpdate={(session) => console.log('Session updated:', session)}
       isCostMode={isCostMode}
       onToggleCostMode={() => setIsCostMode((prev) => !prev)}
-      categoryCounts={sampleCounts}
-      filterState={filterState}
-      onToggleCategory={handleToggleCategory}
-      onToggleUserSubcategory={handleToggleUserSubcategory}
-      onToggleAssistantSubcategory={handleToggleAssistantSubcategory}
-      onToggleAttachmentSubcategory={handleToggleAttachmentSubcategory}
+      filterSlot={filterSlot}
     />
   );
 }
@@ -396,7 +338,7 @@ export const WithoutFilter: DirectStory = {
       onShare={() => alert('Share clicked')}
       onDelete={() => alert('Delete clicked')}
       onSessionUpdate={(session) => console.log('Session updated:', session)}
-      // No filter props - simulates Analytics tab view
+      // No filterSlot - simulates Analytics tab view
     />
   ),
 };
@@ -467,7 +409,16 @@ export const CodexNoModel: DirectStory = {
 // category model (assistant.commentary/final, tool_call.*, reasoning_hidden,
 // compacted, turn_separator).
 function CodexWithFiltersDemo() {
-  const initial = {
+  type CodexState = {
+    user: boolean;
+    assistant: { commentary: boolean; final: boolean };
+    tool_call: { exec_command: boolean; apply_patch: boolean; web_search: boolean; generic: boolean };
+    reasoning_hidden: boolean;
+    compacted: boolean;
+    turn_separator: boolean;
+    unknown: boolean;
+  };
+  const initial: CodexState = {
     user: true,
     assistant: { commentary: true, final: true },
     tool_call: { exec_command: true, apply_patch: true, web_search: true, generic: true },
@@ -476,7 +427,7 @@ function CodexWithFiltersDemo() {
     turn_separator: true,
     unknown: true,
   };
-  const [filterState, setFilterState] = useState(initial);
+  const [filterState, setFilterState] = useState<CodexState>(initial);
 
   const counts = {
     user: 12,
@@ -487,6 +438,41 @@ function CodexWithFiltersDemo() {
     turn_separator: 12,
     unknown: 0,
   };
+
+  const filterSlot = (
+    <CodexFilterDropdown
+      counts={counts}
+      filterState={filterState}
+      onToggleCategory={(c) => {
+        setFilterState((prev) => {
+          const next: CodexState = { ...prev };
+          if (c === 'assistant') {
+            const all = prev.assistant.commentary && prev.assistant.final;
+            next.assistant = { commentary: !all, final: !all };
+          } else if (c === 'tool_call') {
+            const tc = prev.tool_call;
+            const all = tc.exec_command && tc.apply_patch && tc.web_search && tc.generic;
+            next.tool_call = { exec_command: !all, apply_patch: !all, web_search: !all, generic: !all };
+          } else {
+            next[c] = !prev[c];
+          }
+          return next;
+        });
+      }}
+      onToggleAssistantSubcategory={(sub) =>
+        setFilterState((prev) => ({
+          ...prev,
+          assistant: { ...prev.assistant, [sub]: !prev.assistant[sub] },
+        }))
+      }
+      onToggleToolCallSubcategory={(sub) =>
+        setFilterState((prev) => ({
+          ...prev,
+          tool_call: { ...prev.tool_call, [sub]: !prev.tool_call[sub] },
+        }))
+      }
+    />
+  );
 
   return (
     <SessionHeader
@@ -503,36 +489,7 @@ function CodexWithFiltersDemo() {
       gitInfo={sampleGitInfo}
       isOwner={true}
       isShared={false}
-      codexCategoryCounts={counts}
-      codexFilterState={filterState}
-      onToggleCodexCategory={(c) => {
-        setFilterState((prev) => {
-          const next = { ...prev };
-          if (c === 'assistant') {
-            const all = prev.assistant.commentary && prev.assistant.final;
-            next.assistant = { commentary: !all, final: !all };
-          } else if (c === 'tool_call') {
-            const tc = prev.tool_call;
-            const all = tc.exec_command && tc.apply_patch && tc.web_search && tc.generic;
-            next.tool_call = { exec_command: !all, apply_patch: !all, web_search: !all, generic: !all };
-          } else {
-            next[c] = !prev[c];
-          }
-          return next;
-        });
-      }}
-      onToggleCodexAssistantSubcategory={(sub) =>
-        setFilterState((prev) => ({
-          ...prev,
-          assistant: { ...prev.assistant, [sub]: !prev.assistant[sub] },
-        }))
-      }
-      onToggleCodexToolCallSubcategory={(sub) =>
-        setFilterState((prev) => ({
-          ...prev,
-          tool_call: { ...prev.tool_call, [sub]: !prev.tool_call[sub] },
-        }))
-      }
+      filterSlot={filterSlot}
     />
   );
 }
