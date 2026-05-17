@@ -15,7 +15,11 @@ import "github.com/ConfabulousDev/confab-web/internal/codex"
 //     applying the uncached rate. Reasoning tokens add to output (same rate).
 //   - Session: full population (TotalMessages, breakdowns, ModelsUsed, Duration).
 //     Compactions all classified as "auto" (Codex doesn't distinguish auto vs manual).
-//   - Tools: standard success/error breakdown; orphan "<unknown>" tools counted.
+//   - Tools: standard success/error breakdown. Orphan "<unknown>" tools
+//     (synthetic placeholders for function_call_output with no matching
+//     function_call) are dropped from per-tool stats and excluded from
+//     TotalToolCalls / ToolErrorCount. The anomaly is surfaced via
+//     ParsedRollout.ValidationErrors at parse time. CF-438.
 //   - Code activity: apply_patch envelopes drive FilesModified/LinesAdded/Removed
 //     and LanguageBreakdown. FilesRead stays 0 (Codex has no Read tool).
 //   - Conversation: UserTurns / AssistantTurns plus the five timing fields

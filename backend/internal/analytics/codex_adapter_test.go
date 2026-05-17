@@ -310,7 +310,12 @@ func TestComputeFromCodexRollout_Redactions_Recursive(t *testing.T) {
 	}
 }
 
-func TestComputeFromCodexRollout_OrphanToolCall(t *testing.T) {
+// TestComputeFromCodexRollout_OrphanToolCallSkipped locks in the CF-438
+// contract: orphan "<unknown>" tool calls (synthetic placeholders the parser
+// emits when a function_call_output arrives without a matching function_call)
+// are dropped from the Tools card. The data anomaly is recorded as a
+// ParsedRollout.ValidationError at parse time instead.
+func TestComputeFromCodexRollout_OrphanToolCallSkipped(t *testing.T) {
 	r := &codex.ParsedRollout{
 		Turns: []codex.Turn{{
 			ToolCalls: []codex.ToolCall{
@@ -322,10 +327,49 @@ func TestComputeFromCodexRollout_OrphanToolCall(t *testing.T) {
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
-	if out.TotalToolCalls != 1 {
-		t.Errorf("TotalToolCalls = %d, want 1", out.TotalToolCalls)
+	if out.TotalToolCalls != 0 {
+		t.Errorf("TotalToolCalls = %d, want 0 (orphan must be skipped)", out.TotalToolCalls)
 	}
-	if out.ToolStats["<unknown>"] == nil || out.ToolStats["<unknown>"].Success != 1 {
-		t.Errorf("ToolStats[<unknown>] not populated: %v", out.ToolStats)
+	if out.ToolErrorCount != 0 {
+		t.Errorf("ToolErrorCount = %d, want 0", out.ToolErrorCount)
+	}
+	if _, ok := out.ToolStats["<unknown>"]; ok {
+		t.Errorf("ToolStats must not contain orphan <unknown> key: %v", out.ToolStats)
+	}
+}
+
+// TestComputeFromCodexRollout_FailedTool exercises CF-438 acceptance #2:
+// failed custom_tool_call payloads must increment both ToolErrorCount and the
+// per-tool Errors counter, while completed payloads land in Success.
+func TestComputeFromCodexRollout_FailedTool(t *testing.T) {
+	r := &codex.ParsedRollout{
+		Model: "gpt-5",
+		Turns: []codex.Turn{{
+			TurnID: "t1",
+			ToolCalls: []codex.ToolCall{
+				{Name: "apply_patch", Arguments: "*** Begin Patch\n*** Add File: a.txt\n+ok\n*** End Patch", Status: "completed"},
+				{Name: "apply_patch", Arguments: "*** Begin Patch\n*** Update File: b.txt\n-old\n+new\n*** End Patch", Status: "failed"},
+			},
+		}},
+	}
+	out := ComputeFromCodexRollout(r)
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.TotalToolCalls != 2 {
+		t.Errorf("TotalToolCalls = %d, want 2", out.TotalToolCalls)
+	}
+	if out.ToolErrorCount != 1 {
+		t.Errorf("ToolErrorCount = %d, want 1 (one failed apply_patch)", out.ToolErrorCount)
+	}
+	stats := out.ToolStats["apply_patch"]
+	if stats == nil {
+		t.Fatalf("ToolStats[apply_patch] missing: %v", out.ToolStats)
+	}
+	if stats.Success != 1 {
+		t.Errorf("ToolStats[apply_patch].Success = %d, want 1", stats.Success)
+	}
+	if stats.Errors != 1 {
+		t.Errorf("ToolStats[apply_patch].Errors = %d, want 1", stats.Errors)
 	}
 }

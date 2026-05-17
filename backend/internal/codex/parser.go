@@ -257,11 +257,12 @@ func (p *parser) handleResponseItem(ts time.Time, raw json.RawMessage, lineNum i
 		}
 		p.ensureTurn(ts)
 		p.openToolCall(ts, ct.CallID, ct.Name, ct.Input)
-		if ct.Status == "completed" {
-			// Some custom tool calls (e.g. apply_patch) report completion
-			// inline; mark pending until output arrives unless explicit.
+		// Some custom tool calls (e.g. apply_patch) report a terminal status
+		// inline rather than via a later *_output event. Other statuses fall
+		// through to "pending" for a subsequent *_output to resolve. CF-438.
+		if ct.Status == "completed" || ct.Status == "failed" {
 			if ref, ok := p.callIndex[ct.CallID]; ok {
-				p.toolCallAt(ref).Status = "completed"
+				p.toolCallAt(ref).Status = ct.Status
 			}
 		}
 	case "custom_tool_call_output":
@@ -365,15 +366,16 @@ func (p *parser) openToolCall(ts time.Time, callID, name, args string) {
 }
 
 // closeToolCallOutput attaches an output to a previously-opened ToolCall.
-// If no matching call exists, emits a synthetic ToolCall named "<unknown>"
-// so the data is still surfaced to analytics.
+// On orphan output (no matching call_id), emits a synthetic "<unknown>"
+// ToolCall so transcript/search still surface the text, and appends a
+// ValidationError so callers can discover the anomaly. The analytics Tools
+// card drops "<unknown>" entries by design (CF-438).
 func (p *parser) closeToolCallOutput(ts time.Time, callID, output string) {
 	if ref, ok := p.callIndex[callID]; ok {
 		tc := p.toolCallAt(ref)
 		applyToolOutput(tc, output)
 		return
 	}
-	// Orphan: open a synthetic turn if needed, then emit a <unknown> tool call.
 	p.ensureTurn(ts)
 	tc := ToolCall{
 		CallID:    callID,
@@ -382,6 +384,10 @@ func (p *parser) closeToolCallOutput(ts time.Time, callID, output string) {
 	}
 	applyToolOutput(&tc, output)
 	p.active.ToolCalls = append(p.active.ToolCalls, tc)
+	p.out.ValidationErrors = append(p.out.ValidationErrors, ValidationError{
+		Type:   "function_call_output",
+		Reason: "orphan output: no matching call_id " + callID,
+	})
 }
 
 // toolCallAt returns a pointer into Turns[turnIdx].ToolCalls or the active

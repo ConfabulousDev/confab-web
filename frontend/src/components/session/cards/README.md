@@ -13,7 +13,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `SessionCard.tsx` | Session metadata: message counts, duration, models, compaction stats |
 | `ConversationCard.tsx` | Turn-based metrics: user/assistant turns, avg response time, utilization |
 | `CodeActivityCard.tsx` | Code activity: files read/modified, lines added/removed, language breakdown |
-| `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts |
+| `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts. Exports `prepareChartData` for testing. Defensively filters orphan `<unknown>` entries so a literal `<unknown>` bar never paints, even for stale ComputeResults predating the CF-438 backend skip. |
 | `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown |
 | `RedactionsCard.tsx` | Redaction counts by type (shown only when redactions exist) |
 | `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links |

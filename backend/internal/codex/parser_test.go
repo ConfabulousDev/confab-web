@@ -61,11 +61,12 @@ func TestParseRollout_HappyPath(t *testing.T) {
 		t.Errorf("CWD = %q", rollout.CWD)
 	}
 
-	// Two completed turns plus a third implicit turn for the trailing orphan
-	// function_call_output (orphan outputs need a turn to land in, and the
-	// rollout closed after the second task_complete).
-	if len(rollout.Turns) != 3 {
-		t.Fatalf("Turns count = %d, want 3 (2 completed + 1 implicit for orphan)", len(rollout.Turns))
+	// Three explicit turns (the third carrying an inline-failed apply_patch
+	// covering CF-438) plus a fourth implicit turn for the trailing orphan
+	// function_call_output. Orphan outputs need a turn to land in, and the
+	// rollout closed after the third task_complete.
+	if len(rollout.Turns) != 4 {
+		t.Fatalf("Turns count = %d, want 4 (3 completed + 1 implicit for orphan)", len(rollout.Turns))
 	}
 
 	turn1 := rollout.Turns[0]
@@ -135,6 +136,22 @@ func TestParseRollout_HappyPath(t *testing.T) {
 	}
 	if len(turn2.UserMessages) != 1 {
 		t.Errorf("turn2.UserMessages count = %d, want 1", len(turn2.UserMessages))
+	}
+
+	// Turn 3 (CF-438): inline-failed apply_patch. The custom_tool_call payload
+	// carries status="failed"; the parser must propagate that onto ToolCall.Status.
+	turn3 := rollout.Turns[2]
+	if turn3.TurnID != "019e-turn-0003" {
+		t.Errorf("turn3.TurnID = %q, want 019e-turn-0003", turn3.TurnID)
+	}
+	if len(turn3.ToolCalls) != 1 {
+		t.Fatalf("turn3.ToolCalls count = %d, want 1", len(turn3.ToolCalls))
+	}
+	if turn3.ToolCalls[0].Name != "apply_patch" {
+		t.Errorf("turn3 tool name = %q, want apply_patch", turn3.ToolCalls[0].Name)
+	}
+	if turn3.ToolCalls[0].Status != "failed" {
+		t.Errorf("turn3 tool Status = %q, want \"failed\" (CF-438: inline-failed custom_tool_call must propagate)", turn3.ToolCalls[0].Status)
 	}
 
 	// Token usage from last non-null token_count info.
@@ -278,10 +295,7 @@ func TestParseRollout_OrphanFunctionCallOutput(t *testing.T) {
 	}
 	// The fixture's trailing orphan output should be surfaced as a synthetic
 	// "<unknown>"-named tool call. It lands after the last task_complete, so
-	// it implicitly creates a third turn? No — implicit-turn fires only when
-	// there's NO active turn AND we see a response_item. After turn 2
-	// completes, the active turn is closed; a third turn is implicitly opened
-	// for the orphan output.
+	// implicit-turn fires (active turn is closed; orphan opens a new one).
 	var found bool
 	for _, turn := range rollout.Turns {
 		for _, tc := range turn.ToolCalls {
@@ -292,6 +306,71 @@ func TestParseRollout_OrphanFunctionCallOutput(t *testing.T) {
 	}
 	if !found {
 		t.Error("orphan function_call_output should produce a synthetic <unknown> tool call")
+	}
+
+	// CF-438: every orphan output must also append a ValidationError naming
+	// the unmatched call_id so the anomaly is discoverable downstream.
+	var orphanErrs int
+	for _, ve := range rollout.ValidationErrors {
+		if ve.Type == "function_call_output" && strings.Contains(ve.Reason, "orphan output") {
+			orphanErrs++
+		}
+	}
+	if orphanErrs != 1 {
+		t.Errorf("orphan ValidationError count = %d, want 1 (one orphan in fixture)", orphanErrs)
+	}
+}
+
+// TestParseRollout_CustomToolCallFailedStatus covers CF-438 acceptance #1:
+// a custom_tool_call carrying status="failed" inline (e.g. an apply_patch that
+// fails on the call rather than via a later patch_apply_end event) must
+// produce ToolCall.Status="failed", not "pending".
+func TestParseRollout_CustomToolCallFailedStatus(t *testing.T) {
+	jsonl := strings.Join([]string{
+		`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"model":"gpt-5","model_provider":"openai"}}`,
+		`{"timestamp":"2026-05-13T01:00:00.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1,"model":"gpt-5"}}`,
+		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"custom_tool_call","status":"failed","call_id":"c1","name":"apply_patch","input":"*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch"}}`,
+		`{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`,
+	}, "\n")
+	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	if len(rollout.Turns) != 1 {
+		t.Fatalf("Turns = %d, want 1", len(rollout.Turns))
+	}
+	calls := rollout.Turns[0].ToolCalls
+	if len(calls) != 1 {
+		t.Fatalf("ToolCalls = %d, want 1", len(calls))
+	}
+	tc := calls[0]
+	if tc.Name != "apply_patch" {
+		t.Errorf("Name = %q, want apply_patch", tc.Name)
+	}
+	if tc.Status != "failed" {
+		t.Errorf("Status = %q, want \"failed\" (inline failure must propagate)", tc.Status)
+	}
+}
+
+// TestParseRollout_CustomToolCallCompletedStatus is the matched-pair test for
+// the failed-status case: completed payloads must also propagate cleanly
+// without regressing the existing behavior.
+func TestParseRollout_CustomToolCallCompletedStatus(t *testing.T) {
+	jsonl := strings.Join([]string{
+		`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"model":"gpt-5","model_provider":"openai"}}`,
+		`{"timestamp":"2026-05-13T01:00:00.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1,"model":"gpt-5"}}`,
+		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"custom_tool_call","status":"completed","call_id":"c1","name":"apply_patch","input":"*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch"}}`,
+		`{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`,
+	}, "\n")
+	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	if len(rollout.Turns) != 1 || len(rollout.Turns[0].ToolCalls) != 1 {
+		t.Fatalf("unexpected shape")
+	}
+	if got := rollout.Turns[0].ToolCalls[0].Status; got != "completed" {
+		t.Errorf("Status = %q, want \"completed\"", got)
 	}
 }
 

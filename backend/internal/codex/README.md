@@ -21,7 +21,7 @@ backend pipelines.
 | `parser.go` | `ParseRollout(io.Reader) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, and exec_command output-preamble parsing. |
 | `types.go` | `ParsedRollout`, `Turn`, `Message`, `ToolCall`, `TokenUsage`, `CompactionEvent`, `ValidationError`. Pure data types — no imports beyond `time`. |
 | `parser_test.go` | Unit tests against `testdata/sample_rollout.jsonl`. Covers the 10 spec scenarios (happy path, mid-turn truncation, bad JSON, empty input, null token info, exec exit codes, env-context stripping, compaction, orphan output, implicit turn). |
-| `testdata/sample_rollout.jsonl` | Fixture covering session_meta, two completed turns, function_call + custom_tool_call, web_search_call, encrypted reasoning, non-null `token_count.info`, a compacted line, an unknown top-level type (forward-compat), and a trailing orphan `function_call_output`. |
+| `testdata/sample_rollout.jsonl` | Fixture covering session_meta, three completed turns (turns 1–2 are the standard happy paths; turn 3 carries an inline-failed `custom_tool_call` per CF-438), function_call + custom_tool_call, web_search_call, encrypted reasoning, non-null `token_count.info`, a compacted line, an unknown top-level type (forward-compat), and a trailing orphan `function_call_output`. |
 
 ## Parser contract
 
@@ -45,8 +45,15 @@ and applies the following rules:
 4. **Tool-call pairing**: each `call_id` is indexed; `function_call` and
    `custom_tool_call` create the entry; `*_output` populates `Output` and
    `Status`; `event_msg.patch_apply_end` overrides `Status` to `"failed"`
-   when `success: false`. **Orphan outputs** create a synthetic ToolCall
-   named `"<unknown>"` in an implicit turn so analytics still see the data.
+   when `success: false`. A `custom_tool_call` carrying `status: "completed"`
+   or `status: "failed"` inline (e.g. `apply_patch` reporting failure on the
+   call rather than via a later `patch_apply_end`) propagates that status
+   onto the open ToolCall immediately; unknown statuses fall through to
+   `"pending"` for a later `*_output` to resolve (CF-438). **Orphan outputs**
+   (`function_call_output` with no matching `function_call`) create a
+   synthetic ToolCall named `"<unknown>"` in an implicit turn so transcript
+   and search still surface the output text, and append a `ValidationError`
+   per occurrence so downstream consumers can detect the anomaly.
 5. **exec_command output preamble** (`Chunk ID:`, `Wall time:`, `Process
    exited with code N`, `Output:\n`): parsed into `ExitCode`, `WallTimeMs`,
    and the body. Mirrors the frontend's `parseExecOutput`.
