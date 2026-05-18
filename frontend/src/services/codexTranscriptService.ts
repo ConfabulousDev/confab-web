@@ -343,7 +343,9 @@ type ToolCallDraft = {
  *   - Emit CodexReasoningHiddenItem for each reasoning line
  *   - Emit CodexTurnSeparatorItem per task_complete (durationMs, timeToFirstTokenMs)
  *   - Emit CodexCompactedItem for each compacted line
- *   - Track current model from session_meta and task_started for assistant items
+ *   - Track current model from session_meta, turn_context, and task_started for
+ *     assistant items (Codex CLI ~0.130+ writes the model per-turn into
+ *     turn_context; older CLIs put it on session_meta or task_started)
  *   - Fall back to CodexUnknownItem for unrecognized types
  */
 export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[] {
@@ -374,7 +376,9 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
         break;
       }
       case 'turn_context': {
-        // Always dropped.
+        // Pluck the per-turn model (Codex CLI ~0.130+ moved it here from
+        // session_meta), drop the line itself.
+        if (line.payload.model) currentModel = line.payload.model;
         break;
       }
       case 'compacted': {

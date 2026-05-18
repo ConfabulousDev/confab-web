@@ -215,6 +215,57 @@ describe('normalizeCodexLines', () => {
     }
   });
 
+  // Codex CLI ~0.130+ (CF-379) moved the per-turn model out of session_meta /
+  // task_started and into turn_context. Without picking it up here, the
+  // assistant render items fall back to the initial 'unknown' literal and the
+  // transcript view badges every assistant message "unknown".
+  it('picks up the model from turn_context when session_meta and task_started omit it', () => {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","cwd":"/x"}}',
+      '{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}',
+      '{"timestamp":"2026-05-13T01:00:00.200Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}',
+      '{"timestamp":"2026-05-13T01:00:00.300Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}}',
+    ].join('\n');
+    const result = items(jsonl);
+    const assistants = result.filter((i) => i.kind === 'assistant');
+    expect(assistants.length).toBe(1);
+    if (assistants[0]?.kind === 'assistant') {
+      expect(assistants[0].model).toBe('gpt-5.5');
+    }
+  });
+
+  it('updates the running model on each new turn_context envelope', () => {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","cwd":"/x"}}',
+      '{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5"}}',
+      '{"timestamp":"2026-05-13T01:00:00.300Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first"}]}}',
+      '{"timestamp":"2026-05-13T01:01:00Z","type":"turn_context","payload":{"turn_id":"t2","model":"gpt-5.5"}}',
+      '{"timestamp":"2026-05-13T01:01:00.300Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second"}]}}',
+    ].join('\n');
+    const result = items(jsonl);
+    const assistants = result.filter((i) => i.kind === 'assistant');
+    expect(assistants.length).toBe(2);
+    const models = assistants.map((a) => (a.kind === 'assistant' ? a.model : null));
+    expect(models).toEqual(['gpt-5', 'gpt-5.5']);
+  });
+
+  // Pins the last-wins ordering for rollouts in transition that carry both
+  // envelopes: turn_context is the more specific per-turn signal and must
+  // override whatever session_meta set earlier in the stream.
+  it('turn_context.model overrides session_meta.model for subsequent assistant items', () => {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"id":"x","cwd":"/x","model":"gpt-5"}}',
+      '{"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}',
+      '{"timestamp":"2026-05-13T01:00:00.300Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}}',
+    ].join('\n');
+    const result = items(jsonl);
+    const assistants = result.filter((i) => i.kind === 'assistant');
+    expect(assistants.length).toBe(1);
+    if (assistants[0]?.kind === 'assistant') {
+      expect(assistants[0].model).toBe('gpt-5.5');
+    }
+  });
+
   // -------------------------------------------------------------------------
   // Tool calls
   // -------------------------------------------------------------------------

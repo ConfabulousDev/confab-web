@@ -78,6 +78,8 @@ without re-fetching:
    - Drop noise: `session_meta`, `turn_context`,
      `event_msg.task_started`, `event_msg.user_message`,
      `event_msg.agent_message`, `response_item.message[role=developer]`.
+     (`session_meta` and `turn_context` are dropped from the render stream
+     but their `payload.model` is plucked first — see below.)
    - **CF-362 — `event_msg.token_count`**: never emits a render item, but
      walks `items` backwards to find the most-recent assistant item whose
      `usage` is still undefined and attaches `info.last_token_usage` to it
@@ -93,8 +95,12 @@ without re-fetching:
    - Pair `custom_tool_call` ↔ `custom_tool_call_output` ↔
      `event_msg.patch_apply_end` (merges structured patch info into the
      existing draft).
-   - Track the running model from `session_meta.model` and
-     `task_started.model`; attach it to each assistant render item.
+   - Track the running model from `session_meta.model`,
+     `turn_context.model`, and `task_started.model`; attach it to each
+     assistant render item. Codex CLI ~0.130+ (CF-379) writes the model
+     per-turn into `turn_context`; older CLIs put it on `session_meta` or
+     `task_started`. Mirrors the backend parser's fallback chain at
+     `backend/internal/codex/parser.go:271-285`.
    - Emit `CodexReasoningHiddenItem` placeholders for encrypted reasoning
      lines, `CodexTurnSeparatorItem` per `task_complete` (with
      `durationMs` + `timeToFirstTokenMs`), and `CodexCompactedItem` per
