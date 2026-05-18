@@ -1274,7 +1274,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 
 #### Get Organization Analytics
 ```
-GET /api/v1/org/analytics?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>
+GET /api/v1/org/analytics?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&provider=<list>&repos=<list>&include_no_repo=<bool>
 ```
 
 Returns per-user aggregated analytics across all sessions in the organization. Requires `ENABLE_ORG_ANALYTICS=true` environment variable.
@@ -1287,6 +1287,9 @@ Returns per-user aggregated analytics across all sessions in the organization. R
 | start_ts | integer | No | 7 days ago (UTC) | Start of date range as epoch seconds (inclusive) |
 | end_ts | integer | No | tomorrow (UTC) | End of date range as epoch seconds (exclusive) |
 | tz_offset | integer | No | 0 | Client timezone offset in minutes |
+| provider | string | No | (all) | Comma-separated canonical providers (`claude-code`, `codex`). Case-insensitive. Omitted/empty = aggregate across all providers. Legacy `Claude Code` rows fold into `claude-code` automatically. |
+| repos | string | No | (none) | Comma-separated repo names (`owner/name` form) to include. Empty/omitted matches **no** repo-tagged sessions — pass every repo (e.g. via `/org/repos`) to include all repo-tagged sessions. |
+| include_no_repo | boolean | No | `true` | Whether to include sessions that have no `repo_url` in `git_info`, independent of the `repos` list. The frontend OrgPage auto-selects all known repos on first load so the default user experience is "everything"; this endpoint itself is strict. |
 
 **Constraints:**
 - Maximum date range: 90 days
@@ -1300,6 +1303,7 @@ Returns per-user aggregated analytics across all sessions in the organization. R
     "start_date": "2024-01-08",
     "end_date": "2024-01-15"
   },
+  "providers_present": ["claude-code", "codex"],
   "users": [
     {
       "user": {
@@ -1310,11 +1314,11 @@ Returns per-user aggregated analytics across all sessions in the organization. R
       "session_count": 45,
       "total_cost_usd": "128.50",
       "total_duration_ms": 432000000,
-      "total_claude_time_ms": 216000000,
+      "total_assistant_time_ms": 216000000,
       "total_user_time_ms": 216000000,
       "avg_cost_usd": "2.86",
       "avg_duration_ms": 9600000,
-      "avg_claude_time_ms": 4800000,
+      "avg_assistant_time_ms": 4800000,
       "avg_user_time_ms": 4800000
     }
   ]
@@ -1326,6 +1330,7 @@ Returns per-user aggregated analytics across all sessions in the organization. R
 | `computed_at` | string | ISO timestamp when analytics were computed |
 | `date_range.start_date` | string | Start date (inclusive) |
 | `date_range.end_date` | string | End date (inclusive) |
+| `providers_present` | array | Canonical providers (e.g. `claude-code`, `codex`) with at least one qualifying session in the filtered range. Always non-null; `[]` when nothing matches. |
 | `users` | array | One entry per active user |
 | `users[].user.id` | int | User ID |
 | `users[].user.email` | string | User email |
@@ -1333,12 +1338,44 @@ Returns per-user aggregated analytics across all sessions in the organization. R
 | `users[].session_count` | int | Sessions with both tokens and conversation cards |
 | `users[].total_cost_usd` | string | Total estimated cost (decimal as string) |
 | `users[].total_duration_ms` | int | Total session duration in milliseconds |
-| `users[].total_claude_time_ms` | int | Total assistant (Claude) time in milliseconds |
+| `users[].total_assistant_time_ms` | int | Total assistant time in milliseconds |
 | `users[].total_user_time_ms` | int | Total user time in milliseconds |
 | `users[].avg_cost_usd` | string | Average cost per session (decimal as string) |
 | `users[].avg_duration_ms` | int\|null | Average session duration (null if 0 sessions) |
-| `users[].avg_claude_time_ms` | int\|null | Average Claude time per session (null if 0 sessions) |
+| `users[].avg_assistant_time_ms` | int\|null | Average assistant time per session (null if 0 sessions) |
 | `users[].avg_user_time_ms` | int\|null | Average user time per session (null if 0 sessions) |
+
+**Errors:**
+- `400` - Invalid parameters or range exceeds 90 days
+- `401` - Authentication required
+- `404` - Feature not enabled (`ENABLE_ORG_ANALYTICS` env var not set)
+
+#### List Organization Repos
+```
+GET /api/v1/org/repos?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>
+```
+
+Returns the alphabetically sorted, deduplicated list of repos (owner/name) across all org sessions in the date range. Drives the repo filter dropdown on the Organization page.
+
+Requires `ENABLE_ORG_ANALYTICS=true`. Same privacy model and middleware chain as the Organization Analytics endpoint: any authenticated user sees every repo name across the org.
+
+**Query Parameters:** identical to `GET /api/v1/org/analytics` (`start_ts`, `end_ts`, `tz_offset`).
+
+**Response:**
+```json
+{
+  "computed_at": "2024-01-15T10:30:00Z",
+  "date_range": {
+    "start_date": "2024-01-08",
+    "end_date": "2024-01-15"
+  },
+  "repos": ["ConfabulousDev/confab-cli", "ConfabulousDev/confab-web"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `repos` | array | Alphabetically sorted `owner/name` strings extracted from sessions.git_info->>'repo_url'. Always non-null; `[]` when nothing matches. |
 
 **Errors:**
 - `400` - Invalid parameters or range exceeds 90 days

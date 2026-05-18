@@ -98,3 +98,82 @@
   width: 14px;
   height: 14px;
 }
+
+/* Active state for a filter button (highlighted when the filter is narrowed). */
+.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.checkboxItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--transition-base);
+}
+
+.checkboxItem:hover {
+  background: var(--color-bg-hover);
+}
+
+.checkboxItem input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-accent);
+}
+
+/* Per-provider row icon in the provider dropdown. Sized to match the brand
+   icons used elsewhere (FilterChipsBar, SessionHeader). */
+.providerIcon {
+  display: inline-flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+}
+
+/* Repo-filter section helpers — header label + select-all toggle + divider. */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-xs);
+}
+
+.sectionLabel {
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.toggleAllBtn {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: var(--font-xs);
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: opacity var(--transition-base);
+}
+
+.toggleAllBtn:hover {
+  opacity: 0.8;
+}
+
+.divider {
+  height: 1px;
+  margin: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-border);
+}
+
+.repoName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

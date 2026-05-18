@@ -12,6 +12,7 @@ function makeResponse(): OrgAnalyticsResponse {
   return {
     computed_at: '2025-01-01T00:00:00Z',
     date_range: { start_date: '2025-01-01', end_date: '2025-01-31' },
+    providers_present: [],
     users: [],
   };
 }
@@ -63,6 +64,33 @@ describe('useOrgAnalytics', () => {
 
     await result.current.refetch({ startDate: '2025-03-01' });
     expect(orgAnalyticsAPI.get).toHaveBeenLastCalledWith({ startDate: '2025-03-01' });
+  });
+
+  it('round-trips a providers filter to the API call', async () => {
+    vi.mocked(orgAnalyticsAPI.get).mockResolvedValue(makeResponse());
+    const { result } = renderHook(() =>
+      useOrgAnalytics({ providers: ['codex'] })
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(orgAnalyticsAPI.get).toHaveBeenCalledWith({ providers: ['codex'] });
+  });
+
+  it('skips initial fetch when enabled=false; fires once on enable', async () => {
+    vi.mocked(orgAnalyticsAPI.get).mockResolvedValue(makeResponse());
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useOrgAnalytics({ startDate: '2025-01-01' }, { enabled }),
+      { initialProps: { enabled: false } }
+    );
+
+    expect(orgAnalyticsAPI.get).not.toHaveBeenCalled();
+    expect(result.current.loading).toBe(false);
+
+    rerender({ enabled: true });
+    await waitFor(() => expect(orgAnalyticsAPI.get).toHaveBeenCalledTimes(1));
+    expect(orgAnalyticsAPI.get).toHaveBeenCalledWith({ startDate: '2025-01-01' });
   });
 
   it('does not trigger a second fetch when initialParams prop changes after mount', async () => {

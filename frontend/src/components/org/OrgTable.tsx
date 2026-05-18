@@ -10,11 +10,11 @@ type SortField =
   | 'session_count'
   | 'total_cost'
   | 'total_duration'
-  | 'claude_time'
+  | 'assistant_time'
   | 'user_time'
   | 'avg_cost'
   | 'avg_duration'
-  | 'avg_claude'
+  | 'avg_assistant'
   | 'avg_user';
 
 interface Column {
@@ -30,11 +30,11 @@ const COLUMNS: Column[] = [
   { key: 'session_count', label: 'Sessions', tooltip: 'Total number of sessions' },
   { key: 'total_cost', label: 'Est. Cost', tooltip: COST_TOOLTIP },
   { key: 'total_duration', label: 'Total Duration', tooltip: 'Sum of all session durations' },
-  { key: 'claude_time', label: 'Claude Time', tooltip: 'Total time Claude was actively responding' },
+  { key: 'assistant_time', label: 'Assistant Time', tooltip: 'Total time the assistant was actively responding' },
   { key: 'user_time', label: 'User Time', tooltip: 'Total time the user was active' },
   { key: 'avg_cost', label: 'Avg Cost', tooltip: 'Average estimated cost per session' },
   { key: 'avg_duration', label: 'Avg Duration', tooltip: 'Average session duration' },
-  { key: 'avg_claude', label: 'Avg Claude', tooltip: 'Average Claude response time per session' },
+  { key: 'avg_assistant', label: 'Avg Assistant', tooltip: 'Average assistant response time per session' },
   { key: 'avg_user', label: 'Avg User', tooltip: 'Average user active time per session' },
 ];
 
@@ -52,16 +52,16 @@ function getSortValue(row: OrgUserAnalytics, field: SortField): number | string 
       return parseFloat(row.total_cost_usd);
     case 'total_duration':
       return row.total_duration_ms;
-    case 'claude_time':
-      return row.total_claude_time_ms;
+    case 'assistant_time':
+      return row.total_assistant_time_ms;
     case 'user_time':
       return row.total_user_time_ms;
     case 'avg_cost':
       return parseFloat(row.avg_cost_usd);
     case 'avg_duration':
       return row.avg_duration_ms ?? 0;
-    case 'avg_claude':
-      return row.avg_claude_time_ms ?? 0;
+    case 'avg_assistant':
+      return row.avg_assistant_time_ms ?? 0;
     case 'avg_user':
       return row.avg_user_time_ms ?? 0;
   }
@@ -111,10 +111,10 @@ function OrgTable({ users }: OrgTableProps) {
         sessions: acc.sessions + u.session_count,
         cost: acc.cost + parseFloat(u.total_cost_usd),
         duration: acc.duration + u.total_duration_ms,
-        claude: acc.claude + u.total_claude_time_ms,
+        assistant: acc.assistant + u.total_assistant_time_ms,
         user: acc.user + u.total_user_time_ms,
       }),
-      { sessions: 0, cost: 0, duration: 0, claude: 0, user: 0 },
+      { sessions: 0, cost: 0, duration: 0, assistant: 0, user: 0 },
     );
 
     const avg = (value: number) =>
@@ -124,11 +124,11 @@ function OrgTable({ users }: OrgTableProps) {
       sessionCount: totals.sessions,
       totalCost: totals.cost,
       totalDuration: totals.duration,
-      totalClaude: totals.claude,
+      totalAssistant: totals.assistant,
       totalUser: totals.user,
       avgCost: totals.sessions > 0 ? totals.cost / totals.sessions : 0,
       avgDuration: avg(totals.duration),
-      avgClaude: avg(totals.claude),
+      avgAssistant: avg(totals.assistant),
       avgUser: avg(totals.user),
     };
   }, [users]);
@@ -168,11 +168,11 @@ function OrgTable({ users }: OrgTableProps) {
             <td className={styles.alignRight}>{summary.sessionCount}</td>
             <td className={styles.alignRight}>{formatCostCompact(summary.totalCost)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.totalDuration)}</td>
-            <td className={styles.alignRight}>{formatDurationOrDash(summary.totalClaude)}</td>
+            <td className={styles.alignRight}>{formatDurationOrDash(summary.totalAssistant)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.totalUser)}</td>
             <td className={styles.alignRight}>{formatCostCompact(summary.avgCost)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.avgDuration)}</td>
-            <td className={styles.alignRight}>{formatDurationOrDash(summary.avgClaude)}</td>
+            <td className={styles.alignRight}>{formatDurationOrDash(summary.avgAssistant)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.avgUser)}</td>
           </tr>
 
@@ -191,11 +191,11 @@ function OrgTable({ users }: OrgTableProps) {
                 <td className={`${styles.alignRight} ${cellClass}`}>{row.session_count}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatCostCompact(row.total_cost_usd)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.total_duration_ms)}</td>
-                <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.total_claude_time_ms)}</td>
+                <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.total_assistant_time_ms)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.total_user_time_ms)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatCostCompact(row.avg_cost_usd)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.avg_duration_ms)}</td>
-                <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.avg_claude_time_ms)}</td>
+                <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.avg_assistant_time_ms)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.avg_user_time_ms)}</td>
               </tr>
             );

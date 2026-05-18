@@ -2,6 +2,15 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { orgAnalyticsAPI, type OrgAnalyticsParams } from '@/services/api';
 import type { OrgAnalyticsResponse } from '@/schemas/api';
 
+interface UseOrgAnalyticsOptions {
+  // When false, the hook skips its on-mount fetch. The caller must drive
+  // the first request via `refetch` once it's ready. Useful when the page
+  // can't decide the right params until a sibling resource (e.g. the org
+  // repo list) has loaded — firing with the wrong default would render
+  // wrong data and waste a request.
+  enabled?: boolean;
+}
+
 interface UseOrgAnalyticsReturn {
   data: OrgAnalyticsResponse | null;
   loading: boolean;
@@ -9,9 +18,13 @@ interface UseOrgAnalyticsReturn {
   refetch: (params: OrgAnalyticsParams) => Promise<void>;
 }
 
-export function useOrgAnalytics(initialParams: OrgAnalyticsParams): UseOrgAnalyticsReturn {
+export function useOrgAnalytics(
+  initialParams: OrgAnalyticsParams,
+  options: UseOrgAnalyticsOptions = {},
+): UseOrgAnalyticsReturn {
+  const enabled = options.enabled ?? true;
   const [data, setData] = useState<OrgAnalyticsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<Error | null>(null);
   const initialParamsRef = useRef(initialParams);
 
@@ -30,8 +43,9 @@ export function useOrgAnalytics(initialParams: OrgAnalyticsParams): UseOrgAnalyt
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     fetchData(initialParamsRef.current);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only fetch once on mount
+  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps -- only fetch once on enable
 
   return { data, loading, error, refetch: fetchData };
 }
