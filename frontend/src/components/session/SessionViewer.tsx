@@ -21,9 +21,10 @@ interface SessionViewerProps {
   activeTab?: ViewTab;
   /** Callback when tab changes - required if activeTab is provided */
   onTabChange?: (tab: ViewTab) => void;
-  /** Deep-link target. For Claude this is a message UUID; for Codex it is a
-   *  lineId. The adapter for the active provider resolves it. */
-  targetMessageUuid?: string;
+  /** Deep-link target. Forwarded opaquely to the active provider's adapter,
+   *  which interprets it per its own identity scheme (Claude: message UUID;
+   *  Codex: lineId per CF-360). */
+  targetId?: string;
   /** For Storybook: pass messages directly instead of fetching from API */
   initialMessages?: TranscriptLine[];
   /** For Storybook: pass analytics directly instead of fetching from API */
@@ -43,7 +44,7 @@ function SessionViewer({
   isShared = false,
   activeTab: controlledTab,
   onTabChange,
-  targetMessageUuid,
+  targetId,
   initialMessages,
   initialAnalytics,
   initialGithubLinks,
@@ -94,7 +95,7 @@ function SessionViewer({
     return { filteredItems: filtered, visibleIndices: visible };
   }, [adapter, items, filters.state]);
 
-  adapter.useDeepLinkFilterReset(items, targetMessageUuid, filters);
+  adapter.useDeepLinkFilterReset(items, targetId, filters);
 
   const tilsByMessageUuid = useSessionTILs(session.id, adapter.supportsTILs);
 
@@ -204,7 +205,7 @@ function SessionViewer({
                 visibleIndices={visibleIndices}
                 loading={loading}
                 error={error}
-                targetId={targetMessageUuid}
+                targetId={targetId}
                 isCostMode={isCostMode}
                 tilsByMessageUuid={tilsByMessageUuid}
               />

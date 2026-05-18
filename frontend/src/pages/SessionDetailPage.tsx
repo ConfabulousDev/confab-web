@@ -214,7 +214,7 @@ function SessionDetailPage() {
         isShared={!isOwner}
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        targetMessageUuid={msgParam ?? undefined}
+        targetId={msgParam ?? undefined}
       />
 
       {/* Share Dialog Modal */}

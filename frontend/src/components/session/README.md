@@ -39,7 +39,7 @@ interface SessionViewerProps {
   isShared?: boolean;
   activeTab?: ViewTab;           // Controlled mode
   onTabChange?: (tab: ViewTab) => void;
-  targetMessageUuid?: string;    // Deep-link to specific message
+  targetId?: string;             // Deep-link target (provider-opaque: Claude UUID, Codex lineId)
   initialMessages?: TranscriptLine[];     // Storybook bypass
   initialAnalytics?: SessionAnalytics;    // Storybook bypass
   initialGithubLinks?: GitHubLink[];      // Storybook bypass
@@ -117,7 +117,7 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - **Transcript polling**: New transcript lines are fetched incrementally using `line_offset` to avoid re-downloading the entire transcript. The `lineCountRef` tracks total JSONL lines (not parsed messages) to stay in sync with the backend. Since CF-386 a single provider-aware poll useEffect in `SessionViewer` covers both Claude (via `fetchNewTranscriptMessages`) and Codex (via `fetchNewCodexLines`).
 - **Provider branching**: `SessionViewer` dispatches on `session.provider` for the Transcript pane only — `'codex'` → `CodexTranscriptPane`, anything else (including the legacy `'Claude Code'` value backfilled by the API) → `ClaudeTranscriptPane`. The Summary tab uses `SessionSummaryPanel` for both providers (CF-364), backed by Codex analytics from `ComputeFromCodexRollout` (CF-350). TIL badges and smart-recap deep-links remain Claude-only because both anchor to message UUIDs that Codex messages don't carry.
 - **Storybook bypass**: `SessionViewer` and `SessionSummaryPanel` accept `initial*` props to skip API calls in Storybook stories.
-- **Deep linking**: When `targetMessageUuid` is set but the target message is hidden by filters, filters are automatically reset to make it visible. The same `?msg=` URL param doubles as a Codex deep-link target (CF-360): `SessionViewer` passes it to `CodexTranscriptPane` as `targetLineId`, which the Codex timeline interprets as a stable `rawLines` index. CF-361 wired the Codex parallel of the auto-reset: if the target's category is currently hidden, `setCodexFilterState({ ...DEFAULT_CODEX_FILTER_STATE, reasoning_hidden: target.kind === 'reasoning_hidden' }, { replace: true })` runs so the target becomes visible (the post-default override matters only for `reasoning_hidden` targets, since that's the only default-hidden Codex category).
+- **Deep linking**: When `targetId` is set but the target message is hidden by filters, filters are automatically reset to make it visible. The shell-level prop is provider-opaque (CF-367): Claude interprets it as a message UUID, Codex as a stable `lineId` (CF-360). `SessionViewer` forwards it to the active provider's adapter, which passes it through to the pane's provider-internal prop (`targetMessageUuid` for Claude, `targetLineId` for Codex). CF-361 wired the Codex parallel of the auto-reset: if the target's category is currently hidden, `setCodexFilterState({ ...DEFAULT_CODEX_FILTER_STATE, reasoning_hidden: target.kind === 'reasoning_hidden' }, { replace: true })` runs so the target becomes visible (the post-default override matters only for `reasoning_hidden` targets, since that's the only default-hidden Codex category).
 - **URL filter grammar**: Claude and Codex filter hooks share the `?hide=` URL slot with provider-specific token grammars. Foreign tokens (e.g. `attachment.hook` on a Codex session) are silently ignored on read; a write from the Codex hook drops them. Cross-provider URL navigation degrades gracefully.
 
 ## Design Decisions

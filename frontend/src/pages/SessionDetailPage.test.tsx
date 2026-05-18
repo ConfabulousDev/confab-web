@@ -6,23 +6,13 @@ import type { SessionDetail } from '@/types';
 import SessionDetailPage from './SessionDetailPage';
 import { makeSessionDetailFixture } from '@/test-fixtures/session';
 
-const mockSession: SessionDetail = makeSessionDetailFixture('claude-code', {
-  id: 'test-session-uuid',
-  external_id: 'abc123def456',
-  custom_title: null,
-  summary: 'Test session summary',
-  first_user_message: 'Help me test',
-  first_seen: '2025-01-15T10:00:00Z',
-  last_sync_at: '2025-01-15T12:30:00Z',
-  cwd: '/test',
-  transcript_path: '/test/transcript.jsonl',
-  git_info: null,
-  files: [],
-  hostname: 'test-host',
-  username: 'tester',
-  is_owner: true,
-  owner_email: 'test@example.com',
-});
+// CF-367: parameterized over both providers via `describe.each` to prove the
+// shell forwards `?msg=` opaquely. `vi.hoisted` shares a mutable ref with the
+// `useLoadSession` mock factory so each iteration can swap the session in
+// before render.
+const sessionRef: { current: SessionDetail | null } = vi.hoisted(() => ({
+  current: null,
+}));
 
 // Mock hooks
 vi.mock('@/hooks', () => ({
@@ -31,7 +21,7 @@ vi.mock('@/hooks', () => ({
   useDocumentTitle: vi.fn(),
   useSuccessMessage: () => ({ message: null, fading: false }),
   useLoadSession: () => ({
-    session: mockSession,
+    session: sessionRef.current,
     setSession: vi.fn(),
     loading: false,
     error: null,
@@ -70,63 +60,77 @@ function renderWithRouter(initialEntry: string) {
   );
 }
 
-describe('SessionDetailPage deep-link', () => {
-  beforeEach(() => {
-    sessionViewerCalls.length = 0;
-  });
+// CF-367: per-provider target shape. Claude uses a UUID-shaped string;
+// Codex uses a non-UUID numeric string mirroring the CF-360 `lineId` format
+// (raw JSONL line index as a string). The shell must forward both opaquely.
+const PROVIDER_CASES = [
+  { provider: 'claude-code' as const, target: 'target-uuid-123' },
+  { provider: 'codex' as const, target: '12' },
+];
 
-  function lastProps() {
-    const call = sessionViewerCalls[sessionViewerCalls.length - 1];
-    if (!call) throw new Error('SessionViewer was never rendered');
-    return call[0];
+describe.each(PROVIDER_CASES)(
+  'SessionDetailPage deep-link / $provider',
+  ({ provider, target }) => {
+    beforeEach(() => {
+      sessionViewerCalls.length = 0;
+      sessionRef.current = makeSessionDetailFixture(provider, {
+        id: 'test-session-uuid',
+      });
+    });
+
+    function lastProps() {
+      const call = sessionViewerCalls[sessionViewerCalls.length - 1];
+      if (!call) throw new Error('SessionViewer was never rendered');
+      return call[0];
+    }
+
+    it('passes targetId from msg search param to SessionViewer', () => {
+      renderWithRouter(`/sessions/test-session-uuid?msg=${target}`);
+      expect(lastProps().targetId).toBe(target);
+    });
+
+    it('forces transcript tab when msg param is present', () => {
+      renderWithRouter(`/sessions/test-session-uuid?msg=${target}`);
+      expect(lastProps().activeTab).toBe('transcript');
+    });
+
+    it('forces transcript tab even when tab=summary is set alongside msg', () => {
+      renderWithRouter(`/sessions/test-session-uuid?tab=summary&msg=${target}`);
+      expect(lastProps().activeTab).toBe('transcript');
+    });
+
+    it('passes undefined targetId when msg param is absent', () => {
+      renderWithRouter('/sessions/test-session-uuid');
+      expect(lastProps().targetId).toBeUndefined();
+    });
+
+    it('defaults to summary tab when no msg param', () => {
+      renderWithRouter('/sessions/test-session-uuid');
+      expect(lastProps().activeTab).toBe('summary');
+    });
+
+    it('clears msg param when onTabChange is called with summary', () => {
+      renderWithRouter(`/sessions/test-session-uuid?tab=transcript&msg=${target}`);
+
+      // Simulate switching to summary tab via the callback
+      act(() => {
+        lastProps().onTabChange('summary');
+      });
+
+      // After tab change, SessionViewer re-renders without msg
+      expect(lastProps().targetId).toBeUndefined();
+      expect(lastProps().activeTab).toBe('summary');
+    });
+
+    it('preserves msg param when switching to transcript tab', () => {
+      renderWithRouter(`/sessions/test-session-uuid?tab=transcript&msg=${target}`);
+
+      // Switching to transcript should NOT clear msg
+      act(() => {
+        lastProps().onTabChange('transcript');
+      });
+
+      expect(lastProps().targetId).toBe(target);
+    });
   }
-
-  it('passes targetMessageUuid from msg search param to SessionViewer', () => {
-    renderWithRouter('/sessions/test-session-uuid?msg=target-uuid-123');
-    expect(lastProps().targetMessageUuid).toBe('target-uuid-123');
-  });
-
-  it('forces transcript tab when msg param is present', () => {
-    renderWithRouter('/sessions/test-session-uuid?msg=target-uuid-123');
-    expect(lastProps().activeTab).toBe('transcript');
-  });
-
-  it('forces transcript tab even when tab=summary is set alongside msg', () => {
-    renderWithRouter('/sessions/test-session-uuid?tab=summary&msg=target-uuid-123');
-    expect(lastProps().activeTab).toBe('transcript');
-  });
-
-  it('passes undefined targetMessageUuid when msg param is absent', () => {
-    renderWithRouter('/sessions/test-session-uuid');
-    expect(lastProps().targetMessageUuid).toBeUndefined();
-  });
-
-  it('defaults to summary tab when no msg param', () => {
-    renderWithRouter('/sessions/test-session-uuid');
-    expect(lastProps().activeTab).toBe('summary');
-  });
-
-  it('clears msg param when onTabChange is called with summary', () => {
-    renderWithRouter('/sessions/test-session-uuid?tab=transcript&msg=target-uuid-123');
-
-    // Simulate switching to summary tab via the callback
-    act(() => {
-      lastProps().onTabChange('summary');
-    });
-
-    // After tab change, SessionViewer re-renders without msg
-    expect(lastProps().targetMessageUuid).toBeUndefined();
-    expect(lastProps().activeTab).toBe('summary');
-  });
-
-  it('preserves msg param when switching to transcript tab', () => {
-    renderWithRouter('/sessions/test-session-uuid?tab=transcript&msg=target-uuid-123');
-
-    // Switching to transcript should NOT clear msg
-    act(() => {
-      lastProps().onTabChange('transcript');
-    });
-
-    expect(lastProps().targetMessageUuid).toBe('target-uuid-123');
-  });
-});
+);
