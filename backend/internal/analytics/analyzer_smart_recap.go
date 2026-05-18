@@ -465,17 +465,17 @@ func resolveMessageIDs(result *SmartRecapResult, idMap map[int]string) {
 
 // smartRecapInputFormat describes the XML transcript and session_stats input structure.
 // This is a FIXED section — it describes the actual data format produced by the system
-// and must not be modified by admins.
-const smartRecapInputFormat = `You are analyzing a Claude Code session. The input contains:
+// and must not be modified by admins. The description is intentionally agnostic to the
+// underlying coding agent (Claude Code, Codex, etc.) so a single prompt serves every
+// provider — see CF-447.
+const smartRecapInputFormat = `You are analyzing an AI coding agent's session. The input contains:
 
 1. <transcript> - The conversation in XML format:
-   - Each element has a sequential integer id attribute for reference (e.g., <user id="1">, <assistant id="2">)
-   - <user> tags for human messages (prompts from the user)
-   - <skill> tags for skill expansions (instructions injected when skills like /commit are invoked)
-   - <assistant> tags for Claude's responses, which may include:
-     - <thinking> for Claude's reasoning process
-     - <tools_called> listing tool names used
-   - <tool_results> tags showing which tools succeeded or failed
+   - Each element has a sequential integer id attribute for reference (e.g., <user id="1">, <assistant id="2">).
+   - User messages capture human prompts.
+   - Assistant messages capture the agent's responses, which may include reasoning and the tool calls it made.
+   - Tool calls and their results appear inline; results indicate success or failure.
+   - Compaction markers indicate the session was auto-summarized.
 
 2. <session_stats> - Computed analytics metrics (if available):
    - Token usage, costs, and cache hit rates
@@ -495,11 +495,11 @@ const smartRecapOutputSchema = `Output ONLY valid JSON with these fields:
 - went_bad: Up to 3 objects of things that did not go well (same format as went_well)
 - human_suggestions: Up to 2 objects of human technique improvements (same format). Omit or use empty array if nothing stands out.
 - environment_suggestions: Up to 2 objects of environment improvements (same format). Omit or use empty array if nothing stands out.
-- default_context_suggestions: Up to 2 objects of CLAUDE.md/system context improvements (same format). These should be high-level general practices (e.g., "always run tests before committing"), NOT task-specific details (e.g., "when implementing OAuth, use PKCE flow"). Omit or use empty array if nothing stands out.`
+- default_context_suggestions: Up to 2 objects of system context / agent config improvements (same format). These should be high-level general practices (e.g., "always run tests before committing"), NOT task-specific details (e.g., "when implementing OAuth, use PKCE flow"). Omit or use empty array if nothing stands out.`
 
 // smartRecapDefaultInstructions is the default customizable section: persona, analysis
 // instructions, and guidelines. Admins can replace this via the admin_settings table.
-const smartRecapDefaultInstructions = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient in using Claude Code for software engineering tasks. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding in the new world of Claude Code assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
+const smartRecapDefaultInstructions = `You are a highly expert software engineer with decades of experience working in the software industry. You have become highly proficient at evaluating sessions from AI coding agents and understanding what makes them productive. You have an in-depth understanding of software engineering best practices in general, and you know how to marry such understanding with the new world of AI-assisted engineering. You are a great communicator who explains complex concepts in simple terms and in an approachable tone.
 
 Provide a high-signal analysis. Look for interesting patterns in both the transcript AND the stats.
 
@@ -522,7 +522,7 @@ Example output:
   "went_bad": [{"text": "Multiple rounds needed to fix CSS specificity issues", "message_id": 5}],
   "human_suggestions": [{"text": "Include browser compatibility requirements upfront"}],
   "environment_suggestions": [],
-  "default_context_suggestions": [{"text": "Document preferred testing patterns in CLAUDE.md"}]
+  "default_context_suggestions": [{"text": "Document preferred testing patterns in the project's agent config file"}]
 }`
 
 // BuildSmartRecapSystemPrompt assembles the full system prompt from fixed sections

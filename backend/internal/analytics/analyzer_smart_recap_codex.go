@@ -9,9 +9,22 @@ import (
 
 // PrepareCodexTranscript builds an XML transcript for the smart recap LLM,
 // reusing the same envelope as Claude's PrepareTranscript so the prompt
-// accepts it without changes. The idMap entries are synthetic placeholders;
-// codexProvider reports ClearMessageIDs=true so the frontend treats items as
-// plain text. Truncation honors DefaultFormatConfig() for parity with Claude.
+// accepts it without changes. Truncation honors DefaultFormatConfig() for
+// parity with Claude.
+//
+// Message-ID anchoring (intentional limitation, CF-447):
+// Codex rollout JSONL has no stable per-message identifier the frontend can
+// anchor a deep link on. The idMap entries returned here are synthetic
+// placeholders ("codex-msg-N", "codex-tool-N", "codex-tool-result-N",
+// "codex-compaction-N") that only serve the LLM's internal cross-references
+// within a single recap generation. To keep these synthetic ids from leaking
+// into the rendered card, codexProvider.ClearMessageIDs() returns true; the
+// generator calls SmartRecapGenerator.GenerateWithMessageIDClearing, which
+// zeroes every AnnotatedItem.MessageID after the LLM returns. The frontend
+// SmartRecapCard.tsx MessageLink component short-circuits on an empty
+// message_id and renders the item as plain text. This is correct behavior,
+// not a bug — Claude transcripts get clickable deep links because Claude
+// has real per-message UUIDs; Codex transcripts do not.
 func PrepareCodexTranscript(rollouts []*codex.ParsedRollout) (string, map[int]string) {
 	cfg := DefaultFormatConfig()
 	var b strings.Builder

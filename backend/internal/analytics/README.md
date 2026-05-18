@@ -172,6 +172,8 @@ The smart recap system prompt is composed of four sections: input format, output
 
 `SmartRecapFixedSections()` returns the three fixed sections (input format, output schema, example) for the admin API to display as read-only context.
 
+**Provider-agnostic by design (CF-447).** The same prompt is sent for every coding-agent provider (Claude Code, Codex, and any future addition). The input format describes the transcript structure categorically (user messages, assistant responses, tool calls, tool results, compaction markers) without naming agent-specific tags like `<skill>` or `<thinking>`. The example output and the output schema reference "the project's agent config file" rather than a specific filename like `CLAUDE.md` or `AGENTS.md`. Adding a new provider does NOT require touching the prompt.
+
 ## Design Decisions
 
 ### Card-per-Table Architecture
@@ -234,7 +236,7 @@ Per-card mapping decisions for Codex are documented inline in `codex_compute.go`
 - Reasoning tokens are billed as output by OpenAI; they fold into `OutputTokens`.
 - `FilesRead` stays 0 — Codex has no Read tool; documented inline rather than approximated heuristically.
 - `AssistantTurns` count user-prompt-triggered sequences (not raw Codex `task_started`->`task_complete` cycles) for closer parity with Claude semantics.
-- Smart recap items get empty `MessageID` when the provider reports `ClearMessageIDs() == true`; the frontend's `SmartRecapCard.tsx` already short-circuits on `!item.message_id` and renders them as plain text (Codex messages have no stable id for deep-linking).
+- Smart recap items get empty `MessageID` when the provider reports `ClearMessageIDs() == true`; the frontend's `SmartRecapCard.tsx` already short-circuits on `!item.message_id` and renders them as plain text (Codex rollout JSONL has no stable per-message id for deep-linking — the synthetic `codex-msg-N`/`codex-tool-N` ids in `PrepareCodexTranscript`'s idMap exist only for the LLM's internal cross-references and are zeroed before the card is saved). See the header godoc on `analyzer_smart_recap_codex.go::PrepareCodexTranscript` for the full rationale (CF-447).
 
 ### Adding a New Provider
 
