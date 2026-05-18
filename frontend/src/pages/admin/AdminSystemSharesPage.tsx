@@ -4,6 +4,7 @@ import { adminAPI, APIError } from '@/services/api';
 import { useAppConfig } from '@/hooks/useAppConfig';
 import { useCopyToClipboard } from '@/hooks';
 import { formatRelativeTime } from '@/utils';
+import { getProviderMetadataOrFallback, providerLabel } from '@/utils/providers';
 import Button from '@/components/Button';
 import Alert from '@/components/Alert';
 import FormField from '@/components/FormField';
@@ -104,6 +105,7 @@ function AdminSystemSharesPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th>Provider</th>
                   <th>Session ID</th>
                   <th>External ID</th>
                   <th>Share URL</th>
@@ -113,31 +115,40 @@ function AdminSystemSharesPage() {
                 </tr>
               </thead>
               <tbody>
-                {shares.map((share) => (
-                  <tr key={share.id}>
-                    <td>
-                      <code className={styles.code}>{share.session_id.substring(0, 8)}</code>
-                    </td>
-                    <td>
-                      <code className={styles.code}>{share.external_id.substring(0, 8)}</code>
-                    </td>
-                    <td>
-                      <div className={styles.urlCell}>
-                        <span className={styles.urlText}>{share.share_url}</span>
-                        <Button size="sm" onClick={() => copy(share.share_url)}>
-                          Copy
-                        </Button>
-                      </div>
-                    </td>
-                    <td className={styles.timestamp}>{formatRelativeTime(share.created_at)}</td>
-                    <td className={styles.timestamp}>
-                      {share.last_accessed_at ? formatRelativeTime(share.last_accessed_at) : '\u2014'}
-                    </td>
-                    <td className={styles.timestamp}>
-                      {share.expires_at ? formatRelativeTime(share.expires_at) : 'Never'}
-                    </td>
-                  </tr>
-                ))}
+                {shares.map((share) => {
+                  const metadata = getProviderMetadataOrFallback(share.provider, 'neutral');
+                  return (
+                    <tr key={share.id}>
+                      <td>
+                        <span className={styles.providerCell}>
+                          {metadata && <span className={styles.providerIcon}>{metadata.icon}</span>}
+                          {providerLabel(share.provider)}
+                        </span>
+                      </td>
+                      <td>
+                        <code className={styles.code}>{share.session_id.substring(0, 8)}</code>
+                      </td>
+                      <td>
+                        <code className={styles.code}>{share.external_id.substring(0, 8)}</code>
+                      </td>
+                      <td>
+                        <div className={styles.urlCell}>
+                          <span className={styles.urlText}>{share.share_url}</span>
+                          <Button size="sm" onClick={() => copy(share.share_url)}>
+                            Copy
+                          </Button>
+                        </div>
+                      </td>
+                      <td className={styles.timestamp}>{formatRelativeTime(share.created_at)}</td>
+                      <td className={styles.timestamp}>
+                        {share.last_accessed_at ? formatRelativeTime(share.last_accessed_at) : '\u2014'}
+                      </td>
+                      <td className={styles.timestamp}>
+                        {share.expires_at ? formatRelativeTime(share.expires_at) : 'Never'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

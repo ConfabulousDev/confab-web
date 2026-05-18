@@ -650,6 +650,10 @@ const AdminSystemShareSchema = z.object({
   id: z.number(),
   session_id: z.string(),
   external_id: z.string(),
+  // Canonical provider value (e.g. 'claude-code' / 'codex'). Permissive z.string()
+  // matches the codebase's backend-first rollout pattern; unknown future values
+  // pass through providerLabel() as-is. CF-370.
+  provider: z.string(),
   share_url: z.string(),
   expires_at: z.string().nullable(),
   created_at: z.string(),

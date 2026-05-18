@@ -1636,6 +1636,7 @@ GET /api/v1/admin/system-shares
       "id": 1,
       "session_id": "uuid",
       "external_id": "ext-id",
+      "provider": "claude-code",
       "share_url": "https://app.example.com/sessions/uuid",
       "expires_at": null,
       "created_at": "2024-01-01T00:00:00Z",
@@ -1644,6 +1645,8 @@ GET /api/v1/admin/system-shares
   ]
 }
 ```
+
+`provider` is the canonical session provider (`"claude-code"` or `"codex"`). Legacy `"Claude Code"` rows are normalized at the DB boundary so the wire value is always canonical.
 
 ### Create System Share
 ```

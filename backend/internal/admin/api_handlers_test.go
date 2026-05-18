@@ -1,8 +1,10 @@
 package admin_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -582,6 +585,138 @@ func TestAdminSystemSharesAPI(t *testing.T) {
 		}
 		testutil.RequireStatus(t, resp, http.StatusNotFound)
 	})
+
+	// CF-370: admin must be able to triage Codex vs Claude shares from the list.
+	t.Run("list includes canonical provider per row", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		claudeSessionID := testutil.CreateTestSessionWithProvider(t, env, adminUser.ID, "ext-claude", "claude-code")
+		codexSessionID := testutil.CreateTestSessionWithProvider(t, env, adminUser.ID, "ext-codex", "codex")
+		legacySessionID := testutil.CreateTestSessionLegacyClaudeCode(t, env, adminUser.ID, "ext-legacy")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		for _, sid := range []string{claudeSessionID, codexSessionID, legacySessionID} {
+			resp, err := client.Post("/api/v1/admin/system-shares", map[string]string{
+				"session_id": sid,
+			})
+			if err != nil {
+				t.Fatalf("create request failed for %s: %v", sid, err)
+			}
+			testutil.RequireStatus(t, resp, http.StatusOK)
+		}
+
+		resp, err := client.Get("/api/v1/admin/system-shares")
+		if err != nil {
+			t.Fatalf("list request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var listResult admin.SystemSharesResponse
+		testutil.ParseJSON(t, resp, &listResult)
+		if len(listResult.Shares) != 3 {
+			t.Fatalf("expected 3 shares, got %d", len(listResult.Shares))
+		}
+
+		wantProvider := map[string]string{
+			claudeSessionID: "claude-code",
+			codexSessionID:  "codex",
+			legacySessionID: "claude-code", // legacy "Claude Code" normalizes
+		}
+		for _, share := range listResult.Shares {
+			want, ok := wantProvider[share.SessionID]
+			if !ok {
+				t.Errorf("unexpected share for session %s", share.SessionID)
+				continue
+			}
+			if share.Provider != want {
+				t.Errorf("session %s: response.provider = %q, want %q", share.SessionID, share.Provider, want)
+			}
+		}
+	})
+
+	// CF-370: audit trail must carry the provider so historic actions remain
+	// interpretable even if the underlying session row is later deleted.
+	t.Run("create records provider in audit log", func(t *testing.T) {
+		env.CleanDB(t)
+
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+		codexSessionID := testutil.CreateTestSessionWithProvider(t, env, adminUser.ID, "ext-codex-audit", "codex")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+
+		auditLines := captureAuditLog(t, func() {
+			resp, err := client.Post("/api/v1/admin/system-shares", map[string]string{
+				"session_id": codexSessionID,
+			})
+			if err != nil {
+				t.Fatalf("create request failed: %v", err)
+			}
+			testutil.RequireStatus(t, resp, http.StatusOK)
+		})
+
+		entry := findAuditEntry(t, auditLines, string(admin.ActionSystemShareCreate))
+		if entry["provider"] != "codex" {
+			t.Errorf("audit log: provider = %v, want %q (entry=%v)", entry["provider"], "codex", entry)
+		}
+	})
+}
+
+// captureAuditLog redirects the logger output through a pipe so tests can read
+// emitted JSON log lines while f runs. The original handler is restored on
+// cleanup. LOG_FORMAT=json is already set by the enclosing TestAdminSystemSharesAPI.
+func captureAuditLog(t *testing.T, f func()) []map[string]any {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	t.Cleanup(logger.SetOutputForTest(w))
+
+	f()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("read pipe: %v", err)
+	}
+
+	out := strings.TrimSpace(buf.String())
+	if out == "" {
+		return nil
+	}
+	lines := strings.Split(out, "\n")
+	parsed := make([]map[string]any, 0, len(lines))
+	for _, line := range lines {
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(line), &decoded); err != nil {
+			continue // skip non-JSON lines (e.g. test harness output)
+		}
+		parsed = append(parsed, decoded)
+	}
+	return parsed
+}
+
+// findAuditEntry locates the first ADMIN_AUDIT log entry whose "action" field
+// matches the wanted action. Fails the test if no such entry is found.
+func findAuditEntry(t *testing.T, lines []map[string]any, action string) map[string]any {
+	t.Helper()
+	for _, line := range lines {
+		if line["msg"] == "ADMIN_AUDIT" && line["action"] == action {
+			return line
+		}
+	}
+	t.Fatalf("no ADMIN_AUDIT log entry found for action %q in %d captured lines", action, len(lines))
+	return nil
 }
 
 // ===================================================================

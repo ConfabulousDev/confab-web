@@ -71,11 +71,16 @@ type StatusChangeResponse struct {
 	Status string `json:"status"`
 }
 
-// SystemShareJSON represents a system share in the admin list
+// SystemShareJSON represents a system share in the admin list.
+//
+// Provider is the canonical session_type (e.g. "claude-code", "codex"),
+// normalized at the DB boundary. The admin UI renders a brand chip per row so
+// operators can triage shares without joining back to the sessions table (CF-370).
 type SystemShareJSON struct {
 	ID             int64   `json:"id"`
 	SessionID      string  `json:"session_id"`
 	ExternalID     string  `json:"external_id"`
+	Provider       string  `json:"provider"`
 	ShareURL       string  `json:"share_url"`
 	ExpiresAt      *string `json:"expires_at"`
 	CreatedAt      string  `json:"created_at"`
@@ -339,6 +344,7 @@ func (h *Handlers) HandleListSystemSharesAPI(w http.ResponseWriter, r *http.Requ
 			ID:             share.ID,
 			SessionID:      share.SessionID,
 			ExternalID:     share.ExternalID,
+			Provider:       share.Provider,
 			ShareURL:       h.FrontendURL + "/sessions/" + share.SessionID,
 			ExpiresAt:      formatTimePtr(share.ExpiresAt),
 			LastAccessedAt: formatTimePtr(share.LastAccessedAt),
@@ -390,6 +396,7 @@ func (h *Handlers) HandleCreateSystemShareAPI(w http.ResponseWriter, r *http.Req
 		"session_id":  req.SessionID,
 		"share_id":    share.ID,
 		"external_id": share.ExternalID,
+		"provider":    share.Provider,
 	})
 
 	httputil.RespondJSON(w, http.StatusOK, CreateSystemShareResponse{

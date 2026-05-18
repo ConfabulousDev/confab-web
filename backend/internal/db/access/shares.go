@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // CreateShare creates a new share link for a session (by UUID primary key)
@@ -34,11 +35,11 @@ func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64,
 	}
 	defer tx.Rollback()
 
-	// Verify session exists for this user and get external_id for display
-	var externalID string
+	// Verify session exists for this user and load identity columns
+	var externalID, rawProvider string
 	err = tx.QueryRowContext(ctx,
-		`SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`,
-		sessionID, userID).Scan(&externalID)
+		`SELECT external_id, session_type FROM sessions WHERE id = $1 AND user_id = $2`,
+		sessionID, userID).Scan(&externalID, &rawProvider)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, db.ErrSessionNotFound
@@ -57,6 +58,7 @@ func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64,
 	var share db.SessionShare
 	share.SessionID = sessionID
 	share.ExternalID = externalID
+	share.Provider = models.NormalizeProvider(rawProvider)
 	share.IsPublic = isPublic
 	share.ExpiresAt = expiresAt
 
@@ -153,11 +155,11 @@ func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expires
 	}
 	defer tx.Rollback()
 
-	// Get session external_id (no ownership check - admin operation)
-	var externalID string
+	// Get session identity columns (no ownership check - admin operation)
+	var externalID, rawProvider string
 	err = tx.QueryRowContext(ctx,
-		`SELECT external_id FROM sessions WHERE id = $1`,
-		sessionID).Scan(&externalID)
+		`SELECT external_id, session_type FROM sessions WHERE id = $1`,
+		sessionID).Scan(&externalID, &rawProvider)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, db.ErrSessionNotFound
@@ -174,6 +176,7 @@ func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expires
 	var share db.SessionShare
 	share.SessionID = sessionID
 	share.ExternalID = externalID
+	share.Provider = models.NormalizeProvider(rawProvider)
 	share.IsPublic = false // System shares are not public (require auth)
 	share.ExpiresAt = expiresAt
 
@@ -215,7 +218,7 @@ func (s *Store) ListSystemShares(ctx context.Context) ([]db.SessionShare, error)
 	defer span.End()
 
 	query := `
-		SELECT ss.id, ss.session_id, se.external_id,
+		SELECT ss.id, ss.session_id, se.external_id, se.session_type,
 		       ss.expires_at, ss.created_at, ss.last_accessed_at
 		FROM session_shares ss
 		JOIN session_share_system sss ON ss.id = sss.share_id
@@ -234,11 +237,13 @@ func (s *Store) ListSystemShares(ctx context.Context) ([]db.SessionShare, error)
 	shares := make([]db.SessionShare, 0)
 	for rows.Next() {
 		var share db.SessionShare
-		err := rows.Scan(&share.ID, &share.SessionID, &share.ExternalID,
+		var rawProvider string
+		err := rows.Scan(&share.ID, &share.SessionID, &share.ExternalID, &rawProvider,
 			&share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan system share: %w", err)
 		}
+		share.Provider = models.NormalizeProvider(rawProvider)
 		share.IsPublic = false // System shares are not public
 		shares = append(shares, share)
 	}
@@ -260,11 +265,11 @@ func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) 
 		))
 	defer span.End()
 
-	// Verify session exists for this user and get external_id for display
-	var externalID string
+	// Verify session exists for this user and load identity columns
+	var externalID, rawProvider string
 	err := s.conn().QueryRowContext(ctx,
-		`SELECT external_id FROM sessions WHERE id = $1 AND user_id = $2`,
-		sessionID, userID).Scan(&externalID)
+		`SELECT external_id, session_type FROM sessions WHERE id = $1 AND user_id = $2`,
+		sessionID, userID).Scan(&externalID, &rawProvider)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, db.ErrSessionNotFound
@@ -276,6 +281,7 @@ func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) 
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
+	provider := models.NormalizeProvider(rawProvider)
 
 	// Get shares with public status
 	query := `SELECT ss.id, ss.session_id, ss.expires_at, ss.created_at, ss.last_accessed_at,
@@ -300,6 +306,7 @@ func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) 
 			return nil, fmt.Errorf("failed to scan share: %w", err)
 		}
 		share.ExternalID = externalID // Set from parent query
+		share.Provider = provider     // Same session → same canonical provider for every row
 
 		// Get recipients for non-public shares
 		if !share.IsPublic {
@@ -329,7 +336,7 @@ func (s *Store) ListAllUserShares(ctx context.Context, userID int64) ([]db.Share
 	// Get all shares for the user with session info and public status
 	query := `
 		SELECT
-			ss.id, ss.session_id, s.external_id,
+			ss.id, ss.session_id, s.external_id, s.session_type,
 			(ssp.share_id IS NOT NULL) as is_public,
 			ss.expires_at, ss.created_at, ss.last_accessed_at,
 			s.summary, s.first_user_message
@@ -349,14 +356,16 @@ func (s *Store) ListAllUserShares(ctx context.Context, userID int64) ([]db.Share
 	shares := make([]db.ShareWithSessionInfo, 0)
 	for rows.Next() {
 		var share db.ShareWithSessionInfo
+		var rawProvider string
 		err := rows.Scan(
-			&share.ID, &share.SessionID, &share.ExternalID,
+			&share.ID, &share.SessionID, &share.ExternalID, &rawProvider,
 			&share.IsPublic, &share.ExpiresAt, &share.CreatedAt, &share.LastAccessedAt,
 			&share.SessionSummary, &share.SessionFirstUserMessage,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan share: %w", err)
 		}
+		share.Provider = models.NormalizeProvider(rawProvider)
 
 		// Get recipients for non-public shares
 		if !share.IsPublic {

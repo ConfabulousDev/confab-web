@@ -33,6 +33,7 @@ Session access control and share management (create, list, revoke shares; check 
 - PII fields are never returned for non-owner access (enforced via `RedactForSharing()`).
 - `RevokeShare` uses a single `DELETE ... USING sessions` to atomically verify ownership and delete, preventing TOCTOU races.
 - The share tables use a polymorphic pattern: `session_shares` is the base, with `session_share_public`, `session_share_recipients`, and `session_share_system` as type-specific join tables.
+- `db.SessionShare.Provider` is always the canonical session provider. Every share-store read (`CreateShare`, `CreateSystemShare`, `ListShares`, `ListSystemShares`, `ListAllUserShares`) selects `session_type` from the joined `sessions` row and applies `models.NormalizeProvider`, so the legacy `"Claude Code"` form is never surfaced to callers (CF-370).
 
 ## Design Decisions
 
