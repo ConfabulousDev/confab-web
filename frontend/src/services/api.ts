@@ -15,6 +15,7 @@ import {
   SessionAnalyticsSchema,
   TrendsResponseSchema,
   OrgAnalyticsResponseSchema,
+  OrgReposResponseSchema,
   TILListResponseSchema,
   SessionTILsResponseSchema,
   AdminUserListResponseSchema,
@@ -43,6 +44,7 @@ import {
   type SessionListResponse,
   type TrendsResponse,
   type OrgAnalyticsResponse,
+  type OrgReposResponse,
   type TILListResponse,
   type SessionTILsResponse,
   type AdminUserListResponse,
@@ -615,6 +617,15 @@ export const trendsAPI = {
 export interface OrgAnalyticsParams {
   startDate?: string; // YYYY-MM-DD (local date)
   endDate?: string;   // YYYY-MM-DD (local date, inclusive)
+  // Canonical providers (`claude-code`, `codex`). Empty / omitted = include all.
+  // Serialized as the singular `?provider=` wire key, matching trends and the
+  // session-listing endpoint.
+  providers?: string[];
+  // Repo names (owner/name) to include. Empty / omitted = no repo filter.
+  repos?: string[];
+  // Whether to include sessions without a repo. Defaults to true server-side
+  // when omitted; pass false to exclude no-repo sessions.
+  includeNoRepo?: boolean;
 }
 
 export const orgAnalyticsAPI = {
@@ -627,12 +638,45 @@ export const orgAnalyticsAPI = {
       searchParams.set('end_ts', String(localDateToEpoch(params.endDate) + 86400));
     }
     searchParams.set('tz_offset', String(new Date().getTimezoneOffset()));
+    if (params.providers && params.providers.length > 0) {
+      searchParams.set('provider', params.providers.join(','));
+    }
+    if (params.repos && params.repos.length > 0) {
+      searchParams.set('repos', params.repos.join(','));
+    }
+    if (params.includeNoRepo !== undefined) {
+      searchParams.set('include_no_repo', String(params.includeNoRepo));
+    }
 
     const queryString = searchParams.toString();
     const url = `/org/analytics${queryString ? `?${queryString}` : ''}`;
     const response = await fetchRaw(url, { method: 'GET' });
     const data = await response.json();
     return validateResponse(OrgAnalyticsResponseSchema, data, url);
+  },
+};
+
+export interface OrgReposParams {
+  startDate?: string;
+  endDate?: string;
+}
+
+export const orgReposAPI = {
+  get: async (params: OrgReposParams = {}): Promise<OrgReposResponse> => {
+    const searchParams = new URLSearchParams();
+    if (params.startDate) {
+      searchParams.set('start_ts', String(localDateToEpoch(params.startDate)));
+    }
+    if (params.endDate) {
+      searchParams.set('end_ts', String(localDateToEpoch(params.endDate) + 86400));
+    }
+    searchParams.set('tz_offset', String(new Date().getTimezoneOffset()));
+
+    const queryString = searchParams.toString();
+    const url = `/org/repos${queryString ? `?${queryString}` : ''}`;
+    const response = await fetchRaw(url, { method: 'GET' });
+    const data = await response.json();
+    return validateResponse(OrgReposResponseSchema, data, url);
   },
 };
 

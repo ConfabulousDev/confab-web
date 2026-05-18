@@ -543,22 +543,34 @@ const OrgUserAnalyticsSchema = z.object({
   session_count: z.number(),
   total_cost_usd: z.string(),
   total_duration_ms: z.number(),
-  total_claude_time_ms: z.number(),
+  total_assistant_time_ms: z.number(),
   total_user_time_ms: z.number(),
   avg_cost_usd: z.string(),
   avg_duration_ms: z.number().nullable().optional(),
-  avg_claude_time_ms: z.number().nullable().optional(),
+  avg_assistant_time_ms: z.number().nullable().optional(),
   avg_user_time_ms: z.number().nullable().optional(),
 });
 
 export const OrgAnalyticsResponseSchema = z.object({
   computed_at: z.string(),
   date_range: DateRangeSchema,
+  // Canonical providers with any qualifying session in the filtered range.
+  // Backend always emits `[]` but we accept null too — a regression to a nil
+  // slice on the server should degrade to "no narrowing", not blow up parse.
+  providers_present: z.array(z.string()).nullish().transform((v) => v ?? []),
   users: z.array(OrgUserAnalyticsSchema),
+});
+
+export const OrgReposResponseSchema = z.object({
+  computed_at: z.string(),
+  date_range: DateRangeSchema,
+  // Same null-tolerance rule as providers_present above.
+  repos: z.array(z.string()).nullish().transform((v) => v ?? []),
 });
 
 export type OrgUserAnalytics = z.infer<typeof OrgUserAnalyticsSchema>;
 export type OrgAnalyticsResponse = z.infer<typeof OrgAnalyticsResponseSchema>;
+export type OrgReposResponse = z.infer<typeof OrgReposResponseSchema>;
 
 // ============================================================================
 // TIL Schemas

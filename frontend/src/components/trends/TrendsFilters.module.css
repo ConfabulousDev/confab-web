@@ -1,4 +1,4 @@
-/* TrendsFilters — shared styles composed from base, unique styles below */
+/* TrendsFilters — fully composed from the shared filter dropdown base. */
 
 .container { composes: container from '../../styles/filterDropdown.module.css'; }
 .filterWrapper { composes: filterWrapper from '../../styles/filterDropdown.module.css'; }
@@ -11,82 +11,11 @@
 .selected { composes: selected from '../../styles/filterDropdown.module.css'; }
 .itemLabel { composes: itemLabel from '../../styles/filterDropdown.module.css'; }
 .checkIcon { composes: checkIcon from '../../styles/filterDropdown.module.css'; }
-
-/* TrendsFilters-specific: active state for repo filter button.
-   If a second consumer needs this, promote to filterDropdown.module.css. */
-.active {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.sectionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-xs);
-}
-
-.sectionLabel {
-  font-size: var(--font-xs);
-  font-weight: var(--font-semibold);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.toggleAllBtn {
-  padding: 0;
-  background: none;
-  border: none;
-  font-size: var(--font-xs);
-  color: var(--color-accent);
-  cursor: pointer;
-  transition: opacity var(--transition-base);
-}
-
-.toggleAllBtn:hover {
-  opacity: 0.8;
-}
-
-.divider {
-  height: 1px;
-  margin: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-border);
-}
-
-.checkboxItem {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  font-size: var(--font-sm);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: background var(--transition-base);
-}
-
-.checkboxItem:hover {
-  background: var(--color-bg-hover);
-}
-
-.checkboxItem input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--color-accent);
-}
-
-.repoName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* CF-424: per-provider row icon in the provider dropdown. Sized to match
-   the brand icons used elsewhere (FilterChipsBar, SessionHeader). */
-.providerIcon {
-  display: inline-flex;
-  align-items: center;
-  width: 16px;
-  height: 16px;
-}
+.active { composes: active from '../../styles/filterDropdown.module.css'; }
+.checkboxItem { composes: checkboxItem from '../../styles/filterDropdown.module.css'; }
+.providerIcon { composes: providerIcon from '../../styles/filterDropdown.module.css'; }
+.sectionHeader { composes: sectionHeader from '../../styles/filterDropdown.module.css'; }
+.sectionLabel { composes: sectionLabel from '../../styles/filterDropdown.module.css'; }
+.toggleAllBtn { composes: toggleAllBtn from '../../styles/filterDropdown.module.css'; }
+.divider { composes: divider from '../../styles/filterDropdown.module.css'; }
+.repoName { composes: repoName from '../../styles/filterDropdown.module.css'; }

@@ -11,3 +11,11 @@
 .selected { composes: selected from '../../styles/filterDropdown.module.css'; }
 .itemLabel { composes: itemLabel from '../../styles/filterDropdown.module.css'; }
 .checkIcon { composes: checkIcon from '../../styles/filterDropdown.module.css'; }
+.active { composes: active from '../../styles/filterDropdown.module.css'; }
+.checkboxItem { composes: checkboxItem from '../../styles/filterDropdown.module.css'; }
+.providerIcon { composes: providerIcon from '../../styles/filterDropdown.module.css'; }
+.sectionHeader { composes: sectionHeader from '../../styles/filterDropdown.module.css'; }
+.sectionLabel { composes: sectionLabel from '../../styles/filterDropdown.module.css'; }
+.toggleAllBtn { composes: toggleAllBtn from '../../styles/filterDropdown.module.css'; }
+.divider { composes: divider from '../../styles/filterDropdown.module.css'; }
+.repoName { composes: repoName from '../../styles/filterDropdown.module.css'; }
