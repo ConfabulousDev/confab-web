@@ -343,3 +343,122 @@ func TestListAllUserShares_Empty(t *testing.T) {
 		t.Errorf("expected 0 shares, got %d", len(shares))
 	}
 }
+
+// =============================================================================
+// Provider canonicalization on share reads (CF-370)
+// =============================================================================
+
+// TestListSystemShares_PopulatesCanonicalProvider verifies that the admin
+// system-shares list returns the canonical provider for each row, including
+// for legacy "Claude Code" session_type rows that older binaries may have
+// written. The admin UI needs this to render the provider chip without
+// re-implementing NormalizeProvider in the frontend.
+func TestListSystemShares_PopulatesCanonicalProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+
+	claudeSessionID := testutil.CreateTestSessionWithProvider(t, env, owner.ID, "ext-claude", "claude-code")
+	codexSessionID := testutil.CreateTestSessionWithProvider(t, env, owner.ID, "ext-codex", "codex")
+	legacySessionID := testutil.CreateTestSessionLegacyClaudeCode(t, env, owner.ID, "ext-legacy")
+
+	testutil.CreateTestSystemShare(t, env, claudeSessionID, nil)
+	testutil.CreateTestSystemShare(t, env, codexSessionID, nil)
+	testutil.CreateTestSystemShare(t, env, legacySessionID, nil)
+
+	ctx := context.Background()
+	shares, err := store.ListSystemShares(ctx)
+	if err != nil {
+		t.Fatalf("ListSystemShares failed: %v", err)
+	}
+	if len(shares) != 3 {
+		t.Fatalf("expected 3 system shares, got %d", len(shares))
+	}
+
+	wantProvider := map[string]string{
+		claudeSessionID: "claude-code",
+		codexSessionID:  "codex",
+		legacySessionID: "claude-code", // legacy "Claude Code" normalizes to canonical
+	}
+	for _, share := range shares {
+		want, ok := wantProvider[share.SessionID]
+		if !ok {
+			t.Errorf("unexpected share for session %s", share.SessionID)
+			continue
+		}
+		if share.Provider != want {
+			t.Errorf("session %s: Provider = %q, want %q", share.SessionID, share.Provider, want)
+		}
+	}
+}
+
+// TestListShares_PopulatesCanonicalProvider mirrors the system-shares test for
+// the owner-side ListShares path. Provider is exposed in the JSON response so
+// any consumer (current or future) gets a canonical value regardless of what
+// the legacy session_type column stored.
+func TestListShares_PopulatesCanonicalProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSessionLegacyClaudeCode(t, env, owner.ID, "legacy-share")
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+
+	ctx := context.Background()
+	shares, err := store.ListShares(ctx, sessionID, owner.ID)
+	if err != nil {
+		t.Fatalf("ListShares failed: %v", err)
+	}
+	if len(shares) != 1 {
+		t.Fatalf("expected 1 share, got %d", len(shares))
+	}
+	if got := shares[0].Provider; got != "claude-code" {
+		t.Errorf("legacy session: Provider = %q, want %q", got, "claude-code")
+	}
+}
+
+// TestCreateSystemShare_ReturnsCanonicalProvider verifies that the system
+// share constructor populates the canonical Provider on the returned struct so
+// callers (like the admin audit log) can record it without an extra round-trip.
+func TestCreateSystemShare_ReturnsCanonicalProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	codexSessionID := testutil.CreateTestSessionWithProvider(t, env, owner.ID, "ext-codex", "codex")
+	legacySessionID := testutil.CreateTestSessionLegacyClaudeCode(t, env, owner.ID, "ext-legacy")
+
+	ctx := context.Background()
+
+	codexShare, err := store.CreateSystemShare(ctx, codexSessionID, nil)
+	if err != nil {
+		t.Fatalf("CreateSystemShare (codex) failed: %v", err)
+	}
+	if codexShare.Provider != "codex" {
+		t.Errorf("codex share: Provider = %q, want %q", codexShare.Provider, "codex")
+	}
+
+	legacyShare, err := store.CreateSystemShare(ctx, legacySessionID, nil)
+	if err != nil {
+		t.Fatalf("CreateSystemShare (legacy) failed: %v", err)
+	}
+	if legacyShare.Provider != "claude-code" {
+		t.Errorf("legacy share: Provider = %q, want %q", legacyShare.Provider, "claude-code")
+	}
+}

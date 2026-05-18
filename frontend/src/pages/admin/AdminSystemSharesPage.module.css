@@ -31,6 +31,20 @@
   gap: var(--spacing-sm);
 }
 
+.providerCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  white-space: nowrap;
+}
+
+.providerIcon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 .urlText {
   font-size: var(--font-xs);
   color: var(--color-text-secondary);

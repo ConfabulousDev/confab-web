@@ -21,7 +21,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 - **`Handlers`** -- Dependency holder (DB, Storage, config flags) for all admin HTTP handlers.
 - **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`, `setting.update`, `setting.reset`, `smart_recap.regenerate_all`, `cards.invalidate`) used as audit log keys.
 - **`AdminUserListResponse`**, **`AdminUserJSON`**, **`AdminTotals`** -- JSON response types for the user list endpoint.
-- **`SystemSharesResponse`**, **`SystemShareJSON`** -- JSON response types for system shares.
+- **`SystemSharesResponse`**, **`SystemShareJSON`** -- JSON response types for system shares. `SystemShareJSON.Provider` is the canonical session provider (`"claude-code"` / `"codex"`), normalized at the DB boundary so the admin UI can render a brand chip without re-normalizing (CF-370).
 - **`SmartRecapPromptResponse`**, **`SetSmartRecapPromptRequest`**, **`SetSmartRecapPromptResponse`**, **`DeleteSmartRecapPromptResponse`** -- JSON request/response types for smart recap prompt settings.
 - **`InvalidateCardsRequest`**, **`InvalidateCardsResponse`**, **`CardInvalidationRow`**, **`CardInvalidationsListResponse`** -- JSON request/response types for card invalidations (CF-343).
 
@@ -65,7 +65,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 
 - **Middleware ordering.** `Middleware` must run after `auth.SessionMiddleware`; it reads the user ID from context via `auth.GetUserID`.
 - **S3 before DB on delete.** `HandleDeleteUserAPI` deletes S3 objects first, then the database row. If S3 fails, the DB row is preserved so the operation can be retried.
-- **Audit logging on every mutating action.** Every state-changing handler calls `AuditLogFromRequest` before responding.
+- **Audit logging on every mutating action.** Every state-changing handler calls `AuditLogFromRequest` before responding. Payloads include enough context that the entry stays interpretable after the underlying row is deleted -- e.g. `system_share.create` records `provider` alongside `session_id` and `external_id` so the action can be attributed to Claude vs Codex even if the session row is later gone.
 - **Database timeout.** All DB operations use a 5-second context timeout (`DatabaseTimeout`), except user deletion which uses 60 seconds to allow for S3 cleanup.
 
 ## Design Decisions

@@ -118,10 +118,15 @@ type SyncFileDetail struct {
 
 // SessionShare represents a share link
 type SessionShare struct {
-	ID             int64      `json:"id"`
-	SessionID      string     `json:"session_id"`      // UUID references sessions.id
-	ExternalID     string     `json:"external_id"`     // External system's session ID (for display)
-	IsPublic       bool       `json:"is_public"`       // true if in session_share_public table
+	ID         int64  `json:"id"`
+	SessionID  string `json:"session_id"`  // UUID references sessions.id
+	ExternalID string `json:"external_id"` // External system's session ID (for display)
+	// Provider is the canonical session_type (e.g. "claude-code", "codex").
+	// All share-store reads (ListShares, ListSystemShares, CreateShare,
+	// CreateSystemShare) populate this via models.NormalizeProvider so the
+	// legacy "Claude Code" form is never surfaced to callers. CF-370.
+	Provider       string     `json:"provider"`
+	IsPublic       bool       `json:"is_public"` // true if in session_share_public table
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
