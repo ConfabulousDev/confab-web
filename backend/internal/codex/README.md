@@ -108,8 +108,8 @@ and applies the following rules:
 
 | Consumer | Usage |
 |----------|-------|
-| `internal/analytics/codex_adapter.go` | `ComputeFromCodexRollout([]*ParsedRollout)` maps the rollout slice (main + subagents) onto `ComputeResult` for card upsert. |
+| `internal/analytics/codex_compute.go` | `ComputeFromCodexRollout([]*ParsedRollout)` maps the rollout slice (main + subagents) onto `ComputeResult` for card upsert. |
 | `internal/analytics/codex_search.go` | `ExtractCodexUserMessagesText([]*ParsedRollout)` flattens user / assistant-final / tool-call text across all rollouts into the search index Weight C content. |
-| `internal/analytics/codex_transcript.go` | `PrepareCodexTranscript([]*ParsedRollout)` builds the XML transcript fed to the smart recap LLM (main turns first, then each subagent's turns inline). |
+| `internal/analytics/analyzer_smart_recap_codex.go` | `PrepareCodexTranscript([]*ParsedRollout)` builds the XML transcript fed to the smart recap LLM (main turns first, then each subagent's turns inline). |
 | `internal/analytics/codex_provider.go` | `codexProvider.Parse` → `codexRollout.materialize` discovers subagent rollouts via `sync_files` (`file_type='agent'`), downloads + parses each on first use (`codex.ParseRollout` once per file), caches the result, and prefixes their `ValidationError` reasons with the file name. |
 | `internal/analytics/precompute.go` + `internal/api/analytics.go` | Both dispatch through `analytics.ProviderFor("codex")` → `codexProvider` (CF-402, CF-403). No provider literals at the dispatch boundary. |

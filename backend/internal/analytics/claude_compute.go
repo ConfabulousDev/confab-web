@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -14,87 +13,6 @@ import (
 // Each call downloads and parses one agent file. The returned TranscriptFile
 // may be discarded after all FileProcessors have seen it.
 type AgentProvider func(ctx context.Context) (*TranscriptFile, error)
-
-// ComputeResult contains the computed analytics from JSONL content.
-// This struct aggregates results from all analyzers.
-type ComputeResult struct {
-	// Token and cost stats (from TokensAnalyzer)
-	InputTokens         int64
-	OutputTokens        int64
-	CacheCreationTokens int64
-	CacheReadTokens     int64
-	EstimatedCostUSD    decimal.Decimal
-
-	// Fast mode breakdown (from TokensAnalyzer)
-	FastTurns   int
-	FastCostUSD decimal.Decimal
-
-	// Message counts (from SessionAnalyzer)
-	TotalMessages     int
-	UserMessages      int
-	AssistantMessages int
-
-	// Message type breakdown (from SessionAnalyzer)
-	HumanPrompts   int
-	ToolResults    int
-	TextResponses  int
-	ToolCalls      int
-	ThinkingBlocks int
-
-	// Actual conversational turns (from ConversationAnalyzer)
-	UserTurns      int
-	AssistantTurns int
-
-	// Session metadata (from SessionAnalyzer)
-	DurationMs *int64
-	ModelsUsed []string
-
-	// Compaction stats (from SessionAnalyzer)
-	CompactionAuto      int
-	CompactionManual    int
-	CompactionAvgTimeMs *int
-
-	// Tools stats (from ToolsAnalyzer)
-	TotalToolCalls int
-	ToolStats      map[string]*ToolStats
-	ToolErrorCount int
-
-	// Code activity stats (from CodeActivityAnalyzer)
-	FilesRead         int
-	FilesModified     int
-	LinesAdded        int
-	LinesRemoved      int
-	SearchCount       int
-	LanguageBreakdown map[string]int
-
-	// Conversation stats (from ConversationAnalyzer)
-	AvgAssistantTurnMs       *int64
-	AvgUserThinkingMs        *int64
-	TotalAssistantDurationMs *int64
-	TotalUserDurationMs     *int64
-	AssistantUtilizationPct *float64
-
-	// Agent stats (from AgentsAnalyzer)
-	TotalAgentInvocations int
-	AgentStats            map[string]*AgentStats
-
-	// Skill stats (from SkillsAnalyzer)
-	TotalSkillInvocations int
-	SkillStats            map[string]*SkillStats
-
-	// Redaction stats (from RedactionsAnalyzer)
-	TotalRedactions int
-	RedactionCounts map[string]int
-
-	// Validation stats (from parsing)
-	ValidationErrorCount int
-
-	// Per-card computation errors (graceful degradation)
-	CardErrors map[string]string
-
-	// Streaming stats
-	SkippedAgentFiles int // Number of agent files skipped (cap exceeded, download errors)
-}
 
 // ComputeFromJSONL computes analytics from JSONL content.
 // It uses the analyzer pattern where each analyzer processes the full file collection.
@@ -218,18 +136,18 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 		FastCostUSD:         tokens.FastCostUSD,
 
 		// Session
-		TotalMessages:      session.TotalMessages,
-		UserMessages:       session.UserMessages,
-		AssistantMessages:  session.AssistantMessages,
-		HumanPrompts:       session.HumanPrompts,
-		ToolResults:        session.ToolResults,
-		TextResponses:      session.TextResponses,
-		ToolCalls:          session.ToolCalls,
-		ThinkingBlocks:     session.ThinkingBlocks,
-		DurationMs:         session.DurationMs,
-		ModelsUsed:         session.ModelsUsed,
-		CompactionAuto:     session.CompactionAuto,
-		CompactionManual:   session.CompactionManual,
+		TotalMessages:       session.TotalMessages,
+		UserMessages:        session.UserMessages,
+		AssistantMessages:   session.AssistantMessages,
+		HumanPrompts:        session.HumanPrompts,
+		ToolResults:         session.ToolResults,
+		TextResponses:       session.TextResponses,
+		ToolCalls:           session.ToolCalls,
+		ThinkingBlocks:      session.ThinkingBlocks,
+		DurationMs:          session.DurationMs,
+		ModelsUsed:          session.ModelsUsed,
+		CompactionAuto:      session.CompactionAuto,
+		CompactionManual:    session.CompactionManual,
 		CompactionAvgTimeMs: session.CompactionAvgTimeMs,
 
 		// Tools

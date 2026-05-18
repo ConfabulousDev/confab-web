@@ -147,7 +147,7 @@ func (a *<Name>Analyzer) Analyze(fc *FileCollection) (*<Name>Result, error) {
 
 ### Phase 5: Backend - Wire Up
 
-1. **Add to ComputeResult** in `compute.go`:
+1. **Add to ComputeResult** in `compute_result.go`:
 ```go
 // In ComputeResult struct
 MyMetric int64
