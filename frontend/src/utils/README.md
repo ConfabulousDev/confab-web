@@ -16,7 +16,8 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `dateRange.ts` | Date range types, presets (This Week, Last 30 Days, etc.), URL parsing |
 | `git.ts` | Git URL conversion (SSH to HTTPS, branch URLs) |
 | `sessionErrors.ts` | Session error types, messages, icons, and 401 redirect skip list |
-| `agentSkillChart.ts` | Shared agent/skill chart constants, types, and name truncation |
+| `agentSkillChart.ts` | Shared agent/skill chart constants (`AGENT_SKILL_COLORS`) and the `ChartDataItem` shape |
+| `chartLabels.ts` | `truncateName` — cap long bar-chart axis labels to "prefix...suffix" form. `truncatedYAxisWidth(labels, minChars)` — px-width for a Recharts YAxis sized off the *truncated* form so one long MCP/agent name can't shove bars off-screen. Pairs with `TruncatedYAxisTick` (Agents & Skills, Tools) |
 | `utils.ts` | Low-level utilities: `stripAnsi`, `isRecord` (runtime guard for plain objects, used wherever an `unknown` needs its fields read without an `as` cast), `formatBytes` |
 | `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. `tryParseAsJson` — if a string is a JSON object/array, return a pretty-printed version (used as the JSON fallback before markdown rendering). Used by `ContentBlock`, the Codex message renderers, `AwaySummary`, and `QueuedCommand` |
 | `providers.ts` | CF-416 — `PROVIDER_METADATA` registry (icon, label, brandDisplayName, brandColor, resumeCommand) keyed by `ProviderId` (`'claude-code' \| 'codex'`). `getProviderMetadata(id)` strict canonical lookup; `getProviderMetadataOrFallback(value, 'claude' \| 'neutral')` codifies the unknown-provider policy in one place. `PROVIDER_VALUES`, `providerLabel(value)` preserved for back-compat with surfaces that render arbitrary backend values. Used by `providerIcon`, `SessionHeader`, `CopyIdDropdown`, `TrendsTopSessionsCard`, `FilterChipsBar` |

@@ -2,12 +2,9 @@ import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { UsersIcon, ZapIcon } from '@/components/icons';
 import type { AgentsAndSkillsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
-import { AgentSkillYAxisTick } from '@/components/charts/AgentSkillYAxisTick';
-import {
-  AGENT_SKILL_COLORS,
-  truncateName,
-  type ChartDataItem,
-} from '@/utils/agentSkillChart';
+import { TruncatedYAxisTick } from '@/components/charts/TruncatedYAxisTick';
+import { AGENT_SKILL_COLORS, type ChartDataItem } from '@/utils/agentSkillChart';
+import { truncatedYAxisWidth } from '@/utils/chartLabels';
 import {
   BarChart,
   Bar,
@@ -112,9 +109,10 @@ export function AgentsAndSkillsCard({ data, loading, error }: CardProps<AgentsAn
   // Calculate dynamic height based on number of items (24px per item, min 80px)
   const chartHeight = Math.max(80, chartData.length * 24);
 
-  // Calculate dynamic YAxis width based on longest truncated label (~7px per char at 11px font)
-  const maxLabelLength = Math.max(...chartData.map((d) => truncateName(d.name).length), 6);
-  const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
+  const yAxisWidth = truncatedYAxisWidth(
+    chartData.map((d) => d.name),
+    6,
+  );
 
   // Find max value for integer ticks
   const maxTotal = Math.max(...chartData.map((d) => d.total));
@@ -160,7 +158,7 @@ export function AgentsAndSkillsCard({ data, loading, error }: CardProps<AgentsAn
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={<AgentSkillYAxisTick />}
+                  tick={<TruncatedYAxisTick />}
                   width={yAxisWidth}
                   interval={0}
                 />

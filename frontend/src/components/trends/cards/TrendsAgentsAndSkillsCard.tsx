@@ -1,12 +1,9 @@
 import { TrendsCard } from './TrendsCard';
 import { UsersIcon } from '@/components/icons';
 import type { TrendsAgentsAndSkillsCard as TrendsAgentsAndSkillsCardData } from '@/schemas/api';
-import { AgentSkillYAxisTick } from '@/components/charts/AgentSkillYAxisTick';
-import {
-  AGENT_SKILL_COLORS,
-  truncateName,
-  type ChartDataItem,
-} from '@/utils/agentSkillChart';
+import { TruncatedYAxisTick } from '@/components/charts/TruncatedYAxisTick';
+import { AGENT_SKILL_COLORS, type ChartDataItem } from '@/utils/agentSkillChart';
+import { truncatedYAxisWidth } from '@/utils/chartLabels';
 import {
   BarChart,
   Bar,
@@ -83,8 +80,10 @@ interface SectionChartProps {
 
 function SectionChart({ data }: SectionChartProps) {
   const chartHeight = Math.max(80, data.length * 28);
-  const maxLabelLength = Math.max(...data.map((d) => truncateName(d.name).length), 4);
-  const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
+  const yAxisWidth = truncatedYAxisWidth(
+    data.map((d) => d.name),
+    4,
+  );
 
   return (
     <div className={styles.chartContainer} style={{ height: chartHeight }}>
@@ -107,7 +106,7 @@ function SectionChart({ data }: SectionChartProps) {
             dataKey="name"
             axisLine={false}
             tickLine={false}
-            tick={<AgentSkillYAxisTick />}
+            tick={<TruncatedYAxisTick />}
             width={yAxisWidth}
             interval={0}
           />

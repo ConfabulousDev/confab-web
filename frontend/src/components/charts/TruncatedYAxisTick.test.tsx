@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import { AgentSkillYAxisTick } from './AgentSkillYAxisTick';
+import { TruncatedYAxisTick } from './TruncatedYAxisTick';
 
-function renderTick(props: Parameters<typeof AgentSkillYAxisTick>[0]) {
+function renderTick(props: Parameters<typeof TruncatedYAxisTick>[0]) {
   return render(
     <svg>
-      <AgentSkillYAxisTick {...props} />
+      <TruncatedYAxisTick {...props} />
     </svg>
   );
 }
 
-describe('AgentSkillYAxisTick', () => {
+describe('TruncatedYAxisTick', () => {
   it('returns null when payload is undefined', () => {
     const { container } = renderTick({ x: 10, y: 20 });
     expect(container.querySelector('g')).toBeNull();

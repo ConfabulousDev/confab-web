@@ -21,13 +21,3 @@ export interface ChartDataItem {
   total: number;
   type: 'agent' | 'skill';
 }
-
-const TRUNCATE_PREFIX = 6;
-const TRUNCATE_SUFFIX = 6;
-const TRUNCATE_MAX = TRUNCATE_PREFIX + TRUNCATE_SUFFIX + 3; // "prefix...suffix"
-
-/** Truncate long agent/skill names for Y-axis labels (e.g. "execut...ctron") */
-export function truncateName(name: string): string {
-  if (name.length <= TRUNCATE_MAX) return name;
-  return `${name.slice(0, TRUNCATE_PREFIX)}...${name.slice(-TRUNCATE_SUFFIX)}`;
-}

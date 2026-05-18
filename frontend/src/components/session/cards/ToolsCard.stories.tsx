@@ -194,6 +194,27 @@ export const OrphanFilteredOut: Story = {
   },
 };
 
+// Regression: an MCP server whose name contains underscores (e.g.
+// `claude_ai_Linear`) is not stripped by `formatToolName` — the displayed
+// label is the full `mcp__claude_ai_Linear__save_issue` string. Without the
+// TruncatedYAxisTick the label overflows the card. Exercises that path.
+export const LongMCPLabels: Story = {
+  args: {
+    data: {
+      total_calls: 200,
+      tool_stats: {
+        Bash: { success: 50, errors: 0 },
+        Read: { success: 40, errors: 0 },
+        AskUserQuestion: { success: 30, errors: 0 },
+        'mcp__claude_ai_Linear__save_issue': { success: 10, errors: 0 },
+        'mcp__claude_ai_Gmail__authenticate': { success: 5, errors: 0 },
+      },
+      error_count: 0,
+    },
+    loading: false,
+  },
+};
+
 export const WithMCPTools: Story = {
   args: {
     data: {

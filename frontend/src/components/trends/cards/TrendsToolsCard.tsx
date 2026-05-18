@@ -1,6 +1,8 @@
 import { TrendsCard } from './TrendsCard';
 import { WrenchIcon } from '@/components/icons';
 import type { TrendsToolsCard as TrendsToolsCardData } from '@/schemas/api';
+import { TruncatedYAxisTick } from '@/components/charts/TruncatedYAxisTick';
+import { truncatedYAxisWidth } from '@/utils/chartLabels';
 import {
   BarChart,
   Bar,
@@ -95,9 +97,10 @@ export function TrendsToolsCard({ data }: TrendsToolsCardProps) {
   // Calculate dynamic height based on number of tools
   const chartHeight = Math.max(120, chartData.length * 28);
 
-  // Calculate dynamic YAxis width based on longest display label
-  const maxLabelLength = Math.max(...chartData.map((d) => d.displayName.length));
-  const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
+  const yAxisWidth = truncatedYAxisWidth(
+    chartData.map((d) => d.displayName),
+    4,
+  );
 
   const subtitle =
     data.total_errors > 0
@@ -126,8 +129,9 @@ export function TrendsToolsCard({ data }: TrendsToolsCardProps) {
               dataKey="displayName"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+              tick={<TruncatedYAxisTick />}
               width={yAxisWidth}
+              interval={0}
             />
             <Tooltip
               content={<CustomTooltip />}

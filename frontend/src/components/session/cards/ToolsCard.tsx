@@ -2,6 +2,8 @@ import { CardWrapper, CardLoading, CardError } from './Card';
 import { WrenchIcon } from '@/components/icons';
 import type { ToolsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
+import { TruncatedYAxisTick } from '@/components/charts/TruncatedYAxisTick';
+import { truncatedYAxisWidth } from '@/utils/chartLabels';
 import {
   BarChart,
   Bar,
@@ -119,9 +121,10 @@ export function ToolsCard({ data, loading, error }: CardProps<ToolsCardData>) {
   // Calculate dynamic height based on number of tools (min 120px, 28px per tool)
   const chartHeight = Math.max(120, chartData.length * 28);
 
-  // Calculate dynamic YAxis width based on longest display label (~7px per char at 11px font)
-  const maxLabelLength = Math.max(...chartData.map((d) => d.displayName.length));
-  const yAxisWidth = Math.max(40, maxLabelLength * 7 + 8);
+  const yAxisWidth = truncatedYAxisWidth(
+    chartData.map((d) => d.displayName),
+    4,
+  );
 
   const subtitle =
     data.error_count > 0
@@ -150,8 +153,9 @@ export function ToolsCard({ data, loading, error }: CardProps<ToolsCardData>) {
               dataKey="displayName"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 11, fill: 'var(--color-text-secondary)' }}
+              tick={<TruncatedYAxisTick />}
               width={yAxisWidth}
+              interval={0}
             />
             <Tooltip
               content={<CustomTooltip />}

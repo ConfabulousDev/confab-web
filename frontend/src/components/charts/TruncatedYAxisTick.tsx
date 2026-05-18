@@ -1,13 +1,17 @@
-import { truncateName } from '@/utils/agentSkillChart';
+import { truncateName } from '@/utils/chartLabels';
 
-/** Recharts custom tick for the Y-axis that truncates long names with a hover tooltip */
-interface YAxisTickProps {
+interface TruncatedYAxisTickProps {
   x?: number;
   y?: number;
   payload?: { value: string };
 }
 
-export function AgentSkillYAxisTick({ x, y, payload }: YAxisTickProps): React.ReactElement | null {
+/**
+ * Recharts custom tick that truncates long Y-axis labels and exposes the
+ * full value via an SVG `<title>` for hover. Used by Agents & Skills and
+ * Tools charts in both session and trends scopes.
+ */
+export function TruncatedYAxisTick({ x, y, payload }: TruncatedYAxisTickProps): React.ReactElement | null {
   if (!payload) return null;
   const fullName = payload.value;
   const display = truncateName(fullName);
