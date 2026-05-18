@@ -14,6 +14,9 @@ interface MockSession {
   // teal Codex). Defaults to 'claude-code' when omitted on a mock row.
   provider?: string;
   custom_title: string | null;
+  // Title proposed by the smart-recap pipeline (CF-350 / CF-447). Falls
+  // between custom_title and summary in the SessionsPage title chain.
+  suggested_session_title?: string | null;
   summary: string | null;
   first_user_message: string | null;
   first_seen: string;
@@ -137,66 +140,73 @@ function SessionListTable({ sessions }: SessionListTableProps) {
           <thead>
             <tr>
               <th>Session</th>
-              <th>Activity</th>
               <th className={styles.costHeader}>Est. Cost</th>
+              <th>Activity</th>
             </tr>
           </thead>
           <tbody>
-            {sessions.map((session) => (
-              <tr key={session.id} className={`${styles.clickableRow} ${session.shared_by_email ? styles.sharedRow : ''}`}>
-                <td className={styles.sessionCell}>
-                  <div className={session.custom_title || session.summary || session.first_user_message ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
-                    {session.custom_title || session.summary || session.first_user_message || 'Untitled'}
-                  </div>
-                  <div className={styles.chipRow}>
-                    <Chip icon={getProviderIcon(session.provider ?? 'claude-code')} variant="neutral">
-                      {session.external_id.substring(0, 8)}
-                    </Chip>
-                    {session.git_repo && (
-                      <Chip
-                        icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
-                        variant="neutral"
-                      >
-                        {session.git_repo}
-                      </Chip>
-                    )}
-                    {session.git_branch && (
-                      <Chip icon={BranchIcon} variant="blue">
-                        {session.git_branch}
-                      </Chip>
-                    )}
-                    {session.github_prs?.map((pr) => (
-                      <Chip key={pr} icon={PRIcon} variant="purple">
-                        #{pr}
-                      </Chip>
-                    ))}
-                  </div>
-                  {session.shared_by_email && (
-                    <div className={styles.sharedByLine}>
-                      Shared by {session.shared_by_email}
+            {sessions.map((session) => {
+              const title =
+                session.custom_title ||
+                session.suggested_session_title ||
+                session.summary ||
+                session.first_user_message;
+              return (
+                <tr key={session.id} className={`${styles.clickableRow} ${session.shared_by_email ? styles.sharedRow : ''}`}>
+                  <td className={styles.sessionCell}>
+                    <div className={title ? styles.sessionTitle : `${styles.sessionTitle} ${styles.untitled}`}>
+                      {title || 'Untitled'}
                     </div>
-                  )}
-                </td>
-                <td className={styles.timestamp}>
-                  <span className={styles.activityContent}>
-                    <span className={styles.activityTime}>
-                      {session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}
-                    </span>
-                    {session.first_seen && session.last_sync_time && (
-                      <span className={styles.activityDuration}>
-                        {DurationIcon}
-                        {formatDuration(new Date(session.last_sync_time).getTime() - new Date(session.first_seen).getTime())}
-                      </span>
+                    <div className={styles.chipRow}>
+                      <Chip icon={getProviderIcon(session.provider ?? 'claude-code')} variant="neutral">
+                        {session.external_id.substring(0, 8)}
+                      </Chip>
+                      {session.git_repo && (
+                        <Chip
+                          icon={session.git_repo_url?.includes('github.com') ? GitHubIcon : RepoIcon}
+                          variant="neutral"
+                        >
+                          {session.git_repo}
+                        </Chip>
+                      )}
+                      {session.git_branch && (
+                        <Chip icon={BranchIcon} variant="blue">
+                          {session.git_branch}
+                        </Chip>
+                      )}
+                      {session.github_prs?.map((pr) => (
+                        <Chip key={pr} icon={PRIcon} variant="purple">
+                          #{pr}
+                        </Chip>
+                      ))}
+                    </div>
+                    {session.shared_by_email && (
+                      <div className={styles.sharedByLine}>
+                        Shared by {session.shared_by_email}
+                      </div>
                     )}
-                  </span>
-                </td>
-                <td className={styles.costCell}>
-                  {session.estimated_cost_usd
-                    ? formatCost(parseFloat(session.estimated_cost_usd))
-                    : '-'}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className={styles.costCell}>
+                    {session.estimated_cost_usd
+                      ? formatCost(parseFloat(session.estimated_cost_usd))
+                      : '-'}
+                  </td>
+                  <td className={styles.timestamp}>
+                    <span className={styles.activityContent}>
+                      <span className={styles.activityTime}>
+                        {session.last_sync_time ? formatRelativeTime(session.last_sync_time) : '-'}
+                      </span>
+                      {session.first_seen && session.last_sync_time && (
+                        <span className={styles.activityDuration}>
+                          {DurationIcon}
+                          {formatDuration(new Date(session.last_sync_time).getTime() - new Date(session.first_seen).getTime())}
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -316,6 +326,9 @@ export const WithSharedSessions: Story = {
 // Codex-only sessions: confirms getProviderIcon renders the teal OpenAI
 // blossom (CodexIcon) on every row instead of the orange Claude logo.
 // Regression guard for CF-353 — pair with the providerIcon.test.tsx unit test.
+// The third row also exercises the smart-recap → list-title surface
+// (CF-350 + CF-447): when `suggested_session_title` is set, it wins over
+// `summary` and `first_user_message` in the title fallback chain.
 const mockCodexSessions: MockSession[] = [
   {
     id: 'codex-1',
@@ -344,6 +357,21 @@ const mockCodexSessions: MockSession[] = [
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/codex-attachments',
+  },
+  {
+    id: 'codex-3',
+    external_id: '019e23cc-7777-8888-9999-aaaabbbbcccc',
+    provider: 'codex',
+    custom_title: null,
+    suggested_session_title: 'Wire Codex token-usage parser to analytics',
+    summary: 'so basically i was looking at this stack trace and wondered',
+    first_user_message: 'so basically i was looking at this stack trace and wondered',
+    first_seen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    last_sync_time: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    estimated_cost_usd: '2.8700',
+    git_repo: 'ConfabulousDev/confab-web',
+    git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
+    git_branch: 'feature/codex-tokens',
   },
 ];
 

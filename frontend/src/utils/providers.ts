@@ -98,6 +98,24 @@ function normalizeProvider(value: string): string {
 }
 
 /**
+ * Mirrors the spirit of backend `models.LegacyAliases`: returns true when
+ * `value` is a non-canonical spelling whose normalized form is the
+ * canonical `claude-code` id. The classic case is the legacy DB display
+ * form `'Claude Code'`.
+ *
+ * Functionally redundant with `normalizeProvider(value) === 'claude-code' &&
+ * value !== 'claude-code'` — promoted to its own export (CF-366) so the
+ * legacy-detection rule has one documented home, in case future callers
+ * need to branch on "did we just rescue a legacy row?" without re-deriving
+ * the rule. `getProviderMetadataOrFallback` handles the rescue
+ * transparently via `normalizeProvider`, so most call sites do not need
+ * this helper directly.
+ */
+export function isLegacyClaudeCode(value: string): boolean {
+  return normalizeProvider(value) === 'claude-code' && value !== 'claude-code';
+}
+
+/**
  * Tolerant lookup with explicit fallback. The SINGLE place that codifies
  * the unknown-provider policy.
  *
