@@ -4,6 +4,10 @@ import { SessionCard } from './SessionCard';
 const meta: Meta<typeof SessionCard> = {
   title: 'Session/Cards/SessionCard',
   component: SessionCard,
+  args: {
+    // Default provider for all stories (CF-437). CodexSession story overrides.
+    provider: 'claude-code',
+  },
   parameters: {
     layout: 'centered',
   },
@@ -195,5 +199,62 @@ export const Loading: Story = {
   args: {
     data: undefined,
     loading: true,
+  },
+};
+
+/**
+ * Codex session (CF-437). Demonstrates:
+ *   - "Reasoning" / "Reasoning steps" bar label (vs Claude's "Thinking blocks")
+ *   - Tool results bar HIDDEN because tool_calls === tool_results (every
+ *     successful Codex tool call has an output, so they're redundant)
+ *   - OpenAI model name formatting: "gpt-5-codex" → "GPT-5 Codex"
+ *   - Provider-aware Messages tooltip (hover to see)
+ */
+export const CodexSession: Story = {
+  args: {
+    provider: 'codex',
+    data: {
+      total_messages: 60,
+      user_messages: 8,
+      assistant_messages: 22,
+      human_prompts: 8,
+      tool_results: 30,
+      text_responses: 8,
+      tool_calls: 30,
+      thinking_blocks: 14, // renders as "Reasoning"
+      duration_ms: 1_800_000,
+      models_used: ['gpt-5-codex-2025-01-01'],
+      compaction_auto: 0,
+      compaction_manual: 0,
+      compaction_avg_time_ms: null,
+    },
+    loading: false,
+  },
+};
+
+/**
+ * Codex session where some tool calls failed mid-stream, so tool_calls
+ * (30) > tool_results (22). The Tool results bar IS shown because the
+ * hide rule only fires on equality.
+ */
+export const CodexWithFailedTools: Story = {
+  args: {
+    provider: 'codex',
+    data: {
+      total_messages: 60,
+      user_messages: 8,
+      assistant_messages: 22,
+      human_prompts: 8,
+      tool_results: 22,
+      text_responses: 8,
+      tool_calls: 30,
+      thinking_blocks: 10,
+      duration_ms: 1_800_000,
+      models_used: ['gpt-5'],
+      compaction_auto: 0,
+      compaction_manual: 0,
+      compaction_avg_time_ms: null,
+    },
+    loading: false,
   },
 };

@@ -29,7 +29,14 @@ func computeCodexSession(out *ComputeResult, rollouts []*codex.ParsedRollout) {
 
 			out.UserMessages += len(turn.UserMessages)
 			out.AssistantMessages += len(turn.AssistantMessages)
-			out.HumanPrompts += len(turn.UserMessages) // parser already stripped env-context-only
+			// HumanPrompts == UserMessages for Codex: the parser already
+			// separates tool outputs (function_call_output / custom_tool_call_output
+			// land on turn.ToolCalls, not turn.UserMessages) and strips
+			// env-context-only messages. Claude needs an IsHumanMessage filter at
+			// compute time because its protocol overloads the "user" role to also
+			// carry tool_result blocks; Codex's wire format separates them. See
+			// analyzer_session_codex_test.go for the regression guard (CF-437).
+			out.HumanPrompts += len(turn.UserMessages)
 			for _, m := range turn.AssistantMessages {
 				if m.Text != "" {
 					out.TextResponses++
