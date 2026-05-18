@@ -368,7 +368,10 @@ const TrendsOverviewCardSchema = z.object({
 
 const DailyCostPointSchema = z.object({
   date: z.string(),     // YYYY-MM-DD
-  cost_usd: z.string(), // Decimal as string
+  cost_usd: z.string(), // Decimal as string — cross-provider total for the day
+  // Per-provider cost breakdown for the day, keyed by canonical provider id.
+  // `.default({})` keeps older wire payloads (single-series chart era) parseable.
+  per_provider: z.record(z.string(), z.string()).default({}),
 });
 
 // CF-435: per-provider tokens/cost breakdown. Backend always populates this

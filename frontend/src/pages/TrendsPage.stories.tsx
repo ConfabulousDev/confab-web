@@ -10,6 +10,7 @@ import {
   TrendsAgentsAndSkillsCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
+import { singleProviderDailyCosts } from '@/test-fixtures/session';
 import CardGrid from '@/components/CardGrid';
 import type { TrendsResponse } from '@/schemas/api';
 import { PROVIDER_VALUES, type ProviderId } from '@/utils/providers';
@@ -101,7 +102,7 @@ export default meta;
 type Story = StoryObj<typeof TrendsPagePresentational>;
 
 // Mock data generators
-const mockDailyCosts = [
+const mockDailyCosts = singleProviderDailyCosts('claude-code', [
   { date: '2024-01-08', cost_usd: '1.25' },
   { date: '2024-01-09', cost_usd: '1.80' },
   { date: '2024-01-10', cost_usd: '0.95' },
@@ -109,7 +110,7 @@ const mockDailyCosts = [
   { date: '2024-01-12', cost_usd: '1.50' },
   { date: '2024-01-13', cost_usd: '0.65' },
   { date: '2024-01-14', cost_usd: '1.90' },
-];
+]);
 
 const mockDailySessionCounts = [
   { date: '2024-01-08', session_count: 5 },
@@ -252,7 +253,7 @@ export const HighUsage: Story = {
               total_cost_usd: '125.00',
             },
           },
-          daily_costs: [
+          daily_costs: singleProviderDailyCosts('claude-code', [
             { date: '2024-01-08', cost_usd: '4.50' },
             { date: '2024-01-09', cost_usd: '5.20' },
             { date: '2024-01-10', cost_usd: '3.80' },
@@ -260,7 +261,7 @@ export const HighUsage: Story = {
             { date: '2024-01-12', cost_usd: '4.90' },
             { date: '2024-01-13', cost_usd: '2.80' },
             { date: '2024-01-14', cost_usd: '5.80' },
-          ],
+          ]),
         },
         activity: {
           total_files_read: 15000,
@@ -340,7 +341,9 @@ export const SingleSession: Story = {
           total_cache_read_tokens: 5000,
           total_cache_creation_tokens: 1000,
           total_cost_usd: '0.35',
-          daily_costs: [{ date: '2024-01-14', cost_usd: '0.35' }],
+          daily_costs: singleProviderDailyCosts('claude-code', [
+            { date: '2024-01-14', cost_usd: '0.35' },
+          ]),
           per_provider: {
             'claude-code': {
               total_input_tokens: 25000,

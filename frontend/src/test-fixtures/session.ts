@@ -62,6 +62,19 @@ export function makeSessionDetailFixture(
 }
 
 /**
+ * Per-day per-provider cost fixture for trends-card stories. Routes the
+ * full daily cost to a single provider so the stacked bar chart renders in
+ * that provider's brand color instead of the generic fallback. Used by both
+ * `TrendsTokensCard.stories.tsx` and `TrendsPage.stories.tsx`.
+ */
+export function singleProviderDailyCosts(
+  providerId: string,
+  daily: Array<{ date: string; cost_usd: string }>,
+): Array<{ date: string; cost_usd: string; per_provider: Record<string, string> }> {
+  return daily.map((d) => ({ ...d, per_provider: { [providerId]: d.cost_usd } }));
+}
+
+/**
  * Build a list-item `Session` fixture (for session-list pages and trends
  * cards that index a list of recent sessions).
  */

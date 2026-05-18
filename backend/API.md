@@ -1151,8 +1151,8 @@ Returns aggregated analytics across multiple sessions for the authenticated user
       "total_cache_read_tokens": 500000,
       "total_cost_usd": "125.50",
       "daily_costs": [
-        {"date": "2024-01-08", "cost_usd": "15.20"},
-        {"date": "2024-01-09", "cost_usd": "18.50"}
+        {"date": "2024-01-08", "cost_usd": "15.20", "per_provider": {"claude-code": "14.50", "codex": "0.70"}},
+        {"date": "2024-01-09", "cost_usd": "18.50", "per_provider": {"claude-code": "17.80", "codex": "0.70"}}
       ],
       "per_provider": {
         "claude-code": {
@@ -1242,7 +1242,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | `cards.tokens.total_input_tokens` | int | Sum of input tokens across all sessions |
 | `cards.tokens.total_output_tokens` | int | Sum of output tokens across all sessions |
 | `cards.tokens.total_cost_usd` | string | Total estimated cost across all providers (decimal as string) |
-| `cards.tokens.daily_costs` | array | Cost per day for charting (combined across providers; per-provider daily breakdowns are out of scope) |
+| `cards.tokens.daily_costs` | array | Cost per day for charting. Each entry includes `date` (YYYY-MM-DD), `cost_usd` (cross-provider total), and `per_provider` (canonical provider id → decimal cost string) for the stacked-bar chart. `per_provider` is always present; empty `{}` for days with no sessions. |
 | `cards.tokens.per_provider` | object | Per-canonical-provider tokens & cost breakdown (CF-435). Map keyed by canonical provider id (`claude-code`, `codex`); each entry has `total_input_tokens`, `total_output_tokens`, `total_cache_creation_tokens`, `total_cache_read_tokens`, `total_cost_usd`. Always present; `{}` when no sessions match. Legacy `Claude Code` session_type rows fold into the `claude-code` key server-side via `models.NormalizeProvider`. The Tokens UI switches to a per-provider table when this map has 2+ keys. |
 | `cards.activity.total_files_read` | int | Sum of files read across all sessions |
 | `cards.activity.total_files_modified` | int | Sum of files modified |

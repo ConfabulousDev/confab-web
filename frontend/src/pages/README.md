@@ -78,7 +78,7 @@ The most complex page. It:
 - Date range picker with presets (This Week, Last 7 Days, Last 30 Days, etc.)
 - Repo filter multi-select
 - AI provider filter (CF-424): canonical values `claude-code` / `codex`; URL-persisted via singular `?provider=` key; empty state = aggregate across all providers
-- Renders trend cards from `@/components/trends/cards/`. `TrendsTokensCard` self-switches between single-series StatRows and a per-provider table based on `data.cards.tokens.per_provider` (CF-435)
+- Renders trend cards from `@/components/trends/cards/`. `TrendsTokensCard` self-switches between single-series StatRows and indented per-provider sections based on `data.cards.tokens.per_provider` (CF-472, replaces the CF-435 table)
 
 ## How to Extend
 

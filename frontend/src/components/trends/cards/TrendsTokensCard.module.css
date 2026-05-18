@@ -3,46 +3,73 @@
 .tooltip { composes: tooltip from './trendsChart.module.css'; }
 .tooltipDate { composes: tooltipDate from './trendsChart.module.css'; }
 .tooltipValue { composes: tooltipValue from './trendsChart.module.css'; }
+.tooltipRow { composes: tooltipRow from './trendsChart.module.css'; }
+.tooltipDot { composes: tooltipDot from './trendsChart.module.css'; }
 
-/* CF-435: per-provider tokens table shown when len(per_provider) >= 2.
-   Wrapped in an overflow-x:auto container so narrow viewports get
-   horizontal scroll instead of column collapse. */
-.tableWrap {
-  overflow-x: auto;
-  margin: calc(-1 * var(--spacing-sm)) calc(-1 * var(--spacing-sm)) 0;
+.tooltipBreakdown {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
 }
 
-.providerTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+.tooltipProviderLabel {
+  color: var(--color-text-secondary);
+}
+
+.tooltipProviderValue {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-primary);
 }
 
-.providerTable th,
-.providerTable td {
-  padding: 8px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+/* Prominent top-level "Total Cost" row above the per-provider stack.
+   Deliberately larger than the nested per-provider Cost row so the
+   rolled-up number reads first — that's the headline most users want. */
+.totalCostRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 4px 0 12px;
   border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
 }
 
-.providerTable th {
+.totalCostLabel {
+  font-size: 15px;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+}
+
+.totalCostValue {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Per-provider sections under the top-level "Total Cost" row. Each section
+   gets a small heading and an indented StatRow stack, reusing the base
+   StatRow styling for visual continuity with single-provider mode. */
+.providerSections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.providerSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.providerHeader {
   font-size: 12px;
-}
-
-.providerTable .providerCol {
-  text-align: left;
-}
-
-.providerTable tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.providerTable .totalRow td {
   font-weight: 600;
-  border-top: 1px solid var(--color-border);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 4px;
+}
+
+.providerRows {
+  padding-left: 12px;
 }

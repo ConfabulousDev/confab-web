@@ -87,8 +87,7 @@ type TrendsTokensCard struct {
 }
 
 // TrendsTokensPerProvider holds aggregated token usage and cost for one
-// canonical provider (e.g. "claude-code", "codex"). No per-provider daily
-// costs — the chart stays a single combined-cost line. Legacy session_type
+// canonical provider (e.g. "claude-code", "codex"). Legacy session_type
 // aliases are folded into the canonical key at the Scan site via
 // models.NormalizeProvider before reaching this struct.
 type TrendsTokensPerProvider struct {
@@ -99,10 +98,15 @@ type TrendsTokensPerProvider struct {
 	TotalCostUSD             string `json:"total_cost_usd"` // Decimal as string
 }
 
-// DailyCostPoint represents a single day's cost for charting.
+// DailyCostPoint represents a single day's cost for charting. CostUSD is the
+// cross-provider total for the day; PerProvider holds the per-provider
+// breakdown for that day (canonical provider id → decimal cost as string),
+// driving the stacked-bar chart on the frontend. Always non-nil — an empty
+// map is emitted for days with no sessions so JSON yields `{}` not `null`.
 type DailyCostPoint struct {
-	Date    string `json:"date"` // YYYY-MM-DD
-	CostUSD string `json:"cost_usd"`
+	Date        string            `json:"date"` // YYYY-MM-DD
+	CostUSD     string            `json:"cost_usd"`
+	PerProvider map[string]string `json:"per_provider"`
 }
 
 // TrendsActivityCard provides code activity summary.

@@ -326,13 +326,12 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 	return overview, activity, utilizationCard, totalSessions, nil
 }
 
-// aggregateTokens computes the tokens card with daily cost breakdown plus the
-// per-provider breakdown introduced in CF-435. Two queries share the same
-// filtered_sessions CTE shape: the first drives daily costs and cross-provider
-// totals; the second groups by s.session_type for the per_provider map.
-// Uses generate_series so all dates in range are returned (zeros for missing
-// days). Per-provider keys are normalized via models.NormalizeProvider at the
-// Scan site so legacy 'Claude Code' rows fold into 'claude-code'.
+// aggregateTokens computes the tokens card in one SQL pass: per-day
+// per-provider cost rows for the stacked-bar chart, per-provider grand totals,
+// and cross-provider grand totals. A date_range LEFT JOIN backfills every
+// day in the range so empty days still appear (with session_type='' and
+// PerProvider={}). Provider keys are normalized via models.NormalizeProvider
+// at the Scan site so legacy 'Claude Code' rows fold into 'claude-code'.
 func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (*TrendsTokensCard, error) {
 	query := `
 		WITH date_range AS (
@@ -345,6 +344,7 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 		filtered_sessions AS (
 			SELECT
 				s.id,
+				s.session_type,
 				(s.first_seen - make_interval(mins => $6))::date as session_date
 			FROM sessions s
 			WHERE s.user_id = $1
@@ -356,9 +356,10 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 				)
 				AND s.session_type = ANY($7::text[])
 		),
-		daily_agg AS (
+		per_day_per_provider AS (
 			SELECT
 				fs.session_date,
+				fs.session_type,
 				COALESCE(SUM(t.input_tokens), 0) as input_tokens,
 				COALESCE(SUM(t.output_tokens), 0) as output_tokens,
 				COALESCE(SUM(t.cache_creation_tokens), 0) as cache_creation_tokens,
@@ -366,18 +367,19 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 				COALESCE(SUM(t.estimated_cost_usd::numeric), 0) as cost_usd
 			FROM filtered_sessions fs
 			LEFT JOIN session_card_tokens t ON fs.id = t.session_id
-			GROUP BY fs.session_date
+			GROUP BY fs.session_date, fs.session_type
 		)
 		SELECT
 			dr.d as session_date,
-			COALESCE(da.input_tokens, 0) as input_tokens,
-			COALESCE(da.output_tokens, 0) as output_tokens,
-			COALESCE(da.cache_creation_tokens, 0) as cache_creation_tokens,
-			COALESCE(da.cache_read_tokens, 0) as cache_read_tokens,
-			COALESCE(da.cost_usd, 0) as cost_usd
+			COALESCE(pdpp.session_type, '') as session_type,
+			COALESCE(pdpp.input_tokens, 0),
+			COALESCE(pdpp.output_tokens, 0),
+			COALESCE(pdpp.cache_creation_tokens, 0),
+			COALESCE(pdpp.cache_read_tokens, 0),
+			COALESCE(pdpp.cost_usd, 0)
 		FROM date_range dr
-		LEFT JOIN daily_agg da ON dr.d = da.session_date
-		ORDER BY dr.d
+		LEFT JOIN per_day_per_provider pdpp ON dr.d = pdpp.session_date
+		ORDER BY dr.d, pdpp.session_type
 	`
 
 	rows, err := s.db.QueryContext(ctx, query,
@@ -394,8 +396,18 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 	}
 	defer rows.Close()
 
+	type dailyAccum struct {
+		total       decimal.Decimal
+		perProvider map[string]decimal.Decimal
+	}
+	type providerAccum struct {
+		entry *TrendsTokensPerProvider
+		cost  decimal.Decimal
+	}
 	var (
-		dailyCosts         = []DailyCostPoint{}
+		datesInOrder       []string
+		dailyByDate        = map[string]*dailyAccum{}
+		perProvider        = map[string]*providerAccum{}
 		totalInput         int64
 		totalOutput        int64
 		totalCacheCreation int64
@@ -405,26 +417,45 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 
 	for rows.Next() {
 		var sessionDate time.Time
+		var rawProvider, costStr string
 		var input, output, cacheCreation, cacheRead int64
-		var costStr string
-
-		err := rows.Scan(
-			&sessionDate,
-			&input,
-			&output,
-			&cacheCreation,
-			&cacheRead,
-			&costStr,
-		)
-		if err != nil {
+		if err := rows.Scan(&sessionDate, &rawProvider, &input, &output, &cacheCreation, &cacheRead, &costStr); err != nil {
 			return nil, err
 		}
 
+		dateKey := sessionDate.Format("2006-01-02")
+		day, ok := dailyByDate[dateKey]
+		if !ok {
+			day = &dailyAccum{total: decimal.Zero, perProvider: map[string]decimal.Decimal{}}
+			dailyByDate[dateKey] = day
+			datesInOrder = append(datesInOrder, dateKey)
+		}
+
+		// Empty-day anchor row from the date_range LEFT JOIN: NULL session_type
+		// becomes '', NULL numerics become 0. Skip accumulation so we don't
+		// pollute provider totals with a phantom '' bucket.
+		if rawProvider == "" {
+			continue
+		}
+
+		canonical := models.NormalizeProvider(rawProvider)
 		cost, _ := decimal.NewFromString(costStr)
-		dailyCosts = append(dailyCosts, DailyCostPoint{
-			Date:    sessionDate.Format("2006-01-02"),
-			CostUSD: cost.String(),
-		})
+
+		// Per-day per-provider (merges legacy 'Claude Code' with 'claude-code'
+		// on the same date — both fold into the canonical bucket).
+		day.perProvider[canonical] = day.perProvider[canonical].Add(cost)
+		day.total = day.total.Add(cost)
+
+		prov, ok := perProvider[canonical]
+		if !ok {
+			prov = &providerAccum{entry: &TrendsTokensPerProvider{}}
+			perProvider[canonical] = prov
+		}
+		prov.entry.TotalInputTokens += input
+		prov.entry.TotalOutputTokens += output
+		prov.entry.TotalCacheCreationTokens += cacheCreation
+		prov.entry.TotalCacheReadTokens += cacheRead
+		prov.cost = prov.cost.Add(cost)
 
 		totalInput += input
 		totalOutput += output
@@ -432,14 +463,28 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 		totalCacheRead += cacheRead
 		totalCost = totalCost.Add(cost)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	perProvider, err := s.aggregateTokensPerProvider(ctx, userID, req, providerArg)
-	if err != nil {
-		return nil, err
+	perProviderTotals := make(map[string]*TrendsTokensPerProvider, len(perProvider))
+	for canonical, prov := range perProvider {
+		prov.entry.TotalCostUSD = prov.cost.String()
+		perProviderTotals[canonical] = prov.entry
+	}
+
+	dailyCosts := make([]DailyCostPoint, 0, len(datesInOrder))
+	for _, dateKey := range datesInOrder {
+		day := dailyByDate[dateKey]
+		perDay := make(map[string]string, len(day.perProvider))
+		for provider, cost := range day.perProvider {
+			perDay[provider] = cost.String()
+		}
+		dailyCosts = append(dailyCosts, DailyCostPoint{
+			Date:        dateKey,
+			CostUSD:     day.total.String(),
+			PerProvider: perDay,
+		})
 	}
 
 	return &TrendsTokensCard{
@@ -449,90 +494,8 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 		TotalCacheReadTokens:     totalCacheRead,
 		TotalCostUSD:             totalCost.String(),
 		DailyCosts:               dailyCosts,
-		PerProvider:              perProvider,
+		PerProvider:              perProviderTotals,
 	}, nil
-}
-
-// aggregateTokensPerProvider returns the per-provider tokens/cost breakdown
-// for the trends Tokens card (CF-435). GROUP BY s.session_type captures every
-// provider present in the filtered range; the Scan loop normalizes legacy
-// 'Claude Code' rows into 'claude-code' so the wire surface only exposes
-// canonical provider ids. Returns a non-nil empty map when the range is
-// empty so JSON serialization yields {} rather than null.
-func (s *Store) aggregateTokensPerProvider(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (map[string]*TrendsTokensPerProvider, error) {
-	query := `
-		WITH filtered_sessions AS (
-			SELECT s.id, s.session_type
-			FROM sessions s
-			WHERE s.user_id = $1
-				AND s.first_seen >= to_timestamp($2)
-				AND s.first_seen < to_timestamp($3)
-				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
-					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
-				)
-				AND s.session_type = ANY($6::text[])
-		)
-		SELECT
-			fs.session_type,
-			COALESCE(SUM(t.input_tokens), 0) AS input_tokens,
-			COALESCE(SUM(t.output_tokens), 0) AS output_tokens,
-			COALESCE(SUM(t.cache_creation_tokens), 0) AS cache_creation_tokens,
-			COALESCE(SUM(t.cache_read_tokens), 0) AS cache_read_tokens,
-			COALESCE(SUM(t.estimated_cost_usd::numeric), 0) AS cost_usd
-		FROM filtered_sessions fs
-		LEFT JOIN session_card_tokens t ON fs.id = t.session_id
-		GROUP BY fs.session_type
-	`
-
-	rows, err := s.db.QueryContext(ctx, query,
-		userID,
-		req.StartTS,
-		req.EndTS,
-		pq.Array(req.Repos),
-		req.IncludeNoRepo,
-		providerArg,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	// Accumulate cost as decimal.Decimal and stringify once after the loop so
-	// the legacy-alias fold doesn't round-trip strings through NewFromString
-	// for every merged row.
-	out := map[string]*TrendsTokensPerProvider{}
-	costs := map[string]decimal.Decimal{}
-	for rows.Next() {
-		var rawProvider, costStr string
-		var input, output, cacheCreation, cacheRead int64
-		if err := rows.Scan(&rawProvider, &input, &output, &cacheCreation, &cacheRead, &costStr); err != nil {
-			return nil, err
-		}
-		canonical := models.NormalizeProvider(rawProvider)
-		cost, _ := decimal.NewFromString(costStr)
-
-		// Get-or-create the canonical bucket, then accumulate. When two SQL
-		// rows share a canonical key (e.g. 'Claude Code' + 'claude-code'),
-		// the second row folds into the first.
-		entry, ok := out[canonical]
-		if !ok {
-			entry = &TrendsTokensPerProvider{}
-			out[canonical] = entry
-		}
-		entry.TotalInputTokens += input
-		entry.TotalOutputTokens += output
-		entry.TotalCacheCreationTokens += cacheCreation
-		entry.TotalCacheReadTokens += cacheRead
-		costs[canonical] = costs[canonical].Add(cost)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	for canonical, entry := range out {
-		entry.TotalCostUSD = costs[canonical].String()
-	}
-	return out, nil
 }
 
 // aggregateTools computes the tools card with per-tool breakdown.
