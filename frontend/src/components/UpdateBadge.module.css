@@ -2,28 +2,37 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
-  padding: 0 10px;
+  padding: 2px 8px;
   margin-right: var(--spacing-sm);
   font-size: var(--font-xs);
   font-weight: var(--font-medium);
-  color: var(--color-accent);
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-full);
+  line-height: 1.4;
+  color: #c2410c;
+  background: #fff4e6;
+  border-radius: var(--radius-md);
   text-decoration: none;
+  white-space: nowrap;
   transition: background var(--transition-fast);
 }
 
+[data-theme='dark'] .badge {
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.15);
+}
+
 .badge:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-accent-hover);
+  background: #ffe4cc;
   text-decoration: none;
+}
+
+[data-theme='dark'] .badge:hover {
+  background: rgba(249, 115, 22, 0.25);
 }
 
 .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-accent);
+  background: #f97316;
+  flex-shrink: 0;
 }
