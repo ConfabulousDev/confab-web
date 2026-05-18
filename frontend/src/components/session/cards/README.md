@@ -16,7 +16,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts. Exports `prepareChartData` for testing. Defensively filters orphan `<unknown>` entries so a literal `<unknown>` bar never paints, even for stale ComputeResults predating the CF-438 backend skip. |
 | `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown. Provider-agnostic copy: Claude buckets by `subagent_type`, Codex (CF-443) buckets by `agent_role` (`"default"`, `"explorer"`). Renders for both providers via the registry's `agent_invocations + skill_invocations > 0` gate. |
 | `RedactionsCard.tsx` | Redaction counts by type (shown only when redactions exist) |
-| `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links |
+| `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links. `MessageLink` short-circuits when `item.message_id` is empty — this is the intentional state for Codex sessions (Codex rollout JSONL has no stable per-message id; the backend `PrepareCodexTranscript` synthesizes ids only for the LLM's internal use, and `codexProvider.ClearMessageIDs()` zeroes them before the card is saved). Claude sessions render the icon link; Codex sessions render plain text. |
 | `index.ts` | Barrel export: `getOrderedCards()` |
 
 ## Key Types

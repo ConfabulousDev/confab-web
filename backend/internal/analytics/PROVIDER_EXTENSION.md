@@ -20,7 +20,7 @@ type SessionProvider interface {
 - `Parse` downloads transcript bytes from `ParseInput.Store` (S3), parses them into a provider-specific `Rollout`, and returns `(nil, nil)` for an empty session (no transcript file yet). The `Rollout` is opaque — a marker interface — so each provider can use its own struct.
 - `ComputeCards` maps the parsed rollout onto `ComputeResult` (the cross-provider canonical shape).
 - `SearchText` returns the Weight-C content for the search index (typically: user messages + assistant final text + tool-call summaries, capped at 500 KB).
-- `PrepareTranscript` builds the XML envelope (`<transcript><user>…</transcript>`) the smart-recap LLM consumes, plus an `idMap` from sequential ids to provider-specific message identifiers.
+- `PrepareTranscript` builds the XML envelope (`<transcript><user>…</transcript>`) the smart-recap LLM consumes, plus an `idMap` from sequential ids to provider-specific message identifiers. The smart-recap system prompt is **provider-agnostic by design** (CF-447) — it describes the XML structure categorically, so a new provider does not need to touch the prompt; whatever element shapes you emit will be summarized correctly.
 - `ClearMessageIDs` returns `true` when smart-recap annotated items should drop their MessageID (the provider has no stable frontend anchors). Codex returns `true`; Claude returns `false`.
 - `DisplayName` returns the human-facing label ("Claude Code", "Codex") used in email subject lines and other display surfaces.
 
