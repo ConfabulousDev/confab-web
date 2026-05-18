@@ -43,7 +43,7 @@ func TestComputeCodexSession_HumanPromptsExcludesToolOutputs(t *testing.T) {
 		}},
 	}
 
-	out := ComputeFromCodexRollout(rollout)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
 
 	if out.HumanPrompts != 2 {
 		t.Errorf("HumanPrompts = %d, want 2 (only genuine user prompts; tool outputs must not inflate)", out.HumanPrompts)
@@ -71,7 +71,7 @@ func TestComputeCodexSession_ThinkingBlocksMirrorsReasoningCount(t *testing.T) {
 			{TurnID: "t2", ReasoningCount: 2},
 		},
 	}
-	out := ComputeFromCodexRollout(rollout)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
 
 	if out.ThinkingBlocks != 5 {
 		t.Errorf("ThinkingBlocks = %d, want 5 (sum of per-turn ReasoningCount)", out.ThinkingBlocks)
