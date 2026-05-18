@@ -8,31 +8,26 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
 
-// SessionProvider is the contract every provider's analytics implementation
-// satisfies. Implementations register at init time via RegisterProvider; the
-// precompute worker dispatches through ProviderFor.
+// SessionProvider is the per-provider analytics contract. Implementations
+// register at init time via RegisterProvider; callers dispatch through
+// ProviderFor.
 type SessionProvider interface {
-	// Parse downloads and normalizes session data into a provider-specific
-	// Rollout. It returns a nil rollout when the session has no transcript yet.
+	// Parse loads session data into a provider-specific Rollout, or returns
+	// (nil, nil) when the session has no transcript yet.
 	Parse(ctx context.Context, input ParseInput) (Rollout, error)
-
-	// ComputeCards maps the Rollout onto the canonical ComputeResult shape.
 	ComputeCards(ctx context.Context, rollout Rollout) *ComputeResult
-
-	// SearchText returns the Weight C transcript text for the search index.
 	SearchText(ctx context.Context, rollout Rollout) string
-
-	// PrepareTranscript builds the XML transcript and id map for smart recap.
 	PrepareTranscript(ctx context.Context, rollout Rollout) (xml string, idMap map[int]string, err error)
-
-	// ClearMessageIDs reports whether smart recap items should drop message IDs
-	// because the provider lacks stable frontend anchors.
+	// ClearMessageIDs reports whether smart-recap items should drop message
+	// IDs (providers without stable frontend anchors).
 	ClearMessageIDs() bool
+	// DisplayName returns the human-facing label (e.g. "Claude Code",
+	// "Codex"); concatenated with " session" / " transcript" by callers.
+	DisplayName() string
 }
 
-// ParseInput contains session metadata plus the dependencies providers need to
-// load raw transcript data. Provider implementations stay stateless and can be
-// registered once at package init time.
+// ParseInput carries the dependencies a provider needs to load raw transcript
+// data. Stateless providers can register once at init time.
 type ParseInput struct {
 	DB         *sql.DB
 	Store      *storage.S3Storage
@@ -47,31 +42,25 @@ type Rollout interface{}
 
 var providerRegistry = map[string]SessionProvider{}
 
-// RegisterProvider registers p for a canonical provider name and optional
-// aliases. Duplicate names panic because registrations happen at init time and
-// duplicate ownership is a programmer error.
+// RegisterProvider registers p under a canonical name plus optional aliases.
+// Nil providers, empty names, and duplicate names all panic — registrations
+// happen at init time.
 func RegisterProvider(p SessionProvider, canonical string, aliases ...string) {
 	if p == nil {
 		panic("analytics: cannot register nil SessionProvider")
 	}
-	registerProviderName(p, canonical)
-	for _, alias := range aliases {
-		registerProviderName(p, alias)
+	for _, name := range append([]string{canonical}, aliases...) {
+		if name == "" {
+			panic("analytics: cannot register empty provider name")
+		}
+		if _, exists := providerRegistry[name]; exists {
+			panic(fmt.Sprintf("analytics: provider %q already registered", name))
+		}
+		providerRegistry[name] = p
 	}
 }
 
-func registerProviderName(p SessionProvider, name string) {
-	if name == "" {
-		panic("analytics: cannot register empty provider name")
-	}
-	if _, exists := providerRegistry[name]; exists {
-		panic(fmt.Sprintf("analytics: provider %q already registered", name))
-	}
-	providerRegistry[name] = p
-}
-
-// ProviderFor returns the provider registered for name. Name may be canonical
-// or a registered legacy alias.
+// ProviderFor returns the provider registered for name (canonical or alias).
 func ProviderFor(name string) (SessionProvider, error) {
 	p, ok := providerRegistry[name]
 	if !ok {

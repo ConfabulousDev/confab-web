@@ -7,32 +7,26 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 )
 
-// PrepareCodexTranscript builds an XML transcript suitable for the smart
-// recap LLM. Reuses the same <transcript>/<user>/<assistant>/<tool>/<tool_result>
-// envelope as Claude's PrepareTranscript so the existing prompt accepts it
-// without changes (per CF-350 interview decision: simple path, no prompt variants).
-//
-// The returned idMap maps sequential integer ids to synthetic
-// "codex-<seq>" placeholders. These ids are NOT used by the frontend for
-// deep-linking — Codex messages have no stable id. codexProvider reports
-// ClearMessageIDs=true so the resulting card has empty message_ids, and
-// SmartRecapCard.tsx's `if (!item.message_id)` short-circuit renders items as
-// plain text.
-//
-// Truncation honors DefaultFormatConfig() for parity with the Claude path.
-func PrepareCodexTranscript(rollout *codex.ParsedRollout) (string, map[int]string) {
+// PrepareCodexTranscript builds an XML transcript for the smart recap LLM,
+// reusing the same envelope as Claude's PrepareTranscript so the prompt
+// accepts it without changes. The idMap entries are synthetic placeholders;
+// codexProvider reports ClearMessageIDs=true so the frontend treats items as
+// plain text. Truncation honors DefaultFormatConfig() for parity with Claude.
+func PrepareCodexTranscript(rollouts []*codex.ParsedRollout) (string, map[int]string) {
 	cfg := DefaultFormatConfig()
 	var b strings.Builder
 	idMap := make(map[int]string)
 	counter := 0
 
 	b.WriteString("<transcript>\n")
-	if rollout != nil {
+	for _, rollout := range rollouts {
+		if rollout == nil {
+			continue
+		}
 		for _, turn := range rollout.Turns {
 			emitCodexTurn(&b, &counter, idMap, turn, cfg)
 		}
-		// Compactions: only the marker matters to the recap prompt; timestamps
-		// are intentionally not surfaced.
+		// Compactions surface only as markers; timestamps are intentionally omitted.
 		for range rollout.Compactions {
 			counter++
 			idMap[counter] = fmt.Sprintf("codex-compaction-%d", counter)
@@ -43,8 +37,7 @@ func PrepareCodexTranscript(rollout *codex.ParsedRollout) (string, map[int]strin
 	return b.String(), idMap
 }
 
-// emitCodexTurn writes one Codex turn's items in JSONL order: user messages,
-// assistant messages (commentary + final), and tool calls with their outputs.
+// emitCodexTurn writes one turn's items in JSONL order.
 func emitCodexTurn(b *strings.Builder, counter *int, idMap map[int]string, turn codex.Turn, cfg FormatConfig) {
 	for _, m := range turn.UserMessages {
 		*counter++
@@ -79,9 +72,8 @@ func emitCodexTurn(b *strings.Builder, counter *int, idMap map[int]string, turn 
 	}
 }
 
-// xmlEscape escapes the five XML-reserved chars. Lightweight (no encoding/xml
-// dependency) — sufficient because the smart recap prompt treats content as
-// opaque text, not a structured DOM.
+// xmlEscape escapes the five XML-reserved chars. Lightweight — sufficient
+// because the smart recap prompt treats content as opaque text.
 var xmlReplacer = strings.NewReplacer(
 	"&", "&amp;",
 	"<", "&lt;",

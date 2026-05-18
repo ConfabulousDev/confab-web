@@ -53,7 +53,7 @@ func minimalRollout() *codex.ParsedRollout {
 
 func TestComputeFromCodexRollout_HappyPath(t *testing.T) {
 	r := minimalRollout()
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -104,7 +104,7 @@ func TestComputeFromCodexRollout_HappyPath(t *testing.T) {
 }
 
 func TestComputeFromCodexRollout_EmptyRollout(t *testing.T) {
-	out := ComputeFromCodexRollout(&codex.ParsedRollout{})
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{{}})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -120,9 +120,9 @@ func TestComputeFromCodexRollout_EmptyRollout(t *testing.T) {
 func TestComputeFromCodexRollout_OnlyEnvContext(t *testing.T) {
 	// Parser drops env-context-only messages, so this represents a rollout
 	// that, after parser stripping, has no user messages remaining.
-	out := ComputeFromCodexRollout(&codex.ParsedRollout{
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{{
 		Turns: []codex.Turn{{TurnID: "t1"}},
-	})
+	}})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -153,7 +153,7 @@ func TestComputeFromCodexRollout_ApplyPatch(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -194,7 +194,7 @@ func TestComputeFromCodexRollout_ApplyPatch_MissingEndPatch(t *testing.T) {
 			}},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -232,7 +232,7 @@ func TestComputeFromCodexRollout_ApplyPatch_ConsecutiveHeaders(t *testing.T) {
 			}},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -278,7 +278,7 @@ func TestComputeFromCodexRollout_ApplyPatch_SingleSpaceContextLines(t *testing.T
 			}},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -299,7 +299,7 @@ func TestComputeFromCodexRollout_Compaction(t *testing.T) {
 			{ReplacementCount: 3},
 		},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -323,7 +323,7 @@ func TestComputeFromCodexRollout_TokenCost_GPT5(t *testing.T) {
 			TotalTokens:           12500,
 		},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -363,7 +363,7 @@ func TestComputeFromCodexRollout_UnknownModel(t *testing.T) {
 			TotalTokens:  1500,
 		},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -389,7 +389,7 @@ func TestComputeFromCodexRollout_AssistantTurns_MidStreamUserPrompts(t *testing.
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -413,7 +413,7 @@ func TestComputeFromCodexRollout_Redactions_Recursive(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -441,7 +441,7 @@ func TestComputeFromCodexRollout_OrphanToolCallSkipped(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -470,7 +470,7 @@ func TestComputeFromCodexRollout_FailedTool(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout(r)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -510,7 +510,7 @@ func TestComputeFromCodexRollout_ParentFixture_PopulatesAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
-	out := ComputeFromCodexRollout(rollout)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
 	if out.TotalAgentInvocations != 2 {
 		t.Errorf("TotalAgentInvocations = %d, want 2", out.TotalAgentInvocations)
 	}
@@ -538,7 +538,7 @@ func TestComputeFromCodexRollout_SkillFixture_PopulatesSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
-	out := ComputeFromCodexRollout(rollout)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
 	if out.TotalSkillInvocations != 1 {
 		t.Errorf("TotalSkillInvocations = %d, want 1", out.TotalSkillInvocations)
 	}
@@ -560,7 +560,7 @@ func TestComputeFromCodexRollout_NoSpawnAgentInTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
-	out := ComputeFromCodexRollout(rollout)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
 	if out.ToolStats["spawn_agent"] != nil {
 		t.Errorf("ToolStats[spawn_agent] = %+v, want nil (routed to AgentsAndSkills)",
 			out.ToolStats["spawn_agent"])
@@ -578,7 +578,7 @@ func TestComputeFromCodexRollout_NoWaitAgentInTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
-	out := ComputeFromCodexRollout(rollout)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
 	if out.ToolStats["wait_agent"] != nil {
 		t.Errorf("ToolStats[wait_agent] = %+v, want nil (excluded from Tools card)",
 			out.ToolStats["wait_agent"])
@@ -598,7 +598,7 @@ func TestComputeFromCodexRollout_ConversationTimingUnchanged_NoSpawnFixture(t *t
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
-	out := ComputeFromCodexRollout(rollout)
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
 	// Hard-coded baselines captured from main before CF-443. If any of these
 	// shift, CF-443 has inadvertently altered Conversation card behavior — fix
 	// the parser refactor, not the baseline.
