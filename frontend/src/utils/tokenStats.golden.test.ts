@@ -107,36 +107,38 @@ describe('golden: Claude session total cost', () => {
 // ---------------------------------------------------------------------------
 // Codex session golden — two assistant items.
 //
-// Pre-refactor calculation (using existing calculateCodexAssistantCost):
+// Calculation (post-CF-471: reasoning_output_tokens is a SUBSET of
+// output_tokens on the wire; never added to output for billing):
 //
 //   Item 1: gpt-5
-//     usage = { input_tokens: 500_000, cached_input_tokens: 100_000,
-//               output_tokens: 50_000, reasoning_output_tokens: 20_000 }
+//     wire   = { input_tokens: 500_000, cached_input_tokens: 100_000,
+//                output_tokens: 50_000, reasoning_output_tokens: 20_000 }
 //     uncached = max(0, 500_000 - 100_000) = 400_000
-//     output total = 50_000 + 20_000 = 70_000
+//     output billed = 50_000  (wire output_tokens; reasoning is already inside)
 //     pricing = gpt-5 { input:1.25, output:10, cacheRead:0.125 }
-//     cost = (400_000*1.25 + 100_000*0.125 + 70_000*10) / 1e6
-//          = (500_000 + 12_500 + 700_000) / 1e6 = 1.2125
+//     cost = (400_000*1.25 + 100_000*0.125 + 50_000*10) / 1e6
+//          = (500_000 + 12_500 + 500_000) / 1e6 = 1.0125
 //
 //   Item 2: gpt-5-mini
-//     usage = { input_tokens: 200_000, cached_input_tokens: 50_000,
-//               output_tokens: 10_000 }
+//     wire   = { input_tokens: 200_000, cached_input_tokens: 50_000,
+//                output_tokens: 10_000 }
 //     uncached = 150_000
 //     output = 10_000
 //     pricing = gpt-5-mini { input:0.25, output:2.00, cacheRead:0.025 }
 //     cost = (150_000*0.25 + 50_000*0.025 + 10_000*2.00) / 1e6
 //          = (37_500 + 1_250 + 20_000) / 1e6 = 0.05875
 //
-//   session_total = 1.2125 + 0.05875 = 1.27125
+//   session_total = 1.0125 + 0.05875 = 1.07125
 //
-// In the post-refactor canonical TokenUsage, the parse layer has already done
-// `uncached = max(0, input_tokens - cached_input_tokens)` and folded reasoning
-// into output, so the items carry:
-//   Item 1: { input:400_000, output:70_000, cacheWrite:0, cacheRead:100_000 }
+// In the canonical TokenUsage, the parse layer has already done
+// `uncached = max(0, input_tokens - cached_input_tokens)` and passes
+// `output_tokens` through unchanged (reasoning lives separately on the
+// assistant item via `reasoningTokens`):
+//   Item 1: { input:400_000, output:50_000, cacheWrite:0, cacheRead:100_000 }
 //   Item 2: { input:150_000, output:10_000, cacheWrite:0, cacheRead:50_000 }
 // ---------------------------------------------------------------------------
 
-const CODEX_SESSION_TOTAL_USD = 1.27125;
+const CODEX_SESSION_TOTAL_USD = 1.07125;
 
 function codexAssistant(model: string, usage: TokenUsage): CodexAssistantItem {
   return {
@@ -151,10 +153,10 @@ function codexAssistant(model: string, usage: TokenUsage): CodexAssistantItem {
 }
 
 describe('golden: Codex session total cost', () => {
-  it('reproduces pre-refactor cost within $0.0001', () => {
+  it('reproduces canonical cost within $0.0001 (reasoning is a subset of output)', () => {
     const i1 = codexAssistant('gpt-5', {
       input: 400_000,
-      output: 70_000,
+      output: 50_000,
       cacheWrite: 0,
       cacheRead: 100_000,
     });

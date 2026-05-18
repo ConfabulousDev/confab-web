@@ -250,6 +250,7 @@ OpenAI prices: https://developers.openai.com/api/docs/pricing
 
 OpenAI conventions differ from Anthropic:
 - OpenAI's `cached_input_tokens` is a **subset** of `input_tokens` (not a separate count). The Codex adapter subtracts it before applying the uncached rate.
+- OpenAI's `reasoning_output_tokens` is a **subset** of `output_tokens` (not a separate count, CF-471). Never add it to output or to a total; it bills at the output rate implicitly. Preserve it for display only.
 - OpenAI does NOT charge for cache writes — set `CacheWrite: decimal.NewFromFloat(0)` on every OpenAI entry.
 - OpenAI cache reads are typically ~10% of input (gpt-5 family) — different from Anthropic's 0.1x ratio that uses separate `CacheRead`/`CacheWrite` rates.
 - OpenAI model family keys are passed through unchanged (e.g. `"gpt-5"`, `"gpt-5.5"`, `"o3-mini"`); `stripOpenAIDateSuffix` handles pinned date suffixes like `gpt-5-2026-05-01`.

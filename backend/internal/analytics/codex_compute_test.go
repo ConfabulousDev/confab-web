@@ -338,18 +338,19 @@ func TestComputeFromCodexRollout_TokenCost_GPT5(t *testing.T) {
 	if out.CacheCreationTokens != 0 {
 		t.Errorf("CacheCreationTokens = %d, want 0 (OpenAI doesn't charge cache writes)", out.CacheCreationTokens)
 	}
-	// OutputTokens = output + reasoning_output (both billed as output by OpenAI).
-	if out.OutputTokens != 2500 {
-		t.Errorf("OutputTokens = %d, want 2500 (2000 + 500 reasoning)", out.OutputTokens)
+	// CF-471: OutputTokens passes the wire value through unchanged.
+	// reasoning_output_tokens is a subset of output_tokens, not additive.
+	if out.OutputTokens != 2000 {
+		t.Errorf("OutputTokens = %d, want 2000 (wire output_tokens; reasoning is a subset)", out.OutputTokens)
 	}
 
 	// Cost: uncached_input*1.25 + cached*0.125 + output*10 per million.
-	//     = (6000*1.25 + 4000*0.125 + 2500*10) / 1_000_000
-	//     = (7500 + 500 + 25000) / 1_000_000
-	//     = 0.033
-	want := decimal.NewFromFloat(0.033)
+	//     = (6000*1.25 + 4000*0.125 + 2000*10) / 1_000_000
+	//     = (7500 + 500 + 20000) / 1_000_000
+	//     = 0.028
+	want := decimal.NewFromFloat(0.028)
 	if out.EstimatedCostUSD.Sub(want).Abs().GreaterThan(decimal.NewFromFloat(0.001)) {
-		t.Errorf("EstimatedCostUSD = %s, want ~0.033", out.EstimatedCostUSD)
+		t.Errorf("EstimatedCostUSD = %s, want ~0.028", out.EstimatedCostUSD)
 	}
 }
 
