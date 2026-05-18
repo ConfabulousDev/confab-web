@@ -4,11 +4,45 @@
 .tooltipDate { composes: tooltipDate from './trendsChart.module.css'; }
 .tooltipValue { composes: tooltipValue from './trendsChart.module.css'; }
 
-/* CF-424: muted caveat shown when the filtered set spans 2+ providers —
-   token counts across Claude and OpenAI aren't directly comparable. */
-.providerCaveat {
-  margin: var(--spacing-sm) 0 0;
-  font-size: var(--font-xs);
-  color: var(--color-text-muted);
-  line-height: 1.4;
+/* CF-435: per-provider tokens table shown when len(per_provider) >= 2.
+   Wrapped in an overflow-x:auto container so narrow viewports get
+   horizontal scroll instead of column collapse. */
+.tableWrap {
+  overflow-x: auto;
+  margin: calc(-1 * var(--spacing-sm)) calc(-1 * var(--spacing-sm)) 0;
+}
+
+.providerTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.providerTable th,
+.providerTable td {
+  padding: 8px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.providerTable th {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.providerTable .providerCol {
+  text-align: left;
+}
+
+.providerTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.providerTable .totalRow td {
+  font-weight: 600;
+  border-top: 1px solid var(--color-border);
 }

@@ -15,7 +15,13 @@ import "github.com/ConfabulousDev/confab-web/internal/codex"
 //     applying the uncached rate. Reasoning tokens add to output (same rate).
 //   - Session: full population (TotalMessages, breakdowns, ModelsUsed, Duration).
 //     Compactions all classified as "auto" (Codex doesn't distinguish auto vs manual).
-//   - Tools: standard success/error breakdown; orphan "<unknown>" tools counted.
+//   - Tools: standard success/error breakdown. Orphan "<unknown>" tools
+//     (synthetic placeholders for function_call_output with no matching
+//     function_call) are dropped from per-tool stats and excluded from
+//     TotalToolCalls / ToolErrorCount. The anomaly is surfaced via
+//     ParsedRollout.ValidationErrors at parse time. CF-438. spawn_agent and
+//     wait_agent function_calls are routed out of Turn.ToolCalls by the
+//     parser (CF-443) so they only surface in the Agents & Skills card.
 //   - Code activity: apply_patch envelopes drive FilesModified/LinesAdded/Removed
 //     and LanguageBreakdown. FilesRead stays 0 (Codex has no Read tool).
 //     SearchCount stays 0 — web_search_call is a web search, not file search
@@ -24,8 +30,10 @@ import "github.com/ConfabulousDev/confab-web/internal/codex"
 //     (CF-441). Reasoning extends the assistant window via a synthetic event
 //     at Turn.CompletedAt — a Codex-specific divergence from Claude that's
 //     documented inline in analyzer_conversation_codex.go.
-//   - Agents/skills: zero (no Codex equivalent). See
-//     analyzer_agents_and_skills_codex.go.
+//   - Agents/skills: populated. SubagentSpawns bucket by agent_role
+//     (success = wait_agent "completed", error = any other status or orphan).
+//     SkillInvocations bucket by skill name, always success (Codex emits no
+//     per-skill error signal in rollout JSONL). CF-443.
 //   - Redactions: walk all parser-surfaced strings.
 func ComputeFromCodexRollout(rollout *codex.ParsedRollout) *ComputeResult {
 	if rollout == nil {

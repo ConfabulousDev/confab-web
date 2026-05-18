@@ -123,3 +123,24 @@ export const ManyItems: Story = {
     },
   },
 };
+
+// Codex trends: spawn_agent buckets by agent_role ("default", "explorer"),
+// skill buckets by SKILL.md name. See CF-443.
+export const CodexProvider: Story = {
+  args: {
+    data: {
+      total_agent_invocations: 24,
+      total_skill_invocations: 18,
+      agent_stats: {
+        default: { success: 16, errors: 2 },
+        explorer: { success: 5, errors: 1 },
+      },
+      skill_stats: {
+        'execute-linear-ticket': { success: 8, errors: 0 },
+        'audit-documentation': { success: 5, errors: 0 },
+        interview: { success: 3, errors: 0 },
+        retro: { success: 2, errors: 0 },
+      },
+    },
+  },
+};
