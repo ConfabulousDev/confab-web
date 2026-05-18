@@ -27,7 +27,8 @@ func TestGetOrgAnalytics_EmptyResults(t *testing.T) {
 	req := analytics.OrgAnalyticsRequest{
 		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
 		EndTS:    now.Add(24 * time.Hour).Unix(),
-		TZOffset: 0,
+		TZOffset:      0,
+		IncludeNoRepo: true,
 	}
 
 	response, err := store.GetOrgAnalytics(ctx, req)
@@ -45,8 +46,15 @@ func TestGetOrgAnalytics_EmptyResults(t *testing.T) {
 	if response.Users[0].TotalCostUSD != "0.00" {
 		t.Errorf("TotalCostUSD = %s, want 0.00", response.Users[0].TotalCostUSD)
 	}
-	if response.Users[0].AvgClaudeTimeMs != nil {
-		t.Error("expected AvgClaudeTimeMs to be nil for 0 sessions")
+	if response.Users[0].AvgAssistantTimeMs != nil {
+		t.Error("expected AvgAssistantTimeMs to be nil for 0 sessions")
+	}
+	// providers_present is always non-nil; empty here since no qualifying sessions.
+	if response.ProvidersPresent == nil {
+		t.Error("expected ProvidersPresent to be non-nil, got nil")
+	}
+	if len(response.ProvidersPresent) != 0 {
+		t.Errorf("ProvidersPresent = %v, want empty (no qualifying sessions)", response.ProvidersPresent)
 	}
 }
 
@@ -116,7 +124,8 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 	req := analytics.OrgAnalyticsRequest{
 		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
 		EndTS:    now.Add(24 * time.Hour).Unix(),
-		TZOffset: 0,
+		TZOffset:      0,
+		IncludeNoRepo: true,
 	}
 
 	response, err := store.GetOrgAnalytics(ctx, req)
@@ -139,15 +148,15 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 		t.Errorf("second user email = %s, want bob@test.com", bob.User.Email)
 	}
 
-	// Alice: 2 sessions, $3.00 total, 70000ms claude, 140000ms user, 210000ms duration
+	// Alice: 2 sessions, $3.00 total, 70000ms assistant, 140000ms user, 210000ms duration
 	if alice.SessionCount != 2 {
 		t.Errorf("Alice.SessionCount = %d, want 2", alice.SessionCount)
 	}
 	if alice.TotalCostUSD != "3.00" {
 		t.Errorf("Alice.TotalCostUSD = %s, want 3.00", alice.TotalCostUSD)
 	}
-	if alice.TotalClaudeTimeMs != 70000 {
-		t.Errorf("Alice.TotalClaudeTimeMs = %d, want 70000", alice.TotalClaudeTimeMs)
+	if alice.TotalAssistantTimeMs != 70000 {
+		t.Errorf("Alice.TotalAssistantTimeMs = %d, want 70000", alice.TotalAssistantTimeMs)
 	}
 	if alice.TotalUserTimeMs != 140000 {
 		t.Errorf("Alice.TotalUserTimeMs = %d, want 140000", alice.TotalUserTimeMs)
@@ -156,12 +165,12 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 		t.Errorf("Alice.TotalDurationMs = %d, want 210000", alice.TotalDurationMs)
 	}
 
-	// Alice averages: $1.50, 35000ms claude, 70000ms user, 105000ms duration
+	// Alice averages: $1.50, 35000ms assistant, 70000ms user, 105000ms duration
 	if alice.AvgCostUSD != "1.50" {
 		t.Errorf("Alice.AvgCostUSD = %s, want 1.50", alice.AvgCostUSD)
 	}
-	if alice.AvgClaudeTimeMs == nil || *alice.AvgClaudeTimeMs != 35000 {
-		t.Errorf("Alice.AvgClaudeTimeMs = %v, want 35000", alice.AvgClaudeTimeMs)
+	if alice.AvgAssistantTimeMs == nil || *alice.AvgAssistantTimeMs != 35000 {
+		t.Errorf("Alice.AvgAssistantTimeMs = %v, want 35000", alice.AvgAssistantTimeMs)
 	}
 	if alice.AvgDurationMs == nil || *alice.AvgDurationMs != 105000 {
 		t.Errorf("Alice.AvgDurationMs = %v, want 105000", alice.AvgDurationMs)
@@ -173,6 +182,11 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 	}
 	if bob.TotalCostUSD != "0.50" {
 		t.Errorf("Bob.TotalCostUSD = %s, want 0.50", bob.TotalCostUSD)
+	}
+
+	// All sessions default to session_type='claude-code' (migration 000043).
+	if len(response.ProvidersPresent) != 1 || response.ProvidersPresent[0] != "claude-code" {
+		t.Errorf("ProvidersPresent = %v, want [claude-code]", response.ProvidersPresent)
 	}
 }
 
@@ -222,7 +236,8 @@ func TestGetOrgAnalytics_DateRangeFiltering(t *testing.T) {
 	req := analytics.OrgAnalyticsRequest{
 		StartTS:  pastStart.Unix(),
 		EndTS:    pastEnd.Unix(),
-		TZOffset: 0,
+		TZOffset:      0,
+		IncludeNoRepo: true,
 	}
 
 	response, err := store.GetOrgAnalytics(ctx, req)
@@ -301,7 +316,8 @@ func TestGetOrgAnalytics_DeactivatedUsersExcluded(t *testing.T) {
 	req := analytics.OrgAnalyticsRequest{
 		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
 		EndTS:    now.Add(24 * time.Hour).Unix(),
-		TZOffset: 0,
+		TZOffset:      0,
+		IncludeNoRepo: true,
 	}
 
 	response, err := store.GetOrgAnalytics(ctx, req)
@@ -378,7 +394,8 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 	req := analytics.OrgAnalyticsRequest{
 		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
 		EndTS:    now.Add(24 * time.Hour).Unix(),
-		TZOffset: 0,
+		TZOffset:      0,
+		IncludeNoRepo: true,
 	}
 
 	response, err := store.GetOrgAnalytics(ctx, req)
@@ -398,4 +415,366 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 	if u.TotalCostUSD != "1.00" {
 		t.Errorf("TotalCostUSD = %s, want 1.00 (only complete session counted)", u.TotalCostUSD)
 	}
+}
+
+// TestGetOrgAnalytics_ProviderFilter asserts that the `Providers` filter on
+// OrgAnalyticsRequest narrows session counting to the requested canonical
+// providers, and that legacy `Claude Code` rows fold into a `claude-code`
+// filter via ExpandWithAliases.
+func TestGetOrgAnalytics_ProviderFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+	user := testutil.CreateTestUser(t, env, "provider-filter@test.com", "Provider Filter User")
+
+	// Three sessions: canonical Claude, legacy Claude, Codex. Distinct costs to
+	// keep aggregation arithmetic obvious in failure messages.
+	claudeSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "pf-claude", "claude-code")
+	legacySession := testutil.CreateTestSessionLegacyClaudeCode(t, env, user.ID, "pf-legacy")
+	codexSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "pf-codex", "codex")
+
+	now := time.Now().UTC()
+	seed := func(sessionID string, cost float64, claudeMs, userMs int64) {
+		t.Helper()
+		err := store.UpsertCards(ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:        sessionID,
+				Version:          analytics.TokensCardVersion,
+				ComputedAt:       now,
+				UpToLine:         100,
+				EstimatedCostUSD: decimal.NewFromFloat(cost),
+			},
+			Conversation: &analytics.ConversationCardRecord{
+				SessionID:                sessionID,
+				Version:                  analytics.ConversationCardVersion,
+				ComputedAt:               now,
+				UpToLine:                 100,
+				TotalAssistantDurationMs: &claudeMs,
+				TotalUserDurationMs:      &userMs,
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sessionID, err)
+		}
+	}
+	seed(claudeSession, 6.00, 10000, 20000)
+	seed(legacySession, 3.00, 5000, 10000)
+	seed(codexSession, 9.00, 15000, 30000)
+
+	cases := []struct {
+		name                 string
+		providers            []string
+		wantSessionCount     int
+		wantTotalCostUSD     string
+		wantProvidersPresent []string
+	}{
+		{
+			name:                 "nil filter — all sessions",
+			providers:            nil,
+			wantSessionCount:     3,
+			wantTotalCostUSD:     "18.00",
+			wantProvidersPresent: []string{"claude-code", "codex"},
+		},
+		{
+			name:                 "claude-code only — excludes codex, includes legacy",
+			providers:            []string{"claude-code"},
+			wantSessionCount:     2,
+			wantTotalCostUSD:     "9.00",
+			wantProvidersPresent: []string{"claude-code"},
+		},
+		{
+			name:                 "codex only — excludes claude-code and legacy",
+			providers:            []string{"codex"},
+			wantSessionCount:     1,
+			wantTotalCostUSD:     "9.00",
+			wantProvidersPresent: []string{"codex"},
+		},
+		{
+			name:                 "both providers — same as nil filter",
+			providers:            []string{"claude-code", "codex"},
+			wantSessionCount:     3,
+			wantTotalCostUSD:     "18.00",
+			wantProvidersPresent: []string{"claude-code", "codex"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := analytics.OrgAnalyticsRequest{
+				StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+				EndTS:         now.Add(24 * time.Hour).Unix(),
+				TZOffset:      0,
+				Providers:     tc.providers,
+				IncludeNoRepo: true,
+			}
+
+			response, err := store.GetOrgAnalytics(ctx, req)
+			if err != nil {
+				t.Fatalf("GetOrgAnalytics failed: %v", err)
+			}
+			if len(response.Users) != 1 {
+				t.Fatalf("Users length = %d, want 1", len(response.Users))
+			}
+			got := response.Users[0]
+			if got.SessionCount != tc.wantSessionCount {
+				t.Errorf("SessionCount = %d, want %d", got.SessionCount, tc.wantSessionCount)
+			}
+			if got.TotalCostUSD != tc.wantTotalCostUSD {
+				t.Errorf("TotalCostUSD = %s, want %s", got.TotalCostUSD, tc.wantTotalCostUSD)
+			}
+			if !equalStringSlice(response.ProvidersPresent, tc.wantProvidersPresent) {
+				t.Errorf("ProvidersPresent = %v, want %v", response.ProvidersPresent, tc.wantProvidersPresent)
+			}
+		})
+	}
+}
+
+// TestGetOrgAnalytics_RepoFilter asserts that the `Repos` + `IncludeNoRepo`
+// filter narrows session counting by extracted repo name (owner/name) and
+// optionally includes sessions without a repo_url.
+func TestGetOrgAnalytics_RepoFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+	user := testutil.CreateTestUser(t, env, "repo-filter@test.com", "Repo Filter User")
+
+	// Three sessions: one in repo "ConfabulousDev/confab-web", one in
+	// "ConfabulousDev/cli", one without a repo_url.
+	sid1 := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "rf-confab", "https://github.com/ConfabulousDev/confab-web.git")
+	sid2 := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, "rf-cli", "git@github.com:ConfabulousDev/cli.git")
+	sid3 := testutil.CreateTestSession(t, env, user.ID, "rf-norepo")
+
+	now := time.Now().UTC()
+	seed := func(sessionID string, cost float64) {
+		t.Helper()
+		assistantMs := int64(10000)
+		userMs := int64(20000)
+		err := store.UpsertCards(ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:        sessionID,
+				Version:          analytics.TokensCardVersion,
+				ComputedAt:       now,
+				UpToLine:         100,
+				EstimatedCostUSD: decimal.NewFromFloat(cost),
+			},
+			Conversation: &analytics.ConversationCardRecord{
+				SessionID:                sessionID,
+				Version:                  analytics.ConversationCardVersion,
+				ComputedAt:               now,
+				UpToLine:                 100,
+				TotalAssistantDurationMs: &assistantMs,
+				TotalUserDurationMs:      &userMs,
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sessionID, err)
+		}
+	}
+	seed(sid1, 2.00)
+	seed(sid2, 3.00)
+	seed(sid3, 5.00)
+
+	// Filter semantics mirror trends:
+	//   include_no_repo = true → also include sessions with NULL/empty repo_url
+	//   repos = [...] → include sessions whose extracted owner/name is in the set
+	// To match "all sessions" you must pass every repo AND include_no_repo=true,
+	// which is the auto-select-all-on-load behavior the page implements.
+	cases := []struct {
+		name             string
+		repos            []string
+		includeNoRepo    bool
+		wantSessionCount int
+		wantTotalCostUSD string
+	}{
+		{
+			name:             "all repos selected + include_no_repo=true — every session",
+			repos:            []string{"ConfabulousDev/confab-web", "ConfabulousDev/cli"},
+			includeNoRepo:    true,
+			wantSessionCount: 3,
+			wantTotalCostUSD: "10.00",
+		},
+		{
+			name:             "single repo, no_repo excluded",
+			repos:            []string{"ConfabulousDev/confab-web"},
+			includeNoRepo:    false,
+			wantSessionCount: 1,
+			wantTotalCostUSD: "2.00",
+		},
+		{
+			name:             "multiple repos, no_repo excluded",
+			repos:            []string{"ConfabulousDev/confab-web", "ConfabulousDev/cli"},
+			includeNoRepo:    false,
+			wantSessionCount: 2,
+			wantTotalCostUSD: "5.00",
+		},
+		{
+			name:             "no repos selected, include_no_repo=true — only sessions without repo",
+			repos:            nil,
+			includeNoRepo:    true,
+			wantSessionCount: 1,
+			wantTotalCostUSD: "5.00",
+		},
+		{
+			name:             "no repos selected, include_no_repo=false — empty",
+			repos:            nil,
+			includeNoRepo:    false,
+			wantSessionCount: 0,
+			wantTotalCostUSD: "0.00",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := analytics.OrgAnalyticsRequest{
+				StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+				EndTS:         now.Add(24 * time.Hour).Unix(),
+				TZOffset:      0,
+				Repos:         tc.repos,
+				IncludeNoRepo: tc.includeNoRepo,
+			}
+
+			response, err := store.GetOrgAnalytics(ctx, req)
+			if err != nil {
+				t.Fatalf("GetOrgAnalytics failed: %v", err)
+			}
+			if len(response.Users) != 1 {
+				t.Fatalf("Users length = %d, want 1", len(response.Users))
+			}
+			got := response.Users[0]
+			if got.SessionCount != tc.wantSessionCount {
+				t.Errorf("SessionCount = %d, want %d", got.SessionCount, tc.wantSessionCount)
+			}
+			if got.TotalCostUSD != tc.wantTotalCostUSD {
+				t.Errorf("TotalCostUSD = %s, want %s", got.TotalCostUSD, tc.wantTotalCostUSD)
+			}
+		})
+	}
+}
+
+// TestGetOrgAnalytics_RepoAndProviderCoFilter asserts that the repo and
+// provider filters combine multiplicatively: a session must satisfy BOTH to
+// be counted. Guards against either filter degrading to "all" when the other
+// is also set (a class of bug that wouldn't surface in single-axis tests).
+func TestGetOrgAnalytics_RepoAndProviderCoFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+	user := testutil.CreateTestUser(t, env, "co-filter@test.com", "Co Filter User")
+
+	// 4 sessions:
+	//   claude + confab-web
+	//   claude + cli
+	//   codex  + confab-web
+	//   codex  + cli
+	type seed struct {
+		externalID string
+		provider   string
+		repoURL    string
+		cost       float64
+	}
+	seeds := []seed{
+		{"cf-cw-claude", "claude-code", "https://github.com/ConfabulousDev/confab-web.git", 1.00},
+		{"cf-cli-claude", "claude-code", "git@github.com:ConfabulousDev/cli.git", 2.00},
+		{"cf-cw-codex", "codex", "https://github.com/ConfabulousDev/confab-web.git", 4.00},
+		{"cf-cli-codex", "codex", "git@github.com:ConfabulousDev/cli.git", 8.00},
+	}
+	now := time.Now().UTC()
+	for _, s := range seeds {
+		sid := createTestSessionWithProviderAndGit(t, env, user.ID, s.externalID, s.provider, s.repoURL)
+		assistantMs := int64(10000)
+		userMs := int64(20000)
+		err := store.UpsertCards(ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:        sid,
+				Version:          analytics.TokensCardVersion,
+				ComputedAt:       now,
+				UpToLine:         100,
+				EstimatedCostUSD: decimal.NewFromFloat(s.cost),
+			},
+			Conversation: &analytics.ConversationCardRecord{
+				SessionID:                sid,
+				Version:                  analytics.ConversationCardVersion,
+				ComputedAt:               now,
+				UpToLine:                 100,
+				TotalAssistantDurationMs: &assistantMs,
+				TotalUserDurationMs:      &userMs,
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sid, err)
+		}
+	}
+
+	// codex + confab-web only → exactly one session, cost $4.00.
+	req := analytics.OrgAnalyticsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Providers:     []string{"codex"},
+		Repos:         []string{"ConfabulousDev/confab-web"},
+		IncludeNoRepo: false,
+	}
+	response, err := store.GetOrgAnalytics(ctx, req)
+	if err != nil {
+		t.Fatalf("GetOrgAnalytics failed: %v", err)
+	}
+	if len(response.Users) != 1 {
+		t.Fatalf("Users length = %d, want 1", len(response.Users))
+	}
+	got := response.Users[0]
+	if got.SessionCount != 1 {
+		t.Errorf("SessionCount = %d, want 1 (codex × confab-web is the only intersection)", got.SessionCount)
+	}
+	if got.TotalCostUSD != "4.00" {
+		t.Errorf("TotalCostUSD = %s, want 4.00", got.TotalCostUSD)
+	}
+	if !equalStringSlice(response.ProvidersPresent, []string{"codex"}) {
+		t.Errorf("ProvidersPresent = %v, want [codex]", response.ProvidersPresent)
+	}
+}
+
+// createTestSessionWithProviderAndGit creates a session with both a custom
+// session_type and a git_info->>'repo_url'. The shared testutil helpers cover
+// each axis in isolation but not both — and the co-filter test needs the
+// combination.
+func createTestSessionWithProviderAndGit(t *testing.T, env *testutil.TestEnvironment, userID int64, externalID, provider, repoURL string) string {
+	t.Helper()
+	sid := testutil.CreateTestSessionWithProvider(t, env, userID, externalID, provider)
+	_, err := env.DB.Conn().ExecContext(env.Ctx,
+		`UPDATE sessions SET git_info = jsonb_build_object('repo_url', $2::text) WHERE id = $1`,
+		sid, repoURL)
+	if err != nil {
+		t.Fatalf("set git_info on %s: %v", sid, err)
+	}
+	return sid
+}
+
+func equalStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -328,6 +328,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			// to any authenticated user. Only enable for trusted-team deployments.
 			if s.orgAnalyticsEnabled {
 				r.Get("/org/analytics", withMaxBody(MaxBodyXS, HandleGetOrgAnalytics(s.db)))
+				r.Get("/org/repos", withMaxBody(MaxBodyXS, HandleGetOrgRepos(s.db)))
 			}
 
 			// API key management
