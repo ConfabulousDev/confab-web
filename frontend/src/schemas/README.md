@@ -87,25 +87,25 @@ plus a catch-all `CodexUnknownLineSchema` so unfamiliar future types parse
 without erroring.
 
 **Top-level inferred types:**
-- `RawCodexLine` -- union of all branches
-- `KnownCodexLine` -- union of the five known branches (catch-all excluded)
-- Per-branch: `CodexSessionMetaLine`, `CodexTurnContextLine`,
-  `CodexResponseItemLine`, `CodexEventMsgLine`, `CodexCompactedLine`
+- `RawCodexLine` -- union of all branches (catch-all included)
+- `CodexResponseItemLine`, `CodexEventMsgLine` -- the two branches the
+  normalizer destructures; the other three (`session_meta`,
+  `turn_context`, `compacted`) parse through `RawCodexLine` but their
+  per-branch types are local to the schema module.
 
 **Nested payload variants:**
 - `response_item.payload` is a union with seven known shapes
   (`message`, `function_call`, `function_call_output`,
   `custom_tool_call`, `custom_tool_call_output`, `reasoning`,
-  `web_search_call`) plus a catch-all. Exported branch types:
-  `CodexResponseMessage`, `CodexFunctionCall`, `CodexFunctionCallOutput`,
-  `CodexCustomToolCall`, `CodexCustomToolCallOutput`, `CodexWebSearchCall`.
+  `web_search_call`) plus a catch-all. `CodexResponseMessage` is the
+  only exported branch type (used by the normalizer); the others are
+  composed via schema unions and don't need exported aliases.
 - `event_msg.payload` is a union with six known shapes
   (`user_message`, `agent_message`, `task_started`, `task_complete`,
-  `token_count`, `patch_apply_end`) plus a catch-all. Exported branch
-  types: `CodexEventPatchApplyEnd`, `CodexEventTaskComplete`,
+  `token_count`, `patch_apply_end`) plus a catch-all.
   `CodexTokenUsageDetails` (CF-362 — typed `info.last_token_usage` /
-  `info.total_token_usage` shape, consumed by the normalizer to attach
-  per-call usage to assistant render items).
+  `info.total_token_usage` shape) is exported and consumed by the
+  normalizer to attach per-call usage to assistant render items.
 
 **Type predicates** (each narrows away the catch-all so a subsequent
 `switch` on `.type` discriminates cleanly between the known branches):

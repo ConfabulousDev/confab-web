@@ -162,7 +162,7 @@ const CodexResponseItemPayloadSchema = z.union([
   CodexUnknownResponseItemPayloadSchema,
 ]);
 
-export type KnownResponseItemPayload = z.infer<typeof KnownResponseItemPayloadSchema>;
+type KnownResponseItemPayload = z.infer<typeof KnownResponseItemPayloadSchema>;
 
 const KNOWN_RESPONSE_ITEM_PAYLOAD_TYPES = new Set<string>([
   'message',
@@ -317,7 +317,7 @@ const CodexEventPayloadSchema = z.union([
   CodexUnknownEventPayloadSchema,
 ]);
 
-export type KnownEventPayload = z.infer<typeof KnownEventPayloadSchema>;
+type KnownEventPayload = z.infer<typeof KnownEventPayloadSchema>;
 
 const KNOWN_EVENT_PAYLOAD_TYPES = new Set<string>([
   'user_message',
@@ -436,7 +436,7 @@ export const RawCodexLineSchema = z.union([
 ]);
 
 export type RawCodexLine = z.infer<typeof RawCodexLineSchema>;
-export type KnownCodexLine = z.infer<typeof KnownCodexLineSchema>;
+type KnownCodexLine = z.infer<typeof KnownCodexLineSchema>;
 
 const KNOWN_LINE_TYPES = new Set<string>([
   'session_meta',
@@ -458,20 +458,10 @@ export function isKnownCodexLine(line: RawCodexLine): line is KnownCodexLine {
 // Branch-level inferred types (used by the normalizer)
 // ============================================================================
 
-export type CodexSessionMetaLine = z.infer<typeof CodexSessionMetaLineSchema>;
-export type CodexTurnContextLine = z.infer<typeof CodexTurnContextLineSchema>;
 export type CodexResponseItemLine = z.infer<typeof CodexResponseItemLineSchema>;
 export type CodexEventMsgLine = z.infer<typeof CodexEventMsgLineSchema>;
-export type CodexCompactedLine = z.infer<typeof CodexCompactedLineSchema>;
 
 export type CodexResponseMessage = z.infer<typeof CodexResponseMessageSchema>;
-export type CodexFunctionCall = z.infer<typeof CodexFunctionCallSchema>;
-export type CodexFunctionCallOutput = z.infer<typeof CodexFunctionCallOutputSchema>;
-export type CodexCustomToolCall = z.infer<typeof CodexCustomToolCallSchema>;
-export type CodexCustomToolCallOutput = z.infer<typeof CodexCustomToolCallOutputSchema>;
-export type CodexWebSearchCall = z.infer<typeof CodexWebSearchCallSchema>;
-export type CodexEventPatchApplyEnd = z.infer<typeof CodexEventPatchApplyEndSchema>;
-export type CodexEventTaskComplete = z.infer<typeof CodexEventTaskCompleteSchema>;
 
 // ============================================================================
 // Parse-result types

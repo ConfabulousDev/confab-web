@@ -4,17 +4,18 @@
 // `parseCodexJSONL` validates input and `normalizeCodexLines` transforms
 // validated raw lines into a clean render-item stream.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   parseCodexJSONL,
   normalizeCodexLines,
   extractCodexModel,
+  reportCodexTranscriptErrors,
   _resetReportedCodexSessions,
 } from './codexTranscriptService';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
-import type { RawCodexLine } from '@/schemas/codexTranscript';
+import type { RawCodexLine, TranscriptValidationError } from '@/schemas/codexTranscript';
 
 const FIXTURE_PATH = resolve(__dirname, '../test-fixtures/codex-rollout.jsonl');
 const fixtureJsonl = readFileSync(FIXTURE_PATH, 'utf-8');
@@ -827,5 +828,90 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
     const result = items(jsonl);
     // Only the assistant item; no unknown / extra row from the token_count.
     expect(result.map((i) => i.kind)).toEqual(['assistant']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reportCodexTranscriptErrors
+// ---------------------------------------------------------------------------
+// Mirrors transcriptService.test.ts's reportTranscriptErrors block. Locks the
+// fire-and-forget POST contract to /api/v1/client-errors under the
+// `codex_transcript_validation` category so the two providers stay
+// triageable independently in observability tooling.
+
+describe('reportCodexTranscriptErrors', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    _resetReportedCodexSessions();
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"status":"ok"}'));
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  /** Extract the parsed JSON body from a fetch spy call */
+  const parseFetchBody = (spy: ReturnType<typeof vi.spyOn>, callIndex = 0) =>
+    JSON.parse(String(spy.mock.calls[callIndex]![1]?.body ?? ''));
+
+  const makeError = (line: number, messageType?: string): TranscriptValidationError => ({
+    line,
+    rawJson: `{"type":"${messageType ?? 'unknown'}","bad":"data"}`,
+    messageType,
+    errors: [
+      { path: 'payload.type', message: 'Invalid type', expected: 'message', received: 'new_type' },
+    ],
+  });
+
+  it('sends errors to the backend with correct payload structure', () => {
+    const errors = [makeError(42, 'response_item')];
+    reportCodexTranscriptErrors('session-abc', errors);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, options] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('/api/v1/client-errors');
+    expect(options?.method).toBe('POST');
+    expect(options?.credentials).toBe('include');
+
+    const body = parseFetchBody(fetchSpy);
+    expect(body.category).toBe('codex_transcript_validation');
+    expect(body.session_id).toBe('session-abc');
+    expect(body.errors).toHaveLength(1);
+    expect(body.errors[0].line).toBe(42);
+    expect(body.errors[0].message_type).toBe('response_item');
+    expect(body.errors[0].details).toHaveLength(1);
+    expect(body.errors[0].details[0].path).toBe('payload.type');
+    expect(body.errors[0].details[0].expected).toBe('message');
+    expect(body.errors[0].details[0].received).toBe('new_type');
+  });
+
+  it('truncates raw_json_preview to 500 chars', () => {
+    const longJson = 'x'.repeat(1000);
+    const errors: TranscriptValidationError[] = [{
+      line: 1,
+      rawJson: longJson,
+      errors: [{ path: 'root', message: 'bad' }],
+    }];
+
+    reportCodexTranscriptErrors('session-long', errors);
+
+    const body = parseFetchBody(fetchSpy);
+    expect(body.errors[0].raw_json_preview).toHaveLength(500);
+  });
+
+  it('limits to 50 errors per report', () => {
+    const errors = Array.from({ length: 100 }, (_, i) => makeError(i + 1));
+    reportCodexTranscriptErrors('session-many', errors);
+
+    const body = parseFetchBody(fetchSpy);
+    expect(body.errors).toHaveLength(50);
+  });
+
+  it('silently ignores fetch failures', () => {
+    fetchSpy.mockRejectedValue(new Error('Network error'));
+
+    // Should not throw
+    expect(() => reportCodexTranscriptErrors('session-fail', [makeError(1)])).not.toThrow();
   });
 });
