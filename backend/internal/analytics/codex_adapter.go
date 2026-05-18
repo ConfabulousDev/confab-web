@@ -24,7 +24,8 @@ import "github.com/ConfabulousDev/confab-web/internal/codex"
 //     by the parser (CF-443) so they only surface in the Agents & Skills card.
 //   - Code activity: per-rollout dispatch. apply_patch envelopes drive
 //     FilesModified / LinesAdded / Removed and LanguageBreakdown. FilesRead
-//     stays 0 (Codex has no Read tool).
+//     stays 0 (Codex has no Read tool). SearchCount stays 0 — web_search_call
+//     is web search, not file search (CF-439).
 //   - Agents/skills: per-rollout dispatch (CF-443). SubagentSpawns bucket by
 //     agent_role (success = wait_agent "completed", error = any other status
 //     or orphan). SkillInvocations bucket by skill name, always success

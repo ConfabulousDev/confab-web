@@ -178,6 +178,121 @@ func TestComputeFromCodexRollout_ApplyPatch(t *testing.T) {
 	}
 }
 
+// TestComputeFromCodexRollout_ApplyPatch_MissingEndPatch locks in the
+// graceful-degradation behavior for truncated rollouts (network drop,
+// killed session): parseApplyPatch counts what was seen up to EOF, even
+// without a closing "*** End Patch" line. CF-439.
+func TestComputeFromCodexRollout_ApplyPatch_MissingEndPatch(t *testing.T) {
+	r := &codex.ParsedRollout{
+		Model: "gpt-5",
+		Turns: []codex.Turn{{
+			TurnID: "t1",
+			ToolCalls: []codex.ToolCall{{
+				Name:      "apply_patch",
+				Arguments: "*** Begin Patch\n*** Add File: foo.go\n+line1\n+line2\n-removed",
+				Status:    "completed",
+			}},
+		}},
+	}
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.FilesModified != 1 {
+		t.Errorf("FilesModified = %d, want 1 (truncated envelope still counts the seen file)", out.FilesModified)
+	}
+	if out.LinesAdded != 2 {
+		t.Errorf("LinesAdded = %d, want 2 (count + lines seen before EOF)", out.LinesAdded)
+	}
+	if out.LinesRemoved != 1 {
+		t.Errorf("LinesRemoved = %d, want 1", out.LinesRemoved)
+	}
+	if out.LanguageBreakdown["go"] != 1 {
+		t.Errorf("LanguageBreakdown[go] = %d, want 1", out.LanguageBreakdown["go"])
+	}
+}
+
+// TestComputeFromCodexRollout_ApplyPatch_ConsecutiveHeaders verifies that
+// back-to-back Update File headers with no diff lines between them still
+// count each file. A rename-only patch (zero +/- lines, multiple files) is
+// honest activity. CF-439.
+func TestComputeFromCodexRollout_ApplyPatch_ConsecutiveHeaders(t *testing.T) {
+	r := &codex.ParsedRollout{
+		Model: "gpt-5",
+		Turns: []codex.Turn{{
+			TurnID: "t1",
+			ToolCalls: []codex.ToolCall{{
+				Name: "apply_patch",
+				Arguments: "*** Begin Patch\n" +
+					"*** Update File: a.go\n" +
+					"*** Update File: b.py\n" +
+					"*** Update File: c.ts\n" +
+					"*** End Patch",
+				Status: "completed",
+			}},
+		}},
+	}
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.FilesModified != 3 {
+		t.Errorf("FilesModified = %d, want 3 (each header counts even without diff lines)", out.FilesModified)
+	}
+	if out.LinesAdded != 0 {
+		t.Errorf("LinesAdded = %d, want 0", out.LinesAdded)
+	}
+	if out.LinesRemoved != 0 {
+		t.Errorf("LinesRemoved = %d, want 0", out.LinesRemoved)
+	}
+	if out.LanguageBreakdown["go"] != 1 {
+		t.Errorf("LanguageBreakdown[go] = %d, want 1", out.LanguageBreakdown["go"])
+	}
+	if out.LanguageBreakdown["python"] != 1 {
+		t.Errorf("LanguageBreakdown[python] = %d, want 1", out.LanguageBreakdown["python"])
+	}
+	if out.LanguageBreakdown["typescript"] != 1 {
+		t.Errorf("LanguageBreakdown[typescript] = %d, want 1", out.LanguageBreakdown["typescript"])
+	}
+}
+
+// TestComputeFromCodexRollout_ApplyPatch_SingleSpaceContextLines verifies that
+// classic unified-diff context lines (leading single space) are ignored: only
+// "+" and "-" prefixed lines count toward LinesAdded / LinesRemoved. CF-439.
+func TestComputeFromCodexRollout_ApplyPatch_SingleSpaceContextLines(t *testing.T) {
+	r := &codex.ParsedRollout{
+		Model: "gpt-5",
+		Turns: []codex.Turn{{
+			TurnID: "t1",
+			ToolCalls: []codex.ToolCall{{
+				Name: "apply_patch",
+				Arguments: "*** Begin Patch\n" +
+					"*** Update File: foo.go\n" +
+					" unchanged_a\n" +
+					"+added_one\n" +
+					" unchanged_b\n" +
+					"-removed_one\n" +
+					" unchanged_c\n" +
+					"*** End Patch",
+				Status: "completed",
+			}},
+		}},
+	}
+	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.FilesModified != 1 {
+		t.Errorf("FilesModified = %d, want 1", out.FilesModified)
+	}
+	if out.LinesAdded != 1 {
+		t.Errorf("LinesAdded = %d, want 1 (single-space context lines must not count)", out.LinesAdded)
+	}
+	if out.LinesRemoved != 1 {
+		t.Errorf("LinesRemoved = %d, want 1 (single-space context lines must not count)", out.LinesRemoved)
+	}
+}
+
 func TestComputeFromCodexRollout_Compaction(t *testing.T) {
 	r := &codex.ParsedRollout{
 		Compactions: []codex.CompactionEvent{

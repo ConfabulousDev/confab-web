@@ -4,6 +4,12 @@ import { CodeActivityCard } from './CodeActivityCard';
 const meta: Meta<typeof CodeActivityCard> = {
   title: 'Session/Cards/CodeActivityCard',
   component: CodeActivityCard,
+  args: {
+    // Default provider; Codex* stories override. The 'Files read' row is
+    // hidden when provider is codex, and the 'Searches' row gets a Codex
+    // tooltip explaining the web_search_call exclusion (CF-439).
+    provider: 'claude-code',
+  },
   parameters: {
     layout: 'centered',
   },
@@ -171,6 +177,57 @@ export const Loading: Story = {
   args: {
     data: undefined,
     loading: true,
+  },
+};
+
+/**
+ * Codex session: Files-read row is hidden (Codex has no Read tool), and the
+ * Searches row gets a tooltip explaining `web_search_call` is not counted as
+ * file search (CF-439).
+ */
+export const Codex: Story = {
+  args: {
+    provider: 'codex',
+    data: {
+      files_read: 0,
+      files_modified: 12,
+      lines_added: 156,
+      lines_removed: 23,
+      search_count: 0,
+      language_breakdown: {
+        go: 8,
+        py: 4,
+      },
+    },
+    loading: false,
+  },
+};
+
+/**
+ * Codex variant of ManyLanguages: same visual richness but with the Codex
+ * row-hiding + Searches tooltip applied.
+ */
+export const CodexManyLanguages: Story = {
+  args: {
+    provider: 'codex',
+    data: {
+      files_read: 0,
+      files_modified: 34,
+      lines_added: 520,
+      lines_removed: 180,
+      search_count: 0,
+      language_breakdown: {
+        go: 45,
+        ts: 25,
+        tsx: 18,
+        css: 12,
+        sql: 8,
+        md: 6,
+        json: 4,
+        yaml: 2,
+      },
+    },
+    loading: false,
   },
 };
 

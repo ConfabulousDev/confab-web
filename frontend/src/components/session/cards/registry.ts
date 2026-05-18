@@ -1,6 +1,6 @@
 import { TokensCardForRegistry } from './TokensCard';
 import { SessionCardForRegistry } from './SessionCard';
-import { CodeActivityCard } from './CodeActivityCard';
+import { CodeActivityCardForRegistry } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
 import { ConversationCardForRegistry } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
@@ -26,8 +26,9 @@ import type {
  * Compaction stats are now included in the Session card.
  *
  * ConversationCardForRegistry / TokensCardForRegistry / SessionCardForRegistry
- * wrap their cards to default the required `provider` prop the registry shape
- * can't model (CF-441, CF-436, CF-437).
+ * / CodeActivityCardForRegistry wrap their cards to default the required
+ * `provider` prop the registry shape can't model (CF-441, CF-436, CF-437,
+ * CF-439).
  */
 export const cardRegistry: CardDefinition[] = [
   {
@@ -63,7 +64,7 @@ export const cardRegistry: CardDefinition[] = [
   {
     key: 'code_activity',
     title: 'Code Activity',
-    component: CodeActivityCard,
+    component: CodeActivityCardForRegistry,
     order: 4,
     size: 'standard',
   },
