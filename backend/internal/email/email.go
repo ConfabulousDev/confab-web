@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
-	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // ShareInvitationParams contains the parameters for a share invitation email
@@ -157,28 +157,14 @@ type resendRequest struct {
 	Text    string   `json:"text"`
 }
 
-// humanProviderLabel returns the phrase the recipient sees identifying which
-// agent's session they were sent ("Claude Code session" / "Codex session").
-// Unknown or empty values fall back to a neutral phrase ("session") and emit
-// an ERROR log on the supplied context so on-call notices ungrounded values.
-//
-// Defensive: legacy "Claude Code" (display form, pre-CF-347) is treated as
-// the canonical claude-code value here so the email layer is robust even if
-// a caller forgot to normalise. New callers should still call
-// models.NormalizeProvider at the boundary; this helper just refuses to silently
-// emit the wrong wording or spurious unknown-provider logs for known legacy
-// values.
-//
-// Local to the email package today; if a second surface needs the same
-// mapping, lift this next to models.NormalizeProvider per CLAUDE.md's "Where
-// shared code lives" guidance.
+// humanProviderLabel returns the phrase the recipient sees identifying the
+// provider ("Claude Code session" / "Codex session"). Unknown values fall
+// back to a neutral "session" and emit an ERROR log so on-call notices
+// ungrounded values. Resolution goes through analytics.ProviderFor so the
+// alias map is the single source of truth.
 func humanProviderLabel(ctx context.Context, provider, shareID, toEmail string) string {
-	switch models.NormalizeProvider(provider) {
-	case models.ProviderClaudeCode:
-		return "Claude Code session"
-	case models.ProviderCodex:
-		return "Codex session"
-	default:
+	sp, err := analytics.ProviderFor(provider)
+	if err != nil {
 		logger.Ctx(ctx).Error("email: unknown provider, using neutral wording",
 			"provider", provider,
 			"share_id", shareID,
@@ -186,21 +172,28 @@ func humanProviderLabel(ctx context.Context, provider, shareID, toEmail string) 
 		)
 		return "session"
 	}
+	return sp.DisplayName() + " session"
 }
 
-// composeSubject builds the email Subject header. Extracted so tests can
-// exercise the wording without spinning up a transport.
+// subjectFor formats the Subject header from a sharer name and pre-resolved
+// provider phrase.
+func subjectFor(sharerName, phrase string) string {
+	return fmt.Sprintf("%s shared a %s transcript with you", sharerName, phrase)
+}
+
+// composeSubject is the test entry point: resolves the phrase and formats
+// the subject in one call.
 func composeSubject(ctx context.Context, params ShareInvitationParams) string {
 	phrase := humanProviderLabel(ctx, params.Provider, params.ShareID, params.ToEmail)
-	return fmt.Sprintf("%s shared a %s transcript with you", params.SharerName, phrase)
+	return subjectFor(params.SharerName, phrase)
 }
 
-// SendShareInvitation sends an invitation email via Resend
+// SendShareInvitation sends an invitation email via Resend.
 func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInvitationParams) error {
-	// Resolve the provider phrase once so the unknown-provider ERROR log
-	// (if any) fires exactly once per send, not once per template render.
+	// Resolve the phrase once so the unknown-provider ERROR log (if any)
+	// fires exactly once per send, not once per template render.
 	phrase := humanProviderLabel(ctx, params.Provider, params.ShareID, params.ToEmail)
-	subject := fmt.Sprintf("%s shared a %s transcript with you", params.SharerName, phrase)
+	subject := subjectFor(params.SharerName, phrase)
 
 	htmlBody, err := renderHTMLTemplateWithPhrase(params, phrase, s.frontendURL)
 	if err != nil {
@@ -247,17 +240,16 @@ func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInv
 
 var shareInvitationTmpl = template.Must(template.New("share_invitation").Parse(htmlTemplate))
 
-// renderHTMLTemplate renders the HTML email template. Resolves the provider
-// phrase using context.Background() — callers wanting log context should use
-// renderHTMLTemplateWithPhrase directly.
+// renderHTMLTemplate is the test entry point: resolves the phrase and
+// renders the HTML template.
 func renderHTMLTemplate(params ShareInvitationParams, frontendURL string) (string, error) {
 	phrase := humanProviderLabel(context.Background(), params.Provider, params.ShareID, params.ToEmail)
 	return renderHTMLTemplateWithPhrase(params, phrase, frontendURL)
 }
 
-// renderHTMLTemplateWithPhrase renders the HTML email template with a
-// pre-resolved provider phrase. SendShareInvitation uses this directly so
-// the unknown-provider ERROR log fires only once per send.
+// renderHTMLTemplateWithPhrase renders the HTML template with a pre-resolved
+// provider phrase so SendShareInvitation logs unknown-provider errors only
+// once per send.
 func renderHTMLTemplateWithPhrase(params ShareInvitationParams, phrase, frontendURL string) (string, error) {
 	data := templateData{
 		SharerName:     params.SharerName,
@@ -280,17 +272,15 @@ func renderHTMLTemplateWithPhrase(params ShareInvitationParams, phrase, frontend
 	return buf.String(), nil
 }
 
-// renderTextTemplate renders the plain text email template. Resolves the
-// provider phrase using context.Background() — callers wanting log context
-// should use renderTextTemplateWithPhrase directly.
+// renderTextTemplate is the test entry point: resolves the phrase and
+// renders the plain-text template.
 func renderTextTemplate(params ShareInvitationParams, frontendURL string) string {
 	phrase := humanProviderLabel(context.Background(), params.Provider, params.ShareID, params.ToEmail)
 	return renderTextTemplateWithPhrase(params, phrase, frontendURL)
 }
 
-// renderTextTemplateWithPhrase renders the plain text email template with a
-// pre-resolved provider phrase. SendShareInvitation uses this directly so
-// the unknown-provider ERROR log fires only once per send.
+// renderTextTemplateWithPhrase renders the plain-text template with a
+// pre-resolved provider phrase.
 func renderTextTemplateWithPhrase(params ShareInvitationParams, phrase, frontendURL string) string {
 	title := params.SessionTitle
 	if title == "" {
