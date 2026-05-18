@@ -127,10 +127,7 @@ function TrendsPage() {
           {data && data.session_count > 0 && (
             <CardGrid>
               <TrendsOverviewCard data={data.cards.overview} />
-              <TrendsTokensCard
-                data={data.cards.tokens}
-                providersPresent={data.providers_present}
-              />
+              <TrendsTokensCard data={data.cards.tokens} />
               <TrendsTopSessionsCard data={data.cards.top_sessions} />
               <TrendsActivityCard data={data.cards.activity} />
               <TrendsToolsCard data={data.cards.tools} />

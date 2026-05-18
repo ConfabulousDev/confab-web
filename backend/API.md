@@ -1153,7 +1153,23 @@ Returns aggregated analytics across multiple sessions for the authenticated user
       "daily_costs": [
         {"date": "2024-01-08", "cost_usd": "15.20"},
         {"date": "2024-01-09", "cost_usd": "18.50"}
-      ]
+      ],
+      "per_provider": {
+        "claude-code": {
+          "total_input_tokens": 4500000,
+          "total_output_tokens": 1900000,
+          "total_cache_creation_tokens": 100000,
+          "total_cache_read_tokens": 480000,
+          "total_cost_usd": "121.25"
+        },
+        "codex": {
+          "total_input_tokens": 500000,
+          "total_output_tokens": 100000,
+          "total_cache_creation_tokens": 0,
+          "total_cache_read_tokens": 20000,
+          "total_cost_usd": "4.25"
+        }
+      }
     },
     "activity": {
       "total_files_read": 500,
@@ -1218,15 +1234,16 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | `session_count` | int | Total sessions in the date range |
 | `repos_included` | string[] | Repos that were included in the filter |
 | `include_no_repo` | bool | Whether sessions without repos were included |
-| `providers_present` | string[] | Distinct canonical AI providers in the filtered result set, sorted alphabetically. Always present; `[]` when no sessions match. Used by the Tokens card to render a multi-provider caveat when `length >= 2` (CF-424). |
+| `providers_present` | string[] | Distinct canonical AI providers in the filtered result set, sorted alphabetically. Always present; `[]` when no sessions match. Originally introduced for the Tokens card's multi-provider caveat (CF-424); now duplicated by `cards.tokens.per_provider` keys, which the Tokens UI switches on. Kept on the top-level response for other consumers (CLI, scripts). |
 | `cards.overview.session_count` | int | Total session count |
 | `cards.overview.total_duration_ms` | int | Sum of all session durations |
 | `cards.overview.avg_duration_ms` | int\|null | Average session duration |
 | `cards.overview.days_covered` | int | Number of unique days with sessions |
 | `cards.tokens.total_input_tokens` | int | Sum of input tokens across all sessions |
 | `cards.tokens.total_output_tokens` | int | Sum of output tokens across all sessions |
-| `cards.tokens.total_cost_usd` | string | Total estimated cost (decimal as string) |
-| `cards.tokens.daily_costs` | array | Cost per day for charting |
+| `cards.tokens.total_cost_usd` | string | Total estimated cost across all providers (decimal as string) |
+| `cards.tokens.daily_costs` | array | Cost per day for charting (combined across providers; per-provider daily breakdowns are out of scope) |
+| `cards.tokens.per_provider` | object | Per-canonical-provider tokens & cost breakdown (CF-435). Map keyed by canonical provider id (`claude-code`, `codex`); each entry has `total_input_tokens`, `total_output_tokens`, `total_cache_creation_tokens`, `total_cache_read_tokens`, `total_cost_usd`. Always present; `{}` when no sessions match. Legacy `Claude Code` session_type rows fold into the `claude-code` key server-side via `models.NormalizeProvider`. The Tokens UI switches to a per-provider table when this map has 2+ keys. |
 | `cards.activity.total_files_read` | int | Sum of files read across all sessions |
 | `cards.activity.total_files_modified` | int | Sum of files modified |
 | `cards.activity.total_lines_added` | int | Sum of lines added |

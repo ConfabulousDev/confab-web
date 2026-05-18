@@ -86,6 +86,8 @@ vi.mock('recharts', async () => {
     ResponsiveContainer: Passthrough,
     BarChart: Passthrough,
     Bar: () => null,
+    AreaChart: Passthrough,
+    Area: () => null,
     XAxis: Axis,
     YAxis: Axis,
     Tooltip,

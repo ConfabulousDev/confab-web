@@ -371,6 +371,18 @@ const DailyCostPointSchema = z.object({
   cost_usd: z.string(), // Decimal as string
 });
 
+// CF-435: per-provider tokens/cost breakdown. Backend always populates this
+// map (empty when the range has no sessions). Frontend renders a per-provider
+// table when `Object.keys(per_provider).length >= 2`; otherwise the existing
+// single-series StatRow layout is used.
+const TrendsTokensPerProviderSchema = z.object({
+  total_input_tokens: z.number(),
+  total_output_tokens: z.number(),
+  total_cache_creation_tokens: z.number(),
+  total_cache_read_tokens: z.number(),
+  total_cost_usd: z.string(),
+});
+
 const TrendsTokensCardSchema = z.object({
   total_input_tokens: z.number(),
   total_output_tokens: z.number(),
@@ -378,6 +390,8 @@ const TrendsTokensCardSchema = z.object({
   total_cache_read_tokens: z.number(),
   total_cost_usd: z.string(),
   daily_costs: z.array(DailyCostPointSchema),
+  // `.default({})` keeps older backends (no per_provider field) parseable.
+  per_provider: z.record(z.string(), TrendsTokensPerProviderSchema).default({}),
 });
 
 const DailySessionCountSchema = z.object({
@@ -502,6 +516,7 @@ export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 export type TrendsResponse = z.infer<typeof TrendsResponseSchema>;
 export type TrendsOverviewCard = z.infer<typeof TrendsOverviewCardSchema>;
 export type TrendsTokensCard = z.infer<typeof TrendsTokensCardSchema>;
+export type TrendsTokensPerProvider = z.infer<typeof TrendsTokensPerProviderSchema>;
 export type TrendsActivityCard = z.infer<typeof TrendsActivityCardSchema>;
 export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;

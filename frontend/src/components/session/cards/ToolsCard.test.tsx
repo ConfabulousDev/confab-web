@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import { ToolsCard } from './ToolsCard';
+import { ToolsCard, prepareChartData } from './ToolsCard';
 import type { ToolsCardData } from '@/schemas/api';
 
 function makeData(overrides: Partial<ToolsCardData> = {}): ToolsCardData {
@@ -56,5 +56,26 @@ describe('ToolsCard', () => {
   it('renders recharts stub when tools are present', () => {
     const { getAllByTestId } = render(<ToolsCard data={makeData()} loading={false} />);
     expect(getAllByTestId('recharts-stub').length).toBeGreaterThan(0);
+  });
+
+  // CF-438: cached ComputeResults predating the backend skip may still
+  // contain orphan "<unknown>" entries. prepareChartData filters defensively
+  // so the chart never paints a literal "<unknown>" bar.
+  describe('CF-438 orphan filter', () => {
+    it('drops "<unknown>" entries from chart data', () => {
+      const stats = {
+        Bash: { success: 5, errors: 1 },
+        '<unknown>': { success: 10, errors: 2 },
+      };
+      const result = prepareChartData(stats);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('Bash');
+      expect(result.find((d) => d.name === '<unknown>')).toBeUndefined();
+    });
+
+    it('returns empty chart data when "<unknown>" is the only entry', () => {
+      const result = prepareChartData({ '<unknown>': { success: 3, errors: 0 } });
+      expect(result).toEqual([]);
+    });
   });
 });

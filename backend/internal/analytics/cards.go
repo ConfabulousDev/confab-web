@@ -34,10 +34,10 @@ func IsKnownCardTableName(name string) bool {
 const (
 	TokensCardVersion          = 3 // v3: dedup by message.id (fixes multi-line + replay over-counting)
 	SessionCardVersion         = 5 // v5: dedup assistant counts by message.id, non-exclusive breakdown
-	ToolsCardVersion           = 2 // v2: per-tool success/error breakdown
+	ToolsCardVersion           = 3 // v3: Codex spawn_agent/wait_agent excluded — surfaced via AgentsAndSkills (CF-443)
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
 	ConversationCardVersion    = 3 // v3: AssistantTurns = user-prompt-triggered sequences (deduped)
-	AgentsAndSkillsCardVersion = 1 // v1: combined agents and skills card
+	AgentsAndSkillsCardVersion = 2 // v2: Codex subagent + skill support (CF-443)
 	RedactionsCardVersion      = 2 // v2: filter out "TYPE" placeholder
 	SmartRecapCardVersion      = 1 // v1: initial AI-powered session recap
 	SearchIndexVersion         = 1 // v1: initial full-text search index

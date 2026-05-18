@@ -2,6 +2,7 @@ package analytics_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -1271,6 +1272,17 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 		IncludeNoRepo: true,
 	}
 
+	// wantPerProviderEntry captures the expected aggregated values for a single
+	// canonical provider in Tokens.PerProvider. Cost is a decimal string for
+	// parity with the wire format (decimal.String()). CF-435.
+	type wantPerProviderEntry struct {
+		input         int64
+		output        int64
+		cacheCreation int64
+		cacheRead     int64
+		costUSD       string
+	}
+
 	cases := []struct {
 		name                 string
 		providers            []string
@@ -1280,6 +1292,10 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 		// wantTopProviders is the expected Provider values on TopSessions rows,
 		// in descending cost order (after normalization).
 		wantTopProviders []string
+		// wantPerProvider is the expected Tokens.PerProvider map (CF-435).
+		// Keys are canonical provider ids; legacy 'Claude Code' rows fold into
+		// the 'claude-code' entry server-side.
+		wantPerProvider map[string]wantPerProviderEntry
 	}{
 		{
 			name:                 "nil filter — all sessions",
@@ -1288,6 +1304,10 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 			wantInputTokens:      6000,
 			wantProvidersPresent: []string{"claude-code", "codex"},
 			wantTopProviders:     []string{"codex", "claude-code", "claude-code"},
+			wantPerProvider: map[string]wantPerProviderEntry{
+				"claude-code": {input: 3000, output: 1500, costUSD: "9"}, // canonical 2000+1000 + legacy 1000+500
+				"codex":       {input: 3000, output: 1500, costUSD: "9"},
+			},
 		},
 		{
 			name:                 "claude-code only — excludes codex, includes legacy",
@@ -1296,6 +1316,9 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 			wantInputTokens:      3000,
 			wantProvidersPresent: []string{"claude-code"},
 			wantTopProviders:     []string{"claude-code", "claude-code"},
+			wantPerProvider: map[string]wantPerProviderEntry{
+				"claude-code": {input: 3000, output: 1500, costUSD: "9"},
+			},
 		},
 		{
 			name:                 "codex only — excludes claude-code and legacy",
@@ -1304,6 +1327,9 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 			wantInputTokens:      3000,
 			wantProvidersPresent: []string{"codex"},
 			wantTopProviders:     []string{"codex"},
+			wantPerProvider: map[string]wantPerProviderEntry{
+				"codex": {input: 3000, output: 1500, costUSD: "9"},
+			},
 		},
 		{
 			name:                 "both providers selected — same as nil filter",
@@ -1312,6 +1338,10 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 			wantInputTokens:      6000,
 			wantProvidersPresent: []string{"claude-code", "codex"},
 			wantTopProviders:     []string{"codex", "claude-code", "claude-code"},
+			wantPerProvider: map[string]wantPerProviderEntry{
+				"claude-code": {input: 3000, output: 1500, costUSD: "9"},
+				"codex":       {input: 3000, output: 1500, costUSD: "9"},
+			},
 		},
 	}
 
@@ -1357,6 +1387,48 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 			if !equalStringSlices(gotTopProviders, tc.wantTopProviders) {
 				t.Errorf("TopSessions providers = %v, want %v", gotTopProviders, tc.wantTopProviders)
 			}
+
+			// CF-435: Tokens.PerProvider must mirror the filtered, normalized
+			// session_type set. Legacy 'Claude Code' rows fold into 'claude-code'
+			// server-side via models.NormalizeProvider at the Scan site.
+			if resp.Cards.Tokens.PerProvider == nil {
+				t.Fatal("Tokens.PerProvider must be non-nil (empty map, not nil)")
+			}
+			gotKeys := make([]string, 0, len(resp.Cards.Tokens.PerProvider))
+			for k := range resp.Cards.Tokens.PerProvider {
+				gotKeys = append(gotKeys, k)
+			}
+			sort.Strings(gotKeys)
+			wantKeys := make([]string, 0, len(tc.wantPerProvider))
+			for k := range tc.wantPerProvider {
+				wantKeys = append(wantKeys, k)
+			}
+			sort.Strings(wantKeys)
+			if !equalStringSlices(gotKeys, wantKeys) {
+				t.Errorf("Tokens.PerProvider keys = %v, want %v", gotKeys, wantKeys)
+			}
+			for provider, want := range tc.wantPerProvider {
+				got, ok := resp.Cards.Tokens.PerProvider[provider]
+				if !ok {
+					t.Errorf("Tokens.PerProvider[%q] missing", provider)
+					continue
+				}
+				if got.TotalInputTokens != want.input {
+					t.Errorf("Tokens.PerProvider[%q].TotalInputTokens = %d, want %d", provider, got.TotalInputTokens, want.input)
+				}
+				if got.TotalOutputTokens != want.output {
+					t.Errorf("Tokens.PerProvider[%q].TotalOutputTokens = %d, want %d", provider, got.TotalOutputTokens, want.output)
+				}
+				if got.TotalCacheCreationTokens != want.cacheCreation {
+					t.Errorf("Tokens.PerProvider[%q].TotalCacheCreationTokens = %d, want %d", provider, got.TotalCacheCreationTokens, want.cacheCreation)
+				}
+				if got.TotalCacheReadTokens != want.cacheRead {
+					t.Errorf("Tokens.PerProvider[%q].TotalCacheReadTokens = %d, want %d", provider, got.TotalCacheReadTokens, want.cacheRead)
+				}
+				if got.TotalCostUSD != want.costUSD {
+					t.Errorf("Tokens.PerProvider[%q].TotalCostUSD = %q, want %q", provider, got.TotalCostUSD, want.costUSD)
+				}
+			}
 		})
 	}
 }
@@ -1395,6 +1467,139 @@ func TestGetTrends_ProvidersPresent_EmptyRange(t *testing.T) {
 	}
 	if len(resp.ProvidersPresent) != 0 {
 		t.Errorf("ProvidersPresent = %v, want empty slice", resp.ProvidersPresent)
+	}
+
+	// CF-435: Tokens.PerProvider must also be a non-nil empty map (not nil)
+	// so JSON serialization yields `{}` rather than `null` in the empty case.
+	if resp.Cards.Tokens == nil {
+		t.Fatal("Tokens card must be non-nil")
+	}
+	if resp.Cards.Tokens.PerProvider == nil {
+		t.Fatal("Tokens.PerProvider must be non-nil even when empty (JSON {})")
+	}
+	if len(resp.Cards.Tokens.PerProvider) != 0 {
+		t.Errorf("Tokens.PerProvider = %v, want empty map", resp.Cards.Tokens.PerProvider)
+	}
+}
+
+// TestGetTrends_TokensPerProvider_LegacyAliasFold (CF-435) pins that the
+// per-provider tokens breakdown folds legacy 'Claude Code' session_type rows
+// into the canonical 'claude-code' key server-side. The Scan site applies
+// models.NormalizeProvider; both legacy and canonical Claude rows accumulate
+// into one entry so the wire surface only exposes canonical provider ids.
+func TestGetTrends_TokensPerProvider_LegacyAliasFold(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-tpp-alias-fold@test.com", "Trends PerProvider Alias Fold User")
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	claudeSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "tpp-claude", "claude-code")
+	legacySession := testutil.CreateTestSessionLegacyClaudeCode(t, env, user.ID, "tpp-legacy")
+	codexSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "tpp-codex", "codex")
+
+	seed := func(t *testing.T, sessionID string, input, output, cacheCreation, cacheRead int64, cost float64) {
+		t.Helper()
+		err := store.UpsertCards(ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:           sessionID,
+				Version:             analytics.TokensCardVersion,
+				ComputedAt:          time.Now().UTC(),
+				UpToLine:            100,
+				InputTokens:         input,
+				OutputTokens:        output,
+				CacheCreationTokens: cacheCreation,
+				CacheReadTokens:     cacheRead,
+				EstimatedCostUSD:    decimal.NewFromFloat(cost),
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sessionID, err)
+		}
+	}
+	seed(t, claudeSession, 2000, 1000, 500, 1000, 6.00)
+	seed(t, legacySession, 1000, 500, 250, 500, 3.00)
+	seed(t, codexSession, 3000, 1500, 0, 2000, 9.00) // Codex has no cache-write by design.
+
+	now := time.Now().UTC()
+	resp, err := store.GetTrends(ctx, user.ID, analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	})
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+
+	if resp.Cards.Tokens == nil {
+		t.Fatal("Tokens card must be non-nil")
+	}
+	pp := resp.Cards.Tokens.PerProvider
+	if pp == nil {
+		t.Fatal("Tokens.PerProvider must be non-nil")
+	}
+
+	// Exactly two canonical keys; legacy 'Claude Code' must NOT appear.
+	if _, hasLegacyKey := pp["Claude Code"]; hasLegacyKey {
+		t.Error("Tokens.PerProvider must not expose legacy 'Claude Code' key — should fold into 'claude-code'")
+	}
+	wantKeys := []string{"claude-code", "codex"}
+	gotKeys := make([]string, 0, len(pp))
+	for k := range pp {
+		gotKeys = append(gotKeys, k)
+	}
+	sort.Strings(gotKeys)
+	if !equalStringSlices(gotKeys, wantKeys) {
+		t.Fatalf("Tokens.PerProvider keys = %v, want %v", gotKeys, wantKeys)
+	}
+
+	// claude-code entry = canonical + legacy sums.
+	claudeEntry := pp["claude-code"]
+	if claudeEntry == nil {
+		t.Fatal("Tokens.PerProvider['claude-code'] is nil")
+	}
+	if claudeEntry.TotalInputTokens != 3000 {
+		t.Errorf("claude-code.TotalInputTokens = %d, want 3000 (2000+1000)", claudeEntry.TotalInputTokens)
+	}
+	if claudeEntry.TotalOutputTokens != 1500 {
+		t.Errorf("claude-code.TotalOutputTokens = %d, want 1500 (1000+500)", claudeEntry.TotalOutputTokens)
+	}
+	if claudeEntry.TotalCacheCreationTokens != 750 {
+		t.Errorf("claude-code.TotalCacheCreationTokens = %d, want 750 (500+250)", claudeEntry.TotalCacheCreationTokens)
+	}
+	if claudeEntry.TotalCacheReadTokens != 1500 {
+		t.Errorf("claude-code.TotalCacheReadTokens = %d, want 1500 (1000+500)", claudeEntry.TotalCacheReadTokens)
+	}
+	if claudeEntry.TotalCostUSD != "9" {
+		t.Errorf("claude-code.TotalCostUSD = %q, want %q (6.00+3.00)", claudeEntry.TotalCostUSD, "9")
+	}
+
+	// codex entry = codex session alone.
+	codexEntry := pp["codex"]
+	if codexEntry == nil {
+		t.Fatal("Tokens.PerProvider['codex'] is nil")
+	}
+	if codexEntry.TotalInputTokens != 3000 {
+		t.Errorf("codex.TotalInputTokens = %d, want 3000", codexEntry.TotalInputTokens)
+	}
+	if codexEntry.TotalOutputTokens != 1500 {
+		t.Errorf("codex.TotalOutputTokens = %d, want 1500", codexEntry.TotalOutputTokens)
+	}
+	if codexEntry.TotalCacheCreationTokens != 0 {
+		t.Errorf("codex.TotalCacheCreationTokens = %d, want 0", codexEntry.TotalCacheCreationTokens)
+	}
+	if codexEntry.TotalCacheReadTokens != 2000 {
+		t.Errorf("codex.TotalCacheReadTokens = %d, want 2000", codexEntry.TotalCacheReadTokens)
+	}
+	if codexEntry.TotalCostUSD != "9" {
+		t.Errorf("codex.TotalCostUSD = %q, want %q", codexEntry.TotalCostUSD, "9")
 	}
 }
 

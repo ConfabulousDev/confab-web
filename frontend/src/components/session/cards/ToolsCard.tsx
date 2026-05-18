@@ -33,8 +33,19 @@ function formatToolName(name: string): string {
   return name;
 }
 
-function prepareChartData(toolStats: Record<string, { success: number; errors: number }>): ToolChartData[] {
+/**
+ * Build chart rows from the tool_stats map. Exported for unit testing.
+ *
+ * CF-438: orphan "<unknown>" entries are filtered defensively. The backend
+ * analyzer skips them, but historical ComputeResults cached before the fix
+ * may still contain the literal key.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function prepareChartData(
+  toolStats: Record<string, { success: number; errors: number }>,
+): ToolChartData[] {
   return Object.entries(toolStats)
+    .filter(([name]) => name !== '<unknown>')
     .map(([name, stats]) => ({
       name,
       displayName: formatToolName(name),
@@ -42,9 +53,8 @@ function prepareChartData(toolStats: Record<string, { success: number; errors: n
       errors: stats.errors,
       total: stats.success + stats.errors,
     }))
-    .sort((a, b) => b.total - a.total); // Longest bar first
+    .sort((a, b) => b.total - a.total);
 }
-
 
 interface CustomTooltipProps {
   active?: boolean;

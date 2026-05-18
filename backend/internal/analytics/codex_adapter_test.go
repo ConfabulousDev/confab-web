@@ -1,6 +1,9 @@
 package analytics
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -310,7 +313,12 @@ func TestComputeFromCodexRollout_Redactions_Recursive(t *testing.T) {
 	}
 }
 
-func TestComputeFromCodexRollout_OrphanToolCall(t *testing.T) {
+// TestComputeFromCodexRollout_OrphanToolCallSkipped locks in the CF-438
+// contract: orphan "<unknown>" tool calls (synthetic placeholders the parser
+// emits when a function_call_output arrives without a matching function_call)
+// are dropped from the Tools card. The data anomaly is recorded as a
+// ParsedRollout.ValidationError at parse time instead.
+func TestComputeFromCodexRollout_OrphanToolCallSkipped(t *testing.T) {
 	r := &codex.ParsedRollout{
 		Turns: []codex.Turn{{
 			ToolCalls: []codex.ToolCall{
@@ -322,10 +330,177 @@ func TestComputeFromCodexRollout_OrphanToolCall(t *testing.T) {
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
-	if out.TotalToolCalls != 1 {
-		t.Errorf("TotalToolCalls = %d, want 1", out.TotalToolCalls)
+	if out.TotalToolCalls != 0 {
+		t.Errorf("TotalToolCalls = %d, want 0 (orphan must be skipped)", out.TotalToolCalls)
 	}
-	if out.ToolStats["<unknown>"] == nil || out.ToolStats["<unknown>"].Success != 1 {
-		t.Errorf("ToolStats[<unknown>] not populated: %v", out.ToolStats)
+	if out.ToolErrorCount != 0 {
+		t.Errorf("ToolErrorCount = %d, want 0", out.ToolErrorCount)
+	}
+	if _, ok := out.ToolStats["<unknown>"]; ok {
+		t.Errorf("ToolStats must not contain orphan <unknown> key: %v", out.ToolStats)
 	}
 }
+
+// TestComputeFromCodexRollout_FailedTool exercises CF-438 acceptance #2:
+// failed custom_tool_call payloads must increment both ToolErrorCount and the
+// per-tool Errors counter, while completed payloads land in Success.
+func TestComputeFromCodexRollout_FailedTool(t *testing.T) {
+	r := &codex.ParsedRollout{
+		Model: "gpt-5",
+		Turns: []codex.Turn{{
+			TurnID: "t1",
+			ToolCalls: []codex.ToolCall{
+				{Name: "apply_patch", Arguments: "*** Begin Patch\n*** Add File: a.txt\n+ok\n*** End Patch", Status: "completed"},
+				{Name: "apply_patch", Arguments: "*** Begin Patch\n*** Update File: b.txt\n-old\n+new\n*** End Patch", Status: "failed"},
+			},
+		}},
+	}
+	out := ComputeFromCodexRollout(r)
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.TotalToolCalls != 2 {
+		t.Errorf("TotalToolCalls = %d, want 2", out.TotalToolCalls)
+	}
+	if out.ToolErrorCount != 1 {
+		t.Errorf("ToolErrorCount = %d, want 1 (one failed apply_patch)", out.ToolErrorCount)
+	}
+	stats := out.ToolStats["apply_patch"]
+	if stats == nil {
+		t.Fatalf("ToolStats[apply_patch] missing: %v", out.ToolStats)
+	}
+	if stats.Success != 1 {
+		t.Errorf("ToolStats[apply_patch].Success = %d, want 1", stats.Success)
+	}
+	if stats.Errors != 1 {
+		t.Errorf("ToolStats[apply_patch].Errors = %d, want 1", stats.Errors)
+	}
+}
+
+// ============================================================================
+// CF-443: end-to-end Codex agents/skills support
+// ============================================================================
+
+// TestComputeFromCodexRollout_SanitizedRealFixture_PopulatesBoth runs the full
+// pipeline on the synthetic parent-with-spawns fixture and verifies that the
+// resulting ComputeResult carries non-zero agent and skill counts. (Skills
+// are zero here because the parent fixture doesn't invoke any; this exercises
+// the agents path.)
+func TestComputeFromCodexRollout_ParentFixture_PopulatesAgents(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "codex", "testdata", "sample_rollout_parent_with_spawns.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	out := ComputeFromCodexRollout(rollout)
+	if out.TotalAgentInvocations != 2 {
+		t.Errorf("TotalAgentInvocations = %d, want 2", out.TotalAgentInvocations)
+	}
+	// AgentStats keyed by role.
+	if out.AgentStats["default"] == nil || out.AgentStats["default"].Success != 1 {
+		t.Errorf("AgentStats[default] = %+v, want {Success:1}", out.AgentStats["default"])
+	}
+	if out.AgentStats["explorer"] == nil || out.AgentStats["explorer"].Errors != 1 {
+		t.Errorf("AgentStats[explorer] = %+v, want {Errors:1}", out.AgentStats["explorer"])
+	}
+	// Skills are absent in this fixture.
+	if out.TotalSkillInvocations != 0 {
+		t.Errorf("TotalSkillInvocations = %d, want 0", out.TotalSkillInvocations)
+	}
+}
+
+// TestComputeFromCodexRollout_SkillFixture_PopulatesSkills runs the pipeline
+// on the synthetic skill-invocation fixture.
+func TestComputeFromCodexRollout_SkillFixture_PopulatesSkills(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "codex", "testdata", "sample_rollout_with_skill_invocation.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	out := ComputeFromCodexRollout(rollout)
+	if out.TotalSkillInvocations != 1 {
+		t.Errorf("TotalSkillInvocations = %d, want 1", out.TotalSkillInvocations)
+	}
+	if out.SkillStats["audit-documentation"] == nil ||
+		out.SkillStats["audit-documentation"].Success != 1 {
+		t.Errorf("SkillStats[audit-documentation] = %+v, want {Success:1}",
+			out.SkillStats["audit-documentation"])
+	}
+}
+
+// TestComputeFromCodexRollout_NoSpawnAgentInTools verifies spawn_agent does
+// not appear in the Tools card stats produced by the adapter.
+func TestComputeFromCodexRollout_NoSpawnAgentInTools(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "codex", "testdata", "sample_rollout_parent_with_spawns.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	out := ComputeFromCodexRollout(rollout)
+	if out.ToolStats["spawn_agent"] != nil {
+		t.Errorf("ToolStats[spawn_agent] = %+v, want nil (routed to AgentsAndSkills)",
+			out.ToolStats["spawn_agent"])
+	}
+}
+
+// TestComputeFromCodexRollout_NoWaitAgentInTools verifies wait_agent does
+// not appear in the Tools card stats.
+func TestComputeFromCodexRollout_NoWaitAgentInTools(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "codex", "testdata", "sample_rollout_parent_with_spawns.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	out := ComputeFromCodexRollout(rollout)
+	if out.ToolStats["wait_agent"] != nil {
+		t.Errorf("ToolStats[wait_agent] = %+v, want nil (excluded from Tools card)",
+			out.ToolStats["wait_agent"])
+	}
+}
+
+// TestComputeFromCodexRollout_ConversationTimingUnchanged_NoSpawnFixture is the
+// CF-441 regression guard. The legacy fixture (sample_rollout.jsonl) contains
+// no spawn_agent/wait_agent calls — the CF-443 parser refactor must not change
+// the timing numbers it produces.
+func TestComputeFromCodexRollout_ConversationTimingUnchanged_NoSpawnFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "codex", "testdata", "sample_rollout.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseRollout: %v", err)
+	}
+	out := ComputeFromCodexRollout(rollout)
+	// Hard-coded baselines captured from main before CF-443. If any of these
+	// shift, CF-443 has inadvertently altered Conversation card behavior — fix
+	// the parser refactor, not the baseline.
+	if out.UserTurns != 2 {
+		t.Errorf("UserTurns = %d, want 2 (CF-441 baseline)", out.UserTurns)
+	}
+	if out.AssistantTurns != 2 {
+		t.Errorf("AssistantTurns = %d, want 2 (CF-441 baseline)", out.AssistantTurns)
+	}
+	if out.UserMessages != 2 {
+		t.Errorf("UserMessages = %d, want 2 (CF-441 baseline)", out.UserMessages)
+	}
+	if out.AssistantMessages != 3 {
+		t.Errorf("AssistantMessages = %d, want 3 (CF-441 baseline)", out.AssistantMessages)
+	}
+	if out.TotalToolCalls != 4 {
+		t.Errorf("TotalToolCalls = %d, want 4 (CF-441 baseline)", out.TotalToolCalls)
+	}
+}
+

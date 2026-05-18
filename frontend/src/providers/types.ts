@@ -123,6 +123,20 @@ export interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
    */
   extendCostTooltip?(base: string[], usage: TokenUsage, message: TItem): string[];
 
+  /**
+   * Per-session Tokens summary card tooltip for the "Estimated cost" row.
+   * Each provider supplies its own copy (5-minute prompt caching note for
+   * Claude, OpenAI-pricing note for Codex). CF-436.
+   */
+  readonly tokensCostTooltip: string;
+
+  /**
+   * Per-session Tokens summary card tooltip for the "Fast mode" row.
+   * Only the provider that surfaces the row (Claude's Anthropic priority
+   * tier) defines this. CF-436.
+   */
+  readonly tokensFastTooltip?: string;
+
   FilterDropdown: FC<{
     counts: TCounts;
     filters: FilterAPI<TFilterState, TToggles>;

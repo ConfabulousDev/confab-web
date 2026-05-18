@@ -21,6 +21,35 @@ const maxLineBytes = 4 * 1024 * 1024
 // newlines (DOTALL behavior via [\s\S]).
 var envContextPattern = regexp.MustCompile(`(?s)<environment_context>.*?</environment_context>`)
 
+// skillBlockPattern matches a single <skill>...</skill> wrapper Codex injects
+// as a synthetic user-role message. Non-greedy so multiple blocks in one
+// message extract individually.
+var skillBlockPattern = regexp.MustCompile(`(?s)<skill>(.*?)</skill>`)
+
+// skillNamePattern / skillPathPattern extract the inner metadata tags. Use
+// raw (non-multiline) regex; the tags are guaranteed by Codex to sit on
+// their own lines but we accept any whitespace around them.
+var skillNamePattern = regexp.MustCompile(`<name>\s*(.+?)\s*</name>`)
+var skillPathPattern = regexp.MustCompile(`<path>\s*(.+?)\s*</path>`)
+
+// subagentNotificationPattern strips parent-side <subagent_notification>
+// JSON wrappers. The structured data is sourced from wait_agent output;
+// the user-message form is purely a transcript-rendering artifact.
+var subagentNotificationPattern = regexp.MustCompile(`(?s)<subagent_notification>.*?</subagent_notification>`)
+
+// skillsInstructionsBlockPattern extracts the entire <skills_instructions>
+// body from the first developer-role message.
+var skillsInstructionsBlockPattern = regexp.MustCompile(`(?s)<skills_instructions>(.*?)</skills_instructions>`)
+
+// skillCatalogEntryPattern matches one bullet from the Available skills list:
+//
+//	- <name>: <description> (file: <path>)
+var skillCatalogEntryPattern = regexp.MustCompile(`^-\s+(\S+?):\s+(.+?)\s+\(file:\s+(.+?)\)\s*$`)
+
+// maxCompletionTextLen caps SubagentSpawn.CompletionText to keep ParsedRollout
+// memory bounded (Codex subagent outputs can run into hundreds of KB).
+const maxCompletionTextLen = 1000
+
 // execOutputSentinel separates the Codex exec_command output preamble from
 // the actual command output. The sentinel sits on its own line, so we match
 // either at start-of-string or after a newline.
@@ -93,6 +122,20 @@ type parser struct {
 	// callIndex maps call_id → (turnIdx, toolCallIdx) so out-of-order tool
 	// outputs can update the right ToolCall even after their turn closed.
 	callIndex map[string]callRef
+	// spawnIndex maps spawn_agent call_id → index into out.SubagentSpawns
+	// so the matching function_call_output (and later wait_agent results)
+	// can update the right record.
+	spawnIndex map[string]int
+	// waitCallIDs is the set of wait_agent call_ids seen so far. Membership
+	// is enough to route a function_call_output to applyWaitAgentOutput —
+	// the spawn-to-update lookup goes through spawnAgentIDIndex instead.
+	waitCallIDs map[string]struct{}
+	// spawnAgentIDIndex maps spawned ResultAgentID → index into
+	// out.SubagentSpawns, used by wait_agent output resolution.
+	spawnAgentIDIndex map[string]int
+	// skillsCatalogPopulated guards against capturing a second
+	// <skills_instructions> block (e.g. after compaction).
+	skillsCatalogPopulated bool
 }
 
 type callRef struct {
@@ -127,6 +170,34 @@ type sessionMetaPayload struct {
 	ModelProvider string                 `json:"model_provider"`
 	CWD           string                 `json:"cwd"`
 	Git           map[string]interface{} `json:"git"`
+	CLIVersion    string                 `json:"cli_version"`
+	Source        json.RawMessage        `json:"source"`
+	ThreadSource  string                 `json:"thread_source"`
+	AgentNickname string                 `json:"agent_nickname"`
+	AgentRole     string                 `json:"agent_role"`
+	AgentType     string                 `json:"agent_type"` // legacy alias for agent_role
+	AgentPath     string                 `json:"agent_path"`
+}
+
+// subAgentSourceWrapper decodes the {"sub_agent":{...}} variant. The inner
+// value is either a string (e.g. "review", "compact") or an object whose
+// single key names the subagent kind (e.g. {"thread_spawn":{...}}).
+type subAgentSourceWrapper struct {
+	SubAgent json.RawMessage `json:"sub_agent"`
+}
+
+// threadSpawnWrapper decodes {"thread_spawn":{...}}.
+type threadSpawnWrapper struct {
+	ThreadSpawn *threadSpawnPayload `json:"thread_spawn"`
+}
+
+type threadSpawnPayload struct {
+	ParentThreadID string `json:"parent_thread_id"`
+	Depth          int    `json:"depth"`
+	AgentPath      string `json:"agent_path"`
+	AgentNickname  string `json:"agent_nickname"`
+	AgentRole      string `json:"agent_role"`
+	AgentType      string `json:"agent_type"` // legacy alias
 }
 
 func (p *parser) handleSessionMeta(raw json.RawMessage) {
@@ -146,6 +217,41 @@ func (p *parser) handleSessionMeta(raw json.RawMessage) {
 	if len(meta.Git) > 0 {
 		p.out.GitInfo = meta.Git
 	}
+	if meta.CLIVersion != "" {
+		p.out.CLIVersion = meta.CLIVersion
+	}
+	if sub := extractThreadSpawn(meta.Source); sub != nil {
+		role := sub.AgentRole
+		if role == "" {
+			role = sub.AgentType
+		}
+		p.out.Subagent = &SubagentSource{
+			ParentThreadID: sub.ParentThreadID,
+			Depth:          sub.Depth,
+			AgentPath:      sub.AgentPath,
+			AgentNickname:  sub.AgentNickname,
+			AgentRole:      role,
+		}
+	}
+}
+
+// extractThreadSpawn returns the thread_spawn payload if source decodes as
+// {"sub_agent":{"thread_spawn":{...}}}, otherwise nil. Any other variant
+// (string source, custom source, non-thread_spawn sub_agent variant) yields
+// nil with no error — those rollouts are simply not subagent threads.
+func extractThreadSpawn(raw json.RawMessage) *threadSpawnPayload {
+	if len(raw) == 0 {
+		return nil
+	}
+	var wrap subAgentSourceWrapper
+	if err := json.Unmarshal(raw, &wrap); err != nil || len(wrap.SubAgent) == 0 {
+		return nil
+	}
+	var ts threadSpawnWrapper
+	if err := json.Unmarshal(wrap.SubAgent, &ts); err != nil {
+		return nil
+	}
+	return ts.ThreadSpawn
 }
 
 // ----------------------------------------------------------------------------
@@ -242,11 +348,32 @@ func (p *parser) handleResponseItem(ts time.Time, raw json.RawMessage, lineNum i
 		if err := json.Unmarshal(raw, &fc); err != nil {
 			return
 		}
+		// spawn_agent and wait_agent are subagent-management calls, not
+		// generic tool invocations. Route them out of Turn.ToolCalls so
+		// they don't pollute the Tools card; analytics consumes them via
+		// out.SubagentSpawns (CF-443).
+		if fc.Name == "spawn_agent" {
+			p.ensureTurn(ts)
+			p.openSpawnAgent(ts, fc.CallID, fc.Arguments)
+			return
+		}
+		if fc.Name == "wait_agent" {
+			p.rememberWaitAgentCall(fc.CallID)
+			return
+		}
 		p.ensureTurn(ts)
 		p.openToolCall(ts, fc.CallID, fc.Name, fc.Arguments)
 	case "function_call_output":
 		var out functionCallOutputPayload
 		if err := json.Unmarshal(raw, &out); err != nil {
+			return
+		}
+		if idx, ok := p.spawnIndex[out.CallID]; ok {
+			p.applySpawnAgentOutput(idx, out.Output)
+			return
+		}
+		if _, ok := p.waitCallIDs[out.CallID]; ok {
+			p.applyWaitAgentOutput(out.Output)
 			return
 		}
 		p.closeToolCallOutput(ts, out.CallID, out.Output)
@@ -257,11 +384,12 @@ func (p *parser) handleResponseItem(ts time.Time, raw json.RawMessage, lineNum i
 		}
 		p.ensureTurn(ts)
 		p.openToolCall(ts, ct.CallID, ct.Name, ct.Input)
-		if ct.Status == "completed" {
-			// Some custom tool calls (e.g. apply_patch) report completion
-			// inline; mark pending until output arrives unless explicit.
+		// Some custom tool calls (e.g. apply_patch) report a terminal status
+		// inline rather than via a later *_output event. Other statuses fall
+		// through to "pending" for a subsequent *_output to resolve. CF-438.
+		if ct.Status == "completed" || ct.Status == "failed" {
 			if ref, ok := p.callIndex[ct.CallID]; ok {
-				p.toolCallAt(ref).Status = "completed"
+				p.toolCallAt(ref).Status = ct.Status
 			}
 		}
 	case "custom_tool_call_output":
@@ -299,17 +427,30 @@ func (p *parser) handleResponseItem(ts time.Time, raw json.RawMessage, lineNum i
 }
 
 // handleMessage processes a response_item.message. Developer-role messages
-// are dropped. User messages have <environment_context> stripped; if nothing
-// remains they're dropped entirely. Assistant messages preserve their phase.
+// are inspected for a <skills_instructions> catalog and then dropped. User
+// messages have <environment_context>, <skill>...</skill>, and
+// <subagent_notification> wrappers stripped; <skill> blocks additionally
+// produce SkillInvocation records. If nothing remains they're dropped
+// entirely. Assistant messages preserve their phase.
 func (p *parser) handleMessage(ts time.Time, msg responseMessagePayload) {
+	text := joinContentText(msg.Content)
+
 	if msg.Role == "developer" {
+		if !p.skillsCatalogPopulated {
+			if catalog := extractSkillsCatalog(text); len(catalog) > 0 {
+				p.out.AvailableSkills = catalog
+				p.skillsCatalogPopulated = true
+			}
+		}
 		return
 	}
-	text := joinContentText(msg.Content)
 
 	switch msg.Role {
 	case "user":
-		text = strings.TrimSpace(envContextPattern.ReplaceAllString(text, ""))
+		text = envContextPattern.ReplaceAllString(text, "")
+		text = subagentNotificationPattern.ReplaceAllString(text, "")
+		text = p.extractAndStripSkillBlocks(ts, text)
+		text = strings.TrimSpace(text)
 		if text == "" {
 			return
 		}
@@ -329,6 +470,67 @@ func (p *parser) handleMessage(ts time.Time, msg responseMessagePayload) {
 	}
 }
 
+// extractAndStripSkillBlocks pulls every <skill>...</skill> wrapper out of
+// text, appends a SkillInvocation per block, and returns text with all
+// wrappers removed. Empty Name/Path still produces an invocation record
+// (the parser is permissive — bucketing as "unknown" happens downstream).
+func (p *parser) extractAndStripSkillBlocks(ts time.Time, text string) string {
+	return skillBlockPattern.ReplaceAllStringFunc(text, func(match string) string {
+		body := firstSubmatch(skillBlockPattern, match)
+		p.out.SkillInvocations = append(p.out.SkillInvocations, SkillInvocation{
+			Name:      firstSubmatch(skillNamePattern, body),
+			Path:      firstSubmatch(skillPathPattern, body),
+			Timestamp: ts,
+		})
+		return ""
+	})
+}
+
+// firstSubmatch returns the first capture group of re applied to s, or "" if
+// no match. Trims surrounding whitespace.
+func firstSubmatch(re *regexp.Regexp, s string) string {
+	m := re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+// extractSkillsCatalog walks the joined developer-message text and pulls
+// every bullet under `### Available skills` from the first
+// <skills_instructions> block. Returns nil if the block isn't found.
+func extractSkillsCatalog(text string) []SkillAvailable {
+	body := firstSubmatch(skillsInstructionsBlockPattern, text)
+	if body == "" {
+		return nil
+	}
+	var inAvailable bool
+	var out []SkillAvailable
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "### Available skills") {
+			inAvailable = true
+			continue
+		}
+		if !inAvailable {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "### ") {
+			// Next section reached — stop scanning.
+			break
+		}
+		m := skillCatalogEntryPattern.FindStringSubmatch(trimmed)
+		if len(m) == 4 {
+			out = append(out, SkillAvailable{
+				Name:        m[1],
+				Description: m[2],
+				Path:        m[3],
+			})
+		}
+	}
+	return out
+}
+
 // joinContentText concatenates input_text and output_text blocks with "\n".
 // Other block types contribute no text.
 func joinContentText(blocks []responseContentBlock) string {
@@ -344,6 +546,107 @@ func joinContentText(blocks []responseContentBlock) string {
 // ----------------------------------------------------------------------------
 // Tool-call pairing
 // ----------------------------------------------------------------------------
+
+// spawnAgentArgs decodes spawn_agent arguments. Field names match the Codex
+// Rust struct (codex-rs/core/src/tools/handlers/multi_agents/spawn.rs).
+type spawnAgentArgs struct {
+	AgentType       string `json:"agent_type"`
+	Message         string `json:"message"`
+	ReasoningEffort string `json:"reasoning_effort"`
+	ForkContext     bool   `json:"fork_context"`
+}
+
+// spawnAgentResult decodes the spawn_agent function_call_output payload.
+type spawnAgentResult struct {
+	AgentID  string `json:"agent_id"`
+	Nickname string `json:"nickname"`
+}
+
+// waitAgentResult decodes the wait_agent function_call_output payload.
+// status is a map: agent_id → {<status_key>: <message_or_text>}.
+type waitAgentResult struct {
+	Status   map[string]map[string]string `json:"status"`
+	TimedOut bool                         `json:"timed_out"`
+}
+
+// openSpawnAgent appends a SubagentSpawn record at the time the parent's
+// spawn_agent function_call fires. Result fields are filled in by the matching
+// function_call_output; wait status is filled by a later wait_agent output.
+func (p *parser) openSpawnAgent(ts time.Time, callID, args string) {
+	var sa spawnAgentArgs
+	_ = json.Unmarshal([]byte(args), &sa)
+	if p.spawnIndex == nil {
+		p.spawnIndex = make(map[string]int)
+	}
+	p.out.SubagentSpawns = append(p.out.SubagentSpawns, SubagentSpawn{
+		CallID:          callID,
+		AgentType:       sa.AgentType,
+		Message:         sa.Message,
+		ReasoningEffort: sa.ReasoningEffort,
+		ForkContext:     sa.ForkContext,
+		Timestamp:       ts,
+	})
+	p.spawnIndex[callID] = len(p.out.SubagentSpawns) - 1
+}
+
+// applySpawnAgentOutput fills ResultAgentID + ResultNickname on the matching
+// SubagentSpawn record and indexes the spawn by its child agent_id so a
+// later wait_agent output can find it.
+func (p *parser) applySpawnAgentOutput(idx int, raw string) {
+	var r spawnAgentResult
+	if err := json.Unmarshal([]byte(raw), &r); err != nil {
+		return
+	}
+	spawn := &p.out.SubagentSpawns[idx]
+	spawn.ResultAgentID = r.AgentID
+	spawn.ResultNickname = r.Nickname
+	if r.AgentID == "" {
+		return
+	}
+	if p.spawnAgentIDIndex == nil {
+		p.spawnAgentIDIndex = make(map[string]int)
+	}
+	p.spawnAgentIDIndex[r.AgentID] = idx
+}
+
+// rememberWaitAgentCall records a wait_agent call_id so the matching
+// function_call_output routes to applyWaitAgentOutput. The arguments payload
+// itself is unused — the spawn-to-update lookup happens by agent_id inside
+// the output, via spawnAgentIDIndex.
+func (p *parser) rememberWaitAgentCall(callID string) {
+	if p.waitCallIDs == nil {
+		p.waitCallIDs = make(map[string]struct{})
+	}
+	p.waitCallIDs[callID] = struct{}{}
+}
+
+// applyWaitAgentOutput walks the {status:{agent_id:{key:text}}} map and
+// updates Completed / CompletionStatus / CompletionText on each matching
+// SubagentSpawn. The "completed" key indicates success; any other key
+// (e.g. "failed", "cancelled") indicates an error.
+func (p *parser) applyWaitAgentOutput(raw string) {
+	var r waitAgentResult
+	if err := json.Unmarshal([]byte(raw), &r); err != nil {
+		return
+	}
+	for agentID, status := range r.Status {
+		idx, ok := p.spawnAgentIDIndex[agentID]
+		if !ok {
+			continue
+		}
+		// status maps carry exactly one key in practice; take the first.
+		for key, text := range status {
+			if len(text) > maxCompletionTextLen {
+				text = text[:maxCompletionTextLen]
+			}
+			spawn := &p.out.SubagentSpawns[idx]
+			spawn.CompletionStatus = key
+			spawn.Completed = key == "completed"
+			spawn.CompletionText = text
+			break
+		}
+	}
+}
 
 // openToolCall appends a new ToolCall to the active turn and indexes it by call_id.
 func (p *parser) openToolCall(ts time.Time, callID, name, args string) {
@@ -365,15 +668,16 @@ func (p *parser) openToolCall(ts time.Time, callID, name, args string) {
 }
 
 // closeToolCallOutput attaches an output to a previously-opened ToolCall.
-// If no matching call exists, emits a synthetic ToolCall named "<unknown>"
-// so the data is still surfaced to analytics.
+// On orphan output (no matching call_id), emits a synthetic "<unknown>"
+// ToolCall so transcript/search still surface the text, and appends a
+// ValidationError so callers can discover the anomaly. The analytics Tools
+// card drops "<unknown>" entries by design (CF-438).
 func (p *parser) closeToolCallOutput(ts time.Time, callID, output string) {
 	if ref, ok := p.callIndex[callID]; ok {
 		tc := p.toolCallAt(ref)
 		applyToolOutput(tc, output)
 		return
 	}
-	// Orphan: open a synthetic turn if needed, then emit a <unknown> tool call.
 	p.ensureTurn(ts)
 	tc := ToolCall{
 		CallID:    callID,
@@ -382,6 +686,10 @@ func (p *parser) closeToolCallOutput(ts time.Time, callID, output string) {
 	}
 	applyToolOutput(&tc, output)
 	p.active.ToolCalls = append(p.active.ToolCalls, tc)
+	p.out.ValidationErrors = append(p.out.ValidationErrors, ValidationError{
+		Type:   "function_call_output",
+		Reason: "orphan output: no matching call_id " + callID,
+	})
 }
 
 // toolCallAt returns a pointer into Turns[turnIdx].ToolCalls or the active

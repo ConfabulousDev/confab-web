@@ -154,6 +154,15 @@ const defaultMockData: TrendsResponse = {
       total_cache_creation_tokens: 50000,
       total_cost_usd: '10.25',
       daily_costs: mockDailyCosts,
+      per_provider: {
+        'claude-code': {
+          total_input_tokens: 1250000,
+          total_output_tokens: 450000,
+          total_cache_read_tokens: 350000,
+          total_cache_creation_tokens: 50000,
+          total_cost_usd: '10.25',
+        },
+      },
     },
     activity: {
       total_files_read: 500,
@@ -234,6 +243,15 @@ export const HighUsage: Story = {
           total_cache_read_tokens: 4200000,
           total_cache_creation_tokens: 800000,
           total_cost_usd: '125.00',
+          per_provider: {
+            'claude-code': {
+              total_input_tokens: 15000000,
+              total_output_tokens: 5500000,
+              total_cache_read_tokens: 4200000,
+              total_cache_creation_tokens: 800000,
+              total_cost_usd: '125.00',
+            },
+          },
           daily_costs: [
             { date: '2024-01-08', cost_usd: '4.50' },
             { date: '2024-01-09', cost_usd: '5.20' },
@@ -323,6 +341,15 @@ export const SingleSession: Story = {
           total_cache_creation_tokens: 1000,
           total_cost_usd: '0.35',
           daily_costs: [{ date: '2024-01-14', cost_usd: '0.35' }],
+          per_provider: {
+            'claude-code': {
+              total_input_tokens: 25000,
+              total_output_tokens: 8000,
+              total_cache_read_tokens: 5000,
+              total_cache_creation_tokens: 1000,
+              total_cost_usd: '0.35',
+            },
+          },
         },
         activity: {
           total_files_read: 50,

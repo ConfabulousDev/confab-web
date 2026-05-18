@@ -150,6 +150,50 @@ export const Loading: Story = {
   },
 };
 
+export const CodexFailedApplyPatch: Story = {
+  args: {
+    data: {
+      total_calls: 6,
+      tool_stats: {
+        apply_patch: { success: 3, errors: 2 },
+        exec_command: { success: 1, errors: 0 },
+      },
+      error_count: 2,
+    },
+    loading: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Codex Tools card with apply_patch failures. Verifies the per-tool error bar renders for inline-failed custom_tool_call payloads (CF-438).',
+      },
+    },
+  },
+};
+
+export const OrphanFilteredOut: Story = {
+  args: {
+    data: {
+      total_calls: 5,
+      tool_stats: {
+        Bash: { success: 4, errors: 1 },
+        '<unknown>': { success: 10, errors: 2 },
+      },
+      error_count: 1,
+    },
+    loading: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Defensive filter for stale data: a "<unknown>" key in tool_stats is dropped at render time so the chart never paints a literal "<unknown>" bar. Only Bash should appear (CF-438).',
+      },
+    },
+  },
+};
+
 export const WithMCPTools: Story = {
   args: {
     data: {

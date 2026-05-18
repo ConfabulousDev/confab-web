@@ -9,12 +9,12 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `registry.ts` | Central card registry -- ordered list of all cards with render conditions |
 | `types.ts` | `CardProps<T>`, `CardDefinition` interfaces |
 | `Card.tsx` | Shared building blocks: `CardWrapper`, `StatRow`, `CardLoading`, `CardError`, `SectionHeader` |
-| `TokensCard.tsx` | Token usage breakdown (input, output, cache) with estimated cost |
+| `TokensCard.tsx` | Token usage breakdown (input, output, cache) with estimated cost. Provider-aware via `getAdapter(provider)`: cost / fast-mode tooltips come from `tokensCostTooltip` / `tokensFastTooltip` on the adapter. "Cache created" row hidden when value is 0 (CF-436). Direct callers pass required `provider`; the registry uses `TokensCardForRegistry` (mirrors `ConversationCardForRegistry`). |
 | `SessionCard.tsx` | Session metadata: message counts, duration, models, compaction stats |
 | `ConversationCard.tsx` | Turn-based metrics: user/assistant turns, avg response time, utilization |
 | `CodeActivityCard.tsx` | Code activity: files read/modified, lines added/removed, language breakdown |
-| `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts |
-| `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown |
+| `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts. Exports `prepareChartData` for testing. Defensively filters orphan `<unknown>` entries so a literal `<unknown>` bar never paints, even for stale ComputeResults predating the CF-438 backend skip. |
+| `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown. Provider-agnostic copy: Claude buckets by `subagent_type`, Codex (CF-443) buckets by `agent_role` (`"default"`, `"explorer"`). Renders for both providers via the registry's `agent_invocations + skill_invocations > 0` gate. |
 | `RedactionsCard.tsx` | Redaction counts by type (shown only when redactions exist) |
 | `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links |
 | `index.ts` | Barrel export: `getOrderedCards()` |

@@ -109,6 +109,8 @@ export const codexAdapter: CodexAdapter = {
   countCategories: countCodexCategories,
   itemMatchesFilter: codexItemMatchesFilter,
 
+  tokensCostTooltip: 'Estimated API cost based on token usage and OpenAI model pricing.',
+
   calculateMessageCost(model, usage) {
     // Codex has no fast multiplier and no server-tool dollars. Parse layer
     // already split input into uncached + cacheRead and folded reasoning
