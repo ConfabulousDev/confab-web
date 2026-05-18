@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { getProviderIcon } from './providerIcon';
-import { ClaudeCodeIcon, CodexIcon } from './icons';
+import { ClaudeCodeIcon, CodexIcon, RobotIcon } from './icons';
 
 // getProviderIcon is the single seam SessionsPage / SessionHeader / any
 // future session-row component uses to pick the brand icon for a session.
-// CF-353 pins that codex sessions render CodexIcon and never ClaudeCodeIcon,
-// and that the fallback for unknown/empty values is ClaudeCodeIcon
-// (intentional default for legacy and unrecognised rows).
+// CF-353 pins that codex sessions render CodexIcon. CF-366 split the
+// fallback policy: canonical and legacy values still resolve to their
+// brand icon (claude-code and the legacy "Claude Code" form both render
+// the Claude logo), but truly unknown values now render the neutral
+// RobotIcon — so a future third-party provider mid-rollout never silently
+// impersonates Claude on the UI.
 describe('getProviderIcon', () => {
   it('returns CodexIcon for the canonical codex provider', () => {
     expect(getProviderIcon('codex')).toBe(CodexIcon);
@@ -23,17 +26,20 @@ describe('getProviderIcon', () => {
   });
 
   it('returns ClaudeCodeIcon for the legacy "Claude Code" display form', () => {
-    // Defensive: legacy rows still in production. Backend normalizes at
-    // every Scan site, but the frontend can also see this value if a
-    // response slips through unnormalised.
+    // Backend normalizes at every Scan site, but a response may slip
+    // through unnormalised — the icon helper must still recover.
     expect(getProviderIcon('Claude Code')).toBe(ClaudeCodeIcon);
   });
 
-  it('falls back to ClaudeCodeIcon for empty provider', () => {
-    expect(getProviderIcon('')).toBe(ClaudeCodeIcon);
+  it('returns ClaudeCodeIcon for uppercase canonical form', () => {
+    expect(getProviderIcon('CLAUDE-CODE')).toBe(ClaudeCodeIcon);
   });
 
-  it('falls back to ClaudeCodeIcon for unknown future providers', () => {
-    expect(getProviderIcon('windsurf')).toBe(ClaudeCodeIcon);
+  it('returns RobotIcon for empty provider', () => {
+    expect(getProviderIcon('')).toBe(RobotIcon);
+  });
+
+  it('returns RobotIcon for unknown future providers', () => {
+    expect(getProviderIcon('windsurf')).toBe(RobotIcon);
   });
 });
