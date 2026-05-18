@@ -4,6 +4,16 @@
 // own data shapes (TranscriptLine vs CodexRenderItem).
 
 /**
+ * Right-offset (px) for `ScrollNavButtons` when the CostBar is visible. Both
+ * Claude (`MessageTimeline`) and Codex (`CodexMessageTimeline`) pass this as
+ * `rightOffset` so the floating buttons clear the CostBar / TimelineBar rail.
+ *
+ * CostBar (22px) + gap (8px from `--spacing-sm`) + default right (24px from
+ * `--spacing-xl`) + 2px breathing room = 56px.
+ */
+export const SCROLL_NAV_COST_MODE_RIGHT = 56;
+
+/**
  * Format a timestamp for the >5min idle-gap divider. Today → time-of-day;
  * otherwise short date + time. Used by both `MessageTimeline` (Claude) and
  * `CodexMessageTimeline` (Codex) so the divider reads the same in both views.

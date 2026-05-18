@@ -18,7 +18,12 @@ import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { codexAdapter } from '@/providers/codexAdapter';
 import { cx } from '@/utils/utils';
-import { addCmdFListener, formatTimeSeparator, retryOnAnimationFrame } from '../timelineUtils';
+import {
+  addCmdFListener,
+  formatTimeSeparator,
+  retryOnAnimationFrame,
+  SCROLL_NAV_COST_MODE_RIGHT,
+} from '../timelineUtils';
 import { CostBar } from '../CostBar';
 import CodexUserMessage from './CodexUserMessage';
 import CodexAssistantMessage from './CodexAssistantMessage';
@@ -372,6 +377,7 @@ export default function CodexMessageTimeline({
           onScrollToBottom={scrollToBottom}
           contentDependency={items.length}
           onSearchClick={search.open}
+          rightOffset={isCostMode ? SCROLL_NAV_COST_MODE_RIGHT : undefined}
         />
         <div
           className={styles.virtualizer}
@@ -387,7 +393,6 @@ export default function CodexMessageTimeline({
               return (
                 <div
                   key={virtualItem.key}
-                  data-codex-time-separator
                   ref={virtualizer.measureElement}
                   data-index={virtualItem.index}
                   className={cx(styles.slot, styles.timeSeparator)}

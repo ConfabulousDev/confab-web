@@ -17,7 +17,7 @@ consume a separate render-item model produced by `services/codexTranscriptServic
 | `TimelineBar.tsx` | Vertical timeline bar showing user/assistant turn segments with duration tooltips |
 | `timelineFormat.ts` | `formatDuration` — shared `1h 15m` / `5m 30s` / `500ms` formatter for both Claude and Codex tooltip prose |
 | `timelineSegments.ts` | Claude segment compute (`useSegmentLayout`) + generic `useBlendedSegmentLayout` hook (size + position math, also consumed by Codex's bar) |
-| `timelineUtils.ts` | Provider-neutral helpers shared by Claude & Codex timelines: `formatTimeSeparator` (>5min idle-gap label), `retryOnAnimationFrame` (virtualizer scroll positioning), and `addCmdFListener` (Cmd/Ctrl+F intercept that opens the search bar — CF-359) |
+| `timelineUtils.ts` | Provider-neutral helpers shared by Claude & Codex timelines: `formatTimeSeparator` (>5min idle-gap label), `retryOnAnimationFrame` (virtualizer scroll positioning), `addCmdFListener` (Cmd/Ctrl+F intercept that opens the search bar — CF-359), and `SCROLL_NAV_COST_MODE_RIGHT` (CF-369 — 56px rightOffset both timelines pass to `ScrollNavButtons` in cost mode so the floating buttons clear the CostBar / TimelineBar rail) |
 | `attachments/` | Renderers for `attachment.*` subtypes (hook output, edited files, queued commands, tool deltas) and `system.away_summary`. See `attachments/README.md` |
 | `codex/` | Codex transcript renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback, virtualized timeline, turn-based timeline bar). See "Codex transcript renderers" below |
 

@@ -14,13 +14,14 @@ import { getRoleLabel } from './messageCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
-import { addCmdFListener, formatTimeSeparator, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import {
+  addCmdFListener,
+  formatTimeSeparator,
+  retryOnAnimationFrame,
+  SCROLL_NAV_COST_MODE_RIGHT,
+} from '@/components/transcript/timelineUtils';
 import { useSegmentLayout } from '@/components/transcript/timelineSegments';
 import styles from './MessageTimeline.module.css';
-
-// Right offset for ScrollNavButtons when CostBar is visible.
-// CostBar (22px) + gap (8px from --spacing-sm) + default right (24px from --spacing-xl) + 2px breathing room
-const SCROLL_NAV_COST_MODE_RIGHT = 56;
 
 interface MessageTimelineProps {
   messages: TranscriptLine[];

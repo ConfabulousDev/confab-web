@@ -33,6 +33,18 @@ function toolCall(timestamp: string, callId = 'c1'): CodexRenderItem {
   };
 }
 
+// Shared fixture for cost-mode tests (CF-362 + CF-369). Canonical TokenUsage
+// shape — `usage` is what the parse layer normalizes to (see CF-418).
+const assistantWithUsage: CodexRenderItem = {
+  kind: 'assistant',
+  lineId: '1',
+  timestamp: '2026-05-13T18:00:01Z',
+  text: 'hi',
+  phase: 'final',
+  model: 'gpt-5',
+  usage: { input: 1_000_000, output: 100_000, cacheWrite: 0, cacheRead: 0 },
+};
+
 describe('CodexMessageTimeline', () => {
   it('renders the empty-state when items is empty', () => {
     render(<CodexMessageTimeline items={[]} filteredItems={[]} sessionId="test-session" />);
@@ -56,17 +68,6 @@ describe('CodexMessageTimeline', () => {
   // ---------------------------------------------------------------------------
 
   describe('cost mode', () => {
-    const assistantWithUsage: CodexRenderItem = {
-      kind: 'assistant',
-      lineId: '1',
-      timestamp: '2026-05-13T18:00:01Z',
-      text: 'hi',
-      phase: 'final',
-      model: 'gpt-5',
-      // CF-418: canonical TokenUsage (parse layer already normalized).
-      usage: { input: 1_000_000, output: 100_000, cacheWrite: 0, cacheRead: 0 },
-    };
-
     it('renders the CostBar side rail when isCostMode is on and items have usage', () => {
       render(
         <CodexMessageTimeline
@@ -112,6 +113,39 @@ describe('CodexMessageTimeline', () => {
       );
       // CostBar returns null when totalCost === 0.
       expect(document.querySelector('[title*="Color intensity"]')).toBeNull();
+    });
+  });
+
+  // CF-369: in cost mode the floating ScrollNavButtons must shift left so
+  // they don't sit on top of the CostBar / TimelineBar rail. The shared
+  // constant lives in transcript/timelineUtils.ts.
+  describe('cost mode scroll-nav offset (CF-369)', () => {
+    it('sets inline right: 56px on ScrollNavButtons when isCostMode is on', () => {
+      render(
+        <CodexMessageTimeline
+          items={[assistantWithUsage]}
+          filteredItems={[assistantWithUsage]}
+          sessionId="test-session"
+          isCostMode
+        />,
+      );
+      const nav = document.querySelector<HTMLElement>('[class*="navButtons"]');
+      expect(nav).not.toBeNull();
+      expect(nav?.style.right).toBe('56px');
+    });
+
+    it('does not set inline right on ScrollNavButtons when isCostMode is off', () => {
+      render(
+        <CodexMessageTimeline
+          items={[assistantWithUsage]}
+          filteredItems={[assistantWithUsage]}
+          sessionId="test-session"
+          isCostMode={false}
+        />,
+      );
+      const nav = document.querySelector<HTMLElement>('[class*="navButtons"]');
+      expect(nav).not.toBeNull();
+      expect(nav?.style.right).toBe('');
     });
   });
 });
