@@ -109,4 +109,27 @@ describe('useOrgAnalytics', () => {
     expect(orgAnalyticsAPI.get).toHaveBeenCalledTimes(1);
     expect(orgAnalyticsAPI.get).toHaveBeenCalledWith({ startDate: '2025-01-01' });
   });
+
+  it('on-enable fetch uses latest params, not the captured-at-mount params', async () => {
+    // OrgPage mounts with `repos: []`, learns the repo list from /org/repos,
+    // auto-selects, then flips `enabled` to true. The fire on enable must use
+    // the post-auto-select params or `providers_present` collapses to no-repo
+    // sessions only (reproducing the inconsistent dropdown bug).
+    vi.mocked(orgAnalyticsAPI.get).mockResolvedValue(makeResponse());
+
+    type Props = { params: { repos: string[] }; enabled: boolean };
+    const initialProps: Props = { params: { repos: [] }, enabled: false };
+    const { rerender } = renderHook(
+      ({ params, enabled }: Props) => useOrgAnalytics(params, { enabled }),
+      { initialProps }
+    );
+
+    expect(orgAnalyticsAPI.get).not.toHaveBeenCalled();
+
+    rerender({ params: { repos: ['foo/bar', 'baz/qux'] }, enabled: false });
+    rerender({ params: { repos: ['foo/bar', 'baz/qux'] }, enabled: true });
+
+    await waitFor(() => expect(orgAnalyticsAPI.get).toHaveBeenCalledTimes(1));
+    expect(orgAnalyticsAPI.get).toHaveBeenCalledWith({ repos: ['foo/bar', 'baz/qux'] });
+  });
 });

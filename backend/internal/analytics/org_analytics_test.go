@@ -482,18 +482,20 @@ func TestGetOrgAnalytics_ProviderFilter(t *testing.T) {
 			wantProvidersPresent: []string{"claude-code", "codex"},
 		},
 		{
+			// providers_present reports the unfiltered set so the dropdown can
+			// offer codex even when the user has currently filtered to claude.
 			name:                 "claude-code only — excludes codex, includes legacy",
 			providers:            []string{"claude-code"},
 			wantSessionCount:     2,
 			wantTotalCostUSD:     "9.00",
-			wantProvidersPresent: []string{"claude-code"},
+			wantProvidersPresent: []string{"claude-code", "codex"},
 		},
 		{
 			name:                 "codex only — excludes claude-code and legacy",
 			providers:            []string{"codex"},
 			wantSessionCount:     1,
 			wantTotalCostUSD:     "9.00",
-			wantProvidersPresent: []string{"codex"},
+			wantProvidersPresent: []string{"claude-code", "codex"},
 		},
 		{
 			name:                 "both providers — same as nil filter",
@@ -746,8 +748,11 @@ func TestGetOrgAnalytics_RepoAndProviderCoFilter(t *testing.T) {
 	if got.TotalCostUSD != "4.00" {
 		t.Errorf("TotalCostUSD = %s, want 4.00", got.TotalCostUSD)
 	}
-	if !equalStringSlice(response.ProvidersPresent, []string{"codex"}) {
-		t.Errorf("ProvidersPresent = %v, want [codex]", response.ProvidersPresent)
+	// providers_present ignores the provider filter but still respects the
+	// repo filter, so we see both providers present inside confab-web even
+	// though the request narrowed to codex.
+	if !equalStringSlice(response.ProvidersPresent, []string{"claude-code", "codex"}) {
+		t.Errorf("ProvidersPresent = %v, want [claude-code codex]", response.ProvidersPresent)
 	}
 }
 

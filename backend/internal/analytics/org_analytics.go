@@ -33,6 +33,12 @@ func (s *Store) GetOrgAnalytics(ctx context.Context, req OrgAnalyticsRequest) (*
 
 	providerArg := pq.Array(resolveProviderFilter(req.Providers))
 	repoArg := pq.Array(req.Repos)
+	// providers_present must drive the frontend's provider dropdown options, so
+	// it has to be independent of the *current* provider selection — otherwise
+	// once a user pins `?provider=claude-code`, the dropdown narrows to just
+	// claude-code and they can never widen it from the UI. Compute it over the
+	// full canonical+legacy set, scoped only by date range + repo filter.
+	allProvidersArg := pq.Array(models.AllowedProviders)
 
 	// Run the per-user aggregate and the providers-present DISTINCT in parallel —
 	// they share filter args and don't depend on each other. Mirrors the trends
@@ -47,7 +53,7 @@ func (s *Store) GetOrgAnalytics(ctx context.Context, req OrgAnalyticsRequest) (*
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		providersPresent, provErr = s.orgProvidersPresent(ctx, req, providerArg, repoArg)
+		providersPresent, provErr = s.orgProvidersPresent(ctx, req, allProvidersArg, repoArg)
 	}()
 	go func() {
 		defer wg.Done()
@@ -177,10 +183,14 @@ func (s *Store) orgUserAggregates(ctx context.Context, req OrgAnalyticsRequest, 
 }
 
 // orgProvidersPresent returns the canonical providers with at least one
-// qualifying session (tokens + conversation cards) in the filtered range.
-// Legacy 'Claude Code' session_type rows fold into 'claude-code' via
-// models.NormalizeProvider so the API surface only exposes canonical values.
-// Always returns a non-nil slice (empty when no sessions match).
+// qualifying session (tokens + conversation cards) in the date range × repo
+// filter — independent of the request's provider filter. The frontend uses
+// this to populate the provider-filter dropdown; if we narrowed by the current
+// provider selection, a user with `?provider=claude-code` could never widen
+// back from the UI. Legacy 'Claude Code' session_type rows fold into
+// 'claude-code' via models.NormalizeProvider so the API surface only exposes
+// canonical values. Always returns a non-nil slice (empty when no sessions
+// match).
 func (s *Store) orgProvidersPresent(ctx context.Context, req OrgAnalyticsRequest, providerArg, repoArg any) ([]string, error) {
 	query := `
 		SELECT DISTINCT s.session_type

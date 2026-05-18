@@ -1330,7 +1330,7 @@ Returns per-user aggregated analytics across all sessions in the organization. R
 | `computed_at` | string | ISO timestamp when analytics were computed |
 | `date_range.start_date` | string | Start date (inclusive) |
 | `date_range.end_date` | string | End date (inclusive) |
-| `providers_present` | array | Canonical providers (e.g. `claude-code`, `codex`) with at least one qualifying session in the filtered range. Always non-null; `[]` when nothing matches. |
+| `providers_present` | array | Canonical providers (e.g. `claude-code`, `codex`) with at least one qualifying session in the date range × repo filter. Independent of the `?provider=` selection so clients can use this to populate a provider-filter dropdown that stays widenable when one provider is pinned. Always non-null; `[]` when nothing matches. |
 | `users` | array | One entry per active user |
 | `users[].user.id` | int | User ID |
 | `users[].user.email` | string | User email |

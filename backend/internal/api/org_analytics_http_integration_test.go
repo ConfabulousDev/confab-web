@@ -189,7 +189,8 @@ func orgAnalyticsURL(extra url.Values) string {
 //  1. `total_assistant_time_ms` / `avg_assistant_time_ms` are present.
 //  2. Stale `total_claude_time_ms` / `avg_claude_time_ms` are NOT present
 //     (negative assertion via raw JSON to catch drift past struct rename).
-//  3. `providers_present` is always non-nil and reflects the filtered set.
+//  3. `providers_present` is always non-nil and reports providers in the date
+//     range × repo filter — independent of the provider selection.
 //  4. `?provider=` narrows session counting; legacy `Claude Code` rows fold
 //     into the canonical `claude-code` filter via models.ExpandWithAliases.
 func TestOrgAnalytics_HTTP_WireContract(t *testing.T) {
@@ -285,8 +286,12 @@ func TestOrgAnalytics_HTTP_WireContract(t *testing.T) {
 		if got.TotalCostUSD != "3.00" {
 			t.Errorf("TotalCostUSD = %s, want 3.00", got.TotalCostUSD)
 		}
-		if len(result.ProvidersPresent) != 1 || result.ProvidersPresent[0] != "codex" {
-			t.Errorf("ProvidersPresent = %v, want [codex]", result.ProvidersPresent)
+		// providers_present is independent of the provider filter — both
+		// providers seeded in the date range should appear so the dropdown
+		// stays widenable when a user pins one provider.
+		if len(result.ProvidersPresent) != 2 ||
+			result.ProvidersPresent[0] != "claude-code" || result.ProvidersPresent[1] != "codex" {
+			t.Errorf("ProvidersPresent = %v, want [claude-code codex]", result.ProvidersPresent)
 		}
 	})
 

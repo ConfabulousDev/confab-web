@@ -26,7 +26,15 @@ export function useOrgAnalytics(
   const [data, setData] = useState<OrgAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<Error | null>(null);
-  const initialParamsRef = useRef(initialParams);
+  // Mirror the latest render's params so the on-enable auto-fire uses *current*
+  // values, not the captured-at-mount values. OrgPage mounts with `repos: []`
+  // and only fills it in after `/org/repos` lands + auto-select runs; capturing
+  // at mount would issue the first request with stale `repos: []`, collapsing
+  // `providers_present` to no-repo sessions only.
+  const latestParamsRef = useRef(initialParams);
+  useEffect(() => {
+    latestParamsRef.current = initialParams;
+  }, [initialParams]);
 
   const fetchData = useCallback(async (params: OrgAnalyticsParams) => {
     setLoading(true);
@@ -44,8 +52,8 @@ export function useOrgAnalytics(
 
   useEffect(() => {
     if (!enabled) return;
-    fetchData(initialParamsRef.current);
-  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps -- only fetch once on enable
+    fetchData(latestParamsRef.current);
+  }, [enabled, fetchData]);
 
   return { data, loading, error, refetch: fetchData };
 }

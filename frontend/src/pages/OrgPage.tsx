@@ -108,6 +108,7 @@ function OrgPage() {
     });
   }, [setAll, refetch]);
 
+  const isInitialLoading = !data && !error && (loading || !ready);
   const showEmpty = !loading && data && data.users.every(u => u.session_count === 0);
   const hasData = !loading && data && data.users.length > 0 && !showEmpty;
 
@@ -130,7 +131,7 @@ function OrgPage() {
           {reposError && <Alert variant="error">{reposError.message}</Alert>}
           {error && <Alert variant="error">{error.message}</Alert>}
 
-          {(!ready || (loading && !data)) && (
+          {isInitialLoading && (
             <div className={styles.loading}>Loading organization analytics...</div>
           )}
 

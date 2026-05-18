@@ -21,10 +21,11 @@ type OrgAnalyticsResponse struct {
 	ComputedAt time.Time          `json:"computed_at"`
 	DateRange  DateRange          `json:"date_range"` // Reuses existing DateRange type
 	// ProvidersPresent enumerates the distinct canonical providers with any
-	// qualifying session in the filtered range (legacy session_type values
-	// are normalized via models.NormalizeProvider). Always non-nil; emit
-	// `[]` for ranges with no sessions. Drives the frontend filter dropdown's
-	// "narrow to providers with data" behavior.
+	// qualifying session in the date range × repo filter (legacy session_type
+	// values are normalized via models.NormalizeProvider). Independent of the
+	// request's provider filter — see orgProvidersPresent's docstring for why.
+	// Always non-nil; emit `[]` for ranges with no sessions. Drives the
+	// frontend filter dropdown's "narrow to providers with data" behavior.
 	ProvidersPresent []string           `json:"providers_present"`
 	Users            []OrgUserAnalytics `json:"users"`
 }
