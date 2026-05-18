@@ -493,7 +493,7 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 //
 // Expected (per analytics.ComputeFromCodexRollout's documented mapping):
 //   - tokens.input          = 800   (1000 - 200 cached, OpenAI semantics)
-//   - tokens.output         = 200   (150 output + 50 reasoning)
+//   - tokens.output         = 150   (wire output_tokens; reasoning is a subset, CF-471)
 //   - tokens.cache_creation = 0     (OpenAI doesn't charge for cache writes)
 //   - tokens.cache_read     = 200   (cached portion)
 //   - code_activity.files_modified = 1 (one Add File)
@@ -627,8 +627,8 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_Exact(t *testing.T) {
 	if result.Tokens.Input != 800 {
 		t.Errorf("tokens.input = %d, want 800 (1000 - 200 cached)", result.Tokens.Input)
 	}
-	if result.Tokens.Output != 200 {
-		t.Errorf("tokens.output = %d, want 200 (150 output + 50 reasoning)", result.Tokens.Output)
+	if result.Tokens.Output != 150 {
+		t.Errorf("tokens.output = %d, want 150 (wire output_tokens; reasoning is a subset, CF-471)", result.Tokens.Output)
 	}
 	if result.Tokens.CacheRead != 200 {
 		t.Errorf("tokens.cache_read = %d, want 200", result.Tokens.CacheRead)

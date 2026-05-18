@@ -113,29 +113,24 @@ export const codexAdapter: CodexAdapter = {
 
   calculateMessageCost(model, usage) {
     // Codex has no fast multiplier and no server-tool dollars. Parse layer
-    // already split input into uncached + cacheRead and folded reasoning
-    // into output.
+    // already split input into uncached + cacheRead; `usage.output` is the
+    // wire `output_tokens` (reasoning is a subset, not additive — CF-471).
     return calculateCost('codex', model, usage);
   },
 
   extendCostTooltip(base, usage, message) {
-    // CF-418: Codex display preserves the gross-input / raw-output presentation
-    // users saw pre-refactor by reversing the canonical normalization at display
-    // time. `usage.input` is uncached, `usage.cacheRead` is the cache hit subset,
-    // and `usage.output` already includes reasoning — reconstruct the wire shape
-    // for display so the tooltip matches the pre-refactor formatting byte-for-byte.
-    // Sub-lines (`Cached`, `Reasoning`) are interleaved under their parent lines
-    // rather than appended at the end, matching the original layout.
+    // CF-418 + CF-471: reconstruct the wire shape for display. Gross input =
+    // uncached + cacheRead (parse layer split them); `usage.output` is the
+    // wire `output_tokens` (reasoning is a subset, surfaced as a sub-line).
     const reasoning = message.kind === 'assistant' ? message.reasoningTokens ?? 0 : 0;
     const grossInput = usage.input + usage.cacheRead;
-    const rawOutput = Math.max(0, usage.output - reasoning);
     // base[0] is `formatCost(cost)`; base[1] is the blank separator line.
     const lines: string[] = [base[0] ?? '', ''];
     lines.push(`Input tokens (in): ${grossInput.toLocaleString()}`);
     if (usage.cacheRead) {
       lines.push(`  Cached (hit): ${usage.cacheRead.toLocaleString()}`);
     }
-    lines.push(`Output tokens (out): ${rawOutput.toLocaleString()}`);
+    lines.push(`Output tokens (out): ${usage.output.toLocaleString()}`);
     if (reasoning) {
       lines.push(`  Reasoning: ${reasoning.toLocaleString()}`);
     }

@@ -284,17 +284,18 @@ function attachTokenCountToAssistant(
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
     if (!item || item.kind !== 'assistant' || item.usage !== undefined) continue;
-    // CF-418: normalize the OpenAI wire shape to canonical TokenUsage.
-    //   - `cached_input_tokens` is a SUBSET of `input_tokens` per OpenAI's
-    //     semantics; subtract it out so `input` carries only uncached tokens.
-    //   - Reasoning tokens are folded into `output` (they bill at the output
-    //     rate). Preserve the raw count on the item for the tooltip.
+    // CF-418 + CF-471: normalize the OpenAI wire shape to canonical TokenUsage.
+    //   - `cached_input_tokens` is a SUBSET of `input_tokens`; subtract it so
+    //     `input` carries only uncached tokens.
+    //   - `reasoning_output_tokens` is a SUBSET of `output_tokens`; pass the
+    //     wire value through unchanged. Reasoning bills at the output rate
+    //     implicitly and is preserved on the item for the tooltip sub-line.
     //   - OpenAI does not charge for cache writes.
     const cached = delta.cached_input_tokens ?? 0;
     const reasoning = delta.reasoning_output_tokens ?? 0;
     const usage: TokenUsage = {
       input: Math.max(0, delta.input_tokens - cached),
-      output: delta.output_tokens + reasoning,
+      output: delta.output_tokens,
       cacheWrite: 0,
       cacheRead: cached,
     };

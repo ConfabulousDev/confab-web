@@ -3086,9 +3086,10 @@ func TestPrecomputeRegularCards_CodexSession(t *testing.T) {
 	if cards.Tokens.CacheReadTokens != 100 {
 		t.Errorf("Tokens.CacheReadTokens = %d, want 100", cards.Tokens.CacheReadTokens)
 	}
-	// output 80 + reasoning 20 = 100 total output.
-	if cards.Tokens.OutputTokens != 100 {
-		t.Errorf("Tokens.OutputTokens = %d, want 100 (80 + 20 reasoning)", cards.Tokens.OutputTokens)
+	// CF-471: reasoning_output_tokens is a subset of output_tokens; wire value
+	// passes through unchanged.
+	if cards.Tokens.OutputTokens != 80 {
+		t.Errorf("Tokens.OutputTokens = %d, want 80 (wire output_tokens; reasoning is a subset)", cards.Tokens.OutputTokens)
 	}
 	// Cost should be > 0 with gpt-5 pricing in the table.
 	if cards.Tokens.EstimatedCostUSD.IsZero() {

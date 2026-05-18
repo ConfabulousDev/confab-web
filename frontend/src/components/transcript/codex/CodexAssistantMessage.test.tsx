@@ -154,13 +154,14 @@ describe('CodexAssistantMessage', () => {
   // ---------------------------------------------------------------------------
 
   describe('cost mode', () => {
-    // CF-418: canonical TokenUsage (parse layer has already split gross input
-    // into uncached + cacheRead and folded reasoning into output).
-    // Original wire shape mapped: input_tokens 12_345 with cached 200 →
-    // input 12_145, cacheRead 200. Output 1_200 + reasoning 250 → 1_450.
+    // CF-418 + CF-471: canonical TokenUsage (parse layer has split gross input
+    // into uncached + cacheRead). Output is the wire `output_tokens`; reasoning
+    // is a subset of output (informational, never additive).
+    // Wire shape: input_tokens 12_345 with cached 200 → input 12_145,
+    // cacheRead 200. Output 1_200 (reasoning 250 lives in `reasoningTokens`).
     const usage = {
       input: 12_145,
-      output: 1_450,
+      output: 1_200,
       cacheWrite: 0,
       cacheRead: 200,
     };
@@ -177,13 +178,14 @@ describe('CodexAssistantMessage', () => {
       expect(screen.getByText('$0.42')).toBeInTheDocument();
     });
 
-    it('renders a token pill showing gross input and (output + reasoning) output', () => {
-      // Choose reasoning so 1200 + 300 = 1500 → "1.5k". Wire mapping:
-      //   input 12_345 (gross, uncached only since cached=0 implicit) → input 12_345.
-      //   output 1_200 + reasoning 300 → output 1_500.
+    it('renders a token pill showing gross input and wire output_tokens', () => {
+      // CF-471: pill shows wire `output_tokens` directly; reasoning is a subset
+      // of output and never inflates the pill number. Wire mapping:
+      //   input 12_345 (uncached, cached=0 implicit) → input 12_345.
+      //   output 1_200 (reasoning 300 lives separately on `reasoningTokens`).
       const pillUsage = {
         input: 12_345,
-        output: 1_500,
+        output: 1_200,
         cacheWrite: 0,
         cacheRead: 0,
       };
@@ -202,7 +204,7 @@ describe('CodexAssistantMessage', () => {
       );
       expect(pill).toBeTruthy();
       expect(pill?.textContent).toMatch(/12\.3k\s*in/);
-      expect(pill?.textContent).toMatch(/1\.5k\s*out/);
+      expect(pill?.textContent).toMatch(/1\.2k\s*out/);
     });
 
     it('renders a cache pill when cacheRead > 0', () => {
@@ -273,9 +275,9 @@ describe('CodexAssistantMessage', () => {
       const tooltip = costBadge.getAttribute('title');
       expect(tooltip).toBeTruthy();
       expect(tooltip).toContain('$0.42');
-      // CF-418: tooltip preserves the pre-refactor gross-input / raw-output
-      // presentation by reversing the canonical normalization at display time.
-      // Cached and Reasoning sub-lines are interleaved under their parents.
+      // CF-418 + CF-471: tooltip shows gross input reconstructed for display
+      // (uncached + cacheRead) and wire `output_tokens` directly. Cached and
+      // Reasoning are interleaved as sub-lines under their parents.
       expect(tooltip).toContain('Input tokens (in): 12,345');
       expect(tooltip).toContain('Output tokens (out): 1,200');
       expect(tooltip).toContain('Cached (hit): 200');

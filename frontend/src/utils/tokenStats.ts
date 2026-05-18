@@ -16,9 +16,12 @@ import { PROVIDER_VALUES } from './providers';
  *
  *   - `input`: uncached input tokens (Codex's `max(0, input - cached)`,
  *     Anthropic's `input_tokens` already-uncached).
- *   - `output`: total output tokens, including reasoning where applicable
- *     (Codex folds `reasoning_output_tokens` here; reasoning bills at the
- *     output rate).
+ *   - `output`: total output tokens — the wire `output_tokens` passed
+ *     through unchanged. On the OpenAI wire, `reasoning_output_tokens`
+ *     is a SUBSET of `output_tokens` (CF-471), so reasoning is already
+ *     included here and bills at the output rate implicitly. The raw
+ *     reasoning count is preserved separately on the assistant render
+ *     item (`reasoningTokens`) for the cost-tooltip sub-line.
  *   - `cacheWrite`: cache-creation tokens. Anthropic charges 1.25x input;
  *     OpenAI charges 0 (set to 0 by the Codex normalizer).
  *   - `cacheRead`: cache-hit tokens (Codex's `cached_input_tokens`,

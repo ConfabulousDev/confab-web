@@ -742,8 +742,9 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
     expect(assistantItems).toHaveLength(1);
     const a = assistantItems[0];
     if (a?.kind !== 'assistant') throw new Error('expected assistant');
-    // CF-418: parse layer normalizes to canonical TokenUsage.
-    // input=1000 - cached=0 → uncached=1000; output=500+reasoning=0 → 500.
+    // CF-418 + CF-471: parse layer normalizes to canonical TokenUsage.
+    // input=1000 - cached=0 → uncached=1000; output passes the wire value
+    // through (reasoning is a subset of output_tokens, never added).
     expect(a.usage).toEqual({
       input: 1000,
       output: 500,
@@ -782,14 +783,15 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
       throw new Error('expected two assistant items');
     }
     expect(first.phase).toBe('commentary');
-    // CF-418: canonical `.input` is uncached; `.cacheRead` is the cache hit.
-    // first: 1000 - 0 = 1000 uncached, 0 cacheRead, output 500+0.
+    // CF-418 + CF-471: canonical `.input` is uncached; `.cacheRead` is the
+    // cache hit. `.output` is the wire output_tokens; reasoning is a subset.
+    // first: 1000 - 0 = 1000 uncached, 0 cacheRead, output 500.
     expect(first.usage?.input).toBe(1000);
     expect(second.phase).toBe('final');
-    // second: 2000 - 300 = 1700 uncached, 300 cacheRead, output 700+100.
+    // second: 2000 - 300 = 1700 uncached, 300 cacheRead, output 700.
     expect(second.usage?.input).toBe(1700);
     expect(second.usage?.cacheRead).toBe(300);
-    expect(second.usage?.output).toBe(800);
+    expect(second.usage?.output).toBe(700);
   });
 
   it('is a no-op when token_count arrives before any assistant message', () => {
@@ -828,6 +830,67 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
     const result = items(jsonl);
     // Only the assistant item; no unknown / extra row from the token_count.
     expect(result.map((i) => i.kind)).toEqual(['assistant']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CF-471 regression — `reasoning_output_tokens` is a SUBSET of `output_tokens`
+// on the OpenAI wire, not an additive bucket. `applyTokenUsageToLastAssistant`
+// must surface the wire `output_tokens` unchanged on the canonical TokenUsage
+// and never add reasoning to it. The raw reasoning count is preserved on the
+// assistant item (`reasoningTokens`) so the cost tooltip can show it as a
+// parenthetical sub-line.
+// ---------------------------------------------------------------------------
+
+describe('normalizeCodexLines — reasoning is informational, never additive (CF-471)', () => {
+  // One user → one assistant, then a single token_count event whose usage
+  // JSON varies per case. All four cases share this scaffold, so we build
+  // the JSONL through a helper rather than repeating the boilerplate.
+  const ASSISTANT_LINES = [
+    '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5"}}',
+    '{"timestamp":"2026-05-13T01:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}}',
+    '{"timestamp":"2026-05-13T01:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final","content":[{"type":"output_text","text":"hello"}]}}',
+  ] as const;
+
+  function buildJsonl(usage: {
+    input: number;
+    cached: number;
+    output: number;
+    reasoning: number;
+  }): string {
+    const total = usage.input + usage.output;
+    const usageJSON = `{"input_tokens":${usage.input},"cached_input_tokens":${usage.cached},"output_tokens":${usage.output},"reasoning_output_tokens":${usage.reasoning},"total_tokens":${total}}`;
+    return [
+      ...ASSISTANT_LINES,
+      `{"timestamp":"2026-05-13T01:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${usageJSON},"total_token_usage":${usageJSON}}}}`,
+    ].join('\n');
+  }
+
+  function assistantFrom(jsonl: string) {
+    const a = items(jsonl).find((i) => i.kind === 'assistant');
+    if (a?.kind !== 'assistant') throw new Error('expected assistant');
+    return a;
+  }
+
+  it.each([0, 1, 100, 999_999])(
+    'usage.output equals wire output_tokens when reasoning_output_tokens=%d',
+    (reasoning) => {
+      const wireOutput = 500;
+      const a = assistantFrom(
+        buildJsonl({ input: 1000, cached: 0, output: wireOutput, reasoning }),
+      );
+      expect(a.usage?.output).toBe(wireOutput);
+    },
+  );
+
+  it('preserves the raw reasoning count on the assistant item even though output is unchanged', () => {
+    const a = assistantFrom(
+      buildJsonl({ input: 1000, cached: 0, output: 500, reasoning: 120 }),
+    );
+    // Output is the wire value, untouched.
+    expect(a.usage?.output).toBe(500);
+    // Reasoning is informational, stamped separately for the tooltip.
+    expect(a.reasoningTokens).toBe(120);
   });
 });
 

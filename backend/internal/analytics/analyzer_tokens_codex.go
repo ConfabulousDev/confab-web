@@ -6,10 +6,15 @@ import (
 )
 
 // computeCodexTokens sums token usage across rollouts and computes cost.
-// OpenAI semantics: CachedInputTokens is a subset of InputTokens, so we
-// subtract it before billing the uncached portion at the input rate.
-// Reasoning tokens bill as output. CacheCreationTokens stays 0 (OpenAI
-// doesn't charge for cache writes). Pricing uses the main rollout's model.
+// OpenAI semantics:
+//   - CachedInputTokens is a subset of InputTokens; subtract it before billing
+//     the uncached portion at the input rate.
+//   - ReasoningOutputTokens is a subset of OutputTokens (CF-471); the wire's
+//     output_tokens already includes reasoning, so we surface it unchanged.
+//     Reasoning bills at the output rate implicitly.
+//   - CacheCreationTokens stays 0; OpenAI doesn't charge for cache writes.
+//
+// Pricing uses the main rollout's model.
 func computeCodexTokens(out *ComputeResult, rollouts []*codex.ParsedRollout) {
 	var totalUncached, totalCached, totalOutput int64
 	for _, r := range rollouts {
@@ -23,7 +28,7 @@ func computeCodexTokens(out *ComputeResult, rollouts []*codex.ParsedRollout) {
 		}
 		totalUncached += uncached
 		totalCached += tu.CachedInputTokens
-		totalOutput += tu.OutputTokens + tu.ReasoningOutputTokens
+		totalOutput += tu.OutputTokens
 	}
 	out.InputTokens = totalUncached
 	out.CacheReadTokens = totalCached
