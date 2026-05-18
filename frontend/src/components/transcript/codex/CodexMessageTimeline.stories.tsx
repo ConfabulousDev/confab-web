@@ -181,6 +181,38 @@ export const FullSession: Story = {
   ),
 };
 
+// CF-369: cost mode on. Every assistant row gets a synthetic round-number
+// `usage` so the slide-in CostBar renders alongside the timeline rail, and
+// the floating ScrollNavButtons receive the cost-mode rightOffset
+// (SCROLL_NAV_COST_MODE_RIGHT = 56px) so they sit clear of the CostBar /
+// TimelineBar column.
+const sampleCostMode: CodexRenderItem[] = sample.map((item) =>
+  item.kind === 'assistant'
+    ? { ...item, usage: { input: 1_000_000, output: 100_000, cacheWrite: 0, cacheRead: 0 } }
+    : item,
+);
+
+export const CostMode: Story = {
+  render: () => (
+    <Frame>
+      <CodexMessageTimeline
+        items={sampleCostMode}
+        filteredItems={sampleCostMode}
+        sessionId="story-session"
+        isCostMode
+      />
+    </Frame>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'CF-362 + CF-369 — cost mode adds the green CostBar to the left of the timeline rail and shifts the floating scroll buttons left so they clear both rails. Regression cover for the rightOffset wiring fix.',
+      },
+    },
+  },
+};
+
 export const WithTimeGap: Story = {
   render: () => (
     <Frame>
