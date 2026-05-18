@@ -34,6 +34,7 @@ Internal packages for the Confab backend server. All packages live under
 | `recapquota` | Per-user monthly smart recap quota tracking | Changing quota rules, billing logic |
 | `storage` | MinIO/S3 client, chunk operations (download, merge, parse keys) | Changing object storage, chunk format |
 | `testutil` | Test helpers: Docker containers (Postgres/MinIO), test server, fixtures | Adding test infrastructure, changing test patterns |
+| `updatecheck` | Lazy GitHub-release fetch + TTL cache; reports whether the running backend is behind the latest release for the in-product "Update available" badge on `/api/v1/auth/config` | Changing the GitHub source, TTLs, semver semantics, or the response shape |
 | `validation` | Input validation (email normalization, field size limits, external ID) | Adding validation rules, changing DB constraints |
 
 ## Dependency Map

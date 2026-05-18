@@ -1923,6 +1923,14 @@ Returns the list of enabled authentication providers. No authentication required
     "saas_footer_enabled": false,
     "saas_termly_enabled": false,
     "support_email": "support@example.com"
+  },
+  "version": {
+    "current": "v0.4.1",
+    "latest": "v0.5.0",
+    "latest_url": "https://github.com/ConfabulousDev/confab-web/releases/tag/v0.5.0",
+    "update_available": true,
+    "update_check_disabled": false,
+    "update_check_failed": false
   }
 }
 ```
@@ -1938,8 +1946,16 @@ Returns the list of enabled authentication providers. No authentication required
 | `features.org_analytics_enabled` | bool | Whether org-wide analytics is enabled (`true` when `ENABLE_ORG_ANALYTICS=true`). See [Organization Analytics](#organization-analytics) for privacy implications |
 | `features.password_auth_enabled` | bool | Whether password-based authentication is enabled |
 | `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |
+| `version.current` | string | Running backend build tag (e.g., `"v0.4.1"`). Empty in local dev (`go run` without ldflags). |
+| `version.latest` | string | Latest stable release tag on GitHub. Omitted when the check is disabled or the GitHub fetch failed. |
+| `version.latest_url` | string | URL of the latest release notes (GitHub `html_url`). Omitted with `latest`. |
+| `version.update_available` | bool | `true` when the frontend should show the "Update available" badge. Forced `true` in local dev (empty `current`) so the badge is visible during development. |
+| `version.update_check_disabled` | bool | `true` when the operator set `DISABLE_UPDATE_CHECK=true` or `ENABLE_SAAS_FOOTER=true` (SaaS users can't self-upgrade). |
+| `version.update_check_failed` | bool | `true` when the most recent GitHub fetch failed; cached for 15 min before retrying. |
 
 Providers are returned in order: password, GitHub, Google, OIDC. Only enabled providers are included.
+
+The `version` object surfaces the running backend build alongside the latest GitHub release so the frontend can render the "Update available" badge. The backend caches the GitHub response for 6 hours (15 minutes on failure) and never blocks the caller for longer than 3 seconds. See [`internal/updatecheck`](internal/updatecheck/) for details.
 
 ---
 

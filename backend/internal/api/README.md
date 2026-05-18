@@ -24,7 +24,7 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `til_export.go` | TIL export endpoint: `GET /api/v1/tils/export` (external API, API key auth). Returns paginated TILs enriched with session URLs and transcript deep links for machine consumers |
 | `external.go` | External API endpoints (API key auth + dedicated rate limiter): condensed transcript (`GET /sessions/{id}/condensed-transcript`), session file list (`GET /sessions/{id}/files`), session file download (`GET /sessions/{id}/files/download`). Shared helpers: `serveCondensedTranscript`, `serveSessionFiles`, `serveSessionFileDownload` |
 | `access.go` | `CheckCanonicalAccess`, `RequireCanonicalRead`, and `RespondCanonicalAccessError` -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, GitHub links, and TIL endpoints |
-| `auth_config.go` | `GET /api/v1/auth/config` -- public endpoint returning enabled auth providers and feature flags |
+| `auth_config.go` | `GET /api/v1/auth/config` -- public endpoint returning enabled auth providers, feature flags, and a `version` object (current build, latest GitHub release, `update_available`). Holds the `UpdateChecker` interface so tests can inject a canned `updatecheck.Status` without GitHub round-trips |
 | `client_errors.go` | `POST /api/v1/client-errors` -- accepts frontend error reports for server-side logging/observability |
 | `compression.go` | `decompressMiddleware` -- handles zstd decompression of request bodies from CLI uploads |
 | `content_type.go` | `validateContentType` middleware -- enforces `application/json` Content-Type on POST/PUT/PATCH requests within `/api/v1` |

@@ -65,7 +65,8 @@ This package is intentionally thin. Request handlers live in [`internal/api`](..
 |---|---|
 | `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | `"true"` makes every session visible to all signed-in users. On-prem use. |
 | `ENABLE_SHARE_CREATION` | Logs that share links can be created. |
-| `ENABLE_SAAS_FOOTER` / `ENABLE_SAAS_TERMLY` | SaaS-only UI/consent toggles. |
+| `ENABLE_SAAS_FOOTER` / `ENABLE_SAAS_TERMLY` | SaaS-only UI/consent toggles. `ENABLE_SAAS_FOOTER=true` also disables the GitHub-release update check (SaaS users can't self-upgrade). |
+| `DISABLE_UPDATE_CHECK` | `"true"` suppresses the in-product "Update available" badge by skipping the periodic GitHub release fetch. Useful for air-gapped deployments. |
 | `ENABLE_PPROF` | `"true"` exposes `pprof` on `127.0.0.1:6060` (use `fly proxy 6060:6060`). |
 
 ### Observability

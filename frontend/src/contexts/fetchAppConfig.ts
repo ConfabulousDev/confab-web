@@ -1,14 +1,5 @@
 import type { AppConfig } from './AppConfigContext';
-
-const defaultAppConfig: AppConfig = {
-  sharesEnabled: false,
-  saasFooterEnabled: false,
-  saasTermlyEnabled: false,
-  orgAnalyticsEnabled: false,
-  passwordAuthEnabled: false,
-  smartRecapEnabled: false,
-  supportEmail: '',
-};
+import { defaultAppConfig, defaultVersionInfo } from './appConfigDefaults';
 
 export async function fetchConfigWithRetry(): Promise<AppConfig> {
   const maxRetries = 3;
@@ -27,6 +18,16 @@ export async function fetchConfigWithRetry(): Promise<AppConfig> {
         passwordAuthEnabled: data.features?.password_auth_enabled ?? false,
         smartRecapEnabled: data.features?.smart_recap_enabled ?? false,
         supportEmail: data.features?.support_email ?? '',
+        version: data.version
+          ? {
+              current: data.version.current ?? '',
+              latest: data.version.latest,
+              latestUrl: data.version.latest_url,
+              updateAvailable: data.version.update_available ?? false,
+              updateCheckDisabled: data.version.update_check_disabled ?? false,
+              updateCheckFailed: data.version.update_check_failed ?? false,
+            }
+          : defaultVersionInfo,
       };
     } catch {
       if (attempt < maxRetries - 1) {

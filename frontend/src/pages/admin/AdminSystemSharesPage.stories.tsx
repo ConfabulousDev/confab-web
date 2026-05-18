@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import AdminSystemSharesPage from './AdminSystemSharesPage';
 import { AppConfigContext, type AppConfig } from '@/contexts/AppConfigContext';
+import { defaultVersionInfo } from '@/contexts/appConfigDefaults';
 import type { AdminSystemSharesResponse } from '@/schemas/api';
 
 const appConfig: AppConfig = {
@@ -13,6 +14,7 @@ const appConfig: AppConfig = {
   passwordAuthEnabled: false,
   smartRecapEnabled: false,
   supportEmail: '',
+  version: defaultVersionInfo,
 };
 
 function createQueryClient(seed?: AdminSystemSharesResponse): QueryClient {

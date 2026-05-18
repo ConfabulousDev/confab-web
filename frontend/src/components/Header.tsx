@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppConfig } from '@/hooks/useAppConfig';
 import ThemeToggle from './ThemeToggle';
+import UpdateBadge from './UpdateBadge';
 import styles from './Header.module.css';
 
 function Header() {
@@ -65,6 +66,7 @@ function Header() {
       </nav>
 
       <div className={styles.actions}>
+        <UpdateBadge />
         <ThemeToggle />
       </div>
 

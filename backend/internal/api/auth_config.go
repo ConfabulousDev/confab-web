@@ -1,6 +1,11 @@
 package api
 
-import "net/http"
+import (
+	"context"
+	"net/http"
+
+	"github.com/ConfabulousDev/confab-web/internal/updatecheck"
+)
 
 type providerInfo struct {
 	Name        string `json:"name"`         // "github", "google", "oidc", "password"
@@ -18,13 +23,20 @@ type authConfigFeatures struct {
 	SupportEmail        string `json:"support_email"`
 }
 
-type authConfigResponse struct {
-	Providers []providerInfo    `json:"providers"`
-	Features  authConfigFeatures `json:"features"`
+// UpdateChecker is the contract handleAuthConfig needs from updatecheck. The
+// interface lets tests inject a canned Status without GitHub roundtrips.
+type UpdateChecker interface {
+	Status(ctx context.Context) updatecheck.Status
 }
 
-// handleAuthConfig returns the list of enabled authentication providers.
-// Public endpoint — no authentication required.
+type authConfigResponse struct {
+	Providers []providerInfo     `json:"providers"`
+	Features  authConfigFeatures `json:"features"`
+	Version   updatecheck.Status `json:"version"`
+}
+
+// handleAuthConfig returns enabled auth providers, SaaS feature flags, and
+// the running backend version. Public endpoint — no authentication required.
 func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	providers := []providerInfo{}
 
@@ -64,6 +76,11 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	version := updatecheck.Status{UpdateCheckDisabled: true}
+	if s.updateChecker != nil {
+		version = s.updateChecker.Status(r.Context())
+	}
+
 	respondJSON(w, http.StatusOK, authConfigResponse{
 		Providers: providers,
 		Features: authConfigFeatures{
@@ -75,5 +92,6 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 			SmartRecapEnabled:   s.smartRecapEnabled,
 			SupportEmail:        s.supportEmail,
 		},
+		Version: version,
 	})
 }

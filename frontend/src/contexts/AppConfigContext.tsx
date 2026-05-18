@@ -1,5 +1,15 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react';
 import { fetchConfigWithRetry } from './fetchAppConfig';
+import { defaultAppConfig } from './appConfigDefaults';
+
+export interface VersionInfo {
+  current: string;
+  latest?: string;
+  latestUrl?: string;
+  updateAvailable: boolean;
+  updateCheckDisabled: boolean;
+  updateCheckFailed: boolean;
+}
 
 export interface AppConfig {
   sharesEnabled: boolean;
@@ -9,17 +19,8 @@ export interface AppConfig {
   passwordAuthEnabled: boolean;
   smartRecapEnabled: boolean;
   supportEmail: string;
+  version: VersionInfo;
 }
-
-const defaultAppConfig: AppConfig = {
-  sharesEnabled: false,
-  saasFooterEnabled: false,
-  saasTermlyEnabled: false,
-  orgAnalyticsEnabled: false,
-  passwordAuthEnabled: false,
-  smartRecapEnabled: false,
-  supportEmail: '',
-};
 
 const AppConfigContext = createContext<AppConfig>(defaultAppConfig);
 

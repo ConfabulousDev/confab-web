@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,13 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/updatecheck"
 )
+
+// fakeChecker is a test double that returns a canned Status.
+type fakeChecker struct{ s updatecheck.Status }
+
+func (f fakeChecker) Status(_ context.Context) updatecheck.Status { return f.s }
 
 func TestHandleAuthConfig(t *testing.T) {
 	t.Run("no providers enabled", func(t *testing.T) {
@@ -314,6 +321,148 @@ func TestHandleAuthConfig(t *testing.T) {
 		}
 		if !resp.Features.SharesEnabled {
 			t.Error("expected features.shares_enabled to be true when enabled")
+		}
+	})
+}
+
+func TestHandleAuthConfigVersion(t *testing.T) {
+	t.Run("update available is wired through verbatim", func(t *testing.T) {
+		s := &Server{
+			oauthConfig: &auth.OAuthConfig{},
+			updateChecker: fakeChecker{s: updatecheck.Status{
+				Current:         "v0.4.1",
+				Latest:          "v0.5.0",
+				LatestURL:       "https://github.com/ConfabulousDev/confab-web/releases/tag/v0.5.0",
+				UpdateAvailable: true,
+			}},
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		var resp authConfigResponse
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Version.Current != "v0.4.1" {
+			t.Errorf("version.current = %q, want %q", resp.Version.Current, "v0.4.1")
+		}
+		if resp.Version.Latest != "v0.5.0" {
+			t.Errorf("version.latest = %q, want %q", resp.Version.Latest, "v0.5.0")
+		}
+		if resp.Version.LatestURL != "https://github.com/ConfabulousDev/confab-web/releases/tag/v0.5.0" {
+			t.Errorf("version.latest_url = %q, want the GitHub tag URL", resp.Version.LatestURL)
+		}
+		if !resp.Version.UpdateAvailable {
+			t.Error("version.update_available = false, want true")
+		}
+		if resp.Version.UpdateCheckDisabled {
+			t.Error("version.update_check_disabled = true, want false")
+		}
+		if resp.Version.UpdateCheckFailed {
+			t.Error("version.update_check_failed = true, want false")
+		}
+	})
+
+	t.Run("disabled checker surfaces update_check_disabled", func(t *testing.T) {
+		s := &Server{
+			oauthConfig: &auth.OAuthConfig{},
+			updateChecker: fakeChecker{s: updatecheck.Status{
+				Current:             "v0.4.1",
+				UpdateCheckDisabled: true,
+			}},
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		var resp authConfigResponse
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if !resp.Version.UpdateCheckDisabled {
+			t.Error("version.update_check_disabled = false, want true")
+		}
+		if resp.Version.UpdateAvailable {
+			t.Error("version.update_available = true, want false when disabled")
+		}
+		if resp.Version.Latest != "" {
+			t.Errorf("version.latest = %q, want empty when disabled", resp.Version.Latest)
+		}
+	})
+
+	t.Run("failed checker surfaces update_check_failed", func(t *testing.T) {
+		s := &Server{
+			oauthConfig: &auth.OAuthConfig{},
+			updateChecker: fakeChecker{s: updatecheck.Status{
+				Current:           "v0.4.1",
+				UpdateCheckFailed: true,
+			}},
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		var resp authConfigResponse
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if !resp.Version.UpdateCheckFailed {
+			t.Error("version.update_check_failed = false, want true")
+		}
+		if resp.Version.UpdateAvailable {
+			t.Error("version.update_available = true, want false on failure")
+		}
+	})
+
+	t.Run("nil checker is treated as disabled (no panic)", func(t *testing.T) {
+		s := &Server{
+			oauthConfig:   &auth.OAuthConfig{},
+			updateChecker: nil,
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200 with nil checker, got %d", rr.Code)
+		}
+		var resp authConfigResponse
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if !resp.Version.UpdateCheckDisabled {
+			t.Error("nil checker should be reported as update_check_disabled=true")
+		}
+		if resp.Version.UpdateAvailable {
+			t.Error("nil checker should not claim update_available=true")
+		}
+	})
+
+	t.Run("response JSON has version object alongside features/providers", func(t *testing.T) {
+		s := &Server{
+			oauthConfig: &auth.OAuthConfig{},
+			updateChecker: fakeChecker{s: updatecheck.Status{
+				Current:         "v0.4.1",
+				Latest:          "v0.5.0",
+				LatestURL:       "https://example.test/r",
+				UpdateAvailable: true,
+			}},
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		body := rr.Body.String()
+		for _, key := range []string{`"version"`, `"current":"v0.4.1"`, `"latest":"v0.5.0"`, `"update_available":true`} {
+			if !strings.Contains(body, key) {
+				t.Errorf("response body missing %s; got: %s", key, body)
+			}
 		}
 	})
 }

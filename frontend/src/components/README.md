@@ -56,6 +56,8 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `SortableHeader.tsx` | Table header with sort direction indicator |
 | `ThemedImage.tsx` | Image component that swaps src based on light/dark theme |
 | `ThemeToggle.tsx` | Light/dark theme toggle button |
+| `UpdateBadge.tsx` | Container: reads `version` from `useAppConfig()` and decides whether to show. Mounted in `Header.tsx` for authenticated users only |
+| `UpdateBadgeView.tsx` | Pure presentational pill: small "Update available" link to the latest GitHub release; tooltip shows `current → latest` (or `(dev) → latest` when running unversioned). Stories drive this directly so visuals are stable without mocking hooks |
 
 ## Key Patterns
 

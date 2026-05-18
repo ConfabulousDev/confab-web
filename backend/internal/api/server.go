@@ -25,6 +25,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/ratelimit"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/ConfabulousDev/confab-web/internal/updatecheck"
 )
 
 // Operation timeout constants
@@ -74,14 +75,20 @@ type Server struct {
 	validationLimiter   ratelimit.RateLimiter     // Moderate limiter for API key validation
 	clientErrorLimiter  ratelimit.RateLimiter     // Limiter for client error reporting
 	externalReadLimiter ratelimit.RateLimiter     // Limiter for external API read endpoints
+	updateChecker       UpdateChecker             // Reports whether a newer backend release is available (nil → treated as disabled)
 }
 
-// NewServer creates a new API server
-func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAuthConfig, emailService *email.RateLimitedService, _ string) *Server {
+// NewServer creates a new API server. version is the running backend build
+// (set via -ldflags at release time, empty in dev). The update check is
+// suppressed for SaaS deploys (ENABLE_SAAS_FOOTER) since those users can't
+// self-upgrade, and can be force-disabled via DISABLE_UPDATE_CHECK.
+func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAuthConfig, emailService *email.RateLimitedService, version string) *Server {
 	supportEmail := os.Getenv("SUPPORT_EMAIL")
 	if supportEmail == "" {
 		supportEmail = "support@example.com"
 	}
+	saasFooterEnabled := os.Getenv("ENABLE_SAAS_FOOTER") == "true"
+	updateCheckDisabled := os.Getenv("DISABLE_UPDATE_CHECK") == "true" || saasFooterEnabled
 	return &Server{
 		db:             database,
 		storage:        store,
@@ -90,7 +97,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		frontendURL:    os.Getenv("FRONTEND_URL"),
 		supportEmail:   supportEmail,
 		sharesEnabled:     os.Getenv("ENABLE_SHARE_CREATION") == "true",
-		saasFooterEnabled: os.Getenv("ENABLE_SAAS_FOOTER") == "true",
+		saasFooterEnabled: saasFooterEnabled,
 		saasTermlyEnabled:   os.Getenv("ENABLE_SAAS_TERMLY") == "true",
 		orgAnalyticsEnabled: os.Getenv("ENABLE_ORG_ANALYTICS") == "true",
 		smartRecapEnabled:   os.Getenv("SMART_RECAP_ENABLED") == "true",
@@ -112,6 +119,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		// External API: 30 req/sec, burst of 60 per user
 		// Generous read-only limit for machine consumers (agents, CLI, scripts)
 		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60),
+		updateChecker:       updatecheck.NewChecker(version, updateCheckDisabled),
 	}
 }
 
