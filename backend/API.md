@@ -1177,8 +1177,8 @@ Returns aggregated analytics across multiple sessions for the authenticated user
       "total_lines_added": 5000,
       "total_lines_removed": 2000,
       "daily_session_counts": [
-        {"date": "2024-01-08", "session_count": 5},
-        {"date": "2024-01-09", "session_count": 8}
+        {"date": "2024-01-08", "session_count": 5, "per_provider": {"claude-code": 4, "codex": 1}},
+        {"date": "2024-01-09", "session_count": 8, "per_provider": {"claude-code": 5, "codex": 3}}
       ]
     },
     "tools": {
@@ -1248,7 +1248,7 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | `cards.activity.total_files_modified` | int | Sum of files modified |
 | `cards.activity.total_lines_added` | int | Sum of lines added |
 | `cards.activity.total_lines_removed` | int | Sum of lines removed |
-| `cards.activity.daily_session_counts` | array | Sessions per day for charting |
+| `cards.activity.daily_session_counts` | array | Sessions per day for charting. Each entry includes `date` (YYYY-MM-DD), `session_count` (cross-provider total), and `per_provider` (canonical provider id → session count) for the stacked-bar chart (CF-444). `per_provider` is always present; empty `{}` for days with no sessions. Legacy `Claude Code` session_type rows fold into the `claude-code` key server-side via `models.NormalizeProvider`. |
 | `cards.tools.total_calls` | int | Sum of tool calls across all sessions |
 | `cards.tools.total_errors` | int | Sum of tool errors |
 | `cards.tools.tool_stats` | object | Per-tool success/error breakdown |

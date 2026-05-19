@@ -119,9 +119,15 @@ type TrendsActivityCard struct {
 }
 
 // DailySessionCount represents a single day's session count for charting.
+// PerProvider keys are canonical provider ids (legacy session_type values are
+// folded via models.NormalizeProvider at the Scan site). Always non-nil —
+// emitted as `{}` for days with no sessions so JSON yields `{}` not `null`.
+// Drives the stacked-bar chart on the frontend, mirroring DailyCostPoint
+// from the Tokens card (CF-444).
 type DailySessionCount struct {
-	Date         string `json:"date"` // YYYY-MM-DD
-	SessionCount int    `json:"session_count"`
+	Date         string         `json:"date"` // YYYY-MM-DD
+	SessionCount int            `json:"session_count"`
+	PerProvider  map[string]int `json:"per_provider"`
 }
 
 // TrendsToolsCard provides tool usage summary.
@@ -165,18 +171,3 @@ type TopSessionItem struct {
 	GitRepo          *string `json:"git_repo,omitempty"`
 }
 
-// =============================================================================
-// Internal aggregation types (used during SQL query)
-// =============================================================================
-
-// DailyActivityAggregation holds per-day activity stats from the SQL query.
-type DailyActivityAggregation struct {
-	Date                string
-	SessionCount        int
-	FilesRead           int
-	FilesModified       int
-	LinesAdded          int
-	LinesRemoved        int
-	DurationMs          int64
-	AssistantDurationMs int64
-}

@@ -400,6 +400,10 @@ const TrendsTokensCardSchema = z.object({
 const DailySessionCountSchema = z.object({
   date: z.string(),         // YYYY-MM-DD
   session_count: z.number(),
+  // CF-444: per-provider session-count breakdown for the stacked-bar chart.
+  // `.default({})` keeps older backends parseable; canonical provider ids
+  // come pre-normalized server-side.
+  per_provider: z.record(z.string(), z.number()).default({}),
 });
 
 const TrendsActivityCardSchema = z.object({

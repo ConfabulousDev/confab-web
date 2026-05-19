@@ -3,3 +3,30 @@
 .tooltip { composes: tooltip from './trendsChart.module.css'; }
 .tooltipDate { composes: tooltipDate from './trendsChart.module.css'; }
 .tooltipValue { composes: tooltipValue from './trendsChart.module.css'; }
+.tooltipRow { composes: tooltipRow from './trendsChart.module.css'; }
+.tooltipDot { composes: tooltipDot from './trendsChart.module.css'; }
+
+.tooltipBreakdown {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+}
+
+.tooltipProviderLabel {
+  color: var(--color-text-secondary);
+}
+
+.tooltipProviderValue {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+/* ⓘ affordance next to the Files Read value; native title= carries the copy. */
+.caveatIcon {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: help;
+}

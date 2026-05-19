@@ -164,8 +164,16 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	return response, nil
 }
 
-// aggregateOverviewAndActivity computes the overview, activity, and utilization cards.
-// These are combined because they share the same session and code_activity queries.
+// aggregateOverviewAndActivity computes the overview, activity, and utilization
+// cards in one query (they share the same filtered_sessions / card joins).
+//
+// daily_agg groups by (session_date, session_type) so DailySessionCount can
+// carry a per-provider session-count map for the stacked-bar chart. Empty days
+// from the date_range LEFT JOIN surface as one row with session_type '' and
+// zero numerics — used only to register the date in the output (no provider
+// accumulation). Provider keys are folded server-side via
+// models.NormalizeProvider so legacy 'Claude Code' rows collapse into
+// 'claude-code'.
 func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (*TrendsOverviewCard, *TrendsActivityCard, *TrendsUtilizationCard, int, error) {
 	// Query sessions and their code activity data
 	// Uses generate_series to ensure all dates in range are returned (with zeros for missing days)
@@ -181,6 +189,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 		filtered_sessions AS (
 			SELECT
 				s.id,
+				s.session_type,
 				(s.first_seen - make_interval(mins => $6))::date as session_date
 			FROM sessions s
 			WHERE s.user_id = $1
@@ -195,6 +204,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 		daily_agg AS (
 			SELECT
 				fs.session_date,
+				fs.session_type,
 				COUNT(DISTINCT fs.id) as session_count,
 				COALESCE(SUM(sess.duration_ms), 0) as total_duration_ms,
 				COALESCE(SUM(ca.files_read), 0) as files_read,
@@ -206,10 +216,11 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 			LEFT JOIN session_card_session sess ON fs.id = sess.session_id
 			LEFT JOIN session_card_code_activity ca ON fs.id = ca.session_id
 			LEFT JOIN session_card_conversation cv ON fs.id = cv.session_id
-			GROUP BY fs.session_date
+			GROUP BY fs.session_date, fs.session_type
 		)
 		SELECT
 			dr.d as session_date,
+			COALESCE(da.session_type, '') as session_type,
 			COALESCE(da.session_count, 0) as session_count,
 			COALESCE(da.total_duration_ms, 0) as total_duration_ms,
 			COALESCE(da.files_read, 0) as files_read,
@@ -219,7 +230,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 			COALESCE(da.assistant_duration_ms, 0) as assistant_duration_ms
 		FROM date_range dr
 		LEFT JOIN daily_agg da ON dr.d = da.session_date
-		ORDER BY dr.d
+		ORDER BY dr.d, da.session_type
 	`
 
 	rows, err := s.db.QueryContext(ctx, query,
@@ -236,38 +247,72 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 	}
 	defer rows.Close()
 
-	var dailyData []DailyActivityAggregation
-	var totalSessions int
-	var totalDurationMs int64
-	var totalAssistantDurationMs int64
-	var totalFilesRead, totalFilesModified, totalLinesAdded, totalLinesRemoved int
+	type dayBucket struct {
+		date                string
+		sessionCount        int
+		durationMs          int64
+		assistantDurationMs int64
+		perProvider         map[string]int
+	}
+	var (
+		dateOrder                = []string{}
+		dailyByDate              = map[string]*dayBucket{}
+		totalSessions            int
+		totalDurationMs          int64
+		totalAssistantDurationMs int64
+		totalFilesRead           int
+		totalFilesModified       int
+		totalLinesAdded          int
+		totalLinesRemoved        int
+	)
 
 	for rows.Next() {
-		var d DailyActivityAggregation
 		var sessionDate time.Time
-		err := rows.Scan(
+		var rawProvider string
+		var sessionCount, filesRead, filesModified, linesAdded, linesRemoved int
+		var durationMs, assistantDurationMs int64
+		if err := rows.Scan(
 			&sessionDate,
-			&d.SessionCount,
-			&d.DurationMs,
-			&d.FilesRead,
-			&d.FilesModified,
-			&d.LinesAdded,
-			&d.LinesRemoved,
-			&d.AssistantDurationMs,
-		)
-		if err != nil {
+			&rawProvider,
+			&sessionCount,
+			&durationMs,
+			&filesRead,
+			&filesModified,
+			&linesAdded,
+			&linesRemoved,
+			&assistantDurationMs,
+		); err != nil {
 			return nil, nil, nil, 0, err
 		}
-		d.Date = sessionDate.Format("2006-01-02")
-		dailyData = append(dailyData, d)
 
-		totalSessions += d.SessionCount
-		totalDurationMs += d.DurationMs
-		totalAssistantDurationMs += d.AssistantDurationMs
-		totalFilesRead += d.FilesRead
-		totalFilesModified += d.FilesModified
-		totalLinesAdded += d.LinesAdded
-		totalLinesRemoved += d.LinesRemoved
+		dateKey := sessionDate.Format("2006-01-02")
+		bucket, ok := dailyByDate[dateKey]
+		if !ok {
+			bucket = &dayBucket{date: dateKey, perProvider: map[string]int{}}
+			dailyByDate[dateKey] = bucket
+			dateOrder = append(dateOrder, dateKey)
+		}
+
+		// Empty-day anchor from the date_range LEFT JOIN: session_type NULL→''.
+		// Date is already registered in dateOrder; skip accumulation so no
+		// phantom '' bucket leaks into perProvider.
+		if rawProvider == "" {
+			continue
+		}
+
+		canonical := models.NormalizeProvider(rawProvider)
+		bucket.sessionCount += sessionCount
+		bucket.durationMs += durationMs
+		bucket.assistantDurationMs += assistantDurationMs
+		bucket.perProvider[canonical] += sessionCount
+
+		totalSessions += sessionCount
+		totalDurationMs += durationMs
+		totalAssistantDurationMs += assistantDurationMs
+		totalFilesRead += filesRead
+		totalFilesModified += filesModified
+		totalLinesAdded += linesAdded
+		totalLinesRemoved += linesRemoved
 	}
 
 	if err := rows.Err(); err != nil {
@@ -275,22 +320,23 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 	}
 
 	// Build daily session counts and utilization for charts, count days with activity
-	dailyCounts := make([]DailySessionCount, len(dailyData))
-	dailyUtilization := make([]DailyUtilizationPoint, len(dailyData))
+	dailyCounts := make([]DailySessionCount, 0, len(dateOrder))
+	dailyUtilization := make([]DailyUtilizationPoint, 0, len(dateOrder))
 	daysWithActivity := 0
-	for i, d := range dailyData {
-		dailyCounts[i] = DailySessionCount{
-			Date:         d.Date,
-			SessionCount: d.SessionCount,
-		}
-		// Calculate daily utilization: only if there's duration data for that day
-		point := DailyUtilizationPoint{Date: d.Date}
-		if d.DurationMs > 0 {
-			util := float64(d.AssistantDurationMs) / float64(d.DurationMs) * 100
+	for _, dateKey := range dateOrder {
+		bucket := dailyByDate[dateKey]
+		dailyCounts = append(dailyCounts, DailySessionCount{
+			Date:         bucket.date,
+			SessionCount: bucket.sessionCount,
+			PerProvider:  bucket.perProvider,
+		})
+		point := DailyUtilizationPoint{Date: bucket.date}
+		if bucket.durationMs > 0 {
+			util := float64(bucket.assistantDurationMs) / float64(bucket.durationMs) * 100
 			point.UtilizationPct = &util
 		}
-		dailyUtilization[i] = point
-		if d.SessionCount > 0 {
+		dailyUtilization = append(dailyUtilization, point)
+		if bucket.sessionCount > 0 {
 			daysWithActivity++
 		}
 	}

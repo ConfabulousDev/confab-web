@@ -78,7 +78,7 @@ function TrendsPagePresentational({
             <CardGrid>
               <TrendsOverviewCard data={data.cards.overview} />
               <TrendsTokensCard data={data.cards.tokens} />
-              <TrendsActivityCard data={data.cards.activity} />
+              <TrendsActivityCard data={data.cards.activity} providersPresent={data.providers_present} />
               <TrendsToolsCard data={data.cards.tools} />
               <TrendsUtilizationCard data={data.cards.utilization} />
               <TrendsAgentsAndSkillsCard data={data.cards.agents_and_skills} />
@@ -113,13 +113,13 @@ const mockDailyCosts = singleProviderDailyCosts('claude-code', [
 ]);
 
 const mockDailySessionCounts = [
-  { date: '2024-01-08', session_count: 5 },
-  { date: '2024-01-09', session_count: 8 },
-  { date: '2024-01-10', session_count: 3 },
-  { date: '2024-01-11', session_count: 12 },
-  { date: '2024-01-12', session_count: 6 },
-  { date: '2024-01-13', session_count: 2 },
-  { date: '2024-01-14', session_count: 10 },
+  { date: '2024-01-08', session_count: 5, per_provider: {} },
+  { date: '2024-01-09', session_count: 8, per_provider: {} },
+  { date: '2024-01-10', session_count: 3, per_provider: {} },
+  { date: '2024-01-11', session_count: 12, per_provider: {} },
+  { date: '2024-01-12', session_count: 6, per_provider: {} },
+  { date: '2024-01-13', session_count: 2, per_provider: {} },
+  { date: '2024-01-14', session_count: 10, per_provider: {} },
 ];
 
 const mockDailyUtilization = [
@@ -269,13 +269,13 @@ export const HighUsage: Story = {
           total_lines_added: 125000,
           total_lines_removed: 45000,
           daily_session_counts: [
-            { date: '2024-01-08', session_count: 15 },
-            { date: '2024-01-09', session_count: 20 },
-            { date: '2024-01-10', session_count: 18 },
-            { date: '2024-01-11', session_count: 25 },
-            { date: '2024-01-12', session_count: 12 },
-            { date: '2024-01-13', session_count: 8 },
-            { date: '2024-01-14', session_count: 22 },
+            { date: '2024-01-08', session_count: 15, per_provider: {} },
+            { date: '2024-01-09', session_count: 20, per_provider: {} },
+            { date: '2024-01-10', session_count: 18, per_provider: {} },
+            { date: '2024-01-11', session_count: 25, per_provider: {} },
+            { date: '2024-01-12', session_count: 12, per_provider: {} },
+            { date: '2024-01-13', session_count: 8, per_provider: {} },
+            { date: '2024-01-14', session_count: 22, per_provider: {} },
           ],
         },
         tools: {
@@ -359,7 +359,7 @@ export const SingleSession: Story = {
           total_files_modified: 10,
           total_lines_added: 200,
           total_lines_removed: 50,
-          daily_session_counts: [{ date: '2024-01-14', session_count: 1 }],
+          daily_session_counts: [{ date: '2024-01-14', session_count: 1, per_provider: {} }],
         },
         tools: {
           total_calls: 80,

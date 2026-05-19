@@ -1603,6 +1603,207 @@ func TestGetTrends_TokensPerProvider_LegacyAliasFold(t *testing.T) {
 	}
 }
 
+// TestGetTrends_CodexCodeActivityAggregation (CF-444) pins the cross-provider
+// behavior of the Activity card when a mixed Claude + Codex window is in play:
+//
+//   - Files Modified / Lines Added / Lines Removed accumulate from BOTH providers.
+//   - Files Read accumulates from Claude only (Codex has no Read tool — its
+//     CodeActivity rows always carry FilesRead=0 by design).
+//   - DailySessionCounts[i].PerProvider exposes a canonical-id-keyed map per day
+//     so the frontend can render stacked bars (mirrors DailyCostPoint.PerProvider
+//     from the Tokens card).
+//   - ProvidersPresent enumerates the canonical providers in the window.
+func TestGetTrends_CodexCodeActivityAggregation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-cf444-mixed@test.com", "Trends CF-444 Mixed User")
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	claudeSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "cf444-claude", "claude-code")
+	codexSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "cf444-codex", "codex")
+
+	seedActivity := func(t *testing.T, sessionID string, read, modified, added, removed int) {
+		t.Helper()
+		err := store.UpsertCards(ctx, &analytics.Cards{
+			CodeActivity: &analytics.CodeActivityCardRecord{
+				SessionID:     sessionID,
+				Version:       analytics.CodeActivityCardVersion,
+				ComputedAt:    time.Now().UTC(),
+				UpToLine:      100,
+				FilesRead:     read,
+				FilesModified: modified,
+				LinesAdded:    added,
+				LinesRemoved:  removed,
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sessionID, err)
+		}
+	}
+	seedActivity(t, claudeSession, 10, 5, 100, 50)
+	seedActivity(t, codexSession, 0, 3, 80, 30)
+
+	now := time.Now().UTC()
+	resp, err := store.GetTrends(ctx, user.ID, analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	})
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+
+	if resp.Cards.Activity == nil {
+		t.Fatal("Activity card must be non-nil")
+	}
+	if got, want := resp.Cards.Activity.TotalFilesRead, 10; got != want {
+		t.Errorf("TotalFilesRead = %d, want %d (Claude-only)", got, want)
+	}
+	if got, want := resp.Cards.Activity.TotalFilesModified, 8; got != want {
+		t.Errorf("TotalFilesModified = %d, want %d (5 Claude + 3 Codex)", got, want)
+	}
+	if got, want := resp.Cards.Activity.TotalLinesAdded, 180; got != want {
+		t.Errorf("TotalLinesAdded = %d, want %d (100 Claude + 80 Codex)", got, want)
+	}
+	if got, want := resp.Cards.Activity.TotalLinesRemoved, 80; got != want {
+		t.Errorf("TotalLinesRemoved = %d, want %d (50 Claude + 30 Codex)", got, want)
+	}
+
+	wantProviders := []string{"claude-code", "codex"}
+	if !equalStringSlices(resp.ProvidersPresent, wantProviders) {
+		t.Errorf("ProvidersPresent = %v, want %v", resp.ProvidersPresent, wantProviders)
+	}
+
+	// Locate today's daily entry (the only day with sessions) and assert per_provider.
+	today := time.Now().UTC().Format("2006-01-02")
+	var todayEntry *analytics.DailySessionCount
+	for i := range resp.Cards.Activity.DailySessionCounts {
+		if resp.Cards.Activity.DailySessionCounts[i].Date == today {
+			todayEntry = &resp.Cards.Activity.DailySessionCounts[i]
+			break
+		}
+	}
+	if todayEntry == nil {
+		t.Fatalf("DailySessionCounts has no entry for %s (got %v)", today, resp.Cards.Activity.DailySessionCounts)
+	}
+	if todayEntry.SessionCount != 2 {
+		t.Errorf("DailySessionCounts[%s].SessionCount = %d, want 2", today, todayEntry.SessionCount)
+	}
+	if todayEntry.PerProvider == nil {
+		t.Fatalf("DailySessionCounts[%s].PerProvider must be non-nil even when empty (JSON {})", today)
+	}
+	if got, want := todayEntry.PerProvider["claude-code"], 1; got != want {
+		t.Errorf("PerProvider[claude-code] = %d, want %d", got, want)
+	}
+	if got, want := todayEntry.PerProvider["codex"], 1; got != want {
+		t.Errorf("PerProvider[codex] = %d, want %d", got, want)
+	}
+
+	// Empty days must still carry a non-nil PerProvider map so JSON yields `{}`
+	// rather than `null` — mirrors the Tokens card's DailyCostPoint contract.
+	for _, d := range resp.Cards.Activity.DailySessionCounts {
+		if d.PerProvider == nil {
+			t.Errorf("DailySessionCounts[%s].PerProvider is nil, want non-nil (even for empty days)", d.Date)
+		}
+	}
+}
+
+// TestGetTrends_CodexOnlyFilesReadZero (CF-444) pins that a Codex-only window
+// produces TotalFilesRead == 0 (Codex contributes 0 by design), ProvidersPresent
+// == ["codex"], and the daily per_provider map carries a 'codex' entry.
+func TestGetTrends_CodexOnlyFilesReadZero(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-cf444-codex-only@test.com", "Trends CF-444 Codex Only User")
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	codexSession := testutil.CreateTestSessionWithProvider(t, env, user.ID, "cf444-codex-only", "codex")
+
+	err := store.UpsertCards(ctx, &analytics.Cards{
+		CodeActivity: &analytics.CodeActivityCardRecord{
+			SessionID:     codexSession,
+			Version:       analytics.CodeActivityCardVersion,
+			ComputedAt:    time.Now().UTC(),
+			UpToLine:      100,
+			FilesRead:     0,
+			FilesModified: 3,
+			LinesAdded:    80,
+			LinesRemoved:  30,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpsertCards: %v", err)
+	}
+
+	now := time.Now().UTC()
+	resp, err := store.GetTrends(ctx, user.ID, analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	})
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+
+	if resp.Cards.Activity == nil {
+		t.Fatal("Activity card must be non-nil")
+	}
+	if got := resp.Cards.Activity.TotalFilesRead; got != 0 {
+		t.Errorf("TotalFilesRead = %d, want 0 (Codex has no Read tool)", got)
+	}
+	if got, want := resp.Cards.Activity.TotalFilesModified, 3; got != want {
+		t.Errorf("TotalFilesModified = %d, want %d", got, want)
+	}
+	if got, want := resp.Cards.Activity.TotalLinesAdded, 80; got != want {
+		t.Errorf("TotalLinesAdded = %d, want %d", got, want)
+	}
+	if got, want := resp.Cards.Activity.TotalLinesRemoved, 30; got != want {
+		t.Errorf("TotalLinesRemoved = %d, want %d", got, want)
+	}
+
+	wantProviders := []string{"codex"}
+	if !equalStringSlices(resp.ProvidersPresent, wantProviders) {
+		t.Errorf("ProvidersPresent = %v, want %v", resp.ProvidersPresent, wantProviders)
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	var todayEntry *analytics.DailySessionCount
+	for i := range resp.Cards.Activity.DailySessionCounts {
+		if resp.Cards.Activity.DailySessionCounts[i].Date == today {
+			todayEntry = &resp.Cards.Activity.DailySessionCounts[i]
+			break
+		}
+	}
+	if todayEntry == nil {
+		t.Fatalf("DailySessionCounts has no entry for %s", today)
+	}
+	if todayEntry.SessionCount != 1 {
+		t.Errorf("DailySessionCounts[%s].SessionCount = %d, want 1", today, todayEntry.SessionCount)
+	}
+	if got, want := todayEntry.PerProvider["codex"], 1; got != want {
+		t.Errorf("PerProvider[codex] = %d, want %d", got, want)
+	}
+	if _, hasClaude := todayEntry.PerProvider["claude-code"]; hasClaude {
+		t.Errorf("PerProvider must not contain claude-code in a Codex-only window: %v", todayEntry.PerProvider)
+	}
+}
+
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

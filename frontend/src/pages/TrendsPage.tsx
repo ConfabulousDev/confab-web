@@ -129,7 +129,7 @@ function TrendsPage() {
               <TrendsOverviewCard data={data.cards.overview} />
               <TrendsTokensCard data={data.cards.tokens} />
               <TrendsTopSessionsCard data={data.cards.top_sessions} />
-              <TrendsActivityCard data={data.cards.activity} />
+              <TrendsActivityCard data={data.cards.activity} providersPresent={data.providers_present} />
               <TrendsToolsCard data={data.cards.tools} />
               <TrendsUtilizationCard data={data.cards.utilization} />
               <TrendsAgentsAndSkillsCard data={data.cards.agents_and_skills} />
