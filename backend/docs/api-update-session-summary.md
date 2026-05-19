@@ -8,7 +8,7 @@ PATCH /api/v1/sessions/{external_id}/summary
 
 ## Description
 
-Updates the summary field for a session identified by its external_id (the Claude Code session ID). This endpoint is designed for CLI use to set/update the session summary after it has been computed.
+Updates the summary field for a session identified by its external_id (the agent-native session ID — a Claude Code session UUID or a Codex thread UUID). This endpoint is designed for CLI use to set/update the session summary after it has been computed.
 
 ## Authentication
 
@@ -22,7 +22,7 @@ Authorization: Bearer <api_key>
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `external_id` | string | Yes | The Claude Code session ID (e.g., `01234567-89ab-cdef-0123-456789abcdef`) |
+| `external_id` | string | Yes | The agent-native session ID — Claude Code session UUID or Codex thread UUID (e.g., `01234567-89ab-cdef-0123-456789abcdef`) |
 
 ## Request Body
 

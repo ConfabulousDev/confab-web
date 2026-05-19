@@ -1,6 +1,6 @@
 # Confabulous
 
-Self-hosted analytics for your Claude Code sessions.
+Self-hosted analytics for your Claude Code and Codex sessions.
 
 [![GitHub Stars](https://img.shields.io/github/stars/ConfabulousDev/confab-web)](https://github.com/ConfabulousDev/confab-web)
 [![Docker Image](https://img.shields.io/badge/ghcr.io-confabulousdev%2Fconfab--web-blue?logo=docker)](https://ghcr.io/confabulousdev/confab-web)
@@ -23,7 +23,7 @@ Self-hosted analytics for your Claude Code sessions.
 </tr>
 </table>
 
-**Open-source, self-hosted** platform for archiving, searching, and analyzing your Claude Code sessions. Runs entirely in Docker on **your own infrastructure**.
+**Open-source, self-hosted** platform for archiving, searching, and analyzing your Claude Code and Codex sessions. Runs entirely in Docker on **your own infrastructure**.
 
 > [!IMPORTANT]
 > Code sessions contain proprietary code, architecture decisions, and internal workflows. The self hosted Confabulous stack keeps all of it on your network — no third-party access, no vendor lock-in.
@@ -54,7 +54,7 @@ Point it at your server:
 confab setup --backend-url http://localhost:8080
 ```
 
-Start a Claude Code session — it appears in the dashboard automatically.
+Start a Claude Code or Codex session — it appears in the dashboard automatically.
 
 ## Features
 

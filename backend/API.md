@@ -1,6 +1,6 @@
 # Confab Backend API Reference
 
-This document describes the backend API surface for the Confab web application. It is intended for Claude Code working on the frontend or CLI.
+This document describes the backend API surface for the Confab web application. It is intended for engineers (and AI coding agents) working on the frontend or CLI.
 
 ## Authentication
 

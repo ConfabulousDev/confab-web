@@ -1,6 +1,6 @@
 # Confab Backend
 
-Backend service for Confab — the self-hosted Claude Code session analytics platform. See the [root README](../README.md) for deployment instructions.
+Backend service for Confab — the self-hosted Claude Code and Codex session analytics platform. See the [root README](../README.md) for deployment instructions.
 
 ## Features
 

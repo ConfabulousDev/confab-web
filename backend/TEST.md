@@ -54,7 +54,7 @@ docker compose up -d
 # 3. Configure the Confab CLI (separate repo: https://github.com/ConfabulousDev/confab)
 #    to point at http://localhost:8080 with the API key from step 2.
 
-# 4. Run a Claude Code session. The CLI uploads chunks via /api/v1/sync/{init,chunk,event}.
+# 4. Run a Claude Code or Codex session. The CLI uploads chunks via /api/v1/sync/{init,chunk,event}.
 
 # 5. Verify in the web UI or directly in Postgres:
 docker exec -it confab-postgres psql -U confab -d confab \

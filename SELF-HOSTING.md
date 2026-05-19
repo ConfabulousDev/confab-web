@@ -1,6 +1,6 @@
 # Self-Hosting Guide
 
-Deploy Confabulous — self-hosted analytics for your Claude Code sessions — on your own infrastructure.
+Deploy Confabulous — self-hosted analytics for your Claude Code and Codex sessions — on your own infrastructure.
 
 This guide walks you through setup step by step. For the full environment variable reference, see [CONFIGURATION.md](CONFIGURATION.md). For security details, see [backend/SECURITY.md](backend/SECURITY.md).
 
@@ -145,7 +145,7 @@ curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.
 confab setup --backend-url http://localhost:8080
 ```
 
-Start a Claude Code session — it appears in the dashboard automatically.
+Start a Claude Code or Codex session — it appears in the dashboard automatically.
 
 ---
 
@@ -400,7 +400,7 @@ Then configure it to point at your instance:
 confab setup --backend-url https://confab.example.com
 ```
 
-The install script fetches pre-built binaries from [GitHub Releases](https://github.com/ConfabulousDev/confab/releases). Start a Claude Code session and it will appear in your dashboard automatically.
+The install script fetches pre-built binaries from [GitHub Releases](https://github.com/ConfabulousDev/confab/releases). Start a Claude Code or Codex session and it will appear in your dashboard automatically.
 
 ---
 
