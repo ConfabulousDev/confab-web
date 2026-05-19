@@ -12,6 +12,7 @@ function makeCounts(overrides: Partial<CodexHierarchicalCounts> = {}): CodexHier
     reasoning_hidden: 1,
     compacted: 0,
     turn_separator: 2,
+    turn_aborted: 0,
     unknown: 0,
     ...overrides,
   };
@@ -25,6 +26,7 @@ function makeFilterState(overrides: Partial<CodexFilterState> = {}): CodexFilter
     reasoning_hidden: false,
     compacted: true,
     turn_separator: true,
+    turn_aborted: true,
     unknown: true,
     ...overrides,
   };

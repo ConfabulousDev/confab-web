@@ -13,12 +13,15 @@
 
 import type { CodexRenderItem, CodexToolCallItem } from '@/types/codexRenderItem';
 import {
+  buildPlanSummaryText,
   readPatchChanges,
+  readPlanSummary,
   readStringField,
   readWebSearchQueries,
 } from './codexToolCallHelpers';
 import { stringifyForDisplay } from './codexFormat';
 import { compactedLabel } from './CodexCompactedDivider';
+import { turnAbortedLabel } from './CodexTurnAbortedDivider';
 
 export function extractCodexItemText(item: CodexRenderItem): string {
   switch (item.kind) {
@@ -29,6 +32,8 @@ export function extractCodexItemText(item: CodexRenderItem): string {
       return extractToolCallText(item);
     case 'compacted':
       return compactedLabel(item.replacementCount);
+    case 'turn_aborted':
+      return turnAbortedLabel(item.reason, item.durationMs);
     case 'unknown':
       return stringifyForDisplay(item.rawLine);
     case 'turn_separator':
@@ -56,6 +61,12 @@ function extractToolCallText(item: CodexToolCallItem): string {
     case 'web_search_call': {
       const queries = readWebSearchQueries(item.rawInput);
       if (queries.length > 0) parts.push(queries.join('\n'));
+      break;
+    }
+    // CF-368: update_plan renders the summary line, not the raw plan JSON.
+    // The search index must mirror what the user sees on the row.
+    case 'update_plan': {
+      parts.push(buildPlanSummaryText(readPlanSummary(item.rawInput)));
       break;
     }
     default: {

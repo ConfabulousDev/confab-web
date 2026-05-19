@@ -107,6 +107,13 @@ export interface CodexToolCallItem {
   status: 'pending' | 'completed' | 'failed' | 'unknown';
   /** For `exec_command`: parsed from the `Chunk ID: …` preamble. */
   execMetadata?: { exitCode: number; wallTimeMs: number };
+  /**
+   * CF-368: present iff a paired `event_msg.mcp_tool_call_end` enriched this
+   * call. Carries the MCP server and tool names so the renderer can label
+   * the row `<server> / <tool>` instead of the bare function name. Only set
+   * when at least one of `server` / `tool` is non-empty.
+   */
+  mcpInvocation?: { server: string; tool: string };
 }
 
 /**
@@ -144,6 +151,24 @@ export interface CodexCompactedItem {
 }
 
 /**
+ * CF-368: divider for an aborted turn (`event_msg.turn_aborted`). Fires
+ * when the user interrupts the model mid-turn (Esc / kill), the turn is
+ * replaced, a review ended, or the budget cap was hit. The Codex upstream
+ * enum lists those four reasons (`interrupted` | `replaced` | `review_ended`
+ * | `budget_limited`); we store the raw string for forward-compat with new
+ * variants. Empty string when the field was missing on the wire.
+ */
+export interface CodexTurnAbortedItem {
+  kind: 'turn_aborted';
+  lineId: string;
+  timestamp: CodexTimestamp;
+  /** Wire `reason`, snake_case. Empty string when absent. */
+  reason: string;
+  /** Wall-clock duration of the aborted turn. 0 when absent. */
+  durationMs: number;
+}
+
+/**
  * Forward-compat fallback. Any line whose top-level `type` (or nested
  * `payload.type`) is unrecognized lands here so the timeline still renders
  * something useful instead of crashing or silently dropping content.
@@ -163,4 +188,5 @@ export type CodexRenderItem =
   | CodexReasoningHiddenItem
   | CodexTurnSeparatorItem
   | CodexCompactedItem
+  | CodexTurnAbortedItem
   | CodexUnknownItem;

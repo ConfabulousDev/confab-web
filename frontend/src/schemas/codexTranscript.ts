@@ -297,6 +297,50 @@ const CodexMCPToolCallEndSchema = z
   })
   .passthrough();
 
+// CF-368: `event_msg.web_search_end` is the completion sibling of
+// `response_item.web_search_call` (paired by `call_id`). The response_item
+// already carries everything we render, so we drop this event as noise.
+// Schema mirrors openai/codex `WebSearchEndEvent` (call_id, query, action).
+const CodexEventWebSearchEndSchema = z
+  .object({
+    type: z.literal('web_search_end'),
+    call_id: z.string().optional(),
+    query: z.string().optional(),
+    action: z
+      .object({
+        type: z.string().optional(),
+        query: z.string().optional(),
+        queries: z.array(z.string()).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+// CF-368: `event_msg.turn_aborted` fires when the user interrupts a turn
+// (Esc / kill / budget exhaustion). We emit a divider row from this.
+// Schema mirrors openai/codex `TurnAbortedEvent`. `reason` is a snake_case
+// enum upstream (`interrupted` | `replaced` | `review_ended` | `budget_limited`);
+// we accept any string for forward-compat.
+const CodexEventTurnAbortedSchema = z
+  .object({
+    type: z.literal('turn_aborted'),
+    turn_id: z.string().optional(),
+    reason: z.string().optional(),
+    completed_at: z.number().optional(),
+    duration_ms: z.number().optional(),
+  })
+  .passthrough();
+
+// CF-368: `event_msg.context_compacted` is a pre-event for the top-level
+// `compacted` rollout line (the actual divider source). Drop as noise.
+// Schema mirrors openai/codex `ContextCompactedEvent` (unit struct → no fields).
+const CodexEventContextCompactedSchema = z
+  .object({
+    type: z.literal('context_compacted'),
+  })
+  .passthrough();
+
 // Catch-all for unknown event_msg.payload.type variants.
 const CodexUnknownEventPayloadSchema = z
   .object({ type: z.string() })
@@ -310,6 +354,9 @@ const KnownEventPayloadSchema = z.union([
   CodexEventTokenCountSchema,
   CodexEventPatchApplyEndSchema,
   CodexMCPToolCallEndSchema,
+  CodexEventWebSearchEndSchema,
+  CodexEventTurnAbortedSchema,
+  CodexEventContextCompactedSchema,
 ]);
 
 const CodexEventPayloadSchema = z.union([
@@ -327,6 +374,9 @@ const KNOWN_EVENT_PAYLOAD_TYPES = new Set<string>([
   'token_count',
   'patch_apply_end',
   'mcp_tool_call_end',
+  'web_search_end',      // CF-368
+  'turn_aborted',        // CF-368
+  'context_compacted',   // CF-368
 ]);
 
 export function isKnownEventPayload(

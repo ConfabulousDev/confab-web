@@ -125,6 +125,22 @@
   color: var(--color-text-primary);
 }
 
+/* CF-368: one-line summary for the `update_plan` body
+   (Now: <step> · N/M complete). Mirrors `.commandLine`'s monospace
+   density so the body stays visually consistent across tool kinds. */
+.planSummary {
+  margin: var(--spacing-xs) 0;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: 0.9em;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
 .queryChips {
   display: flex;
   flex-wrap: wrap;

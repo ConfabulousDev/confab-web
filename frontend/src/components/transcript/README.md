@@ -65,16 +65,17 @@ layer.
 | `CodexAssistantMessage.tsx` | Assistant text. Lighter styling + "(commentary)" label when `phase === 'commentary'`; model badge per message. Body renders through `CodexMessageBody`. Accepts the same chrome props as `CodexUserMessage`. CF-362: when `isCostMode && messageCost > 0 && item.usage`, renders `$cost` / `N in · N out` / `N hit` (when cached) badges in the header right-slot, all sharing a verbose `buildCostTooltip(codexAdapter, ...)` title attribute (CF-418: tooltip body is built by the Codex adapter's `extendCostTooltip` hook so cached/reasoning sub-lines interleave correctly under their parent lines) |
 | `CodexMessageBody.tsx` | Shared rendering path for user + assistant text. JSON-shaped text pretty-prints via `CodeBlock` (`language="json"`); everything else flows through `renderMarkdownToHtml`. Mirrors `ContentBlock.tsx`'s text-block contract |
 | `CodexMessageImages.tsx` | CF-388 shared image gallery for user + assistant messages. Renders one `<img loading="lazy">` per entry in `images`, parameterized by `altPrefix` (`User-attached image` vs `Assistant-generated image`). Same dimension caps as `ContentBlock`'s image render for cross-provider visual parity |
-| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s. Accepts the chrome props (`sessionId`, `isDeepLinkTarget`, `onSkipToNext` / `onSkipToPrevious`, `kindLabel`); `isNewSpeaker` is no-op per the Codex speaker rule |
-| `codexToolCallHelpers.ts` | Pure helpers extracted from `CodexToolCallBlock.tsx` for testability: `buildToolCallCopyText` (per-tool copy-text composition for `CodexRowActions`) plus shape readers `readStringField`, `readPatchChanges`, `readWebSearchQueries`, `stringifyGenericInput` |
+| `CodexToolCallBlock.tsx` | Paired tool call + output. Dispatches by `toolName` to `ExecCommandBody` (body-level `$ cmd` + `BashOutput` with terminal styling), `ApplyPatchBody` (file-list summary + `CodeBlock` `language="diff"`), `WebSearchBody` (query chips), `UpdatePlanBody` (CF-368 — `Now: <activeStep>  ·  N/M complete` summary; never the raw plan JSON), or a generic body that renders rawInput/rawOutput as expanded `CodeBlock`s. `toolNameLabel` checks `item.mcpInvocation` first (CF-368: labels MCP-fronted calls as `<server> / <tool>` via the paired `event_msg.mcp_tool_call_end`); otherwise looks up `TOOL_NAME_LABELS` (extended in CF-368 with `update_plan`, `write_stdin`, `spawn_agent`, `wait_agent`, `close_agent`, `request_user_input`); else falls back to `Tool: <name>`. Accepts the chrome props (`sessionId`, `isDeepLinkTarget`, `onSkipToNext` / `onSkipToPrevious`, `kindLabel`); `isNewSpeaker` is no-op per the Codex speaker rule |
+| `codexToolCallHelpers.ts` | Pure helpers extracted from `CodexToolCallBlock.tsx` for testability: `buildToolCallCopyText` (per-tool copy-text composition for `CodexRowActions`; CF-368 routes `update_plan` through the same summary text the body renders), shape readers `readStringField`, `readPatchChanges`, `readWebSearchQueries`, `stringifyGenericInput`, and CF-368's `readPlanSummary` + `buildPlanSummaryText` (classify an `update_plan` payload into the `empty` / `complete` / `in_progress` / `paused` / `pending` bucket and render the one-line summary; shared with the search-index projection so renderer and Cmd-F stay in sync) |
 | `CodexTurnSeparator.tsx` | `Turn N — duration · TTFT` divider between `task_complete` boundaries. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; the CF-360 row chrome renders a copy-link-only button strip |
 | `CodexReasoningHidden.tsx` | "(reasoning hidden)" marker for encrypted `reasoning` lines. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-link-only chrome |
 | `CodexCompactedDivider.tsx` | Divider for `compacted` rows, with the count of replaced messages. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-link-only chrome |
+| `CodexTurnAbortedDivider.tsx` | CF-368: divider for `event_msg.turn_aborted` (user interrupted / replaced / review-ended / budget-limited turn). Visible label is `Turn aborted · <reason> · <duration>` with each segment dropped when the underlying field is empty/zero. Mirrors `CodexCompactedDivider`'s shape; copy-link-only chrome. Exports `turnAbortedLabel(reason, durationMs)` so the search projection uses the exact rendered string |
 | `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-text uses `stringifyForDisplay(rawLine)` so users can dump the unknown payload |
 | `codexFormat.ts` | Shared formatters: `formatCodexTimestamp`, `formatDurationMs`, `leafFileName`, `stringifyForDisplay` |
 | `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint), `.newSpeaker` (extra top margin), `.deepLinkTarget` (composes `deepLinkPulse` from `@/styles/animations.module.css`; accent ring overrides the grey selection ring on hover), `.searchMatch` (amber ring — CF-359; source-ordered after `.selected` / `.deepLinkTarget` so it wins via the cascade), and `.costBadge` / `.tokenPill` / `.cachePill` composed from `@/styles/badges.module.css` (CF-362; shared with Claude `TimelineMessage.module.css`) |
-| `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips). Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
-| `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, unknown fallback. Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
+| `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips, `.planSummary` for CF-368's `update_plan` body). Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
+| `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, turn-aborted divider (CF-368), unknown fallback. Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
 | `CodexRowActions.module.css` | CF-360 button-strip chrome (icon button states, copy-success colour) |
 | `CodexMessageTimeline.module.css` | Container (flex with bar on the right), virtualizer slot positioning, scroll chrome, time-separator divider, and CF-362 `.costBarWrapper` / `.costBarWrapperVisible` slide-in for the cost bar |
 | `CodexTimelineBar.module.css` | Vertical-bar chrome: segments, position indicator, hover tooltip |
@@ -107,7 +108,23 @@ most-recent unannotated assistant of any phase, so multi-call turns get
 per-call attribution), `CodexAssistantMessage` renders `$cost` / `N in · N
 out` / `N hit` badges with a verbose tooltip, and a slide-in `CostBar`
 appears next to `CodexTimelineBar` driven by the same `BlendedSegmentLayout`
-instance so the two rails line up.
+instance so the two rails line up. CF-368 closed several real-session
+audit findings: three previously-unrecognized `event_msg` variants are now
+schema-known (`web_search_end` and `context_compacted` drop as noise —
+they're redundant with the paired `response_item.web_search_call` / the
+top-level `compacted` line; `turn_aborted` emits a new `CodexTurnAbortedItem`
+divider rendered as `Turn aborted · <reason> · <duration>`). The previously-
+dropped `event_msg.mcp_tool_call_end` now enriches the paired tool_call
+with `mcpInvocation = { server, tool }` so MCP-fronted rows label
+programmatically as `<server> / <tool>` without a hardcoded per-server list.
+`TOOL_NAME_LABELS` gained the six codex-internal tools observed in real
+sessions (`update_plan`, `write_stdin`, `spawn_agent`, `wait_agent`,
+`close_agent`, `request_user_input`). The `update_plan` body switched
+from raw plan JSON to a one-line `Now: <activeStep>  ·  N/M complete`
+summary (via `readPlanSummary` + `buildPlanSummaryText`, shared with the
+search projection); the bucket logic handles five states (empty / complete
+/ in_progress / paused / pending) and tolerates unknown statuses for
+forward-compat.
 
 **Known gaps (deferred — see TODOs at the referenced sites):**
 - Plaintext `reasoning` is not rendered — every reasoning line emits a

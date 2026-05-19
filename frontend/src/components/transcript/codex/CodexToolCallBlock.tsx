@@ -19,8 +19,10 @@ import {
 } from './codexFormat';
 import CodexRowActions from './CodexRowActions';
 import {
+  buildPlanSummaryText,
   buildToolCallCopyText,
   readPatchChanges,
+  readPlanSummary,
   readStringField,
   readWebSearchQueries,
 } from './codexToolCallHelpers';
@@ -94,15 +96,38 @@ export default function CodexToolCallBlock({
   );
 }
 
-// Display labels for known tool names. Anything not listed gets a generic
-// "Tool: <name>" prefix so unfamiliar future tools still stand out.
+// Display labels for known tool names. Anything not listed (and not an MCP
+// call — see `toolNameLabel`) gets a generic "Tool: <name>" prefix so
+// unfamiliar future tools still stand out.
+//
+// CF-368: extended with the codex-internal tools that show up in real
+// sessions but had no dedicated entry — `update_plan` / `write_stdin` /
+// `spawn_agent` / `wait_agent` / `close_agent` / `request_user_input`.
+// MCP-fronted tools (`save_issue`, `get_issue`, etc.) are NOT listed here;
+// they're labeled programmatically from the paired `event_msg.mcp_tool_call_end`
+// data so we don't have to hardcode a list per MCP server.
 const TOOL_NAME_LABELS: Record<string, string> = {
   exec_command: 'exec_command',
   apply_patch: 'apply_patch',
   web_search_call: 'web_search',
+  update_plan: 'update_plan',
+  write_stdin: 'write_stdin',
+  spawn_agent: 'spawn_agent',
+  wait_agent: 'wait_agent',
+  close_agent: 'close_agent',
+  request_user_input: 'request_user_input',
 };
 
 function toolNameLabel(item: CodexToolCallItem): string {
+  // CF-368: when a paired `mcp_tool_call_end` enriched this call, the MCP
+  // server + tool names take priority over TOOL_NAME_LABELS / the function
+  // name. Label as `<server> / <tool>`; if one side is missing, fall back
+  // to whichever string is non-empty.
+  if (item.mcpInvocation) {
+    const { server, tool } = item.mcpInvocation;
+    if (server && tool) return `${server} / ${tool}`;
+    return tool || server;
+  }
   return TOOL_NAME_LABELS[item.toolName] ?? `Tool: ${item.toolName}`;
 }
 
@@ -146,6 +171,11 @@ function renderBody(item: CodexToolCallItem, search: SearchHighlightProps) {
       return <ApplyPatchBody item={item} {...search} />;
     case 'web_search_call':
       return <WebSearchBody item={item} {...search} />;
+    // CF-368: update_plan is summarized (active step + progress count)
+    // rather than rendered as raw JSON — the literal payload is the same
+    // plan shipped 18+ times per session with statuses shifted.
+    case 'update_plan':
+      return <UpdatePlanBody item={item} {...search} />;
     default:
       return <GenericToolBody item={item} {...search} />;
   }
@@ -274,6 +304,28 @@ function WebSearchBody({ item, searchQuery, isCurrentSearchMatch }: BodyProps) {
             </span>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// update_plan (CF-368)
+// ----------------------------------------------------------------------------
+//
+// The full plan repeats verbatim across many calls; the only thing that
+// changes is which step is in_progress. Render the active step + N/M
+// progress instead of dumping the plan JSON. `buildPlanSummaryText` is
+// shared with `extractCodexItemText` so the search index matches the
+// rendered text exactly (no drift).
+
+function UpdatePlanBody({ item, searchQuery, isCurrentSearchMatch }: BodyProps) {
+  const summary = readPlanSummary(item.rawInput);
+  const text = buildPlanSummaryText(summary);
+  return (
+    <div className={styles.body}>
+      <div className={styles.planSummary} data-plan-bucket={summary.bucket}>
+        {renderTextWithHighlight(text, searchQuery, isCurrentSearchMatch)}
       </div>
     </div>
   );

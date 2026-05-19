@@ -64,7 +64,7 @@ interface FilterState {
   unknown: boolean;
 }
 
-// CF-361
+// CF-361 (extended in CF-368 with turn_aborted)
 interface CodexFilterState {
   user: boolean;
   assistant: { commentary: boolean; final: boolean };
@@ -77,6 +77,7 @@ interface CodexFilterState {
   reasoning_hidden: boolean;
   compacted: boolean;
   turn_separator: boolean;
+  turn_aborted: boolean;  // CF-368
   unknown: boolean;
 }
 ```
@@ -89,7 +90,7 @@ interface CodexFilterState {
 - **SessionSummaryPanel** -- Polls analytics via `useAnalyticsPolling`, renders ordered cards from the card registry, and provides smart recap regeneration. Provider-agnostic — Codex sessions display the same cards as Claude, with provider-specific shape captured in the backend adapter (`gpt-5` model strings, `cache_creation=0`, `files_read=0`, etc.).
 - **MessageTimeline** -- Uses `@tanstack/react-virtual` for virtualized rendering of potentially thousands of messages. Integrates `TranscriptSearchBar`, `TimelineBar`, and `CostBar`.
 - **FilterDropdown** -- Hierarchical filter with three top-level categories with subcategories (user, assistant, attachment) plus flat chips for system, away-summary, file-history-snapshot, summary, queue-operation, and pr-link. The attachment chip groups hook output, file edits, queued commands, deferred tools, and mcp instructions. Default state: only user + assistant + unknown are visible; everything else is opt-in.
-- **CodexFilterDropdown** (CF-361) -- Codex parallel of `FilterDropdown`. Two hierarchical parents (`assistant` with `commentary`/`final`, `tool_call` with `exec_command`/`apply_patch`/`web_search`/`generic`) plus five flat chips (`user`, `reasoning_hidden`, `compacted`, `turn_separator`, `unknown`). Default state visible for everything except `reasoning_hidden` (opt-in). Imports `FilterDropdownShared.module.css` for visual parity with the Claude dropdown.
+- **CodexFilterDropdown** (CF-361) -- Codex parallel of `FilterDropdown`. Two hierarchical parents (`assistant` with `commentary`/`final`, `tool_call` with `exec_command`/`apply_patch`/`web_search`/`generic`) plus six flat chips (`user`, `reasoning_hidden`, `compacted`, `turn_separator`, `turn_aborted` — added in CF-368 for the aborted-turn divider — `unknown`). Default state visible for everything except `reasoning_hidden` (opt-in). Imports `FilterDropdownShared.module.css` for visual parity with the Claude dropdown.
 
 ## How to Extend
 

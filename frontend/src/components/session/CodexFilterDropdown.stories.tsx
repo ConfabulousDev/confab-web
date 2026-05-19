@@ -17,6 +17,7 @@ const sampleCounts: CodexHierarchicalCounts = {
   reasoning_hidden: 7,
   compacted: 1,
   turn_separator: 12,
+  turn_aborted: 1,
   unknown: 0,
 };
 
@@ -27,6 +28,7 @@ const zeroCounts: CodexHierarchicalCounts = {
   reasoning_hidden: 0,
   compacted: 0,
   turn_separator: 0,
+  turn_aborted: 0,
   unknown: 0,
 };
 
@@ -116,6 +118,7 @@ export const AllHidden: Story = {
       reasoning_hidden: false,
       compacted: false,
       turn_separator: false,
+      turn_aborted: false,
       unknown: false,
     },
   },
@@ -142,6 +145,7 @@ export const PartialHidden: Story = {
       reasoning_hidden: false,
       compacted: true,
       turn_separator: true,
+      turn_aborted: true,
       unknown: true,
     },
   },

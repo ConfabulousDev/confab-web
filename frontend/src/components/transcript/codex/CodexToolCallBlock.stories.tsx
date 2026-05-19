@@ -243,3 +243,135 @@ export const WithDeepLinkTarget: Story = {
     isDeepLinkTarget: true,
   },
 };
+
+// ---------------------------------------------------------------------------
+// CF-368: extended tool-name labels for codex-internal tools (label-only —
+// the body falls through to `GenericToolBody`).
+// ---------------------------------------------------------------------------
+
+export const WriteStdin: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      lineId: '0',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'write_stdin',
+      callId: 'call_stdin',
+      rawInput: { session_id: 71608, chars: '', yield_time_ms: 30000, max_output_tokens: 30000 },
+      rawOutput: '{"status":"ok"}',
+      status: 'completed',
+    } satisfies CodexToolCallItem,
+  },
+};
+
+export const SpawnAgent: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      lineId: '0',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'spawn_agent',
+      callId: 'call_spawn',
+      rawInput: {
+        agent_type: 'default',
+        message: 'Write one original short poem in English. Aim for 8-12 lines.',
+        reasoning_effort: 'low',
+      },
+      rawOutput: '{"agent_id":"019e315e-520a-73c1-b328-5c3b69267324","nickname":"Hubble"}',
+      status: 'completed',
+    } satisfies CodexToolCallItem,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// CF-368: MCP-fronted tool. `mcpInvocation` overrides the TOOL_NAME_LABELS
+// lookup so the header reads `<server> / <tool>` regardless of the bare
+// function name. No body change — that's deferred to FU1.
+// ---------------------------------------------------------------------------
+
+export const McpToolCall: Story = {
+  args: {
+    item: {
+      kind: 'tool_call',
+      lineId: '0',
+      timestamp: '2026-05-13T18:00:00Z',
+      toolName: 'save_issue',
+      callId: 'call_mcp_save',
+      rawInput: { team: 'Confabulous', title: 'CF-368 follow-up' },
+      rawOutput: '[{"type":"text","text":"{\\"id\\":\\"CF-499\\"}"}]',
+      status: 'completed',
+      mcpInvocation: { server: 'linear', tool: 'save_issue' },
+    } satisfies CodexToolCallItem,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// CF-368: update_plan body — one story per summary bucket. The literal
+// plan JSON is never rendered; only `Now: <step> · N/M complete` (or the
+// degenerate variants per bucket).
+// ---------------------------------------------------------------------------
+
+const updatePlan = (
+  plan: Array<{ step: string; status: string }>,
+): CodexToolCallItem => ({
+  kind: 'tool_call',
+  lineId: '0',
+  timestamp: '2026-05-13T18:00:00Z',
+  toolName: 'update_plan',
+  callId: 'call_plan',
+  rawInput: { plan },
+  rawOutput: 'Plan updated',
+  status: 'completed',
+});
+
+export const UpdatePlanInProgress: Story = {
+  args: {
+    item: updatePlan([
+      { step: 'Phase 1 deletes/inlines and test callsite updates', status: 'completed' },
+      { step: 'Phase 2 cmd helper extractions', status: 'in_progress' },
+      { step: 'Phase 2 package helper extractions', status: 'pending' },
+      { step: 'Run tests/static analysis and fix issues', status: 'pending' },
+      { step: 'Update package READMEs', status: 'pending' },
+      { step: 'Final review, commit, push, PR, close Linear', status: 'pending' },
+    ]),
+  },
+};
+
+export const UpdatePlanComplete: Story = {
+  args: {
+    item: updatePlan([
+      { step: 'Encode CF-402 registry/spec tests before implementation', status: 'completed' },
+      { step: 'Implement SessionProvider registry and provider wrappers', status: 'completed' },
+      { step: 'Refactor precompute dispatch and smart recap flag flow', status: 'completed' },
+      { step: 'Update analytics docs and guidance', status: 'completed' },
+      { step: 'Run tests, simplify/review, and prepare PR', status: 'completed' },
+    ]),
+  },
+};
+
+export const UpdatePlanRegistered: Story = {
+  args: {
+    item: updatePlan([
+      { step: 'Phase 1 deletes/inlines and test callsite updates', status: 'pending' },
+      { step: 'Phase 2 cmd helper extractions', status: 'pending' },
+      { step: 'Run tests/static analysis', status: 'pending' },
+      { step: 'Final review, PR, close ticket', status: 'pending' },
+    ]),
+  },
+};
+
+export const UpdatePlanPaused: Story = {
+  args: {
+    item: updatePlan([
+      { step: 'Phase 1 deletes/inlines and test callsite updates', status: 'completed' },
+      { step: 'Phase 2 cmd helper extractions', status: 'pending' },
+      { step: 'Run tests/static analysis', status: 'pending' },
+    ]),
+  },
+};
+
+export const UpdatePlanEmpty: Story = {
+  args: {
+    item: updatePlan([]),
+  },
+};

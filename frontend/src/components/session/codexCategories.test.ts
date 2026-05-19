@@ -249,6 +249,7 @@ describe('codexItemMatchesFilter', () => {
       reasoning_hidden: false,
       compacted: false,
       turn_separator: false,
+      turn_aborted: false,
       unknown: false,
     };
     it.each<[string, CodexRenderItem]>([

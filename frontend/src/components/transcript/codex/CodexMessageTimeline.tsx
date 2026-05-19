@@ -31,6 +31,7 @@ import CodexToolCallBlock from './CodexToolCallBlock';
 import CodexTurnSeparator from './CodexTurnSeparator';
 import CodexReasoningHidden from './CodexReasoningHidden';
 import CodexCompactedDivider from './CodexCompactedDivider';
+import CodexTurnAbortedDivider from './CodexTurnAbortedDivider';
 import CodexUnknownItem from './CodexUnknownItem';
 import CodexTimelineBar from './CodexTimelineBar';
 import { useCodexSegmentLayout } from './codexTimelineSegments';
@@ -541,6 +542,8 @@ function renderItem(item: CodexRenderItem, flags: RenderFlags) {
       return <CodexReasoningHidden item={item} {...dividerFlags} />;
     case 'compacted':
       return <CodexCompactedDivider item={item} {...dividerFlags} />;
+    case 'turn_aborted':
+      return <CodexTurnAbortedDivider item={item} {...dividerFlags} />;
     case 'unknown':
       return <CodexUnknownItem item={item} {...dividerFlags} />;
     default: {

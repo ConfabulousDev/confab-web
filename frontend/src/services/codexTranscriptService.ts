@@ -6,6 +6,7 @@
 import type {
   CodexRenderItem,
   CodexToolCallItem,
+  CodexTurnAbortedItem,
   CodexTurnSeparatorItem,
 } from '@/types/codexRenderItem';
 import type { TokenUsage } from '@/utils/tokenStats';
@@ -333,16 +334,20 @@ type ToolCallDraft = {
  * `useMemo`.
  *
  * Responsibilities:
- *   - Drop noise: session_meta, turn_context, event_msg.token_count,
- *     event_msg.task_started, event_msg.user_message, event_msg.agent_message,
- *     event_msg.mcp_tool_call_end, response_item.message[role=developer]
+ *   - Drop noise: session_meta, turn_context, event_msg.task_started,
+ *     event_msg.user_message, event_msg.agent_message,
+ *     event_msg.web_search_end (CF-368), event_msg.context_compacted (CF-368),
+ *     response_item.message[role=developer]
  *   - Strip `<environment_context>…</environment_context>` from user messages
  *   - Strip exec output preamble; surface exit code + wall time as execMetadata
  *   - Pair function_call ↔ function_call_output by call_id
  *   - Pair custom_tool_call ↔ custom_tool_call_output ↔ event_msg.patch_apply_end
+ *   - Enrich the paired tool_call with MCP server/tool from event_msg.mcp_tool_call_end (CF-368)
+ *   - Attach event_msg.token_count.last_token_usage to the most-recent unannotated assistant
  *   - Emit CodexReasoningHiddenItem for each reasoning line
  *   - Emit CodexTurnSeparatorItem per task_complete (durationMs, timeToFirstTokenMs)
  *   - Emit CodexCompactedItem for each compacted line
+ *   - Emit CodexTurnAbortedItem for each event_msg.turn_aborted (CF-368)
  *   - Track current model from session_meta, turn_context, and task_started for
  *     assistant items (Codex CLI ~0.130+ writes the model per-turn into
  *     turn_context; older CLIs put it on session_meta or task_started)
@@ -644,10 +649,48 @@ function handleEventMsg(
       };
       return {};
     }
-    case 'mcp_tool_call_end':
-      // Redundant with the paired response_item.function_call_output for the
-      // same call_id. Keep the schema current, but do not render a duplicate row.
+    case 'mcp_tool_call_end': {
+      // CF-368: function_call_output already carries the response body, so the
+      // paired tool_call row stays the visible item. We use this event only to
+      // attach `mcpInvocation = { server, tool }` so the row labels as
+      // `<server> / <tool>` instead of the bare function name.
+      const invocation = payload.invocation;
+      const server = invocation?.server ?? '';
+      const tool = invocation?.tool ?? '';
+      if (!server && !tool) return {};
+      const draft = callIdToDraft.get(payload.call_id);
+      if (!draft) return {};
+      const existing = items[draft.index];
+      if (!existing || existing.kind !== 'tool_call') return {};
+      items[draft.index] = {
+        ...existing,
+        mcpInvocation: { server, tool },
+      };
       return {};
+    }
+    case 'web_search_end':
+      // CF-368: redundant with the paired response_item.web_search_call for
+      // the same call_id (mirrors mcp_tool_call_end's relationship to
+      // function_call_output). Drop to avoid duplicate rows.
+      return {};
+    case 'context_compacted':
+      // CF-368: pre-event for the top-level `compacted` rollout line. The
+      // top-level line already produces the CodexCompactedDivider, so this
+      // sibling event is noise.
+      return {};
+    case 'turn_aborted': {
+      // CF-368: user-interrupted / replaced / review-ended / budget-limited
+      // turn. Emit a divider row showing the reason and duration.
+      const aborted: CodexTurnAbortedItem = {
+        kind: 'turn_aborted',
+        lineId,
+        timestamp: line.timestamp,
+        reason: payload.reason ?? '',
+        durationMs: payload.duration_ms ?? 0,
+      };
+      items.push(aborted);
+      return {};
+    }
   }
 }
 

@@ -94,6 +94,29 @@ describe('extractCodexItemText', () => {
       expect(text).toContain('abc123');
       expect(text).toContain('response payload');
     });
+
+    // CF-368: update_plan renders the summary line, never the raw plan JSON.
+    // The search projection must match the rendered text so Cmd-F finds rows.
+    it('update_plan: returns the active step summary, not the raw plan', () => {
+      const item: CodexRenderItem = {
+        kind: 'tool_call', lineId: '0', timestamp: ts,
+        toolName: 'update_plan', callId: 'c_plan',
+        rawInput: {
+          plan: [
+            { step: 'Phase 1 deletes', status: 'completed' },
+            { step: 'Phase 2 cmd extractions', status: 'in_progress' },
+            { step: 'Run tests', status: 'pending' },
+          ],
+        },
+        rawOutput: 'Plan updated',
+        status: 'completed',
+      };
+      const text = extractCodexItemText(item);
+      expect(text).toContain('Now: Phase 2 cmd extractions');
+      expect(text).toContain('1/3 complete');
+      // Raw plan JSON keys must NOT leak into the search index.
+      expect(text).not.toContain('"status"');
+    });
   });
 
   it('turn_separator: returns empty string', () => {
@@ -130,6 +153,29 @@ describe('extractCodexItemText', () => {
       expect(text.toLowerCase()).toContain('1 earlier message');
       // Must not include the plural-only token "messages"
       expect(text.toLowerCase()).not.toContain('messages');
+    });
+  });
+
+  // CF-368: turn_aborted divider — the visible label is searchable so a user
+  // querying "aborted" or "interrupted" lands on the row.
+  describe('turn_aborted', () => {
+    it('returns the visible label including reason and duration', () => {
+      const item: CodexRenderItem = {
+        kind: 'turn_aborted', lineId: '0', timestamp: ts,
+        reason: 'interrupted', durationMs: 4_000,
+      };
+      const text = extractCodexItemText(item).toLowerCase();
+      expect(text).toContain('turn aborted');
+      expect(text).toContain('interrupted');
+    });
+
+    it('returns just the label when reason is empty', () => {
+      const item: CodexRenderItem = {
+        kind: 'turn_aborted', lineId: '0', timestamp: ts,
+        reason: '', durationMs: 0,
+      };
+      const text = extractCodexItemText(item).toLowerCase();
+      expect(text).toContain('turn aborted');
     });
   });
 

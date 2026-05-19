@@ -416,6 +416,7 @@ function CodexWithFiltersDemo() {
     reasoning_hidden: boolean;
     compacted: boolean;
     turn_separator: boolean;
+    turn_aborted: boolean;
     unknown: boolean;
   };
   const initial: CodexState = {
@@ -425,6 +426,7 @@ function CodexWithFiltersDemo() {
     reasoning_hidden: false,
     compacted: true,
     turn_separator: true,
+    turn_aborted: true,
     unknown: true,
   };
   const [filterState, setFilterState] = useState<CodexState>(initial);
@@ -436,6 +438,7 @@ function CodexWithFiltersDemo() {
     reasoning_hidden: 7,
     compacted: 1,
     turn_separator: 12,
+    turn_aborted: 0,
     unknown: 0,
   };
 

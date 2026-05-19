@@ -146,6 +146,7 @@ describe('stateFromPaths', () => {
         reasoning_hidden: false,
         compacted: false,
         turn_separator: false,
+        turn_aborted: false,
         unknown: true,
       },
       {
@@ -160,6 +161,7 @@ describe('stateFromPaths', () => {
         reasoning_hidden: true,
         compacted: true,
         turn_separator: true,
+        turn_aborted: true,
         unknown: true,
       },
     ];

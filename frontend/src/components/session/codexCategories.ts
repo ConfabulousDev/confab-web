@@ -8,7 +8,8 @@
 //   - tool_call: subs `exec_command` | `apply_patch` | `web_search` | `generic`.
 //     Bucket selected by `categorizeCodexToolCall` from the raw toolName.
 //     Future tool names fall into `generic`; the mapping is the single edit.
-//   - flat: `reasoning_hidden`, `compacted`, `turn_separator`, `unknown`.
+//   - flat: `reasoning_hidden`, `compacted`, `turn_separator`, `turn_aborted`
+//     (CF-368), `unknown`.
 //
 // `reasoning_hidden` is the only default-hidden category — parallel to
 // Claude's attachment chips defaulting to hidden. Everything else is visible
@@ -23,6 +24,7 @@ export type CodexCategory =
   | 'reasoning_hidden'
   | 'compacted'
   | 'turn_separator'
+  | 'turn_aborted'
   | 'unknown';
 
 export type CodexAssistantSubcategory = 'commentary' | 'final';
@@ -52,6 +54,7 @@ export interface CodexHierarchicalCounts {
   reasoning_hidden: number;
   compacted: number;
   turn_separator: number;
+  turn_aborted: number;
   unknown: number;
 }
 
@@ -67,6 +70,7 @@ export interface CodexFilterState {
   reasoning_hidden: boolean;
   compacted: boolean;
   turn_separator: boolean;
+  turn_aborted: boolean;
   unknown: boolean;
 }
 
@@ -77,6 +81,7 @@ export const DEFAULT_CODEX_FILTER_STATE: CodexFilterState = {
   reasoning_hidden: false,
   compacted: true,
   turn_separator: true,
+  turn_aborted: true,
   unknown: true,
 };
 
@@ -101,6 +106,7 @@ export function countCodexCategories(items: CodexRenderItem[]): CodexHierarchica
     reasoning_hidden: 0,
     compacted: 0,
     turn_separator: 0,
+    turn_aborted: 0,
     unknown: 0,
   };
 
@@ -128,6 +134,9 @@ export function countCodexCategories(items: CodexRenderItem[]): CodexHierarchica
       case 'turn_separator':
         counts.turn_separator++;
         break;
+      case 'turn_aborted':
+        counts.turn_aborted++;
+        break;
       case 'unknown':
         counts.unknown++;
         break;
@@ -154,6 +163,8 @@ export function codexItemMatchesFilter(
       return state.compacted;
     case 'turn_separator':
       return state.turn_separator;
+    case 'turn_aborted':
+      return state.turn_aborted;
     case 'unknown':
       return state.unknown;
   }

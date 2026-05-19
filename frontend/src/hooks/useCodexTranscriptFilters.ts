@@ -39,6 +39,7 @@ const FLAT_KEYS = [
   'reasoning_hidden',
   'compacted',
   'turn_separator',
+  'turn_aborted',
   'unknown',
 ] as const satisfies readonly Exclude<CodexCategory, 'assistant' | 'tool_call'>[];
 
@@ -74,6 +75,7 @@ export function stateFromPaths(paths: string[]): CodexFilterState {
     reasoning_hidden: visible('reasoning_hidden'),
     compacted: visible('compacted'),
     turn_separator: visible('turn_separator'),
+    turn_aborted: visible('turn_aborted'),
     unknown: visible('unknown'),
   };
 }

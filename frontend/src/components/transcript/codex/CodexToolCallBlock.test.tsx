@@ -293,4 +293,181 @@ describe('CodexToolCallBlock', () => {
     render(<CodexToolCallBlock item={execCommandItem()} />);
     expect(screen.queryByLabelText(/copy link/i)).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // CF-368 — extended tool-name labels for common codex-internal tools.
+  // Each is a snake_case identifier rendered without the "Tool: " prefix
+  // (and without the trailing "_call" the existing web_search_call entry trims).
+  // ---------------------------------------------------------------------------
+
+  function genericItem(toolName: string, rawInput: unknown = {}): CodexToolCallItem {
+    return {
+      kind: 'tool_call',
+      lineId: '0',
+      timestamp: '2026-05-13T01:00:00Z',
+      toolName,
+      callId: `call_${toolName}`,
+      rawInput,
+      rawOutput: 'ok',
+      status: 'completed',
+    };
+  }
+
+  it.each([
+    ['write_stdin', { session_id: 1, chars: '', yield_time_ms: 1000 }],
+    ['spawn_agent', { agent_type: 'default', message: 'do thing' }],
+    ['wait_agent', { targets: ['agent-id-1'], timeout_ms: 60000 }],
+    ['close_agent', { target: 'agent-id-1' }],
+    ['request_user_input', { questions: [] }],
+  ])('renders %s with a friendly snake_case label (no "Tool:" prefix)', (toolName, rawInput) => {
+    const { container } = render(
+      <CodexToolCallBlock item={genericItem(toolName, rawInput)} />,
+    );
+    // The header span carries the label text; assert the friendly name
+    // appears AND the "Tool: " prefix is absent.
+    expect(container.textContent).toContain(toolName);
+    expect(container.textContent).not.toContain(`Tool: ${toolName}`);
+  });
+
+  // update_plan also lands in TOOL_NAME_LABELS but is exercised via its
+  // dedicated body in the update_plan section below.
+
+  // ---------------------------------------------------------------------------
+  // CF-368 — mcpInvocation overrides TOOL_NAME_LABELS lookup.
+  // ---------------------------------------------------------------------------
+
+  it('mcpInvocation renders header as "<server> / <tool>"', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={{
+          ...genericItem('save_issue', { team: 'Confabulous' }),
+          mcpInvocation: { server: 'linear', tool: 'save_issue' },
+        }}
+      />,
+    );
+    expect(container.textContent).toContain('linear / save_issue');
+    expect(container.textContent).not.toContain('Tool: save_issue');
+  });
+
+  it('mcpInvocation with empty server renders just the tool name', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={{
+          ...genericItem('foo'),
+          mcpInvocation: { server: '', tool: 'foo' },
+        }}
+      />,
+    );
+    expect(container.textContent).toContain('foo');
+    expect(container.textContent).not.toContain(' / foo');
+    expect(container.textContent).not.toContain('Tool: foo');
+  });
+
+  it('mcpInvocation with empty tool renders just the server name', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={{
+          ...genericItem('foo'),
+          mcpInvocation: { server: 'bar', tool: '' },
+        }}
+      />,
+    );
+    expect(container.textContent).toContain('bar');
+    expect(container.textContent).not.toContain('bar / ');
+  });
+
+  // ---------------------------------------------------------------------------
+  // CF-368 — update_plan body (active step + N/M progress, by bucket).
+  // The literal JSON payload is never rendered; only the summary line.
+  // ---------------------------------------------------------------------------
+
+  function updatePlanItem(plan: Array<{ step: string; status: string }>): CodexToolCallItem {
+    return {
+      kind: 'tool_call',
+      lineId: '0',
+      timestamp: '2026-05-13T01:00:00Z',
+      toolName: 'update_plan',
+      callId: 'call_plan',
+      rawInput: { plan },
+      rawOutput: 'Plan updated',
+      status: 'completed',
+    };
+  }
+
+  it('update_plan renders "Now: <step> · N/M complete" when a step is in_progress', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={updatePlanItem([
+          { step: 'Phase 1 deletes', status: 'completed' },
+          { step: 'Phase 2 cmd extractions', status: 'in_progress' },
+          { step: 'Run tests', status: 'pending' },
+        ])}
+      />,
+    );
+    expect(container.textContent).toContain('Now: Phase 2 cmd extractions');
+    expect(container.textContent).toContain('1/3 complete');
+    // The raw JSON plan is NOT rendered.
+    expect(container.textContent).not.toContain('"status"');
+    expect(container.textContent).not.toContain('"step"');
+  });
+
+  it('update_plan renders "Plan complete" when every step is completed', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={updatePlanItem([
+          { step: 'a', status: 'completed' },
+          { step: 'b', status: 'completed' },
+        ])}
+      />,
+    );
+    expect(container.textContent).toContain('Plan complete');
+    expect(container.textContent).toContain('2/2 complete');
+  });
+
+  it('update_plan renders "Plan registered" when every step is pending', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={updatePlanItem([
+          { step: 'a', status: 'pending' },
+          { step: 'b', status: 'pending' },
+        ])}
+      />,
+    );
+    expect(container.textContent).toContain('Plan registered');
+    expect(container.textContent).toContain('0/2 complete');
+  });
+
+  it('update_plan renders "Plan paused" when mixed completed+pending with no active', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={updatePlanItem([
+          { step: 'a', status: 'completed' },
+          { step: 'b', status: 'pending' },
+        ])}
+      />,
+    );
+    expect(container.textContent).toContain('Plan paused');
+    expect(container.textContent).toContain('1/2 complete');
+  });
+
+  it('update_plan renders "Empty plan" when plan is empty', () => {
+    const { container } = render(<CodexToolCallBlock item={updatePlanItem([])} />);
+    expect(container.textContent).toContain('Empty plan');
+  });
+
+  it('update_plan search highlight wraps the active-step text', () => {
+    const { container } = render(
+      <CodexToolCallBlock
+        item={updatePlanItem([
+          { step: 'Phase 1 deletes', status: 'completed' },
+          { step: 'Phase 2 cmd extractions', status: 'in_progress' },
+        ])}
+        searchQuery="cmd"
+        isCurrentSearchMatch
+      />,
+    );
+    const mark = container.querySelector('mark');
+    expect(mark).not.toBeNull();
+    expect(mark?.textContent).toBe('cmd');
+  });
 });

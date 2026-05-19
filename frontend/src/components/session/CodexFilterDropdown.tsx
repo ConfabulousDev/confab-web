@@ -57,6 +57,10 @@ const FLAT_CATEGORIES: FlatFilterItem[] = [
   { category: 'reasoning_hidden', label: 'Reasoning Hidden', color: 'purple' },
   { category: 'compacted', label: 'Compacted', color: 'cyan' },
   { category: 'turn_separator', label: 'Turn Separator', color: 'gray' },
+  // CF-368: aborted-turn divider — sits next to the regular turn separator
+  // chip since both are turn-boundary markers; amber to mirror the
+  // warning-coloured CSS on the divider itself.
+  { category: 'turn_aborted', label: 'Turn Aborted', color: 'amber' },
   { category: 'unknown', label: 'Unknown', color: 'default' },
 ];
 

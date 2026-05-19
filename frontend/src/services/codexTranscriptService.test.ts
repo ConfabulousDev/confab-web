@@ -102,7 +102,7 @@ describe('normalizeCodexLines', () => {
     expect(userOccurrences.length).toBe(1);
   });
 
-  it('drops event_msg.mcp_tool_call_end as redundant with function_call_output', () => {
+  it('event_msg.mcp_tool_call_end enriches the paired tool_call with mcpInvocation (CF-368)', () => {
     const jsonl = [
       {
         timestamp: '2026-05-13T01:00:00Z',
@@ -148,6 +148,8 @@ describe('normalizeCodexLines', () => {
       .join('\n');
 
     const result = items(jsonl);
+    // Only the paired function_call row should be emitted — mcp_tool_call_end
+    // mutates it in-place rather than producing its own item.
     expect(result).toHaveLength(1);
     const toolCall = result[0];
     expect(toolCall?.kind).toBe('tool_call');
@@ -155,6 +157,160 @@ describe('normalizeCodexLines', () => {
       expect(toolCall.callId).toBe('call_mcp_001');
       expect(toolCall.status).toBe('completed');
       expect(toolCall.rawOutput).toContain('CF-404');
+      expect(toolCall.mcpInvocation).toEqual({ server: 'linear', tool: 'save_issue' });
+    }
+  });
+
+  it('event_msg.mcp_tool_call_end with no server/tool drops the enrichment (CF-368)', () => {
+    const jsonl = [
+      {
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          call_id: 'call_mcp_empty',
+          name: 'unlabeled',
+          arguments: '{}',
+        },
+      },
+      {
+        timestamp: '2026-05-13T01:00:01Z',
+        type: 'event_msg',
+        payload: {
+          type: 'mcp_tool_call_end',
+          call_id: 'call_mcp_empty',
+          // invocation omitted entirely
+        },
+      },
+      {
+        timestamp: '2026-05-13T01:00:02Z',
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          call_id: 'call_mcp_empty',
+          output: '',
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    expect(result).toHaveLength(1);
+    const toolCall = result[0];
+    if (toolCall?.kind === 'tool_call') {
+      expect(toolCall.mcpInvocation).toBeUndefined();
+    }
+  });
+
+  it('drops event_msg.web_search_end as redundant with response_item.web_search_call (CF-368)', () => {
+    const jsonl = [
+      {
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'response_item',
+        payload: {
+          type: 'web_search_call',
+          status: 'completed',
+          action: { type: 'search', query: 'codex jsonl format' },
+        },
+      },
+      {
+        timestamp: '2026-05-13T01:00:01Z',
+        type: 'event_msg',
+        payload: {
+          type: 'web_search_end',
+          call_id: 'ws_abc',
+          query: 'codex jsonl format',
+          action: { type: 'search', query: 'codex jsonl format', queries: ['codex jsonl format'] },
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    // Only the response_item.web_search_call survives as a tool_call.
+    // The event_msg.web_search_end must NOT produce an additional row,
+    // and crucially must NOT fall through to a CodexUnknownItem.
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('tool_call');
+    expect(result.find((i) => i.kind === 'unknown')).toBeUndefined();
+  });
+
+  it('drops event_msg.context_compacted as redundant with top-level compacted line (CF-368)', () => {
+    const jsonl = [
+      {
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'event_msg',
+        payload: { type: 'context_compacted' },
+      },
+      {
+        timestamp: '2026-05-13T01:00:01Z',
+        type: 'compacted',
+        payload: {
+          message: 'summary',
+          replacement_history: [{ a: 1 }, { b: 2 }],
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    // Only the top-level `compacted` line produces a divider; the
+    // event_msg.context_compacted preview is noise and must be dropped.
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('compacted');
+    expect(result.find((i) => i.kind === 'unknown')).toBeUndefined();
+  });
+
+  it('emits CodexTurnAbortedItem for event_msg.turn_aborted (CF-368)', () => {
+    const jsonl = [
+      {
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'event_msg',
+        payload: {
+          type: 'turn_aborted',
+          turn_id: '019e3bb4-2150-70f3-a356-599189a0292c',
+          reason: 'interrupted',
+          completed_at: 1779118150,
+          duration_ms: 29367,
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    expect(result).toHaveLength(1);
+    const aborted = result[0];
+    expect(aborted?.kind).toBe('turn_aborted');
+    if (aborted?.kind === 'turn_aborted') {
+      expect(aborted.reason).toBe('interrupted');
+      expect(aborted.durationMs).toBe(29367);
+      expect(aborted.timestamp).toBe('2026-05-13T01:00:00Z');
+      expect(aborted.lineId).toBe('0');
+    }
+    expect(result.find((i) => i.kind === 'unknown')).toBeUndefined();
+  });
+
+  it('CodexTurnAbortedItem tolerates missing reason and duration_ms (CF-368)', () => {
+    const jsonl = [
+      {
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'event_msg',
+        payload: { type: 'turn_aborted' },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    expect(result).toHaveLength(1);
+    const aborted = result[0];
+    if (aborted?.kind === 'turn_aborted') {
+      expect(aborted.reason).toBe('');
+      expect(aborted.durationMs).toBe(0);
     }
   });
 

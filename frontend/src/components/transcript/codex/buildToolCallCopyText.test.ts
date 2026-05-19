@@ -5,9 +5,11 @@
 //   - apply_patch:  raw patch input only (no output, no summary)
 //   - web_search:   queries joined by newlines; undefined if no queries
 //   - generic:      stringified rawInput + rawOutput, joined by blank line
+//
+// CF-368 added `readPlanSummary` for the `update_plan` body — tested below.
 
 import { describe, it, expect } from 'vitest';
-import { buildToolCallCopyText } from './codexToolCallHelpers';
+import { buildToolCallCopyText, readPlanSummary } from './codexToolCallHelpers';
 import type { CodexToolCallItem } from '@/types/codexRenderItem';
 
 const baseTs = '2026-05-13T18:00:00Z';
@@ -169,5 +171,192 @@ describe('buildToolCallCopyText', () => {
         ),
       ).toBeUndefined();
     });
+  });
+
+  // CF-368: update_plan copies the rendered summary (Now: <step> · N/M complete),
+  // never the raw JSON plan. The body renders the same summary.
+  describe('update_plan', () => {
+    it('returns the active-step summary when one step is in_progress', () => {
+      const item = tc({
+        toolName: 'update_plan',
+        rawInput: {
+          plan: [
+            { step: 'Step one', status: 'completed' },
+            { step: 'Step two', status: 'in_progress' },
+            { step: 'Step three', status: 'pending' },
+          ],
+        },
+      });
+      expect(buildToolCallCopyText(item)).toBe('Now: Step two · 1/3 complete');
+    });
+
+    it('returns "Plan complete" when every step is completed', () => {
+      const item = tc({
+        toolName: 'update_plan',
+        rawInput: {
+          plan: [
+            { step: 'a', status: 'completed' },
+            { step: 'b', status: 'completed' },
+          ],
+        },
+      });
+      expect(buildToolCallCopyText(item)).toBe('Plan complete · 2/2 complete');
+    });
+
+    it('returns "Plan registered" when every step is pending', () => {
+      const item = tc({
+        toolName: 'update_plan',
+        rawInput: {
+          plan: [
+            { step: 'a', status: 'pending' },
+            { step: 'b', status: 'pending' },
+          ],
+        },
+      });
+      expect(buildToolCallCopyText(item)).toBe('Plan registered · 0/2 complete');
+    });
+
+    it('returns "Empty plan" when the plan is empty', () => {
+      const item = tc({ toolName: 'update_plan', rawInput: { plan: [] } });
+      expect(buildToolCallCopyText(item)).toBe('Empty plan');
+    });
+
+    it('returns undefined when the input is not a usable plan object', () => {
+      expect(
+        buildToolCallCopyText(tc({ toolName: 'update_plan', rawInput: null })),
+      ).toBeUndefined();
+      expect(
+        buildToolCallCopyText(tc({ toolName: 'update_plan', rawInput: undefined })),
+      ).toBeUndefined();
+    });
+  });
+});
+
+// CF-368: pure helper that classifies an update_plan payload into one of the
+// five summary buckets. Drives both the body renderer and the copy text.
+describe('readPlanSummary', () => {
+  it('classifies an empty plan as bucket=empty with zero totals', () => {
+    expect(readPlanSummary({ plan: [] })).toEqual({
+      bucket: 'empty',
+      completedCount: 0,
+      totalCount: 0,
+    });
+  });
+
+  it('classifies a missing plan field as bucket=empty (defensive)', () => {
+    expect(readPlanSummary({})).toEqual({
+      bucket: 'empty',
+      completedCount: 0,
+      totalCount: 0,
+    });
+    expect(readPlanSummary(null)).toEqual({
+      bucket: 'empty',
+      completedCount: 0,
+      totalCount: 0,
+    });
+    expect(readPlanSummary('not an object')).toEqual({
+      bucket: 'empty',
+      completedCount: 0,
+      totalCount: 0,
+    });
+  });
+
+  it('classifies all-completed as bucket=complete', () => {
+    expect(
+      readPlanSummary({
+        plan: [
+          { step: 'a', status: 'completed' },
+          { step: 'b', status: 'completed' },
+          { step: 'c', status: 'completed' },
+        ],
+      }),
+    ).toEqual({
+      bucket: 'complete',
+      completedCount: 3,
+      totalCount: 3,
+    });
+  });
+
+  it('classifies all-pending as bucket=pending', () => {
+    expect(
+      readPlanSummary({
+        plan: [
+          { step: 'a', status: 'pending' },
+          { step: 'b', status: 'pending' },
+        ],
+      }),
+    ).toEqual({
+      bucket: 'pending',
+      completedCount: 0,
+      totalCount: 2,
+    });
+  });
+
+  it('classifies a mix-with-active as bucket=in_progress with the first active step', () => {
+    const result = readPlanSummary({
+      plan: [
+        { step: 'one', status: 'completed' },
+        { step: 'two', status: 'in_progress' },
+        { step: 'three', status: 'pending' },
+      ],
+    });
+    expect(result.bucket).toBe('in_progress');
+    expect(result.activeStep).toBe('two');
+    expect(result.completedCount).toBe(1);
+    expect(result.totalCount).toBe(3);
+  });
+
+  it('first in_progress wins when multiple are active', () => {
+    const result = readPlanSummary({
+      plan: [
+        { step: 'first', status: 'in_progress' },
+        { step: 'second', status: 'in_progress' },
+      ],
+    });
+    expect(result.bucket).toBe('in_progress');
+    expect(result.activeStep).toBe('first');
+  });
+
+  it('classifies completed+pending with no in_progress as bucket=paused', () => {
+    expect(
+      readPlanSummary({
+        plan: [
+          { step: 'a', status: 'completed' },
+          { step: 'b', status: 'pending' },
+          { step: 'c', status: 'pending' },
+        ],
+      }),
+    ).toEqual({
+      bucket: 'paused',
+      completedCount: 1,
+      totalCount: 3,
+    });
+  });
+
+  it('counts unrecognized status values toward total but not completed', () => {
+    const result = readPlanSummary({
+      plan: [
+        { step: 'a', status: 'completed' },
+        { step: 'b', status: 'blocked' }, // unrecognized — forward-compat
+        { step: 'c', status: 'pending' },
+      ],
+    });
+    expect(result.completedCount).toBe(1);
+    expect(result.totalCount).toBe(3);
+    // No in_progress, has completed AND pending → paused.
+    expect(result.bucket).toBe('paused');
+  });
+
+  it('skips steps with non-string `step` field cleanly (no crash, no count)', () => {
+    const result = readPlanSummary({
+      plan: [
+        { step: 'valid', status: 'completed' },
+        { step: 42, status: 'in_progress' }, // malformed, skipped
+        { status: 'pending' }, // malformed, skipped
+      ],
+    });
+    expect(result.totalCount).toBe(1);
+    expect(result.completedCount).toBe(1);
+    expect(result.bucket).toBe('complete');
   });
 });
