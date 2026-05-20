@@ -19,7 +19,7 @@ import (
 
 // Tunables are vars (not consts) so tests can shrink them.
 var (
-	successTTL     = 6 * time.Hour
+	successTTL     = 2 * time.Hour
 	failureTTL     = 15 * time.Minute
 	requestTimeout = 3 * time.Second
 	githubBaseURL  = "https://api.github.com"
