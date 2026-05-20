@@ -28,6 +28,9 @@ Self-hosted analytics for your Claude Code and Codex sessions.
 > [!IMPORTANT]
 > Code sessions contain proprietary code, architecture decisions, and internal workflows. The self hosted Confabulous stack keeps all of it on your network — no third-party access, no vendor lock-in.
 
+> [!TIP]
+> **Don't want to self-host?** Use the **free, fully featured** managed instance at **[confabulous.dev](https://confabulous.dev)** — no install required.
+
 ## Quickstart
 
 **Prerequisites:** Docker and Docker Compose
@@ -78,9 +81,9 @@ See the [Self-Hosting Guide](SELF-HOSTING.md) for complete deployment instructio
 
 Configuration is simple — everything is controlled through environment variables in `docker-compose.yml`. See [CONFIGURATION.md](CONFIGURATION.md) for the full reference.
 
-## Cloud Deployment
+## Deploying to a Cloud Host
 
-The official SaaS instance lives at [confabulous.dev](https://confabulous.dev), hosted on a Fly.io / Neon.tech stack. See [`deploy-to-fly.sh`](deploy-to-fly.sh) and [`fly.toml`](fly.toml) for details.
+Prefer to self-host on a cloud provider rather than your own hardware? See [`deploy-to-fly.sh`](deploy-to-fly.sh) and [`fly.toml`](fly.toml) for a tested Fly.io + Neon.tech deployment — the same stack that powers [confabulous.dev](https://confabulous.dev).
 
 ## Developer Docs
 
