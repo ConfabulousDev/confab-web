@@ -442,7 +442,7 @@ const sessionStatsJoins = `
 
 const githubRefCTEs = `
 		github_pr_refs AS (
-			SELECT session_id, array_agg(ref ORDER BY created_at) as prs
+			SELECT session_id, array_agg(url ORDER BY created_at) as prs
 			FROM session_github_links WHERE link_type = 'pull_request' GROUP BY session_id
 		),
 		github_commit_refs AS (

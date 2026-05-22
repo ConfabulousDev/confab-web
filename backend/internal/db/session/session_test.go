@@ -898,11 +898,11 @@ func TestListUserSessions_IncludesGitHubPRs(t *testing.T) {
 	}
 
 	// Verify PRs are ordered by created_at (456 was created first)
-	if session.GitHubPRs[0] != "456" {
-		t.Errorf("expected first PR to be '456', got '%s'", session.GitHubPRs[0])
+	if session.GitHubPRs[0] != "https://github.com/test-owner/test-repo/pull/456" {
+		t.Errorf("expected first PR URL to be 'https://github.com/test-owner/test-repo/pull/456', got '%s'", session.GitHubPRs[0])
 	}
-	if session.GitHubPRs[1] != "123" {
-		t.Errorf("expected second PR to be '123', got '%s'", session.GitHubPRs[1])
+	if session.GitHubPRs[1] != "https://github.com/test-owner/test-repo/pull/123" {
+		t.Errorf("expected second PR URL to be 'https://github.com/test-owner/test-repo/pull/123', got '%s'", session.GitHubPRs[1])
 	}
 }
 
@@ -967,8 +967,8 @@ func TestListUserSessions_GitHubPRsExcludesCommits(t *testing.T) {
 	if len(sessions[0].GitHubPRs) != 1 {
 		t.Fatalf("expected 1 GitHub PR (commits excluded), got %d", len(sessions[0].GitHubPRs))
 	}
-	if sessions[0].GitHubPRs[0] != "42" {
-		t.Errorf("expected PR '42', got '%s'", sessions[0].GitHubPRs[0])
+	if sessions[0].GitHubPRs[0] != "https://github.com/test-owner/test-repo/pull/42" {
+		t.Errorf("expected PR URL 'https://github.com/test-owner/test-repo/pull/42', got '%s'", sessions[0].GitHubPRs[0])
 	}
 }
 
@@ -1017,8 +1017,8 @@ func TestListUserSessions_GitHubPRsSharedView(t *testing.T) {
 	if len(sharedSession.GitHubPRs) != 1 {
 		t.Fatalf("expected 1 GitHub PR in shared session, got %d", len(sharedSession.GitHubPRs))
 	}
-	if sharedSession.GitHubPRs[0] != "999" {
-		t.Errorf("expected PR '999', got '%s'", sharedSession.GitHubPRs[0])
+	if sharedSession.GitHubPRs[0] != "https://github.com/test-owner/test-repo/pull/999" {
+		t.Errorf("expected PR URL 'https://github.com/test-owner/test-repo/pull/999', got '%s'", sharedSession.GitHubPRs[0])
 	}
 }
 

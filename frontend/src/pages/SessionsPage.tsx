@@ -172,17 +172,16 @@ function SessionsPage() {
                                   {session.git_branch}
                                 </Chip>
                               )}
-                              {session.github_prs?.map((pr) => {
-                                const prUrl = webUrl ? `${webUrl}/pull/${pr}` : undefined;
+                              {session.github_prs?.map((prUrl) => {
+                                const prNumber = prUrl.split('/').pop() ?? prUrl;
                                 return (
                                   <Chip
-                                    key={pr}
+                                    key={prUrl}
                                     icon={PRIcon}
                                     variant="purple"
                                     linkUrl={prUrl}
-                                    copyValue={prUrl ? undefined : pr}
                                   >
-                                    #{pr}
+                                    #{prNumber}
                                   </Chip>
                                 );
                               })}

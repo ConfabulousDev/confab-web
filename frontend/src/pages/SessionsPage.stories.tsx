@@ -43,7 +43,7 @@ const mockSessions: MockSession[] = [
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'main',
-    github_prs: ['142'],
+    github_prs: ['https://github.com/ConfabulousDev/confab-web/pull/142'],
   },
   {
     id: '2',
@@ -96,7 +96,7 @@ const mockSessions: MockSession[] = [
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'feature/quickstart',
-    github_prs: ['118', '119'],
+    github_prs: ['https://github.com/ConfabulousDev/confab-web/pull/118', 'https://github.com/ConfabulousDev/confab-web/pull/119'],
   },
   {
     id: '6',
@@ -174,9 +174,9 @@ function SessionListTable({ sessions }: SessionListTableProps) {
                           {session.git_branch}
                         </Chip>
                       )}
-                      {session.github_prs?.map((pr) => (
-                        <Chip key={pr} icon={PRIcon} variant="purple">
-                          #{pr}
+                      {session.github_prs?.map((prUrl) => (
+                        <Chip key={prUrl} icon={PRIcon} variant="purple">
+                          #{prUrl.split('/').pop() ?? prUrl}
                         </Chip>
                       ))}
                     </div>
@@ -312,7 +312,7 @@ const mockSharedSessions: MockSession[] = [
     git_repo: 'ConfabulousDev/confab-web',
     git_repo_url: 'https://github.com/ConfabulousDev/confab-web',
     git_branch: 'perf/lazy-loading',
-    github_prs: ['156'],
+    github_prs: ['https://github.com/ConfabulousDev/confab-web/pull/156'],
     shared_by_email: 'carol@example.org',
   },
 ];

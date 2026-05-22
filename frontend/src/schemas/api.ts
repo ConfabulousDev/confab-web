@@ -45,7 +45,7 @@ const SessionSchema = z.object({
   git_repo: z.string().nullable().optional(),
   git_repo_url: z.string().nullable().optional(), // Full git repository URL
   git_branch: z.string().nullable().optional(),
-  github_prs: z.array(z.string()).nullable().optional(), // Linked GitHub PR refs (e.g., ["123", "456"])
+  github_prs: z.array(z.string()).nullable().optional(), // Linked GitHub PR URLs (e.g., ["https://github.com/org/repo/pull/123"])
   github_commits: z.array(z.string()).nullable().optional(), // Linked GitHub commit SHAs (latest first)
   estimated_cost_usd: z.string().nullable().optional(), // Estimated API cost from analytics
   is_owner: z.boolean(),

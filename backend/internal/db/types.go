@@ -35,7 +35,7 @@ type SessionListItem struct {
 	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
 	GitRepoURL       *string    `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
 	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
-	GitHubPRs        []string   `json:"github_prs,omitempty"`         // Linked GitHub PR refs (e.g., ["123", "456"])
+	GitHubPRs        []string   `json:"github_prs,omitempty"`         // Linked GitHub PR URLs (e.g., ["https://github.com/org/repo/pull/123"])
 	GitHubCommits    []string   `json:"github_commits,omitempty"`     // Linked GitHub commit SHAs (latest first)
 	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
 	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
