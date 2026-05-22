@@ -19,7 +19,7 @@ Reports whether the running backend build is behind the latest GitHub release of
 ## Behavior
 
 - **Lazy**: zero work at construction; first `Status()` call triggers the fetch.
-- **TTLs**: 6 h after a successful fetch, 15 min after a failure. Tunables are package-level `var`s so tests can shrink them.
+- **TTLs**: 2 h after a successful fetch, 15 min after a failure. Tunables are package-level `var`s so tests can shrink them.
 - **GitHub headers**: `User-Agent: confab-backend/<version>`, `Accept: application/vnd.github+json`.
 - **Prerelease filter**: ignored even though `/releases/latest` returns only stable releases by design (defensive).
 - **Dev bias**: when `Current == ""` (local `go run` without `-ldflags`) the checker still fetches and forces `UpdateAvailable: true` so the badge is visible during development.
