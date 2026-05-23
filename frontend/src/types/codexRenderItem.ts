@@ -4,12 +4,13 @@
 // often mirror response_item events). `normalizeCodexLines` collapses that
 // stream into the items below, which the timeline renders one row each.
 //
-// ## `lineId` (CF-360)
+// ## `lineId` (CF-360, internal-only since CF-475)
 //
-// Every variant carries a stable string identifier so the UI can deep-link to
-// individual rows via `?msg=<lineId>`. The value is `String(idx)` where `idx`
-// is the position of the originating line in the validated `rawLines` array
-// passed to `normalizeCodexLines()`. It is:
+// Every variant carries a stable string identifier used internally for React
+// keys, selection state, and the `nextOfSameKind` / `prevOfSameKind` skip-nav
+// maps. The value is `String(idx)` where `idx` is the position of the
+// originating line in the validated `rawLines` array passed to
+// `normalizeCodexLines()`. It is:
 //
 //   - Stable across re-renders of the same `rawLines` (the array is
 //     append-only across polling cycles).
@@ -20,11 +21,13 @@
 //
 // NOT the literal source-file line number. `parseCodexJSONL` drops empty and
 // schema-invalid lines, so the rawLines index differs from the on-disk row.
-// If a future feature needs the literal file line number, add a separate
-// `originalLineNumber` on `RawCodexLine` rather than redefining `lineId`.
 //
-// The string type is intentional so a future swap (content-hash, server-issued
-// UUID) doesn't break the prop shape.
+// **Not used for deep-linking** (CF-475). The `?msg=` query-param value for
+// Codex sessions is an ISO 8601 `timestamp` (matched against `item.timestamp`
+// by `resolveCodexDeepLinkTarget`). Routing lineId through URLs was fragile —
+// any change to `normalizeCodexLines` (pairing rules, dropped-line filters)
+// would silently invalidate saved URLs. Timestamps are stable because they
+// come from the on-disk JSONL envelope, which doesn't move.
 
 import type { TokenUsage } from '@/utils/tokenStats';
 

@@ -596,6 +596,11 @@ const TILWithSessionSchema = TILSchema.extend({
   owner_email: z.string(),
   is_owner: z.boolean(),
   access_type: z.string(),
+  // CF-475: backend joins `sessions.session_type`, normalized to canonical
+  // form (`claude-code` | `codex`). Used by the TIL list page to decide
+  // whether the deep-link target is a message_uuid (Claude) or a timestamp
+  // (Codex).
+  provider: z.string(),
 });
 
 const TILFilterOptionsSchema = z.object({

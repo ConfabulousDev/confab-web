@@ -83,7 +83,7 @@ export default function CodexToolCallBlock({
         {sessionId && (
           <CodexRowActions
             sessionId={sessionId}
-            lineId={item.lineId}
+            timestamp={item.timestamp}
             copyText={buildToolCallCopyText(item)}
             onSkipToNext={onSkipToNext}
             onSkipToPrevious={onSkipToPrevious}

@@ -15,6 +15,7 @@ const baseTIL: TILWithSession = {
   owner_email: 'jackie@confab.dev',
   is_owner: true,
   access_type: 'owner',
+  provider: 'claude-code',
 };
 
 const meta: Meta<typeof TILCard> = {

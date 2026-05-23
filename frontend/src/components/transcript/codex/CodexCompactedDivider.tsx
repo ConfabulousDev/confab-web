@@ -60,7 +60,7 @@ export default function CodexCompactedDivider({
       {sessionId && (
         <CodexRowActions
           sessionId={sessionId}
-          lineId={item.lineId}
+          timestamp={item.timestamp}
           kindLabel="compaction marker"
         />
       )}

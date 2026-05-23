@@ -2,8 +2,10 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -79,12 +81,14 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("transcript_deep_link equals session_url when no message_uuid", func(t *testing.T) {
+	t.Run("transcript_deep_link equals session_url when no message_uuid (Claude session)", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "exporter@test.com", "Exporter")
 		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "export-key")
-		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-no-msg", testutil.TestSessionFullOpts{Summary: "s"})
+		// Explicit claude-code session — Claude TILs with null message_uuid
+		// cannot deep-link to a row, so the export emits just the session_url.
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-no-msg", "claude-code")
 
 		testutil.CreateTestTIL(t, env, user.ID, sessionID, "No message UUID", "summary", nil)
 
@@ -108,6 +112,45 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 		if result.TILs[0].TranscriptDeepLink != result.TILs[0].SessionURL {
 			t.Errorf("expected deep_link == session_url when no message_uuid, got deep_link=%q session_url=%q",
 				result.TILs[0].TranscriptDeepLink, result.TILs[0].SessionURL)
+		}
+	})
+
+	// CF-475: Codex TILs (always null message_uuid) deep-link via timestamp.
+	t.Run("transcript_deep_link uses created_at for Codex TILs without message_uuid", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "exporter@test.com", "Exporter")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "export-key")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-codex", "codex")
+
+		testutil.CreateTestTIL(t, env, user.ID, sessionID, "Codex TIL", "no uuid", nil)
+
+		ts := setupTILsTestServer(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/tils/export")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result ExportTILsResponse
+		testutil.ParseJSON(t, resp, &result)
+
+		if len(result.TILs) != 1 {
+			t.Fatalf("expected 1 TIL, got %d", len(result.TILs))
+		}
+		// deep_link must differ from session_url and carry ?msg=<RFC3339-encoded created_at>.
+		exported := result.TILs[0]
+		if exported.TranscriptDeepLink == exported.SessionURL {
+			t.Fatalf("expected Codex deep_link to differ from session_url, got both = %q", exported.SessionURL)
+		}
+		expectedSuffix := "?msg=" + url.QueryEscape(exported.CreatedAt.Format(time.RFC3339Nano))
+		if exported.TranscriptDeepLink != exported.SessionURL+expectedSuffix {
+			t.Errorf("expected deep_link suffix %q, got deep_link=%q session_url=%q",
+				expectedSuffix, exported.TranscriptDeepLink, exported.SessionURL)
 		}
 	})
 

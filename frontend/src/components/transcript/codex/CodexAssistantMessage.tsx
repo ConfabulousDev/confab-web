@@ -118,7 +118,7 @@ export default function CodexAssistantMessage({
         {sessionId && (
           <CodexRowActions
             sessionId={sessionId}
-            lineId={item.lineId}
+            timestamp={item.timestamp}
             copyText={item.text}
             onSkipToNext={onSkipToNext}
             onSkipToPrevious={onSkipToPrevious}

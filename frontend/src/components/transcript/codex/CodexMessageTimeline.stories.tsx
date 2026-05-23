@@ -221,8 +221,9 @@ export const WithTimeGap: Story = {
   ),
 };
 
-// CF-360: deep-link target lands on the apply_patch tool_call at lineId '4'.
-// The row should scroll into view (centered) and pulse with the accent ring.
+// CF-475: deep-link target lands on the row at timestamp 2026-05-13T18:00:10Z
+// (the apply_patch tool_call, item index 4 in `sample`). The row should
+// scroll into view (centered) and pulse with the accent ring.
 export const WithDeepLinkTarget: Story = {
   render: () => (
     <Frame>
@@ -230,7 +231,7 @@ export const WithDeepLinkTarget: Story = {
         items={sample}
         filteredItems={sample}
         sessionId="story-session"
-        targetLineId="4"
+        targetTimestamp="2026-05-13T18:00:10Z"
       />
     </Frame>
   ),

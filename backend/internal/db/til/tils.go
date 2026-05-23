@@ -41,6 +41,11 @@ type TILWithSession struct {
 	OwnerEmail   string  `json:"owner_email"`
 	IsOwner      bool    `json:"is_owner"`
 	AccessType   string  `json:"access_type"`
+	// CF-475: normalized via models.NormalizeProvider on Scan, so wire
+	// values are canonical (`claude-code` | `codex`) and never legacy.
+	// The frontend uses this to pick between UUID and timestamp deep-link
+	// targets on the TIL list page.
+	Provider string `json:"provider"`
 }
 
 // FilterOptions contains available filter values computed from TILs' sessions.
@@ -301,13 +306,15 @@ const sessionTitleExpr = `COALESCE(s.custom_title, s.suggested_session_title, s.
 // Repo extraction from git_info JSONB (matches session list query)
 const repoExtractExpr = `regexp_replace(regexp_replace(s.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1')`
 
-// tilSelectCols are the columns selected in each CTE.
+// tilSelectCols are the columns selected in each CTE. The `session_type`
+// column (CF-475) is normalized on Scan via models.NormalizeProvider.
 const tilSelectCols = `
 				t.id, t.title, t.summary, t.session_id, t.message_uuid, t.owner_id, t.created_at,
 				` + sessionTitleExpr + ` as session_title,
 				s.git_info->>'repo_url' as git_repo_url,
 				s.git_info->>'branch' as git_branch,
-				u.email as owner_email`
+				u.email as owner_email,
+				s.session_type as provider`
 
 func buildTILFilters(pb *paramBuilder, params ListParams) (commonFilters, ownedOwnerFilter, sharedOwnerFilter string) {
 	if len(params.Repos) > 0 {
@@ -417,17 +424,20 @@ func (s *Store) queryPaginatedTILs(ctx context.Context, userID int64, params Lis
 	for rows.Next() {
 		var t TILWithSession
 		var gitRepoURL *string
+		var rawProvider sql.NullString
 		if err := rows.Scan(
 			&t.ID, &t.Title, &t.Summary, &t.SessionID,
 			&t.MessageUUID, &t.OwnerID, &t.CreatedAt,
 			&t.SessionTitle, &gitRepoURL, &t.GitBranch,
-			&t.OwnerEmail, &t.IsOwner, &t.AccessType,
+			&t.OwnerEmail, &rawProvider,
+			&t.IsOwner, &t.AccessType,
 		); err != nil {
 			return nil, false, "", fmt.Errorf("failed to scan TIL: %w", err)
 		}
 		if gitRepoURL != nil && *gitRepoURL != "" {
 			t.GitRepo = db.ExtractRepoName(*gitRepoURL)
 		}
+		t.Provider = models.NormalizeProvider(rawProvider.String)
 		tils = append(tils, t)
 	}
 

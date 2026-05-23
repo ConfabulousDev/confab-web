@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTILsFetch, useAuth, useDocumentTitle, useSessionFilters, useColumnCount, distributeToColumns } from '@/hooks';
 import type { TILWithSession } from '@/schemas/api';
+import { buildTILDeepLink } from '@/utils/buildTILDeepLink';
 import PageHeader from '@/components/PageHeader';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
@@ -38,11 +39,7 @@ function TILsPage() {
   );
 
   const handleNavigate = (til: TILWithSession) => {
-    let url = `/sessions/${til.session_id}?tab=transcript`;
-    if (til.message_uuid) {
-      url += `&msg=${til.message_uuid}`;
-    }
-    navigate(url);
+    navigate(buildTILDeepLink(til));
   };
 
   return (

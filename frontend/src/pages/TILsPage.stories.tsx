@@ -18,6 +18,7 @@ const makeTIL = (id: number, overrides: Partial<TILWithSession> = {}): TILWithSe
   owner_email: 'jackie@confab.dev',
   is_owner: true,
   access_type: 'owner',
+  provider: 'claude-code',
   ...overrides,
 });
 

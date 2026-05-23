@@ -1,11 +1,13 @@
-// CF-360: per-row action buttons shared by every Codex renderer.
+// CF-360 / CF-475: per-row action buttons shared by every Codex renderer.
 //
 // Renders, into a row's header-right slot:
 //   [prev-skip?] [next-skip?] [copy-text?] [copy-link]
 //
 // - copy-link is always rendered; it builds a deep-link URL of the form
-//     ${origin}/sessions/${sessionId}?tab=transcript&msg=${lineId}
-//   that matches Claude's TimelineMessage exactly (no trailing `/`).
+//     ${origin}/sessions/${sessionId}?tab=transcript&msg=${timestamp}
+//   where `timestamp` is the render item's ISO 8601 timestamp. The Codex
+//   viewer resolves it via `resolveCodexDeepLinkTarget`. Pre-CF-475 URLs
+//   used a numeric lineId — those land at the top instead of the row.
 // - copy-text is shown only when `copyText` is non-empty / non-whitespace.
 // - skip buttons appear only when the corresponding callback is provided
 //   (parent hides at the ends of a same-kind chain).
@@ -15,7 +17,8 @@ import styles from './CodexRowActions.module.css';
 
 export interface CodexRowActionsProps {
   sessionId: string;
-  lineId: string;
+  /** ISO 8601 timestamp of the originating render item — the `?msg=` value. */
+  timestamp: string;
   /** Omitted = no copy-text button. Treated as empty if whitespace-only. */
   copyText?: string;
   /** Both omitted = no skip buttons. Each missing = that direction hidden. */
@@ -27,7 +30,7 @@ export interface CodexRowActionsProps {
 
 export default function CodexRowActions({
   sessionId,
-  lineId,
+  timestamp,
   copyText,
   onSkipToNext,
   onSkipToPrevious,
@@ -36,18 +39,13 @@ export default function CodexRowActions({
   const { copy: copyTextHandler, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLinkHandler, copied: linkCopied } = useCopyToClipboard();
 
-  // copyText is shown iff it has at least one non-whitespace character. The
-  // button only renders when `showCopyText` is true, so `copyText` is known
-  // to be a non-empty string by the time `handleCopyText` runs.
-  const showCopyText = (copyText?.trim().length ?? 0) > 0;
-
-  function handleCopyText() {
-    void copyTextHandler(copyText ?? '');
-  }
+  // copyText is shown iff it has at least one non-whitespace character.
+  // `hasCopyText` narrows `copyText` to `string` for the button branch below.
+  const hasCopyText = typeof copyText === 'string' && copyText.trim().length > 0;
 
   function handleCopyLink() {
     void copyLinkHandler(
-      `${window.location.origin}/sessions/${sessionId}?tab=transcript&msg=${lineId}`,
+      `${window.location.origin}/sessions/${sessionId}?tab=transcript&msg=${encodeURIComponent(timestamp)}`,
     );
   }
 
@@ -81,11 +79,11 @@ export default function CodexRowActions({
           </svg>
         </button>
       )}
-      {showCopyText && (
+      {hasCopyText && (
         <button
           type="button"
           className={`${styles.iconBtn} ${textCopied ? styles.copied : ''}`}
-          onClick={handleCopyText}
+          onClick={() => void copyTextHandler(copyText)}
           title="Copy text"
           aria-label="Copy text"
         >

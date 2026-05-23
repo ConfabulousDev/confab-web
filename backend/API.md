@@ -439,7 +439,10 @@ Authorization: Bearer <api_key>
 
 **URL fields:**
 - `session_url` — Full URL to the session in the Confab web UI
-- `transcript_deep_link` — URL to the session with a `?msg=` anchor if the TIL has a `message_uuid`, otherwise same as `session_url`
+- `transcript_deep_link` — URL to the session.
+  - Claude TIL with `message_uuid`: appends `?msg=<message_uuid>`.
+  - Codex TIL (CF-475): appends `?msg=<created_at>` (RFC 3339, URL-encoded). The Codex transcript resolves the timestamp to the latest row with `timestamp <= target`, landing on the row that was active when `/til` was invoked.
+  - Claude TIL with null `message_uuid`: equals `session_url` (no usable anchor).
 
 **Access rules:** Uses the same visibility model as the frontend TIL list. The caller sees TILs on sessions they own, sessions shared with them (private shares), and sessions with system shares. TILs on unshared sessions owned by other users are excluded.
 
@@ -996,7 +999,8 @@ Lists TILs visible to the authenticated user. Supports the same filter dimension
       "git_branch": "main",
       "owner_email": "user@example.com",
       "is_owner": true,
-      "access_type": "owner"
+      "access_type": "owner",
+      "provider": "claude-code"
     }
   ],
   "has_more": false,
@@ -1009,6 +1013,8 @@ Lists TILs visible to the authenticated user. Supports the same filter dimension
   }
 }
 ```
+
+The `provider` field (CF-475) carries the session's canonical `session_type`, normalized via `models.NormalizeProvider` (so legacy `"Claude Code"` values surface as `"claude-code"`). The frontend uses it to pick between UUID and timestamp deep-link targets.
 
 #### Get TIL
 

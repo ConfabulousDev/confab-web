@@ -37,6 +37,7 @@ import CodexTimelineBar from './CodexTimelineBar';
 import { useCodexSegmentLayout } from './codexTimelineSegments';
 import { buildVirtualItems, skipNavKey, skipNavLabel } from './codexVirtualItems';
 import { extractCodexItemText } from './extractCodexItemText';
+import { resolveCodexDeepLinkTarget } from './resolveCodexDeepLinkTarget';
 import styles from './CodexMessageTimeline.module.css';
 
 export interface CodexMessageTimelineProps {
@@ -58,8 +59,13 @@ export interface CodexMessageTimelineProps {
   visibleIndices?: Set<number>;
   /** Session ID — used by per-row Copy Link to build deep-link URLs. */
   sessionId: string;
-  /** Deep-link target row, addressed by its stable `lineId` (CF-360). */
-  targetLineId?: string;
+  /**
+   * Deep-link target row, addressed by ISO 8601 timestamp (CF-475). The
+   * resolver picks the latest item with `timestamp <= target`; values that
+   * precede every item clamp to index 0. Pre-CF-475 lineId-style values
+   * (pure digits) are rejected by the resolver and produce no scroll.
+   */
+  targetTimestamp?: string;
   /**
    * CF-362: when true, render per-assistant-message cost badges and the
    * green CostBar side rail. Mirrors the Claude transcript's cost mode.
@@ -77,7 +83,7 @@ export default function CodexMessageTimeline({
   filteredItems,
   visibleIndices,
   sessionId,
-  targetLineId,
+  targetTimestamp,
   isCostMode,
 }: CodexMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -93,16 +99,21 @@ export default function CodexMessageTimeline({
 
   const virtualItems = useMemo(() => buildVirtualItems(filteredItems), [filteredItems]);
 
-  // CF-360/CF-361: map lineId → position in filteredItems[] so deep-link lookup
-  // resolves to the actual row index in the visible list. Built off
-  // `filteredItems` so it stays in sync with what the virtualizer renders.
-  const lineIdToItemIndex = useMemo(() => {
-    const map = new Map<string, number>();
-    filteredItems.forEach((item, idx) => {
-      map.set(item.lineId, idx);
-    });
-    return map;
-  }, [filteredItems]);
+  // CF-475: resolved deep-link target index, in `filteredItems` coords. The
+  // resolver returns the latest item with `timestamp <= targetTimestamp`, or
+  // null when the target is empty / unparseable / a legacy lineId-style
+  // value. Recomputes as items stream in (polling / initial load).
+  const targetItemIndex = useMemo(
+    () =>
+      targetTimestamp !== undefined
+        ? resolveCodexDeepLinkTarget(filteredItems, targetTimestamp)
+        : null,
+    [filteredItems, targetTimestamp],
+  );
+  // CF-475: post-resolution lineId of the target row, used to drive the
+  // per-row highlight. Separate from `targetTimestamp` (the URL value) so a
+  // before-all-items target still highlights the resolved row.
+  const resolvedTargetLineId = targetItemIndex !== null ? filteredItems[targetItemIndex]?.lineId : undefined;
 
   // CF-360: next-/prev-of-same-kind skip-nav maps, keyed by filteredItems
   // index so navigation jumps through visible rows only. Items whose
@@ -165,6 +176,16 @@ export default function CodexMessageTimeline({
     if (!selected) return 0;
     return lineIdToUnfilteredIndex.get(selected.lineId) ?? 0;
   }, [filteredItems, effectiveSelectedIndex, lineIdToUnfilteredIndex]);
+
+  // CF-475: map lineId → position in filteredItems[]. Used to translate the
+  // timeline bar's unfiltered click-to-seek index into a filtered-list row.
+  const lineIdToItemIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredItems.forEach((item, idx) => {
+      map.set(item.lineId, idx);
+    });
+    return map;
+  }, [filteredItems]);
 
   // CF-362: one segment layout instance feeds both `CodexTimelineBar` and
   // `CostBar` so the two side-by-side rails line up row-for-row.
@@ -239,30 +260,29 @@ export default function CodexMessageTimeline({
     [itemIndexToVirtualIndex, virtualizer],
   );
 
-  // CF-360: reset the scroll guard when the deep-link target changes. Handles
-  // both initial mount (guard starts false) and intra-page navigation (user
-  // clicks copy-link on a different row).
+  // CF-360 / CF-475: reset the scroll guard when the deep-link target
+  // changes. Handles initial mount (guard starts false) and intra-page
+  // navigation (user clicks copy-link on a different row).
   useEffect(() => {
     hasScrolledToTarget.current = false;
-  }, [targetLineId]);
+  }, [targetTimestamp]);
 
-  // CF-360: scroll-to-target effect. Polling-aware — depends on
-  // `lineIdToItemIndex`, which changes when items grow, so an in-flight
-  // session whose target arrives later still lands. `hasScrolledToTarget`
-  // ensures we only scroll once per target.
+  // CF-475: scroll-to-target effect. The resolver recomputes
+  // `targetItemIndex` as `filteredItems` grows, so polling-aware behavior is
+  // free: an in-flight session whose target row arrives later will scroll
+  // once the resolver lands it. `hasScrolledToTarget` ensures we only scroll
+  // once per target.
   useEffect(() => {
-    if (!targetLineId || hasScrolledToTarget.current) return;
-    const itemIndex = lineIdToItemIndex.get(targetLineId);
-    if (itemIndex === undefined) return;
-    const virtualIndex = itemIndexToVirtualIndex.get(itemIndex);
+    if (targetItemIndex === null || hasScrolledToTarget.current) return;
+    const virtualIndex = itemIndexToVirtualIndex.get(targetItemIndex);
     if (virtualIndex === undefined) return;
     retryOnAnimationFrame(
       () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
       () => false,
     );
-    setSelectedIndex(itemIndex);
+    setSelectedIndex(targetItemIndex);
     hasScrolledToTarget.current = true;
-  }, [targetLineId, lineIdToItemIndex, itemIndexToVirtualIndex, virtualizer]);
+  }, [targetItemIndex, itemIndexToVirtualIndex, virtualizer]);
 
   // CF-359: scroll to current search match, then scroll first <mark> into
   // view within the row. Structurally mirrors `MessageTimeline.tsx`'s
@@ -410,7 +430,7 @@ export default function CodexMessageTimeline({
 
             const isSelected = vi.index === selectedIndex;
             const isDeepLinkTarget =
-              targetLineId !== undefined && vi.item.lineId === targetLineId;
+              resolvedTargetLineId !== undefined && vi.item.lineId === resolvedTargetLineId;
             const isCurrentSearchMatch =
               search.currentMatchFilteredIndex === vi.index;
             const nextIdx = nextOfSameKind.get(vi.index);
