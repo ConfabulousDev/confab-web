@@ -29,6 +29,9 @@ Self-hosted analytics for your Claude Code and Codex sessions.
 > Code sessions contain proprietary code, architecture decisions, and internal workflows. The self hosted Confabulous stack keeps all of it on your network — no third-party access, no vendor lock-in.
 
 > [!TIP]
+> **No login required** — see Confabulous in action at **[demo.confabulous.dev](https://demo.confabulous.dev)**.
+
+> [!TIP]
 > **Don't want to self-host?** Use the **free, fully featured** managed instance at **[confabulous.dev](https://confabulous.dev)** — no install required.
 
 ## Quickstart
