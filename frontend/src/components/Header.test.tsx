@@ -1,26 +1,35 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Header from './Header';
 
-// Mock the hooks Header reads from so we can render the component in
-// isolation without a QueryClient or AppConfigProvider.
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: null, isAuthenticated: false, loading: false }),
-}));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('@/hooks/useAppConfig', () => ({
   useAppConfig: () => ({ sharesEnabled: false, orgAnalyticsEnabled: false, version: null }),
 }));
 // ThemeToggle / UpdateBadge each require their own context; mock to keep
-// the test focused on the badge in the logo.
+// the test focused on what Header itself renders.
 vi.mock('./ThemeToggle', () => ({ default: () => null }));
 vi.mock('./UpdateBadge', () => ({ default: () => null }));
+
+import { useAuth } from '@/hooks/useAuth';
 
 declare global {
   interface Window {
     __DEMO_IDENTITY__?: unknown;
   }
 }
+
+beforeEach(() => {
+  vi.mocked(useAuth).mockReturnValue({
+    user: null,
+    loading: false,
+    error: null,
+    isAuthenticated: false,
+    serverError: false,
+    refetch: vi.fn(),
+  });
+});
 
 afterEach(() => {
   delete window.__DEMO_IDENTITY__;
@@ -32,6 +41,17 @@ function renderHeader() {
       <Header />
     </MemoryRouter>
   );
+}
+
+function signInAs(email: string) {
+  vi.mocked(useAuth).mockReturnValue({
+    user: { email },
+    loading: false,
+    error: null,
+    isAuthenticated: true,
+    serverError: false,
+    refetch: vi.fn(),
+  });
 }
 
 describe('Header logo badge', () => {
@@ -55,5 +75,61 @@ describe('Header logo badge', () => {
     window.__DEMO_IDENTITY__ = '';
     renderHeader();
     expect(screen.queryByText(/demo/i)).toBeNull();
+  });
+});
+
+describe('Header nav links — owner pre-filter', () => {
+  it('Sessions link pre-fills ?owner=<email> for a normal authenticated user', () => {
+    signInAs('alice@example.com');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'Sessions' });
+    expect(link.getAttribute('href')).toBe(
+      `/sessions?owner=${encodeURIComponent('alice@example.com')}`
+    );
+  });
+
+  it('TILs link pre-fills ?owner=<email> for a normal authenticated user', () => {
+    signInAs('alice@example.com');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'TILs' });
+    expect(link.getAttribute('href')).toBe(
+      `/tils?owner=${encodeURIComponent('alice@example.com')}`
+    );
+  });
+
+  it('Sessions link omits ?owner= when the current user IS the demo identity', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    signInAs('demo@confabulous.dev');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'Sessions' });
+    expect(link.getAttribute('href')).toBe('/sessions');
+  });
+
+  it('TILs link omits ?owner= when the current user IS the demo identity', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    signInAs('demo@confabulous.dev');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'TILs' });
+    expect(link.getAttribute('href')).toBe('/tils');
+  });
+
+  it('Sessions link still pre-fills ?owner= when demo mode is on but the user is NOT the demo identity', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    signInAs('alice@example.com');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'Sessions' });
+    expect(link.getAttribute('href')).toBe(
+      `/sessions?owner=${encodeURIComponent('alice@example.com')}`
+    );
+  });
+
+  it('TILs link still pre-fills ?owner= when demo mode is on but the user is NOT the demo identity', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    signInAs('alice@example.com');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'TILs' });
+    expect(link.getAttribute('href')).toBe(
+      `/tils?owner=${encodeURIComponent('alice@example.com')}`
+    );
   });
 });

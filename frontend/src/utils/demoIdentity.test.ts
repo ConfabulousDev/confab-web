@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getDemoIdentity, notifyReadOnlyDemo, READ_ONLY_EVENT } from './demoIdentity';
+import { getDemoIdentity, isDemoViewer, notifyReadOnlyDemo, READ_ONLY_EVENT } from './demoIdentity';
 
 // CF-483: getDemoIdentity must defensively read window.__DEMO_IDENTITY__
 // and only return a non-empty string. Anything else returns null so
@@ -37,6 +37,28 @@ describe('getDemoIdentity', () => {
   it('returns the email when global is a non-empty string', () => {
     window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
     expect(getDemoIdentity()).toBe('demo@confabulous.dev');
+  });
+});
+
+describe('isDemoViewer', () => {
+  it('returns false when demo mode is off, regardless of email', () => {
+    expect(isDemoViewer('demo@confabulous.dev')).toBe(false);
+    expect(isDemoViewer('alice@example.com')).toBe(false);
+    expect(isDemoViewer(undefined)).toBe(false);
+    expect(isDemoViewer(null)).toBe(false);
+  });
+
+  it('returns true when demo mode is on and the email matches', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    expect(isDemoViewer('demo@confabulous.dev')).toBe(true);
+  });
+
+  it('returns false when demo mode is on but the email does not match', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    expect(isDemoViewer('alice@example.com')).toBe(false);
+    expect(isDemoViewer(undefined)).toBe(false);
+    expect(isDemoViewer(null)).toBe(false);
+    expect(isDemoViewer('')).toBe(false);
   });
 });
 
