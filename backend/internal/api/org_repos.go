@@ -47,10 +47,10 @@ func HandleGetOrgRepos(database *db.DB) http.HandlerFunc {
 		startLocal := time.Unix(dr.StartTS, 0).UTC().Add(-tzDuration)
 		endLocal := time.Unix(dr.EndTS, 0).UTC().Add(-tzDuration).Add(-24 * time.Hour) // EndTS is exclusive
 
-		// Owner/name extraction mirrors trends.go and org_analytics.go.
+		// CF-491: collapse forks to their upstream root through session_repos.
+		// Pure-COALESCE form keeps repos with NULL root_name passing through.
 		query := `
-			SELECT DISTINCT
-				regexp_replace(regexp_replace(s.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') AS repo
+			SELECT DISTINCT ` + db.RepoRootExpr("s") + ` AS repo
 			FROM sessions s
 			INNER JOIN users u ON s.user_id = u.id AND u.status = 'active'
 			WHERE s.first_seen >= to_timestamp($1)

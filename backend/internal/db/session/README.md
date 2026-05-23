@@ -38,6 +38,7 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 - Session uniqueness is `(user_id, session_type, external_id)`. New code writes the canonical `session_type` values `'claude-code'` and `'codex'`; legacy `'Claude Code'` rows persist **permanently** in OSS self-hosted installs (no one-time backfill is run). Read paths apply `models.NormalizeProvider` so the application layer always sees canonical values; see `internal/models/provider.go`.
 - `UpdateSyncFileState` increments `chunk_count` on each upsert; this is an estimate that may drift. The read path self-heals via `UpdateSyncFileChunkCount`.
 - Filter lookup tables (`session_repos`, `session_branches`) are upserted during sync via `upsertFilterLookups` for fast filter option queries.
+- **CF-491 fork→root collapsing**: `session_repos` carries optional `root_name` + `root_source` columns. When a sync chunk's PR link points to a different `owner/repo` than the session's extracted repo, the resolver in `api/sync.go` stamps the upstream as `root_name`. Both filter list queries (`queryFilterOptionsGlobal`, `queryFilterOptionsScoped`) and the filter match (`buildPushdownFilters`) `COALESCE` through `root_name` via `db.RepoRootExpr`/`db.RepoMatchExpr`, so fork sessions surface under their upstream chip.
 
 ## Design Decisions
 

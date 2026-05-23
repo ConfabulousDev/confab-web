@@ -298,8 +298,6 @@ func decodeCursor(cursor string) (time.Time, int64, error) {
 // Session title fallback: COALESCE(custom_title, suggested_session_title, summary, first_user_message)
 const sessionTitleExpr = `COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message)`
 
-// Repo extraction from git_info JSONB (matches session list query)
-const repoExtractExpr = `regexp_replace(regexp_replace(s.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1')`
 
 // tilSelectCols are the columns selected in each CTE.
 const tilSelectCols = `
@@ -312,7 +310,7 @@ const tilSelectCols = `
 func buildTILFilters(pb *paramBuilder, params ListParams) (commonFilters, ownedOwnerFilter, sharedOwnerFilter string) {
 	if len(params.Repos) > 0 {
 		p := pb.addArray(params.Repos)
-		commonFilters += "\n\t\t\t\tAND " + repoExtractExpr + " = ANY(" + p + ")"
+		commonFilters += "\n\t\t\t\tAND " + db.RepoMatchExpr("s", p)
 	}
 	if len(params.Branches) > 0 {
 		p := pb.addArray(params.Branches)
@@ -473,8 +471,10 @@ func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (FilterOpt
 			COALESCE(o.owners, ARRAY[]::text[]) as owners
 		FROM
 			(SELECT array_agg(DISTINCT repo ORDER BY repo) as repos
-			 FROM (SELECT regexp_replace(regexp_replace(v.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') as repo
-				FROM visible_sessions v WHERE v.git_info->>'repo_url' IS NOT NULL) r2) r,
+			 FROM (SELECT COALESCE(sr.root_name, extracted.repo) as repo
+			       FROM (SELECT regexp_replace(regexp_replace(v.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') as repo
+			             FROM visible_sessions v WHERE v.git_info->>'repo_url' IS NOT NULL) extracted
+			       LEFT JOIN session_repos sr ON sr.repo_name = extracted.repo AND sr.root_name IS NOT NULL) r2) r,
 			(SELECT array_agg(DISTINCT branch ORDER BY branch) as branches
 			 FROM (SELECT v.git_info->>'branch' as branch FROM visible_sessions v WHERE v.git_info->>'branch' IS NOT NULL) b2) b,
 			(SELECT array_agg(DISTINCT LOWER(u.email) ORDER BY LOWER(u.email)) as owners

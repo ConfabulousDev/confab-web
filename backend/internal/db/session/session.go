@@ -245,7 +245,7 @@ func (s *Store) queryFilterOptionsGlobal(ctx context.Context) (db.SessionFilterO
 		Providers: models.CanonicalProviders,
 	}
 
-	rows, err := s.conn().QueryContext(ctx, "SELECT repo_name FROM session_repos ORDER BY repo_name")
+	rows, err := s.conn().QueryContext(ctx, "SELECT DISTINCT COALESCE(root_name, repo_name) FROM session_repos ORDER BY 1")
 	if err != nil {
 		return opts, fmt.Errorf("failed to query session_repos: %w", err)
 	}
@@ -317,8 +317,10 @@ func (s *Store) queryFilterOptionsScoped(ctx context.Context, userID int64) (db.
 			COALESCE(o.owners, ARRAY[]::text[]) as owners
 		FROM
 			(SELECT array_agg(DISTINCT repo ORDER BY repo) as repos
-			 FROM (SELECT regexp_replace(regexp_replace(v.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') as repo
-				FROM visible v WHERE v.git_info->>'repo_url' IS NOT NULL) r2) r,
+			 FROM (SELECT COALESCE(sr.root_name, extracted.repo) as repo
+			       FROM (SELECT regexp_replace(regexp_replace(v.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') as repo
+			             FROM visible v WHERE v.git_info->>'repo_url' IS NOT NULL) extracted
+			       LEFT JOIN session_repos sr ON sr.repo_name = extracted.repo AND sr.root_name IS NOT NULL) r2) r,
 			(SELECT array_agg(DISTINCT branch ORDER BY branch) as branches
 			 FROM (SELECT v.git_info->>'branch' as branch FROM visible v WHERE v.git_info->>'branch' IS NOT NULL) b2) b,
 			(SELECT array_agg(DISTINCT LOWER(u.email) ORDER BY LOWER(u.email)) as owners
@@ -365,7 +367,7 @@ func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (common
 
 	if len(params.Repos) > 0 {
 		p := pb.addArray(params.Repos)
-		commonFilters += "\n\t\t\t\tAND regexp_replace(regexp_replace(s.git_info->>'repo_url', '\\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\\1') = ANY(" + p + ")"
+		commonFilters += "\n\t\t\t\tAND " + db.RepoMatchExpr("s", p)
 	}
 	if len(params.Branches) > 0 {
 		p := pb.addArray(params.Branches)

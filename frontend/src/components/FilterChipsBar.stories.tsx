@@ -112,3 +112,21 @@ export const ProviderPlusOtherDimensions: Story = {
     ...noopHandlers,
   },
 };
+
+// CF-491: when a user has worked on the same project through a fork
+// (jackie/confab-web) and through the upstream (ConfabulousDev/confab-web),
+// the repo chip list shows a single upstream-root entry rather than two
+// chips. Collapsing happens server-side via session_repos.root_name; the
+// frontend sees only the collapsed name.
+export const CollapsedForks: Story = {
+  args: {
+    filters: { repos: [], branches: [], owners: [], providers: [], query: '' },
+    filterOptions: {
+      repos: ['ConfabulousDev/confab-web'],
+      branches: ['main'],
+      owners: ['alice@example.com'],
+    },
+    currentUserEmail: 'alice@example.com',
+    ...noopHandlers,
+  },
+};

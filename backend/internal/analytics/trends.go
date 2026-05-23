@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
@@ -196,7 +197,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 				AND s.first_seen >= to_timestamp($2)
 				AND s.first_seen < to_timestamp($3)
 				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 				AND s.session_type = ANY($7::text[])
@@ -397,7 +398,7 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 				AND s.first_seen >= to_timestamp($2)
 				AND s.first_seen < to_timestamp($3)
 				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 				AND s.session_type = ANY($7::text[])
@@ -555,7 +556,7 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 				AND s.first_seen >= to_timestamp($2)
 				AND s.first_seen < to_timestamp($3)
 				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 				AND s.session_type = ANY($6::text[])
@@ -638,7 +639,7 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 				AND s.first_seen >= to_timestamp($2)
 				AND s.first_seen < to_timestamp($3)
 				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 				AND s.session_type = ANY($6::text[])
@@ -727,7 +728,7 @@ func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req 
 				AND s.first_seen >= to_timestamp($2)
 				AND s.first_seen < to_timestamp($3)
 				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 				AND s.session_type = ANY($6::text[])
@@ -827,7 +828,7 @@ func (s *Store) aggregateProvidersPresent(ctx context.Context, userID int64, req
 				AND s.first_seen >= to_timestamp($2)
 				AND s.first_seen < to_timestamp($3)
 				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 				AND s.session_type = ANY($6::text[])

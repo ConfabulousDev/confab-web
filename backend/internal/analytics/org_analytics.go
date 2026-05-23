@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
@@ -106,7 +107,7 @@ func (s *Store) orgUserAggregates(ctx context.Context, req OrgAnalyticsRequest, 
 				AND s.first_seen < to_timestamp($2)
 				AND s.session_type = ANY($3::text[])
 				AND (
-					regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 		) qs ON true
@@ -202,7 +203,7 @@ func (s *Store) orgProvidersPresent(ctx context.Context, req OrgAnalyticsRequest
 			AND s.first_seen < to_timestamp($2)
 			AND s.session_type = ANY($3::text[])
 			AND (
-				regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') = ANY($4::text[])
+				` + db.RepoMatchExpr("s", "$4::text[]") + `
 				OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 			)
 	`

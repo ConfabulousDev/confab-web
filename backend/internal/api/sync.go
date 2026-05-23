@@ -508,6 +508,29 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// CF-491: fork→root resolver. If the chunk's extracted repo differs from
+	// any PR-link's owner/repo, record the upstream root on session_repos.
+	// First-write-wins via the IS NULL guard in db.RecordRepoRoot; runs
+	// non-fatal so a failure cannot fail the chunk upload.
+	if fork := db.ExtractRepoFromGitInfo(gitInfo); fork != "" && len(prLinks) > 0 {
+		for _, link := range prLinks {
+			if link.LinkType != models.GitHubLinkTypePullRequest {
+				continue
+			}
+			root := link.Owner + "/" + link.Repo
+			if root == fork {
+				continue
+			}
+			if err := db.RecordRepoRoot(updateCtx, s.db.Conn(), fork, root, "pr_inference"); err != nil {
+				log.Warn("Failed to record repo root",
+					"error", err,
+					"session_id", req.SessionID,
+					"fork", fork,
+					"root", root)
+			}
+		}
+	}
+
 	// Codex rollout sidecar (CF-385). Runs after S3 + sync state are
 	// committed so a failure here leaves no orphan content — only a delayed
 	// metadata registration that the next chunk's upsert will reconcile.
