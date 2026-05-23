@@ -29,7 +29,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `FilterChipsBar.tsx` | Horizontal bar of dimension dropdowns + active filter chips with clear-all and optional history commit on blur. Dimensions: Provider (static enum, opt out via `showProviderFilter={false}`), Repo, Branch, Owner. `DimensionDropdown` accepts optional `iconFor` / `labelFor` for per-option icons and display labels (used by Provider) |
 | `Footer.tsx` | App footer (SaaS mode only) |
 | `FormField.tsx` | Form field wrapper with label and validation error display |
-| `Header.tsx` | App header with navigation and auth state. Renders a "demo" badge next to the logo when `window.__DEMO_IDENTITY__` is set (CF-483); no badge in normal deployments. |
+| `Header.tsx` | App header with navigation and auth state. Renders a "demo" badge next to the logo when `window.__DEMO_IDENTITY__` is set (CF-483); no badge in normal deployments. Sessions/TILs nav links pre-fill `?owner=<your email>` for normal users; the demo identity skips the pre-filter so the page isn't collapsed to zero rows. |
 | `HeroCards.tsx` | Landing page hero section cards |
 | `HowItWorksModal.tsx` | Onboarding modal explaining the product |
 | `icons.tsx` | SVG icon components (ClaudeCodeIcon, CodexIcon, GitHubIcon, etc.) |

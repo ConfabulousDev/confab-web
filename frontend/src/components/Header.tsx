@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppConfig } from '@/hooks/useAppConfig';
-import { getDemoIdentity } from '@/utils/demoIdentity';
+import { getDemoIdentity, isDemoViewer } from '@/utils/demoIdentity';
 import ThemeToggle from './ThemeToggle';
 import UpdateBadge from './UpdateBadge';
 import styles from './Header.module.css';
@@ -22,6 +22,12 @@ function Logo() {
 function Header() {
   const { user, isAuthenticated } = useAuth();
   const { sharesEnabled, orgAnalyticsEnabled } = useAppConfig();
+  // CF-483 follow-up: the demo identity owns nothing, so pre-filling
+  // ?owner=<demo email> on these nav links collapses the page to zero
+  // rows. Skip the auto-injection for demo viewers; they still get the
+  // owner dropdown to filter manually.
+  const demoViewer = isDemoViewer(user?.email);
+  const ownerQS = user?.email && !demoViewer ? `?owner=${encodeURIComponent(user.email)}` : '';
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -72,9 +78,9 @@ function Header() {
       <Logo />
 
       <nav className={styles.nav}>
-        <Link to={user?.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions'} className={styles.navLink}>Sessions</Link>
+        <Link to={`/sessions${ownerQS}`} className={styles.navLink}>Sessions</Link>
         <Link to="/trends" className={styles.navLink}>Personal Trends</Link>
-        <Link to={user?.email ? `/tils?owner=${encodeURIComponent(user.email)}` : '/tils'} className={styles.navLink}>TILs</Link>
+        <Link to={`/tils${ownerQS}`} className={styles.navLink}>TILs</Link>
         {orgAnalyticsEnabled && <Link to="/org" className={styles.navLink}>Organization</Link>}
       </nav>
 
@@ -128,7 +134,7 @@ function Header() {
                 of — clicking Logout just re-impersonates on the next
                 request. Swap in a "Log in as yourself" link instead so
                 real users can claim a real session. */}
-            {getDemoIdentity() === user?.email ? (
+            {demoViewer ? (
               <Link to="/login" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
                 Log in as yourself
               </Link>

@@ -26,6 +26,17 @@ export function getDemoIdentity(): string | null {
 }
 
 /**
+ * True when demo mode is on AND the supplied email matches the configured
+ * demo identity. Used by Header, HomePage, and LoginPage to branch UI for
+ * the read-only demo viewer (skip ?owner= pre-filter, show "Log in as
+ * yourself", skip post-login redirect, etc.).
+ */
+export function isDemoViewer(email: string | undefined | null): boolean {
+  const demoEmail = getDemoIdentity();
+  return demoEmail !== null && demoEmail === email;
+}
+
+/**
  * Name of the CustomEvent dispatched on window when an API call returns
  * the documented `read_only_user` structured error. ReadOnlyToast listens
  * for this event; api.ts dispatches it.

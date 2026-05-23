@@ -6,7 +6,7 @@ Page-level components corresponding to routes. All pages are lazy-loaded for cod
 
 | File | Role |
 |------|------|
-| `HomePage.tsx` | Landing page with hero, quickstart CTA, and feature overview |
+| `HomePage.tsx` | Landing page with hero, quickstart CTA, and feature overview. Auto-redirects authenticated users to `/sessions?owner=<your email>` (or plain `/sessions` for the demo identity, which owns nothing). |
 | `SessionsPage.tsx` | Paginated session list with server-side filtering (repos, branches, owners, search) |
 | `SessionDetailPage.tsx` | Session detail view wrapping `SessionViewer` with share/delete modals |
 | `TrendsPage.tsx` | Trends analytics dashboard with date range and repo filters |

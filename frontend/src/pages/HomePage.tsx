@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { isDemoViewer } from '@/utils/demoIdentity';
 import DeployCTA from '@/components/DeployCTA';
 import HeroCards from '@/components/HeroCards';
 import styles from './HomePage.module.css';
@@ -11,10 +12,15 @@ function HomePage() {
   const { user, loading, serverError } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect logged-in users to sessions (skip if server is down)
+  // Redirect logged-in users to sessions (skip if server is down).
+  // Demo identity skips the ?owner= pre-filter — see Header.tsx for the
+  // rationale; same fix, same gate.
   useEffect(() => {
     if (!loading && user && !serverError) {
-      navigate(user.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions', { replace: true });
+      const target = user.email && !isDemoViewer(user.email)
+        ? `/sessions?owner=${encodeURIComponent(user.email)}`
+        : '/sessions';
+      navigate(target, { replace: true });
     }
   }, [loading, user, serverError, navigate]);
 

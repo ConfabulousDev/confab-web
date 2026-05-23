@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAppConfig } from '@/hooks/useAppConfig';
-import { getDemoIdentity } from '@/utils/demoIdentity';
+import { isDemoViewer } from '@/utils/demoIdentity';
 import Alert from '@/components/Alert';
 import styles from './LoginPage.module.css';
 
@@ -58,8 +58,7 @@ function LoginPage() {
   // CF-483: demo identity is auto-impersonated, so isAuthenticated is true
   // for visitors who came here via "Log in as yourself". Skip the redirect
   // so they can actually see the form and pick a real provider.
-  const demoEmail = getDemoIdentity();
-  const isDemoUser = demoEmail !== null && user?.email === demoEmail;
+  const isDemoUser = isDemoViewer(user?.email);
 
   // Extract auth error from URL params into state on initial render
   const [authError] = useState(() => {
