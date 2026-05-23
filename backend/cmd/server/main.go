@@ -93,6 +93,16 @@ func main() {
 		}
 	}
 
+	// CF-483: provision the demo identity and its shared session row.
+	// No-op when DEMO_IDENTITY_EMAIL is unset.
+	if config.OAuthConfig.DemoIdentityEmail != "" {
+		ctx := context.Background()
+		if err := auth.BootstrapDemoIdentity(ctx, database,
+			config.OAuthConfig.DemoIdentityEmail, config.OAuthConfig.CSRFSecretKey); err != nil {
+			logFatal("failed to bootstrap demo identity", "error", err)
+		}
+	}
+
 	// Initialize S3/MinIO storage
 	store, err := storage.NewS3Storage(config.S3Config)
 	if err != nil {
@@ -275,6 +285,19 @@ func loadConfig() Config {
 	}
 	if len(csrfSecretKey) < 32 {
 		logFatal("invalid env var", "var", "CSRF_SECRET_KEY", "error", "must be at least 32 characters")
+	}
+	oauthConfig.CSRFSecretKey = csrfSecretKey
+
+	// CF-483: optional demo identity. When set, the named user is the
+	// per-user read-only "demo identity"; anonymous web visitors are
+	// auto-impersonated as them. Unset = zero behavior change.
+	if demoEmail := strings.TrimSpace(os.Getenv("DEMO_IDENTITY_EMAIL")); demoEmail != "" {
+		demoEmail = validation.NormalizeEmail(demoEmail)
+		if !validation.IsValidEmail(demoEmail) {
+			logFatal("invalid env var", "var", "DEMO_IDENTITY_EMAIL", "error", "must be a valid email address")
+		}
+		oauthConfig.DemoIdentityEmail = demoEmail
+		logger.Info("demo mode enabled", "demo_identity_email", demoEmail)
 	}
 
 	// Validate required database configuration

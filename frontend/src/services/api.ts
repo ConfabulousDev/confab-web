@@ -2,6 +2,7 @@
 // All API responses are validated at runtime to ensure type safety
 import { z } from 'zod';
 import { shouldSkip401Redirect } from '@/utils/sessionErrors';
+import { notifyReadOnlyDemo } from '@/utils/demoIdentity';
 import {
   SessionDetailSchema,
   SessionListResponseSchema,
@@ -128,11 +129,25 @@ async function parseErrorBody(response: Response): Promise<unknown> {
 }
 
 /**
+ * Type guard for the CF-483 read-only structured error body.
+ */
+function isReadOnlyUserError(data: unknown): boolean {
+  return isErrorResponse(data) && data.error === 'read_only_user';
+}
+
+/**
  * Read an error response and throw an APIError.
  * Shared by all fetch paths to ensure consistent error handling.
+ *
+ * CF-483: when the body matches the documented read_only_user shape,
+ * dispatch the toast event before throwing so the user sees a "read-only
+ * demo" toast in addition to whatever the call-site does with the error.
  */
 async function throwResponseError(response: Response): Promise<never> {
   const errorData = await parseErrorBody(response);
+  if (response.status === 403 && isReadOnlyUserError(errorData)) {
+    notifyReadOnlyDemo();
+  }
   throw new APIError(
     `Request failed: ${response.statusText}`,
     response.status,

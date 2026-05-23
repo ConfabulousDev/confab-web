@@ -9,8 +9,8 @@ Authentication and authorization database operations: OAuth identity management,
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
 | `oauth.go` | `FindOrCreateUserByOAuth` -- finds user by provider identity, links new identities to existing accounts by email match, or creates new users. Resolves pending share recipients on user creation. |
 | `password.go` | `AuthenticatePassword`, `CreatePasswordUser`, `UpdateUserPassword`, `GetUserByEmail`, `IsUserAdmin`. Includes bcrypt verification, account lockout after failed attempts, and timing-attack mitigation. |
-| `web_sessions.go` | `CreateWebSession`, `GetWebSession`, `DeleteWebSession` -- browser session management with expiration |
-| `api_keys.go` | `ValidateAPIKey`, `CreateAPIKeyWithReturn`, `ReplaceAPIKey`, `ListAPIKeys`, `DeleteAPIKey`, `CountAPIKeys`, `UpdateAPIKeyLastUsed` -- API key lifecycle with per-user limits |
+| `web_sessions.go` | `CreateWebSession`, `GetWebSession`, `DeleteWebSession` -- browser session management with expiration. `UpsertSharedSession` + `DeleteOtherSessionsForUser` (CF-483) keep the demo identity at exactly one persistent session row keyed by `auth.DemoSessionCookieID`. `GetWebSession` also returns `users.read_only` for `EnforceReadOnly`. |
+| `api_keys.go` | `ValidateAPIKey`, `CreateAPIKeyWithReturn`, `ReplaceAPIKey`, `ListAPIKeys`, `DeleteAPIKey`, `CountAPIKeys`, `UpdateAPIKeyLastUsed` -- API key lifecycle with per-user limits. `ValidateAPIKey` also returns `users.read_only` (CF-483) so the auth middleware can stash the flag in request context. |
 | `device_codes.go` | `CreateDeviceCode`, `GetDeviceCodeByUserCode`, `GetDeviceCodeByDeviceCode`, `AuthorizeDeviceCode`, `DeleteDeviceCode` -- OAuth device code flow for CLI authentication |
 
 ## Key API
@@ -21,6 +21,8 @@ Authentication and authorization database operations: OAuth identity management,
 - **`ReplaceAPIKey(ctx, userID, keyHash, name)`** -- Atomically replaces an existing key with the same name or creates a new one (subject to `MaxAPIKeysPerUser`). Used by CLI device code flow.
 - **`ValidateAPIKey(ctx, keyHash)`** -- Returns user info for a key hash. Used by the auth middleware on every API request.
 - **`AuthorizeDeviceCode(ctx, userCode, userID)`** -- Links a device code to a user. Only succeeds if the code is unexpired and unauthorized.
+- **`UpsertSharedSession(ctx, sessionID, userID, expiresAt)`** (CF-483) -- `INSERT ... ON CONFLICT (id) DO UPDATE`. Used by bootstrap and `AutoImpersonateIfDemo` to maintain exactly one persistent demo session row.
+- **`DeleteOtherSessionsForUser(ctx, userID, keepSessionID)`** (CF-483) -- Prunes every other session row for the demo user; returns deleted count.
 
 ## How to Extend
 

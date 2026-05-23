@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppConfig } from '@/hooks/useAppConfig';
+import { getDemoIdentity } from '@/utils/demoIdentity';
 import ThemeToggle from './ThemeToggle';
 import UpdateBadge from './UpdateBadge';
 import styles from './Header.module.css';
@@ -111,9 +112,19 @@ function Header() {
               </Link>
             )}
             <div className={styles.dropdownDivider} />
-            <button className={styles.dropdownItem} onClick={handleLogout}>
-              Logout
-            </button>
+            {/* CF-483: the demo identity has no real session to log out
+                of — clicking Logout just re-impersonates on the next
+                request. Swap in a "Log in as yourself" link instead so
+                real users can claim a real session. */}
+            {getDemoIdentity() === user?.email ? (
+              <Link to="/login" className={styles.dropdownItem} onClick={() => setMenuOpen(false)}>
+                Log in as yourself
+              </Link>
+            ) : (
+              <button className={styles.dropdownItem} onClick={handleLogout}>
+                Logout
+              </button>
+            )}
           </div>
         )}
       </div>

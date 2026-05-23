@@ -72,8 +72,9 @@ func enrichSpanWithUser(ctx context.Context, userID int64, userEmail string, aut
 
 // apiKeyAuthResult contains the result of API key authentication
 type apiKeyAuthResult struct {
-	userID    int64
-	userEmail string
+	userID       int64
+	userEmail    string
+	userReadOnly bool // CF-483: stashed in request ctx for EnforceReadOnly
 }
 
 // TryAPIKeyAuth attempts to authenticate using an API key from the Authorization header.
@@ -97,7 +98,7 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 	authStore := &dbauth.Store{DB: database}
 
 	// Validate key in database
-	userID, keyID, userEmail, userStatus, err := authStore.ValidateAPIKey(r.Context(), keyHash)
+	userID, keyID, userEmail, userStatus, userReadOnly, err := authStore.ValidateAPIKey(r.Context(), keyHash)
 	if err != nil {
 		log := logger.Ctx(r.Context())
 		log.Warn("API key validation failed",
@@ -123,15 +124,21 @@ func TryAPIKeyAuth(r *http.Request, database *db.DB) *apiKeyAuthResult {
 		}
 	}()
 
-	return &apiKeyAuthResult{userID: userID, userEmail: userEmail}
+	return &apiKeyAuthResult{userID: userID, userEmail: userEmail, userReadOnly: userReadOnly}
 }
 
 // RequireAPIKey returns an HTTP middleware that requires API key authentication.
 // If allowedDomains is non-empty, the user's email domain must match.
 // Use TryAPIKeyAuth for optional authentication.
+//
+// CF-483: chains EnforceReadOnly internally so mutating requests from a
+// demo identity using an API key (vanishingly rare but possible if B1
+// is bypassed) still return the documented 403 structured body.
 func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
 	authStore := &dbauth.Store{DB: database}
+	enforceReadOnly := EnforceReadOnly(database)
 	return func(next http.Handler) http.Handler {
+		next = enforceReadOnly(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
@@ -150,7 +157,7 @@ func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) 
 			keyHash := HashAPIKey(rawKey)
 
 			// Validate key in database
-			userID, keyID, userEmail, userStatus, err := authStore.ValidateAPIKey(r.Context(), keyHash)
+			userID, keyID, userEmail, userStatus, userReadOnly, err := authStore.ValidateAPIKey(r.Context(), keyHash)
 			if err != nil {
 				log := logger.Ctx(r.Context())
 				log.Warn("API key validation failed",
@@ -194,8 +201,9 @@ func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) 
 			// Enrich OpenTelemetry span with user info
 			enrichSpanWithUser(ctx, userID, userEmail, true, false)
 
-			// Add user ID to request context
+			// Add user ID + read-only flag (CF-483) to request context
 			ctx = context.WithValue(ctx, userIDContextKey, userID)
+			ctx = WithReadOnly(ctx, userReadOnly)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

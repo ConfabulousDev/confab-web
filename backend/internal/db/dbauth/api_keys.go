@@ -14,30 +14,33 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
-// ValidateAPIKey checks if an API key is valid and returns the associated user ID, key ID, user email, and user status
-func (s *Store) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userEmail string, userStatus models.UserStatus, err error) {
+// ValidateAPIKey checks if an API key is valid and returns the associated
+// user info. The userReadOnly flag (CF-483) lets callers stash the value
+// into the request context so EnforceReadOnly can block writes from
+// API-key auth as well as session auth.
+func (s *Store) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userEmail string, userStatus models.UserStatus, userReadOnly bool, err error) {
 	ctx, span := tracer.Start(ctx, "db.validate_api_key")
 	defer span.End()
 
 	query := `
-		SELECT ak.id, ak.user_id, u.email, u.status
+		SELECT ak.id, ak.user_id, u.email, u.status, u.read_only
 		FROM api_keys ak
 		JOIN users u ON ak.user_id = u.id
 		WHERE ak.key_hash = $1
 	`
 
-	err = s.conn().QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userEmail, &userStatus)
+	err = s.conn().QueryRowContext(ctx, query, keyHash).Scan(&keyID, &userID, &userEmail, &userStatus, &userReadOnly)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, 0, "", "", fmt.Errorf("invalid API key")
+			return 0, 0, "", "", false, fmt.Errorf("invalid API key")
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return 0, 0, "", "", fmt.Errorf("failed to validate API key: %w", err)
+		return 0, 0, "", "", false, fmt.Errorf("failed to validate API key: %w", err)
 	}
 
 	span.SetAttributes(attribute.Int64("user.id", userID))
-	return userID, keyID, userEmail, userStatus, nil
+	return userID, keyID, userEmail, userStatus, userReadOnly, nil
 }
 
 // UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key

@@ -23,6 +23,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `CardGrid.tsx` | CSS grid container for rendering card layouts |
 | `Chip.tsx` | Tag/chip component for filter selections |
 | `CopyIdDropdown.tsx` | Dropdown for copying Confab ID or the agent-native session ID (Claude Code / Codex) with confirmation feedback; label switches per `provider` |
+| `DemoBanner.tsx` | CF-483 read-only demo banner. Renders a persistent top-of-page strip when `window.__DEMO_IDENTITY__` (injected by the backend's `serveSPA`) is a non-empty string; otherwise renders nothing. Above the nav, not dismissible. |
 | `DeployCTA.tsx` | Call-to-action for self-hosted deployment |
 | `ErrorBoundary.tsx` | React error boundary with fallback UI |
 | `ErrorDisplay.tsx` | Styled error message display |
@@ -44,6 +45,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `Quickstart.tsx` | Quickstart guide component |
 | `QuickstartCTA.tsx` | Call-to-action directing users to quickstart |
 | `QuickstartModal.tsx` | Modal with quickstart instructions |
+| `ReadOnlyToast.tsx` | CF-483 toast that listens for the `confab:read-only` CustomEvent (dispatched by `services/api.ts` when an API call returns the `read_only_user` structured 403) and shows a transient "This is a read-only demo." message. Single toast at a time; re-firing while visible resets the dismiss timer (debounced replace). |
 | `RelativeTime.tsx` | Auto-updating relative timestamp display |
 | `ReviewModal.tsx` | Modal for reviewing session details |
 | `ScrollNavButtons.tsx` | Floating scroll-to-top/bottom buttons |

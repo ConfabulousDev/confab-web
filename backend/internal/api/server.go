@@ -244,7 +244,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Auth routes (public) - Apply stricter auth rate limiting
 	// Password authentication (if enabled)
 	if s.oauthConfig.PasswordEnabled {
-		r.Post("/auth/password/login", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandlePasswordLogin(s.db, s.oauthConfig.AllowedEmailDomains))))
+		r.Post("/auth/password/login", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandlePasswordLogin(s.db, s.oauthConfig))))
 	}
 
 	// GitHub OAuth (if enabled)
@@ -266,7 +266,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	}
 
 	// Logout (always available)
-	r.Get("/auth/logout", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db))))
+	r.Get("/auth/logout", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db, s.oauthConfig))))
 
 	// CLI authorize (requires web session) - Apply auth rate limiting
 	r.Get("/auth/cli/authorize", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db))))
@@ -288,6 +288,12 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Validate Content-Type for POST/PUT/PATCH requests
 		r.Use(validateContentType)
+
+		// CF-483 D1: read-only enforcement is chained internally by
+		// each auth middleware (see RequireAPIKey/RequireSession/etc.
+		// in internal/auth) so it always runs AFTER the user has been
+		// resolved. A future contributor adding a write route still
+		// can't forget it — the enforcement travels with auth.
 
 		// Public auth config endpoint (no auth required)
 		r.Get("/auth/config", withMaxBody(MaxBodyXS, s.handleAuthConfig))
@@ -324,7 +330,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// CSRF protection applied here to prevent forged requests
 		r.Group(func(r chi.Router) {
 			r.Use(csrfMiddleware)
-			r.Use(auth.RequireSession(s.db, s.oauthConfig.AllowedEmailDomains))
+			r.Use(auth.RequireSession(s.db, s.oauthConfig))
 
 			r.Get("/me", withMaxBody(MaxBodyXS, s.handleGetMe))
 
@@ -408,7 +414,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// CSRF applied conditionally: enforced for session cookie auth, skipped for API key auth
 		r.Group(func(r chi.Router) {
 			r.Use(csrfWhenSession(csrfMiddleware))
-			r.Use(auth.RequireSessionOrAPIKey(s.db, s.oauthConfig.AllowedEmailDomains))
+			r.Use(auth.RequireSessionOrAPIKey(s.db, s.oauthConfig))
 			r.Get("/sessions/by-external-id/{external_id}", withMaxBody(MaxBodyXS, HandleLookupSessionByExternalID(s.db)))
 			// GitHub links - create (CLI or web)
 			r.Post("/sessions/{id}/github-links", withMaxBody(MaxBodyM, HandleCreateGitHubLink(s.db)))
@@ -417,7 +423,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		// Canonical session access (CF-132) - supports optional authentication
 		// Works for: owner access, public shares, system shares, recipient shares
 		r.Group(func(r chi.Router) {
-			r.Use(auth.OptionalAuth(s.db, s.oauthConfig.AllowedEmailDomains))
+			r.Use(auth.OptionalAuth(s.db, s.oauthConfig))
 			r.Get("/sessions/{id}", withMaxBody(MaxBodyXS, HandleGetSession(s.db)))
 			// Canonical shared sync file access endpoint (CF-132)
 			// Uses same session access logic as /sessions/{id}
@@ -653,18 +659,31 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 	// Clean staticDir once during initialization for security check
 	cleanStaticDir := filepath.Clean(staticDir)
 
-	// Pre-process index.html at startup: inject Termly script if enabled
+	// Pre-process index.html at startup: inject Termly script + demo banner
+	// state hook if enabled. Done once at boot so per-request serving is
+	// just a Write. Both injections land before </head>; we build the
+	// combined block first so we touch the source string at most once.
 	indexPath := filepath.Join(cleanStaticDir, "index.html")
 	var processedIndex []byte
 	if raw, err := os.ReadFile(indexPath); err == nil {
+		var headInject strings.Builder
 		if s.saasTermlyEnabled {
-			// Inject Termly consent banner script before </head>
-			termlyScript := `    <!-- Termly Consent Banner -->
-    <script src="https://app.termly.io/resource-blocker/6f350df0-f6a8-4213-b299-da2516ace3ac?autoBlock=on"></script>`
-			processedIndex = []byte(strings.Replace(string(raw), "</head>", termlyScript+"\n  </head>", 1))
-		} else {
-			processedIndex = raw
+			headInject.WriteString(`    <!-- Termly Consent Banner -->
+    <script src="https://app.termly.io/resource-blocker/6f350df0-f6a8-4213-b299-da2516ace3ac?autoBlock=on"></script>
+`)
 		}
+		// CF-483: RenderDemoBannerScriptTag returns "" when DemoIdentityEmail
+		// is unset, so this is a no-op in non-demo deployments.
+		if demoScript := auth.RenderDemoBannerScriptTag(s.oauthConfig.DemoIdentityEmail); demoScript != "" {
+			headInject.WriteString("    ")
+			headInject.WriteString(demoScript)
+			headInject.WriteString("\n")
+		}
+		processed := string(raw)
+		if headInject.Len() > 0 {
+			processed = strings.Replace(processed, "</head>", headInject.String()+"  </head>", 1)
+		}
+		processedIndex = []byte(processed)
 	}
 
 	serveIndex := func(w http.ResponseWriter, r *http.Request) {

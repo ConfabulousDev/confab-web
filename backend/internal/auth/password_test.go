@@ -165,7 +165,7 @@ func TestHandlePasswordLogin(t *testing.T) {
 		t.Fatalf("CreatePasswordUser failed: %v", err)
 	}
 
-	handler := auth.HandlePasswordLogin(env.DB, nil)
+	handler := auth.HandlePasswordLogin(env.DB, &auth.OAuthConfig{})
 
 	t.Run("rejects invalid email format", func(t *testing.T) {
 		form := url.Values{}

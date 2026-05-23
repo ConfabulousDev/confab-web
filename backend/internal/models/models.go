@@ -17,6 +17,7 @@ type User struct {
 	Name      *string    `json:"name,omitempty"`
 	AvatarURL *string    `json:"avatar_url,omitempty"`
 	Status    UserStatus `json:"status"`
+	ReadOnly  bool       `json:"read_only"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 }
@@ -54,6 +55,7 @@ type WebSession struct {
 	UserID     int64      `json:"user_id"`
 	UserEmail  string     `json:"-"` // Used for request tracing — never serialized to prevent leaking session-to-email mapping
 	UserStatus UserStatus `json:"-"` // Used for auth middleware status check — never serialized to prevent leaking account state
+	ReadOnly   bool       `json:"-"` // Used for EnforceReadOnly middleware (CF-483) — never serialized
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
 }

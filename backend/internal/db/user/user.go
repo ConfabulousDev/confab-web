@@ -19,7 +19,7 @@ func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, er
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
-	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, email, name, avatar_url, status, read_only, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
 	err := s.conn().QueryRowContext(ctx, query, userID).Scan(
@@ -28,6 +28,7 @@ func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, er
 		&user.Name,
 		&user.AvatarURL,
 		&user.Status,
+		&user.ReadOnly,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -41,6 +42,61 @@ func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, er
 	}
 
 	return &user, nil
+}
+
+// UpsertDemoIdentity provisions or refreshes the demo user row idempotently.
+// Sets name='Demo', status='active', is_admin=false, read_only=true. Returns
+// the resulting user and whether the row pre-existed (caller logs WARN if so,
+// because flipping a real user is a significant operator action). CF-483.
+func (s *Store) UpsertDemoIdentity(ctx context.Context, email string) (*models.User, bool, error) {
+	ctx, span := tracer.Start(ctx, "db.upsert_demo_identity",
+		trace.WithAttributes(attribute.String("email", email)))
+	defer span.End()
+
+	query := `
+		INSERT INTO users (email, name, status, is_admin, read_only, created_at, updated_at)
+		VALUES ($1, 'Demo', 'active', false, true, NOW(), NOW())
+		ON CONFLICT (email) DO UPDATE
+			SET name = 'Demo',
+			    status = 'active',
+			    is_admin = false,
+			    read_only = true,
+			    updated_at = NOW()
+		RETURNING id, email, name, avatar_url, status, read_only, created_at, updated_at,
+		          (xmax <> 0) AS pre_existed
+	`
+	var user models.User
+	var preExisted bool
+	err := s.conn().QueryRowContext(ctx, query, email).Scan(
+		&user.ID, &user.Email, &user.Name, &user.AvatarURL,
+		&user.Status, &user.ReadOnly, &user.CreatedAt, &user.UpdatedAt,
+		&preExisted,
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, false, fmt.Errorf("upsert demo identity: %w", err)
+	}
+	return &user, preExisted, nil
+}
+
+// DeletePasswordIdentitiesForUser removes every password-provider
+// identity (and its credentials via ON DELETE CASCADE on identity_passwords)
+// for the given user. Used by CF-483 bootstrap so the demo identity
+// cannot be logged in via password even if it inherited a hash from
+// a pre-existing real user. Idempotent.
+func (s *Store) DeletePasswordIdentitiesForUser(ctx context.Context, userID int64) error {
+	ctx, span := tracer.Start(ctx, "db.delete_password_identities_for_user",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	query := `DELETE FROM user_identities WHERE user_id = $1 AND provider = 'password'`
+	if _, err := s.conn().ExecContext(ctx, query, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("delete password identities: %w", err)
+	}
+	return nil
 }
 
 // CountUsers returns the total number of users in the system

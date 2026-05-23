@@ -2037,3 +2037,22 @@ When `ALLOWED_EMAIL_DOMAINS` is set (comma-separated list of domains), only user
 | M | 128 KB | API keys, shares, session updates |
 | L | 2 MB | Batch operations |
 | XL | 16 MB | Sync chunk uploads |
+
+---
+
+## Read-Only Identity (CF-483 Demo Mode)
+
+When the server is configured with `DEMO_IDENTITY_EMAIL`, requests resolving to the demo user (whether via auto-impersonated session cookie or — should it occur — a leaked API key) get the following uniform error on any mutating method:
+
+**Endpoints affected:** Any `POST`, `PUT`, `PATCH`, or `DELETE` under `/api/v1` when the resolved user has `read_only=true`.
+
+**Response:** `403 Forbidden`
+
+```json
+{
+  "error": "read_only_user",
+  "message": "This identity is read-only."
+}
+```
+
+GET/HEAD/OPTIONS requests pass through unchanged. The check fires from `EnforceReadOnly` middleware chained inside every auth middleware; it cannot be bypassed by adding a new route group. When `DEMO_IDENTITY_EMAIL` is unset, no user has `read_only=true` and this error never appears.

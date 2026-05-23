@@ -412,7 +412,7 @@ func TestValidateAPIKey_ActiveUser(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key - should succeed with active status
-	userID, _, _, userStatus, err := authStore.ValidateAPIKey(ctx, keyHash)
+	userID, _, _, userStatus, _, err := authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -452,7 +452,7 @@ func TestValidateAPIKey_InactiveUser(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key - should return inactive status
-	userID, _, _, userStatus, err := authStore.ValidateAPIKey(ctx, keyHash)
+	userID, _, _, userStatus, _, err := authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -562,7 +562,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Step 1: Verify user starts as active
-	_, _, _, apiStatus, err := authStore.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, _, err := authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -585,7 +585,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	}
 
 	// Verify both auth methods return inactive
-	_, _, _, apiStatus, err = authStore.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, _, err = authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey after deactivation failed: %v", err)
 	}
@@ -608,7 +608,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 	}
 
 	// Verify both auth methods return active again
-	_, _, _, apiStatus, err = authStore.ValidateAPIKey(ctx, keyHash)
+	_, _, _, apiStatus, _, err = authStore.ValidateAPIKey(ctx, keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey after reactivation failed: %v", err)
 	}
@@ -923,7 +923,7 @@ func TestEmailDomainRestriction_Session(t *testing.T) {
 		expiresAt := time.Now().Add(24 * time.Hour)
 		testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
-		handler := auth.RequireSession(env.DB, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireSession(env.DB, &auth.OAuthConfig{AllowedEmailDomains: []string{"company.com"}})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Error("handler should not be called for non-matching domain")
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -952,7 +952,7 @@ func TestEmailDomainRestriction_Session(t *testing.T) {
 		expiresAt := time.Now().Add(24 * time.Hour)
 		testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
-		handler := auth.RequireSession(env.DB, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := auth.RequireSession(env.DB, &auth.OAuthConfig{AllowedEmailDomains: []string{"company.com"}})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 

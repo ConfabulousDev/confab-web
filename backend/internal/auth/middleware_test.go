@@ -128,7 +128,7 @@ func TestHashAPIKey_Integration(t *testing.T) {
 func TestOptionalAuth_DomainRestriction(t *testing.T) {
 	t.Run("unauthenticated request passes through without domain restrictions", func(t *testing.T) {
 		handlerCalled := false
-		handler := OptionalAuth(nil, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := OptionalAuth(nil, &OAuthConfig{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCalled = true
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -147,7 +147,7 @@ func TestOptionalAuth_DomainRestriction(t *testing.T) {
 
 	t.Run("unauthenticated request blocked with domain restrictions", func(t *testing.T) {
 		handlerCalled := false
-		handler := OptionalAuth(nil, []string{"company.com"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := OptionalAuth(nil, &OAuthConfig{AllowedEmailDomains: []string{"company.com"}})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handlerCalled = true
 			w.WriteHeader(http.StatusOK)
 		}))

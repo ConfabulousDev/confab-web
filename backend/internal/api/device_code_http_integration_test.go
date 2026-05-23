@@ -664,7 +664,7 @@ func TestDeviceCodeFlow_HTTP_Integration(t *testing.T) {
 		// Verify API key works
 		authStore := &dbauth.Store{DB: env.DB}
 		keyHash := auth.HashAPIKey(tokenResult.AccessToken)
-		userID, _, _, _, err := authStore.ValidateAPIKey(env.Ctx, keyHash)
+		userID, _, _, _, _, err := authStore.ValidateAPIKey(env.Ctx, keyHash)
 		if err != nil {
 			t.Fatalf("failed to validate API key: %v", err)
 		}
@@ -734,14 +734,14 @@ func TestDeviceCodeFlow_HTTP_Integration(t *testing.T) {
 		// First token should no longer work
 		authStore := &dbauth.Store{DB: env.DB}
 		firstKeyHash := auth.HashAPIKey(firstToken)
-		_, _, _, _, err = authStore.ValidateAPIKey(env.Ctx, firstKeyHash)
+		_, _, _, _, _, err = authStore.ValidateAPIKey(env.Ctx, firstKeyHash)
 		if err == nil {
 			t.Error("expected first token to be invalid after re-auth")
 		}
 
 		// Second token should work
 		secondKeyHash := auth.HashAPIKey(secondToken)
-		userID, _, _, _, err := authStore.ValidateAPIKey(env.Ctx, secondKeyHash)
+		userID, _, _, _, _, err := authStore.ValidateAPIKey(env.Ctx, secondKeyHash)
 		if err != nil {
 			t.Fatalf("second token validation failed: %v", err)
 		}
@@ -800,7 +800,7 @@ func TestDeviceCodeFlow_HTTP_Integration(t *testing.T) {
 		authStore := &dbauth.Store{DB: env.DB}
 		for i, token := range tokens {
 			keyHash := auth.HashAPIKey(token)
-			userID, _, _, _, err := authStore.ValidateAPIKey(env.Ctx, keyHash)
+			userID, _, _, _, _, err := authStore.ValidateAPIKey(env.Ctx, keyHash)
 			if err != nil {
 				t.Errorf("token %d validation failed: %v", i, err)
 			}

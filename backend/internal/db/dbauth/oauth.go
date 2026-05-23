@@ -66,12 +66,19 @@ func (s *Store) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUs
 	}
 
 	// 2. Identity not found - check if email exists (for account linking)
-	emailQuery := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE email = $1`
+	emailQuery := `SELECT id, email, name, avatar_url, status, read_only, created_at, updated_at FROM users WHERE email = $1`
 	err = tx.QueryRowContext(ctx, emailQuery, info.Email).Scan(
-		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.ReadOnly, &user.CreatedAt, &user.UpdatedAt,
 	)
 
 	if err == nil {
+		// CF-483 D2: defense-in-depth. Even though the OAuth callbacks
+		// reject the demo email up front, refuse to link a brand-new
+		// OAuth identity onto a read-only user at the store layer too.
+		if user.ReadOnly {
+			return nil, fmt.Errorf("cannot link OAuth identity to read-only user")
+		}
+
 		// User exists with same email - link this identity to their account
 		linkSQL := `INSERT INTO user_identities (user_id, provider, provider_id, provider_username, created_at)
 		            VALUES ($1, $2, $3, $4, NOW())`

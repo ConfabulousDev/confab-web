@@ -567,7 +567,7 @@ func TestHandleGoogleLogin_EmailHint(t *testing.T) {
 func TestHandleLogout_ClearsCookie(t *testing.T) {
 	t.Setenv("FRONTEND_URL", "http://localhost:3000")
 
-	handler := HandleLogout(nil)
+	handler := HandleLogout(nil, &OAuthConfig{})
 
 	req := httptest.NewRequest("GET", "/auth/logout", nil)
 	rec := httptest.NewRecorder()
@@ -601,7 +601,7 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 	t.Run("redirects to relative path", func(t *testing.T) {
 		t.Setenv("FRONTEND_URL", "http://localhost:3000")
 
-		handler := HandleLogout(nil)
+		handler := HandleLogout(nil, &OAuthConfig{})
 
 		req := httptest.NewRequest("GET", "/auth/logout?redirect=/auth/github/login", nil)
 		rec := httptest.NewRecorder()
@@ -618,7 +618,7 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 	t.Run("prepends frontend URL for non-auth paths", func(t *testing.T) {
 		t.Setenv("FRONTEND_URL", "http://localhost:3000")
 
-		handler := HandleLogout(nil)
+		handler := HandleLogout(nil, &OAuthConfig{})
 
 		req := httptest.NewRequest("GET", "/auth/logout?redirect=/sessions/123", nil)
 		rec := httptest.NewRecorder()
@@ -634,7 +634,7 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 	t.Run("blocks absolute URL redirects (open redirect attack)", func(t *testing.T) {
 		t.Setenv("FRONTEND_URL", "http://localhost:3000")
 
-		handler := HandleLogout(nil)
+		handler := HandleLogout(nil, &OAuthConfig{})
 
 		req := httptest.NewRequest("GET", "/auth/logout?redirect=http://evil.com", nil)
 		rec := httptest.NewRecorder()
@@ -651,7 +651,7 @@ func TestHandleLogout_RedirectSupport(t *testing.T) {
 	t.Run("blocks protocol-relative redirects", func(t *testing.T) {
 		t.Setenv("FRONTEND_URL", "http://localhost:3000")
 
-		handler := HandleLogout(nil)
+		handler := HandleLogout(nil, &OAuthConfig{})
 
 		req := httptest.NewRequest("GET", "/auth/logout?redirect=//evil.com/path", nil)
 		rec := httptest.NewRecorder()

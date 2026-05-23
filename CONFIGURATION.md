@@ -95,6 +95,12 @@ Works with Okta, Auth0, Azure AD, Keycloak, etc. All four variables must be set.
 |----------|---------|----------|-------------|
 | `ALLOWED_EMAIL_DOMAINS` | *(all domains)* | No | Comma-separated list of allowed email domains; applies to all auth methods |
 
+### Demo Mode (CF-483)
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `DEMO_IDENTITY_EMAIL` | *(none)* | No | When set, designates a single user as the **read-only demo identity**. On startup the named user is provisioned with `read_only=true`, name `"Demo"`, `is_admin=false`, and any password identity is stripped (login disabled). Anonymous web visitors on auth-required routes are auto-impersonated as the demo identity via a single shared session cookie (HMAC-derived from `CSRF_SECRET_KEY`). Mutating requests from the demo identity return `403 {"error":"read_only_user", ...}`. The login handler and all OAuth callbacks reject this email. Real users (with their own password / OAuth) continue to authenticate and write normally. **Unset = zero behavior change anywhere** — safe to leave off in regular deployments. |
+
 ## Email
 
 *Applies to: web server*

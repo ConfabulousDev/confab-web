@@ -240,11 +240,11 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User,
 	ctx, span := tracer.Start(ctx, "db.get_user_by_email")
 	defer span.End()
 
-	query := `SELECT id, email, name, avatar_url, status, created_at, updated_at FROM users WHERE email = $1`
+	query := `SELECT id, email, name, avatar_url, status, read_only, created_at, updated_at FROM users WHERE email = $1`
 
 	var user models.User
 	err := s.conn().QueryRowContext(ctx, query, email).Scan(
-		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.ReadOnly, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {

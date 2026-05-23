@@ -9,6 +9,7 @@ Authentication and authorization for Confab. Supports multiple OAuth providers, 
 | `auth.go` | Core auth primitives: `GenerateAPIKey`, `HashAPIKey`, API key context key, `RequireAPIKey` middleware, `TryAPIKeyAuth` (non-rejecting), `GetUserID` context extractor, `SetUserIDForTest` helper, `setLogUserID` for FlyLogger integration, OpenTelemetry span enrichment |
 | `oauth.go` | OAuth providers (GitHub, Google, generic OIDC), session cookie management, all auth middleware (`RequireSession`, `RequireSessionOrAPIKey`, `OptionalAuth`), logout, CLI authorize flow, device code flow (initiate, poll, verify page), user cap enforcement, `OAuthConfig` struct, OIDC lazy discovery |
 | `password.go` | Password authentication: `HandlePasswordLogin`, `HashPassword`/`CheckPassword` (bcrypt), `BootstrapAdmin` for initial admin user creation, `redirectWithError` helper |
+| `demo.go` | CF-483 demo identity support. Single env var `DEMO_IDENTITY_EMAIL` activates: `BootstrapDemoIdentity` provisions the demo user and shared session row, `AutoImpersonateIfDemo` is the fallback called by the three session-aware middlewares when real auth fails, `EnforceReadOnly` is the structured-403 middleware chained inside every auth middleware, `DemoSessionCookieID` derives the shared HMAC cookie, `RenderDemoBannerScriptTag` injects the `window.__DEMO_IDENTITY__` global into index.html, `IsDemoLoginEmail` short-circuits password + OAuth callbacks for the demo email, `redirectDemoLoginRejected` is the shared OAuth-callback redirect helper, `WithReadOnly`/`ReadOnlyFromContext` plumb the read-only flag through request context. **Inert when env var is unset.** |
 
 ## Key Types
 
@@ -23,18 +24,19 @@ Authentication and authorization for Confab. Supports multiple OAuth providers, 
 | Middleware | Auth Mode | Behavior on Failure |
 |------------|-----------|-------------------|
 | `RequireAPIKey(db, allowedDomains)` | API key (Bearer token) | 401 Unauthorized |
-| `RequireSession(db, allowedDomains)` | Session cookie | 401 Unauthorized |
-| `RequireSessionOrAPIKey(db, allowedDomains)` | Session cookie first, then API key | 401 Unauthorized |
-| `OptionalAuth(db, allowedDomains)` | API key first, then session cookie | Continues without user ID (unless `allowedDomains` is set, then 401) |
+| `RequireSession(db, config)` | Session cookie | 401 Unauthorized (or demo auto-impersonate when `config.DemoIdentityEmail` is set) |
+| `RequireSessionOrAPIKey(db, config)` | Session cookie first, then API key | 401 Unauthorized (or demo auto-impersonate when configured) |
+| `OptionalAuth(db, config)` | API key first, then session cookie | Continues without user ID (unless `allowedDomains` is set, then 401; demo auto-impersonate runs first when configured) |
 
 All middleware functions:
 1. Validate the credential (API key hash lookup or session cookie lookup)
 2. Check user status (reject inactive users)
 3. Enforce email domain restrictions if `allowedDomains` is non-empty
-4. Set user ID in request context via `context.WithValue`
+4. Set user ID + read-only flag (CF-483) in request context via `context.WithValue`
 5. Enrich the request-scoped logger with `user_id`
 6. Enrich the OpenTelemetry span with user attributes
 7. Set user ID on the FlyLogger response writer for access logging
+8. Chain `EnforceReadOnly` (CF-483) internally so mutating requests from a read-only user return the structured 403 — runs AFTER user resolution so the context has the read-only flag
 
 ### Handler factories (return `http.HandlerFunc`, registered in `api/server.go`)
 
@@ -106,6 +108,7 @@ If the new mode is neither API key nor session cookie, add a new `Try*Auth` func
 - **`ReplaceAPIKey`** is used instead of `CreateAPIKey` for CLI/device flows to prevent unbounded key growth when re-authenticating from the same machine.
 - **bcrypt cost is 12** (~250ms on modern hardware), balancing security and performance.
 - **OIDC endpoints are lazily discovered** on first request and cached on success only. Failures are not cached so temporary IdP outages don't permanently break OIDC.
+- **CF-483 demo identity** is the per-user `users.read_only=true` user named by `DEMO_IDENTITY_EMAIL`. Anonymous web visitors on session-aware routes are auto-impersonated as them via a single shared HMAC-derived cookie (one `web_sessions` row total, 100-year expiry). The demo email is rejected by `HandlePasswordLogin` AND all three OAuth callbacks. `HandleCLIAuthorize` and `HandleDeviceVerify` refuse to mint API keys when the resolved session has `read_only=true` even if the demo cookie is presented (B1). `HandleLogout` clears the demo cookie client-side but skips the DB delete so the shared row survives (B2). `FindOrCreateUserByOAuth` refuses to link new OAuth identities onto a read-only user as a store-layer backstop (D2). When `DEMO_IDENTITY_EMAIL` is unset, every demo-mode predicate short-circuits to today's behavior.
 
 ## Design Decisions
 

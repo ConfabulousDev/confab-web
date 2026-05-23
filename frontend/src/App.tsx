@@ -5,6 +5,8 @@ import { useAppConfig } from '@/hooks/useAppConfig';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import DemoBanner from '@/components/DemoBanner';
+import ReadOnlyToast from '@/components/ReadOnlyToast';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import './index.css';
@@ -25,11 +27,15 @@ function AppLayout() {
 
   return (
     <div className="app-container">
+      {/* CF-483: above the nav, not dismissible, only rendered when
+          window.__DEMO_IDENTITY__ is set. */}
+      <DemoBanner />
       <Header />
       <main>
         <Outlet />
       </main>
       {saasFooterEnabled && <Footer />}
+      <ReadOnlyToast />
     </div>
   );
 }

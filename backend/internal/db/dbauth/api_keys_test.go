@@ -34,7 +34,7 @@ func TestValidateAPIKey_ValidKey(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user.ID, keyHash, "Test Key")
 
 	// Validate the key
-	userID, keyID, _, userStatus, err := store.ValidateAPIKey(context.Background(), keyHash)
+	userID, keyID, _, userStatus, _, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestValidateAPIKey_InvalidKey(t *testing.T) {
 	store := &dbauth.Store{DB: env.DB}
 
 	// Try to validate a non-existent key
-	_, _, _, _, err := store.ValidateAPIKey(context.Background(), "nonexistent_hash_12345")
+	_, _, _, _, _, err := store.ValidateAPIKey(context.Background(), "nonexistent_hash_12345")
 	if err == nil {
 		t.Error("expected error for invalid API key")
 	}
@@ -95,7 +95,7 @@ func TestValidateAPIKey_MultipleKeys(t *testing.T) {
 	testutil.CreateTestAPIKey(t, env, user2.ID, keyHash2, "User2 Key")
 
 	// Validate each key returns correct user
-	userID1, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash1)
+	userID1, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash1)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user1 failed: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestValidateAPIKey_MultipleKeys(t *testing.T) {
 		t.Errorf("key1 returned userID = %d, want %d", userID1, user1.ID)
 	}
 
-	userID2, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
+	userID2, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user2 failed: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestCreateAPIKeyWithReturn(t *testing.T) {
 	}
 
 	// Verify key can be validated
-	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestDeleteAPIKey(t *testing.T) {
 	}
 
 	// Verify key no longer works
-	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash)
+	_, _, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash)
 	if err == nil {
 		t.Error("expected error after key deletion")
 	}
@@ -272,7 +272,7 @@ func TestDeleteAPIKey_WrongUser(t *testing.T) {
 	}
 
 	// Verify key still works
-	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("key should still be valid: %v", err)
 	}
@@ -335,7 +335,7 @@ func TestReplaceAPIKey_NewKey(t *testing.T) {
 	}
 
 	// Verify key can be validated
-	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
+	userID, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
@@ -377,13 +377,13 @@ func TestReplaceAPIKey_ReplacesExisting(t *testing.T) {
 	}
 
 	// Old key should no longer work
-	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash1)
+	_, _, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash1)
 	if err == nil {
 		t.Error("expected old key to be invalid after replace")
 	}
 
 	// New key should work
-	userID, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
+	userID, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Fatalf("new key validation failed: %v", err)
 	}
@@ -431,11 +431,11 @@ func TestReplaceAPIKey_DifferentNames(t *testing.T) {
 	}
 
 	// Both keys should work
-	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash1)
+	_, _, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash1)
 	if err != nil {
 		t.Error("expected first key to still be valid")
 	}
-	_, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash2)
+	_, _, _, _, _, err = store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Error("expected second key to be valid")
 	}
@@ -552,7 +552,7 @@ func TestReplaceAPIKey_DifferentUsers(t *testing.T) {
 	}
 
 	// Both keys should work and return correct users
-	userID1, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash1)
+	userID1, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash1)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user1 failed: %v", err)
 	}
@@ -560,7 +560,7 @@ func TestReplaceAPIKey_DifferentUsers(t *testing.T) {
 		t.Errorf("key1 returned userID = %d, want %d", userID1, user1.ID)
 	}
 
-	userID2, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
+	userID2, _, _, _, _, err := store.ValidateAPIKey(context.Background(), keyHash2)
 	if err != nil {
 		t.Fatalf("ValidateAPIKey for user2 failed: %v", err)
 	}

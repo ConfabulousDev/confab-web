@@ -224,6 +224,14 @@ type OAuthConfig struct {
 	// Email domain restrictions (optional, for on-prem deployments)
 	AllowedEmailDomains []string
 
+	// CF-483: Demo mode. When DemoIdentityEmail is set, anonymous web
+	// visitors on auth-required routes are auto-impersonated as the
+	// designated demo user (which is per-user read-only). CSRFSecretKey
+	// is reused as the HMAC key for the shared demo session cookie ID.
+	// Both fields empty = zero behavior change.
+	DemoIdentityEmail string
+	CSRFSecretKey     string
+
 	oidcEndpoints *OIDCEndpoints // lazily populated, cached on success only
 	oidcMu        sync.Mutex     // protects lazy discovery
 }
@@ -326,6 +334,14 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			"email", user.Email,
 			"name", user.Name)
 
+		// CF-483: never let the demo email log in via OAuth — closes the
+		// email-linking vector in FindOrCreateUserByOAuth.
+		if IsDemoLoginEmail(config.DemoIdentityEmail, user.Email) {
+			log.Warn("GitHub OAuth login attempt for demo identity rejected", "email", user.Email)
+			redirectDemoLoginRejected(w, r, frontendURL)
+			return
+		}
+
 		// Check email domain restriction
 		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
 			log.Warn("Email domain not permitted", "email", user.Email, "provider", "github")
@@ -407,9 +423,17 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 	}
 }
 
-// HandleLogout logs out the user
-func HandleLogout(database *db.DB) http.HandlerFunc {
+// HandleLogout logs out the user.
+//
+// CF-483 B2: when the cookie value is the shared demo session ID, we
+// clear the client cookie but skip the DB delete — otherwise the next
+// anonymous visitor would briefly fail auto-impersonate until the row
+// is re-upserted, and we'd thrash the row on every demo logout.
+// DemoSessionCookieID returns "" when DemoIdentityEmail is unset, so
+// the comparison is inert in non-demo deployments.
+func HandleLogout(database *db.DB, config *OAuthConfig) http.HandlerFunc {
 	authStore := &dbauth.Store{DB: database}
+	demoSessionID := DemoSessionCookieID(config.CSRFSecretKey, config.DemoIdentityEmail)
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		log := logger.Ctx(ctx)
@@ -421,8 +445,13 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 		clearCookie(w, SessionCookieName)
 
 		if err == nil {
-			if err := authStore.DeleteWebSession(ctx, cookie.Value); err != nil {
-				log.Warn("Failed to delete web session from database", "error", err)
+			switch {
+			case demoSessionID != "" && cookie.Value == demoSessionID:
+				log.Info("demo logout: clearing cookie but preserving shared session row")
+			default:
+				if err := authStore.DeleteWebSession(ctx, cookie.Value); err != nil {
+					log.Warn("Failed to delete web session from database", "error", err)
+				}
 			}
 		}
 
@@ -450,8 +479,9 @@ func HandleLogout(database *db.DB) http.HandlerFunc {
 
 // sessionAuthResult contains the result of session authentication
 type sessionAuthResult struct {
-	userID    int64
-	userEmail string
+	userID       int64
+	userEmail    string
+	userReadOnly bool // CF-483: stashed in request ctx for EnforceReadOnly
 }
 
 // TrySessionAuth attempts to authenticate using a session cookie.
@@ -474,23 +504,34 @@ func TrySessionAuth(r *http.Request, database *db.DB) *sessionAuthResult {
 		return nil
 	}
 
-	return &sessionAuthResult{userID: session.UserID, userEmail: session.UserEmail}
+	return &sessionAuthResult{userID: session.UserID, userEmail: session.UserEmail, userReadOnly: session.ReadOnly}
 }
 
 // RequireSession returns an HTTP middleware that requires session cookie authentication.
 // If allowedDomains is non-empty, the user's email domain must match.
 // Use TrySessionAuth for optional authentication.
-func RequireSession(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
+//
+// CF-483: when config.DemoIdentityEmail is set and no real session is
+// present, falls back to AutoImpersonateIfDemo so anonymous browser
+// visitors are seen as the read-only demo user. Chains EnforceReadOnly
+// internally so mutating requests from the demo identity get the
+// documented 403. Both are inert when DemoIdentityEmail is empty.
+func RequireSession(database *db.DB, config *OAuthConfig) func(http.Handler) http.Handler {
+	enforceReadOnly := EnforceReadOnly(database)
 	return func(next http.Handler) http.Handler {
+		next = enforceReadOnly(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authResult := TrySessionAuth(r, database)
+			if authResult == nil {
+				authResult = AutoImpersonateIfDemo(w, r, database, config.DemoIdentityEmail, config.CSRFSecretKey)
+			}
 			if authResult == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// Check email domain restriction
-			if !validation.IsAllowedEmailDomain(authResult.userEmail, allowedDomains) {
+			if !validation.IsAllowedEmailDomain(authResult.userEmail, config.AllowedEmailDomains) {
 				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}
@@ -505,8 +546,9 @@ func RequireSession(database *db.DB, allowedDomains []string) func(http.Handler)
 			// Enrich OpenTelemetry span with user info
 			enrichSpanWithUser(ctx, authResult.userID, authResult.userEmail, false, true)
 
-			// Add user ID to context
+			// Add user ID + read-only flag (CF-483) to context
 			ctx = context.WithValue(ctx, userIDContextKey, authResult.userID)
+			ctx = WithReadOnly(ctx, authResult.userReadOnly)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -515,30 +557,44 @@ func RequireSession(database *db.DB, allowedDomains []string) func(http.Handler)
 // RequireSessionOrAPIKey returns an HTTP middleware that requires either
 // session cookie or API key authentication. Tries session first, then API key.
 // If allowedDomains is non-empty, the user's email domain must match.
-func RequireSessionOrAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
+//
+// CF-483: when config.DemoIdentityEmail is set and neither real auth path
+// succeeds, falls back to auto-impersonate as the read-only demo user.
+// Chains EnforceReadOnly internally.
+func RequireSessionOrAPIKey(database *db.DB, config *OAuthConfig) func(http.Handler) http.Handler {
+	enforceReadOnly := EnforceReadOnly(database)
 	return func(next http.Handler) http.Handler {
+		next = enforceReadOnly(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var userID int64
 			var userEmail string
+			var userReadOnly bool
 			var authAPIKey, authSession bool
 
 			// Try session cookie first
 			if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
 				userID = sessionAuth.userID
 				userEmail = sessionAuth.userEmail
+				userReadOnly = sessionAuth.userReadOnly
 				authSession = true
 			} else if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
 				// Fall back to API key
 				userID = apiKeyAuth.userID
 				userEmail = apiKeyAuth.userEmail
+				userReadOnly = apiKeyAuth.userReadOnly
 				authAPIKey = true
+			} else if demoAuth := AutoImpersonateIfDemo(w, r, database, config.DemoIdentityEmail, config.CSRFSecretKey); demoAuth != nil {
+				userID = demoAuth.userID
+				userEmail = demoAuth.userEmail
+				userReadOnly = demoAuth.userReadOnly
+				authSession = true
 			} else {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// Check email domain restriction
-			if !validation.IsAllowedEmailDomain(userEmail, allowedDomains) {
+			if !validation.IsAllowedEmailDomain(userEmail, config.AllowedEmailDomains) {
 				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}
@@ -553,8 +609,9 @@ func RequireSessionOrAPIKey(database *db.DB, allowedDomains []string) func(http.
 			// Enrich OpenTelemetry span with user info
 			enrichSpanWithUser(ctx, userID, userEmail, authAPIKey, authSession)
 
-			// Add user ID to context
+			// Add user ID + read-only flag (CF-483) to context
 			ctx = context.WithValue(ctx, userIDContextKey, userID)
+			ctx = WithReadOnly(ctx, userReadOnly)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -565,26 +622,42 @@ func RequireSessionOrAPIKey(database *db.DB, allowedDomains []string) func(http.
 // If authentication fails, the request continues without a user ID.
 // If allowedDomains is non-empty and a user is authenticated, their email domain must match or they get 403.
 // Use auth.GetUserID(ctx) to check if a user is authenticated.
-func OptionalAuth(database *db.DB, allowedDomains []string) func(http.Handler) http.Handler {
+//
+// CF-483: when config.DemoIdentityEmail is set, anonymous requests are
+// auto-impersonated as the read-only demo user (rather than continuing
+// without a user ID). Chains EnforceReadOnly internally. This is what
+// makes the read-only demo flow work for "canonical access" endpoints
+// like GET /sessions/{id}.
+func OptionalAuth(database *db.DB, config *OAuthConfig) func(http.Handler) http.Handler {
+	enforceReadOnly := EnforceReadOnly(database)
 	return func(next http.Handler) http.Handler {
+		next = enforceReadOnly(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var userID int64
 			var userEmail string
+			var userReadOnly bool
 			var authAPIKey, authSession bool
 
 			// Try API key first, then session cookie
 			if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
 				userID = apiKeyAuth.userID
 				userEmail = apiKeyAuth.userEmail
+				userReadOnly = apiKeyAuth.userReadOnly
 				authAPIKey = true
 			} else if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
 				userID = sessionAuth.userID
 				userEmail = sessionAuth.userEmail
+				userReadOnly = sessionAuth.userReadOnly
+				authSession = true
+			} else if demoAuth := AutoImpersonateIfDemo(w, r, database, config.DemoIdentityEmail, config.CSRFSecretKey); demoAuth != nil {
+				userID = demoAuth.userID
+				userEmail = demoAuth.userEmail
+				userReadOnly = demoAuth.userReadOnly
 				authSession = true
 			} else {
 				// No auth - when domain restrictions are in place, require authentication
 				// to prevent anonymous access to public shares on on-prem instances
-				if len(allowedDomains) > 0 {
+				if len(config.AllowedEmailDomains) > 0 {
 					http.Error(w, "Authentication required", http.StatusUnauthorized)
 					return
 				}
@@ -593,7 +666,7 @@ func OptionalAuth(database *db.DB, allowedDomains []string) func(http.Handler) h
 				return
 			}
 
-			if !validation.IsAllowedEmailDomain(userEmail, allowedDomains) {
+			if !validation.IsAllowedEmailDomain(userEmail, config.AllowedEmailDomains) {
 				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}
@@ -603,6 +676,7 @@ func OptionalAuth(database *db.DB, allowedDomains []string) func(http.Handler) h
 			ctx := logger.WithLogger(r.Context(), log)
 			enrichSpanWithUser(ctx, userID, userEmail, authAPIKey, authSession)
 			ctx = context.WithValue(ctx, userIDContextKey, userID)
+			ctx = WithReadOnly(ctx, userReadOnly)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -822,6 +896,13 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			"google_id", user.ID,
 			"email", user.Email,
 			"name", user.Name)
+
+		// CF-483: never let the demo email log in via OAuth.
+		if IsDemoLoginEmail(config.DemoIdentityEmail, user.Email) {
+			log.Warn("Google OAuth login attempt for demo identity rejected", "email", user.Email)
+			redirectDemoLoginRejected(w, r, frontendURL)
+			return
+		}
 
 		// Check email domain restriction
 		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
@@ -1202,6 +1283,13 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 			"email", user.Email,
 			"name", user.Name)
 
+		// CF-483: never let the demo email log in via OAuth.
+		if IsDemoLoginEmail(config.DemoIdentityEmail, user.Email) {
+			log.Warn("OIDC login attempt for demo identity rejected", "email", user.Email)
+			redirectDemoLoginRejected(w, r, frontendURL)
+			return
+		}
+
 		// Check email domain restriction
 		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
 			log.Warn("Email domain not permitted", "email", user.Email, "provider", "oidc")
@@ -1408,6 +1496,21 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 				SameSite: http.SameSiteLaxMode,
 			})
 			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+			return
+		}
+
+		// CF-483 B1: never mint API keys for the demo (read-only) user.
+		// Even though the auth/cli/* endpoints are not auto-impersonated,
+		// a visitor who first browsed the SPA holds the shared demo
+		// cookie and would otherwise mint API keys here.
+		if session.ReadOnly {
+			log.Warn("CLI authorize blocked for read-only user", "user_id", session.UserID)
+			clearCookie(w, SessionCookieName)
+			frontendURL := os.Getenv("FRONTEND_URL")
+			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
+				frontendURL,
+				url.QueryEscape("This identity cannot create API keys. Log in with your own account."))
+			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -1813,6 +1916,18 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		session, err := authStore.GetWebSession(ctx, cookie.Value)
 		if err != nil {
 			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
+			return
+		}
+
+		// CF-483 B1: never authorize device codes for the demo (read-only)
+		// user. Same rationale as HandleCLIAuthorize — a visitor holding
+		// the shared demo cookie could otherwise mint a CLI device.
+		if session.ReadOnly {
+			log.Warn("Device verify blocked for read-only user", "user_id", session.UserID)
+			html := generateDeviceResultHTML(false, "This identity cannot authorize devices. Log in with your own account.")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(html))
 			return
 		}
 

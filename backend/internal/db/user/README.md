@@ -7,7 +7,7 @@ User CRUD and admin operations: lookup, listing with stats, status management, a
 | File | Role |
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
-| `user.go` | All user operations: `GetUserByID`, `CountUsers`, `UserExistsByEmail`, `ListAllUsers`, `UpdateUserStatus`, `DeleteUser`, `HasOwnSessions`, `HasAPIKeys`, `GetUserSessionIDs` |
+| `user.go` | All user operations: `GetUserByID`, `CountUsers`, `UserExistsByEmail`, `ListAllUsers`, `UpdateUserStatus`, `DeleteUser`, `HasOwnSessions`, `HasAPIKeys`, `GetUserSessionIDs`, `UpsertDemoIdentity` + `DeletePasswordIdentitiesForUser` (CF-483 demo bootstrap helpers) |
 
 ## Key API
 
@@ -18,6 +18,8 @@ User CRUD and admin operations: lookup, listing with stats, status management, a
 - **`GetUserSessionIDs(ctx, userID)`** -- Returns all session UUIDs for a user. Used to enumerate S3 objects for cleanup before user deletion.
 - **`HasOwnSessions(ctx, userID)` / `HasAPIKeys(ctx, userID)`** -- Existence checks used by admin UI to show warnings before destructive operations.
 - **`CountUsers(ctx)` / `UserExistsByEmail(ctx, email)`** -- Simple lookup helpers.
+- **`UpsertDemoIdentity(ctx, email)`** (CF-483) -- `INSERT ... ON CONFLICT (email) DO UPDATE` that provisions or refreshes the demo user row (name='Demo', status='active', is_admin=false, read_only=true). Returns `(*User, preExisted, error)` so the caller can WARN-log when an existing real user got flipped.
+- **`DeletePasswordIdentitiesForUser(ctx, userID)`** (CF-483) -- Removes every password-provider identity row for the user (cascades to `identity_passwords`). Called from demo bootstrap so the demo identity cannot be logged in via password even if it inherited a hash from a pre-existing real user. Idempotent.
 
 ## How to Extend
 

@@ -45,7 +45,7 @@ func CheckPassword(hash, password string) bool {
 }
 
 // HandlePasswordLogin handles POST /auth/password/login
-func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerFunc {
+func HandlePasswordLogin(database *db.DB, config *OAuthConfig) http.HandlerFunc {
 	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -74,8 +74,17 @@ func HandlePasswordLogin(database *db.DB, allowedDomains []string) http.HandlerF
 			return
 		}
 
+		// CF-483: demo identity is never loginable. Match the demo email
+		// is always rejected with the same generic copy as a missing
+		// user so we don't leak that the email is the configured demo.
+		if IsDemoLoginEmail(config.DemoIdentityEmail, email) {
+			log.Warn("password login attempt on demo identity rejected", "email", email)
+			redirectWithError(w, r, "Invalid email or password")
+			return
+		}
+
 		// Check email domain restriction
-		if !validation.IsAllowedEmailDomain(email, allowedDomains) {
+		if !validation.IsAllowedEmailDomain(email, config.AllowedEmailDomains) {
 			log.Warn("Email domain not permitted", "email", email, "provider", "password")
 			redirectWithError(w, r, "Your email domain is not permitted. Contact your administrator.")
 			return

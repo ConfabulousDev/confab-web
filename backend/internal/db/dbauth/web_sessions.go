@@ -35,7 +35,7 @@ func (s *Store) GetWebSession(ctx context.Context, sessionID string) (*models.We
 	defer span.End()
 
 	query := `
-		SELECT ws.id, ws.user_id, u.email, u.status, ws.created_at, ws.expires_at
+		SELECT ws.id, ws.user_id, u.email, u.status, u.read_only, ws.created_at, ws.expires_at
 		FROM web_sessions ws
 		JOIN users u ON ws.user_id = u.id
 		WHERE ws.id = $1 AND ws.expires_at > NOW()
@@ -47,6 +47,7 @@ func (s *Store) GetWebSession(ctx context.Context, sessionID string) (*models.We
 		&session.UserID,
 		&session.UserEmail,
 		&session.UserStatus,
+		&session.ReadOnly,
 		&session.CreatedAt,
 		&session.ExpiresAt,
 	)
@@ -77,4 +78,46 @@ func (s *Store) DeleteWebSession(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 	return nil
+}
+
+// UpsertSharedSession is the CF-483 single-shared-cookie helper. The
+// row's ID is deterministically derived from CSRF_SECRET_KEY + demo
+// email; bootstrap and the auto-impersonate fallback both call it so
+// the demo user always has exactly one persistent session row.
+func (s *Store) UpsertSharedSession(ctx context.Context, sessionID string, userID int64, expiresAt time.Time) error {
+	ctx, span := tracer.Start(ctx, "db.upsert_shared_session",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	query := `
+		INSERT INTO web_sessions (id, user_id, created_at, expires_at)
+		VALUES ($1, $2, NOW(), $3)
+		ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at
+	`
+	if _, err := s.conn().ExecContext(ctx, query, sessionID, userID, expiresAt); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("upsert shared web session: %w", err)
+	}
+	return nil
+}
+
+// DeleteOtherSessionsForUser deletes every web_sessions row for userID
+// except the one with id=keepSessionID. Used by CF-483 bootstrap to
+// guarantee the demo user has exactly one session row after flipping
+// an existing real user. Returns the count of deleted rows.
+func (s *Store) DeleteOtherSessionsForUser(ctx context.Context, userID int64, keepSessionID string) (int64, error) {
+	ctx, span := tracer.Start(ctx, "db.delete_other_sessions_for_user",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	query := `DELETE FROM web_sessions WHERE user_id = $1 AND id <> $2`
+	res, err := s.conn().ExecContext(ctx, query, userID, keepSessionID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, fmt.Errorf("delete other web sessions: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
