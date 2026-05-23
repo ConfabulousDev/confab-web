@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useEffect, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Header from './Header';
@@ -70,6 +71,43 @@ export const LoggedInNoAvatar: Story = {
       <QueryClientProvider client={createQueryClient({ ...mockUser, avatar_url: '' })}>
         <Story />
       </QueryClientProvider>
+    ),
+  ],
+};
+
+// CF-483: when DEMO_IDENTITY_EMAIL is set, the backend injects
+// window.__DEMO_IDENTITY__ and the header shows a "demo" badge next to
+// the logo.
+function WithDemoIdentity({ email, children }: { email: string; children: ReactNode }) {
+  useEffect(() => {
+    window.__DEMO_IDENTITY__ = email;
+    return () => {
+      delete window.__DEMO_IDENTITY__;
+    };
+  }, [email]);
+  return <>{children}</>;
+}
+
+export const DemoModeLoggedIn: Story = {
+  decorators: [
+    (Story) => (
+      <WithDemoIdentity email="demo@confabulous.dev">
+        <QueryClientProvider client={createQueryClient({ ...mockUser, email: 'demo@confabulous.dev' })}>
+          <Story />
+        </QueryClientProvider>
+      </WithDemoIdentity>
+    ),
+  ],
+};
+
+export const DemoModeLoggedOut: Story = {
+  decorators: [
+    (Story) => (
+      <WithDemoIdentity email="demo@confabulous.dev">
+        <QueryClientProvider client={createQueryClient(null)}>
+          <Story />
+        </QueryClientProvider>
+      </WithDemoIdentity>
     ),
   ],
 };

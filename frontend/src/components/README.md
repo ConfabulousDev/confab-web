@@ -23,14 +23,13 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `CardGrid.tsx` | CSS grid container for rendering card layouts |
 | `Chip.tsx` | Tag/chip component for filter selections |
 | `CopyIdDropdown.tsx` | Dropdown for copying Confab ID or the agent-native session ID (Claude Code / Codex) with confirmation feedback; label switches per `provider` |
-| `DemoBanner.tsx` | CF-483 read-only demo banner. Renders a persistent top-of-page strip when `window.__DEMO_IDENTITY__` (injected by the backend's `serveSPA`) is a non-empty string; otherwise renders nothing. Above the nav, not dismissible. |
 | `DeployCTA.tsx` | Call-to-action for self-hosted deployment |
 | `ErrorBoundary.tsx` | React error boundary with fallback UI |
 | `ErrorDisplay.tsx` | Styled error message display |
 | `FilterChipsBar.tsx` | Horizontal bar of dimension dropdowns + active filter chips with clear-all and optional history commit on blur. Dimensions: Provider (static enum, opt out via `showProviderFilter={false}`), Repo, Branch, Owner. `DimensionDropdown` accepts optional `iconFor` / `labelFor` for per-option icons and display labels (used by Provider) |
 | `Footer.tsx` | App footer (SaaS mode only) |
 | `FormField.tsx` | Form field wrapper with label and validation error display |
-| `Header.tsx` | App header with navigation and auth state |
+| `Header.tsx` | App header with navigation and auth state. Renders a "demo" badge next to the logo when `window.__DEMO_IDENTITY__` is set (CF-483); no badge in normal deployments. |
 | `HeroCards.tsx` | Landing page hero section cards |
 | `HowItWorksModal.tsx` | Onboarding modal explaining the product |
 | `icons.tsx` | SVG icon components (ClaudeCodeIcon, CodexIcon, GitHubIcon, etc.) |

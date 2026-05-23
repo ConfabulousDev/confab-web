@@ -7,6 +7,18 @@ import ThemeToggle from './ThemeToggle';
 import UpdateBadge from './UpdateBadge';
 import styles from './Header.module.css';
 
+// Logo with optional "demo" badge. Beta badge removed; the badge only
+// shows when DEMO_IDENTITY_EMAIL is configured (CF-483).
+function Logo() {
+  const demoEmail = getDemoIdentity();
+  return (
+    <Link to="/" className={styles.logo}>
+      Confabulous
+      {demoEmail !== null && <span className={styles.badge}>demo</span>}
+    </Link>
+  );
+}
+
 function Header() {
   const { user, isAuthenticated } = useAuth();
   const { sharesEnabled, orgAnalyticsEnabled } = useAppConfig();
@@ -42,7 +54,7 @@ function Header() {
   if (!isAuthenticated) {
     return (
       <header className={styles.header}>
-        <Link to="/" className={styles.logo}>Confabulous</Link>
+        <Logo />
         <div className={styles.actions}>
           <ThemeToggle />
         </div>
@@ -57,7 +69,7 @@ function Header() {
 
   return (
     <header className={styles.header}>
-      <Link to="/" className={styles.logo}>Confabulous</Link>
+      <Logo />
 
       <nav className={styles.nav}>
         <Link to={user?.email ? `/sessions?owner=${encodeURIComponent(user.email)}` : '/sessions'} className={styles.navLink}>Sessions</Link>

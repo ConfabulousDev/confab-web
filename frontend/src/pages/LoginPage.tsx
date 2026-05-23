@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAppConfig } from '@/hooks/useAppConfig';
+import { getDemoIdentity } from '@/utils/demoIdentity';
 import Alert from '@/components/Alert';
 import styles from './LoginPage.module.css';
 
@@ -45,7 +46,7 @@ function LockIcon() {
 
 function LoginPage() {
   useDocumentTitle('Log in');
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const { supportEmail } = useAppConfig();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -53,6 +54,12 @@ function LoginPage() {
 
   const redirectParam = searchParams.get('redirect') || '';
   const emailParam = searchParams.get('email') || '';
+
+  // CF-483: demo identity is auto-impersonated, so isAuthenticated is true
+  // for visitors who came here via "Log in as yourself". Skip the redirect
+  // so they can actually see the form and pick a real provider.
+  const demoEmail = getDemoIdentity();
+  const isDemoUser = demoEmail !== null && user?.email === demoEmail;
 
   // Extract auth error from URL params into state on initial render
   const [authError] = useState(() => {
@@ -76,12 +83,13 @@ function LoginPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Redirect authenticated users to /sessions
+  // Redirect authenticated users to /sessions (but not the demo identity —
+  // they came here to escape it).
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && !isDemoUser) {
       navigate('/sessions', { replace: true });
     }
-  }, [authLoading, isAuthenticated, navigate]);
+  }, [authLoading, isAuthenticated, isDemoUser, navigate]);
 
   // Fetch auth config
   useEffect(() => {
@@ -116,7 +124,7 @@ function LoginPage() {
 
   // Show nothing while loading
   if (authLoading || !config) return null;
-  if (isAuthenticated) return null;
+  if (isAuthenticated && !isDemoUser) return null;
 
   // If single non-password provider and no error, we're about to redirect — show nothing
   const soleProvider = config.providers.length === 1 ? config.providers[0] : undefined;
