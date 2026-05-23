@@ -44,10 +44,12 @@ describe('LoginPage', () => {
       user: null,
     });
     mockNavigate.mockClear();
+    delete window.__DEMO_IDENTITY__;
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    delete window.__DEMO_IDENTITY__;
   });
 
   function mockFetchConfig(providers: Array<{ name: string; display_name: string; login_url: string }>) {
@@ -119,6 +121,47 @@ describe('LoginPage', () => {
       isAuthenticated: true,
       loading: false,
       user: { id: 1, email: 'test@example.com' },
+    });
+
+    mockFetchConfig(twoProviders);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/sessions', { replace: true });
+    });
+  });
+
+  // CF-483: the demo identity is auto-impersonated on /me, so without this
+  // exception clicking "Log in as yourself" would bounce them right back to
+  // /sessions and they could never escape the demo session.
+  it('does NOT redirect when authenticated user is the demo identity', async () => {
+    window.__DEMO_IDENTITY__ = 'demo@example.com';
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      loading: false,
+      user: { id: 99, email: 'demo@example.com' },
+    });
+
+    mockFetchConfig(twoProviders);
+
+    renderWithRouter();
+
+    // Form must actually render — not be hidden by the early-return
+    // `if (isAuthenticated) return null` short-circuit.
+    await waitFor(() => {
+      expect(screen.getByText('Continue with GitHub')).toBeInTheDocument();
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  // Real user (not demo identity) while demo mode is on still gets redirected.
+  it('still redirects real authenticated users when demo mode is configured', async () => {
+    window.__DEMO_IDENTITY__ = 'demo@example.com';
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      loading: false,
+      user: { id: 1, email: 'alice@example.com' },
     });
 
     mockFetchConfig(twoProviders);
