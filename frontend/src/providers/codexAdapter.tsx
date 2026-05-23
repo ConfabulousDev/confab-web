@@ -183,7 +183,7 @@ export const codexAdapter: CodexAdapter = {
         visibleIndices={visibleIndices}
         loading={loading}
         error={error}
-        targetLineId={targetId}
+        targetTimestamp={targetId}
         isCostMode={isCostMode}
       />
     );

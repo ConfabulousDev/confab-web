@@ -22,6 +22,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. `tryParseAsJson` — if a string is a JSON object/array, return a pretty-printed version (used as the JSON fallback before markdown rendering). Used by `ContentBlock`, the Codex message renderers, `AwaySummary`, and `QueuedCommand` |
 | `providers.ts` | CF-416 — `PROVIDER_METADATA` registry (icon, label, brandDisplayName, brandColor, resumeCommand) keyed by `ProviderId` (`'claude-code' \| 'codex'`). `getProviderMetadata(id)` strict canonical lookup; `getProviderMetadataOrFallback(value, 'claude' \| 'neutral')` codifies the unknown-provider policy in one place. `isLegacyClaudeCode(value)` (CF-366) — documented seam mirroring backend `models.LegacyAliases`; returns true for non-canonical spellings whose normalized form is `'claude-code'`. `PROVIDER_VALUES`, `providerLabel(value)` preserved for back-compat with surfaces that render arbitrary backend values. Used by `providerIcon`, `SessionHeader`, `CopyIdDropdown`, `TrendsTopSessionsCard`, `FilterChipsBar` |
 | `demoIdentity.ts` | CF-483 demo-mode helpers. `getDemoIdentity(): string \| null` defensively reads the backend-injected `window.__DEMO_IDENTITY__` global. `notifyReadOnlyDemo()` dispatches the `confab:read-only` CustomEvent that `ReadOnlyToast` listens for; called from `services/api.ts` when a request returns `{"error":"read_only_user"}`. `READ_ONLY_EVENT` is the documented event-name constant. |
+| `buildTILDeepLink.ts` | CF-475 — `buildTILDeepLink(til)` builds the `/sessions/{id}?tab=transcript&msg=…` URL clicked from the TILs list. Claude TILs use `message_uuid`; Codex TILs fall back to `created_at` (ISO timestamp) which the Codex transcript's `resolveCodexDeepLinkTarget` maps to the closest row. Unknown providers fail safe to UUID-only behavior. |
 | `index.ts` | Barrel re-exports of commonly used functions |
 
 ## Key Functions
@@ -147,6 +148,7 @@ These tables must stay in sync; `TestPricingTableSync` enforces this. Look up cu
 - `sorting.test.ts` -- Generic sort by string/number/date with null handling and filter
 - `utils.test.ts` -- ANSI stripping, byte formatting
 - `providers.test.ts` -- Registry drift guard, canonical/fallback lookups, legacy `'Claude Code'` normalization, `providerLabel` passthrough
+- `buildTILDeepLink.test.ts` -- Claude UUID path, Codex `created_at` fallback, legacy `'Claude Code'` alias handling, unknown-provider fail-safe
 
 ## Dependencies
 

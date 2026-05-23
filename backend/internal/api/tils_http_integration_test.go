@@ -347,6 +347,73 @@ func TestListTILs_HTTP_Integration(t *testing.T) {
 
 	// --- Visibility: system-shared sessions included ---
 
+	// CF-475: TIL list rows must carry the session's normalized provider so
+	// the frontend can decide between UUID and timestamp deep-link targets.
+	t.Run("provider field is populated and normalized per row", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "provider@test.com", "Provider Owner")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		// One session per canonical provider, plus one legacy-alias row to
+		// exercise the read-side normalization path.
+		claudeSession := testutil.CreateTestSessionWithProvider(
+			t, env, user.ID, "ext-claude", models.ProviderClaudeCode,
+		)
+		codexSession := testutil.CreateTestSessionWithProvider(
+			t, env, user.ID, "ext-codex", models.ProviderCodex,
+		)
+		legacySession := testutil.CreateTestSessionLegacyClaudeCode(
+			t, env, user.ID, "ext-legacy",
+		)
+
+		testutil.CreateTestTIL(t, env, user.ID, claudeSession, "Claude TIL", "x", nil)
+		testutil.CreateTestTIL(t, env, user.ID, codexSession, "Codex TIL", "x", nil)
+		testutil.CreateTestTIL(t, env, user.ID, legacySession, "Legacy TIL", "x", nil)
+
+		ts := setupTILsTestServer(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Get("/api/v1/tils")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result struct {
+			TILs []map[string]interface{} `json:"tils"`
+		}
+		testutil.ParseJSON(t, resp, &result)
+
+		if len(result.TILs) != 3 {
+			t.Fatalf("expected 3 TILs, got %d", len(result.TILs))
+		}
+
+		byTitle := map[string]string{}
+		for _, row := range result.TILs {
+			title, _ := row["title"].(string)
+			provider, ok := row["provider"].(string)
+			if !ok {
+				t.Errorf("row %q: provider field missing or not a string (raw: %v)", title, row["provider"])
+				continue
+			}
+			byTitle[title] = provider
+		}
+
+		if got := byTitle["Claude TIL"]; got != models.ProviderClaudeCode {
+			t.Errorf("Claude TIL: expected provider=%q, got %q", models.ProviderClaudeCode, got)
+		}
+		if got := byTitle["Codex TIL"]; got != models.ProviderCodex {
+			t.Errorf("Codex TIL: expected provider=%q, got %q", models.ProviderCodex, got)
+		}
+		// Legacy "Claude Code" must be normalized to "claude-code" on the wire.
+		if got := byTitle["Legacy TIL"]; got != models.ProviderClaudeCode {
+			t.Errorf("Legacy TIL: expected normalized provider=%q, got %q", models.ProviderClaudeCode, got)
+		}
+	})
+
 	t.Run("includes TILs on system-shared sessions", func(t *testing.T) {
 		env.CleanDB(t)
 

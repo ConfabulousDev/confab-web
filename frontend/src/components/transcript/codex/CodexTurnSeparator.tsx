@@ -48,7 +48,7 @@ export default function CodexTurnSeparator({
       {sessionId && (
         <CodexRowActions
           sessionId={sessionId}
-          lineId={item.lineId}
+          timestamp={item.timestamp}
           kindLabel="turn separator"
         />
       )}

@@ -73,7 +73,7 @@ export default function CodexTurnAbortedDivider({
       {sessionId && (
         <CodexRowActions
           sessionId={sessionId}
-          lineId={item.lineId}
+          timestamp={item.timestamp}
           kindLabel="turn-aborted marker"
         />
       )}

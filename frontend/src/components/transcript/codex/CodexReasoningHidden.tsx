@@ -54,7 +54,7 @@ export default function CodexReasoningHidden({
       {sessionId && (
         <CodexRowActions
           sessionId={sessionId}
-          lineId={item.lineId}
+          timestamp={item.timestamp}
           kindLabel="reasoning marker"
         />
       )}

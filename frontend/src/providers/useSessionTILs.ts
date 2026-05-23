@@ -2,7 +2,12 @@
 //
 // Skips the fetch when the active provider doesn't support TILs. Today only
 // the Claude adapter sets supportsTILs=true — Codex messages don't carry the
-// message_uuid that TILs reference.
+// message_uuid that per-row TIL **badges** anchor to.
+//
+// Note (CF-475): TIL list-page → transcript deep-linking *does* work for
+// Codex sessions; `buildTILDeepLink` falls back to `created_at` as an ISO
+// timestamp that `resolveCodexDeepLinkTarget` maps to the closest row. The
+// constraint here is only the per-row badge anchoring on the transcript pane.
 
 import { useEffect, useState } from 'react';
 import { tilsAPI, type TIL } from '@/services/api';

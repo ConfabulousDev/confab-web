@@ -10,6 +10,7 @@ import (
 
 	dbtil "github.com/ConfabulousDev/confab-web/internal/db/til"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 const (
@@ -108,8 +109,8 @@ func (s *Server) handleExportTILs(w http.ResponseWriter, r *http.Request) {
 	for i, t := range result.TILs {
 		sessionURL := s.frontendURL + "/sessions/" + t.SessionID
 		deepLink := sessionURL
-		if t.MessageUUID != nil && *t.MessageUUID != "" {
-			deepLink = sessionURL + "?msg=" + url.QueryEscape(*t.MessageUUID)
+		if target := pickExportDeepLinkTarget(t); target != "" {
+			deepLink = sessionURL + "?msg=" + url.QueryEscape(target)
 		}
 
 		exportTILs[i] = ExportTIL{
@@ -134,4 +135,18 @@ func (s *Server) handleExportTILs(w http.ResponseWriter, r *http.Request) {
 		PageSize:   result.PageSize,
 		Count:      len(exportTILs),
 	})
+}
+
+// pickExportDeepLinkTarget mirrors the frontend `buildTILDeepLink` rule:
+// prefer message_uuid; for Codex sessions, fall back to the TIL's created_at
+// (RFC 3339), which the Codex transcript resolver maps to the latest item
+// with `timestamp <= target` (CF-475). Returns "" when no usable target.
+func pickExportDeepLinkTarget(t dbtil.TILWithSession) string {
+	if t.MessageUUID != nil && *t.MessageUUID != "" {
+		return *t.MessageUUID
+	}
+	if t.Provider == models.ProviderCodex {
+		return t.CreatedAt.Format(time.RFC3339Nano)
+	}
+	return ""
 }

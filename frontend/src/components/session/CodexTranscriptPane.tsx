@@ -27,11 +27,12 @@ export interface CodexTranscriptPaneProps {
   /** Error message from the rollout fetch, if any. */
   error: string | null;
   /**
-   * Deep-link target row, addressed by its `lineId` (CF-360). The same URL
-   * `?msg=` parameter that Claude uses for UUID-based deep links; for Codex,
-   * the string is reinterpreted as a lineId.
+   * Deep-link target row, addressed by ISO 8601 timestamp (CF-475). The same
+   * URL `?msg=` parameter that Claude uses for UUID-based deep links; for
+   * Codex, the string is reinterpreted as a timestamp and resolved to the
+   * latest render item with `timestamp <= target`.
    */
-  targetLineId?: string;
+  targetTimestamp?: string;
   /** CF-362: cost mode (per-message badges + CostBar side rail). */
   isCostMode?: boolean;
 }
@@ -43,7 +44,7 @@ export default function CodexTranscriptPane({
   visibleIndices,
   loading,
   error,
-  targetLineId,
+  targetTimestamp,
   isCostMode,
 }: CodexTranscriptPaneProps) {
   if (loading || error) {
@@ -56,7 +57,7 @@ export default function CodexTranscriptPane({
       filteredItems={filteredItems}
       visibleIndices={visibleIndices}
       sessionId={sessionId}
-      targetLineId={targetLineId}
+      targetTimestamp={targetTimestamp}
       isCostMode={isCostMode}
     />
   );

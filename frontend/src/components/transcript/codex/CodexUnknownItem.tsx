@@ -80,7 +80,7 @@ export default function CodexUnknownItem({
         {sessionId && (
           <CodexRowActions
             sessionId={sessionId}
-            lineId={item.lineId}
+            timestamp={item.timestamp}
             copyText={raw}
             kindLabel="unrecognized row"
           />

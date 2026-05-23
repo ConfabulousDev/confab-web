@@ -24,41 +24,41 @@ beforeEach(() => {
 
 describe('CodexRowActions', () => {
   it('always renders the copy-link button', () => {
-    render(<CodexRowActions sessionId="s1" lineId="42" />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" />);
     expect(screen.getByLabelText(/copy link/i)).toBeInTheDocument();
   });
 
-  it('copy-link writes ${origin}/sessions/${sessionId}?tab=transcript&msg=${lineId} to clipboard', () => {
-    render(<CodexRowActions sessionId="abc-123" lineId="42" />);
+  it('copy-link writes ${origin}/sessions/${sessionId}?tab=transcript&msg=${URL-encoded timestamp} to clipboard (CF-475)', () => {
+    render(<CodexRowActions sessionId="abc-123" timestamp="2026-05-13T18:00:00Z" />);
     fireEvent.click(screen.getByLabelText(/copy link/i));
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith(
-      `${window.location.origin}/sessions/abc-123?tab=transcript&msg=42`,
+      `${window.location.origin}/sessions/abc-123?tab=transcript&msg=${encodeURIComponent('2026-05-13T18:00:00Z')}`,
     );
   });
 
   it('renders copy-text when copyText is non-empty', () => {
-    render(<CodexRowActions sessionId="s1" lineId="0" copyText="hello world" />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText="hello world" />);
     expect(screen.getByLabelText(/copy text/i)).toBeInTheDocument();
   });
 
   it('hides copy-text when copyText is undefined', () => {
-    render(<CodexRowActions sessionId="s1" lineId="0" />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" />);
     expect(screen.queryByLabelText(/copy text/i)).toBeNull();
   });
 
   it('hides copy-text when copyText is the empty string', () => {
-    render(<CodexRowActions sessionId="s1" lineId="0" copyText="" />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText="" />);
     expect(screen.queryByLabelText(/copy text/i)).toBeNull();
   });
 
   it('hides copy-text when copyText is whitespace-only', () => {
-    render(<CodexRowActions sessionId="s1" lineId="0" copyText={'   \n\t  '} />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText={'   \n\t  '} />);
     expect(screen.queryByLabelText(/copy text/i)).toBeNull();
   });
 
   it('copy-text writes the provided text to clipboard', () => {
-    render(<CodexRowActions sessionId="s1" lineId="0" copyText="payload" />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText="payload" />);
     fireEvent.click(screen.getByLabelText(/copy text/i));
     expect(writeText).toHaveBeenCalledWith('payload');
   });
@@ -67,7 +67,7 @@ describe('CodexRowActions', () => {
     render(
       <CodexRowActions
         sessionId="s1"
-        lineId="0"
+        timestamp="2026-05-13T18:00:00Z"
         onSkipToNext={() => undefined}
         kindLabel="user prompt"
       />,
@@ -76,7 +76,7 @@ describe('CodexRowActions', () => {
   });
 
   it('hides next-skip when onSkipToNext is undefined', () => {
-    render(<CodexRowActions sessionId="s1" lineId="0" kindLabel="user prompt" />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" kindLabel="user prompt" />);
     expect(screen.queryByLabelText(/next user prompt/i)).toBeNull();
   });
 
@@ -84,7 +84,7 @@ describe('CodexRowActions', () => {
     render(
       <CodexRowActions
         sessionId="s1"
-        lineId="0"
+        timestamp="2026-05-13T18:00:00Z"
         onSkipToPrevious={() => undefined}
         kindLabel="user prompt"
       />,
@@ -93,7 +93,7 @@ describe('CodexRowActions', () => {
   });
 
   it('hides prev-skip when onSkipToPrevious is undefined', () => {
-    render(<CodexRowActions sessionId="s1" lineId="0" kindLabel="user prompt" />);
+    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" kindLabel="user prompt" />);
     expect(screen.queryByLabelText(/previous user prompt/i)).toBeNull();
   });
 
@@ -102,7 +102,7 @@ describe('CodexRowActions', () => {
     render(
       <CodexRowActions
         sessionId="s1"
-        lineId="0"
+        timestamp="2026-05-13T18:00:00Z"
         onSkipToNext={onSkipToNext}
         kindLabel="exec command"
       />,
@@ -116,7 +116,7 @@ describe('CodexRowActions', () => {
     render(
       <CodexRowActions
         sessionId="s1"
-        lineId="0"
+        timestamp="2026-05-13T18:00:00Z"
         onSkipToPrevious={onSkipToPrevious}
         kindLabel="exec command"
       />,
@@ -129,7 +129,7 @@ describe('CodexRowActions', () => {
     render(
       <CodexRowActions
         sessionId="s1"
-        lineId="0"
+        timestamp="2026-05-13T18:00:00Z"
         onSkipToNext={() => undefined}
       />,
     );

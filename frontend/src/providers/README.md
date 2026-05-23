@@ -60,12 +60,12 @@ same provider, so the runtime cast is safe. The widening cast in
 ### Why `useDeepLinkFilterReset` is a hook-on-adapter
 
 The two providers identify deep-link targets differently (Claude: message
-UUID; Codex: lineId) and reset different filter categories when the target
-is hidden (Claude: `system`; Codex: `reasoning_hidden`). Putting the
-provider-specific find + reset logic on the adapter keeps SessionViewer
-agnostic. The hook is called as `adapter.useDeepLinkFilterReset(...)` —
-React's rules-of-hooks plugin accepts property-access calls whose last
-segment starts with `use`.
+UUID; Codex: ISO 8601 timestamp resolved by `resolveCodexDeepLinkTarget` —
+CF-475) and reset different filter categories when the target is hidden
+(Claude: `system`; Codex: `reasoning_hidden`). Putting the provider-specific
+find + reset logic on the adapter keeps SessionViewer agnostic. The hook is
+called as `adapter.useDeepLinkFilterReset(...)` — React's rules-of-hooks
+plugin accepts property-access calls whose last segment starts with `use`.
 
 ## Adding a third provider
 

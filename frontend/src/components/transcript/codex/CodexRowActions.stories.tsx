@@ -14,7 +14,7 @@ type Story = StoryObj<typeof CodexRowActions>;
 export const Default: Story = {
   args: {
     sessionId: 'demo-session',
-    lineId: '42',
+    timestamp: '2026-05-13T18:00:00Z',
     copyText: 'the message body that would land in the clipboard',
     onSkipToNext: () => undefined,
     onSkipToPrevious: () => undefined,
@@ -26,7 +26,7 @@ export const Default: Story = {
 export const CopyLinkOnly: Story = {
   args: {
     sessionId: 'demo-session',
-    lineId: '7',
+    timestamp: '2026-05-13T18:00:07Z',
     kindLabel: 'turn separator',
   },
 };
@@ -35,7 +35,7 @@ export const CopyLinkOnly: Story = {
 export const NoPrevSkip: Story = {
   args: {
     sessionId: 'demo-session',
-    lineId: '0',
+    timestamp: '2026-05-13T18:00:00Z',
     copyText: 'the first user prompt of the session',
     onSkipToNext: () => undefined,
     kindLabel: 'user prompt',
@@ -46,7 +46,7 @@ export const NoPrevSkip: Story = {
 export const NoNextSkip: Story = {
   args: {
     sessionId: 'demo-session',
-    lineId: '99',
+    timestamp: '2026-05-13T18:01:39Z',
     copyText: 'the last user prompt of the session',
     onSkipToPrevious: () => undefined,
     kindLabel: 'user prompt',
@@ -57,7 +57,7 @@ export const NoNextSkip: Story = {
 export const NoCopyText: Story = {
   args: {
     sessionId: 'demo-session',
-    lineId: '13',
+    timestamp: '2026-05-13T18:00:13Z',
     onSkipToNext: () => undefined,
     onSkipToPrevious: () => undefined,
     kindLabel: 'web search',
