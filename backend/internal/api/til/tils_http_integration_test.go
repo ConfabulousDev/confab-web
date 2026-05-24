@@ -1,6 +1,7 @@
-package api
+package til_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"io"
 	"net/http"
 	"os"
@@ -8,33 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
-func setupTILsTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
-	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-
-	oauthConfig := auth.OAuthConfig{
-		GitHubClientID:     "test-github-client-id",
-		GitHubClientSecret: "test-github-client-secret",
-		GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
-		GoogleClientID:     "test-google-client-id",
-		GoogleClientSecret: "test-google-client-secret",
-		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
-}
+// setupTILsTestServer lives in setup_test.go.
 
 // readBody reads and returns the response body as a string without closing it
 // (for tests that need to inspect the body after RequireStatus).
@@ -70,7 +49,7 @@ func TestCreateTIL_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		msgUUID := "msg-uuid-123"
-		reqBody := createTILRequest{
+		reqBody := api.CreateTILRequest{
 			Title:       "Learned about channels",
 			Summary:     "Go channels are great",
 			SessionID:   sessionID,
@@ -111,7 +90,7 @@ func TestCreateTIL_HTTP_Integration(t *testing.T) {
 		ts := setupTILsTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := createTILRequest{
+		reqBody := api.CreateTILRequest{
 			Summary:   "Summary without title",
 			SessionID: sessionID,
 		}
@@ -135,7 +114,7 @@ func TestCreateTIL_HTTP_Integration(t *testing.T) {
 		ts := setupTILsTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := createTILRequest{
+		reqBody := api.CreateTILRequest{
 			Title:     "Title without summary",
 			SessionID: sessionID,
 		}
@@ -159,7 +138,7 @@ func TestCreateTIL_HTTP_Integration(t *testing.T) {
 		ts := setupTILsTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := createTILRequest{
+		reqBody := api.CreateTILRequest{
 			Title:     strings.Repeat("x", 501),
 			Summary:   "Valid summary",
 			SessionID: sessionID,
@@ -184,7 +163,7 @@ func TestCreateTIL_HTTP_Integration(t *testing.T) {
 		ts := setupTILsTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := createTILRequest{
+		reqBody := api.CreateTILRequest{
 			Title:     "Valid title",
 			Summary:   strings.Repeat("x", 10001),
 			SessionID: sessionID,
@@ -212,7 +191,7 @@ func TestCreateTIL_HTTP_Integration(t *testing.T) {
 		ts := setupTILsTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := createTILRequest{
+		reqBody := api.CreateTILRequest{
 			Title:     "Should fail",
 			Summary:   "Not my session",
 			SessionID: sessionID,
@@ -241,7 +220,7 @@ func TestCreateTIL_HTTP_Integration(t *testing.T) {
 		ts := setupTILsTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := createTILRequest{
+		reqBody := api.CreateTILRequest{
 			Title:     "Should fail even with share access",
 			Summary:   "Shared but not owned",
 			SessionID: sessionID,

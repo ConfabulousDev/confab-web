@@ -10,8 +10,8 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
-// meResponse extends the User model with onboarding status fields
-type meResponse struct {
+// MeResponse extends the User model with onboarding status fields
+type MeResponse struct {
 	models.User
 	HasOwnSessions bool `json:"has_own_sessions"`
 	HasAPIKeys     bool `json:"has_api_keys"`
@@ -52,7 +52,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, meResponse{
+	respondJSON(w, http.StatusOK, MeResponse{
 		User:           *user,
 		HasOwnSessions: hasOwnSessions,
 		HasAPIKeys:     hasAPIKeys,

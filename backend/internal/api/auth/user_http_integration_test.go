@@ -1,11 +1,11 @@
-package api
+package auth_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"net/http"
 	"os"
 	"testing"
 
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -13,33 +13,10 @@ import (
 // /api/v1/me HTTP Integration Tests
 //
 // These tests run against a real HTTP server with the production router.
-// They verify the meResponse struct includes has_own_sessions and has_api_keys
+// They verify the api.MeResponse struct includes has_own_sessions and has_api_keys
 // fields computed via EXISTS subqueries (CF-252).
+// setupUserTestServer lives in setup_test.go.
 // =============================================================================
-
-// setupUserTestServer creates a test server for user/me tests
-func setupUserTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
-	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-
-	oauthConfig := auth.OAuthConfig{
-		GitHubClientID:     "test-github-client-id",
-		GitHubClientSecret: "test-github-client-secret",
-		GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
-		GoogleClientID:     "test-google-client-id",
-		GoogleClientSecret: "test-google-client-secret",
-		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
-}
 
 // =============================================================================
 // GET /api/v1/me - Get current user info
@@ -71,7 +48,7 @@ func TestGetMe_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result meResponse
+		var result api.MeResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.ID != user.ID {
@@ -108,7 +85,7 @@ func TestGetMe_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result meResponse
+		var result api.MeResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if !result.HasOwnSessions {
@@ -139,7 +116,7 @@ func TestGetMe_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result meResponse
+		var result api.MeResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.HasOwnSessions {
@@ -171,7 +148,7 @@ func TestGetMe_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result meResponse
+		var result api.MeResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if !result.HasOwnSessions {
@@ -204,7 +181,7 @@ func TestGetMe_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result meResponse
+		var result api.MeResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.ID != user1.ID {

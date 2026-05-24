@@ -1,4 +1,4 @@
-package api
+package sync_test
 
 import (
 	"encoding/json"
@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/api"
+	"github.com/ConfabulousDev/confab-web/internal/api/apitest"
 	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -30,30 +31,10 @@ import (
 //
 // =============================================================================
 
-// setupTestServerWithEnv creates a test server with proper environment variables
+// setupTestServerWithEnv brings up the standard sync test server via apitest.
 func setupTestServerWithEnv(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
 	t.Helper()
-
-	// Set required environment variables
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-
-	// Create the API server
-	oauthConfig := auth.OAuthConfig{
-		GitHubClientID:     "test-github-client-id",
-		GitHubClientSecret: "test-github-client-secret",
-		GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
-		GoogleClientID:     "test-google-client-id",
-		GoogleClientSecret: "test-google-client-secret",
-		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
+	return apitest.NewServer(t, env, apitest.Options{})
 }
 
 // =============================================================================
@@ -81,7 +62,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Execute
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "new-session-123",
 			TranscriptPath: "/home/user/project/transcript.jsonl",
 			CWD:            "/home/user/project",
@@ -96,7 +77,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		// Assert
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.SessionID == "" {
@@ -128,7 +109,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts) // No API key
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "test-session",
 			TranscriptPath: "/home/user/project/transcript.jsonl",
 			CWD:            "/home/user/project",
@@ -149,7 +130,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey("cfb_invalid_api_key_that_does_not_exist_1234")
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "test-session",
 			TranscriptPath: "/home/user/project/transcript.jsonl",
 			CWD:            "/home/user/project",
@@ -173,7 +154,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "", // Missing
 			TranscriptPath: "/home/user/project/transcript.jsonl",
 			CWD:            "/home/user/project",
@@ -204,7 +185,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "test-session",
 			TranscriptPath: "", // Missing
 			CWD:            "/home/user/project",
@@ -240,7 +221,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "existing-session-456",
 			TranscriptPath: "/home/user/project/transcript.jsonl",
 			CWD:            "/home/user/project",
@@ -254,7 +235,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		// Verify session ID is returned
@@ -285,7 +266,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 
 		ts := setupTestServerWithEnv(t, env)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "shared-external-id",
 			TranscriptPath: "/home/user/project/transcript.jsonl",
 			CWD:            "/home/user/project",
@@ -299,7 +280,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		}
 		testutil.RequireStatus(t, resp1, http.StatusOK)
 
-		var result1 SyncInitResponse
+		var result1 api.SyncInitResponse
 		testutil.ParseJSON(t, resp1, &result1)
 
 		// User2 creates a session with same external_id (should be different session)
@@ -310,7 +291,7 @@ func TestSyncInit_HTTP_Integration(t *testing.T) {
 		}
 		testutil.RequireStatus(t, resp2, http.StatusOK)
 
-		var result2 SyncInitResponse
+		var result2 api.SyncInitResponse
 		testutil.ParseJSON(t, resp2, &result2)
 
 		// Session IDs should be different
@@ -349,7 +330,7 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 			`{"type":"user","message":"How are you?"}`,
 		}
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -365,7 +346,7 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncChunkResponse
+		var result api.SyncChunkResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		// Verify high-water mark updated
@@ -392,7 +373,7 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts) // No API key
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: "some-session-id",
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -422,7 +403,7 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey2.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -450,7 +431,7 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -494,13 +475,13 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		gitInfo := json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"feature-branch"}`)
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"type":"user","message":"Hello"}`},
-			Metadata: &SyncChunkMetadata{
+			Metadata: &api.SyncChunkMetadata{
 				GitInfo: gitInfo,
 			},
 		}
@@ -546,13 +527,13 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// First chunk with initial git_info
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"type":"user","message":"Hello"}`},
-			Metadata: &SyncChunkMetadata{
+			Metadata: &api.SyncChunkMetadata{
 				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"main"}`),
 			},
 		}
@@ -565,13 +546,13 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
 		// Second chunk with updated branch (simulating branch switch)
-		reqBody = SyncChunkRequest{
+		reqBody = api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
 			FirstLine: 2,
 			Lines:     []string{`{"type":"assistant","message":"Hi!"}`},
-			Metadata: &SyncChunkMetadata{
+			Metadata: &api.SyncChunkMetadata{
 				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"feature-new"}`),
 			},
 		}
@@ -613,13 +594,13 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// First set git_info via transcript
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"type":"user","message":"Hello"}`},
-			Metadata: &SyncChunkMetadata{
+			Metadata: &api.SyncChunkMetadata{
 				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"main"}`),
 			},
 		}
@@ -632,13 +613,13 @@ func TestSyncChunk_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
 		// Upload agent file chunk with different git_info (should be ignored)
-		agentReq := SyncChunkRequest{
+		agentReq := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "agent-abc123.jsonl",
 			FileType:  "agent",
 			FirstLine: 1,
 			Lines:     []string{`{"type":"tool_use"}`},
-			Metadata: &SyncChunkMetadata{
+			Metadata: &api.SyncChunkMetadata{
 				GitInfo: json.RawMessage(`{"repo_url":"https://github.com/test/repo.git","branch":"should-be-ignored"}`),
 			},
 		}
@@ -739,7 +720,7 @@ func TestSyncInit_MetadataNesting_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.SessionID == "" {
@@ -779,7 +760,7 @@ func TestSyncInit_MetadataNesting_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Use the old struct format (top-level cwd and git_info)
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "old-format-session",
 			TranscriptPath: "/home/user/project/transcript.jsonl",
 			CWD:            "/home/user/old-format-project",
@@ -794,7 +775,7 @@ func TestSyncInit_MetadataNesting_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		// Verify cwd and git_info were stored correctly from top-level fields
@@ -849,7 +830,7 @@ func TestSyncInit_MetadataNesting_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		// Verify metadata values took precedence
@@ -901,7 +882,7 @@ func TestSyncInit_MetadataNesting_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		// Verify top-level values were used as fallback
@@ -953,7 +934,7 @@ func TestSyncInit_MetadataNesting_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		// Verify top-level values were used as fallback
@@ -1045,7 +1026,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 			`{"type":"assistant","message":"Line 102"}`,
 		}
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1061,7 +1042,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncChunkResponse
+		var result api.SyncChunkResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.LastSyncedLine != 102 {
@@ -1080,7 +1061,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload first chunk (lines 1-2)
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1128,7 +1109,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1162,7 +1143,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1195,7 +1176,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: "", // Missing
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1228,7 +1209,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: "00000000-0000-0000-0000-000000000000", // Non-existent
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1256,7 +1237,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload transcript chunk
-		transcriptReq := SyncChunkRequest{
+		transcriptReq := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1272,7 +1253,7 @@ func TestSyncChunk_EdgeCases_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp1, http.StatusOK)
 
 		// Upload agent chunk (different file)
-		agentReq := SyncChunkRequest{
+		agentReq := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "agent-123.jsonl",
 			FileType:  "agent",
@@ -1336,7 +1317,7 @@ func TestSyncFileRead_HTTP_Integration(t *testing.T) {
 		}
 
 		for _, chunk := range chunks {
-			reqBody := SyncChunkRequest{
+			reqBody := api.SyncChunkRequest{
 				SessionID: sessionID,
 				FileName:  "transcript.jsonl",
 				FileType:  "transcript",
@@ -1799,8 +1780,8 @@ func TestSyncChunk_Summary_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		// Upload chunk WITHOUT summary field (using SyncChunkRequest struct, not map)
-		reqBody := SyncChunkRequest{
+		// Upload chunk WITHOUT summary field (using api.SyncChunkRequest struct, not map)
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -1979,7 +1960,7 @@ func TestSyncChunk_FirstUserMessage_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload chunk WITHOUT first_user_message field
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -2035,7 +2016,7 @@ func TestSyncChunk_ChunkCountTracking_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload first chunk
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -2104,7 +2085,7 @@ func TestSyncChunk_ChunkCountTracking_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -2152,7 +2133,7 @@ func TestSyncChunk_ChunkCountTracking_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -2201,7 +2182,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload chunks with 6 lines total
-		chunks := []SyncChunkRequest{
+		chunks := []api.SyncChunkRequest{
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 4, Lines: []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
 		}
@@ -2238,7 +2219,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload chunks
-		chunks := []SyncChunkRequest{
+		chunks := []api.SyncChunkRequest{
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 4, Lines: []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
 		}
@@ -2282,7 +2263,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload chunk
-		chunk := SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}}
+		chunk := api.SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}}
 		resp1, _ := client.Post("/api/v1/sync/chunk", chunk)
 		resp1.Body.Close()
 
@@ -2314,7 +2295,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload chunks with 6 lines total
-		chunks := []SyncChunkRequest{
+		chunks := []api.SyncChunkRequest{
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 4, Lines: []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
 		}
@@ -2351,7 +2332,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload chunk with 3 lines
-		chunk := SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}}
+		chunk := api.SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}}
 		resp1, _ := client.Post("/api/v1/sync/chunk", chunk)
 		resp1.Body.Close()
 
@@ -2383,7 +2364,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload chunk to create the file
-		chunk := SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`}}
+		chunk := api.SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`}}
 		resp1, _ := client.Post("/api/v1/sync/chunk", chunk)
 		resp1.Body.Close()
 
@@ -2428,7 +2409,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload one chunk with 5 lines
-		chunk := SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`, `{"line":4}`, `{"line":5}`}}
+		chunk := api.SyncChunkRequest{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`, `{"line":4}`, `{"line":5}`}}
 		resp1, _ := client.Post("/api/v1/sync/chunk", chunk)
 		resp1.Body.Close()
 
@@ -2468,7 +2449,7 @@ func TestSyncFileRead_LineOffset_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload 3 chunks with 3 lines each (total 9 lines)
-		chunks := []SyncChunkRequest{
+		chunks := []api.SyncChunkRequest{
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`, `{"line":2}`, `{"line":3}`}},
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 4, Lines: []string{`{"line":4}`, `{"line":5}`, `{"line":6}`}},
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 7, Lines: []string{`{"line":7}`, `{"line":8}`, `{"line":9}`}},
@@ -2528,7 +2509,7 @@ func TestDeleteSession_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload multiple chunks
-		chunks := []SyncChunkRequest{
+		chunks := []api.SyncChunkRequest{
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 1, Lines: []string{`{"line":1}`}},
 			{SessionID: sessionID, FileName: "transcript.jsonl", FileType: "transcript", FirstLine: 2, Lines: []string{`{"line":2}`}},
 			{SessionID: sessionID, FileName: "agent-123.jsonl", FileType: "agent", FirstLine: 1, Lines: []string{`{"agent":1}`}},
@@ -2632,7 +2613,7 @@ func TestSyncInit_RaceCondition_HTTP_Integration(t *testing.T) {
 
 				client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-				reqBody := SyncInitRequest{
+				reqBody := api.SyncInitRequest{
 					ExternalID:     externalID,
 					TranscriptPath: "/home/user/project/transcript.jsonl",
 					CWD:            "/home/user/project",
@@ -2650,7 +2631,7 @@ func TestSyncInit_RaceCondition_HTTP_Integration(t *testing.T) {
 					return
 				}
 
-				var initResp SyncInitResponse
+				var initResp api.SyncInitResponse
 				if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
 					results <- result{err: err}
 					return
@@ -2910,7 +2891,7 @@ func TestSyncFileRead_LineOffset_DBShortCircuit_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload a chunk with 3 lines
-		chunk := SyncChunkRequest{
+		chunk := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -2962,7 +2943,7 @@ func TestSyncFileRead_LineOffset_DBShortCircuit_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Upload first chunk (lines 1-3)
-		chunk1 := SyncChunkRequest{
+		chunk1 := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -2982,7 +2963,7 @@ func TestSyncFileRead_LineOffset_DBShortCircuit_HTTP_Integration(t *testing.T) {
 		}
 
 		// New data arrives - upload second chunk (lines 4-6)
-		chunk2 := SyncChunkRequest{
+		chunk2 := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3066,7 +3047,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 			`{"type":"assistant","message":"PR created!"}`,
 		}
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3134,7 +3115,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 		prLine := `{"type":"pr-link","prNumber":10,"prUrl":"https://github.com/owner/repo/pull/10","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
 		lines := []string{prLine, prLine}
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3176,7 +3157,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 		prLine := `{"type":"pr-link","prNumber":5,"prUrl":"https://github.com/owner/repo/pull/5","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
 
 		// Upload first chunk
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3192,7 +3173,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp1, http.StatusOK)
 
 		// Upload second chunk with same PR link (different lines, next chunk)
-		reqBody2 := SyncChunkRequest{
+		reqBody2 := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3236,7 +3217,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 			`{"type":"pr-link","prNumber":1,"prUrl":"https://gitlab.com/owner/repo/pull/1","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`,
 		}
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3278,7 +3259,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 
 		prLine := `{"type":"pr-link","prNumber":99,"prUrl":"https://github.com/owner/repo/pull/99","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "agent.jsonl",
 			FileType:  "agent",
@@ -3319,7 +3300,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 
 		// Step 1: Upload transcript chunk with pr-link → creates link with constructed title
 		prLine := `{"type":"pr-link","prNumber":7,"prUrl":"https://github.com/owner/repo/pull/7","prRepository":"owner/repo","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3377,7 +3358,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 		}
 
 		// Step 3: Upload another transcript chunk with same pr-link → should NOT overwrite the cli_hook title
-		reqBody2 := SyncChunkRequest{
+		reqBody2 := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3432,7 +3413,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 			`{"type":"pr-link","prNumber":2,"prUrl":"https://github.com/owner/repo-b/pull/2","prRepository":"owner/repo-b","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`,
 		}
 
-		reqBody := SyncChunkRequest{
+		reqBody := api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
@@ -3466,7 +3447,7 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 // =============================================================================
 
 // strPtr returns a pointer to s. Local helper to keep the provider tests below
-// readable (the SyncInitRequest.Provider field is a *string so missing and
+// readable (the api.SyncInitRequest.Provider field is a *string so missing and
 // explicit-empty can be distinguished).
 func strPtr(s string) *string { return &s }
 
@@ -3490,7 +3471,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "missing-provider-ext",
 			TranscriptPath: "/p/transcript.jsonl",
 			// Provider intentionally nil
@@ -3502,7 +3483,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.Provider != "claude-code" {
@@ -3528,7 +3509,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "empty-provider-ext",
 			TranscriptPath: "/p/transcript.jsonl",
 			Provider:       strPtr(""),
@@ -3556,7 +3537,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "codex-ext",
 			TranscriptPath: "/p/rollout.jsonl",
 			Provider:       strPtr("codex"),
@@ -3568,7 +3549,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 		if result.Provider != "codex" {
 			t.Errorf("response provider = %q, want %q", result.Provider, "codex")
@@ -3593,7 +3574,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "gemini-ext",
 			TranscriptPath: "/p.jsonl",
 			Provider:       strPtr("gemini"),
@@ -3621,7 +3602,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		reqBody := SyncInitRequest{
+		reqBody := api.SyncInitRequest{
 			ExternalID:     "uppercase-ext",
 			TranscriptPath: "/p.jsonl",
 			Provider:       strPtr("Codex"),
@@ -3645,7 +3626,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 
 		shared := "shared-id-cf347"
 
-		cc, err := client.Post("/api/v1/sync/init", SyncInitRequest{
+		cc, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
 			ExternalID:     shared,
 			TranscriptPath: "/p/cc.jsonl",
 			Provider:       strPtr("claude-code"),
@@ -3655,10 +3636,10 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		}
 		defer cc.Body.Close()
 		testutil.RequireStatus(t, cc, http.StatusOK)
-		var ccResp SyncInitResponse
+		var ccResp api.SyncInitResponse
 		testutil.ParseJSON(t, cc, &ccResp)
 
-		cx, err := client.Post("/api/v1/sync/init", SyncInitRequest{
+		cx, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
 			ExternalID:     shared,
 			TranscriptPath: "/p/codex.jsonl",
 			Provider:       strPtr("codex"),
@@ -3668,7 +3649,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		}
 		defer cx.Body.Close()
 		testutil.RequireStatus(t, cx, http.StatusOK)
-		var cxResp SyncInitResponse
+		var cxResp api.SyncInitResponse
 		testutil.ParseJSON(t, cx, &cxResp)
 
 		if ccResp.SessionID == cxResp.SessionID {
@@ -3695,7 +3676,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// New client omits provider → defaulted to claude-code → must find the legacy row.
-		resp, err := client.Post("/api/v1/sync/init", SyncInitRequest{
+		resp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
 			ExternalID:     "legacy-row-ext",
 			TranscriptPath: "/p.jsonl",
 		})
@@ -3705,7 +3686,7 @@ func TestSyncInit_Provider_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SyncInitResponse
+		var result api.SyncInitResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.SessionID != preexisting {
@@ -3745,7 +3726,7 @@ func TestSyncChunk_Provider_HTTP_Integration(t *testing.T) {
 			`{"timestamp":"2026-01-01T00:00:01Z","type":"turn_context","payload":{"cwd":"/repo"}}`,
 		}
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "rollout-2026-01-01-019e....jsonl",
 			FileType:  "transcript",
@@ -3810,7 +3791,7 @@ func TestSyncChunk_Provider_HTTP_Integration(t *testing.T) {
 			`{"timestamp":"2026-05-13T01:00:00.250Z","type":"pr-link","prNumber":7,"prUrl":"https://github.com/owner/repo/pull/7","prRepository":"owner/repo","sessionId":"019e"}`,
 		}
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "rollout-codex-ts.jsonl",
 			FileType:  "transcript",
@@ -3883,7 +3864,7 @@ func TestSyncChunk_Provider_HTTP_Integration(t *testing.T) {
 		// must NOT trigger last_message_at extraction — that gate keys on
 		// file_type=="transcript" so subagent activity stays out of the
 		// root session's last-activity field.
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "rollout-019e2ce8-subagent.jsonl",
 			FileType:  "agent",
@@ -3977,14 +3958,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "rollout-root.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  rootUUID,
 					RolloutPath: "/home/u/.codex/sessions/rollout-root.jsonl",
 					Model:       "gpt-5",
@@ -4024,14 +4005,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "child.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:       childUUID,
 					ParentThreadUUID: ptr(rootUUID),
 					RolloutPath:      "/home/u/.codex/sessions/child.jsonl",
@@ -4072,14 +4053,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// 1. Root transcript chunk with codex_rollout metadata.
-		rootResp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		rootResp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "rollout-root.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  rootUUID,
 					RolloutPath: "/home/u/.codex/sessions/rollout-root.jsonl",
 					Model:       "gpt-5",
@@ -4094,14 +4075,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 
 		// 2. Subagent rollout chunk as file_type=agent under the same session,
 		//    declaring parent_thread_uuid = rootUUID.
-		childResp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		childResp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "rollout-child.jsonl",
 			FileType:  "agent",
 			FirstLine: 1,
 			Lines:     []string{`{"timestamp":"2026-05-15T10:00:05Z"}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:       childUUID,
 					ParentThreadUUID: ptr(rootUUID),
 					RolloutPath:      "/home/u/.codex/sessions/rollout-child.jsonl",
@@ -4166,14 +4147,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "transcript.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"type":"user"}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  rootUUID,
 					RolloutPath: "/x.jsonl",
 				},
@@ -4202,14 +4183,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "x.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					RolloutPath: "/x.jsonl",
 				},
 			},
@@ -4231,14 +4212,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "x.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  "not-a-uuid",
 					RolloutPath: "/x.jsonl",
 				},
@@ -4262,14 +4243,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		empty := ""
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "x.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:       rootUUID,
 					ParentThreadUUID: &empty,
 					RolloutPath:      "/x.jsonl",
@@ -4293,14 +4274,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "x.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:       rootUUID,
 					ParentThreadUUID: ptr(rootUUID),
 					RolloutPath:      "/x.jsonl",
@@ -4324,14 +4305,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "x.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  rootUUID,
 					RolloutPath: "",
 				},
@@ -4354,14 +4335,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "x.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  rootUUID,
 					RolloutPath: "/x.jsonl",
 					Model:       strings.Repeat("a", validation.MaxCodexModelLength+1),
@@ -4385,15 +4366,15 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		mk := func(firstLine int) SyncChunkRequest {
-			return SyncChunkRequest{
+		mk := func(firstLine int) api.SyncChunkRequest {
+			return api.SyncChunkRequest{
 				SessionID: sessionID,
 				FileName:  "rollout.jsonl",
 				FileType:  "transcript",
 				FirstLine: firstLine,
 				Lines:     []string{`{"timestamp":"2026-05-15T10:00:00Z"}`},
-				Metadata: &SyncChunkMetadata{
-					CodexRollout: &SyncCodexRolloutMetadata{
+				Metadata: &api.SyncChunkMetadata{
+					CodexRollout: &api.SyncCodexRolloutMetadata{
 						ThreadUUID:  rootUUID,
 						RolloutPath: "/r.jsonl",
 						Model:       "gpt-5",
@@ -4439,14 +4420,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		clientA := testutil.NewTestClient(t, ts).WithAPIKey(apiKeyA.RawToken)
 
-		resp, err := clientA.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := clientA.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessA,
 			FileName:  "r.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  rootUUID,
 					RolloutPath: "/r.jsonl",
 				},
@@ -4480,14 +4461,14 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-		resp, err := client.Post("/api/v1/sync/chunk", SyncChunkRequest{
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
 			SessionID: sessionID,
 			FileName:  "r.jsonl",
 			FileType:  "transcript",
 			FirstLine: 1,
 			Lines:     []string{`{"x":1}`},
-			Metadata: &SyncChunkMetadata{
-				CodexRollout: &SyncCodexRolloutMetadata{
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
 					ThreadUUID:  rootUUID,
 					RolloutPath: "/r.jsonl",
 				},

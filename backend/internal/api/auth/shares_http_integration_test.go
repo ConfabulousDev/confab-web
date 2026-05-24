@@ -1,11 +1,11 @@
-package api
+package auth_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"net/http"
 	"os"
 	"testing"
 
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
@@ -16,32 +16,8 @@ import (
 //
 // These tests run against a real HTTP server with the production router.
 // Share endpoints require session auth + CSRF for state-changing operations.
+// setupSharesTestServer lives in setup_test.go (sets ENABLE_SHARE_CREATION=true).
 // =============================================================================
-
-// setupSharesTestServer creates a test server for shares tests
-func setupSharesTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
-	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-	testutil.SetEnvForTest(t, "ENABLE_SHARE_CREATION", "true")
-
-	oauthConfig := auth.OAuthConfig{
-		GitHubClientID:     "test-github-client-id",
-		GitHubClientSecret: "test-github-client-secret",
-		GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
-		GoogleClientID:     "test-google-client-id",
-		GoogleClientSecret: "test-google-client-secret",
-		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
-}
 
 // =============================================================================
 // POST /api/v1/sessions/{id}/share - Create session share
@@ -67,7 +43,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		ts := setupSharesTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateShareRequest{
+		reqBody := api.CreateShareRequest{
 			IsPublic: true,
 		}
 
@@ -79,7 +55,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result CreateShareResponse
+		var result api.CreateShareResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if !result.IsPublic {
@@ -113,7 +89,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		ts := setupSharesTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateShareRequest{
+		reqBody := api.CreateShareRequest{
 			IsPublic:   false,
 			Recipients: []string{"friend@example.com", "colleague@example.com"},
 		}
@@ -126,7 +102,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result CreateShareResponse
+		var result api.CreateShareResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.IsPublic {
@@ -160,7 +136,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		ts := setupSharesTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateShareRequest{
+		reqBody := api.CreateShareRequest{
 			IsPublic: true,
 		}
 
@@ -184,7 +160,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		ts := setupSharesTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateShareRequest{
+		reqBody := api.CreateShareRequest{
 			IsPublic:   false,
 			Recipients: []string{}, // Empty - should fail
 		}
@@ -209,7 +185,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		ts := setupSharesTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateShareRequest{
+		reqBody := api.CreateShareRequest{
 			IsPublic:          false,
 			Recipients:        []string{"friend@example.com", "colleague@example.com"},
 			SkipNotifications: true,
@@ -223,7 +199,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result CreateShareResponse
+		var result api.CreateShareResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.IsPublic {
@@ -247,7 +223,7 @@ func TestCreateShare_HTTP_Integration(t *testing.T) {
 		ts := setupSharesTestServer(t, env)
 		client := testutil.NewTestClient(t, ts) // No session
 
-		reqBody := CreateShareRequest{
+		reqBody := api.CreateShareRequest{
 			IsPublic: true,
 		}
 

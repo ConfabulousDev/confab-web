@@ -1,6 +1,7 @@
-package api
+package til_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"net/http"
 	"net/url"
 	"os"
@@ -47,7 +48,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result ExportTILsResponse
+		var result api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.Count != 1 {
@@ -103,7 +104,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result ExportTILsResponse
+		var result api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if len(result.TILs) != 1 {
@@ -136,7 +137,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result ExportTILsResponse
+		var result api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if len(result.TILs) != 1 {
@@ -182,7 +183,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var allResult ExportTILsResponse
+		var allResult api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &allResult)
 
 		if allResult.Count != 2 {
@@ -198,7 +199,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp2, http.StatusOK)
 
-		var filteredResult ExportTILsResponse
+		var filteredResult api.ExportTILsResponse
 		testutil.ParseJSON(t, resp2, &filteredResult)
 
 		if filteredResult.Count != 1 {
@@ -236,7 +237,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var fromResult ExportTILsResponse
+		var fromResult api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &fromResult)
 
 		if fromResult.Count != 2 {
@@ -252,7 +253,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp2, http.StatusOK)
 
-		var toResult ExportTILsResponse
+		var toResult api.ExportTILsResponse
 		testutil.ParseJSON(t, resp2, &toResult)
 
 		if toResult.Count != 1 {
@@ -271,7 +272,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp3, http.StatusOK)
 
-		var bothResult ExportTILsResponse
+		var bothResult api.ExportTILsResponse
 		testutil.ParseJSON(t, resp3, &bothResult)
 
 		if bothResult.Count != 1 {
@@ -305,7 +306,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var page1 ExportTILsResponse
+		var page1 api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &page1)
 
 		if page1.Count != 2 {
@@ -327,7 +328,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp2, http.StatusOK)
 
-		var page2 ExportTILsResponse
+		var page2 api.ExportTILsResponse
 		testutil.ParseJSON(t, resp2, &page2)
 
 		if page2.Count != 1 {
@@ -355,7 +356,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result ExportTILsResponse
+		var result api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.Count != 0 {
@@ -395,7 +396,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result ExportTILsResponse
+		var result api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.Count != 1 {
@@ -434,7 +435,7 @@ func TestExportTILs_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result ExportTILsResponse
+		var result api.ExportTILsResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.Count != 2 {

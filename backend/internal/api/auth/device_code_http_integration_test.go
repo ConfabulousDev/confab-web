@@ -1,4 +1,4 @@
-package api
+package auth_test
 
 import (
 	"io"
@@ -18,50 +18,10 @@ import (
 //
 // These tests run against a real HTTP server with the production router.
 // Device code endpoints are unauthenticated (public) for CLI auth flow.
+//
+// setupDeviceCodeTestServer / setupDeviceCodeTestServerWithDomains live in
+// setup_test.go alongside the other auth-sub-package helpers.
 // =============================================================================
-
-// setupDeviceCodeTestServer creates a test server for device code tests
-func setupDeviceCodeTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
-	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-
-	oauthConfig := auth.OAuthConfig{
-		GitHubClientID:     "test-github-client-id",
-		GitHubClientSecret: "test-github-client-secret",
-		GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
-		GoogleClientID:     "test-google-client-id",
-		GoogleClientSecret: "test-google-client-secret",
-		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
-}
-
-// setupDeviceCodeTestServerWithDomains creates a test server with email domain restrictions
-func setupDeviceCodeTestServerWithDomains(t *testing.T, env *testutil.TestEnvironment, allowedDomains []string) *testutil.TestServer {
-	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-
-	oauthConfig := auth.OAuthConfig{
-		AllowedEmailDomains: allowedDomains,
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
-}
 
 // =============================================================================
 // POST /auth/device/code - Request device code

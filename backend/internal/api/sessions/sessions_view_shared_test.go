@@ -1,4 +1,4 @@
-package api_test
+package sessions_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
-// parseSessionListResult parses the new paginated response shape from HandleListSessions
+// parseSessionListResult parses the new paginated response shape from api.HandleListSessions
 func parseSessionListResult(t *testing.T, rr *httptest.ResponseRecorder) *db.SessionListResult {
 	t.Helper()
 	var result db.SessionListResult

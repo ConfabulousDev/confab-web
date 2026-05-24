@@ -1,4 +1,4 @@
-package api
+package sessions_test
 
 import (
 	"net/http"

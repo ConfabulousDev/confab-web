@@ -1,6 +1,7 @@
-package api
+package org_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -368,7 +369,7 @@ func TestOrgRepos_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result OrgReposResponse
+		var result api.OrgReposResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		want := []string{"ConfabulousDev/cli", "ConfabulousDev/confab-web"}

@@ -1,4 +1,4 @@
-package api
+package analytics_test
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package api
+package analytics_test
 
 import (
 	"bytes"
@@ -482,7 +482,7 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 // =============================================================================
 // Codex Session Analytics HTTP Integration Tests (CF-364)
 //
-// Exercises the Codex provider branch in HandleGetSessionAnalytics. The branch
+// Exercises the Codex provider branch in api.HandleGetSessionAnalytics. The branch
 // must mirror codexProvider synchronously: download the rollout via storage,
 // parse via codex.ParseRollout, compute via ComputeFromCodexRollout, upsert via
 // Cards, respond.
@@ -525,7 +525,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_Smoke(t *testing.T) {
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 
-	rollout, err := os.ReadFile("../codex/testdata/sample_rollout.jsonl")
+	rollout, err := os.ReadFile("../../codex/testdata/sample_rollout.jsonl")
 	if err != nil {
 		t.Fatalf("failed to read sample_rollout.jsonl: %v", err)
 	}
@@ -688,7 +688,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_AgentsAndSkills(t *testing.T
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 
-	rollout, err := os.ReadFile("../codex/testdata/sample_rollout_parent_with_spawns.jsonl")
+	rollout, err := os.ReadFile("../../codex/testdata/sample_rollout_parent_with_spawns.jsonl")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}

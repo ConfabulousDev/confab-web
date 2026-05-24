@@ -1,12 +1,12 @@
-package api
+package auth_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"fmt"
 	"net/http"
 	"os"
 	"testing"
 
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -17,31 +17,8 @@ import (
 // GitHub Links HTTP Integration Tests
 //
 // These tests run against a real HTTP server with the production router.
+// setupGitHubLinksTestServer lives in setup_test.go.
 // =============================================================================
-
-// setupGitHubLinksTestServer creates a test server for GitHub links tests
-func setupGitHubLinksTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
-	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-
-	oauthConfig := auth.OAuthConfig{
-		GitHubClientID:     "test-github-client-id",
-		GitHubClientSecret: "test-github-client-secret",
-		GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
-		GoogleClientID:     "test-google-client-id",
-		GoogleClientSecret: "test-google-client-secret",
-		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
-}
 
 // =============================================================================
 // POST /api/v1/sessions/{id}/github-links - Create GitHub link
@@ -68,7 +45,7 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
 		title := "Add new feature"
-		reqBody := CreateGitHubLinkRequest{
+		reqBody := api.CreateGitHubLinkRequest{
 			URL:    "https://github.com/owner/repo/pull/123",
 			Title:  &title,
 			Source: models.GitHubLinkSourceManual,
@@ -128,7 +105,7 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		ts := setupGitHubLinksTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateGitHubLinkRequest{
+		reqBody := api.CreateGitHubLinkRequest{
 			URL:    "https://github.com/owner/repo/commit/abc123def456",
 			Source: models.GitHubLinkSourceCLIHook,
 		}
@@ -163,7 +140,7 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		ts := setupGitHubLinksTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKeyInfo.RawToken)
 
-		reqBody := CreateGitHubLinkRequest{
+		reqBody := api.CreateGitHubLinkRequest{
 			URL:    "https://github.com/owner/repo/pull/999",
 			Source: models.GitHubLinkSourceCLIHook,
 		}
@@ -188,7 +165,7 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		ts := setupGitHubLinksTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateGitHubLinkRequest{
+		reqBody := api.CreateGitHubLinkRequest{
 			URL:    "https://github.com/owner/repo/pull/123",
 			Source: models.GitHubLinkSourceManual,
 		}
@@ -234,7 +211,7 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		ts := setupGitHubLinksTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateGitHubLinkRequest{
+		reqBody := api.CreateGitHubLinkRequest{
 			URL:    "https://example.com/not-github",
 			Source: models.GitHubLinkSourceManual,
 		}
@@ -257,7 +234,7 @@ func TestCreateGitHubLink_HTTP_Integration(t *testing.T) {
 		ts := setupGitHubLinksTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateGitHubLinkRequest{
+		reqBody := api.CreateGitHubLinkRequest{
 			URL:    "https://github.com/owner/repo/pull/123",
 			Source: models.GitHubLinkSourceManual,
 		}
@@ -608,12 +585,12 @@ func TestDeleteGitHubLink_HTTP_Integration(t *testing.T) {
 }
 
 // =============================================================================
-// ParseGitHubURL Unit Tests
+// api.ParseGitHubURL Unit Tests
 // =============================================================================
 
 func TestParseGitHubURL(t *testing.T) {
 	t.Run("parses PR URL", func(t *testing.T) {
-		result, err := ParseGitHubURL("https://github.com/owner/repo/pull/123")
+		result, err := api.ParseGitHubURL("https://github.com/owner/repo/pull/123")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -632,7 +609,7 @@ func TestParseGitHubURL(t *testing.T) {
 	})
 
 	t.Run("parses commit URL", func(t *testing.T) {
-		result, err := ParseGitHubURL("https://github.com/owner/repo/commit/abc123def")
+		result, err := api.ParseGitHubURL("https://github.com/owner/repo/commit/abc123def")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -645,7 +622,7 @@ func TestParseGitHubURL(t *testing.T) {
 	})
 
 	t.Run("parses URL with HTTP", func(t *testing.T) {
-		result, err := ParseGitHubURL("http://github.com/owner/repo/pull/456")
+		result, err := api.ParseGitHubURL("http://github.com/owner/repo/pull/456")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -655,130 +632,23 @@ func TestParseGitHubURL(t *testing.T) {
 	})
 
 	t.Run("fails for non-GitHub URL", func(t *testing.T) {
-		_, err := ParseGitHubURL("https://gitlab.com/owner/repo/pull/123")
+		_, err := api.ParseGitHubURL("https://gitlab.com/owner/repo/pull/123")
 		if err == nil {
 			t.Error("expected error for non-GitHub URL")
 		}
 	})
 
 	t.Run("fails for GitHub URL without PR or commit", func(t *testing.T) {
-		_, err := ParseGitHubURL("https://github.com/owner/repo")
+		_, err := api.ParseGitHubURL("https://github.com/owner/repo")
 		if err == nil {
 			t.Error("expected error for non-PR/commit URL")
 		}
 	})
 
 	t.Run("fails for issues URL", func(t *testing.T) {
-		_, err := ParseGitHubURL("https://github.com/owner/repo/issues/123")
+		_, err := api.ParseGitHubURL("https://github.com/owner/repo/issues/123")
 		if err == nil {
 			t.Error("expected error for issues URL")
-		}
-	})
-}
-
-// =============================================================================
-// extractPRLinkFromLine Unit Tests
-// =============================================================================
-
-func TestExtractPRLinkFromLine(t *testing.T) {
-	t.Run("extracts valid pr-link", func(t *testing.T) {
-		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://github.com/ConfabulousDev/confab-web/pull/44","prRepository":"ConfabulousDev/confab-web","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
-		link := extractPRLinkFromLine(line)
-		if link == nil {
-			t.Fatal("expected non-nil link")
-		}
-		if link.Owner != "ConfabulousDev" {
-			t.Errorf("expected owner 'ConfabulousDev', got %s", link.Owner)
-		}
-		if link.Repo != "confab-web" {
-			t.Errorf("expected repo 'confab-web', got %s", link.Repo)
-		}
-		if link.Ref != "44" {
-			t.Errorf("expected ref '44', got %s", link.Ref)
-		}
-		if link.LinkType != models.GitHubLinkTypePullRequest {
-			t.Errorf("expected link_type 'pull_request', got %s", link.LinkType)
-		}
-		if link.Source != models.GitHubLinkSourceTranscript {
-			t.Errorf("expected source 'transcript', got %s", link.Source)
-		}
-		expectedTitle := "ConfabulousDev/confab-web#44"
-		if link.Title == nil || *link.Title != expectedTitle {
-			t.Errorf("expected title %q, got %v", expectedTitle, link.Title)
-		}
-		if link.URL != "https://github.com/ConfabulousDev/confab-web/pull/44" {
-			t.Errorf("expected URL preserved, got %s", link.URL)
-		}
-	})
-
-	t.Run("returns nil for non-pr-link type", func(t *testing.T) {
-		line := `{"type":"assistant","message":{"content":"hello"}}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for non-pr-link type")
-		}
-	})
-
-	t.Run("returns nil for malformed JSON", func(t *testing.T) {
-		if link := extractPRLinkFromLine(`{not valid json`); link != nil {
-			t.Error("expected nil for malformed JSON")
-		}
-	})
-
-	t.Run("returns nil for missing prUrl", func(t *testing.T) {
-		line := `{"type":"pr-link","prNumber":44,"prRepository":"owner/repo"}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for missing prUrl")
-		}
-	})
-
-	t.Run("returns nil for missing prRepository", func(t *testing.T) {
-		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://github.com/owner/repo/pull/44"}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for missing prRepository")
-		}
-	})
-
-	t.Run("returns nil for missing prNumber", func(t *testing.T) {
-		line := `{"type":"pr-link","prUrl":"https://github.com/owner/repo/pull/44","prRepository":"owner/repo"}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for missing prNumber")
-		}
-	})
-
-	t.Run("returns nil for invalid prUrl format", func(t *testing.T) {
-		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://gitlab.com/owner/repo/pull/44","prRepository":"owner/repo"}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for non-GitHub prUrl")
-		}
-	})
-
-	t.Run("returns nil for inconsistent fields", func(t *testing.T) {
-		// prUrl says owner-a/repo-b#5, but prRepository says owner-x/repo-y and prNumber says 10
-		line := `{"type":"pr-link","prNumber":10,"prUrl":"https://github.com/owner-a/repo-b/pull/5","prRepository":"owner-x/repo-y"}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for inconsistent fields")
-		}
-	})
-
-	t.Run("returns nil for invalid prRepository format", func(t *testing.T) {
-		line := `{"type":"pr-link","prNumber":44,"prUrl":"https://github.com/owner/repo/pull/44","prRepository":"noslash"}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for invalid prRepository")
-		}
-	})
-
-	t.Run("returns nil for zero prNumber", func(t *testing.T) {
-		line := `{"type":"pr-link","prNumber":0,"prUrl":"https://github.com/owner/repo/pull/0","prRepository":"owner/repo"}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for zero prNumber")
-		}
-	})
-
-	t.Run("returns nil for line without pr-link string", func(t *testing.T) {
-		// This line doesn't contain "pr-link" at all — quick check should skip it
-		line := `{"type":"human","message":{"content":"hello world"}}`
-		if link := extractPRLinkFromLine(line); link != nil {
-			t.Error("expected nil for unrelated line")
 		}
 	})
 }

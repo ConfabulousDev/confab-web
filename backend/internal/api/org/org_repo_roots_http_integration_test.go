@@ -1,6 +1,7 @@
-package api
+package org_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,7 +78,7 @@ func TestOrgRepos_HTTP_CollapsesForks(t *testing.T) {
 	defer resp.Body.Close()
 	testutil.RequireStatus(t, resp, http.StatusOK)
 
-	var result OrgReposResponse
+	var result api.OrgReposResponse
 	testutil.ParseJSON(t, resp, &result)
 
 	if len(result.Repos) != 1 {

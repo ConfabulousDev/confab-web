@@ -1,4 +1,4 @@
-package api
+package sync_test
 
 import (
 	"database/sql"
@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
@@ -51,7 +52,7 @@ func TestSyncChunk_PRLinkFromFork_RecordsRoot(t *testing.T) {
 
 	prLine := `{"type":"pr-link","prNumber":1,"prUrl":"https://github.com/ConfabulousDev/confab-web/pull/1","prRepository":"ConfabulousDev/confab-web","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
@@ -60,7 +61,7 @@ func TestSyncChunk_PRLinkFromFork_RecordsRoot(t *testing.T) {
 			`{"type":"user","message":"open a PR"}`,
 			prLine,
 		},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: json.RawMessage(`{"repo_url":"https://github.com/jackie/confab-web.git","branch":"main"}`),
 		},
 	}
@@ -101,7 +102,7 @@ func TestSyncChunk_PRLinkFromUpstream_NoOp(t *testing.T) {
 
 	prLine := `{"type":"pr-link","prNumber":2,"prUrl":"https://github.com/ConfabulousDev/confab-web/pull/2","prRepository":"ConfabulousDev/confab-web","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
@@ -110,7 +111,7 @@ func TestSyncChunk_PRLinkFromUpstream_NoOp(t *testing.T) {
 			`{"type":"user","message":"open a PR"}`,
 			prLine,
 		},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: json.RawMessage(`{"repo_url":"https://github.com/ConfabulousDev/confab-web.git","branch":"main"}`),
 		},
 	}
@@ -159,7 +160,7 @@ func TestSyncChunk_CommitLink_NoOp(t *testing.T) {
 	ts := setupTestServerWithEnv(t, env)
 	client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
@@ -168,7 +169,7 @@ func TestSyncChunk_CommitLink_NoOp(t *testing.T) {
 			`{"type":"user","message":"no PR here"}`,
 			`{"type":"assistant","message":"OK"}`,
 		},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: json.RawMessage(`{"repo_url":"https://github.com/jackie/confab-web.git","branch":"main"}`),
 		},
 	}
@@ -234,7 +235,7 @@ func TestSyncChunk_GitRemoteFromFork_RecordsRoot(t *testing.T) {
 	ts := setupTestServerWithEnv(t, env)
 	client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
@@ -242,7 +243,7 @@ func TestSyncChunk_GitRemoteFromFork_RecordsRoot(t *testing.T) {
 		Lines: []string{
 			`{"type":"user","message":"hello"}`,
 		},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: gitInfoWithRemotes(
 				"git@github.com:jackie/confab-web.git",
 				"upstream",
@@ -289,13 +290,13 @@ func TestSyncChunk_OldShape_NoRemotes_FallsBackToPRLink(t *testing.T) {
 
 	prLine := `{"type":"pr-link","prNumber":1,"prUrl":"https://github.com/ConfabulousDev/confab-web/pull/1","prRepository":"ConfabulousDev/confab-web","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
 		FirstLine: 1,
 		Lines:     []string{`{"type":"user","message":"open"}`, prLine},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: json.RawMessage(`{"repo_url":"https://github.com/jackie/confab-web.git","branch":"main"}`),
 		},
 	}
@@ -334,13 +335,13 @@ func TestSyncChunk_BothSignals_GitRemoteWins(t *testing.T) {
 
 	prLine := `{"type":"pr-link","prNumber":7,"prUrl":"https://github.com/ConfabulousDev/confab-web/pull/7","prRepository":"ConfabulousDev/confab-web","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
 		FirstLine: 1,
 		Lines:     []string{`{"type":"user","message":"x"}`, prLine},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: gitInfoWithRemotes(
 				"https://github.com/jackie/confab-web.git",
 				"upstream",
@@ -383,13 +384,13 @@ func TestSyncChunk_MalformedTrackingRemote_NoOp(t *testing.T) {
 	ts := setupTestServerWithEnv(t, env)
 	client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
 		FirstLine: 1,
 		Lines:     []string{`{"type":"user","message":"hi"}`},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: gitInfoWithRemotes(
 				"https://github.com/jackie/confab-web.git",
 				"nonexistent",
@@ -428,13 +429,13 @@ func TestSyncChunk_InvalidRemotesEntry_400(t *testing.T) {
 	ts := setupTestServerWithEnv(t, env)
 	client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
 		FirstLine: 1,
 		Lines:     []string{`{"type":"user","message":"x"}`},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: json.RawMessage(`{"repo_url":"https://github.com/me/repo.git","remotes":[{"name":"","fetch_url":"https://x.git"}]}`),
 		},
 	}
@@ -471,13 +472,13 @@ func TestSyncChunk_TooManyRemotes_400(t *testing.T) {
 			"https://x/y.git",
 		}
 	}
-	reqBody := SyncChunkRequest{
+	reqBody := api.SyncChunkRequest{
 		SessionID: sessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",
 		FirstLine: 1,
 		Lines:     []string{`{"type":"user","message":"x"}`},
-		Metadata: &SyncChunkMetadata{
+		Metadata: &api.SyncChunkMetadata{
 			GitInfo: gitInfoWithRemotes("https://github.com/me/repo.git", "", remotes),
 		},
 	}
@@ -505,10 +506,10 @@ func TestSyncInit_GitRemoteFromFork_RecordsRoot(t *testing.T) {
 	ts := setupTestServerWithEnv(t, env)
 	client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
-	initBody := SyncInitRequest{
+	initBody := api.SyncInitRequest{
 		ExternalID:     "ext-gr-init",
 		TranscriptPath: "/tmp/t.jsonl",
-		Metadata: &SyncInitMetadata{
+		Metadata: &api.SyncInitMetadata{
 			GitInfo: gitInfoWithRemotes(
 				"git@github.com:jackie/confab-web.git",
 				"upstream",

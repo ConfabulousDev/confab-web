@@ -1,13 +1,13 @@
-package api
+package auth_test
 
 import (
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -17,31 +17,9 @@ import (
 //
 // These tests run against a real HTTP server with the production router.
 // API key endpoints require session auth + CSRF for state-changing operations.
+//
+// setupKeysTestServer lives in setup_test.go alongside the other auth helpers.
 // =============================================================================
-
-// setupKeysTestServer creates a test server for keys tests
-func setupKeysTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
-	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", "test-csrf-secret-key-32-bytes!!")
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-
-	oauthConfig := auth.OAuthConfig{
-		GitHubClientID:     "test-github-client-id",
-		GitHubClientSecret: "test-github-client-secret",
-		GitHubRedirectURL:  "http://localhost:3000/auth/github/callback",
-		GoogleClientID:     "test-google-client-id",
-		GoogleClientSecret: "test-google-client-secret",
-		GoogleRedirectURL:  "http://localhost:3000/auth/google/callback",
-	}
-
-	apiServer := NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
-	handler := apiServer.SetupRoutes()
-
-	return testutil.StartTestServer(t, env, handler)
-}
 
 // =============================================================================
 // POST /api/v1/keys - Create API key
@@ -65,7 +43,7 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 		ts := setupKeysTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateAPIKeyRequest{
+		reqBody := api.CreateAPIKeyRequest{
 			Name: "My Test Key",
 		}
 
@@ -77,7 +55,7 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result CreateAPIKeyResponse
+		var result api.CreateAPIKeyResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.ID == 0 {
@@ -119,7 +97,7 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 		ts := setupKeysTestServer(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		reqBody := CreateAPIKeyRequest{
+		reqBody := api.CreateAPIKeyRequest{
 			Name: "", // Empty - should default to "API Key"
 		}
 
@@ -131,7 +109,7 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result CreateAPIKeyResponse
+		var result api.CreateAPIKeyResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.Name != "API Key" {
@@ -145,7 +123,7 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 		ts := setupKeysTestServer(t, env)
 		client := testutil.NewTestClient(t, ts) // No session
 
-		reqBody := CreateAPIKeyRequest{
+		reqBody := api.CreateAPIKeyRequest{
 			Name: "Test Key",
 		}
 
