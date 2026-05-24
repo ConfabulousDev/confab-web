@@ -40,6 +40,7 @@ function TrendsPagePresentational({
     repos: [],
     includeNoRepo: true,
     providers: [],
+    owners: [],
   },
 }: TrendsPagePresentationalProps) {
   const showEmptyState = !loading && data && data.session_count === 0;
@@ -52,6 +53,7 @@ function TrendsPagePresentational({
           actions={
             <TrendsFilters
               repos={repos}
+              owners={data?.filter_options.owners ?? []}
               value={filters}
               onChange={() => {}}
             />
@@ -139,6 +141,10 @@ const defaultMockData: TrendsResponse = {
   repos_included: ['org/repo-web', 'org/repo-api'],
   include_no_repo: true,
   providers_present: ['claude-code'],
+  filter_options: {
+    owners: ['alice@example.com', 'bob@example.com'],
+    repos: ['org/repo-web', 'org/repo-api'],
+  },
   cards: {
     overview: {
       session_count: 42,
@@ -229,6 +235,7 @@ export const HighUsage: Story = {
       repos_included: ['org/repo-web', 'org/repo-api', 'org/repo-cli'],
       include_no_repo: true,
       providers_present: ['claude-code'],
+      filter_options: defaultMockData.filter_options,
       cards: {
         overview: {
           session_count: 250,
@@ -313,6 +320,7 @@ export const HighUsage: Story = {
       repos: [],
       includeNoRepo: true,
     providers: [],
+    owners: [],
     },
   },
 };
@@ -326,6 +334,7 @@ export const SingleSession: Story = {
       repos_included: ['org/repo-web'],
       include_no_repo: false,
       providers_present: ['claude-code'],
+      filter_options: defaultMockData.filter_options,
       cards: {
         overview: {
           session_count: 1,
@@ -383,6 +392,7 @@ export const SingleSession: Story = {
       repos: ['org/repo-web'],
       includeNoRepo: false,
     providers: [],
+    owners: [],
     },
   },
 };
@@ -421,6 +431,7 @@ export const EmptyState: Story = {
       repos_included: [],
       include_no_repo: true,
       providers_present: ['claude-code'],
+      filter_options: defaultMockData.filter_options,
       cards: {
         overview: null,
         tokens: null,
@@ -459,6 +470,7 @@ export const FilteredByRepo: Story = {
       repos_included: ['org/repo-api'],
       include_no_repo: false,
       providers_present: ['claude-code'],
+      filter_options: defaultMockData.filter_options,
       cards: {
         ...defaultMockData.cards,
         overview: {
@@ -477,6 +489,7 @@ export const FilteredByRepo: Story = {
       repos: ['org/repo-api'],
       includeNoRepo: false,
     providers: [],
+    owners: [],
     },
   },
 };

@@ -16,6 +16,7 @@ function makeResponse(overrides: Partial<TrendsResponse> = {}): TrendsResponse {
     repos_included: [],
     include_no_repo: true,
     providers_present: [],
+    filter_options: { owners: [], repos: [] },
     cards: {
       overview: null,
       tokens: null,
@@ -101,6 +102,23 @@ describe('useTrends', () => {
     expect(trendsAPI.get).toHaveBeenLastCalledWith({
       startDate: '2025-01-01',
       providers: ['claude-code'],
+    });
+  });
+
+  // CF-495: owner filter is forwarded verbatim to the trends API client.
+  // Pinned by `useTrends` so the page can drive owner narrowing via refetch.
+  it('refetch with owners forwards the array to trendsAPI.get', async () => {
+    vi.mocked(trendsAPI.get).mockResolvedValue(makeResponse());
+    const { result } = renderHook(() => useTrends({ startDate: '2025-01-01' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await result.current.refetch({
+      startDate: '2025-01-01',
+      owners: ['alice@example.com', 'bob@example.com'],
+    });
+    expect(trendsAPI.get).toHaveBeenLastCalledWith({
+      startDate: '2025-01-01',
+      owners: ['alice@example.com', 'bob@example.com'],
     });
   });
 });

@@ -1131,14 +1131,14 @@ Returns all TILs for a session. Uses canonical access model (CF-132) — anyone 
 
 ---
 
-### Personal Trends (Aggregated Analytics)
+### Trends (Aggregated Analytics)
 
 #### Get Trends
 ```
-GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>&provider=<providers>
+GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>&provider=<providers>&owner=<emails>
 ```
 
-Returns aggregated analytics across multiple sessions for the authenticated user.
+Returns aggregated analytics across sessions **visible to the authenticated user**. Visibility follows the same model as `GET /api/v1/sessions` — owned ∪ private-share ∪ system-share, or all sessions when `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` is on. The visibility predicate is shared with sessions/TILs via `db.VisibleSessionsCTE` (CF-495), so a session that's invisible to the caller on `/api/v1/sessions` is also invisible here.
 
 **Query Parameters:**
 | Parameter | Type | Required | Default | Description |
@@ -1149,9 +1149,11 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | repos | string | No | all | Comma-separated repo names to filter |
 | include_no_repo | boolean | No | true | Include sessions without a git repo |
 | provider | string | No | all | Comma-separated canonical AI providers (`claude-code`, `codex`). Case-insensitive; the legacy DB form `Claude Code` is rejected on the wire. Returns `400` for unknown values. Omitted/empty aggregates across all providers. |
+| owner | string | No | all | Comma-separated owner emails to narrow the visible set (CF-495). Case-insensitive. **Privacy invariant**: narrows within the visible set; cannot broaden access. `?owner=ghost@x.com` for an owner the caller can't see returns zero rows (no 403, no existence leak). Omitted/empty aggregates across all visible owners. Max 50 values. |
 
 **Constraints:**
 - Maximum date range: 90 days
+- Maximum owner values: 50 (per `validation.MaxFilterCount`)
 
 **Response:**
 ```json
@@ -1250,6 +1252,10 @@ Returns aggregated analytics across multiple sessions for the authenticated user
         }
       ]
     }
+  },
+  "filter_options": {
+    "owners": ["alice@example.com", "bob@example.com"],
+    "repos": ["org/frontend-app", "org/auth-service"]
   }
 }
 ```
@@ -1289,6 +1295,8 @@ Returns aggregated analytics across multiple sessions for the authenticated user
 | `cards.top_sessions.sessions[].title` | string | Best available session title (custom > suggested > summary > first message > fallback) |
 | `cards.top_sessions.sessions[].provider` | string | Canonical provider value (`claude-code` or `codex`). Legacy `Claude Code` is normalized server-side. |
 | `cards.top_sessions.sessions[].estimated_cost_usd` | string | Session cost (decimal as string) |
+| `filter_options.owners` | string[] | Lowercased owner emails from the caller's visible-session set, alphabetical. **Static across active filters** — mirrors `SessionFilterOptions` shape on `/api/v1/sessions`. Drives the owner dropdown on TrendsPage without a side-call. CF-495. |
+| `filter_options.repos` | string[] | Repo names (`owner/name`) from the caller's visible-session set, alphabetical. Fork→root collapsed via `db.RepoRootExpr` (CF-491). Static across active filters. CF-495. |
 | `cards.top_sessions.sessions[].duration_ms` | int\|null | Session duration in milliseconds |
 | `cards.top_sessions.sessions[].git_repo` | string\|null | Extracted repo name (e.g., "org/repo") |
 

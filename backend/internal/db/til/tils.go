@@ -303,7 +303,6 @@ func decodeCursor(cursor string) (time.Time, int64, error) {
 // Session title fallback: COALESCE(custom_title, suggested_session_title, summary, first_user_message)
 const sessionTitleExpr = `COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message)`
 
-
 // tilSelectCols are the columns selected in each CTE. The `session_type`
 // column (CF-475) is normalized on Scan via models.NormalizeProvider.
 const tilSelectCols = `
@@ -457,38 +456,30 @@ func (s *Store) queryPaginatedTILs(ctx context.Context, userID int64, params Lis
 func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (FilterOptions, error) {
 	opts := FilterOptions{Repos: []string{}, Branches: []string{}, Owners: []string{}}
 
+	// CF-495: routes through db.VisibleSessionsCTE so the visibility
+	// predicate lives in one place. TIL filter-options additionally restrict
+	// to sessions with at least one TIL (the source of the dropdown is
+	// "sessions surfaced on TILsPage", not "all visible sessions"). The
+	// EXISTS predicate enforces that scope.
 	query := `
-		WITH visible_sessions AS (
-			SELECT DISTINCT s.id, s.user_id, s.git_info FROM tils t
-			JOIN sessions s ON t.session_id = s.id
-			WHERE s.user_id = $1
-			UNION
-			SELECT DISTINCT s.id, s.user_id, s.git_info FROM tils t
-			JOIN sessions s ON t.session_id = s.id
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_recipients ssr ON sh.id = ssr.share_id
-			WHERE ssr.user_id = $1 AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-			UNION
-			SELECT DISTINCT s.id, s.user_id, s.git_info FROM tils t
-			JOIN sessions s ON t.session_id = s.id
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_system sss ON sh.id = sss.share_id
-			WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW()) AND s.user_id != $1
+		WITH ` + db.VisibleSessionsCTE(false) + `,
+		visible AS (
+			SELECT DISTINCT vs.id, vs.user_id, vs.owner_email FROM visible_sessions vs
+			WHERE EXISTS (SELECT 1 FROM tils t WHERE t.session_id = vs.id)
 		)
 		SELECT
 			COALESCE(r.repos, ARRAY[]::text[]) as repos,
 			COALESCE(b.branches, ARRAY[]::text[]) as branches,
 			COALESCE(o.owners, ARRAY[]::text[]) as owners
 		FROM
-			(SELECT array_agg(DISTINCT repo ORDER BY repo) as repos
-			 FROM (SELECT COALESCE(sr.root_name, extracted.repo) as repo
-			       FROM (SELECT regexp_replace(regexp_replace(v.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') as repo
-			             FROM visible_sessions v WHERE v.git_info->>'repo_url' IS NOT NULL) extracted
-			       LEFT JOIN session_repos sr ON sr.repo_name = extracted.repo AND sr.root_name IS NOT NULL) r2) r,
-			(SELECT array_agg(DISTINCT branch ORDER BY branch) as branches
-			 FROM (SELECT v.git_info->>'branch' as branch FROM visible_sessions v WHERE v.git_info->>'branch' IS NOT NULL) b2) b,
-			(SELECT array_agg(DISTINCT LOWER(u.email) ORDER BY LOWER(u.email)) as owners
-			 FROM visible_sessions v JOIN users u ON v.user_id = u.id) o
+			(SELECT array_agg(DISTINCT ` + db.RepoRootExpr("s") + ` ORDER BY ` + db.RepoRootExpr("s") + `) as repos
+			 FROM visible v JOIN sessions s ON v.id = s.id
+			 WHERE s.git_info->>'repo_url' IS NOT NULL) r,
+			(SELECT array_agg(DISTINCT s.git_info->>'branch' ORDER BY s.git_info->>'branch') as branches
+			 FROM visible v JOIN sessions s ON v.id = s.id
+			 WHERE s.git_info->>'branch' IS NOT NULL) b,
+			(SELECT array_agg(DISTINCT LOWER(owner_email) ORDER BY LOWER(owner_email)) as owners
+			 FROM visible) o
 	`
 
 	err := s.conn().QueryRowContext(ctx, query, userID).Scan(

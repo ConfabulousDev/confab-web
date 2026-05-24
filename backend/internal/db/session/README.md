@@ -7,7 +7,7 @@ Session CRUD, paginated listing with filtering, and incremental sync state manag
 | File | Role |
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
-| `session.go` | Session listing (`ListUserSessions`, `ListUserSessionsPaginated`), detail retrieval, delete, ownership verification, title/summary updates, ID lookups. Contains the `SharedWithMe` SQL view builder, cursor-based pagination, full-text search with `BuildPrefixTsquery`, and filter option materialization. `VerifySessionOwnership` and `GetSessionOwnerExternalIDAndProvider` both return the canonical provider value alongside the external_id so callers can pass it straight into chunk-storage methods. |
+| `session.go` | Session listing (`ListUserSessions`, `ListUserSessionsPaginated`), detail retrieval, delete, ownership verification, title/summary updates, ID lookups. Cursor-based pagination, full-text search with `BuildPrefixTsquery`, and filter option materialization. Visibility routes through `db.VisibleSessionsCTE` + `dedupedVisibleCTE` (priority dedup: owner > private_share > system_share) so the predicate is shared with analytics/TILs (CF-495). `VerifySessionOwnership` and `GetSessionOwnerExternalIDAndProvider` both return the canonical provider value alongside the external_id so callers can pass it straight into chunk-storage methods. |
 | `sync.go` | Incremental sync operations: `FindOrCreateSyncSession`, `UpdateSyncFileState`, `GetSyncFileState`, `UpdateSyncFileChunkCount`, `buildSessionLookupQuery`. Manages the `sync_files` table and session metadata updates during sync. The provider-aware lookup matches both canonical and legacy `session_type` values for `claude-code`. |
 
 Provider value constants and the `Claude Code` → `claude-code` legacy mapping live in the root `db` package (`db.ProviderClaudeCode`, `db.NormalizeProvider`) so every Scan site — including the canonical-access reader in `db/access` — can call the same helper.
@@ -25,7 +25,7 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 
 ## How to Extend
 
-1. **New list filter**: Add a field to `db.SessionListParams`, then add the corresponding SQL clause in `buildPushdownFilters()`. Both scoped and `ShareAllSessions` query paths must be updated.
+1. **New list filter**: Add a field to `db.SessionListParams`, then add the corresponding SQL clause in `buildPushdownFilters()`. Since CF-495 the pagination query is a single SQL shape (one `buildFilteredSessionsQuery` that wraps `db.VisibleSessionsCTE`), so there's only one query path to update.
 2. **New session field**: Add to `db.SessionListItem` or `db.SessionDetail` in the root `db/types.go`, then update the SELECT columns and `rows.Scan()` calls in the listing/detail queries.
 3. **New filter option dimension**: Add to `db.SessionFilterOptions`, then update both `queryFilterOptionsGlobal()` and `queryFilterOptionsScoped()`.
 

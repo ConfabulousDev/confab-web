@@ -91,6 +91,7 @@ describe('TrendsTokensCard single-provider mode', () => {
       repos_included: [],
       include_no_repo: true,
       providers_present: ['claude-code'],
+      filter_options: { owners: [], repos: [] },
       cards: {
         overview: null,
         tokens: {

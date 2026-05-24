@@ -3,7 +3,9 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,12 +29,82 @@ func resolveProviderFilter(providers []string) []string {
 	return models.ExpandWithAliases(providers)
 }
 
-// GetTrends retrieves aggregated analytics across sessions for a user.
-// All card aggregations run in parallel to minimize latency.
+// trendsQuery captures the shared CTE prelude every trends aggregation
+// splices into its own query. The prelude defines:
 //
-// The provider filter is resolved once here and threaded as pq.Array through
-// each aggregation, so the five queries can never disagree on which session_type
-// values they accept.
+//	visible_sessions(id, user_id, owner_email, access_type, shared_by_email)
+//	filtered_sessions(id, owner_email, session_type, session_date)
+//
+// args has a fixed positional layout so every aggregation can reference the
+// same placeholders without recomputing:
+//
+//	$1 userID
+//	$2 StartTS (epoch seconds, inclusive)
+//	$3 EndTS   (epoch seconds, exclusive)
+//	$4 Repos   (pq.Array text[])
+//	$5 IncludeNoRepo (bool)
+//	$6 TZOffset (int minutes; JS getTimezoneOffset convention)
+//	$7 Providers (pq.Array text[])
+//	$8 Owners (pq.Array text[], lowercased) — only present when len(req.Owners) > 0
+//
+// CF-495: every aggregation routes through this prelude so the visibility
+// predicate and owner narrowing live in one place. providers_present
+// inherits the owner narrowing automatically (multi-provider caveat reflects
+// the data the user actually sees).
+type trendsQuery struct {
+	cteSQL string
+	args   []interface{}
+}
+
+func buildTrendsQuery(userID int64, req TrendsRequest) trendsQuery {
+	args := []interface{}{
+		userID,              // $1
+		req.StartTS,         // $2
+		req.EndTS,           // $3
+		pq.Array(req.Repos), // $4
+		req.IncludeNoRepo,   // $5
+		req.TZOffset,        // $6
+		pq.Array(resolveProviderFilter(req.Providers)), // $7
+	}
+	ownerClause := ""
+	if len(req.Owners) > 0 {
+		args = append(args, pq.Array(lowercaseAll(req.Owners)))
+		ownerClause = "\n\t\t\t\tAND LOWER(vs.owner_email) = ANY($8::text[])"
+	}
+
+	cte := `WITH ` + db.VisibleSessionsCTE(req.ShareAllSessions) + `,
+		filtered_sessions AS (
+			SELECT
+				vs.id,
+				vs.owner_email,
+				s.session_type,
+				(s.first_seen - make_interval(mins => $6))::date as session_date
+			FROM (SELECT DISTINCT id, user_id, owner_email FROM visible_sessions) vs
+			JOIN sessions s ON vs.id = s.id
+			WHERE s.first_seen >= to_timestamp($2)
+				AND s.first_seen < to_timestamp($3)
+				AND (
+					` + db.RepoMatchExpr("s", "$4::text[]") + `
+					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
+				)
+				AND s.session_type = ANY($7::text[])` + ownerClause + `
+		)`
+
+	return trendsQuery{cteSQL: cte, args: args}
+}
+
+func lowercaseAll(ss []string) []string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = strings.ToLower(s)
+	}
+	return out
+}
+
+// GetTrends retrieves aggregated analytics across sessions visible to the
+// user. All card aggregations run in parallel to minimize latency. Every
+// aggregation routes through buildTrendsQuery so the visibility predicate
+// + owner narrowing live in exactly one place (CF-495).
 func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) (*TrendsResponse, error) {
 	ctx, span := tracer.Start(ctx, "analytics.get_trends",
 		trace.WithAttributes(
@@ -40,6 +112,8 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 			attribute.Int64("start_ts", req.StartTS),
 			attribute.Int64("end_ts", req.EndTS),
 			attribute.Int("tz_offset", req.TZOffset),
+			attribute.Int("owners.count", len(req.Owners)),
+			attribute.Bool("share_all_sessions", req.ShareAllSessions),
 		))
 	defer span.End()
 
@@ -58,21 +132,20 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		IncludeNoRepo:    req.IncludeNoRepo,
 		ProvidersPresent: []string{},
 		Cards:            TrendsCards{},
+		FilterOptions:    TrendsFilterOptions{Owners: []string{}, Repos: []string{}},
 	}
 
-	// Ensure ReposIncluded is an empty slice (not nil) for JSON serialization
 	if req.Repos == nil {
 		response.ReposIncluded = []string{}
 	}
 
-	providerArg := pq.Array(resolveProviderFilter(req.Providers))
+	tq := buildTrendsQuery(userID, req)
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	errChan := make(chan error, 7)
 
-	// Helper to run aggregation in parallel
-	runAgg := func(name string, fn func() error) {
+	runAgg := func(_ string, fn func() error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -82,9 +155,8 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		}()
 	}
 
-	// Run all card aggregations in parallel
 	runAgg("overview_activity", func() error {
-		overview, activity, utilization, count, err := s.aggregateOverviewAndActivity(ctx, userID, req, providerArg)
+		overview, activity, utilization, count, err := s.aggregateOverviewAndActivity(ctx, tq)
 		if err != nil {
 			return err
 		}
@@ -98,7 +170,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	})
 
 	runAgg("tokens", func() error {
-		tokens, err := s.aggregateTokens(ctx, userID, req, providerArg)
+		tokens, err := s.aggregateTokens(ctx, tq)
 		if err != nil {
 			return err
 		}
@@ -109,7 +181,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	})
 
 	runAgg("tools", func() error {
-		tools, err := s.aggregateTools(ctx, userID, req, providerArg)
+		tools, err := s.aggregateTools(ctx, tq)
 		if err != nil {
 			return err
 		}
@@ -120,7 +192,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	})
 
 	runAgg("agents_and_skills", func() error {
-		agentsAndSkills, err := s.aggregateAgentsAndSkills(ctx, userID, req, providerArg)
+		agentsAndSkills, err := s.aggregateAgentsAndSkills(ctx, tq)
 		if err != nil {
 			return err
 		}
@@ -131,7 +203,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	})
 
 	runAgg("top_sessions", func() error {
-		topSessions, err := s.aggregateTopSessions(ctx, userID, req, providerArg)
+		topSessions, err := s.aggregateTopSessions(ctx, tq)
 		if err != nil {
 			return err
 		}
@@ -142,7 +214,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	})
 
 	runAgg("providers_present", func() error {
-		providersPresent, err := s.aggregateProvidersPresent(ctx, userID, req, providerArg)
+		providersPresent, err := s.aggregateProvidersPresent(ctx, tq)
 		if err != nil {
 			return err
 		}
@@ -152,10 +224,20 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		return nil
 	})
 
+	runAgg("filter_options", func() error {
+		opts, err := s.aggregateFilterOptions(ctx, userID, req.ShareAllSessions)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		response.FilterOptions = opts
+		mu.Unlock()
+		return nil
+	})
+
 	wg.Wait()
 	close(errChan)
 
-	// Check for errors
 	for err := range errChan {
 		if err != nil {
 			return nil, err
@@ -165,42 +247,24 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	return response, nil
 }
 
-// aggregateOverviewAndActivity computes the overview, activity, and utilization
+// aggregateOverviewAndActivity computes overview, activity, and utilization
 // cards in one query (they share the same filtered_sessions / card joins).
 //
 // daily_agg groups by (session_date, session_type) so DailySessionCount can
-// carry a per-provider session-count map for the stacked-bar chart. Empty days
-// from the date_range LEFT JOIN surface as one row with session_type '' and
-// zero numerics — used only to register the date in the output (no provider
-// accumulation). Provider keys are folded server-side via
+// carry a per-provider session-count map for the stacked-bar chart. Empty
+// days from the date_range LEFT JOIN surface as one row with session_type
+// '' and zero numerics — used only to register the date in the output (no
+// provider accumulation). Provider keys are folded server-side via
 // models.NormalizeProvider so legacy 'Claude Code' rows collapse into
 // 'claude-code'.
-func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (*TrendsOverviewCard, *TrendsActivityCard, *TrendsUtilizationCard, int, error) {
-	// Query sessions and their code activity data
-	// Uses generate_series to ensure all dates in range are returned (with zeros for missing days)
-	// $2/$3 are epoch seconds; $6 is the client TZ offset in minutes (JS getTimezoneOffset convention)
-	query := `
-		WITH date_range AS (
+func (s *Store) aggregateOverviewAndActivity(ctx context.Context, tq trendsQuery) (*TrendsOverviewCard, *TrendsActivityCard, *TrendsUtilizationCard, int, error) {
+	query := tq.cteSQL + `,
+		date_range AS (
 			SELECT generate_series(
 				(to_timestamp($2) - make_interval(mins => $6))::date,
 				(to_timestamp($3) - make_interval(mins => $6) - interval '1 day')::date,
 				'1 day'
 			)::date as d
-		),
-		filtered_sessions AS (
-			SELECT
-				s.id,
-				s.session_type,
-				(s.first_seen - make_interval(mins => $6))::date as session_date
-			FROM sessions s
-			WHERE s.user_id = $1
-				AND s.first_seen >= to_timestamp($2)
-				AND s.first_seen < to_timestamp($3)
-				AND (
-					` + db.RepoMatchExpr("s", "$4::text[]") + `
-					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
-				)
-				AND s.session_type = ANY($7::text[])
 		),
 		daily_agg AS (
 			SELECT
@@ -234,15 +298,7 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 		ORDER BY dr.d, da.session_type
 	`
 
-	rows, err := s.db.QueryContext(ctx, query,
-		userID,
-		req.StartTS,
-		req.EndTS,
-		pq.Array(req.Repos),
-		req.IncludeNoRepo,
-		req.TZOffset,
-		providerArg,
-	)
+	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
@@ -294,9 +350,6 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 			dateOrder = append(dateOrder, dateKey)
 		}
 
-		// Empty-day anchor from the date_range LEFT JOIN: session_type NULL→''.
-		// Date is already registered in dateOrder; skip accumulation so no
-		// phantom '' bucket leaks into perProvider.
 		if rawProvider == "" {
 			continue
 		}
@@ -320,7 +373,6 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 		return nil, nil, nil, 0, err
 	}
 
-	// Build daily session counts and utilization for charts, count days with activity
 	dailyCounts := make([]DailySessionCount, 0, len(dateOrder))
 	dailyUtilization := make([]DailyUtilizationPoint, 0, len(dateOrder))
 	daysWithActivity := 0
@@ -352,7 +404,6 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 		avgMs := totalDurationMs / int64(totalSessions)
 		overview.AvgDurationMs = &avgMs
 	}
-	// Calculate utilization percentage: (assistant time / total duration) * 100
 	if totalDurationMs > 0 {
 		utilization := float64(totalAssistantDurationMs) / float64(totalDurationMs) * 100
 		overview.AssistantUtilizationPct = &utilization
@@ -374,34 +425,19 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, userID int64, 
 }
 
 // aggregateTokens computes the tokens card in one SQL pass: per-day
-// per-provider cost rows for the stacked-bar chart, per-provider grand totals,
-// and cross-provider grand totals. A date_range LEFT JOIN backfills every
-// day in the range so empty days still appear (with session_type='' and
-// PerProvider={}). Provider keys are normalized via models.NormalizeProvider
-// at the Scan site so legacy 'Claude Code' rows fold into 'claude-code'.
-func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (*TrendsTokensCard, error) {
-	query := `
-		WITH date_range AS (
+// per-provider cost rows for the stacked-bar chart, per-provider grand
+// totals, and cross-provider grand totals. A date_range LEFT JOIN backfills
+// every day in the range so empty days still appear. Provider keys are
+// normalized via models.NormalizeProvider at the Scan site so legacy
+// 'Claude Code' rows fold into 'claude-code'.
+func (s *Store) aggregateTokens(ctx context.Context, tq trendsQuery) (*TrendsTokensCard, error) {
+	query := tq.cteSQL + `,
+		date_range AS (
 			SELECT generate_series(
 				(to_timestamp($2) - make_interval(mins => $6))::date,
 				(to_timestamp($3) - make_interval(mins => $6) - interval '1 day')::date,
 				'1 day'
 			)::date as d
-		),
-		filtered_sessions AS (
-			SELECT
-				s.id,
-				s.session_type,
-				(s.first_seen - make_interval(mins => $6))::date as session_date
-			FROM sessions s
-			WHERE s.user_id = $1
-				AND s.first_seen >= to_timestamp($2)
-				AND s.first_seen < to_timestamp($3)
-				AND (
-					` + db.RepoMatchExpr("s", "$4::text[]") + `
-					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
-				)
-				AND s.session_type = ANY($7::text[])
 		),
 		per_day_per_provider AS (
 			SELECT
@@ -429,15 +465,7 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 		ORDER BY dr.d, pdpp.session_type
 	`
 
-	rows, err := s.db.QueryContext(ctx, query,
-		userID,
-		req.StartTS,
-		req.EndTS,
-		pq.Array(req.Repos),
-		req.IncludeNoRepo,
-		req.TZOffset,
-		providerArg,
-	)
+	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -478,9 +506,6 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 			datesInOrder = append(datesInOrder, dateKey)
 		}
 
-		// Empty-day anchor row from the date_range LEFT JOIN: NULL session_type
-		// becomes '', NULL numerics become 0. Skip accumulation so we don't
-		// pollute provider totals with a phantom '' bucket.
 		if rawProvider == "" {
 			continue
 		}
@@ -488,8 +513,6 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 		canonical := models.NormalizeProvider(rawProvider)
 		cost, _ := decimal.NewFromString(costStr)
 
-		// Per-day per-provider (merges legacy 'Claude Code' with 'claude-code'
-		// on the same date — both fold into the canonical bucket).
 		day.perProvider[canonical] = day.perProvider[canonical].Add(cost)
 		day.total = day.total.Add(cost)
 
@@ -546,37 +569,14 @@ func (s *Store) aggregateTokens(ctx context.Context, userID int64, req TrendsReq
 }
 
 // aggregateTools computes the tools card with per-tool breakdown.
-func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (*TrendsToolsCard, error) {
-	query := `
-		WITH filtered_sessions AS (
-			SELECT
-				s.id
-			FROM sessions s
-			WHERE s.user_id = $1
-				AND s.first_seen >= to_timestamp($2)
-				AND s.first_seen < to_timestamp($3)
-				AND (
-					` + db.RepoMatchExpr("s", "$4::text[]") + `
-					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
-				)
-				AND s.session_type = ANY($6::text[])
-		)
-		SELECT
-			t.total_calls,
-			t.error_count,
-			t.tool_breakdown
+func (s *Store) aggregateTools(ctx context.Context, tq trendsQuery) (*TrendsToolsCard, error) {
+	query := tq.cteSQL + `
+		SELECT t.total_calls, t.error_count, t.tool_breakdown
 		FROM filtered_sessions fs
 		INNER JOIN session_card_tools t ON fs.id = t.session_id
 	`
 
-	rows, err := s.db.QueryContext(ctx, query,
-		userID,
-		req.StartTS,
-		req.EndTS,
-		pq.Array(req.Repos),
-		req.IncludeNoRepo,
-		providerArg,
-	)
+	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -590,15 +590,13 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 		var calls, errors int
 		var breakdownJSON []byte
 
-		err := rows.Scan(&calls, &errors, &breakdownJSON)
-		if err != nil {
+		if err := rows.Scan(&calls, &errors, &breakdownJSON); err != nil {
 			return nil, err
 		}
 
 		totalCalls += calls
 		totalErrors += errors
 
-		// Parse tool breakdown and aggregate
 		if len(breakdownJSON) > 0 {
 			var breakdown map[string]*ToolStats
 			if err := json.Unmarshal(breakdownJSON, &breakdown); err == nil {
@@ -625,28 +623,18 @@ func (s *Store) aggregateTools(ctx context.Context, userID int64, req TrendsRequ
 }
 
 // aggregateTopSessions returns the top 10 most expensive sessions ranked by cost.
-func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (*TrendsTopSessionsCard, error) {
-	query := `
-		WITH filtered_sessions AS (
-			SELECT
-				s.id,
-				s.external_id,
-				s.session_type,
-				COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message) AS title,
-				NULLIF(regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1'), '') AS git_repo
-			FROM sessions s
-			WHERE s.user_id = $1
-				AND s.first_seen >= to_timestamp($2)
-				AND s.first_seen < to_timestamp($3)
-				AND (
-					` + db.RepoMatchExpr("s", "$4::text[]") + `
-					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
-				)
-				AND s.session_type = ANY($6::text[])
-		)
-		SELECT fs.id, fs.external_id, fs.session_type, fs.title, fs.git_repo,
-			   t.estimated_cost_usd, sess.duration_ms
+func (s *Store) aggregateTopSessions(ctx context.Context, tq trendsQuery) (*TrendsTopSessionsCard, error) {
+	query := tq.cteSQL + `
+		SELECT
+			fs.id,
+			s.external_id,
+			fs.session_type,
+			COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message) AS title,
+			NULLIF(regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1'), '') AS git_repo,
+			t.estimated_cost_usd,
+			sess.duration_ms
 		FROM filtered_sessions fs
+		JOIN sessions s ON fs.id = s.id
 		INNER JOIN session_card_tokens t ON fs.id = t.session_id
 		LEFT JOIN session_card_session sess ON fs.id = sess.session_id
 		WHERE t.estimated_cost_usd > 0
@@ -654,14 +642,7 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 		LIMIT 10
 	`
 
-	rows, err := s.db.QueryContext(ctx, query,
-		userID,
-		req.StartTS,
-		req.EndTS,
-		pq.Array(req.Repos),
-		req.IncludeNoRepo,
-		providerArg,
-	)
+	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +656,7 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 		var title *string
 		var costStr string
 
-		err := rows.Scan(
+		if err := rows.Scan(
 			&item.ID,
 			&externalID,
 			&providerRaw,
@@ -683,20 +664,15 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 			&item.GitRepo,
 			&costStr,
 			&item.DurationMs,
-		)
-		if err != nil {
+		); err != nil {
 			return nil, err
 		}
 
-		// Normalize legacy 'Claude Code' → canonical 'claude-code' (CLAUDE.md
-		// invariant: every Scan site reading sessions.session_type must call
-		// models.NormalizeProvider so the API surface only exposes canonical values).
 		item.Provider = models.NormalizeProvider(providerRaw)
 
 		if title != nil {
 			item.Title = *title
 		} else {
-			// Fallback: "Untitled session - <first 8 chars of external_id>"
 			truncID := externalID
 			if len(truncID) > 8 {
 				truncID = truncID[:8]
@@ -718,38 +694,14 @@ func (s *Store) aggregateTopSessions(ctx context.Context, userID int64, req Tren
 }
 
 // aggregateAgentsAndSkills computes the agents and skills card with per-name breakdown.
-func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req TrendsRequest, providerArg any) (*TrendsAgentsAndSkillsCard, error) {
-	query := `
-		WITH filtered_sessions AS (
-			SELECT
-				s.id
-			FROM sessions s
-			WHERE s.user_id = $1
-				AND s.first_seen >= to_timestamp($2)
-				AND s.first_seen < to_timestamp($3)
-				AND (
-					` + db.RepoMatchExpr("s", "$4::text[]") + `
-					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
-				)
-				AND s.session_type = ANY($6::text[])
-		)
-		SELECT
-			a.agent_invocations,
-			a.skill_invocations,
-			a.agent_stats,
-			a.skill_stats
+func (s *Store) aggregateAgentsAndSkills(ctx context.Context, tq trendsQuery) (*TrendsAgentsAndSkillsCard, error) {
+	query := tq.cteSQL + `
+		SELECT a.agent_invocations, a.skill_invocations, a.agent_stats, a.skill_stats
 		FROM filtered_sessions fs
 		INNER JOIN session_card_agents_and_skills a ON fs.id = a.session_id
 	`
 
-	rows, err := s.db.QueryContext(ctx, query,
-		userID,
-		req.StartTS,
-		req.EndTS,
-		pq.Array(req.Repos),
-		req.IncludeNoRepo,
-		providerArg,
-	)
+	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -764,15 +716,13 @@ func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req 
 		var agentInvocations, skillInvocations int
 		var agentStatsJSON, skillStatsJSON []byte
 
-		err := rows.Scan(&agentInvocations, &skillInvocations, &agentStatsJSON, &skillStatsJSON)
-		if err != nil {
+		if err := rows.Scan(&agentInvocations, &skillInvocations, &agentStatsJSON, &skillStatsJSON); err != nil {
 			return nil, err
 		}
 
 		totalAgentInvocations += agentInvocations
 		totalSkillInvocations += skillInvocations
 
-		// Parse and aggregate agent stats
 		if len(agentStatsJSON) > 0 {
 			var agentStats map[string]*AgentStats
 			if err := json.Unmarshal(agentStatsJSON, &agentStats); err == nil {
@@ -786,7 +736,6 @@ func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req 
 			}
 		}
 
-		// Parse and aggregate skill stats
 		if len(skillStatsJSON) > 0 {
 			var skillStats map[string]*SkillStats
 			if err := json.Unmarshal(skillStatsJSON, &skillStats); err == nil {
@@ -815,35 +764,14 @@ func (s *Store) aggregateAgentsAndSkills(ctx context.Context, userID int64, req 
 
 // aggregateProvidersPresent returns the distinct canonical providers in the
 // filtered session set, sorted alphabetically. Drives the Tokens card's
-// multi-provider caveat (CF-424): when len >= 2, the frontend renders a
-// notice that totals span multiple AI providers. Legacy 'Claude Code' rows
-// are collapsed into 'claude-code' via models.NormalizeProvider so the API
-// surface only exposes canonical values.
-func (s *Store) aggregateProvidersPresent(ctx context.Context, userID int64, req TrendsRequest, providerArg any) ([]string, error) {
-	query := `
-		WITH filtered_sessions AS (
-			SELECT s.session_type
-			FROM sessions s
-			WHERE s.user_id = $1
-				AND s.first_seen >= to_timestamp($2)
-				AND s.first_seen < to_timestamp($3)
-				AND (
-					` + db.RepoMatchExpr("s", "$4::text[]") + `
-					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
-				)
-				AND s.session_type = ANY($6::text[])
-		)
+// multi-provider caveat (CF-424). Owner narrowing applies automatically
+// since this query reads from filtered_sessions (CF-495).
+func (s *Store) aggregateProvidersPresent(ctx context.Context, tq trendsQuery) ([]string, error) {
+	query := tq.cteSQL + `
 		SELECT DISTINCT session_type FROM filtered_sessions
 	`
 
-	rows, err := s.db.QueryContext(ctx, query,
-		userID,
-		req.StartTS,
-		req.EndTS,
-		pq.Array(req.Repos),
-		req.IncludeNoRepo,
-		providerArg,
-	)
+	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -867,4 +795,48 @@ func (s *Store) aggregateProvidersPresent(ctx context.Context, userID int64, req
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// aggregateFilterOptions returns the owner + repo dropdown source for
+// TrendsPage. CF-495: derives from visible_sessions (NOT filtered_sessions)
+// so the lists are static across active filters — mirrors SessionFilterOptions.
+//
+// Owners are lowercased and alphabetical. Repos use db.RepoRootExpr (CF-491
+// canonical) so fork→root collapsing is honored identically to Sessions/TILs.
+func (s *Store) aggregateFilterOptions(ctx context.Context, userID int64, shareAllSessions bool) (TrendsFilterOptions, error) {
+	query := `WITH ` + db.VisibleSessionsCTE(shareAllSessions) + `,
+		visible_unique AS (
+			SELECT DISTINCT id, user_id, owner_email FROM visible_sessions
+		),
+		owners_q AS (
+			SELECT COALESCE(array_agg(DISTINCT LOWER(owner_email) ORDER BY LOWER(owner_email)), ARRAY[]::text[]) AS owners
+			FROM visible_unique
+		),
+		repos_q AS (
+			SELECT COALESCE(array_agg(DISTINCT root ORDER BY root), ARRAY[]::text[]) AS repos
+			FROM (
+				SELECT ` + db.RepoRootExpr("s") + ` AS root
+				FROM visible_unique vs
+				JOIN sessions s ON vs.id = s.id
+				WHERE s.git_info->>'repo_url' IS NOT NULL
+			) r
+		)
+		SELECT o.owners, r.repos FROM owners_q o, repos_q r
+	`
+
+	var owners, repos []string
+	if err := s.db.QueryRowContext(ctx, query, userID).Scan(pq.Array(&owners), pq.Array(&repos)); err != nil {
+		return TrendsFilterOptions{}, fmt.Errorf("aggregate filter options: %w", err)
+	}
+	return TrendsFilterOptions{
+		Owners: nonNilSlice(owners),
+		Repos:  nonNilSlice(repos),
+	}, nil
+}
+
+func nonNilSlice(ss []string) []string {
+	if ss == nil {
+		return []string{}
+	}
+	return ss
 }

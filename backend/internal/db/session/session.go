@@ -125,70 +125,20 @@ func scanSessionListItems(rows *sql.Rows) ([]db.SessionListItem, error) {
 }
 
 // buildSharedWithMeQuery returns the SQL for the SharedWithMe view.
+// CF-495: routes through db.VisibleSessionsCTE + the shared dedup pass so
+// the visibility predicate has a single source of truth.
 func (s *Store) buildSharedWithMeQuery() string {
-	var systemSharedCTE string
-	if s.DB.ShareAllSessions {
-		systemSharedCTE = `
-		system_shared_sessions AS (
-			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
-				false as is_owner, 'system_share' as access_type,
-				u.email as shared_by_email, u.email as owner_email
-			FROM sessions s
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
-			WHERE s.user_id != $1
-			ORDER BY s.id
-		)`
-	} else {
-		systemSharedCTE = `
-		system_shared_sessions AS (
-			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
-				false as is_owner, 'system_share' as access_type,
-				u.email as shared_by_email, u.email as owner_email
-			FROM sessions s
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_system sss ON sh.id = sss.share_id
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
-			WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
-			  AND s.user_id != $1
-			ORDER BY s.id, sh.created_at DESC
-		)`
-	}
-
 	return `
 		WITH` + githubRefCTEs + `,
-		owned_sessions AS (
-			SELECT` + sessionSelectCols + `,
-				true as is_owner, 'owner' as access_type,
-				NULL::text as shared_by_email, u.email as owner_email
-			FROM sessions s
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
-			WHERE s.user_id = $1
-		),
-		shared_sessions AS (
-			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
-				false as is_owner, 'private_share' as access_type,
-				u.email as shared_by_email, u.email as owner_email
-			FROM sessions s
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_recipients sr ON sh.id = sr.share_id
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + `
-			WHERE sr.user_id = $1
-			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-			  AND s.user_id != $1
-			ORDER BY s.id, sh.created_at DESC
-		),` + systemSharedCTE + `
-		SELECT * FROM (
-			SELECT DISTINCT ON (id) * FROM (
-				SELECT * FROM owned_sessions
-				UNION ALL SELECT * FROM shared_sessions
-				UNION ALL SELECT * FROM system_shared_sessions
-			) combined
-			ORDER BY id, CASE access_type
-				WHEN 'owner' THEN 1 WHEN 'private_share' THEN 2
-				WHEN 'system_share' THEN 3 ELSE 4
-			END
-		) deduped
-		ORDER BY COALESCE(last_message_at, first_seen) DESC
+		` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,` + dedupedVisibleCTE + `
+		SELECT` + sessionSelectCols + `,
+				(d.access_type = 'owner') as is_owner,
+				d.access_type,
+				d.shared_by_email,
+				d.owner_email
+			FROM deduped_visible d
+			JOIN sessions s ON d.id = s.id` + sessionStatsJoins + `
+			ORDER BY COALESCE(s.last_message_at, s.first_seen) DESC
 	`
 }
 
@@ -297,34 +247,28 @@ func (s *Store) queryFilterOptionsGlobal(ctx context.Context) (db.SessionFilterO
 }
 
 func (s *Store) queryFilterOptionsScoped(ctx context.Context, userID int64) (db.SessionFilterOptions, error) {
+	// CF-495: routes through db.VisibleSessionsCTE so the visibility
+	// predicate has a single source of truth. The wrapper SELECT DISTINCT
+	// collapses the UNION-ALL duplicates emitted by the helper (e.g. a
+	// recipient who also has a system share to the same session).
 	query := `
-		WITH visible AS (
-			SELECT id, user_id, git_info FROM sessions WHERE user_id = $1
-			UNION
-			SELECT s.id, s.user_id, s.git_info FROM sessions s
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_recipients ssr ON sh.id = ssr.share_id
-			WHERE ssr.user_id = $1 AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-			UNION
-			SELECT s.id, s.user_id, s.git_info FROM sessions s
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_system sss ON sh.id = sss.share_id
-			WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW()) AND s.user_id != $1
+		WITH ` + db.VisibleSessionsCTE(false) + `,
+		visible AS (
+			SELECT DISTINCT vs.id, vs.user_id, vs.owner_email FROM visible_sessions vs
 		)
 		SELECT
 			COALESCE(r.repos, ARRAY[]::text[]) as repos,
 			COALESCE(b.branches, ARRAY[]::text[]) as branches,
 			COALESCE(o.owners, ARRAY[]::text[]) as owners
 		FROM
-			(SELECT array_agg(DISTINCT repo ORDER BY repo) as repos
-			 FROM (SELECT COALESCE(sr.root_name, extracted.repo) as repo
-			       FROM (SELECT regexp_replace(regexp_replace(v.git_info->>'repo_url', '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1') as repo
-			             FROM visible v WHERE v.git_info->>'repo_url' IS NOT NULL) extracted
-			       LEFT JOIN session_repos sr ON sr.repo_name = extracted.repo AND sr.root_name IS NOT NULL) r2) r,
-			(SELECT array_agg(DISTINCT branch ORDER BY branch) as branches
-			 FROM (SELECT v.git_info->>'branch' as branch FROM visible v WHERE v.git_info->>'branch' IS NOT NULL) b2) b,
-			(SELECT array_agg(DISTINCT LOWER(u.email) ORDER BY LOWER(u.email)) as owners
-			 FROM visible v JOIN users u ON v.user_id = u.id) o
+			(SELECT array_agg(DISTINCT ` + db.RepoRootExpr("s") + ` ORDER BY ` + db.RepoRootExpr("s") + `) as repos
+			 FROM visible v JOIN sessions s ON v.id = s.id
+			 WHERE s.git_info->>'repo_url' IS NOT NULL) r,
+			(SELECT array_agg(DISTINCT s.git_info->>'branch' ORDER BY s.git_info->>'branch') as branches
+			 FROM visible v JOIN sessions s ON v.id = s.id
+			 WHERE s.git_info->>'branch' IS NOT NULL) b,
+			(SELECT array_agg(DISTINCT LOWER(owner_email) ORDER BY LOWER(owner_email)) as owners
+			 FROM visible) o
 	`
 
 	var repos, branches, owners []string
@@ -361,7 +305,10 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 	return t, parts[1], nil
 }
 
-func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (commonFilters, ownedOwnerFilter, sharedOwnerFilter, searchJoin string) {
+// buildPushdownFilters returns SQL fragments appended to the outer query.
+// CF-495: owner filter now applies uniformly to d.owner_email (post-dedup
+// from db.VisibleSessionsCTE), so the historical owned/shared split is gone.
+func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (commonFilters, ownerFilter, searchJoin string) {
 	commonFilters = "\n\t\t\t\tAND COALESCE(sf_stats.total_lines, 0) > 0" +
 		"\n\t\t\t\tAND (s.summary IS NOT NULL OR s.first_user_message IS NOT NULL)"
 
@@ -379,8 +326,7 @@ func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (common
 	}
 	if len(params.Owners) > 0 {
 		p := pb.addArray(lowercaseSlice(params.Owners))
-		ownedOwnerFilter = "\n\t\t\t\tAND LOWER((SELECT email FROM users WHERE id = $1)) = ANY(" + p + ")"
-		sharedOwnerFilter = "\n\t\t\t\tAND LOWER(u.email) = ANY(" + p + ")"
+		ownerFilter = "\n\t\t\t\tAND LOWER(d.owner_email) = ANY(" + p + ")"
 	}
 	if len(params.PRs) > 0 {
 		p := pb.addArray(params.PRs)
@@ -452,21 +398,44 @@ const githubRefCTEs = `
 			FROM session_github_links WHERE link_type = 'commit' GROUP BY session_id
 		)`
 
-func (s *Store) buildShareAllQuery(userID int64, params db.SessionListParams) (string, []interface{}) {
+// dedupedVisibleCTE wraps db.VisibleSessionsCTE with a DISTINCT ON (id) pass
+// that picks the highest-priority access_type per session: owner > private_share > system_share.
+// The aliased columns become d.id, d.access_type, d.shared_by_email, d.owner_email
+// for the outer query. Used by every paginated/list query.
+const dedupedVisibleCTE = `
+		deduped_visible AS (
+			SELECT DISTINCT ON (vs.id)
+				vs.id, vs.owner_email, vs.access_type, vs.shared_by_email
+			FROM visible_sessions vs
+			ORDER BY vs.id, CASE vs.access_type
+				WHEN 'owner' THEN 1
+				WHEN 'private_share' THEN 2
+				WHEN 'system_share' THEN 3
+				ELSE 4
+			END
+		)`
+
+// CF-495: single SQL shape for paginated session listing — routes visibility
+// through db.VisibleSessionsCTE so both default and share-all modes share the
+// same column projection. Owner filter applied uniformly on the deduped
+// visible CTE (d.owner_email). access_type / shared_by_email come from the
+// helper rather than per-branch CASE expressions.
+func (s *Store) buildFilteredSessionsQuery(userID int64, params db.SessionListParams) (string, []interface{}) {
 	pb := newParamBuilder(userID)
-	commonFilters, _, sharedOwnerFilter, searchJoin := buildPushdownFilters(pb, params)
+	commonFilters, ownerFilter, searchJoin := buildPushdownFilters(pb, params)
 	limitP := pb.add(params.PageSize + 1)
 
 	query := `
-		WITH` + githubRefCTEs + `
+		WITH` + githubRefCTEs + `,
+		` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,` + dedupedVisibleCTE + `
 		SELECT` + sessionSelectCols + `,
-				(s.user_id = $1) as is_owner,
-				CASE WHEN s.user_id = $1 THEN 'owner' ELSE 'system_share' END as access_type,
-				CASE WHEN s.user_id = $1 THEN NULL ELSE u.email END as shared_by_email,
-				u.email as owner_email
-			FROM sessions s
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
-			WHERE 1=1` + commonFilters + sharedOwnerFilter
+				(d.access_type = 'owner') as is_owner,
+				d.access_type,
+				d.shared_by_email,
+				d.owner_email
+			FROM deduped_visible d
+			JOIN sessions s ON d.id = s.id` + sessionStatsJoins + searchJoin + `
+			WHERE 1=1` + commonFilters + ownerFilter
 
 	if params.Cursor != "" {
 		cursorTime, cursorID, err := decodeCursor(params.Cursor)
@@ -481,81 +450,6 @@ func (s *Store) buildShareAllQuery(userID int64, params db.SessionListParams) (s
 	query += `
 			ORDER BY COALESCE(s.last_message_at, s.first_seen) DESC, s.id DESC
 			LIMIT ` + limitP
-
-	return query, pb.args
-}
-
-func (s *Store) buildFilteredSessionsQuery(userID int64, params db.SessionListParams) (string, []interface{}) {
-	if s.DB.ShareAllSessions {
-		return s.buildShareAllQuery(userID, params)
-	}
-
-	pb := newParamBuilder(userID)
-	commonFilters, ownedOwnerFilter, sharedOwnerFilter, searchJoin := buildPushdownFilters(pb, params)
-	limitP := pb.add(params.PageSize + 1)
-
-	systemSharedCTE := `
-			system_shared_sessions AS (
-				SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
-					false as is_owner, 'system_share' as access_type,
-					u.email as shared_by_email, u.email as owner_email
-				FROM sessions s
-				JOIN session_shares sh ON s.id = sh.session_id
-				JOIN session_share_system sss ON sh.id = sss.share_id
-				JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
-				WHERE (sh.expires_at IS NULL OR sh.expires_at > NOW())
-				  AND s.user_id != $1` + commonFilters + sharedOwnerFilter + `
-				ORDER BY s.id, sh.created_at DESC
-			)`
-
-	query := `
-		WITH` + githubRefCTEs + `,
-		owned_sessions AS (
-			SELECT` + sessionSelectCols + `,
-				true as is_owner, 'owner' as access_type,
-				NULL::text as shared_by_email, u.email as owner_email
-			FROM sessions s
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
-			WHERE s.user_id = $1` + commonFilters + ownedOwnerFilter + `
-		),
-		shared_sessions AS (
-			SELECT DISTINCT ON (s.id)` + sessionSelectCols + `,
-				false as is_owner, 'private_share' as access_type,
-				u.email as shared_by_email, u.email as owner_email
-			FROM sessions s
-			JOIN session_shares sh ON s.id = sh.session_id
-			JOIN session_share_recipients sr ON sh.id = sr.share_id
-			JOIN users u ON s.user_id = u.id` + sessionStatsJoins + searchJoin + `
-			WHERE sr.user_id = $1
-			  AND (sh.expires_at IS NULL OR sh.expires_at > NOW())
-			  AND s.user_id != $1` + commonFilters + sharedOwnerFilter + `
-			ORDER BY s.id, sh.created_at DESC
-		),` + systemSharedCTE + `
-		SELECT * FROM (
-			SELECT DISTINCT ON (id) * FROM (
-				SELECT * FROM owned_sessions
-				UNION ALL SELECT * FROM shared_sessions
-				UNION ALL SELECT * FROM system_shared_sessions
-			) combined
-			ORDER BY id, CASE access_type
-				WHEN 'owner' THEN 1 WHEN 'private_share' THEN 2
-				WHEN 'system_share' THEN 3 ELSE 4
-			END
-		) deduped`
-
-	if params.Cursor != "" {
-		cursorTime, cursorID, err := decodeCursor(params.Cursor)
-		if err == nil {
-			cursorTimeP := pb.add(cursorTime)
-			cursorIDP := pb.add(cursorID)
-			query += `
-		WHERE (COALESCE(last_message_at, first_seen), id) < (` + cursorTimeP + `, ` + cursorIDP + `)`
-		}
-	}
-
-	query += `
-		ORDER BY COALESCE(last_message_at, first_seen) DESC, id DESC
-		LIMIT ` + limitP
 
 	return query, pb.args
 }

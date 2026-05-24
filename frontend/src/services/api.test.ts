@@ -82,6 +82,7 @@ const validTrendsResponse = {
   repos_included: [],
   include_no_repo: true,
   providers_present: [],
+  filter_options: { owners: [], repos: [] },
   cards: {
     overview: null,
     tokens: null,
@@ -352,5 +353,49 @@ describe('trendsAPI.get', () => {
     const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
     const parsed = new URL(url, 'http://localhost');
     expect(parsed.searchParams.has('provider')).toBe(false);
+  });
+});
+
+// CF-495: owner filter serialization for trendsAPI.get.
+describe('trendsAPI.get owner serialization', () => {
+  let fetchSpy: ReturnType<typeof setupFetchSpy>;
+
+  beforeEach(() => {
+    fetchSpy = setupFetchSpy();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Owners serializes to the singular `?owner=` wire key, comma-joined,
+  // matching the Sessions list endpoint convention (CF-393).
+  it('with owners: serializes to singular ?owner= key, comma-joined', async () => {
+    fetchSpy.mockResolvedValue(fakeResponse({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(validTrendsResponse),
+    }));
+
+    await trendsAPI.get({ owners: ['alice@example.com', 'bob@example.com'] });
+
+    const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
+    const parsed = new URL(url, 'http://localhost');
+    expect(parsed.searchParams.get('owner')).toBe('alice@example.com,bob@example.com');
+    expect(parsed.searchParams.has('owners')).toBe(false);
+  });
+
+  it('empty owners array drops the parameter entirely', async () => {
+    fetchSpy.mockResolvedValue(fakeResponse({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(validTrendsResponse),
+    }));
+
+    await trendsAPI.get({ owners: [] });
+
+    const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
+    const parsed = new URL(url, 'http://localhost');
+    expect(parsed.searchParams.has('owner')).toBe(false);
   });
 });

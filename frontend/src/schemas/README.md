@@ -31,7 +31,8 @@ All types are inferred from Zod schemas via `z.infer<>`:
 - `AnnotatedItem` -- List item with optional message deep-link reference
 
 **Trends types:**
-- `TrendsResponse` -- Aggregated analytics with date range and repo filters
+- `TrendsResponse` -- Aggregated analytics with date range, repo, provider, and owner (CF-495) filters. Includes top-level `filter_options.{owners,repos}` for dropdown sources (CF-495).
+- `TrendsFilterOptions` -- Owner + repo dropdown source. Static across active filter changes (mirrors `SessionFilterOptions`).
 - Card types: `TrendsOverviewCard`, `TrendsTokensCard`, `TrendsActivityCard`, `TrendsToolsCard`, `TrendsUtilizationCard`, `TrendsAgentsAndSkillsCard`, `TrendsTopSessionsCard`
 
 **Org types:**

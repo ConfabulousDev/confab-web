@@ -9,6 +9,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
 // maxTrendsRangeSeconds is the maximum allowed date range for trends queries (90 days).
@@ -70,8 +71,9 @@ func parseDateRangeParams(w http.ResponseWriter, r *http.Request) *dateRangePara
 	return p
 }
 
-// HandleGetTrends returns aggregated analytics across sessions for the authenticated user.
-// Supports filtering by date range, repos, and AI provider.
+// HandleGetTrends returns aggregated analytics across sessions visible to the
+// authenticated user. Visibility follows the same model as /api/v1/sessions:
+// owned ∪ private-share ∪ system-share (or all sessions when SHARE_ALL is on).
 //
 // Query parameters:
 //   - start_ts: Start of date range as epoch seconds (inclusive, typically local midnight)
@@ -81,6 +83,14 @@ func parseDateRangeParams(w http.ResponseWriter, r *http.Request) *dateRangePara
 //   - include_no_repo: Include sessions without a repo (default: true)
 //   - provider: Comma-separated canonical providers (claude-code, codex). Case-insensitive.
 //     Omitted/empty = aggregate across all AllowedProviders.
+//   - owner: Comma-separated owner emails to narrow the visible set (CF-495).
+//     Case-insensitive. Privacy invariant: narrows within the visible set;
+//     cannot broaden access to sessions the caller couldn't already see via
+//     /api/v1/sessions. Omitted/empty = aggregate across all visible owners.
+//
+// Response includes a `filter_options.{owners,repos}` block mirroring the
+// SessionFilterOptions shape on /api/v1/sessions — static across active
+// filter changes, derived from the visible-session set.
 func HandleGetTrends(database *db.DB) http.HandlerFunc {
 	analyticsStore := analytics.NewStore(database.Conn())
 
@@ -119,13 +129,26 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// CF-495: parse ?owner=. Lowercase for case-insensitive matching;
+		// validate via ValidateFilterValues so the 50-value cap is enforced.
+		owners := parseCommaSeparated(r.URL.Query().Get("owner"))
+		if err := validation.ValidateFilterValues("owner", owners); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		for i, v := range owners {
+			owners[i] = strings.ToLower(v)
+		}
+
 		req := analytics.TrendsRequest{
-			StartTS:       dr.StartTS,
-			EndTS:         dr.EndTS,
-			TZOffset:      dr.TZOffset,
-			Repos:         repos,
-			IncludeNoRepo: includeNoRepo,
-			Providers:     providers,
+			StartTS:          dr.StartTS,
+			EndTS:            dr.EndTS,
+			TZOffset:         dr.TZOffset,
+			Repos:            repos,
+			IncludeNoRepo:    includeNoRepo,
+			Providers:        providers,
+			Owners:           owners,
+			ShareAllSessions: database.ShareAllSessions,
 		}
 
 		response, err := analyticsStore.GetTrends(r.Context(), userID, req)

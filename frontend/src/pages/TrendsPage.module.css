@@ -57,3 +57,20 @@
   color: var(--color-text-secondary);
   max-width: 400px;
 }
+
+/* CF-495: clear-owner CTA inside the owner-narrowed empty state. */
+.clearFilterBtn {
+  margin-top: 16px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.clearFilterBtn:hover {
+  background: var(--color-bg-tertiary, var(--color-bg-secondary));
+}

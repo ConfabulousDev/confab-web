@@ -17,6 +17,17 @@ type TrendsRequest struct {
 	// nil/empty aggregates across models.AllowedProviders; resolveProviderFilter
 	// expands canonical values with legacy aliases before the SQL ANY clause.
 	Providers []string
+	// Owners narrows results to sessions whose owner email matches one of
+	// the provided values (case-insensitive). nil/empty = aggregate across
+	// all visible owners. Privacy invariant: the filter narrows within the
+	// visible set defined by db.VisibleSessionsCTE; it cannot broaden access
+	// to sessions the caller couldn't already see. CF-495.
+	Owners []string
+	// ShareAllSessions mirrors db.DB.ShareAllSessions. Threaded through the
+	// request so analytics.Store doesn't need a direct dependency on *db.DB.
+	// The HTTP handler / worker reads database.ShareAllSessions and assigns
+	// it here. CF-495.
+	ShareAllSessions bool
 }
 
 // =============================================================================
@@ -36,6 +47,20 @@ type TrendsResponse struct {
 	// (CF-424).
 	ProvidersPresent []string    `json:"providers_present"`
 	Cards            TrendsCards `json:"cards"`
+	// FilterOptions is the pre-materialized owner + repo dropdown source
+	// for TrendsPage. Mirrors SessionFilterOptions: the lists reflect the
+	// caller's visible-session set and are STATIC across active filter
+	// changes (date/repo/provider/owner). Always non-nil; empty slices
+	// when nothing is visible. CF-495.
+	FilterOptions TrendsFilterOptions `json:"filter_options"`
+}
+
+// TrendsFilterOptions surfaces the dropdown source for owners + repos on
+// TrendsPage. Owners are lowercased; the frontend pins the viewer's own
+// email to the top in the component.
+type TrendsFilterOptions struct {
+	Owners []string `json:"owners"`
+	Repos  []string `json:"repos"`
 }
 
 // DateRange specifies the start and end dates (inclusive).
@@ -46,9 +71,9 @@ type DateRange struct {
 
 // TrendsCards holds all the trend card data.
 type TrendsCards struct {
-	Overview    *TrendsOverviewCard    `json:"overview"`
-	Tokens      *TrendsTokensCard      `json:"tokens"`
-	Activity    *TrendsActivityCard    `json:"activity"`
+	Overview        *TrendsOverviewCard        `json:"overview"`
+	Tokens          *TrendsTokensCard          `json:"tokens"`
+	Activity        *TrendsActivityCard        `json:"activity"`
 	Tools           *TrendsToolsCard           `json:"tools"`
 	Utilization     *TrendsUtilizationCard     `json:"utilization"`
 	AgentsAndSkills *TrendsAgentsAndSkillsCard `json:"agents_and_skills"`
@@ -111,11 +136,11 @@ type DailyCostPoint struct {
 
 // TrendsActivityCard provides code activity summary.
 type TrendsActivityCard struct {
-	TotalFilesRead     int                   `json:"total_files_read"`
-	TotalFilesModified int                   `json:"total_files_modified"`
-	TotalLinesAdded    int                   `json:"total_lines_added"`
-	TotalLinesRemoved  int                   `json:"total_lines_removed"`
-	DailySessionCounts []DailySessionCount   `json:"daily_session_counts"`
+	TotalFilesRead     int                 `json:"total_files_read"`
+	TotalFilesModified int                 `json:"total_files_modified"`
+	TotalLinesAdded    int                 `json:"total_lines_added"`
+	TotalLinesRemoved  int                 `json:"total_lines_removed"`
+	DailySessionCounts []DailySessionCount `json:"daily_session_counts"`
 }
 
 // DailySessionCount represents a single day's session count for charting.
@@ -170,4 +195,3 @@ type TopSessionItem struct {
 	DurationMs       *int64  `json:"duration_ms,omitempty"`
 	GitRepo          *string `json:"git_repo,omitempty"`
 }
-

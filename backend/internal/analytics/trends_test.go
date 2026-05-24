@@ -1804,6 +1804,274 @@ func TestGetTrends_CodexOnlyFilesReadZero(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// CF-495: Owner filter + filter_options tests.
+//
+// Privacy invariant: ?owner=X narrows within the visible set; if the viewer
+// can't already see X's sessions via the visibility CTE, owner=X yields zero
+// rows (never broadens). All tests below exercise this property.
+// =============================================================================
+
+// shareAllScope flips env.DB.ShareAllSessions on/off around fn.
+func withShareAll(env *testutil.TestEnvironment, fn func()) {
+	prev := env.DB.ShareAllSessions
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = prev }()
+	fn()
+}
+
+// trendsReqAllTime returns a TrendsRequest spanning the last 7 days +
+// today, with no filters. ShareAllSessions is plumbed from env.DB so
+// withShareAll helpers don't need to set it twice.
+func trendsReqAllTime(env *testutil.TestEnvironment) analytics.TrendsRequest {
+	now := time.Now().UTC()
+	return analytics.TrendsRequest{
+		StartTS:          now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:            now.Add(24 * time.Hour).Unix(),
+		TZOffset:         0,
+		Repos:            []string{},
+		IncludeNoRepo:    true,
+		ShareAllSessions: env.DB.ShareAllSessions,
+	}
+}
+
+func TestGetTrends_OwnerNarrowsToSingleOwner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@trends.test", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@trends.test", "Bob")
+
+	withShareAll(env, func() {
+		ctx := context.Background()
+		_ = testutil.CreateTestSessionFull(t, env, alice.ID, "alice-1", testutil.TestSessionFullOpts{Summary: "x"})
+		_ = testutil.CreateTestSessionFull(t, env, bob.ID, "bob-1", testutil.TestSessionFullOpts{Summary: "x"})
+
+		store := analytics.NewStore(env.DB.Conn())
+
+		// Aggregate-all (no owner filter) sees both sessions.
+		full, err := store.GetTrends(ctx, alice.ID, trendsReqAllTime(env))
+		if err != nil {
+			t.Fatalf("GetTrends (no owner): %v", err)
+		}
+		if full.SessionCount != 2 {
+			t.Fatalf("full SessionCount = %d, want 2", full.SessionCount)
+		}
+
+		// owner=alice narrows to only alice's session.
+		narrowed := trendsReqAllTime(env)
+		narrowed.Owners = []string{"alice@trends.test"}
+		narr, err := store.GetTrends(ctx, alice.ID, narrowed)
+		if err != nil {
+			t.Fatalf("GetTrends (owner=alice): %v", err)
+		}
+		if narr.SessionCount != 1 {
+			t.Errorf("owner=alice SessionCount = %d, want 1", narr.SessionCount)
+		}
+
+		// owner=bob narrows to only bob's session.
+		narrowed.Owners = []string{"bob@trends.test"}
+		narr2, err := store.GetTrends(ctx, alice.ID, narrowed)
+		if err != nil {
+			t.Fatalf("GetTrends (owner=bob): %v", err)
+		}
+		if narr2.SessionCount != 1 {
+			t.Errorf("owner=bob SessionCount = %d, want 1", narr2.SessionCount)
+		}
+	})
+}
+
+func TestGetTrends_OwnerCaseInsensitive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@trends.test", "Alice")
+	_ = testutil.CreateTestSessionFull(t, env, alice.ID, "alice-case", testutil.TestSessionFullOpts{Summary: "x"})
+
+	store := analytics.NewStore(env.DB.Conn())
+	req := trendsReqAllTime(env)
+	req.Owners = []string{"ALICE@TRENDS.TEST"}
+	resp, err := store.GetTrends(context.Background(), alice.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+	if resp.SessionCount != 1 {
+		t.Errorf("case-insensitive owner SessionCount = %d, want 1", resp.SessionCount)
+	}
+}
+
+func TestGetTrends_UnknownOwnerReturnsZero(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@trends.test", "Alice")
+	_ = testutil.CreateTestSessionFull(t, env, alice.ID, "alice-unknown", testutil.TestSessionFullOpts{Summary: "x"})
+
+	store := analytics.NewStore(env.DB.Conn())
+	req := trendsReqAllTime(env)
+	req.Owners = []string{"nobody@nowhere.test"}
+	resp, err := store.GetTrends(context.Background(), alice.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+	if resp.SessionCount != 0 {
+		t.Errorf("unknown owner SessionCount = %d, want 0", resp.SessionCount)
+	}
+}
+
+func TestGetTrends_OwnerCannotBroadenAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@trends.test", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@trends.test", "Bob")
+
+	// Bob has no share to alice's session. With share-all OFF, alice's data
+	// must not appear in bob's trends even when bob requests ?owner=alice.
+	_ = testutil.CreateTestSessionFull(t, env, alice.ID, "alice-private", testutil.TestSessionFullOpts{Summary: "x"})
+
+	store := analytics.NewStore(env.DB.Conn())
+	req := trendsReqAllTime(env)
+	req.Owners = []string{"alice@trends.test"}
+	resp, err := store.GetTrends(context.Background(), bob.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+	if resp.SessionCount != 0 {
+		t.Errorf("privacy invariant violated: bob saw %d rows for owner=alice, want 0", resp.SessionCount)
+	}
+}
+
+func TestGetTrends_FilterOptionsOwnersMirrorVisibleSet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@trends.test", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@trends.test", "Bob")
+	charlie := testutil.CreateTestUser(t, env, "charlie@trends.test", "Charlie")
+
+	withShareAll(env, func() {
+		_ = testutil.CreateTestSessionFull(t, env, alice.ID, "fopt-alice", testutil.TestSessionFullOpts{Summary: "x"})
+		_ = testutil.CreateTestSessionFull(t, env, bob.ID, "fopt-bob", testutil.TestSessionFullOpts{Summary: "x"})
+		_ = testutil.CreateTestSessionFull(t, env, charlie.ID, "fopt-charlie", testutil.TestSessionFullOpts{Summary: "x"})
+
+		store := analytics.NewStore(env.DB.Conn())
+		resp, err := store.GetTrends(context.Background(), alice.ID, trendsReqAllTime(env))
+		if err != nil {
+			t.Fatalf("GetTrends: %v", err)
+		}
+
+		want := []string{"alice@trends.test", "bob@trends.test", "charlie@trends.test"}
+		got := resp.FilterOptions.Owners
+		gotSorted := append([]string{}, got...)
+		sort.Strings(gotSorted)
+		if !equalStringSlices(gotSorted, want) {
+			t.Errorf("FilterOptions.Owners = %v, want %v (sorted)", got, want)
+		}
+	})
+}
+
+func TestGetTrends_FilterOptionsStaticAcrossActiveFilters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@trends.test", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@trends.test", "Bob")
+
+	withShareAll(env, func() {
+		_ = testutil.CreateTestSessionFull(t, env, alice.ID, "static-alice", testutil.TestSessionFullOpts{Summary: "x"})
+		_ = testutil.CreateTestSessionFull(t, env, bob.ID, "static-bob", testutil.TestSessionFullOpts{Summary: "x"})
+
+		store := analytics.NewStore(env.DB.Conn())
+
+		// Narrow to alice — filter_options.owners must still contain both
+		// (it's the visible-set view, not the post-filter view).
+		req := trendsReqAllTime(env)
+		req.Owners = []string{"alice@trends.test"}
+		resp, err := store.GetTrends(context.Background(), alice.ID, req)
+		if err != nil {
+			t.Fatalf("GetTrends: %v", err)
+		}
+		gotSorted := append([]string{}, resp.FilterOptions.Owners...)
+		sort.Strings(gotSorted)
+		want := []string{"alice@trends.test", "bob@trends.test"}
+		if !equalStringSlices(gotSorted, want) {
+			t.Errorf("FilterOptions.Owners shrank under active owner filter: got %v, want %v", resp.FilterOptions.Owners, want)
+		}
+	})
+}
+
+func TestGetTrends_OwnerNarrowsProvidersPresent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	alice := testutil.CreateTestUser(t, env, "alice@trends.test", "Alice")
+	bob := testutil.CreateTestUser(t, env, "bob@trends.test", "Bob")
+
+	withShareAll(env, func() {
+		ctx := context.Background()
+		// Alice owns a claude-code session.
+		_ = testutil.CreateTestSessionFull(t, env, alice.ID, "p-alice", testutil.TestSessionFullOpts{Summary: "x"})
+		// Bob owns a codex session — flip the session_type so the providers diverge.
+		bobSess := testutil.CreateTestSessionFull(t, env, bob.ID, "p-bob", testutil.TestSessionFullOpts{Summary: "x"})
+		if _, err := env.DB.Exec(ctx, `UPDATE sessions SET session_type = 'codex' WHERE id = $1`, bobSess); err != nil {
+			t.Fatalf("flip session_type: %v", err)
+		}
+
+		store := analytics.NewStore(env.DB.Conn())
+
+		// Aggregate-all sees both providers.
+		full, err := store.GetTrends(ctx, alice.ID, trendsReqAllTime(env))
+		if err != nil {
+			t.Fatalf("GetTrends (no owner): %v", err)
+		}
+		fullSorted := append([]string{}, full.ProvidersPresent...)
+		sort.Strings(fullSorted)
+		if !equalStringSlices(fullSorted, []string{"claude-code", "codex"}) {
+			t.Fatalf("aggregate providers_present = %v, want [claude-code codex]", full.ProvidersPresent)
+		}
+
+		// Narrowing to alice removes codex from providers_present (her session is claude-code).
+		narrowed := trendsReqAllTime(env)
+		narrowed.Owners = []string{"alice@trends.test"}
+		narr, err := store.GetTrends(ctx, alice.ID, narrowed)
+		if err != nil {
+			t.Fatalf("GetTrends (owner=alice): %v", err)
+		}
+		if !equalStringSlices(narr.ProvidersPresent, []string{"claude-code"}) {
+			t.Errorf("owner-narrowed providers_present = %v, want [claude-code]", narr.ProvidersPresent)
+		}
+	})
+}
+
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

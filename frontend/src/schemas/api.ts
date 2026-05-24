@@ -474,6 +474,15 @@ const TrendsCardsSchema = z.object({
   top_sessions: TrendsTopSessionsCardSchema.nullable(),
 });
 
+// CF-495: TrendsFilterOptions surfaces the dropdown source for owners + repos.
+// Mirrors SessionFilterOptions: lists reflect the caller's visible-session set
+// and are STATIC across active filter changes. Always present; empty arrays
+// when nothing is visible.
+export const TrendsFilterOptionsSchema = z.object({
+  owners: z.array(z.string()),
+  repos: z.array(z.string()),
+});
+
 export const TrendsResponseSchema = z.object({
   computed_at: z.string(),
   date_range: DateRangeSchema,
@@ -485,6 +494,9 @@ export const TrendsResponseSchema = z.object({
   // Tokens card to render a multi-provider caveat when len >= 2.
   providers_present: z.array(z.string()),
   cards: TrendsCardsSchema,
+  // CF-495: pre-materialized filter dropdown source. Saves a side-call to
+  // /api/sessions for the owner + repo lists.
+  filter_options: TrendsFilterOptionsSchema,
 });
 
 // ============================================================================
@@ -521,6 +533,7 @@ export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 export type TrendsResponse = z.infer<typeof TrendsResponseSchema>;
+export type TrendsFilterOptions = z.infer<typeof TrendsFilterOptionsSchema>;
 export type TrendsOverviewCard = z.infer<typeof TrendsOverviewCardSchema>;
 export type TrendsTokensCard = z.infer<typeof TrendsTokensCardSchema>;
 export type TrendsTokensPerProvider = z.infer<typeof TrendsTokensPerProviderSchema>;
