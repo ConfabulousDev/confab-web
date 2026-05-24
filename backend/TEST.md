@@ -32,7 +32,7 @@ CI shards by package using [`scripts/list-test-packages.sh`](scripts/list-test-p
 # emits one Go package per line; run each in parallel with `go test <package>`
 ```
 
-See `CLAUDE.md` for the rationale and sharding rules.
+See `CLAUDE.md` (in this directory) for the test commands and `scripts/list-test-packages.sh` itself for what packages are picked up.
 
 ## Test Patterns
 
