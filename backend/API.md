@@ -75,11 +75,28 @@ Content-Type: application/json
 | `transcript_path` | string | Yes | Path to transcript file on user's machine |
 | `metadata` | object | No | Session metadata (see below) |
 | `metadata.cwd` | string | No | Current working directory |
-| `metadata.git_info` | object | No | Git repository metadata (branch, remote, etc.) |
+| `metadata.git_info` | object | No | Git repository metadata. See [`git_info` fields](#git_info-fields). |
 | `metadata.hostname` | string | No | Client machine hostname |
 | `metadata.username` | string | No | OS username of the client |
 
 Session uniqueness is `(user_id, provider, external_id)`. The same `external_id` may exist under different providers without colliding.
+
+##### `git_info` fields
+
+The `git_info` object is stored as JSONB and passed through verbatim, but the
+backend validates and consumes a known subset. Unknown fields are preserved
+silently. Fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `repo_url` | string | Canonical repo URL (typically `remote.origin.url`). Owner/repo is extracted from this for the repo filter. |
+| `branch` | string | Current branch (e.g. `main`). |
+| `commit_sha` | string | Optional commit SHA at session start. |
+| `commit_message` | string | Optional commit subject line. |
+| `author` | string | Optional commit author. |
+| `is_dirty` | bool | Optional working-tree-dirty flag. |
+| `remotes` | array | Optional list of git remotes (CF-494). Max 50 entries. Each entry: `name` (string, ≤256 chars, required, non-empty), `fetch_url` (string, ≤2048 chars), `push_url` (string, ≤2048 chars). At least one of `fetch_url`/`push_url` must be non-empty per entry. Malformed entries return 400. |
+| `tracking_remote` | string | Optional name of the entry in `remotes` that points to the upstream (CF-494). Max 256 chars. When set and resolvable, the backend stamps `session_repos.root_name` so the upstream is shown in the repo filter instead of the fork. Unknown name = logged warn, no 4xx. |
 
 **Deprecated fields (backward compatibility):**
 
@@ -156,7 +173,7 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 | `first_line` | int | Yes | Line number of first line (1-indexed, must be contiguous) |
 | `lines` | string[] | Yes | Array of line contents |
 | `metadata` | object | No | Optional metadata (only processed for transcript files) |
-| `metadata.git_info` | object | No | Git repository metadata |
+| `metadata.git_info` | object | No | Git repository metadata. See [`git_info` fields](#git_info-fields). |
 | `metadata.summary` | string | No | Session summary (nil=don't update, ""=clear) |
 | `metadata.first_user_message` | string | No | First user message (nil=don't update, ""=clear) |
 | `metadata.codex_rollout` | object | No | Codex rollout sidecar metadata (codex sessions only). See [Codex Rollout Metadata](#codex-rollout-metadata) below. |
@@ -642,7 +659,12 @@ Authentication is optional - the endpoint extracts user from session cookie if p
     "commit_sha": "abc123",
     "commit_message": "Initial commit",
     "author": "developer",
-    "is_dirty": false
+    "is_dirty": false,
+    "remotes": [
+      {"name": "origin",   "fetch_url": "git@github.com:me/repo.git",      "push_url": "git@github.com:me/repo.git"},
+      {"name": "upstream", "fetch_url": "https://github.com/org/repo.git", "push_url": "https://github.com/org/repo.git"}
+    ],
+    "tracking_remote": "upstream"
   },
   "hostname": "macbook.local",
   "username": "developer",

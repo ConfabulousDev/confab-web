@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -318,6 +319,65 @@ func TestValidateCodexRolloutMetadata(t *testing.T) {
 			)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateCodexRolloutMetadata() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidateGitInfo covers CF-494's wire-layer validation of the new
+// `remotes` and `tracking_remote` fields. Old-shape payloads pass through
+// untouched; the validator only enforces caps and per-entry shape when the
+// new fields are present.
+func TestValidateGitInfo(t *testing.T) {
+	// manyRemotes builds a valid remotes-only payload with n entries, each with
+	// a unique name so the cap check (not duplicate-name behavior) is exercised.
+	manyRemotes := func(n int) string {
+		var sb strings.Builder
+		sb.WriteString(`{"remotes":[`)
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				sb.WriteString(",")
+			}
+			fmt.Fprintf(&sb, `{"name":"r%d","fetch_url":"https://x/y.git"}`, i)
+		}
+		sb.WriteString(`]}`)
+		return sb.String()
+	}
+
+	// nil and []byte{} are equivalent under len()==0 short-circuit; we exercise
+	// the nil branch only and trust the implementation to behave the same on
+	// an empty slice.
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"nil/empty bytes", "", false},
+		{"malformed JSON tolerated", "not-json", false},
+		{"old shape, no remotes", `{"repo_url":"https://github.com/me/repo.git"}`, false},
+		{"valid full payload", `{
+			"repo_url":"https://github.com/me/repo.git",
+			"remotes":[{"name":"origin","fetch_url":"https://github.com/me/repo.git","push_url":"https://github.com/me/repo.git"}],
+			"tracking_remote":"origin"
+		}`, false},
+		{"empty name in entry", `{"remotes":[{"name":"","fetch_url":"https://x.git"}]}`, true},
+		{"both URLs empty in entry", `{"remotes":[{"name":"origin","fetch_url":"","push_url":""}]}`, true},
+		{"name too long", `{"remotes":[{"name":"` + strings.Repeat("a", MaxRemoteNameLength+1) + `","fetch_url":"x"}]}`, true},
+		{"fetch_url too long", `{"remotes":[{"name":"origin","fetch_url":"` + strings.Repeat("a", MaxRemoteURLLength+1) + `"}]}`, true},
+		{"push_url too long", `{"remotes":[{"name":"origin","push_url":"` + strings.Repeat("a", MaxRemoteURLLength+1) + `"}]}`, true},
+		{"tracking_remote too long", `{"tracking_remote":"` + strings.Repeat("a", MaxTrackingRemoteLength+1) + `"}`, true},
+		{"too many remotes", manyRemotes(MaxGitRemotesCount + 1), true},
+		{"exactly at cap", manyRemotes(MaxGitRemotesCount), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var in []byte
+			if tt.input != "" {
+				in = []byte(tt.input)
+			}
+			if err := ValidateGitInfo(in); (err != nil) != tt.wantErr {
+				t.Errorf("ValidateGitInfo() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
