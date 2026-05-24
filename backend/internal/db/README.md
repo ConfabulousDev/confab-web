@@ -12,6 +12,7 @@ Core database connection, shared types, sentinel errors, and helper functions fo
 | `helpers.go` | Shared helper functions exported for sub-packages: `IsInvalidUUIDError`, `IsUniqueViolation`, `ExtractRepoName`, `ExtractRepoFromGitInfo`, `UnmarshalSessionGitInfo`, `LoadSessionSyncFiles`, plus `Querier` interface and `RecordRepoRoot` (CF-491 fork→root resolver write) |
 | `provider.go` | Provider value constants (`ProviderClaudeCode`, `ProviderClaudeCodeLegacy`, `ProviderCodex`) and `NormalizeProvider()` — maps the legacy display value `'Claude Code'` to canonical `'claude-code'`. Lives in the root db package so every Scan site that reads `sessions.session_type`, whether in `db/session` or `db/access`, can call the same helper. |
 | `repo_filter.go` | CF-491 SQL fragment helpers for repo extraction + fork→root resolution: `RepoRootExpr(alias)` (SELECT projection) and `RepoMatchExpr(alias, paramPlaceholder)` (WHERE clause). One source of truth across the 7+ call sites that filter sessions by `owner/repo`. |
+| `visibility.go` | CF-495 SQL CTE helper `VisibleSessionsCTE(shareAllSessions)` returning `visible_sessions(id, user_id, owner_email, access_type, shared_by_email)` for the session-visibility predicate. Single source of truth used by analytics (`trends.go`), session-list pagination (`db/session/session.go`), and filter-options paths (`db/session`, `db/til`). UNION ALL — callers wrap with `SELECT DISTINCT` (analytics) or `DISTINCT ON (id)` priority dedup (pagination). |
 
 ## Sub-Package Index
 

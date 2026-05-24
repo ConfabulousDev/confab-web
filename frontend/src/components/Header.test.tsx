@@ -132,4 +132,44 @@ describe('Header nav links — owner pre-filter', () => {
       `/tils?owner=${encodeURIComponent('alice@example.com')}`
     );
   });
+
+  // CF-495: Trends link participates in the same owner-pre-fill convention
+  // as Sessions/TILs (#210). Normal users get ?owner=<self>; demo viewer gets
+  // bare /trends so the page can aggregate across all visible sessions.
+  it('Trends link pre-fills ?owner=<email> for a normal authenticated user', () => {
+    signInAs('alice@example.com');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'Trends' });
+    expect(link.getAttribute('href')).toBe(
+      `/trends?owner=${encodeURIComponent('alice@example.com')}`
+    );
+  });
+
+  it('Trends link omits ?owner= when the current user IS the demo identity', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    signInAs('demo@confabulous.dev');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'Trends' });
+    expect(link.getAttribute('href')).toBe('/trends');
+  });
+
+  it('Trends link still pre-fills ?owner= when demo mode is on but the user is NOT the demo identity', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    signInAs('alice@example.com');
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'Trends' });
+    expect(link.getAttribute('href')).toBe(
+      `/trends?owner=${encodeURIComponent('alice@example.com')}`
+    );
+  });
+});
+
+// CF-495: rename "Personal Trends" → "Trends" applies to the nav label.
+describe('Header nav labels', () => {
+  it('renders the Trends link with the new "Trends" label (not "Personal Trends")', () => {
+    signInAs('alice@example.com');
+    renderHeader();
+    expect(screen.getByRole('link', { name: 'Trends' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Personal Trends' })).toBeNull();
+  });
 });

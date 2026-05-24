@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useDropdown } from '@/hooks';
 import type { DateRange } from '@/utils/dateRange';
 import { getDatePresets } from '@/utils/dateRange';
-import { CalendarIcon, RepoIcon, CheckIcon, RobotIcon } from '@/components/icons';
+import { CalendarIcon, RepoIcon, CheckIcon, RobotIcon, UserIcon } from '@/components/icons';
 import { getProviderIcon } from '@/components/providerIcon';
 import { PROVIDER_VALUES, providerLabel } from '@/utils/providers';
 import styles from './TrendsFilters.module.css';
@@ -14,15 +14,24 @@ export interface TrendsFiltersValue {
   // CF-424: canonical providers (`claude-code`, `codex`). Empty array =
   // aggregate across all providers (distinct from selecting every provider).
   providers: string[];
+  // CF-495: owner emails (lowercased). Empty array = aggregate across all
+  // visible owners (distinct from selecting every owner).
+  owners: string[];
 }
 
 interface TrendsFiltersProps {
   repos: string[];
+  // CF-495: owner dropdown source. Frontend pins viewer's own email to the
+  // top in the rendered dropdown.
+  owners: string[];
+  // CF-495: viewer's own email (used for self-first ordering in the owner
+  // dropdown). Optional — when omitted, owners render in source order.
+  selfEmail?: string;
   value: TrendsFiltersValue;
   onChange: (value: TrendsFiltersValue) => void;
 }
 
-function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
+function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFiltersProps) {
   const {
     isOpen: providerIsOpen,
     toggle: toggleProvider,
@@ -39,6 +48,20 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
     toggle: toggleRepo,
     containerRef: repoContainerRef,
   } = useDropdown<HTMLDivElement>();
+  const {
+    isOpen: ownerIsOpen,
+    toggle: toggleOwner,
+    containerRef: ownerContainerRef,
+  } = useDropdown<HTMLDivElement>();
+
+  // CF-495: owner dropdown source with viewer's own email pinned to the
+  // top. Memoized to keep stable identity for the keyed list below.
+  const orderedOwners = useMemo(() => {
+    if (!selfEmail) return owners;
+    const self = selfEmail.toLowerCase();
+    if (!owners.some((o) => o.toLowerCase() === self)) return owners;
+    return [self, ...owners.filter((o) => o.toLowerCase() !== self)];
+  }, [owners, selfEmail]);
 
   const datePresets = useMemo(() => getDatePresets(), []);
 
@@ -76,6 +99,19 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
       : [...value.providers, provider];
     onChange({ ...value, providers: next });
   };
+
+  const handleOwnerToggle = (owner: string) => {
+    const next = value.owners.includes(owner)
+      ? value.owners.filter((o) => o !== owner)
+      : [...value.owners, owner];
+    onChange({ ...value, owners: next });
+  };
+
+  function getOwnerButtonLabel(): string {
+    if (value.owners.length === 0) return 'All Owners';
+    if (value.owners.length === 1) return value.owners[0] ?? '';
+    return `${value.owners.length} owners`;
+  }
 
   const allReposSelected = repos.length > 0 && value.repos.length === repos.length;
 
@@ -218,6 +254,43 @@ function TrendsFilters({ repos, value, onChange }: TrendsFiltersProps) {
           </div>
         )}
       </div>
+
+      {/* Owner Filter (CF-495) — hidden when no owners are visible to the
+          caller (single-user self-hosted with no shares). Self is pinned to
+          the top of the dropdown so the dominant case is one click. */}
+      {orderedOwners.length > 0 && (
+        <div className={styles.filterWrapper} ref={ownerContainerRef}>
+          <button
+            className={`${styles.filterBtn} ${value.owners.length > 0 ? styles.active : ''}`}
+            onClick={toggleOwner}
+            title="Owner Filter"
+            aria-label="Owner Filter"
+            aria-expanded={ownerIsOpen}
+          >
+            {UserIcon}
+            <span className={styles.filterLabel}>{getOwnerButtonLabel()}</span>
+          </button>
+
+          {ownerIsOpen && (
+            <div className={styles.dropdown}>
+              <div className={styles.dropdownContent}>
+                <div className={styles.section}>
+                  {orderedOwners.map((owner) => (
+                    <label key={owner} className={styles.checkboxItem}>
+                      <input
+                        type="checkbox"
+                        checked={value.owners.includes(owner)}
+                        onChange={() => handleOwnerToggle(owner)}
+                      />
+                      <span className={styles.repoName}>{owner}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

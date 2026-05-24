@@ -23,7 +23,7 @@ const defaultDateRange = {
 
 function Interactive({ initial }: { initial: TrendsFiltersValue }) {
   const [value, setValue] = useState<TrendsFiltersValue>(initial);
-  return <TrendsFilters repos={sampleRepos} value={value} onChange={setValue} />;
+  return <TrendsFilters repos={sampleRepos} owners={[]} value={value} onChange={setValue} />;
 }
 
 // CF-424: empty providers state = "All Providers" label, both checkboxes unchecked.
@@ -35,6 +35,7 @@ export const Default: Story = {
         repos: [],
         includeNoRepo: true,
         providers: [],
+        owners: [],
       }}
     />
   ),
@@ -50,6 +51,7 @@ export const OneProviderSelected: Story = {
         repos: [],
         includeNoRepo: true,
         providers: ['claude-code'],
+        owners: [],
       }}
     />
   ),
@@ -65,6 +67,7 @@ export const BothProvidersSelected: Story = {
         repos: [],
         includeNoRepo: true,
         providers: ['claude-code', 'codex'],
+        owners: [],
       }}
     />
   ),

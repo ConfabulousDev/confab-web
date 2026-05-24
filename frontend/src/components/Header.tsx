@@ -79,7 +79,7 @@ function Header() {
 
       <nav className={styles.nav}>
         <Link to={`/sessions${ownerQS}`} className={styles.navLink}>Sessions</Link>
-        <Link to="/trends" className={styles.navLink}>Personal Trends</Link>
+        <Link to={`/trends${ownerQS}`} className={styles.navLink}>Trends</Link>
         <Link to={`/tils${ownerQS}`} className={styles.navLink}>TILs</Link>
         {orgAnalyticsEnabled && <Link to="/org" className={styles.navLink}>Organization</Link>}
       </nav>

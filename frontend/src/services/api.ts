@@ -581,6 +581,10 @@ export interface TrendsParams {
   // aggregate across all. Serialized as the singular `?provider=` query key
   // to match the session-listing wire format (CF-393).
   providers?: string[];
+  // CF-495: owner emails to narrow within the visible set. Empty / omitted =
+  // aggregate across all visible owners. Serialized as comma-separated
+  // `?owner=a,b` to match the session-listing wire format.
+  owners?: string[];
 }
 
 // Convert a local YYYY-MM-DD date string to epoch seconds at local midnight
@@ -619,6 +623,11 @@ export const trendsAPI = {
     }
     if (params.providers && params.providers.length > 0) {
       searchParams.set('provider', params.providers.join(','));
+    }
+    // CF-495: singular ?owner= matches the session-list wire format.
+    // Empty / omitted = aggregate across all visible owners.
+    if (params.owners && params.owners.length > 0) {
+      searchParams.set('owner', params.owners.join(','));
     }
 
     const queryString = searchParams.toString();

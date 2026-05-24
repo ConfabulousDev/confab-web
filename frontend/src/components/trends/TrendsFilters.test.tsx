@@ -10,9 +10,12 @@ function baseProps(overrides: Partial<React.ComponentProps<typeof TrendsFilters>
     repos: [],
     includeNoRepo: true,
     providers: [],
+    owners: [],
   };
+  const noOwners: string[] = [];
   return {
     repos: ['confab-web', 'other-repo'],
+    owners: noOwners,
     value,
     onChange: vi.fn(),
     ...overrides,
@@ -38,7 +41,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
     render(
       <TrendsFilters
         {...baseProps({
-          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'] },
+          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [] },
         })}
       />
     );
@@ -54,6 +57,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
             repos: [],
             includeNoRepo: true,
             providers: ['claude-code', 'codex'],
+            owners: [],
           },
         })}
       />
@@ -73,7 +77,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
     render(
       <TrendsFilters
         {...baseProps({
-          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'] },
+          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [] },
         })}
       />
     );
@@ -101,7 +105,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
       <TrendsFilters
         {...baseProps({
           onChange,
-          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'] },
+          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [] },
         })}
       />
     );
@@ -117,5 +121,125 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
     fireEvent.click(screen.getByRole('button', { name: /provider/i }));
     expect(screen.queryByText(/select all/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/deselect all/i)).not.toBeInTheDocument();
+  });
+});
+
+// CF-495: Owner multi-select dropdown — mirrors the Repo/Provider pattern
+// with one extra behavior: self (selfEmail) is pinned to the top of the
+// rendered list so it's one click for the dominant case.
+describe('TrendsFilters Owner filter (CF-495)', () => {
+  const ownersIn = ['bob@example.com', 'alice@example.com', 'charlie@example.com'];
+  const selfEmail = 'alice@example.com';
+
+  it('renders the Owner button after Repo (visibility narrowing is the finest cut)', () => {
+    render(<TrendsFilters {...baseProps({ owners: ownersIn, selfEmail })} />);
+    const buttons = screen.getAllByRole('button');
+    const repoIdx = buttons.findIndex((b) => /repository/i.test(b.getAttribute('aria-label') || ''));
+    const ownerIdx = buttons.findIndex((b) => /owner/i.test(b.getAttribute('aria-label') || ''));
+    expect(ownerIdx).toBeGreaterThanOrEqual(0);
+    expect(ownerIdx).toBeGreaterThan(repoIdx);
+  });
+
+  it('shows "All Owners" label when no owners are selected', () => {
+    render(<TrendsFilters {...baseProps({ owners: ownersIn, selfEmail })} />);
+    expect(screen.getByRole('button', { name: /owner/i })).toHaveTextContent(/all owners/i);
+  });
+
+  it('shows the owner email label when exactly one is selected', () => {
+    render(
+      <TrendsFilters
+        {...baseProps({
+          owners: ownersIn,
+          selfEmail,
+          value: {
+            dateRange: defaultDateRange,
+            repos: [],
+            includeNoRepo: true,
+            providers: [],
+            owners: ['alice@example.com'],
+          },
+        })}
+      />
+    );
+    expect(screen.getByRole('button', { name: /owner/i })).toHaveTextContent(/alice@example.com/);
+  });
+
+  it('shows "N owners" when more than one is selected', () => {
+    render(
+      <TrendsFilters
+        {...baseProps({
+          owners: ownersIn,
+          selfEmail,
+          value: {
+            dateRange: defaultDateRange,
+            repos: [],
+            includeNoRepo: true,
+            providers: [],
+            owners: ['alice@example.com', 'bob@example.com'],
+          },
+        })}
+      />
+    );
+    expect(screen.getByRole('button', { name: /owner/i })).toHaveTextContent(/2 owners/i);
+  });
+
+  it('dropdown lists owners with selfEmail pinned to the top', () => {
+    render(<TrendsFilters {...baseProps({ owners: ownersIn, selfEmail })} />);
+    fireEvent.click(screen.getByRole('button', { name: /owner/i }));
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    // First checkbox in the owners dropdown should be selfEmail. There are
+    // also includeNoRepo + provider checkboxes mounted; scope by label text.
+    const labels = checkboxes
+      .map((c) => c.closest('label')?.textContent ?? '')
+      .filter((t) => /@example\.com/.test(t));
+    expect(labels[0]).toContain('alice@example.com');
+    // The remaining two should be the other emails, alphabetical.
+    expect(labels.slice(1)).toEqual(
+      expect.arrayContaining([expect.stringContaining('bob@example.com'), expect.stringContaining('charlie@example.com')])
+    );
+  });
+
+  it('clicking an unselected owner row calls onChange with that owner added', () => {
+    const onChange = vi.fn();
+    render(<TrendsFilters {...baseProps({ owners: ownersIn, selfEmail, onChange })} />);
+    fireEvent.click(screen.getByRole('button', { name: /owner/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /alice@example\.com/ }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ owners: ['alice@example.com'] })
+    );
+  });
+
+  it('unchecking the last selected owner snaps state back to []', () => {
+    const onChange = vi.fn();
+    render(
+      <TrendsFilters
+        {...baseProps({
+          owners: ownersIn,
+          selfEmail,
+          onChange,
+          value: {
+            dateRange: defaultDateRange,
+            repos: [],
+            includeNoRepo: true,
+            providers: [],
+            owners: ['alice@example.com'],
+          },
+        })}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /owner/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /alice@example\.com/ }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ owners: [] }));
+  });
+
+  it('renders no Owner button when the owners list is empty (nothing to filter)', () => {
+    render(<TrendsFilters {...baseProps({ owners: [], selfEmail })} />);
+    // Owner button hidden — the page doesn't have any owners to narrow to.
+    expect(screen.queryByRole('button', { name: /owner/i })).toBeNull();
   });
 });

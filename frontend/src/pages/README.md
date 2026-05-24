@@ -9,7 +9,7 @@ Page-level components corresponding to routes. All pages are lazy-loaded for cod
 | `HomePage.tsx` | Landing page with hero, quickstart CTA, and feature overview. Auto-redirects authenticated users to `/sessions?owner=<your email>` (or plain `/sessions` for the demo identity, which owns nothing). |
 | `SessionsPage.tsx` | Paginated session list with server-side filtering (repos, branches, owners, search) |
 | `SessionDetailPage.tsx` | Session detail view wrapping `SessionViewer` with share/delete modals |
-| `TrendsPage.tsx` | Trends analytics dashboard with date range and repo filters |
+| `TrendsPage.tsx` | Trends analytics dashboard with date range, repo, provider, and owner (CF-495) filters. Document title + heading "Trends" (was "Personal Trends"). Owner + repo dropdown options come from `data.filter_options` — no side-call to `/api/sessions`. Owner-narrowed empty state offers a one-click clear-filter CTA. |
 | `OrgPage.tsx` | Organization-level analytics with per-user table |
 | `APIKeysPage.tsx` | API key management (create, list, delete) |
 | `ShareLinksPage.tsx` | List and manage active share links |
@@ -76,8 +76,9 @@ The most complex page. It:
 ### TrendsPage
 
 - Date range picker with presets (This Week, Last 7 Days, Last 30 Days, etc.)
-- Repo filter multi-select
+- Repo filter multi-select (source: `data.filter_options.repos`)
 - AI provider filter (CF-424): canonical values `claude-code` / `codex`; URL-persisted via singular `?provider=` key; empty state = aggregate across all providers
+- Owner filter (CF-495): multi-select narrowing within the visible-session set; URL-persisted via singular `?owner=` key; viewer's own email pinned to the top in the dropdown; owner-narrowed empty state shows a clear-filter CTA. Source: `data.filter_options.owners` (static across active filters)
 - Renders trend cards from `@/components/trends/cards/`. `TrendsTokensCard` self-switches between single-series StatRows and indented per-provider sections based on `data.cards.tokens.per_provider` (CF-472, replaces the CF-435 table)
 
 ## How to Extend

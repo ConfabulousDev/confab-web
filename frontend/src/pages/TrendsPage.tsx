@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useDocumentTitle, useTrends, useURLFilters } from '@/hooks';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useAuth, useDocumentTitle, useTrends, useURLFilters } from '@/hooks';
 import type { URLFiltersConfig } from '@/hooks';
-import { sessionsAPI } from '@/services/api';
 import { getDefaultDateRange } from '@/utils';
 import PageHeader from '@/components/PageHeader';
 import TrendsFilters, { type TrendsFiltersValue } from '@/components/trends/TrendsFilters';
@@ -19,7 +18,8 @@ import CardGrid from '@/components/CardGrid';
 import styles from './TrendsPage.module.css';
 
 function TrendsPage() {
-  useDocumentTitle('Personal Trends');
+  useDocumentTitle('Trends');
+  const { user } = useAuth();
 
   // Config inside component so getDefaultDateRange() is fresh each render
   const config: URLFiltersConfig = {
@@ -30,39 +30,36 @@ function TrendsPage() {
     // Empty default = "all providers"; we deliberately do not auto-select-all
     // like repos so the URL stays clean for the common case.
     providers: { type: 'string[]', default: [], paramName: 'provider' },
+    // CF-495: owner narrows within visible set. Empty = "all owners"; same
+    // semantics as providers. URL uses singular `owner` key matching Sessions.
+    owners: { type: 'string[]', default: [], paramName: 'owner' },
   };
 
   const { filters, setAll } = useURLFilters<TrendsFiltersValue>(config);
 
-  // Get repos from sessions list API
-  const [availableRepos, setAvailableRepos] = useState<string[]>([]);
-  useEffect(() => {
-    sessionsAPI.list().then((result) => {
-      setAvailableRepos(result.filter_options.repos.sort());
-    }).catch(() => {
-      // Silently fail - repos dropdown will just be empty
-    });
-  }, []);
-
-  // Auto-select all repos on initial load if no explicit repo params in URL
-  const hadExplicitRepoParams = useRef(filters.repos.length > 0);
-  const hasAutoSelectedRepos = useRef(false);
-
-  // Fetch trends data
+  // Fetch trends data. CF-495: filter_options.repos + .owners come from the
+  // response itself — no side-call to /api/sessions needed.
   const { data, loading, error, refetch } = useTrends({
     startDate: filters.dateRange.startDate,
     endDate: filters.dateRange.endDate,
     repos: filters.repos,
     includeNoRepo: filters.includeNoRepo,
     providers: filters.providers,
+    owners: filters.owners,
   });
 
+  const availableRepos = useMemo(() => data?.filter_options.repos ?? [], [data]);
+  const availableOwners = useMemo(() => data?.filter_options.owners ?? [], [data]);
+
+  // Auto-select all repos on initial load if no explicit repo params in URL.
+  // Preserved from before CF-495 — only the source of the list changed.
+  const hadExplicitRepoParams = useRef(filters.repos.length > 0);
+  const hasAutoSelectedRepos = useRef(false);
   const refetchRef = useRef(refetch);
   useEffect(() => {
     refetchRef.current = refetch;
   }, [refetch]);
 
-  // Auto-select all repos on initial load if no explicit repo params in URL
   useEffect(() => {
     if (hasAutoSelectedRepos.current) return;
     if (availableRepos.length === 0) return;
@@ -77,10 +74,10 @@ function TrendsPage() {
       repos: newRepos,
       includeNoRepo: filters.includeNoRepo,
       providers: filters.providers,
+      owners: filters.owners,
     });
-  }, [availableRepos, filters.dateRange, filters.includeNoRepo, filters.providers, setAll]);
+  }, [availableRepos, filters.dateRange, filters.includeNoRepo, filters.providers, filters.owners, setAll]);
 
-  // Handle filter changes from TrendsFilters component
   const handleFilterChange = useCallback((newFilters: TrendsFiltersValue) => {
     setAll(newFilters);
     refetch({
@@ -89,19 +86,29 @@ function TrendsPage() {
       repos: newFilters.repos,
       includeNoRepo: newFilters.includeNoRepo,
       providers: newFilters.providers,
+      owners: newFilters.owners,
     });
   }, [setAll, refetch]);
 
+  // CF-495: owner-narrowed empty state — when a filter is set but yields
+  // zero sessions, hint at the cause and offer a one-click clear.
+  const clearOwnerFilter = useCallback(() => {
+    handleFilterChange({ ...filters, owners: [] });
+  }, [filters, handleFilterChange]);
+
   const showEmptyState = !loading && data && data.session_count === 0;
+  const ownerNarrowedEmpty = showEmptyState && filters.owners.length > 0;
 
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.mainContent}>
         <PageHeader
-          leftContent={<h1 className={styles.title}>Personal Trends</h1>}
+          leftContent={<h1 className={styles.title}>Trends</h1>}
           actions={
             <TrendsFilters
               repos={availableRepos}
+              owners={availableOwners}
+              selfEmail={user?.email}
               value={filters}
               onChange={handleFilterChange}
             />
@@ -115,7 +122,19 @@ function TrendsPage() {
             <div className={styles.loading}>Loading trends...</div>
           )}
 
-          {showEmptyState && (
+          {showEmptyState && ownerNarrowedEmpty && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyStateTitle}>No sessions match the owner filter</div>
+              <div className={styles.emptyStateText}>
+                Try a different owner, or clear the filter to aggregate across all visible sessions.
+              </div>
+              <button className={styles.clearFilterBtn} onClick={clearOwnerFilter}>
+                Clear owner filter
+              </button>
+            </div>
+          )}
+
+          {showEmptyState && !ownerNarrowedEmpty && (
             <div className={styles.emptyState}>
               <div className={styles.emptyStateTitle}>No sessions found</div>
               <div className={styles.emptyStateText}>
