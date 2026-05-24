@@ -40,7 +40,7 @@ npm run build-storybook
 npm run knip         # dead-code detection
 ```
 
-Always run `npm run build && npm run lint && npm test` before declaring work done; see `../CLAUDE.md` for the project-wide testing rules and the Storybook expectation for new components.
+Always run `npm run build && npm run lint && npm test` before declaring work done; see `./CLAUDE.md` for the frontend-specific commands, Storybook expectations, and theming rules, and `../CLAUDE.md` for project-wide conventions.
 
 ## Theming
 
