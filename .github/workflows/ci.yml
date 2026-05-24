@@ -8,7 +8,43 @@ on:
   merge_group:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # &ci / &actions: anchored scalars so every filter group
+          # re-runs when the workflow or composite actions change.
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - &ci '.github/workflows/ci.yml'
+              - &actions '.github/actions/**'
+            backend:
+              - 'backend/**'
+              - *ci
+              - *actions
+            docker:
+              - 'backend/**'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'migrate_db.sh'
+              - *ci
+              - *actions
+
   frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -44,6 +80,8 @@ jobs:
         run: npm run build-storybook
 
   backend-unit:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -62,6 +100,8 @@ jobs:
         run: go test -short -timeout 15m ./...
 
   discover-packages:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -85,7 +125,8 @@ jobs:
           echo "Found $(echo "$packages" | jq length) testable packages"
 
   backend-integration:
-    needs: discover-packages
+    needs: [changes, discover-packages]
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -114,6 +155,8 @@ jobs:
         run: go test -timeout 15m ${{ matrix.package }}
 
   docker-smoke-test:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -159,23 +202,32 @@ jobs:
 
   ci-summary:
     if: always()
-    needs: [frontend, backend-unit, discover-packages, backend-integration, docker-smoke-test]
+    needs: [changes, frontend, backend-unit, discover-packages, backend-integration, docker-smoke-test]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Check results
         run: |
-          if [[ "${{ needs.frontend.result }}" != "success" ||
-                "${{ needs.backend-unit.result }}" != "success" ||
-                "${{ needs.discover-packages.result }}" != "success" ||
-                "${{ needs.backend-integration.result }}" != "success" ||
-                "${{ needs.docker-smoke-test.result }}" != "success" ]]; then
-            echo "One or more jobs failed:"
-            echo "  frontend: ${{ needs.frontend.result }}"
-            echo "  backend-unit: ${{ needs.backend-unit.result }}"
-            echo "  discover-packages: ${{ needs.discover-packages.result }}"
-            echo "  backend-integration: ${{ needs.backend-integration.result }}"
-            echo "  docker-smoke-test: ${{ needs.docker-smoke-test.result }}"
+          # Path-filtered jobs report "skipped" when their paths didn't change.
+          # Treat skipped as success so ci-summary still passes for unrelated changes.
+          # "changes" has no `if:` so it can't be skipped in practice — the same
+          # check covers it.
+          fail=0
+          check() {
+            local name=$1 result=$2
+            echo "  $name: $result"
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              fail=1
+            fi
+          }
+          check "changes" "${{ needs.changes.result }}"
+          check "frontend" "${{ needs.frontend.result }}"
+          check "backend-unit" "${{ needs.backend-unit.result }}"
+          check "discover-packages" "${{ needs.discover-packages.result }}"
+          check "backend-integration" "${{ needs.backend-integration.result }}"
+          check "docker-smoke-test" "${{ needs.docker-smoke-test.result }}"
+          if [[ $fail -ne 0 ]]; then
+            echo "One or more jobs failed"
             exit 1
           fi
-          echo "All jobs passed!"
+          echo "All required jobs passed (or skipped due to path filters)"
