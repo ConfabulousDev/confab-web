@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Lobster&display=swap');
+
+/* Brand wordmark — matches the cursive Lobster mark used in the main app. */
+.site-title,
+a.site-title span,
+a.site-title {
+  font-family: 'Lobster', cursive;
+  font-weight: 400;
+  font-size: 1.8rem;
+  letter-spacing: 0.01em;
+}
+
+/* Splash hero title also gets the wordmark treatment. */
+.hero h1,
+.hero .copy h1 {
+  font-family: 'Lobster', cursive;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* Enlarge the social (GitHub) icon in the header. */
+starlight-menu-button + .social-icons a,
+.social-icons a {
+  padding: 0.4em;
+}
+
+.social-icons a svg {
+  width: 1.5em;
+  height: 1.5em;
+}
+
+/* Tone in-content headings down ~10% from Starlight defaults. Covers both
+   the page title (rendered by PageTitle.astro as <h1 id="_top">) and the
+   body headings inside .sl-markdown-content. */
+h1#_top,
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  font-size: calc(var(--computed-heading-size, 1em) * 0.9);
+}
+
+h1#_top                       { --computed-heading-size: 2.5rem; }
+.sl-markdown-content h1       { --computed-heading-size: 2.5rem; }
+.sl-markdown-content h2       { --computed-heading-size: 1.875rem; }
+.sl-markdown-content h3       { --computed-heading-size: 1.5rem; }
+.sl-markdown-content h4       { --computed-heading-size: 1.25rem; }
+.sl-markdown-content h5       { --computed-heading-size: 1.125rem; }
+.sl-markdown-content h6       { --computed-heading-size: 1rem; }

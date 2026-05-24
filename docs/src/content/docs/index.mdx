@@ -1,0 +1,52 @@
+---
+title: Confabulous
+description: Open-source analytics for your Claude Code and Codex sessions — managed or self-hosted.
+template: splash
+hero:
+  tagline: Open-source analytics for your Claude Code and Codex sessions. Use the free managed instance or self-host the whole stack.
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/ConfabulousDev/confab-web
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why Confabulous?
+
+<CardGrid>
+  <Card title="Self-host or fully managed" icon="rocket">
+    Run the full stack on your own infrastructure with Docker Compose, or use the free managed instance at [confabulous.dev](https://confabulous.dev).
+  </Card>
+  <Card title="Multi-provider" icon="puzzle">
+    First-class support for Claude Code and OpenAI Codex. One dashboard for both.
+  </Card>
+  <Card title="Analytics & insights" icon="bars">
+    Cost tracking, Smart Recaps, TILs, personal Trends, and org-wide analytics across every session you and your team run.
+  </Card>
+  <Card title="No vendor lock-in" icon="open-book">
+    MIT-licensed, open source. Your data stays in your Postgres and your object store.
+  </Card>
+</CardGrid>
+
+## Next steps
+
+<CardGrid>
+  <Card title="Quickstart for end users" icon="seti:shell">
+    Sign in to your team's Confabulous instance (or [confabulous.dev](https://confabulous.dev)) and connect the CLI. [Get started →](/getting-started/end-user-quickstart/)
+  </Card>
+  <Card title="Quickstart for admins" icon="seti:docker">
+    Stand up Confabulous for your team — prototype locally, then deploy for real. [Get started →](/getting-started/admin-quickstart/)
+  </Card>
+  <Card title="CLI reference" icon="seti:powershell">
+    [`confab` CLI](/cli/overview/) — installation, subcommands, and troubleshooting.
+  </Card>
+  <Card title="API reference" icon="document">
+    [HTTP API](/api/overview/) for integrations and custom tooling.
+  </Card>
+</CardGrid>

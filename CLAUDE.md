@@ -12,7 +12,12 @@ Backend API is documented in `backend/API.md`. Keep it up to date when modifying
 
 ## Documentation maintenance
 
-When changing code, update the corresponding package/module README. Keep current: file lists, exported API descriptions, invariants, dependency lists, extension checklists. If a change spans multiple packages, also check the index READMEs (`backend/internal/README.md`, `frontend/src/README.md`) and this file. Documentation that contradicts the code is worse than no documentation.
+Two audiences, two doc trees:
+
+- **Internal docs** (READMEs, `CLAUDE.md` files, `backend/API.md`, `CONFIGURATION.md`, `SELF-HOSTING.md`) — for contributors. When changing code, update the corresponding package/module README. Keep current: file lists, exported API descriptions, invariants, dependency lists, extension checklists. If a change spans multiple packages, also check the index READMEs (`backend/internal/README.md`, `frontend/src/README.md`) and this file.
+- **User-facing docs site** (`docs/` — Starlight, published at `docs.confabulous.dev`) — for end users and self-hosters. When changing user-visible behavior (new config var, new feature, changed CLI flow), update the corresponding page under `docs/src/content/docs/`. The sidebar tree is in `docs/astro.config.mjs`.
+
+Documentation that contradicts the code is worse than no documentation.
 
 ## Shared-code locations (DRY)
 
@@ -30,6 +35,7 @@ Before adding new logic, check the package README for an existing helper. Grep t
 
 - Backend commands, sharded tests, dead-code tools → `backend/CLAUDE.md`.
 - Frontend build/lint/test, Storybook, theme, knip → `frontend/CLAUDE.md`.
+- Docs site (Starlight) — sentence case, IA, source-of-truth pages → `docs/CLAUDE.md`.
 
 ## Skills
 

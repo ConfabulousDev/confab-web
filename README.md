@@ -9,15 +9,15 @@ Self-hosted analytics for your Claude Code and Codex sessions.
 <table>
 <tr>
 <td align="center">
-<img src="docs/screenshot-summary.png" width="300"/>
+<img src="docs/public/screenshot-summary.png" width="300"/>
 <br/><b>Session Summary</b>
 </td>
 <td align="center">
-<img src="docs/screenshot-transcript.png" width="300"/>
+<img src="docs/public/screenshot-transcript.png" width="300"/>
 <br/><b>Transcript</b>
 </td>
 <td align="center">
-<img src="docs/screenshot-analytics.png" width="300"/>
+<img src="docs/public/screenshot-analytics.png" width="300"/>
 <br/><b>Analytics</b>
 </td>
 </tr>
@@ -74,7 +74,7 @@ Start a Claude Code or Codex session — it appears in the dashboard automatical
 
 ## How It Works
 
-<img src="docs/how-it-works.svg" alt="Architecture diagram" width="700"/>
+<img src="docs/public/how-it-works.svg" alt="Architecture diagram" width="700"/>
 
 ## Self-Hosting
 
