@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -142,6 +143,66 @@ func ValidateProvider(p string) error {
 	}
 	return fmt.Errorf("unknown provider %q: must be one of %s",
 		p, strings.Join(models.CanonicalProviders, ", "))
+}
+
+// CF-494 — git_info wire-layer caps for the new `remotes` and
+// `tracking_remote` fields. The validator only fires when the new fields
+// are present in the payload; old-shape git_info (just `repo_url`,
+// `branch`, …) passes through untouched. Per-entry strictness and the
+// 50-cap are 4xx-throwing; the resolver in db/git_remote_resolver.go
+// silently no-ops on semantic noise (e.g., tracking_remote referencing
+// an unknown remote).
+const (
+	MaxGitRemotesCount      = 50
+	MaxRemoteNameLength     = 256
+	MaxRemoteURLLength      = 2048
+	MaxTrackingRemoteLength = 256
+)
+
+// ValidateGitInfo enforces the wire-layer contract for git_info JSON when
+// it contains the CF-494 fields. nil/empty/malformed bytes return nil
+// (tolerant — old CLIs and JSONB pass-through are preserved). Errors are
+// returned only when the JSON parses AND the new fields exceed their
+// caps or violate strict per-entry rules.
+func ValidateGitInfo(gitInfo []byte) error {
+	if len(gitInfo) == 0 {
+		return nil
+	}
+	var parsed struct {
+		Remotes []struct {
+			Name     string `json:"name"`
+			FetchURL string `json:"fetch_url"`
+			PushURL  string `json:"push_url"`
+		} `json:"remotes"`
+		TrackingRemote string `json:"tracking_remote"`
+	}
+	if err := json.Unmarshal(gitInfo, &parsed); err != nil {
+		return nil
+	}
+	if len(parsed.Remotes) > MaxGitRemotesCount {
+		return fmt.Errorf("git_info.remotes exceeds maximum of %d entries", MaxGitRemotesCount)
+	}
+	for i, r := range parsed.Remotes {
+		if r.Name == "" {
+			return fmt.Errorf("git_info.remotes[%d].name is required", i)
+		}
+		if r.FetchURL == "" && r.PushURL == "" {
+			return fmt.Errorf("git_info.remotes[%d] requires fetch_url or push_url", i)
+		}
+		if len(r.Name) > MaxRemoteNameLength {
+			return fmt.Errorf("git_info.remotes[%d].name exceeds maximum length of %d", i, MaxRemoteNameLength)
+		}
+		if len(r.FetchURL) > MaxRemoteURLLength {
+			return fmt.Errorf("git_info.remotes[%d].fetch_url exceeds maximum length of %d", i, MaxRemoteURLLength)
+		}
+		if len(r.PushURL) > MaxRemoteURLLength {
+			return fmt.Errorf("git_info.remotes[%d].push_url exceeds maximum length of %d", i, MaxRemoteURLLength)
+		}
+	}
+	if len(parsed.TrackingRemote) > MaxTrackingRemoteLength {
+		return fmt.Errorf("git_info.tracking_remote exceeds maximum length of %d", MaxTrackingRemoteLength)
+	}
+	return nil
 }
 
 // Codex rollout metadata length limits. Match codex_rollouts column widths

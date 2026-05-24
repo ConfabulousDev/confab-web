@@ -18,9 +18,22 @@ type Querier interface {
 // fork, this call no-ops. Callers should treat errors as non-fatal (log and
 // continue): the next sync chunk on the same session retries.
 //
-// CF-491: the canonical observation comes from comparing a session's
-// extracted git_repo_url to a PR link's owner/repo. The resolver in
-// api/sync.go::HandleSyncChunk invokes this after recording PR links.
+// Source values (CHECK constraint in migrations 000046 + 000047):
+//   - "git_remote": CLI shipped git_info.remotes + tracking_remote; CF-494
+//     resolver derived the mapping definitively.
+//   - "pr_inference": session_github_links pull_request row points at a
+//     different owner/repo than the session's git_repo_url; CF-491 resolver
+//     inferred the mapping.
+//   - "github_api" / "manual": reserved for future use.
+//
+// CF-494 v1 precedence tradeoff: first-write-wins means a prior
+// pr_inference row blocks a later git_remote write even though git_remote
+// is the stronger signal. In practice both signals converge on the same
+// owner/repo so the precedence rarely matters; the known divergence cases
+// (cross-org PRs, sibling-fork PRs) are uncommon. If telemetry shows real
+// divergence, relax the guard to allow git_remote to overwrite
+// pr_inference (e.g. WHERE root_name IS NULL OR root_source = 'pr_inference'
+// when source = 'git_remote').
 func RecordRepoRoot(ctx context.Context, q Querier, fork, root, source string) error {
 	_, err := q.ExecContext(ctx,
 		`UPDATE session_repos

@@ -12,6 +12,7 @@ Core database connection, shared types, sentinel errors, and helper functions fo
 | `helpers.go` | Shared helper functions exported for sub-packages: `IsInvalidUUIDError`, `IsUniqueViolation`, `ExtractRepoName`, `ExtractRepoFromGitInfo`, `UnmarshalSessionGitInfo`, `LoadSessionSyncFiles`, plus `Querier` interface and `RecordRepoRoot` (CF-491 fork→root resolver write) |
 | `provider.go` | Provider value constants (`ProviderClaudeCode`, `ProviderClaudeCodeLegacy`, `ProviderCodex`) and `NormalizeProvider()` — maps the legacy display value `'Claude Code'` to canonical `'claude-code'`. Lives in the root db package so every Scan site that reads `sessions.session_type`, whether in `db/session` or `db/access`, can call the same helper. |
 | `repo_filter.go` | CF-491 SQL fragment helpers for repo extraction + fork→root resolution: `RepoRootExpr(alias)` (SELECT projection) and `RepoMatchExpr(alias, paramPlaceholder)` (WHERE clause). One source of truth across the 7+ call sites that filter sessions by `owner/repo`. |
+| `git_remote_resolver.go` | CF-494 primary fork→upstream resolver fed by CLI-shipped git remotes: `GitRemote`, `ParsedGitInfo`, `ParseGitInfo` (tolerant JSON parse), `FindRemoteByName`, and `ResolveForkFromRemotes` (pure function returning `(fork, root, ok)`). Wired into `api/sync.go::handleSyncInit` and `handleSyncChunk` ahead of the CF-491 PR-link fallback. |
 
 ## Sub-Package Index
 
