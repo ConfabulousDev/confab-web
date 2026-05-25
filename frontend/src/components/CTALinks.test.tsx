@@ -20,11 +20,11 @@ describe('CTALinks', () => {
     );
   });
 
-  it('points Docs at docs.confabulous.dev', () => {
+  it('points Docs at the Introduction page on docs.confabulous.dev', () => {
     render(<CTALinks />);
     expect(screen.getByRole('link', { name: /^Docs/ })).toHaveAttribute(
       'href',
-      'https://docs.confabulous.dev',
+      'https://docs.confabulous.dev/getting-started/introduction/',
     );
   });
 

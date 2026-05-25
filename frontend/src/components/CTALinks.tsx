@@ -2,7 +2,7 @@ import styles from './CTALinks.module.css';
 
 const LINKS: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'Demo', href: 'https://demo.confabulous.dev' },
-  { label: 'Docs', href: 'https://docs.confabulous.dev' },
+  { label: 'Docs', href: 'https://docs.confabulous.dev/getting-started/introduction/' },
   { label: 'GitHub', href: 'https://github.com/ConfabulousDev/confab-web' },
 ];
 
