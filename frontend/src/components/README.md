@@ -36,6 +36,8 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `providerIcon.ts` | `getProviderIcon(provider)` -- delegates to `getProviderMetadataOrFallback(provider, 'neutral')` and falls back to `RobotIcon` when no metadata matches (CF-366). Canonical and legacy values (`'claude-code'`, `'codex'`, `'Claude Code'`, `'CLAUDE-CODE'`) still resolve to their brand icon; truly unknown values render the neutral glyph rather than impersonating Claude. Lives in its own file to keep `icons.tsx` JSX-only for HMR fast-refresh |
 | `LoadingSkeleton.tsx` | Animated loading placeholder |
 | `Modal.tsx` | Base modal component with backdrop and close handling |
+| `MultiProviderModal.tsx` | Hero card modal listing supported AI coding providers (Claude Code, Codex, OpenCode coming) |
+| `OrgCostMetricsModal.tsx` | Hero card modal previewing the org-level per-user cost and time-breakdown view |
 | `PageHeader.tsx` | Page-level header with title and optional actions |
 | `PageSidebar.tsx` | Page-level sidebar for filters and navigation |
 | `Pagination.tsx` | Cursor-based pagination controls (prev/next) |
@@ -46,6 +48,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `QuickstartModal.tsx` | Modal with quickstart instructions |
 | `ReadOnlyToast.tsx` | CF-483 toast that listens for the `confab:read-only` CustomEvent (dispatched by `services/api.ts` when an API call returns the `read_only_user` structured 403) and shows a transient "This is a read-only demo." message. Single toast at a time; re-firing while visible resets the dismiss timer (debounced replace). |
 | `RelativeTime.tsx` | Auto-updating relative timestamp display |
+| `RetroModal.tsx` | Hero card modal explaining the `/retro` skill (load any past session into a new one, even across providers / teammates; synthesize a reusable skill) |
 | `ReviewModal.tsx` | Modal for reviewing session details |
 | `ScrollNavButtons.tsx` | Floating scroll-to-top/bottom buttons |
 | `SelfHostedModal.tsx` | Modal with self-hosted setup instructions |

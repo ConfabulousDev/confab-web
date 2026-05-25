@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import AnalysisModal from './AnalysisModal';
 import HowItWorksModal from './HowItWorksModal';
+import MultiProviderModal from './MultiProviderModal';
+import OrgCostMetricsModal from './OrgCostMetricsModal';
 import PRLinkingModal from './PRLinkingModal';
-import SelfHostedModal from './SelfHostedModal';
 import QuickstartModal from './QuickstartModal';
+import RetroModal from './RetroModal';
 import ReviewModal from './ReviewModal';
+import SelfHostedModal from './SelfHostedModal';
 import ShareModal from './ShareModal';
 import SmartRecapModal from './SmartRecapModal';
 import TILModal from './TILModal';
@@ -15,10 +18,27 @@ interface HeroCard {
   icon: string;
   title: string;
   description: string;
-  href?: string;
 }
 
 const cards: HeroCard[] = [
+  {
+    id: 'quickstart',
+    icon: '🚀',
+    title: 'Quickstart',
+    description: 'Get up and running in under a minute with our simple CLI installer.',
+  },
+  {
+    id: 'analysis',
+    icon: '📊',
+    title: 'Analysis',
+    description: 'Track token usage, costs, and productivity metrics across all your sessions.',
+  },
+  {
+    id: 'org-cost-metrics',
+    icon: '🏢',
+    title: 'Org cost metrics',
+    description: 'See per-user spend, session counts, and time breakdowns across your whole team. Sort any column to find the heaviest users or longest sessions.',
+  },
   {
     id: 'smart-recap',
     icon: '✨',
@@ -32,10 +52,16 @@ const cards: HeroCard[] = [
     description: 'Browse your Claude Code and Codex sessions with full conversation history and context.',
   },
   {
-    id: 'share',
-    icon: '🔗',
-    title: 'Share',
-    description: 'Generate shareable links to collaborate on sessions with your team.',
+    id: 'multi-provider',
+    icon: '🔌',
+    title: 'Multi-provider support',
+    description: 'Started with Claude Code, added Codex, more on the way (OpenCode next). One dashboard for every AI coding session.',
+  },
+  {
+    id: 'retro',
+    icon: '🔁',
+    title: 'Retro',
+    description: 'Use the /retro skill to load any past session into a new one — even a teammate\'s, even across providers. Reference how a problem was solved, or distill it into a reusable skill.',
   },
   {
     id: 'pr-linking',
@@ -50,10 +76,10 @@ const cards: HeroCard[] = [
     description: 'Capture insights and learnings from your sessions. Search, filter, and share with your team.',
   },
   {
-    id: 'analysis',
-    icon: '📊',
-    title: 'Analysis',
-    description: 'Track token usage, costs, and productivity metrics across all your sessions.',
+    id: 'share',
+    icon: '🔗',
+    title: 'Share',
+    description: 'Generate shareable links to collaborate on sessions with your team.',
   },
   {
     id: 'self-hosted',
@@ -67,114 +93,58 @@ const cards: HeroCard[] = [
     title: 'How it works',
     description: 'Learn how Confab syncs and organizes your Claude Code and Codex sessions on your own server.',
   },
-  {
-    id: 'quickstart',
-    icon: '🚀',
-    title: 'Quickstart',
-    description: 'Get up and running in under a minute with our simple CLI installer.',
-  },
 ];
 
-const CLICKABLE_CARDS = ['smart-recap', 'quickstart', 'how-it-works', 'analysis', 'pr-linking', 'review', 'share', 'self-hosted', 'til'];
+type ModalProps = { isOpen: boolean; onClose: () => void };
+
+const MODAL_COMPONENTS: Record<string, React.ComponentType<ModalProps>> = {
+  quickstart: QuickstartModal,
+  analysis: AnalysisModal,
+  'org-cost-metrics': OrgCostMetricsModal,
+  'smart-recap': SmartRecapModal,
+  review: ReviewModal,
+  'multi-provider': MultiProviderModal,
+  retro: RetroModal,
+  'pr-linking': PRLinkingModal,
+  til: TILModal,
+  share: ShareModal,
+  'self-hosted': SelfHostedModal,
+  'how-it-works': HowItWorksModal,
+};
 
 function HeroCards() {
-  const [smartRecapOpen, setSmartRecapOpen] = useState(false);
-  const [quickstartOpen, setQuickstartOpen] = useState(false);
-  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
-  const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [prLinkingOpen, setPrLinkingOpen] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [selfHostedOpen, setSelfHostedOpen] = useState(false);
-  const [tilOpen, setTilOpen] = useState(false);
-
-  const handleCardClick = (cardId: string) => {
-    if (cardId === 'smart-recap') {
-      setSmartRecapOpen(true);
-    } else if (cardId === 'quickstart') {
-      setQuickstartOpen(true);
-    } else if (cardId === 'how-it-works') {
-      setHowItWorksOpen(true);
-    } else if (cardId === 'analysis') {
-      setAnalysisOpen(true);
-    } else if (cardId === 'pr-linking') {
-      setPrLinkingOpen(true);
-    } else if (cardId === 'review') {
-      setReviewOpen(true);
-    } else if (cardId === 'share') {
-      setShareOpen(true);
-    } else if (cardId === 'self-hosted') {
-      setSelfHostedOpen(true);
-    } else if (cardId === 'til') {
-      setTilOpen(true);
-    }
-  };
+  const [openModalId, setOpenModalId] = useState<string | null>(null);
+  const ActiveModal = openModalId ? MODAL_COMPONENTS[openModalId] : null;
 
   return (
     <div className={styles.container}>
       <div className={styles.grid}>
-        {cards.map((card) => {
-          const isClickable = CLICKABLE_CARDS.includes(card.id);
-          return (
-            <div
-              key={card.id}
-              className={`${styles.card} ${isClickable ? styles.clickable : ''}`}
-              onClick={isClickable ? () => handleCardClick(card.id) : undefined}
-              role={isClickable ? 'button' : undefined}
-              tabIndex={isClickable ? 0 : undefined}
-              onKeyDown={isClickable ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleCardClick(card.id);
-                }
-              } : undefined}
-            >
-              <div className={styles.header}>
-                <span className={styles.icon}>{card.icon}</span>
-                <h3 className={styles.title}>{card.title}</h3>
-              </div>
-              <p className={styles.description}>{card.description}</p>
+        {cards.map((card) => (
+          <div
+            key={card.id}
+            className={`${styles.card} ${styles.clickable}`}
+            onClick={() => setOpenModalId(card.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setOpenModalId(card.id);
+              }
+            }}
+          >
+            <div className={styles.header}>
+              <span className={styles.icon}>{card.icon}</span>
+              <h3 className={styles.title}>{card.title}</h3>
             </div>
-          );
-        })}
+            <p className={styles.description}>{card.description}</p>
+          </div>
+        ))}
       </div>
 
-      <SmartRecapModal
-        isOpen={smartRecapOpen}
-        onClose={() => setSmartRecapOpen(false)}
-      />
-      <QuickstartModal
-        isOpen={quickstartOpen}
-        onClose={() => setQuickstartOpen(false)}
-      />
-      <HowItWorksModal
-        isOpen={howItWorksOpen}
-        onClose={() => setHowItWorksOpen(false)}
-      />
-      <AnalysisModal
-        isOpen={analysisOpen}
-        onClose={() => setAnalysisOpen(false)}
-      />
-      <PRLinkingModal
-        isOpen={prLinkingOpen}
-        onClose={() => setPrLinkingOpen(false)}
-      />
-      <ReviewModal
-        isOpen={reviewOpen}
-        onClose={() => setReviewOpen(false)}
-      />
-      <ShareModal
-        isOpen={shareOpen}
-        onClose={() => setShareOpen(false)}
-      />
-      <SelfHostedModal
-        isOpen={selfHostedOpen}
-        onClose={() => setSelfHostedOpen(false)}
-      />
-      <TILModal
-        isOpen={tilOpen}
-        onClose={() => setTilOpen(false)}
-      />
+      {ActiveModal && (
+        <ActiveModal isOpen={true} onClose={() => setOpenModalId(null)} />
+      )}
     </div>
   );
 }
