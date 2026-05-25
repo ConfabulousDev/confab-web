@@ -17,7 +17,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | File | Role |
 |------|------|
 | `Alert.tsx` | Dismissible alert banner (success/error/info) |
-| `AnalysisModal.tsx` | Modal for viewing session analysis details |
+| `AnalyticsModal.tsx` | Modal for viewing session analytics details |
 | `Button.tsx` | Styled button with variants |
 | `CardGrid.module.css` | Grid layout for analytics cards |
 | `CardGrid.tsx` | CSS grid container for rendering card layouts |

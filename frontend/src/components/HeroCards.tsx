@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import AnalysisModal from './AnalysisModal';
+import AnalyticsModal from './AnalyticsModal';
 import HowItWorksModal from './HowItWorksModal';
 import MultiProviderModal from './MultiProviderModal';
 import OrgCostMetricsModal from './OrgCostMetricsModal';
@@ -28,9 +28,9 @@ const cards: HeroCard[] = [
     description: 'Get up and running in under a minute with our simple CLI installer.',
   },
   {
-    id: 'analysis',
+    id: 'analytics',
     icon: '📊',
-    title: 'Analysis',
+    title: 'Analytics',
     description: 'Track token usage, costs, and productivity metrics across all your sessions.',
   },
   {
@@ -99,7 +99,7 @@ type ModalProps = { isOpen: boolean; onClose: () => void };
 
 const MODAL_COMPONENTS: Record<string, React.ComponentType<ModalProps>> = {
   quickstart: QuickstartModal,
-  analysis: AnalysisModal,
+  analytics: AnalyticsModal,
   'org-cost-metrics': OrgCostMetricsModal,
   'smart-recap': SmartRecapModal,
   review: ReviewModal,

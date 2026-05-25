@@ -1,13 +1,13 @@
 import Modal from './Modal';
 import ThemedImage from './ThemedImage';
-import styles from './AnalysisModal.module.css';
+import styles from './AnalyticsModal.module.css';
 
-interface AnalysisModalProps {
+interface AnalyticsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
+function AnalyticsModal({ isOpen, onClose }: AnalyticsModalProps) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} className={styles.modal} ariaLabel="Session Analytics">
       <h2 className={styles.title}>Session Analytics</h2>
@@ -23,4 +23,4 @@ function AnalysisModal({ isOpen, onClose }: AnalysisModalProps) {
   );
 }
 
-export default AnalysisModal;
+export default AnalyticsModal;
