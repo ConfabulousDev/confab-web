@@ -116,6 +116,7 @@ export default defineConfig({
           label: 'Architecture',
           items: [{ label: 'Overview', slug: 'architecture/overview' }],
         },
+        { label: 'FAQ', slug: 'faq' },
       ],
     }),
   ],

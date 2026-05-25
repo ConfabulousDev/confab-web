@@ -28,6 +28,7 @@ Concise, to the point, assume competence.
 ```
 docs/src/content/docs/
 ├── index.mdx                  # Splash landing page
+├── faq.md                     # FAQ (general, managed instance, self-hosting)
 ├── getting-started/           # Audience-specific onboarding (end users vs admins)
 ├── self-hosting/              # Deployment walkthrough, samples, config reference, demo mode
 ├── cli/                       # confab CLI overview, commands, bundled skills
