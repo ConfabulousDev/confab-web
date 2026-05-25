@@ -62,7 +62,7 @@ const SessionsPage = lazy(() => import('@/pages/SessionsPage'));
 
 The most complex page. It:
 - Loads session data via `useLoadSession`
-- Manages `ShareModal` and delete confirmation
+- Manages `ShareDialog` and delete confirmation
 - Handles deep-linking to specific messages via `?msg=UUID` query param
 - Switches to transcript tab automatically when a deep link is present
 - Renders typed error states (not found, expired, forbidden, auth required)

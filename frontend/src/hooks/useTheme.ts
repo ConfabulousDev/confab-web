@@ -5,8 +5,6 @@ interface UseThemeReturn {
   theme: Theme;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
-  /** @deprecated Use theme instead */
-  resolvedTheme: Theme;
 }
 
 export function useTheme(): UseThemeReturn {
@@ -22,7 +20,5 @@ export function useTheme(): UseThemeReturn {
   return {
     ...context,
     toggleTheme,
-    // Keep resolvedTheme for backwards compatibility with ThemedImage
-    resolvedTheme: context.theme,
   };
 }

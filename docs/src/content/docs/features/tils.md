@@ -16,3 +16,7 @@ TIL cards on the dashboard deep-link into the originating row in the transcript 
 ## Filtering
 
 The TIL feed shares the same filter UI as Sessions — provider, repo, owner, date range, and free-text search.
+
+## Export
+
+Each TIL is fetchable via the API. Export to Notion, Confluence, or any external system via the [REST API](/api/overview/).

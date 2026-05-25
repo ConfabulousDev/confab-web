@@ -58,6 +58,12 @@ For Codex, the CLI normalizes subagent thread IDs to the root thread before savi
 
 Fetches and discusses a session you (or a teammate) ran earlier. Useful for reviewing what happened, extracting learnings, or critiquing the approach.
 
+Three things `/retro` is good for:
+
+- **Replay your own work.** Pull a previous session's condensed transcript into a fresh agent so you can pick up where you left off, even days later.
+- **Learn from teammates.** Load a teammate's session — even one run in a different provider — and reference how they solved a tricky problem.
+- **Synthesize a reusable skill.** When a session captures a workflow worth keeping, ask the agent to distill it into a Claude Code or Codex skill on the spot.
+
 ### Usage
 
 Inside a fresh Claude Code or Codex session:

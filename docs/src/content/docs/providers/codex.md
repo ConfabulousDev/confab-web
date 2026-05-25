@@ -32,3 +32,7 @@ When a Codex session spawns subagents, Confabulous aggregates the main thread pl
 - `cached_input_tokens` is a subset of `input_tokens` (not a separate count).
 - `reasoning_output_tokens` is a subset of `output_tokens` (billed at output rate).
 - OpenAI does not charge for cache writes.
+
+## Other supported providers
+
+Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/) is also supported today. **OpenCode is next.** New providers slot into the same sync, storage, and analytics pipeline.
