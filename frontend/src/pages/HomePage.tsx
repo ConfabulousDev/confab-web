@@ -5,6 +5,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { isDemoViewer } from '@/utils/demoIdentity';
 import CTALinks from '@/components/CTALinks';
 import HeroCards from '@/components/HeroCards';
+import { PROVIDER_METADATA, PROVIDER_VALUES } from '@/utils/providers';
 import styles from './HomePage.module.css';
 
 function HomePage() {
@@ -36,8 +37,16 @@ function HomePage() {
           <h1 className={styles.headline}>Understand your AI coding sessions</h1>
           <ul className={styles.bullets}>
             <li>Open source and self-hostable. Maintain data sovereignty.</li>
-            <li>Claude Code · OpenAI Codex</li>
           </ul>
+          <div className={styles.worksWith}>
+            <span className={styles.worksWithLabel}>Works with</span>
+            {PROVIDER_VALUES.map((id) => (
+              <span key={id} className={styles.worksWithItem}>
+                <span aria-hidden="true">{PROVIDER_METADATA[id].icon}</span>
+                {PROVIDER_METADATA[id].label}
+              </span>
+            ))}
+          </div>
         </div>
 
         <CTALinks />

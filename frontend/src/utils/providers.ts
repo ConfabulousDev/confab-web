@@ -13,10 +13,10 @@
 // during a rollout (handled by providerLabel passthrough + the 'claude' /
 // 'neutral' fallback policies below).
 //
-// Marketing prose hardcoded outside this file: HomePage.tsx, Quickstart.tsx,
-// HeroCards.tsx, QuickstartCTA.tsx all spell out "Claude Code and Codex" in
-// conjunctive sentences that don't generate cleanly at N != 2 providers.
-// Hand-update those when a third provider lands.
+// Marketing prose hardcoded outside this file: Quickstart.tsx, HeroCards.tsx,
+// QuickstartCTA.tsx all spell out "Claude Code and Codex" in conjunctive
+// sentences that don't generate cleanly at N != 2 providers. Hand-update
+// those when a third provider lands.
 
 import type { ReactNode } from 'react';
 import { ClaudeCodeIcon, CodexIcon } from '@/components/icons';

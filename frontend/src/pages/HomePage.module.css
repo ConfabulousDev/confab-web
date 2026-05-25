@@ -45,3 +45,30 @@
   margin-right: var(--spacing-sm);
   font-weight: var(--font-bold);
 }
+
+.worksWith {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-md) var(--spacing-lg);
+  margin-top: var(--spacing-md);
+  font-size: var(--font-xl);
+  color: var(--color-text-primary);
+}
+
+.worksWithLabel {
+  color: var(--color-text-secondary);
+  font-size: var(--font-md);
+}
+
+.worksWithItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.worksWithItem svg {
+  width: 1.4em;
+  height: 1.4em;
+}
