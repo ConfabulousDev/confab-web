@@ -33,8 +33,11 @@ function HomePage() {
     <div className={styles.wrapper}>
       <div className={styles.container}>
         <div className={styles.hero}>
-          <h1 className={styles.headline}>Understand your Claude Code and Codex sessions</h1>
-          <p className={styles.subheadline}>Open source and self-hostable. Maintain data sovereignty.</p>
+          <h1 className={styles.headline}>Understand your AI coding sessions</h1>
+          <ul className={styles.bullets}>
+            <li>Open source and self-hostable. Maintain data sovereignty.</li>
+            <li>Claude Code · OpenAI Codex</li>
+          </ul>
         </div>
 
         <CTALinks />

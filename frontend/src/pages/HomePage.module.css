@@ -27,8 +27,21 @@
   letter-spacing: -0.02em;
 }
 
-.subheadline {
-  font-size: var(--font-lg);
-  color: var(--color-text-secondary);
-  margin: var(--spacing-sm) 0 0 0;
+.bullets {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-md) 0 0 0;
+  font-size: var(--font-xl);
+  color: var(--color-text-primary);
+}
+
+.bullets li {
+  margin: var(--spacing-xs) 0;
+}
+
+.bullets li::before {
+  content: '✓';
+  color: var(--color-accent);
+  margin-right: var(--spacing-sm);
+  font-weight: var(--font-bold);
 }
