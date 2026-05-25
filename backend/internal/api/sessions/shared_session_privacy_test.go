@@ -1,4 +1,4 @@
-package api_test
+package sessions_test
 
 import (
 	"context"

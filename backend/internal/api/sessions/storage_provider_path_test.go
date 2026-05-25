@@ -1,4 +1,4 @@
-package api
+package sessions_test
 
 // CF-351 storage-path spec tests.
 //
@@ -12,6 +12,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -160,7 +161,7 @@ func TestSyncChunk_HTTP_CodexUploadsToProviderPath(t *testing.T) {
 
 	const externalID = "codex-http-ext-1"
 	providerLit := models.ProviderCodex
-	initBody := SyncInitRequest{
+	initBody := api.SyncInitRequest{
 		ExternalID:     externalID,
 		TranscriptPath: "/tmp/codex.jsonl",
 		Provider:       &providerLit,
@@ -170,14 +171,14 @@ func TestSyncChunk_HTTP_CodexUploadsToProviderPath(t *testing.T) {
 		t.Fatalf("init request failed: %v", err)
 	}
 	testutil.RequireStatus(t, resp, 200)
-	var initResp SyncInitResponse
+	var initResp api.SyncInitResponse
 	testutil.ParseJSON(t, resp, &initResp)
 	resp.Body.Close()
 	if initResp.Provider != models.ProviderCodex {
 		t.Fatalf("init response provider = %q, want %q", initResp.Provider, models.ProviderCodex)
 	}
 
-	chunkBody := SyncChunkRequest{
+	chunkBody := api.SyncChunkRequest{
 		SessionID: initResp.SessionID,
 		FileName:  "transcript.jsonl",
 		FileType:  "transcript",

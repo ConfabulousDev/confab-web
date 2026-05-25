@@ -1,4 +1,4 @@
-package api
+package sessionaccess_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
@@ -36,7 +37,7 @@ func TestHandleGetSession_OwnerAccess(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -75,7 +76,7 @@ func TestHandleGetSession_PublicShareAccess_Unauthenticated(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -118,7 +119,7 @@ func TestHandleGetSession_PublicShareAccess_Authenticated(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -157,7 +158,7 @@ func TestHandleGetSession_SystemShareAccess(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -196,7 +197,7 @@ func TestHandleGetSession_RecipientShareAccess(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -233,7 +234,7 @@ func TestHandleGetSession_NoAccess_Authenticated(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Should return 404 (not found) to not reveal session existence
@@ -261,7 +262,7 @@ func TestHandleGetSession_NoAccess_Unauthenticated(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Should return 404 (not found) to not reveal session existence
@@ -291,7 +292,7 @@ func TestHandleGetSession_SystemShareRequiresAuth(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Should return 401 (system shares require auth - prompt user to sign in)
@@ -322,7 +323,7 @@ func TestHandleGetSession_PrivateShareRequiresAuth(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Should return 401 (private shares require auth - prompt user to sign in)
@@ -359,7 +360,7 @@ func TestHandleGetSession_InactiveOwnerBlocksAccess(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Should return 403 (forbidden due to inactive owner)
@@ -384,7 +385,7 @@ func TestHandleGetSession_SessionNotFound(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusNotFound)
@@ -417,7 +418,7 @@ func TestHandleGetSession_OwnerHostnameUsernameVisible(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -464,7 +465,7 @@ func TestHandleGetSession_SharedAccessHostnameUsernameHidden(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -511,7 +512,7 @@ func TestHandleGetSession_InvalidUUID(t *testing.T) {
 			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 			w := httptest.NewRecorder()
-			handler := HandleGetSession(env.DB)
+			handler := api.HandleGetSession(env.DB)
 			handler(w, req)
 
 			// All invalid IDs should return 404 or 400, never 500
@@ -553,7 +554,7 @@ func TestHandleGetSession_ExpiredPublicShare(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Expired share = no access = 404
@@ -591,7 +592,7 @@ func TestHandleGetSession_ExpiredSystemShare(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Expired share = no access = 404
@@ -629,7 +630,7 @@ func TestHandleGetSession_ExpiredRecipientShare(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Expired share = no access = 404
@@ -661,7 +662,7 @@ func TestHandleGetSession_WrongRecipient(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Wrong user = no access = 404
@@ -708,7 +709,7 @@ func TestHandleGetSession_Precedence_OwnerOverRecipient(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -750,7 +751,7 @@ func TestHandleGetSession_Precedence_RecipientOverSystem(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -789,7 +790,7 @@ func TestHandleGetSession_Precedence_SystemOverPublic(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -837,7 +838,7 @@ func TestHandleGetSession_AllSharesExpired(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// All shares expired = no access = 404
@@ -875,7 +876,7 @@ func TestHandleGetSession_RecipientHostnameUsernameHidden(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -923,7 +924,7 @@ func TestHandleGetSession_SystemShareHostnameUsernameHidden(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -967,7 +968,7 @@ func TestHandleGetSession_InactiveOwnerBlocksOwnerAccess(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Deactivated owner = forbidden
@@ -1001,7 +1002,7 @@ func TestHandleGetSession_APIKeyOwnerAccess(t *testing.T) {
 	req = req.WithContext(reqCtx)
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	testutil.AssertStatus(t, w, http.StatusOK)
@@ -1044,7 +1045,7 @@ func TestHandleGetSession_APIKeyCrossUserDenied(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Should return 404 (not 401/403) to not reveal session existence
@@ -1072,7 +1073,7 @@ func TestHandleGetSession_APIKeyInvalidDenied(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Invalid API key = unauthenticated = 404 (no public share)
@@ -1112,7 +1113,7 @@ func TestHandleGetSession_APIKeyInactiveUserDenied(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	handler := HandleGetSession(env.DB)
+	handler := api.HandleGetSession(env.DB)
 	handler(w, req)
 
 	// Inactive user's API key = unauthenticated = 404 (falls through to no access)
@@ -1171,7 +1172,7 @@ func TestHandleGetSession_InactiveOwnerBlocksAllAccess(t *testing.T) {
 			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 			w := httptest.NewRecorder()
-			handler := HandleGetSession(env.DB)
+			handler := api.HandleGetSession(env.DB)
 			handler(w, req)
 
 			// All access types blocked when owner is inactive

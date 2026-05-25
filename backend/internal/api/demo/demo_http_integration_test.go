@@ -1,4 +1,4 @@
-package api
+package demo_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/api/apitest"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
@@ -32,39 +33,20 @@ import (
 //   * Regression: DEMO_IDENTITY_EMAIL="" is zero behavior change.
 // =============================================================================
 
-const (
-	demoEmail      = "demo@confabulous.dev"
-	demoCSRFSecret = "test-csrf-secret-key-32-bytes!!"
-)
+const demoEmail = "demo@confabulous.dev"
 
 // setupDemoServer brings up the test server with demo mode enabled and
 // bootstraps the demo identity. The demo cookie is also returned for
 // tests that need to present it.
 func setupDemoServer(t *testing.T, env *testutil.TestEnvironment) (*testutil.TestServer, *http.Cookie) {
 	t.Helper()
-
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", demoCSRFSecret)
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-	testutil.SetEnvForTest(t, "DEMO_IDENTITY_EMAIL", demoEmail)
-
-	cfg := auth.OAuthConfig{
-		PasswordEnabled:   true,
-		DemoIdentityEmail: demoEmail,
-		CSRFSecretKey:     demoCSRFSecret,
-	}
-
-	// Bootstrap the demo identity before the server starts handling
-	// requests — same ordering as cmd/server/main.go.
-	if err := auth.BootstrapDemoIdentity(context.Background(), env.DB, demoEmail, demoCSRFSecret); err != nil {
-		t.Fatalf("BootstrapDemoIdentity: %v", err)
-	}
-
-	srv := NewServer(env.DB, env.Storage, &cfg, nil, "")
-	ts := testutil.StartTestServer(t, env, srv.SetupRoutes())
-
-	cookieID := auth.DemoSessionCookieID(demoCSRFSecret, demoEmail)
+	ts := apitest.NewServer(t, env, apitest.Options{
+		DemoEmail:          demoEmail,
+		BootstrapDemo:      true,
+		PasswordEnabled:    true,
+		SkipOAuthClientIDs: true,
+	})
+	cookieID := auth.DemoSessionCookieID(apitest.DefaultCSRFSecret, demoEmail)
 	cookie := &http.Cookie{Name: auth.SessionCookieName, Value: cookieID, Path: "/"}
 	return ts, cookie
 }
@@ -75,19 +57,14 @@ func demoClient(t *testing.T, ts *testutil.TestServer, cookie *http.Cookie) *tes
 	return testutil.NewTestClient(t, ts).WithSession(cookie.Value)
 }
 
-// setupRegularServer mirrors setupTestServerWithEnv but skips demo mode
-// so we can assert the regression "env unset = today's behavior".
+// setupRegularServer mirrors apitest.NewServer with demo disabled so we can
+// assert the regression "env unset = today's behavior".
 func setupRegularServer(t *testing.T, env *testutil.TestEnvironment) *testutil.TestServer {
 	t.Helper()
-	testutil.SetEnvForTest(t, "CSRF_SECRET_KEY", demoCSRFSecret)
-	testutil.SetEnvForTest(t, "ALLOWED_ORIGINS", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "FRONTEND_URL", "http://localhost:3000")
-	testutil.SetEnvForTest(t, "INSECURE_DEV_MODE", "true")
-	testutil.SetEnvForTest(t, "DEMO_IDENTITY_EMAIL", "")
-
-	cfg := auth.OAuthConfig{PasswordEnabled: true}
-	srv := NewServer(env.DB, env.Storage, &cfg, nil, "")
-	return testutil.StartTestServer(t, env, srv.SetupRoutes())
+	return apitest.NewServer(t, env, apitest.Options{
+		PasswordEnabled:    true,
+		SkipOAuthClientIDs: true,
+	})
 }
 
 // -----------------------------------------------------------------------------
@@ -354,7 +331,7 @@ func TestDemo_LogoutPreservesSharedSessionRow(t *testing.T) {
 	env.CleanDB(t)
 	ts, demoCookie := setupDemoServer(t, env)
 
-	demoID := auth.DemoSessionCookieID(demoCSRFSecret, demoEmail)
+	demoID := auth.DemoSessionCookieID(apitest.DefaultCSRFSecret, demoEmail)
 
 	// Before logout: row exists.
 	var pre int

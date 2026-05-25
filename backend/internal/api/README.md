@@ -91,10 +91,21 @@ Add it to the middleware chain in `SetupRoutes`. Order matters -- see the number
 
 ## Testing
 
-- **Unit tests** -- `*_test.go` files for pure logic (compression, CSRF, auth config, body size limits, GitHub URL parsing, shared session privacy filtering).
-- **Integration tests** -- `*_http_integration_test.go` files that spin up a real HTTP server with containerized Postgres and MinIO. These test full request/response cycles including auth, database, and storage.
+- **Unit tests** -- `*_test.go` files in this package for pure logic (compression, CSRF, auth config, body size limits, GitHub URL parsing, transcript helpers, etc.). These tests need access to unexported helpers (`extractPRLinkFromLine`, `extractRepoName`, `sanitizeContentDispositionFilename`, `truncateTranscriptFromStart`, `debugLoggingMiddleware`, `decompressMiddleware`, …).
+- **Integration tests** -- HTTP integration tests live in per-feature sibling packages under `internal/api/` (one CI shard each — `list-test-packages.sh` discovers them automatically). Each sub-package uses `package <feature>_test` and exercises the router via the shared helper in `apitest`:
+  - `apitest/` — exported `apitest.NewServer(t, env, apitest.Options{...})` builds a real test server (production router, DB, MinIO). Replaces a dozen near-identical `setupXxxTestServer` helpers that used to live in this package.
+  - `sessionaccess/` — canonical session URL access (CF-132) tests against `api.HandleGetSession`.
+  - `sync/` — `POST /api/v1/sync/*` plus PR-link / repo-root extraction tests.
+  - `sessions/` — `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, shared-session privacy, storage provider path.
+  - `analytics/` — `GET /api/v1/sessions/{id}/analytics`, smart recap, Codex subagent aggregation. Reads `../../codex/testdata/*.jsonl`.
+  - `demo/` — CF-483 demo-mode tests (auto-impersonate, read-only enforcement, demo cookie).
+  - `auth/` — API keys, device code, GitHub links (HTTP part), shares, `/api/v1/me`.
+  - `org/` — `/api/v1/org/analytics`, `/api/v1/org/repos`, `/api/v1/trends`.
+  - `til/` — `POST/GET/DELETE /api/v1/tils*` plus export.
+  - `external/` — external API: condensed transcript, session files, file download.
 - Run with `cd backend && DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...`
 - Use `-short` to skip integration tests during development.
+- **Adding a new HTTP integration test:** pick the relevant sub-package (or create one if it's a new feature group), write `package <feature>_test`, and call `apitest.NewServer(t, env, apitest.Options{...})`. Use only the exported `api.*` surface — anything unexported you need is either testable as a unit in this package, or the symbol should be exported (e.g. `MeResponse`, `CreateTILRequest` are exported precisely so wire tests can decode into them).
 
 ## Dependencies
 

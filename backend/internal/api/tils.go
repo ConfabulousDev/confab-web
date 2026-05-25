@@ -25,8 +25,8 @@ func parseTILID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-// createTILRequest is the request body for creating a TIL
-type createTILRequest struct {
+// CreateTILRequest is the request body for creating a TIL
+type CreateTILRequest struct {
 	Title       string  `json:"title"`
 	Summary     string  `json:"summary"`
 	SessionID   string  `json:"session_id"`
@@ -47,7 +47,7 @@ func HandleCreateTIL(database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		var req createTILRequest
+		var req CreateTILRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondError(w, http.StatusBadRequest, "Invalid request body")
 			return

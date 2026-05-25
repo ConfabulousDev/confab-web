@@ -1,4 +1,4 @@
-package api
+package external_test
 
 import (
 	"io"
@@ -8,34 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/api"
+	"github.com/ConfabulousDev/confab-web/internal/api/apitest"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
-
-// TestSanitizeContentDispositionFilename pins the CF-425 behavior that the
-// download endpoint emits a safe filename in the Content-Disposition header —
-// stripping characters that could break header syntax (CR/LF/quotes) or be
-// misinterpreted as a path by client tools (/, \, ..).
-func TestSanitizeContentDispositionFilename(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"transcript.jsonl", "transcript.jsonl"},
-		{"file with spaces.jsonl", "file_with_spaces.jsonl"},
-		{"../../etc/passwd", ".._.._etc_passwd"},
-		{"name\r\nInjected: yes", "name__Injected__yes"},
-		{`evil";X-Injected: 1`, "evil__X-Injected__1"},
-		{"", "download.txt"},
-		{"中文.txt", "__.txt"},
-	}
-	for _, tc := range cases {
-		got := sanitizeContentDispositionFilename(tc.in)
-		if got != tc.want {
-			t.Errorf("sanitize(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
 // =============================================================================
 // Condensed Transcript API — HTTP Integration Tests
 //
@@ -69,7 +46,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		transcript := validTestTranscript()
 		testutil.UploadTestTranscript(t, env, user.ID, models.ProviderClaudeCode, "ext-123", "transcript.jsonl", transcript)
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript")
@@ -80,7 +57,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result CondensedTranscriptResponse
+		var result api.CondensedTranscriptResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		// Verify metadata
@@ -117,7 +94,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 			Summary: "Test session",
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts) // no API key
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript")
@@ -143,7 +120,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		transcript := validTestTranscript()
 		testutil.UploadTestTranscript(t, env, owner.ID, models.ProviderClaudeCode, "ext-123", "transcript.jsonl", transcript)
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(otherKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript")
@@ -172,7 +149,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		// Share with recipient
 		testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(recipientKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript")
@@ -183,7 +160,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result CondensedTranscriptResponse
+		var result api.CondensedTranscriptResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if result.Transcript == "" {
@@ -203,7 +180,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 
 		testutil.UploadTestTranscript(t, env, user.ID, models.ProviderClaudeCode, "ext-123", "transcript.jsonl", longTestTranscript())
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// First get full transcript to know its length
@@ -211,7 +188,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
-		var fullResult CondensedTranscriptResponse
+		var fullResult api.CondensedTranscriptResponse
 		testutil.ParseJSON(t, fullResp, &fullResult)
 
 		fullLen := len(fullResult.Transcript)
@@ -228,7 +205,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var truncResult CondensedTranscriptResponse
+		var truncResult api.CondensedTranscriptResponse
 		testutil.ParseJSON(t, resp, &truncResult)
 
 		if len(truncResult.Transcript) >= fullLen {
@@ -249,7 +226,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 			Summary: "Test session",
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		// Non-numeric
@@ -286,7 +263,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		// Create session with SyncLines: -1 so no sync file is created
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "ext-no-transcript")
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/condensed-transcript")
@@ -305,7 +282,7 @@ func TestCondensedTranscript_HTTP_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/00000000-0000-0000-0000-000000000000/condensed-transcript")
@@ -347,7 +324,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 		testutil.CreateTestSyncFile(t, env, sessionID, "agent-abc.jsonl", "agent", 50)
 		testutil.CreateTestSyncFile(t, env, sessionID, "agent-def.jsonl", "agent", 30)
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
@@ -358,7 +335,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SessionFilesResponse
+		var result api.SessionFilesResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if len(result.Files) != 3 {
@@ -390,7 +367,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 			SyncLines: -1,
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
@@ -401,7 +378,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SessionFilesResponse
+		var result api.SessionFilesResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if len(result.Files) != 0 {
@@ -420,7 +397,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 			Summary: "Private session",
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(otherKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
@@ -445,7 +422,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 
 		testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(recipientKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
@@ -456,7 +433,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var result SessionFilesResponse
+		var result api.SessionFilesResponse
 		testutil.ParseJSON(t, resp, &result)
 
 		if len(result.Files) != 1 {
@@ -472,7 +449,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 			Summary: "Test session",
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts) // no API key
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files")
@@ -490,7 +467,7 @@ func TestSessionFiles_HTTP_Integration(t *testing.T) {
 		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
 		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/00000000-0000-0000-0000-000000000000/files")
@@ -524,7 +501,7 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 		transcript := validTestTranscript()
 		testutil.UploadTestTranscript(t, env, user.ID, models.ProviderClaudeCode, "ext-dl-1", "transcript.jsonl", transcript)
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=transcript.jsonl")
@@ -563,7 +540,7 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 			Summary: "Unknown file test",
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=nonexistent.jsonl")
@@ -585,7 +562,7 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 			Summary: "Missing param test",
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download")
@@ -611,7 +588,7 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 		transcript := validTestTranscript()
 		testutil.UploadTestTranscript(t, env, owner.ID, models.ProviderClaudeCode, "ext-dl-5", "transcript.jsonl", transcript)
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts).WithAPIKey(otherKey.RawToken)
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=transcript.jsonl")
@@ -631,7 +608,7 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 			Summary: "No auth download",
 		})
 
-		ts := setupTestServerWithEnv(t, env)
+		ts := apitest.NewServer(t, env, apitest.Options{})
 		client := testutil.NewTestClient(t, ts) // no API key
 
 		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=transcript.jsonl")
@@ -666,64 +643,4 @@ func longTestTranscript() []byte {
 {"type":"user","message":{"role":"user","content":"Third question: what are the best practices for writing clean, maintainable code in Go?"},"uuid":"u3","timestamp":"2025-01-01T00:00:04Z","parentUuid":"a2","isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
 {"type":"assistant","message":{"id":"msg_03","type":"message","role":"assistant","model":"claude-sonnet-4-20250514","content":[{"type":"text","text":"Key Go best practices include: use short variable names in small scopes, handle errors explicitly, prefer composition over inheritance, write table-driven tests, and keep interfaces small."}],"usage":{"input_tokens":25,"output_tokens":35},"stop_reason":"end_turn","stop_sequence":null},"uuid":"a3","timestamp":"2025-01-01T00:00:05Z","parentUuid":"u3","isSidechain":false}
 `)
-}
-
-// =============================================================================
-// Unit tests for helper functions
-// =============================================================================
-
-func TestExtractRepoName(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"https://github.com/org/repo.git", "org/repo"},
-		{"https://github.com/org/repo", "org/repo"},
-		// SSH URLs use colon separator — extractRepoName splits on "/" only
-		{"git@github.com:org/repo.git", "git@github.com:org/repo"},
-		{"repo", "repo"},
-	}
-
-	for _, tc := range tests {
-		result := extractRepoName(tc.input)
-		if result != tc.expected {
-			t.Errorf("extractRepoName(%q) = %q, want %q", tc.input, result, tc.expected)
-		}
-	}
-}
-
-func TestTruncateTranscriptFromStart(t *testing.T) {
-	// Build a sample transcript
-	transcript := `<transcript>
-<user id="1">Hello world</user>
-<assistant id="2">Hi there! How can I help?</assistant>
-<user id="3">What is 2+2?</user>
-<assistant id="4">The answer is 4.</assistant>
-</transcript>`
-
-	t.Run("no truncation when under limit", func(t *testing.T) {
-		result := truncateTranscriptFromStart(transcript, len(transcript)+100)
-		if result != transcript {
-			t.Error("expected no truncation")
-		}
-	})
-
-	t.Run("truncates from beginning preserving element boundaries", func(t *testing.T) {
-		// Request only ~100 chars — should find a clean element boundary
-		result := truncateTranscriptFromStart(transcript, 100)
-		if !strings.Contains(result, "[Transcript truncated") {
-			t.Error("expected truncation header")
-		}
-		// Should start at an element boundary
-		if !strings.Contains(result, "<user ") && !strings.Contains(result, "<assistant ") {
-			t.Error("expected result to contain a complete element start")
-		}
-	})
-
-	t.Run("exact length returns unchanged", func(t *testing.T) {
-		result := truncateTranscriptFromStart(transcript, len(transcript))
-		if result != transcript {
-			t.Error("expected no truncation at exact length")
-		}
-	})
 }
