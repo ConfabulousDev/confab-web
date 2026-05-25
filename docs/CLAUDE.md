@@ -19,6 +19,10 @@ Examples:
 
 Apply this rule everywhere a title is rendered: frontmatter `title:`, `description:` (sentence case prose), `astro.config.mjs` `label:`, MDX `<Card title="...">`, and every Markdown heading.
 
+## Voice
+
+Concise, to the point, assume competence.
+
 ## Where content lives
 
 ```

@@ -38,15 +38,15 @@ export PRODUCTION_DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'
 
 ## Linode — `demo.confabulous.dev` (demo)
 
-The public demo instance at [demo.confabulous.dev](https://demo.confabulous.dev) runs on a [Linode](https://www.linode.com/) VPS using a Docker Compose stack much like the one in the [Deployment walkthrough](/self-hosting/deploy/), with these additions:
+[demo.confabulous.dev](https://demo.confabulous.dev) runs on a ~$7/month [Linode](https://www.linode.com/) Nanode (1 GB + backups). The full infra-as-code lives in [`ConfabulousDev/confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) — the [Deployment walkthrough](/self-hosting/deploy/) stack plus [Demo mode](/self-hosting/demo-mode/), Caddy for HTTPS, and `MAX_USERS=0`.
 
-- **Caddy** in front of the `app` service for HTTPS via Let's Encrypt.
-- **Demo mode** enabled via `DEMO_IDENTITY_EMAIL=demo@confabulous.dev` — see [Demo mode](/self-hosting/demo-mode/).
-- **Auth:** password auth (`AUTH_PASSWORD_ENABLED=true`) — anonymous visitors are auto-impersonated as the read-only demo user, and the operator signs in as a real account with a password. OAuth is intentionally not configured.
+What's in the repo:
 
-:::note
-The exact `docker-compose.yml` and `Caddyfile` for the demo deployment are not yet published. If you'd like to mirror this configuration, start from the [Deployment walkthrough](/self-hosting/deploy/) and enable [Demo mode](/self-hosting/demo-mode/) — the two together produce the same result.
-:::
+- [`stack/`](https://github.com/ConfabulousDev/confab-demo-site/tree/main/stack) — `docker-compose.yml` and `Caddyfile`.
+- [`tofu/`](https://github.com/ConfabulousDev/confab-demo-site/tree/main/tofu) — [OpenTofu](https://opentofu.org/) for the Linode VM and firewall. [`cloud-init.yaml.tftpl`](https://github.com/ConfabulousDev/confab-demo-site/blob/main/tofu/cloud-init.yaml.tftpl) renders `stack/` plus secrets into `/opt/confab/` on first boot and starts the stack via systemd. `ignore_changes = [metadata]` keeps later `apply`s from rebuilding the VM.
+- [`scripts/deploy.sh`](https://github.com/ConfabulousDev/confab-demo-site/blob/main/scripts/deploy.sh) — image and compose updates. Infra goes through `tofu apply`; secrets are edited in `/opt/confab/.env` on the VM.
+
+Cloudflare DNS is added by hand so no DNS token lives in the repo.
 
 ## Picking a stack
 
