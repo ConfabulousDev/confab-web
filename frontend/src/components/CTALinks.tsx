@@ -1,23 +1,23 @@
 import styles from './CTALinks.module.css';
 
-const LINKS: ReadonlyArray<{ label: string; href: string }> = [
-  { label: 'Demo', href: 'https://demo.confabulous.dev' },
-  { label: 'Docs', href: 'https://docs.confabulous.dev/getting-started/introduction/' },
-  { label: 'GitHub', href: 'https://github.com/ConfabulousDev/confab-web' },
-];
+const LINKS = [
+  { label: 'Demo', href: 'https://demo.confabulous.dev', color: styles.demo },
+  { label: 'Docs', href: 'https://docs.confabulous.dev/getting-started/introduction/', color: styles.docs },
+  { label: 'GitHub', href: 'https://github.com/ConfabulousDev/confab-web', color: styles.github },
+] as const;
 
 function CTALinks() {
   return (
     <div className={styles.row}>
-      {LINKS.map(({ label, href }) => (
+      {LINKS.map(({ label, href, color }) => (
         <a
           key={label}
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className={styles.pill}
+          className={[styles.link, color].filter(Boolean).join(' ')}
         >
-          {label} &rarr;
+          {label}
         </a>
       ))}
     </div>

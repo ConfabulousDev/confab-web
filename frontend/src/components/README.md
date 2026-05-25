@@ -23,7 +23,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `CardGrid.tsx` | CSS grid container for rendering card layouts |
 | `Chip.tsx` | Tag/chip component for filter selections |
 | `CopyIdDropdown.tsx` | Dropdown for copying Confab ID or the agent-native session ID (Claude Code / Codex) with confirmation feedback; label switches per `provider` |
-| `CTALinks.tsx` | Trio of pill links (Demo → demo.confabulous.dev, Docs → docs.confabulous.dev Introduction page, GitHub → confab-web repo). Rendered above and below the `HeroCards` grid on the landing page. |
+| `CTALinks.tsx` | Trio of italic, color-coded text links (Demo → demo.confabulous.dev, Docs → docs.confabulous.dev Introduction page, GitHub → confab-web repo). Each link gets its own semantic color (`--color-accent` / `--color-selected` / `--color-success`). Rendered above and below the `HeroCards` grid on the landing page. |
 | `ErrorBoundary.tsx` | React error boundary with fallback UI |
 | `ErrorDisplay.tsx` | Styled error message display |
 | `FilterChipsBar.tsx` | Horizontal bar of dimension dropdowns + active filter chips with clear-all and optional history commit on blur. Dimensions: Provider (static enum, opt out via `showProviderFilter={false}`), Repo, Branch, Owner. `DimensionDropdown` accepts optional `iconFor` / `labelFor` for per-option icons and display labels (used by Provider) |

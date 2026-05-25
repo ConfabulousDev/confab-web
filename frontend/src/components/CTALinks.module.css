@@ -1,30 +1,36 @@
 .row {
   display: flex;
   justify-content: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-xl);
   flex-wrap: wrap;
 }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--spacing-sm) var(--spacing-xl);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-size: var(--font-sm);
+.link {
+  font-style: italic;
+  font-size: var(--font-lg);
   font-weight: var(--font-medium);
   text-decoration: none;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.pill:hover {
-  border-color: var(--color-accent);
+.link:hover,
+.link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.demo {
   color: var(--color-accent);
 }
 
-.pill:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+.docs {
+  color: var(--color-selected);
+}
+
+.github {
+  color: var(--color-success);
 }
