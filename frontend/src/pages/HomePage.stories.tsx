@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import CTALinks from '@/components/CTALinks';
 import HeroCards from '@/components/HeroCards';
 import styles from './HomePage.module.css';
 
@@ -10,7 +11,9 @@ function HomePageLayout() {
         <div className={styles.hero}>
           <h1 className={styles.headline}>Understand your Claude Code and Codex sessions</h1>
         </div>
+        <CTALinks />
         <HeroCards />
+        <CTALinks />
       </div>
     </div>
   );

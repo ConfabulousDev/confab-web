@@ -24,7 +24,7 @@ vi.mock('react-router-dom', async () => {
 
 // HomePage renders these unconditionally; nothing under test depends on
 // their contents.
-vi.mock('@/components/DeployCTA', () => ({ default: () => null }));
+vi.mock('@/components/CTALinks', () => ({ default: () => null }));
 vi.mock('@/components/HeroCards', () => ({ default: () => null }));
 
 declare global {

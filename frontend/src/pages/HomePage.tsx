@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { isDemoViewer } from '@/utils/demoIdentity';
-import DeployCTA from '@/components/DeployCTA';
+import CTALinks from '@/components/CTALinks';
 import HeroCards from '@/components/HeroCards';
 import styles from './HomePage.module.css';
 
@@ -37,8 +37,9 @@ function HomePage() {
           <p className={styles.subheadline}>Open source and self-hostable. Maintain data sovereignty.</p>
         </div>
 
+        <CTALinks />
         <HeroCards />
-        <DeployCTA />
+        <CTALinks />
       </div>
     </div>
   );

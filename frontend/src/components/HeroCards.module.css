@@ -1,13 +1,13 @@
 .container {
   width: 100%;
-  max-width: 800px;
+  max-width: 1100px;
   margin: 0 auto;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--spacing-lg);
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-xl);
 }
 
 @media (max-width: 640px) {
@@ -16,21 +16,25 @@
   }
 }
 
-@media (min-width: 641px) and (max-width: 900px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
 .card {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  padding: var(--spacing-xl);
+  padding: var(--spacing-2xl);
   background-color: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+/* Center the orphan card when it's alone in its row (2-col layout only;
+   at mobile width the grid is 1-col and every card is naturally full-width). */
+@media (min-width: 641px) {
+  .card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    max-width: calc(50% - var(--spacing-xl) / 2);
+    margin-inline: auto;
+  }
 }
 
 .card.clickable {

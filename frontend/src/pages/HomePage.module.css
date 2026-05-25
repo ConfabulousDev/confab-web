@@ -4,15 +4,19 @@
 }
 
 .container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xl);
   padding: var(--spacing-3xl) var(--spacing-xl);
-  max-width: 780px;
+  max-width: 1100px;
   width: 100%;
   margin: 0 auto;
 }
 
 .hero {
   text-align: center;
-  margin-bottom: var(--spacing-3xl);
+  max-width: 780px;
+  margin-inline: auto;
 }
 
 .headline {
