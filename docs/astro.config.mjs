@@ -9,6 +9,13 @@ const OG_IMAGE = `${SITE}/og-image.svg`;
 
 /** @type {import('@astrojs/starlight/types').StarlightUserConfig['head']} */
 const head = [
+  // Default first-visit theme to dark. Must stay first in `head` so it runs before
+  // Starlight's ThemeProvider reads localStorage. Explicit user choices are preserved.
+  {
+    tag: 'script',
+    content: `try { if (localStorage.getItem('starlight-theme') === null) localStorage.setItem('starlight-theme', 'dark'); } catch {}`,
+  },
+
   // Preconnect to Google Fonts for the Lobster wordmark.
   { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
   { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: true } },

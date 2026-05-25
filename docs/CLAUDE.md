@@ -67,6 +67,7 @@ Config changes (`astro.config.mjs`, `src/content.config.ts`, `src/styles/custom.
 
 - Wordmark uses the **Lobster** Google Font (matches the main app's `Header.module.css`). Applied in `src/styles/custom.css` to `.site-title` and `.hero h1`.
 - Site default colors are Starlight's stock palette — intentionally bland. Don't introduce custom brand colors without explicit direction.
+- First-visit theme defaults to **dark** to match the main app, via a pre-paint script at the top of the `head` array in `astro.config.mjs` that seeds `localStorage['starlight-theme']` with `'dark'` when unset. Explicit choices from Starlight's theme switcher are preserved.
 
 ## Deployment
 
