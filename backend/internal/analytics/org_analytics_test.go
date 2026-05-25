@@ -588,11 +588,10 @@ func TestGetOrgAnalytics_RepoFilter(t *testing.T) {
 	seed(sid2, 3.00)
 	seed(sid3, 5.00)
 
-	// Filter semantics mirror trends:
-	//   include_no_repo = true → also include sessions with NULL/empty repo_url
-	//   repos = [...] → include sessions whose extracted owner/name is in the set
-	// To match "all sessions" you must pass every repo AND include_no_repo=true,
-	// which is the auto-select-all-on-load behavior the page implements.
+	// Filter semantics (CF-506) mirror /sessions:
+	//   repos = [] / nil  → no repo filter; include ALL repos
+	//   repos = [...]     → include sessions whose extracted owner/name is in the set
+	//   include_no_repo   → orthogonal; when true also include sessions with NULL/empty repo_url
 	cases := []struct {
 		name             string
 		repos            []string
@@ -622,18 +621,18 @@ func TestGetOrgAnalytics_RepoFilter(t *testing.T) {
 			wantTotalCostUSD: "5.00",
 		},
 		{
-			name:             "no repos selected, include_no_repo=true — only sessions without repo",
+			name:             "empty repos, include_no_repo=true — every session (CF-506)",
 			repos:            nil,
 			includeNoRepo:    true,
-			wantSessionCount: 1,
-			wantTotalCostUSD: "5.00",
+			wantSessionCount: 3,
+			wantTotalCostUSD: "10.00",
 		},
 		{
-			name:             "no repos selected, include_no_repo=false — empty",
+			name:             "empty repos, include_no_repo=false — every session WITH a repo (CF-506)",
 			repos:            nil,
 			includeNoRepo:    false,
-			wantSessionCount: 0,
-			wantTotalCostUSD: "0.00",
+			wantSessionCount: 2,
+			wantTotalCostUSD: "5.00",
 		},
 	}
 

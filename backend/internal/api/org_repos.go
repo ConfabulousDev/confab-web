@@ -20,8 +20,9 @@ type OrgReposResponse struct {
 	Repos []string `json:"repos"`
 }
 
-// HandleGetOrgRepos returns the org-wide repo list for the date range. Mounted
-// behind ENABLE_ORG_ANALYTICS and inherits the same privacy model as
+// HandleGetOrgRepos returns the org-wide repo list for the date range. Drives
+// the repo filter dropdown on the Organization page. Mounted behind
+// ENABLE_ORG_ANALYTICS and inherits the same privacy model as
 // HandleGetOrgAnalytics: any authenticated user can see every repo name. The
 // route is registered only when org analytics is enabled (see server.go).
 //

@@ -12,8 +12,8 @@ type OrgAnalyticsRequest struct {
 	EndTS         int64    // End of date range (epoch seconds, exclusive — local midnight of day after last day)
 	TZOffset      int      // Client timezone offset in minutes (from JS getTimezoneOffset: positive=behind UTC, negative=ahead)
 	Providers     []string // Canonical provider filter (`claude-code`, `codex`). Empty = include all AllowedProviders.
-	Repos         []string // Repo names (owner/name form) to include. Empty = include no repo-tagged sessions unless IncludeNoRepo is true.
-	IncludeNoRepo bool     // When true, sessions without a repo_url are included alongside the Repos list.
+	Repos         []string // Repo names (owner/name form) to include. Empty/nil = include all repos (CF-506).
+	IncludeNoRepo bool     // Orthogonal to Repos: when true, sessions without a repo_url are also included.
 }
 
 // OrgAnalyticsResponse is the API response for organization analytics.

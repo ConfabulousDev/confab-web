@@ -1146,7 +1146,7 @@ Returns aggregated analytics across sessions **visible to the authenticated user
 | start_ts | integer | No | 7 days ago (UTC) | Start of date range as epoch seconds (inclusive, typically local midnight) |
 | end_ts | integer | No | tomorrow (UTC) | End of date range as epoch seconds (exclusive, typically local midnight of day after last day) |
 | tz_offset | integer | No | 0 | Client timezone offset in minutes (from JS `getTimezoneOffset()`; positive = behind UTC, e.g. 480 for PST) |
-| repos | string | No | all | Comma-separated repo names to filter |
+| repos | string | No | all | Comma-separated repo names to filter. Omitted/empty = include all repos. |
 | include_no_repo | boolean | No | true | Include sessions without a git repo |
 | provider | string | No | all | Comma-separated canonical AI providers (`claude-code`, `codex`). Case-insensitive; the legacy DB form `Claude Code` is rejected on the wire. Returns `400` for unknown values. Omitted/empty aggregates across all providers. |
 | owner | string | No | all | Comma-separated owner emails to narrow the visible set (CF-495). Case-insensitive. **Privacy invariant**: narrows within the visible set; cannot broaden access. `?owner=ghost@x.com` for an owner the caller can't see returns zero rows (no 403, no existence leak). Omitted/empty aggregates across all visible owners. Max 50 values. |
@@ -1324,8 +1324,8 @@ Returns per-user aggregated analytics across all sessions in the organization. R
 | end_ts | integer | No | tomorrow (UTC) | End of date range as epoch seconds (exclusive) |
 | tz_offset | integer | No | 0 | Client timezone offset in minutes |
 | provider | string | No | (all) | Comma-separated canonical providers (`claude-code`, `codex`). Case-insensitive. Omitted/empty = aggregate across all providers. Legacy `Claude Code` rows fold into `claude-code` automatically. |
-| repos | string | No | (none) | Comma-separated repo names (`owner/name` form) to include. Empty/omitted matches **no** repo-tagged sessions — pass every repo (e.g. via `/org/repos`) to include all repo-tagged sessions. |
-| include_no_repo | boolean | No | `true` | Whether to include sessions that have no `repo_url` in `git_info`, independent of the `repos` list. The frontend OrgPage auto-selects all known repos on first load so the default user experience is "everything"; this endpoint itself is strict. |
+| repos | string | No | all | Comma-separated repo names (`owner/name` form) to include. Omitted/empty = include all repos. |
+| include_no_repo | boolean | No | `true` | Whether to include sessions that have no `repo_url` in `git_info`, independent of the `repos` list. |
 
 **Constraints:**
 - Maximum date range: 90 days

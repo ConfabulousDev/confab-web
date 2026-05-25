@@ -3,15 +3,19 @@ package org_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
+	"github.com/shopspring/decimal"
 )
 
 // =============================================================================
@@ -411,6 +415,123 @@ func TestHandleGetTrends_RevokedShareNoLongerAccessible(t *testing.T) {
 	got := decodeTrends(t, resp)
 	if got.SessionCount != 0 {
 		t.Errorf("revoked share: session_count = %d, want 0", got.SessionCount)
+	}
+}
+
+// TestHandleGetTrends_EmptyReposEqualsAllRepos (CF-506) pins the new wire
+// contract: GET /api/v1/trends with no `repos` param returns the same
+// aggregates as GET ...&repos=<every-available-repo>. With this contract the
+// frontend can stop auto-stuffing every repo into the URL on mount.
+func TestHandleGetTrends_EmptyReposEqualsAllRepos(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "cf506-trends@vis.test", "CF-506 Trends")
+	sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+	store := analytics.NewStore(env.DB.Conn())
+	now := time.Now().UTC()
+	// seed creates a session (with or without git_info, per repoURL) and the
+	// tokens + conversation cards it needs to qualify for the trends aggregate.
+	seed := func(externalID, repoURL string, inputTokens int64, cost float64) {
+		t.Helper()
+		var sid string
+		if repoURL == "" {
+			sid = testutil.CreateTestSession(t, env, user.ID, externalID)
+		} else {
+			sid = testutil.CreateTestSessionWithGitInfo(t, env, user.ID, externalID, repoURL)
+		}
+		assistantMs := int64(10000)
+		userMs := int64(20000)
+		err := store.UpsertCards(env.Ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:        sid,
+				Version:          analytics.TokensCardVersion,
+				ComputedAt:       now,
+				UpToLine:         100,
+				InputTokens:      inputTokens,
+				EstimatedCostUSD: decimal.NewFromFloat(cost),
+			},
+			Conversation: &analytics.ConversationCardRecord{
+				SessionID:                sid,
+				Version:                  analytics.ConversationCardVersion,
+				ComputedAt:               now,
+				UpToLine:                 100,
+				TotalAssistantDurationMs: &assistantMs,
+				TotalUserDurationMs:      &userMs,
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sid, err)
+		}
+	}
+	seed("cf506-tr-a", "https://github.com/ConfabulousDev/confab-web.git", 1000, 2.00)
+	seed("cf506-tr-b", "git@github.com:ConfabulousDev/cli.git", 2000, 3.00)
+	seed("cf506-tr-norepo", "", 3000, 5.00)
+
+	ts := setupTestServerWithEnv(t, env)
+	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+	trendsURL := func(extra url.Values) string {
+		v := url.Values{}
+		v.Set("start_ts", fmt.Sprintf("%d", now.Add(-7*24*time.Hour).Unix()))
+		v.Set("end_ts", fmt.Sprintf("%d", now.Add(24*time.Hour).Unix()))
+		v.Set("tz_offset", "0")
+		v.Set("include_no_repo", "true")
+		for k, vals := range extra {
+			for _, vv := range vals {
+				v.Add(k, vv)
+			}
+		}
+		return "/api/v1/trends?" + v.Encode()
+	}
+
+	get := func(extra url.Values) *analytics.TrendsResponse {
+		t.Helper()
+		resp, err := client.Get(trendsURL(extra))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+		return decodeTrends(t, resp)
+	}
+
+	empty := get(url.Values{})
+	explicit := get(url.Values{"repos": {"ConfabulousDev/confab-web,ConfabulousDev/cli"}})
+
+	if empty.SessionCount != explicit.SessionCount {
+		t.Errorf("session_count empty=%d explicit=%d, want equal", empty.SessionCount, explicit.SessionCount)
+	}
+	if empty.Cards.Tokens == nil || explicit.Cards.Tokens == nil {
+		t.Fatalf("Tokens card nil — empty=%v explicit=%v", empty.Cards.Tokens, explicit.Cards.Tokens)
+	}
+	if empty.Cards.Tokens.TotalCostUSD != explicit.Cards.Tokens.TotalCostUSD {
+		t.Errorf("tokens.total_cost_usd empty=%s explicit=%s, want equal",
+			empty.Cards.Tokens.TotalCostUSD, explicit.Cards.Tokens.TotalCostUSD)
+	}
+	if len(empty.ProvidersPresent) != len(explicit.ProvidersPresent) {
+		t.Errorf("providers_present empty=%v explicit=%v, want equal length",
+			empty.ProvidersPresent, explicit.ProvidersPresent)
+	} else {
+		for i := range empty.ProvidersPresent {
+			if empty.ProvidersPresent[i] != explicit.ProvidersPresent[i] {
+				t.Errorf("providers_present[%d] empty=%q explicit=%q",
+					i, empty.ProvidersPresent[i], explicit.ProvidersPresent[i])
+			}
+		}
+	}
+	// Sanity: 3 sessions seeded, all should be aggregated.
+	if empty.SessionCount != 3 {
+		t.Errorf("session_count = %d, want 3 (the seed has 3 sessions)", empty.SessionCount)
+	}
+	if empty.Cards.Tokens.TotalInputTokens != 6000 {
+		t.Errorf("tokens.total_input_tokens = %d, want 6000 (1000+2000+3000)",
+			empty.Cards.Tokens.TotalInputTokens)
 	}
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAuth, useDocumentTitle, useTrends, useURLFilters } from '@/hooks';
 import type { URLFiltersConfig } from '@/hooks';
 import { getDefaultDateRange } from '@/utils';
@@ -50,33 +50,6 @@ function TrendsPage() {
 
   const availableRepos = useMemo(() => data?.filter_options.repos ?? [], [data]);
   const availableOwners = useMemo(() => data?.filter_options.owners ?? [], [data]);
-
-  // Auto-select all repos on initial load if no explicit repo params in URL.
-  // Preserved from before CF-495 — only the source of the list changed.
-  const hadExplicitRepoParams = useRef(filters.repos.length > 0);
-  const hasAutoSelectedRepos = useRef(false);
-  const refetchRef = useRef(refetch);
-  useEffect(() => {
-    refetchRef.current = refetch;
-  }, [refetch]);
-
-  useEffect(() => {
-    if (hasAutoSelectedRepos.current) return;
-    if (availableRepos.length === 0) return;
-    if (hadExplicitRepoParams.current) return;
-
-    hasAutoSelectedRepos.current = true;
-    const newRepos = [...availableRepos];
-    setAll({ repos: newRepos }, { replace: true });
-    refetchRef.current({
-      startDate: filters.dateRange.startDate,
-      endDate: filters.dateRange.endDate,
-      repos: newRepos,
-      includeNoRepo: filters.includeNoRepo,
-      providers: filters.providers,
-      owners: filters.owners,
-    });
-  }, [availableRepos, filters.dateRange, filters.includeNoRepo, filters.providers, filters.owners, setAll]);
 
   const handleFilterChange = useCallback((newFilters: TrendsFiltersValue) => {
     setAll(newFilters);

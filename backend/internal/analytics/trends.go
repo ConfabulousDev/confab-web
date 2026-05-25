@@ -85,6 +85,7 @@ func buildTrendsQuery(userID int64, req TrendsRequest) trendsQuery {
 				AND s.first_seen < to_timestamp($3)
 				AND (
 					` + db.RepoMatchExpr("s", "$4::text[]") + `
+					OR (COALESCE(cardinality($4::text[]), 0) = 0 AND COALESCE(s.git_info->>'repo_url', '') <> '')
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 				AND s.session_type = ANY($7::text[])` + ownerClause + `

@@ -329,6 +329,107 @@ func TestOrgAnalytics_HTTP_WireContract(t *testing.T) {
 	})
 }
 
+// TestOrgAnalytics_HTTP_EmptyReposEqualsAllRepos (CF-506) pins the new
+// contract: GET /api/v1/org/analytics with no `repos` param returns the same
+// aggregates as GET ...&repos=<every-available-repo>. With this contract the
+// frontend can stop auto-stuffing every repo into the URL on mount.
+func TestOrgAnalytics_HTTP_EmptyReposEqualsAllRepos(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	testutil.SetEnvForTest(t, "ENABLE_ORG_ANALYTICS", "true")
+
+	user := testutil.CreateTestUser(t, env, "cf506@test.com", "CF-506 User")
+	sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+	store := analytics.NewStore(env.DB.Conn())
+	now := time.Now().UTC()
+	seedWithRepo := func(externalID, repoURL string, cost float64) {
+		t.Helper()
+		sid := testutil.CreateTestSessionWithGitInfo(t, env, user.ID, externalID, repoURL)
+		assistantMs := int64(10000)
+		userMs := int64(20000)
+		err := store.UpsertCards(env.Ctx, &analytics.Cards{
+			Tokens: &analytics.TokensCardRecord{
+				SessionID:        sid,
+				Version:          analytics.TokensCardVersion,
+				ComputedAt:       now,
+				UpToLine:         100,
+				EstimatedCostUSD: decimal.NewFromFloat(cost),
+			},
+			Conversation: &analytics.ConversationCardRecord{
+				SessionID:                sid,
+				Version:                  analytics.ConversationCardVersion,
+				ComputedAt:               now,
+				UpToLine:                 100,
+				TotalAssistantDurationMs: &assistantMs,
+				TotalUserDurationMs:      &userMs,
+			},
+		})
+		if err != nil {
+			t.Fatalf("UpsertCards (%s): %v", sid, err)
+		}
+	}
+	seedWithRepo("cf506-a", "https://github.com/ConfabulousDev/confab-web.git", 2.00)
+	seedWithRepo("cf506-b", "git@github.com:ConfabulousDev/cli.git", 3.00)
+	seedOrgSession(t, env, user.ID, "cf506-norepo", "claude-code", 5.00, 10000, 20000)
+
+	ts := setupTestServerWithEnv(t, env)
+	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+	get := func(extra url.Values) analytics.OrgAnalyticsResponse {
+		t.Helper()
+		extra.Set("include_no_repo", "true")
+		resp, err := client.Get(orgAnalyticsURL(extra))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+		var out analytics.OrgAnalyticsResponse
+		testutil.ParseJSON(t, resp, &out)
+		return out
+	}
+
+	empty := get(url.Values{})
+	explicit := get(url.Values{"repos": {"ConfabulousDev/confab-web,ConfabulousDev/cli"}})
+
+	if len(empty.Users) != 1 || len(explicit.Users) != 1 {
+		t.Fatalf("Users length empty=%d explicit=%d, want 1 each", len(empty.Users), len(explicit.Users))
+	}
+	if empty.Users[0].SessionCount != explicit.Users[0].SessionCount {
+		t.Errorf("SessionCount empty=%d explicit=%d, want equal",
+			empty.Users[0].SessionCount, explicit.Users[0].SessionCount)
+	}
+	if empty.Users[0].TotalCostUSD != explicit.Users[0].TotalCostUSD {
+		t.Errorf("TotalCostUSD empty=%s explicit=%s, want equal",
+			empty.Users[0].TotalCostUSD, explicit.Users[0].TotalCostUSD)
+	}
+	if len(empty.ProvidersPresent) != len(explicit.ProvidersPresent) {
+		t.Errorf("ProvidersPresent empty=%v explicit=%v, want equal length",
+			empty.ProvidersPresent, explicit.ProvidersPresent)
+	} else {
+		for i := range empty.ProvidersPresent {
+			if empty.ProvidersPresent[i] != explicit.ProvidersPresent[i] {
+				t.Errorf("ProvidersPresent[%d] empty=%q explicit=%q",
+					i, empty.ProvidersPresent[i], explicit.ProvidersPresent[i])
+			}
+		}
+	}
+	// Sanity: the seed produced 3 sessions and the result must reflect all 3
+	// (otherwise both calls could trivially agree on zero).
+	if empty.Users[0].SessionCount != 3 {
+		t.Errorf("SessionCount = %d, want 3 (the seed has 3 sessions)", empty.Users[0].SessionCount)
+	}
+	if empty.Users[0].TotalCostUSD != "10.00" {
+		t.Errorf("TotalCostUSD = %s, want 10.00 (2 + 3 + 5)", empty.Users[0].TotalCostUSD)
+	}
+}
+
 // TestOrgRepos_HTTP_Integration covers the new `/api/v1/org/repos` endpoint:
 // org-wide DISTINCT repos in the date range, sorted, deduped across users,
 // gated on ENABLE_ORG_ANALYTICS.

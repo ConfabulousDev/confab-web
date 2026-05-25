@@ -476,7 +476,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		}
 	})
 
-	t.Run("empty repos + includeNoRepo=true should return only no-repo sessions", func(t *testing.T) {
+	t.Run("empty repos + includeNoRepo=true returns ALL sessions (CF-506)", func(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartTS:       startTS,
 			EndTS:         endTS,
@@ -488,16 +488,16 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetTrends failed: %v", err)
 		}
-		if response.SessionCount != 1 {
-			t.Errorf("SessionCount = %d, want 1 (only no-repo session)", response.SessionCount)
+		if response.SessionCount != 3 {
+			t.Errorf("SessionCount = %d, want 3 (all sessions — empty repos means no repo filter)", response.SessionCount)
 		}
-		// Total tokens: 3000 (no-repo session only)
-		if response.Cards.Tokens.TotalInputTokens != 3000 {
-			t.Errorf("TotalInputTokens = %d, want 3000", response.Cards.Tokens.TotalInputTokens)
+		// Total tokens: 1000+2000+3000 = 6000 (repo1 + repo2 + no-repo)
+		if response.Cards.Tokens.TotalInputTokens != 6000 {
+			t.Errorf("TotalInputTokens = %d, want 6000", response.Cards.Tokens.TotalInputTokens)
 		}
 	})
 
-	t.Run("empty repos + includeNoRepo=false should return no sessions", func(t *testing.T) {
+	t.Run("empty repos + includeNoRepo=false returns all sessions WITH a repo (CF-506)", func(t *testing.T) {
 		req := analytics.TrendsRequest{
 			StartTS:       startTS,
 			EndTS:         endTS,
@@ -509,8 +509,12 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetTrends failed: %v", err)
 		}
-		if response.SessionCount != 0 {
-			t.Errorf("SessionCount = %d, want 0 (no repos specified, includeNoRepo=false)", response.SessionCount)
+		if response.SessionCount != 2 {
+			t.Errorf("SessionCount = %d, want 2 (every repo-tagged session)", response.SessionCount)
+		}
+		// Total tokens: 1000+2000 = 3000 (repo1 + repo2)
+		if response.Cards.Tokens.TotalInputTokens != 3000 {
+			t.Errorf("TotalInputTokens = %d, want 3000", response.Cards.Tokens.TotalInputTokens)
 		}
 	})
 

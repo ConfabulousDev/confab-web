@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDocumentTitle, useOrgAnalytics, useURLFilters } from '@/hooks';
 import type { URLFiltersConfig } from '@/hooks';
 import { orgReposAPI } from '@/services/api';
@@ -22,19 +22,9 @@ function OrgPage() {
 
   const { filters, setAll } = useURLFilters<OrgFiltersValue>(config);
 
-  // `availableRepos === null` means the /org/repos call is still in flight (or
-  // failed); `[]` means "resolved, no repos in range". We MUST distinguish the
-  // two: firing useOrgAnalytics with the URL's default `repos: []` before
-  // /org/repos lands would render no-repo-only data for a beat, then flip to
-  // correct data once auto-select-all kicks in. Reviewer flagged the flicker
-  // + the wasted query.
-  const [availableRepos, setAvailableRepos] = useState<string[] | null>(null);
+  const [availableRepos, setAvailableRepos] = useState<string[]>([]);
   const [reposError, setReposError] = useState<Error | null>(null);
   useEffect(() => {
-    // Note: not clearing prior state synchronously here — the lint rule flags
-    // it, and the resolve/catch handlers overwrite both. The visible effect is
-    // that the repo dropdown holds the previous range's list during refetch,
-    // which is fine (TrendsPage behaves the same way).
     let cancelled = false;
     orgReposAPI
       .get({ startDate: filters.dateRange.startDate, endDate: filters.dateRange.endDate })
@@ -53,41 +43,13 @@ function OrgPage() {
     };
   }, [filters.dateRange.startDate, filters.dateRange.endDate]);
 
-  // Captured once at mount: "did the URL pin explicit repo params?" Drives the
-  // auto-select-all-on-load decision below. useState (not useRef) so we can
-  // read it during render to gate `ready` without tripping React's ref rules.
-  const [hadExplicitRepoParams] = useState(() => filters.repos.length > 0);
-  const hasAutoSelectedRepos = useRef(false);
-  useEffect(() => {
-    if (hasAutoSelectedRepos.current) return;
-    if (availableRepos === null) return;
-    if (hadExplicitRepoParams) {
-      hasAutoSelectedRepos.current = true;
-      return;
-    }
-    hasAutoSelectedRepos.current = true;
-    if (availableRepos.length > 0) {
-      setAll({ repos: [...availableRepos] }, { replace: true });
-    }
-  }, [availableRepos, hadExplicitRepoParams, setAll]);
-
-  // Hold the data fetch until either (a) /org/repos has resolved and (if
-  // auto-selecting) repos have been written to the URL, or (b) the user
-  // landed with explicit `?repo=` params we can honor immediately.
-  const ready = hadExplicitRepoParams
-    ? true
-    : availableRepos !== null && (availableRepos.length === 0 || filters.repos.length > 0);
-
-  const { data, loading, error, refetch } = useOrgAnalytics(
-    {
-      startDate: filters.dateRange.startDate,
-      endDate: filters.dateRange.endDate,
-      providers: filters.providers,
-      repos: filters.repos,
-      includeNoRepo: filters.includeNoRepo,
-    },
-    { enabled: ready },
-  );
+  const { data, loading, error, refetch } = useOrgAnalytics({
+    startDate: filters.dateRange.startDate,
+    endDate: filters.dateRange.endDate,
+    providers: filters.providers,
+    repos: filters.repos,
+    includeNoRepo: filters.includeNoRepo,
+  });
 
   // Narrow the provider dropdown to providers with data in range once the
   // first response lands; before then, offer the full canonical list so the
@@ -108,7 +70,7 @@ function OrgPage() {
     });
   }, [setAll, refetch]);
 
-  const isInitialLoading = !data && !error && (loading || !ready);
+  const isInitialLoading = !data && !error && loading;
   const showEmpty = !loading && data && data.users.every(u => u.session_count === 0);
   const hasData = !loading && data && data.users.length > 0 && !showEmpty;
 
@@ -120,7 +82,7 @@ function OrgPage() {
           actions={
             <OrgFilters
               availableProviders={availableProviders}
-              availableRepos={availableRepos ?? []}
+              availableRepos={availableRepos}
               value={filters}
               onChange={handleFilterChange}
             />

@@ -108,6 +108,7 @@ func (s *Store) orgUserAggregates(ctx context.Context, req OrgAnalyticsRequest, 
 				AND s.session_type = ANY($3::text[])
 				AND (
 					` + db.RepoMatchExpr("s", "$4::text[]") + `
+					OR (COALESCE(cardinality($4::text[]), 0) = 0 AND COALESCE(s.git_info->>'repo_url', '') <> '')
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
 		) qs ON true
@@ -204,6 +205,7 @@ func (s *Store) orgProvidersPresent(ctx context.Context, req OrgAnalyticsRequest
 			AND s.session_type = ANY($3::text[])
 			AND (
 				` + db.RepoMatchExpr("s", "$4::text[]") + `
+				OR (COALESCE(cardinality($4::text[]), 0) = 0 AND COALESCE(s.git_info->>'repo_url', '') <> '')
 				OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 			)
 	`
