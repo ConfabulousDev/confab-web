@@ -4,6 +4,8 @@ Deploy Confabulous — self-hosted analytics for your Claude Code and Codex sess
 
 This guide walks you through setup step by step. For the full environment variable reference, see [CONFIGURATION.md](CONFIGURATION.md). For security details, see [backend/SECURITY.md](backend/SECURITY.md).
 
+> **Worked example:** [`confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) — live compose, Caddyfile, and OpenTofu behind [demo.confabulous.dev](https://demo.confabulous.dev) on a $7/mo Linode. Tracks this guide.
+
 ---
 
 ## Prerequisites

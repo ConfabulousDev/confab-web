@@ -86,7 +86,10 @@ Configuration is simple — everything is controlled through environment variabl
 
 ## Deploying to a Cloud Host
 
-Prefer to self-host on a cloud provider rather than your own hardware? See [`deploy-to-fly.sh`](deploy-to-fly.sh) and [`fly.toml`](fly.toml) for a tested Fly.io + Neon.tech deployment — the same stack that powers [confabulous.dev](https://confabulous.dev).
+Two production reference deployments:
+
+- **Linode + Docker Compose + Caddy** — [`confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) (OpenTofu, compose, Caddyfile, deploy script) powers [demo.confabulous.dev](https://demo.confabulous.dev) for $7/mo.
+- **Fly.io + Neon** — [`deploy-to-fly.sh`](deploy-to-fly.sh) and [`fly.toml`](fly.toml) power [confabulous.dev](https://confabulous.dev).
 
 ## Developer Docs
 
