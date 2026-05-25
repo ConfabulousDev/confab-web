@@ -27,9 +27,19 @@ mkdir confabulous && cd confabulous
 **2. Create `docker-compose.yml`:**
 
 ```yaml
+# Caps each container's logs at 250 MB (5 × 50 MB) so they can't fill the
+# host disk. Referenced on every service via `*default-logging`.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: confab
       POSTGRES_PASSWORD: confab
@@ -44,6 +54,8 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
+    logging: *default-logging
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -58,6 +70,7 @@ services:
 
   minio-setup:
     image: minio/mc:latest
+    logging: *default-logging
     depends_on:
       minio:
         condition: service_healthy
@@ -70,6 +83,7 @@ services:
 
   migrate:
     image: ghcr.io/confabulousdev/confab-web:latest
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,6 +93,8 @@ services:
 
   app:
     image: ghcr.io/confabulousdev/confab-web:latest
+    restart: unless-stopped
+    logging: *default-logging
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -107,6 +123,8 @@ services:
 
   worker:
     image: ghcr.io/confabulousdev/confab-web:latest
+    restart: unless-stopped
+    logging: *default-logging
     command: ["./confab", "worker"]
     depends_on:
       migrate:
@@ -162,6 +180,35 @@ openssl rand -base64 32
 ```
 
 Set the result as `CSRF_SECRET_KEY` in the `app` service. Choose a strong admin password and update `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD`.
+
+The bundled `postgres` and `minio` services still ship with their Quickstart defaults (`confab` / `minioadmin`). Both are only reachable on the docker network, so exposure is bounded — but default credentials are bad hygiene. Generate replacements:
+
+```bash
+openssl rand -base64 24
+```
+
+Put them in a `.env` file next to `docker-compose.yml`:
+
+```bash
+# .env
+POSTGRES_PASSWORD=<random>
+MINIO_ROOT_USER=<random>
+MINIO_ROOT_PASSWORD=<random>
+```
+
+Reference each variable as `${VAR}` wherever the literal appears in `docker-compose.yml`. For example:
+
+```yaml
+# docker-compose.yml (excerpt)
+postgres:
+  environment:
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+app:
+  environment:
+    DATABASE_URL: postgres://confab:${POSTGRES_PASSWORD}@postgres:5432/confab?sslmode=disable
+```
+
+Repeat for `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` in the `minio`, `minio-setup`, `app`, and `worker` services.
 
 Remove or set to `"false"`:
 
@@ -226,13 +273,16 @@ BUCKET_NAME: your-bucket-name
 ```yaml
   caddy:
     image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging   # defined in the Quickstart compose above
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      - caddy_logs:/var/log/caddy
     depends_on:
       - app
 ```
@@ -245,6 +295,7 @@ volumes:
   minio_data:
   caddy_data:
   caddy_config:
+  caddy_logs:
 ```
 
 **2. Remove the port mapping** from the `app` service (Caddy handles external traffic):
@@ -261,10 +312,20 @@ volumes:
 ```
 confab.example.com {
     reverse_proxy app:8080
+
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 50mb
+            roll_keep 5
+            roll_keep_for 168h    # 7 days
+        }
+    }
+
+    encode gzip zstd
 }
 ```
 
-Replace `confab.example.com` with your domain.
+Replace `confab.example.com` with your domain. The `log` block rotates access logs in the `caddy_logs` volume by size and age; `encode gzip zstd` enables response compression.
 
 **4. Update environment variables** in the `app` service:
 
@@ -344,12 +405,22 @@ OIDC_DISPLAY_NAME: SSO  # Controls button text ("Continue with ...")
 
 All four variables (`OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL`) must be set to enable OIDC.
 
-### Email Domain Restriction
+---
 
-Restrict login to specific email domains (applies to all auth methods):
+## Single-Tenant / Single-Org Lockdown
+
+For an internal-only instance with no public signups, two variables lock the deployment down. Set both for a fully closed instance.
+
+**Restrict who can log in** (applies to password, OAuth, and OIDC):
 
 ```yaml
 ALLOWED_EMAIL_DOMAINS: company.com,partner.com
+```
+
+**Block new registrations** (existing users keep working; new sign-ups are rejected):
+
+```yaml
+MAX_USERS: "0"
 ```
 
 ---
@@ -362,6 +433,7 @@ Configure how your team interacts with sessions and sharing.
 |----------|-------------|
 | `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | Set to `"true"` to make every session visible to all authenticated users. Useful for small teams that want full transparency. |
 | `ENABLE_SHARE_CREATION` | Set to `"true"` to allow users to create external share links. |
+| `ENABLE_ORG_ANALYTICS` | Set to `"true"` to expose org-wide per-user analytics (`/admin/...`) to every authenticated user — same visibility model as `SHARE_ALL_SESSIONS_TO_AUTHENTICATED`. See [Organization Analytics in backend/API.md](backend/API.md#organization-analytics) for the privacy implications. |
 | `MAX_USERS` | Maximum registered users (default: `50`). Set to `"0"` to block new registrations. |
 | `SUPER_ADMIN_EMAILS` | Comma-separated emails with access to the admin panel at `/admin/users`. |
 
@@ -488,6 +560,7 @@ Before exposing your instance to the internet:
 
 - [ ] `INSECURE_DEV_MODE` is unset or `"false"`
 - [ ] `CSRF_SECRET_KEY` is a unique random string (32+ characters)
+- [ ] `POSTGRES_PASSWORD` and `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` are random values, not the Quickstart defaults
 - [ ] `ALLOWED_ORIGINS` contains only your domain
 - [ ] HTTPS is enforced (via Caddy or another reverse proxy)
 - [ ] Bootstrap credentials (`ADMIN_BOOTSTRAP_*`) are removed after setup
