@@ -17,7 +17,6 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | File | Role |
 |------|------|
 | `Alert.tsx` | Dismissible alert banner (success/error/info) |
-| `AnalyticsModal.tsx` | Modal for viewing session analytics details |
 | `Button.tsx` | Styled button with variants |
 | `CardGrid.module.css` | Grid layout for analytics cards |
 | `CardGrid.tsx` | CSS grid container for rendering card layouts |
@@ -30,35 +29,25 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `Footer.tsx` | App footer (SaaS mode only) |
 | `FormField.tsx` | Form field wrapper with label and validation error display |
 | `Header.tsx` | App header with navigation and auth state. Renders a "demo" badge next to the logo when `window.__DEMO_IDENTITY__` is set (CF-483); no badge in normal deployments. Sessions, Trends, and TILs nav links pre-fill `?owner=<your email>` for normal users (CF-495 added Trends to the pattern; nav label renamed "Personal Trends" → "Trends"); the demo identity skips the pre-filter so the page isn't collapsed to zero rows. |
-| `HeroCards.tsx` | Landing page hero section cards |
-| `HowItWorksModal.tsx` | Onboarding modal explaining the product |
+| `HeroCards.tsx` | Landing page hero grid (CF-503). Each card has a fixed icon + title + description and a right-aligned link footer: `Demo →` (when a deep-link exists on `demo.confabulous.dev`) followed by one or more docs links into `docs.confabulous.dev`. Multi-provider is the only 3-link card (`Demo →   Claude Code →   Codex →`). Every link opens in a new tab with `rel="noopener noreferrer"` and an `aria-label` of `'{card title}: {link label}[ docs]'` to disambiguate the 20+ identically-named links for screen readers. Cards are not click targets. |
 | `icons.tsx` | SVG icon components (ClaudeCodeIcon, CodexIcon, GitHubIcon, etc.) |
 | `providerIcon.ts` | `getProviderIcon(provider)` -- delegates to `getProviderMetadataOrFallback(provider, 'neutral')` and falls back to `RobotIcon` when no metadata matches (CF-366). Canonical and legacy values (`'claude-code'`, `'codex'`, `'Claude Code'`, `'CLAUDE-CODE'`) still resolve to their brand icon; truly unknown values render the neutral glyph rather than impersonating Claude. Lives in its own file to keep `icons.tsx` JSX-only for HMR fast-refresh |
 | `LoadingSkeleton.tsx` | Animated loading placeholder |
 | `Modal.tsx` | Base modal component with backdrop and close handling |
-| `MultiProviderModal.tsx` | Hero card modal listing supported AI coding providers (Claude Code, Codex, OpenCode coming) |
-| `OrgCostMetricsModal.tsx` | Hero card modal previewing the org-level per-user cost and time-breakdown view |
 | `PageHeader.tsx` | Page-level header with title and optional actions |
 | `PageSidebar.tsx` | Page-level sidebar for filters and navigation |
 | `Pagination.tsx` | Cursor-based pagination controls (prev/next) |
-| `PRLinkingModal.tsx` | Modal for linking GitHub PRs to sessions |
 | `ProtectedRoute.tsx` | Route wrapper that requires authentication |
 | `Quickstart.tsx` | Quickstart guide component |
 | `QuickstartCTA.tsx` | Call-to-action directing users to quickstart |
-| `QuickstartModal.tsx` | Modal with quickstart instructions |
+| `QuickstartModal.tsx` | Modal wrapping `Quickstart` (rendered by `QuickstartCTA` on the empty Sessions page) |
 | `ReadOnlyToast.tsx` | CF-483 toast that listens for the `confab:read-only` CustomEvent (dispatched by `services/api.ts` when an API call returns the `read_only_user` structured 403) and shows a transient "This is a read-only demo." message. Single toast at a time; re-firing while visible resets the dismiss timer (debounced replace). |
 | `RelativeTime.tsx` | Auto-updating relative timestamp display |
-| `RetroModal.tsx` | Hero card modal explaining the `/retro` skill (load any past session into a new one, even across providers / teammates; synthesize a reusable skill) |
-| `ReviewModal.tsx` | Modal for reviewing session details |
 | `ScrollNavButtons.tsx` | Floating scroll-to-top/bottom buttons |
-| `SelfHostedModal.tsx` | Modal with self-hosted setup instructions |
 | `ServerError.tsx` | Full-page server error state with auto-retry |
 | `SessionEmptyState.tsx` | Empty state when no sessions exist |
 | `ShareDialog.tsx` | Dialog for sharing sessions (public/private, recipients) |
-| `ShareModal.tsx` | Modal wrapper around ShareDialog |
-| `SmartRecapModal.tsx` | Modal for displaying AI-generated smart recap |
 | `SortableHeader.tsx` | Table header with sort direction indicator |
-| `ThemedImage.tsx` | Image component that swaps src based on light/dark theme |
 | `ThemeToggle.tsx` | Light/dark theme toggle button |
 | `UpdateBadge.tsx` | Container: reads `version` from `useAppConfig()` and decides whether to show. Mounted in `Header.tsx` for authenticated users only |
 | `UpdateBadgeView.tsx` | Pure presentational pill: small "Update available" link to the latest GitHub release; tooltip shows `current → latest` (or `(dev) → latest` when running unversioned). Stories drive this directly so visuals are stable without mocking hooks |

@@ -26,3 +26,7 @@ Each Claude Code session produces these cards:
 ## Pricing
 
 Confabulous tracks pricing for every published Claude model. New models are added to the pricing table as Anthropic publishes them.
+
+## Other supported providers
+
+Confabulous treats every provider as a first-class citizen. [Codex](/providers/codex/) is also supported today. **OpenCode is next.** New providers slot into the same sync, storage, and analytics pipeline.
