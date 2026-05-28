@@ -25,7 +25,7 @@ Before adding new logic, check the package README for an existing helper. Grep t
 
 - `backend/internal/analytics/` — analytics compute, per-provider dispatch, smart recap, trends, org analytics, search index.
 - `backend/internal/auth/` — auth middleware, OAuth providers, demo identity, read-only enforcement.
-- `backend/internal/db/` — shared DB types/helpers, session visibility CTE, repo-filter SQL fragments, fork→root resolver, codex sidecar.
+- `backend/internal/db/` — shared DB types/helpers, session visibility CTE, repo-filter SQL fragments (incl. read-time fork→upstream resolution from per-session `git_info`), codex sidecar.
 - `backend/internal/models/` — domain types and provider identity (`NormalizeProvider`, `AllowedProviders`, legacy alias map).
 - `frontend/src/providers/` — per-provider transcript adapters behind a shared `ProviderAdapter` interface; `frontend/src/utils/providers.ts` — cosmetic registry (icon/label/color).
 - `frontend/src/utils/tokenStats.ts` — canonical `TokenUsage` shape and provider-keyed pricing table.

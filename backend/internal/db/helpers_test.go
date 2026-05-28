@@ -18,7 +18,13 @@ func TestExtractRepoName(t *testing.T) {
 		{"ssh with .git", "git@github.com:ConfabulousDev/confab.git", "ConfabulousDev/confab"},
 		{"ssh without .git", "git@github.com:ConfabulousDev/confab", "ConfabulousDev/confab"},
 		{"gitlab https", "https://gitlab.com/group/subgroup/repo.git", "subgroup/repo"},
-		{"trailing slash falls through", "just-a-string", "just-a-string"},
+		{"non-url string falls through", "just-a-string", "just-a-string"},
+		// CF-509: trailing slashes must not leak into the result.
+		{"https trailing slash", "https://github.com/ConfabulousDev/confab-web/", "ConfabulousDev/confab-web"},
+		{"https double trailing slash", "https://github.com/ConfabulousDev/confab-web//", "ConfabulousDev/confab-web"},
+		{"ssh trailing slash", "git@github.com:ConfabulousDev/confab/", "ConfabulousDev/confab"},
+		{"https .git then slash", "https://github.com/ConfabulousDev/confab-web.git/", "ConfabulousDev/confab-web"},
+		{"bare repo trailing slash falls through", "repo/", "repo"},
 	}
 
 	for _, c := range cases {

@@ -180,79 +180,16 @@ func (s *Store) ListUserSessionsPaginated(ctx context.Context, userID int64, par
 	}, nil
 }
 
+// queryFilterOptions derives the repo/branch/owner filter dropdowns live from
+// the viewer's visible sessions. CF-495: routes through db.VisibleSessionsCTE
+// so the visibility predicate has a single source of truth (and, with
+// ShareAllSessions, the share-all variant returns every session — no separate
+// global path or lookup tables). The wrapper SELECT DISTINCT collapses the
+// UNION-ALL duplicates emitted by the helper (e.g. a recipient who also has a
+// system share to the same session).
 func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.SessionFilterOptions, error) {
-	if s.DB.ShareAllSessions {
-		return s.queryFilterOptionsGlobal(ctx)
-	}
-	return s.queryFilterOptionsScoped(ctx, userID)
-}
-
-func (s *Store) queryFilterOptionsGlobal(ctx context.Context) (db.SessionFilterOptions, error) {
-	opts := db.SessionFilterOptions{
-		Repos:     make([]string, 0),
-		Branches:  make([]string, 0),
-		Owners:    make([]string, 0),
-		Providers: models.CanonicalProviders,
-	}
-
-	rows, err := s.conn().QueryContext(ctx, "SELECT DISTINCT COALESCE(root_name, repo_name) FROM session_repos ORDER BY 1")
-	if err != nil {
-		return opts, fmt.Errorf("failed to query session_repos: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return opts, fmt.Errorf("failed to scan repo: %w", err)
-		}
-		opts.Repos = append(opts.Repos, name)
-	}
-	if err := rows.Err(); err != nil {
-		return opts, fmt.Errorf("error iterating repos: %w", err)
-	}
-
-	rows, err = s.conn().QueryContext(ctx, "SELECT branch_name FROM session_branches ORDER BY branch_name")
-	if err != nil {
-		return opts, fmt.Errorf("failed to query session_branches: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return opts, fmt.Errorf("failed to scan branch: %w", err)
-		}
-		opts.Branches = append(opts.Branches, name)
-	}
-	if err := rows.Err(); err != nil {
-		return opts, fmt.Errorf("error iterating branches: %w", err)
-	}
-
-	rows, err = s.conn().QueryContext(ctx, "SELECT LOWER(email) FROM users ORDER BY email")
-	if err != nil {
-		return opts, fmt.Errorf("failed to query users: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var email string
-		if err := rows.Scan(&email); err != nil {
-			return opts, fmt.Errorf("failed to scan user email: %w", err)
-		}
-		opts.Owners = append(opts.Owners, email)
-	}
-	if err := rows.Err(); err != nil {
-		return opts, fmt.Errorf("error iterating users: %w", err)
-	}
-
-	return opts, nil
-}
-
-func (s *Store) queryFilterOptionsScoped(ctx context.Context, userID int64) (db.SessionFilterOptions, error) {
-	// CF-495: routes through db.VisibleSessionsCTE so the visibility
-	// predicate has a single source of truth. The wrapper SELECT DISTINCT
-	// collapses the UNION-ALL duplicates emitted by the helper (e.g. a
-	// recipient who also has a system share to the same session).
 	query := `
-		WITH ` + db.VisibleSessionsCTE(false) + `,
+		WITH ` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,
 		visible AS (
 			SELECT DISTINCT vs.id, vs.user_id, vs.owner_email FROM visible_sessions vs
 		)

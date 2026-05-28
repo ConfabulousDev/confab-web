@@ -96,7 +96,7 @@ silently. Fields:
 | `author` | string | Optional commit author. |
 | `is_dirty` | bool | Optional working-tree-dirty flag. |
 | `remotes` | array | Optional list of git remotes (CF-494). Max 50 entries. Each entry: `name` (string, ≤256 chars, required, non-empty), `fetch_url` (string, ≤2048 chars), `push_url` (string, ≤2048 chars). At least one of `fetch_url`/`push_url` must be non-empty per entry. Malformed entries return 400. |
-| `tracking_remote` | string | Optional name of the entry in `remotes` that points to the upstream (CF-494). Max 256 chars. When set and resolvable, the backend stamps `session_repos.root_name` so the upstream is shown in the repo filter instead of the fork. Unknown name = logged warn, no 4xx. |
+| `tracking_remote` | string | Optional name of the entry in `remotes` that points to the upstream (CF-494). Max 256 chars. When set and resolvable, the backend resolves the upstream live at read time (`db.RepoRootExpr`) so it's shown in the repo filter instead of the fork (CF-510). Stored verbatim in `git_info`; nothing is precomputed. |
 
 **Deprecated fields (backward compatibility):**
 
@@ -1296,7 +1296,7 @@ Returns aggregated analytics across sessions **visible to the authenticated user
 | `cards.top_sessions.sessions[].provider` | string | Canonical provider value (`claude-code` or `codex`). Legacy `Claude Code` is normalized server-side. |
 | `cards.top_sessions.sessions[].estimated_cost_usd` | string | Session cost (decimal as string) |
 | `filter_options.owners` | string[] | Lowercased owner emails from the caller's visible-session set, alphabetical. **Static across active filters** — mirrors `SessionFilterOptions` shape on `/api/v1/sessions`. Drives the owner dropdown on TrendsPage without a side-call. CF-495. |
-| `filter_options.repos` | string[] | Repo names (`owner/name`) from the caller's visible-session set, alphabetical. Fork→root collapsed via `db.RepoRootExpr` (CF-491). Static across active filters. CF-495. |
+| `filter_options.repos` | string[] | Repo names (`owner/name`) from the caller's visible-session set, alphabetical. Fork→upstream collapsed via `db.RepoRootExpr`, resolved live per session from its own `git_info` (CF-510). Static across active filters. CF-495. |
 | `cards.top_sessions.sessions[].duration_ms` | int\|null | Session duration in milliseconds |
 | `cards.top_sessions.sessions[].git_repo` | string\|null | Extracted repo name (e.g., "org/repo") |
 

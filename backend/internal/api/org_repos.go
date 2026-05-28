@@ -48,8 +48,9 @@ func HandleGetOrgRepos(database *db.DB) http.HandlerFunc {
 		startLocal := time.Unix(dr.StartTS, 0).UTC().Add(-tzDuration)
 		endLocal := time.Unix(dr.EndTS, 0).UTC().Add(-tzDuration).Add(-24 * time.Hour) // EndTS is exclusive
 
-		// CF-491: collapse forks to their upstream root through session_repos.
-		// Pure-COALESCE form keeps repos with NULL root_name passing through.
+		// CF-510: collapse forks to their upstream root via db.RepoRootExpr,
+		// which resolves each session's upstream live from its own git_info.
+		// Sessions without an upstream signal pass through under their own repo.
 		query := `
 			SELECT DISTINCT ` + db.RepoRootExpr("s") + ` AS repo
 			FROM sessions s

@@ -27,7 +27,7 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 
 1. **New list filter**: Add a field to `db.SessionListParams`, then add the corresponding SQL clause in `buildPushdownFilters()`. Since CF-495 the pagination query is a single SQL shape (one `buildFilteredSessionsQuery` that wraps `db.VisibleSessionsCTE`), so there's only one query path to update.
 2. **New session field**: Add to `db.SessionListItem` or `db.SessionDetail` in the root `db/types.go`, then update the SELECT columns and `rows.Scan()` calls in the listing/detail queries.
-3. **New filter option dimension**: Add to `db.SessionFilterOptions`, then update both `queryFilterOptionsGlobal()` and `queryFilterOptionsScoped()`.
+3. **New filter option dimension**: Add to `db.SessionFilterOptions`, then update `queryFilterOptions()` (a single live path over `db.VisibleSessionsCTE(s.DB.ShareAllSessions)`).
 
 ## Invariants
 
@@ -37,8 +37,8 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 - `FindOrCreateSyncSession` uses an optimistic insert with unique-violation fallback to handle concurrent syncs for the same external ID.
 - Session uniqueness is `(user_id, session_type, external_id)`. New code writes the canonical `session_type` values `'claude-code'` and `'codex'`; legacy `'Claude Code'` rows persist **permanently** in OSS self-hosted installs (no one-time backfill is run). Read paths apply `models.NormalizeProvider` so the application layer always sees canonical values; see `internal/models/provider.go`.
 - `UpdateSyncFileState` increments `chunk_count` on each upsert; this is an estimate that may drift. The read path self-heals via `UpdateSyncFileChunkCount`.
-- Filter lookup tables (`session_repos`, `session_branches`) are upserted during sync via `upsertFilterLookups` for fast filter option queries.
-- **CF-491 fork→root collapsing**: `session_repos` carries optional `root_name` + `root_source` columns. When a sync chunk's PR link points to a different `owner/repo` than the session's extracted repo, the resolver in `api/sync.go` stamps the upstream as `root_name`. Both filter list queries (`queryFilterOptionsGlobal`, `queryFilterOptionsScoped`) and the filter match (`buildPushdownFilters`) `COALESCE` through `root_name` via `db.RepoRootExpr`/`db.RepoMatchExpr`, so fork sessions surface under their upstream chip.
+- Filter option dropdowns (repos, branches, owners) derive live from the viewer's visible sessions' `git_info` via `queryFilterOptions` — there are no precomputed lookup tables.
+- **CF-510 fork→upstream collapsing**: a fork session surfaces under its upstream chip because `db.RepoRootExpr`/`db.RepoMatchExpr` resolve the upstream live from that session's own `git_info` (`tracking_remote` → matching `remotes` entry's URL). Used by both the filter list (`queryFilterOptions`) and the filter match (`buildPushdownFilters`). Per-session, never shared across sessions; sessions without CLI-shipped remotes stay under their own repo. Replaced the global `session_repos.root_name` dictionary (dropped in migration 049).
 
 ## Design Decisions
 

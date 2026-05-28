@@ -17,34 +17,14 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// CF-491 — Org analytics surfaces (org repo list and org analytics
+// CF-510 — Org analytics surfaces (org repo list and org analytics
 // per-user metrics) collapse forks into their upstream root, consistent with
-// Sessions and TILs filter behavior.
-
-// seedOrgForkRootMapping inserts the session_repos rows and stamps the
-// fork→root mapping directly. Production writes go through the sync
-// resolver; these tests bypass that path to focus on the read-side
-// COALESCE behavior. Mirrors seedForkRootMapping (db/session) and
-// seedTILForkRootMapping (db/til).
-func seedOrgForkRootMapping(t *testing.T, env *testutil.TestEnvironment, fork, root string) {
-	t.Helper()
-	for _, name := range []string{fork, root} {
-		if _, err := env.DB.Conn().ExecContext(env.Ctx,
-			`INSERT INTO session_repos (repo_name) VALUES ($1) ON CONFLICT DO NOTHING`,
-			name); err != nil {
-			t.Fatalf("seed session_repos(%s): %v", name, err)
-		}
-	}
-	if _, err := env.DB.Conn().ExecContext(env.Ctx,
-		`UPDATE session_repos SET root_name = $2, root_source = 'pr_inference'
-		   WHERE repo_name = $1 AND root_name IS NULL`,
-		fork, root); err != nil {
-		t.Fatalf("seed mapping %s->%s: %v", fork, root, err)
-	}
-}
+// Sessions and TILs filter behavior. The upstream is resolved live by
+// db.RepoRootExpr from each fork session's own git_info (remotes +
+// tracking_remote).
 
 // TestOrgRepos_HTTP_CollapsesForks verifies /api/v1/org/repos returns the
-// upstream root rather than the fork when a mapping exists.
+// upstream root rather than the fork when the fork session points at it.
 func TestOrgRepos_HTTP_CollapsesForks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping HTTP integration test in short mode")
@@ -59,12 +39,12 @@ func TestOrgRepos_HTTP_CollapsesForks(t *testing.T) {
 	bob := testutil.CreateTestUser(t, env, "bob-org-rr@test.com", "Bob")
 	sessionToken := testutil.CreateTestWebSessionWithToken(t, env, alice.ID)
 
-	testutil.CreateTestSessionWithGitInfo(t, env, alice.ID, "alice-fork",
+	forkID := testutil.CreateTestSessionWithGitInfo(t, env, alice.ID, "alice-fork",
 		"https://github.com/jackie/confab-web.git")
+	testutil.SetSessionUpstream(t, env, forkID,
+		"https://github.com/jackie/confab-web.git", "https://github.com/ConfabulousDev/confab-web.git")
 	testutil.CreateTestSessionWithGitInfo(t, env, bob.ID, "bob-upstream",
 		"https://github.com/ConfabulousDev/confab-web.git")
-
-	seedOrgForkRootMapping(t, env, "jackie/confab-web", "ConfabulousDev/confab-web")
 
 	ts := setupTestServerWithEnv(t, env)
 	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
@@ -111,13 +91,18 @@ func TestOrgAnalytics_HTTP_FilterByRoot_IncludesForkSessions(t *testing.T) {
 
 	// Each session needs a session_type + tokens + conversation cards to be
 	// counted by the org analytics aggregate query (see seedOrgSession).
-	seedAnalyticsSession := func(userID int64, externalID, repoURL string) {
+	// upstreamURL != "" makes the session a fork that resolves to that upstream.
+	seedAnalyticsSession := func(userID int64, externalID, repoURL, upstreamURL string) {
 		sid := testutil.CreateTestSessionWithProvider(t, env, userID, externalID, models.ProviderClaudeCode)
-		gitInfo, _ := json.Marshal(map[string]string{"repo_url": repoURL})
-		if _, err := env.DB.Conn().ExecContext(env.Ctx,
-			`UPDATE sessions SET git_info = $2 WHERE id = $1`,
-			sid, gitInfo); err != nil {
-			t.Fatalf("set git_info: %v", err)
+		if upstreamURL != "" {
+			testutil.SetSessionUpstream(t, env, sid, repoURL, upstreamURL)
+		} else {
+			gitInfo, _ := json.Marshal(map[string]string{"repo_url": repoURL})
+			if _, err := env.DB.Conn().ExecContext(env.Ctx,
+				`UPDATE sessions SET git_info = $2 WHERE id = $1`,
+				sid, gitInfo); err != nil {
+				t.Fatalf("set git_info: %v", err)
+			}
 		}
 		store := analytics.NewStore(env.DB.Conn())
 		assistantMs := int64(1000)
@@ -143,11 +128,9 @@ func TestOrgAnalytics_HTTP_FilterByRoot_IncludesForkSessions(t *testing.T) {
 		}
 	}
 
-	seedAnalyticsSession(alice.ID, "alice-fork-s", "https://github.com/jackie/confab-web.git")
-	seedAnalyticsSession(bob.ID, "bob-upstream-s", "https://github.com/ConfabulousDev/confab-web.git")
-	seedAnalyticsSession(carol.ID, "carol-other-s", "https://github.com/other/repo.git")
-
-	seedOrgForkRootMapping(t, env, "jackie/confab-web", "ConfabulousDev/confab-web")
+	seedAnalyticsSession(alice.ID, "alice-fork-s", "https://github.com/jackie/confab-web.git", "https://github.com/ConfabulousDev/confab-web.git")
+	seedAnalyticsSession(bob.ID, "bob-upstream-s", "https://github.com/ConfabulousDev/confab-web.git", "")
+	seedAnalyticsSession(carol.ID, "carol-other-s", "https://github.com/other/repo.git", "")
 
 	ts := setupTestServerWithEnv(t, env)
 	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)

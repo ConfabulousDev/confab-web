@@ -145,13 +145,12 @@ func ValidateProvider(p string) error {
 		p, strings.Join(models.CanonicalProviders, ", "))
 }
 
-// CF-494 — git_info wire-layer caps for the new `remotes` and
-// `tracking_remote` fields. The validator only fires when the new fields
-// are present in the payload; old-shape git_info (just `repo_url`,
-// `branch`, …) passes through untouched. Per-entry strictness and the
-// 50-cap are 4xx-throwing; the resolver in db/git_remote_resolver.go
-// silently no-ops on semantic noise (e.g., tracking_remote referencing
-// an unknown remote).
+// CF-494 — git_info wire-layer caps for the `remotes` and `tracking_remote`
+// fields. The validator only fires when these fields are present in the
+// payload; old-shape git_info (just `repo_url`, `branch`, …) passes through
+// untouched. Per-entry strictness and the 50-cap are 4xx-throwing; the
+// read-time resolver (db.RepoRootExpr) silently falls back to the fork on
+// semantic noise (e.g., tracking_remote referencing an unknown remote).
 const (
 	MaxGitRemotesCount      = 50
 	MaxRemoteNameLength     = 256
