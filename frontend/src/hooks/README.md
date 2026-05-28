@@ -59,7 +59,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel of `useTranscriptFilters`. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |
 | `useTranscriptSearch` | `<T>(items, extractText) => TranscriptSearchResult` | Generic over item type. Builds a lowercased search index via `extractText`, debounces query (150ms search, 300ms highlight), provides match navigation. Shared by the Claude (`extractMessageText` from `services/messageParser`) and Codex (`extractCodexItemText` from `components/transcript/codex`) timelines. |
 | `useShareDialog` | `({ sessionId, userEmail?, onShareCreated? }) => UseShareDialogReturn` | Full share dialog state: form fields, email validation (Zod), create/revoke API calls. |
-| `useDropdown` | `<T extends HTMLElement>() => UseDropdownReturn<T>` | Open/close state with click-outside detection and Escape key. |
+| `useDropdown` | `<T extends HTMLElement>(initialOpen?: boolean) => UseDropdownReturn<T>` | Open/close state with click-outside detection and Escape key. `initialOpen` defaults to `false`; pass `true` in stories/tests to render open. |
 | `useSuccessMessage` | `(options?) => UseSuccessMessageReturn` | Auto-fading success message with optional URL param extraction. |
 | `useCopyToClipboard` | `(options?) => UseCopyToClipboardReturn` | Clipboard write with configurable success duration. |
 | `useAutoRetry` | `(retryFn, options) => UseAutoRetryReturn` | Exponential backoff with countdown display and exhaustion tracking. |

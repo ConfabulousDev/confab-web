@@ -127,3 +127,80 @@ describe('FilterChipsBar Provider filter (CF-393)', () => {
     expect(onToggleProvider).toHaveBeenCalledWith('codex');
   });
 });
+
+// Six repos so the search input appears (options.length > 5).
+const sixRepos = ['alpha', 'beta', 'confab-cli', 'confab-web', 'delta', 'epsilon'];
+
+describe('DimensionDropdown divider (CF-511)', () => {
+  it('shows a divider when both selected and unselected items are present', () => {
+    render(
+      <FilterChipsBar {...baseProps({
+        filterOptions: { repos: sixRepos, branches: ['main'], owners: ['alice@co.com'] },
+        filters: { repos: ['confab-web'], branches: [], owners: [], providers: [], query: '' },
+      })} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repo/i, expanded: false }));
+    expect(screen.getByTestId('dimension-divider')).toBeInTheDocument();
+  });
+
+  it('does not show a divider when no items are selected', () => {
+    render(
+      <FilterChipsBar {...baseProps({
+        filterOptions: { repos: sixRepos, branches: ['main'], owners: ['alice@co.com'] },
+        filters: { repos: [], branches: [], owners: [], providers: [], query: '' },
+      })} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repo/i, expanded: false }));
+    expect(screen.queryByTestId('dimension-divider')).not.toBeInTheDocument();
+  });
+
+  it('does not show a divider when all items are selected', () => {
+    render(
+      <FilterChipsBar {...baseProps({
+        filterOptions: { repos: sixRepos, branches: ['main'], owners: ['alice@co.com'] },
+        filters: { repos: [...sixRepos], branches: [], owners: [], providers: [], query: '' },
+      })} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repo/i, expanded: false }));
+    expect(screen.queryByTestId('dimension-divider')).not.toBeInTheDocument();
+  });
+
+  it('keeps the divider during search when both groups remain visible', () => {
+    // 'conf' matches confab-web (selected) and confab-cli (unselected) — both groups present
+    render(
+      <FilterChipsBar {...baseProps({
+        filterOptions: { repos: sixRepos, branches: ['main'], owners: ['alice@co.com'] },
+        filters: { repos: ['confab-web'], branches: [], owners: [], providers: [], query: '' },
+      })} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repo/i, expanded: false }));
+    fireEvent.change(screen.getByPlaceholderText(/search repo/i), { target: { value: 'conf' } });
+    expect(screen.getByTestId('dimension-divider')).toBeInTheDocument();
+  });
+
+  it('removes the divider during search when only unselected items match', () => {
+    // 'cli' only matches confab-cli which is unselected — selected group disappears from view
+    render(
+      <FilterChipsBar {...baseProps({
+        filterOptions: { repos: sixRepos, branches: ['main'], owners: ['alice@co.com'] },
+        filters: { repos: ['confab-web'], branches: [], owners: [], providers: [], query: '' },
+      })} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repo/i, expanded: false }));
+    fireEvent.change(screen.getByPlaceholderText(/search repo/i), { target: { value: 'cli' } });
+    expect(screen.queryByTestId('dimension-divider')).not.toBeInTheDocument();
+  });
+
+  it('removes the divider during search when only selected items match', () => {
+    // 'web' only matches confab-web which is selected — unselected group disappears from view
+    render(
+      <FilterChipsBar {...baseProps({
+        filterOptions: { repos: sixRepos, branches: ['main'], owners: ['alice@co.com'] },
+        filters: { repos: ['confab-web'], branches: [], owners: [], providers: [], query: '' },
+      })} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repo/i, expanded: false }));
+    fireEvent.change(screen.getByPlaceholderText(/search repo/i), { target: { value: 'web' } });
+    expect(screen.queryByTestId('dimension-divider')).not.toBeInTheDocument();
+  });
+});

@@ -10,8 +10,8 @@ interface UseDropdownReturn<T extends HTMLElement> {
 /**
  * Hook for managing dropdown state with click-outside and escape key handling
  */
-export function useDropdown<T extends HTMLElement = HTMLDivElement>(): UseDropdownReturn<T> {
-  const [isOpen, setIsOpen] = useState(false);
+export function useDropdown<T extends HTMLElement = HTMLDivElement>(initialOpen = false): UseDropdownReturn<T> {
+  const [isOpen, setIsOpen] = useState(initialOpen);
   const containerRef = useRef<T>(null);
 
   const toggle = useCallback(() => {

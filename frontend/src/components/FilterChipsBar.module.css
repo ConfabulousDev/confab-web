@@ -213,6 +213,12 @@
   white-space: nowrap;
 }
 
+.dimensionDivider {
+  height: 1px;
+  margin: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-border);
+}
+
 .dimensionEmpty {
   padding: var(--spacing-sm);
   text-align: center;

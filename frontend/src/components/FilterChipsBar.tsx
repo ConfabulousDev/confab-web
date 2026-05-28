@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useDropdown } from '@/hooks';
 import { SearchIcon, RepoIcon, BranchIcon, UserIcon, CheckIcon, RobotIcon } from './icons';
 import { getProviderIcon } from './providerIcon';
@@ -41,9 +41,10 @@ interface DimensionDropdownProps {
   // rows render exactly as before (no icon column, raw option as label).
   iconFor?: (option: string) => React.ReactNode;
   labelFor?: (option: string) => string;
+  initialOpen?: boolean;
 }
 
-function DimensionDropdown({
+export function DimensionDropdown({
   label,
   icon,
   options,
@@ -52,8 +53,9 @@ function DimensionDropdown({
   onToggle,
   iconFor,
   labelFor,
+  initialOpen = false,
 }: DimensionDropdownProps) {
-  const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
+  const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>(initialOpen);
   const [search, setSearch] = useState('');
 
   const handleToggle = () => {
@@ -74,6 +76,10 @@ function DimensionDropdown({
     const bLabel = labelFor ? labelFor(b) : b;
     return aLabel.localeCompare(bLabel);
   });
+
+  // Show a divider between the selected group and the unselected group.
+  const selectedCount = sorted.filter((o) => selected.includes(o)).length;
+  const showDivider = selectedCount > 0 && selectedCount < sorted.length;
 
   return (
     <div className={styles.dimensionContainer} ref={containerRef}>
@@ -101,24 +107,29 @@ function DimensionDropdown({
             </div>
           )}
           <div className={styles.dimensionList}>
-            {sorted.map((opt) => {
+            {sorted.map((opt, idx) => {
               const isSelected = selected.includes(opt);
               const baseLabel = labelFor ? labelFor(opt) : opt;
-              const displayLabel = currentUserEmail && opt.toLowerCase() === currentUserEmail.toLowerCase()
-                ? `${baseLabel} (you)`
-                : baseLabel;
+              const displayLabel =
+                currentUserEmail && opt.toLowerCase() === currentUserEmail.toLowerCase()
+                  ? `${baseLabel} (you)`
+                  : baseLabel;
               return (
-                <button
-                  key={opt}
-                  className={`${styles.dimensionItem} ${isSelected ? styles.dimensionItemSelected : ''}`}
-                  onClick={() => onToggle(opt)}
-                >
-                  <span className={`${styles.checkbox} ${isSelected ? styles.checked : ''}`}>
-                    {CheckIcon}
-                  </span>
-                  {iconFor && <span className={styles.dimensionIcon}>{iconFor(opt)}</span>}
-                  <span className={styles.dimensionLabel}>{displayLabel}</span>
-                </button>
+                <Fragment key={opt}>
+                  {showDivider && idx === selectedCount && (
+                    <div data-testid="dimension-divider" className={styles.dimensionDivider} aria-hidden="true" />
+                  )}
+                  <button
+                    className={`${styles.dimensionItem} ${isSelected ? styles.dimensionItemSelected : ''}`}
+                    onClick={() => onToggle(opt)}
+                  >
+                    <span className={`${styles.checkbox} ${isSelected ? styles.checked : ''}`}>
+                      {CheckIcon}
+                    </span>
+                    {iconFor && <span className={styles.dimensionIcon}>{iconFor(opt)}</span>}
+                    <span className={styles.dimensionLabel}>{displayLabel}</span>
+                  </button>
+                </Fragment>
               );
             })}
             {sorted.length === 0 && (

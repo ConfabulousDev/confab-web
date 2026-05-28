@@ -113,6 +113,26 @@ export const ProviderPlusOtherDimensions: Story = {
   },
 };
 
+// CF-511: FilterChipsBar state that produces a mixed dropdown (some repos selected).
+export const MixedDropdownSelection: Story = {
+  args: {
+    filters: {
+      repos: ['confab-web'],
+      branches: [],
+      owners: [],
+      providers: [],
+      query: '',
+    },
+    filterOptions: {
+      repos: ['alpha', 'beta', 'confab-cli', 'confab-web', 'delta', 'epsilon'],
+      branches: ['main'],
+      owners: ['alice@example.com'],
+    },
+    currentUserEmail: 'alice@example.com',
+    ...noopHandlers,
+  },
+};
+
 // CF-491: when a user has worked on the same project through a fork
 // (jackie/confab-web) and through the upstream (ConfabulousDev/confab-web),
 // the repo chip list shows a single upstream-root entry rather than two
@@ -130,3 +150,4 @@ export const CollapsedForks: Story = {
     ...noopHandlers,
   },
 };
+
