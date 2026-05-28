@@ -7,26 +7,22 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
-// CF-491 — TILs page repo filter must collapse forks the same way the
-// Sessions page does. Mapping lives on session_repos.root_name.
+// CF-510 — TILs page repo filter must collapse forks the same way the Sessions
+// page does. The upstream is resolved live by db.RepoRootExpr from each fork
+// session's own git_info (remotes + tracking_remote).
 
-// seedTILForkRootMapping mirrors seedForkRootMapping (db/session) and
-// seedOrgForkRootMapping (api) — the three live in different packages so
-// they can't share trivially.
-func seedTILForkRootMapping(t *testing.T, env *testutil.TestEnvironment, fork, root string) {
-	t.Helper()
-	for _, name := range []string{fork, root} {
-		if _, err := env.DB.Conn().ExecContext(env.Ctx,
-			`INSERT INTO session_repos (repo_name) VALUES ($1) ON CONFLICT DO NOTHING`,
-			name); err != nil {
-			t.Fatalf("seed session_repos(%s): %v", name, err)
-		}
-	}
-	if _, err := env.DB.Conn().ExecContext(env.Ctx,
-		`UPDATE session_repos SET root_name = $2, root_source = 'pr_inference'
-		   WHERE repo_name = $1 AND root_name IS NULL`,
-		fork, root); err != nil {
-		t.Fatalf("seed mapping %s->%s: %v", fork, root, err)
+// forkSessionOpts builds CreateTestSessionFull options for a fork checkout
+// whose tracking_remote points at upstreamURL.
+func forkSessionOpts(forkURL, upstreamURL, summary string) testutil.TestSessionFullOpts {
+	return testutil.TestSessionFullOpts{
+		RepoURL: forkURL,
+		Branch:  "main",
+		Summary: summary,
+		Remotes: []testutil.TestGitRemote{
+			{Name: "origin", FetchURL: forkURL},
+			{Name: "upstream", FetchURL: upstreamURL},
+		},
+		TrackingRemote: "upstream",
 	}
 }
 
@@ -43,11 +39,8 @@ func TestTILRepoRoots_FilterListCollapsesForks(t *testing.T) {
 
 	user := testutil.CreateTestUser(t, env, "til-rr@test.com", "TIL RR")
 
-	forkSession := testutil.CreateTestSessionFull(t, env, user.ID, "til-rr-fork", testutil.TestSessionFullOpts{
-		RepoURL: "https://github.com/jackie/confab-web.git",
-		Branch:  "main",
-		Summary: "Fork",
-	})
+	forkSession := testutil.CreateTestSessionFull(t, env, user.ID, "til-rr-fork",
+		forkSessionOpts("https://github.com/jackie/confab-web.git", "https://github.com/ConfabulousDev/confab-web.git", "Fork"))
 	upstreamSession := testutil.CreateTestSessionFull(t, env, user.ID, "til-rr-upstream", testutil.TestSessionFullOpts{
 		RepoURL: "https://github.com/ConfabulousDev/confab-web.git",
 		Branch:  "main",
@@ -55,8 +48,6 @@ func TestTILRepoRoots_FilterListCollapsesForks(t *testing.T) {
 	})
 	testutil.CreateTestTIL(t, env, user.ID, forkSession, "Fork TIL", "fork-summary", nil)
 	testutil.CreateTestTIL(t, env, user.ID, upstreamSession, "Upstream TIL", "upstream-summary", nil)
-
-	seedTILForkRootMapping(t, env, "jackie/confab-web", "ConfabulousDev/confab-web")
 
 	result, err := store.List(context.Background(), user.ID, ListParams{PageSize: 50})
 	if err != nil {
@@ -87,11 +78,8 @@ func TestTILRepoRoots_FilterMatchIncludesForkSessions(t *testing.T) {
 
 	user := testutil.CreateTestUser(t, env, "til-rr-m@test.com", "TIL RR Match")
 
-	forkSession := testutil.CreateTestSessionFull(t, env, user.ID, "tilm-fork", testutil.TestSessionFullOpts{
-		RepoURL: "https://github.com/jackie/confab-web.git",
-		Branch:  "main",
-		Summary: "Fork",
-	})
+	forkSession := testutil.CreateTestSessionFull(t, env, user.ID, "tilm-fork",
+		forkSessionOpts("https://github.com/jackie/confab-web.git", "https://github.com/ConfabulousDev/confab-web.git", "Fork"))
 	upstreamSession := testutil.CreateTestSessionFull(t, env, user.ID, "tilm-upstream", testutil.TestSessionFullOpts{
 		RepoURL: "https://github.com/ConfabulousDev/confab-web.git",
 		Branch:  "main",
@@ -105,8 +93,6 @@ func TestTILRepoRoots_FilterMatchIncludesForkSessions(t *testing.T) {
 	testutil.CreateTestTIL(t, env, user.ID, forkSession, "Fork TIL", "summary", nil)
 	testutil.CreateTestTIL(t, env, user.ID, upstreamSession, "Upstream TIL", "summary", nil)
 	testutil.CreateTestTIL(t, env, user.ID, unrelatedSession, "Unrelated TIL", "summary", nil)
-
-	seedTILForkRootMapping(t, env, "jackie/confab-web", "ConfabulousDev/confab-web")
 
 	result, err := store.List(context.Background(), user.ID, ListParams{
 		Repos:    []string{"ConfabulousDev/confab-web"},
@@ -130,4 +116,3 @@ func TestTILRepoRoots_FilterMatchIncludesForkSessions(t *testing.T) {
 		t.Error("filter by upstream root incorrectly returned an unrelated TIL")
 	}
 }
-

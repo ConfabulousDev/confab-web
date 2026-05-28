@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -250,13 +249,6 @@ func (s *Server) handleSyncInit(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to initialize sync session")
 		return
 	}
-
-	// CF-494: git_remote-signal fork→root resolver. Runs after
-	// FindOrCreateSyncSession so the session_repos row exists (inserted
-	// by upsertFilterLookups inside that call); a prior call here would
-	// silently no-op against a missing row. Errors are non-fatal — a
-	// subsequent chunk re-runs the resolver.
-	resolveAndRecordRepoRoot(ctx, s.db.Conn(), log, sessionID, gitInfo, "init")
 
 	// Convert to response format
 	respFiles := make(map[string]SyncFileStateResp)
@@ -529,14 +521,6 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 				"ref", link.Ref)
 		}
 	}
-
-	// Fork→root resolver: CF-494 git_remote, fed by CLI-shipped remotes +
-	// tracking_remote. Non-fatal — a failure here never fails the chunk upload.
-	// CF-491's pr_inference fallback was retired in CF-233 because any PR
-	// link to a different owner/repo (cross-org PR, dependency, sibling
-	// repo) was being treated as upstream evidence and silently
-	// misclassified working repos under unrelated roots.
-	resolveAndRecordRepoRoot(updateCtx, s.db.Conn(), log, req.SessionID, gitInfo, "chunk")
 
 	// Codex rollout sidecar (CF-385). Runs after S3 + sync state are
 	// committed so a failure here leaves no orphan content — only a delayed
@@ -964,45 +948,6 @@ func extractTextFromMessage(entry map[string]interface{}) string {
 	}
 
 	return ""
-}
-
-// resolveAndRecordRepoRoot runs the CF-494 git_remote-signal resolver against
-// a parsed git_info payload and stamps the fork→root mapping when one is
-// detected. Non-fatal: callers continue on error. site is "init" or "chunk"
-// for log diagnostics. When tracking_remote is set but doesn't match any
-// remote in the payload, emits a Warn (per Q4 + Q8 interview decisions).
-func resolveAndRecordRepoRoot(ctx context.Context, q db.Querier, log *slog.Logger, sessionID string, gitInfo []byte, site string) {
-	parsed, _ := db.ParseGitInfo(gitInfo)
-	fork, root, ok := db.ResolveForkFromRemotes(parsed)
-	if ok {
-		if err := db.RecordRepoRoot(ctx, q, fork, root, db.RootSourceGitRemote); err != nil {
-			log.Warn("Failed to record repo root from git remotes",
-				"error", err,
-				"site", site,
-				"session_id", sessionID,
-				"fork", fork,
-				"root", root)
-		}
-		return
-	}
-	// Resolver returned false; surface the most common avoidable cause —
-	// tracking_remote naming a remote that's not in the payload — as a Warn.
-	if parsed.TrackingRemote != "" && db.FindRemoteByName(parsed.Remotes, parsed.TrackingRemote) == nil {
-		log.Warn("tracking_remote names unknown remote",
-			"site", site,
-			"session_id", sessionID,
-			"tracking_remote", parsed.TrackingRemote,
-			"remotes", remoteNames(parsed.Remotes))
-	}
-}
-
-// remoteNames returns just the Name field of each remote, for diagnostic logs.
-func remoteNames(remotes []db.GitRemote) []string {
-	out := make([]string, len(remotes))
-	for i, r := range remotes {
-		out[i] = r.Name
-	}
-	return out
 }
 
 // extractTimestampFromLine parses a JSONL line and extracts the timestamp field if present

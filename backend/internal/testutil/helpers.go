@@ -165,6 +165,29 @@ func CreateTestSessionWithGitInfo(t *testing.T, env *TestEnvironment, userID int
 	return sessionID
 }
 
+// SetSessionUpstream rewrites a session's git_info so its tracking_remote
+// ("upstream") points at upstreamURL, making db.RepoRootExpr collapse the fork
+// (forkURL) into upstreamURL's owner/repo. For repo-root collapse tests that
+// create a session first and add the upstream signal after.
+func SetSessionUpstream(t *testing.T, env *TestEnvironment, sessionID, forkURL, upstreamURL string) {
+	t.Helper()
+	gitInfoJSON, err := json.Marshal(map[string]interface{}{
+		"repo_url": forkURL,
+		"branch":   "main",
+		"remotes": []map[string]string{
+			{"name": "origin", "fetch_url": forkURL},
+			{"name": "upstream", "fetch_url": upstreamURL},
+		},
+		"tracking_remote": "upstream",
+	})
+	if err != nil {
+		t.Fatalf("marshal git_info: %v", err)
+	}
+	if _, err := env.DB.Exec(env.Ctx, `UPDATE sessions SET git_info = $2 WHERE id = $1`, sessionID, gitInfoJSON); err != nil {
+		t.Fatalf("set session upstream: %v", err)
+	}
+}
+
 // CreateTestSyncFile creates a sync_file in the database for testing
 func CreateTestSyncFile(t *testing.T, env *TestEnvironment, sessionID string, fileName, fileType string, lastSyncedLine int) {
 	t.Helper()
@@ -406,6 +429,19 @@ type TestSessionFullOpts struct {
 	Summary          string // session summary text
 	FirstUserMessage string // first user message text
 	SyncLines        int    // total_lines for the sync file (default 100, use -1 to skip creating sync file)
+
+	// Remotes + TrackingRemote populate the CF-510 git_remote signal so the
+	// read-time fork→upstream resolver in db.RepoRootExpr can collapse a fork
+	// to its upstream. Each remote is {name, fetch_url, push_url}.
+	Remotes        []TestGitRemote
+	TrackingRemote string
+}
+
+// TestGitRemote mirrors one entry of git_info.remotes for test setup.
+type TestGitRemote struct {
+	Name     string
+	FetchURL string
+	PushURL  string
 }
 
 // CreateTestSessionFull creates a session with git info, summary, first_user_message,
@@ -422,6 +458,16 @@ func CreateTestSessionFull(t *testing.T, env *TestEnvironment, userID int64, ext
 	}
 	if opts.Branch != "" {
 		gitInfo["branch"] = opts.Branch
+	}
+	if len(opts.Remotes) > 0 {
+		remotes := make([]map[string]string, len(opts.Remotes))
+		for i, r := range opts.Remotes {
+			remotes[i] = map[string]string{"name": r.Name, "fetch_url": r.FetchURL, "push_url": r.PushURL}
+		}
+		gitInfo["remotes"] = remotes
+	}
+	if opts.TrackingRemote != "" {
+		gitInfo["tracking_remote"] = opts.TrackingRemote
 	}
 	gitInfoJSON, err := json.Marshal(gitInfo)
 	if err != nil {
@@ -443,18 +489,6 @@ func CreateTestSessionFull(t *testing.T, env *TestEnvironment, userID int64, ext
 	_, err = env.DB.Exec(env.Ctx, query, sessionID, userID, externalID, gitInfoJSON, summary, firstMsg)
 	if err != nil {
 		t.Fatalf("failed to create test session: %v", err)
-	}
-
-	// Populate filter lookup tables (mirrors upsertFilterLookups in production write path)
-	if opts.RepoURL != "" {
-		env.DB.Exec(env.Ctx,
-			`INSERT INTO session_repos (repo_name) VALUES (regexp_replace(regexp_replace($1, '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1')) ON CONFLICT DO NOTHING`,
-			opts.RepoURL)
-	}
-	if opts.Branch != "" {
-		env.DB.Exec(env.Ctx,
-			`INSERT INTO session_branches (branch_name) VALUES ($1) ON CONFLICT DO NOTHING`,
-			opts.Branch)
 	}
 
 	// Add a sync file to make total_lines > 0 (required for visibility)

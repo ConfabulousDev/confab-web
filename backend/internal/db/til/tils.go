@@ -460,9 +460,10 @@ func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (FilterOpt
 	// predicate lives in one place. TIL filter-options additionally restrict
 	// to sessions with at least one TIL (the source of the dropdown is
 	// "sessions surfaced on TILsPage", not "all visible sessions"). The
-	// EXISTS predicate enforces that scope.
+	// EXISTS predicate enforces that scope. CF-510: thread ShareAllSessions so
+	// the self-hosted share-all mode surfaces every contributor's repos.
 	query := `
-		WITH ` + db.VisibleSessionsCTE(false) + `,
+		WITH ` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,
 		visible AS (
 			SELECT DISTINCT vs.id, vs.user_id, vs.owner_email FROM visible_sessions vs
 			WHERE EXISTS (SELECT 1 FROM tils t WHERE t.session_id = vs.id)

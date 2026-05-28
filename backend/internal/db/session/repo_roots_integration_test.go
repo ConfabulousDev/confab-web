@@ -10,29 +10,25 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
-// CF-491 — Sessions repo filter must collapse forks into their upstream root.
-// Mapping lives on session_repos.root_name (NULL for non-forks; populated for
-// observed forks via the PR-inference resolver).
+// CF-510 — Sessions repo filter must collapse forks into their upstream root.
+// The mapping is resolved live by db.RepoRootExpr from each session's own
+// git_info: a fork session carries remotes + a tracking_remote pointing at the
+// upstream, so it surfaces under the upstream chip. Nothing is stored or shared
+// across sessions.
 
-// seedForkRootMapping stamps both the fork and upstream-root rows in
-// session_repos and links the fork to the root. Lets these tests assert
-// behavior without depending on the production resolver path, which is
-// exercised by sync_repo_roots_integration_test.go. Mirrors
-// seedTILForkRootMapping (db/til) and seedOrgForkRootMapping (api).
-func seedForkRootMapping(t *testing.T, env *testutil.TestEnvironment, fork, root string) {
-	t.Helper()
-	for _, name := range []string{fork, root} {
-		if _, err := env.DB.Conn().ExecContext(env.Ctx,
-			`INSERT INTO session_repos (repo_name) VALUES ($1) ON CONFLICT DO NOTHING`,
-			name); err != nil {
-			t.Fatalf("seed session_repos(%s): %v", name, err)
-		}
-	}
-	if _, err := env.DB.Conn().ExecContext(env.Ctx,
-		`UPDATE session_repos SET root_name = $2, root_source = 'pr_inference'
-		   WHERE repo_name = $1 AND root_name IS NULL`,
-		fork, root); err != nil {
-		t.Fatalf("seed mapping %s->%s: %v", fork, root, err)
+// forkSessionOpts builds CreateTestSessionFull options for a fork checkout
+// whose tracking_remote ("upstream") points at upstreamURL, so RepoRootExpr
+// collapses it into upstreamURL's owner/repo.
+func forkSessionOpts(forkURL, upstreamURL, summary string) testutil.TestSessionFullOpts {
+	return testutil.TestSessionFullOpts{
+		RepoURL: forkURL,
+		Branch:  "main",
+		Summary: summary,
+		Remotes: []testutil.TestGitRemote{
+			{Name: "origin", FetchURL: forkURL},
+			{Name: "upstream", FetchURL: upstreamURL},
+		},
+		TrackingRemote: "upstream",
 	}
 }
 
@@ -53,20 +49,13 @@ func TestRepoRoots_FilterListGlobal_CollapsesForks(t *testing.T) {
 
 	user := testutil.CreateTestUser(t, env, "rr-global@test.com", "RR Global")
 
-	// Fork session
-	testutil.CreateTestSessionFull(t, env, user.ID, "rr-fork", testutil.TestSessionFullOpts{
-		RepoURL: "https://github.com/jackie/confab-web.git",
-		Branch:  "main",
-		Summary: "Fork work",
-	})
-	// Upstream session
+	testutil.CreateTestSessionFull(t, env, user.ID, "rr-fork",
+		forkSessionOpts("https://github.com/jackie/confab-web.git", "https://github.com/ConfabulousDev/confab-web.git", "Fork work"))
 	testutil.CreateTestSessionFull(t, env, user.ID, "rr-upstream", testutil.TestSessionFullOpts{
 		RepoURL: "https://github.com/ConfabulousDev/confab-web.git",
 		Branch:  "main",
 		Summary: "Upstream work",
 	})
-
-	seedForkRootMapping(t, env, "jackie/confab-web", "ConfabulousDev/confab-web")
 
 	result, err := store.ListUserSessionsPaginated(context.Background(), user.ID, db.SessionListParams{})
 	if err != nil {
@@ -96,18 +85,13 @@ func TestRepoRoots_FilterListScoped_CollapsesForks(t *testing.T) {
 
 	user := testutil.CreateTestUser(t, env, "rr-scoped@test.com", "RR Scoped")
 
-	testutil.CreateTestSessionFull(t, env, user.ID, "rrs-fork", testutil.TestSessionFullOpts{
-		RepoURL: "https://github.com/jackie/confab-web.git",
-		Branch:  "main",
-		Summary: "Fork",
-	})
+	testutil.CreateTestSessionFull(t, env, user.ID, "rrs-fork",
+		forkSessionOpts("https://github.com/jackie/confab-web.git", "https://github.com/ConfabulousDev/confab-web.git", "Fork"))
 	testutil.CreateTestSessionFull(t, env, user.ID, "rrs-upstream", testutil.TestSessionFullOpts{
 		RepoURL: "https://github.com/ConfabulousDev/confab-web.git",
 		Branch:  "main",
 		Summary: "Upstream",
 	})
-
-	seedForkRootMapping(t, env, "jackie/confab-web", "ConfabulousDev/confab-web")
 
 	result, err := store.ListUserSessionsPaginated(context.Background(), user.ID, db.SessionListParams{})
 	if err != nil {
@@ -126,7 +110,7 @@ func TestRepoRoots_FilterListScoped_CollapsesForks(t *testing.T) {
 
 // TestRepoRoots_FilterMatch_IncludesForkSessions verifies that filtering by
 // the upstream root returns both the upstream session and any fork sessions
-// mapped to that root.
+// that resolve to that root.
 func TestRepoRoots_FilterMatch_IncludesForkSessions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
@@ -141,11 +125,8 @@ func TestRepoRoots_FilterMatch_IncludesForkSessions(t *testing.T) {
 
 	user := testutil.CreateTestUser(t, env, "rr-match@test.com", "RR Match")
 
-	testutil.CreateTestSessionFull(t, env, user.ID, "rrm-fork", testutil.TestSessionFullOpts{
-		RepoURL: "https://github.com/jackie/confab-web.git",
-		Branch:  "main",
-		Summary: "Fork session",
-	})
+	testutil.CreateTestSessionFull(t, env, user.ID, "rrm-fork",
+		forkSessionOpts("https://github.com/jackie/confab-web.git", "https://github.com/ConfabulousDev/confab-web.git", "Fork session"))
 	testutil.CreateTestSessionFull(t, env, user.ID, "rrm-upstream", testutil.TestSessionFullOpts{
 		RepoURL: "https://github.com/ConfabulousDev/confab-web.git",
 		Branch:  "main",
@@ -157,8 +138,6 @@ func TestRepoRoots_FilterMatch_IncludesForkSessions(t *testing.T) {
 		Branch:  "main",
 		Summary: "Other session",
 	})
-
-	seedForkRootMapping(t, env, "jackie/confab-web", "ConfabulousDev/confab-web")
 
 	result, err := store.ListUserSessionsPaginated(context.Background(), user.ID, db.SessionListParams{
 		Repos:    []string{"ConfabulousDev/confab-web"},
@@ -204,12 +183,11 @@ func TestRepoRoots_ThreeForksOneUpstream(t *testing.T) {
 
 	forks := []string{"alice", "bob", "carol"}
 	for _, owner := range forks {
-		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("rrm3-%s", owner), testutil.TestSessionFullOpts{
-			RepoURL: fmt.Sprintf("https://github.com/%s/confab-web.git", owner),
-			Branch:  "main",
-			Summary: owner + " fork",
-		})
-		seedForkRootMapping(t, env, fmt.Sprintf("%s/confab-web", owner), "ConfabulousDev/confab-web")
+		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("rrm3-%s", owner),
+			forkSessionOpts(
+				fmt.Sprintf("https://github.com/%s/confab-web.git", owner),
+				"https://github.com/ConfabulousDev/confab-web.git",
+				owner+" fork"))
 	}
 	testutil.CreateTestSessionFull(t, env, user.ID, "rrm3-upstream", testutil.TestSessionFullOpts{
 		RepoURL: "https://github.com/ConfabulousDev/confab-web.git",
@@ -240,8 +218,8 @@ func TestRepoRoots_ThreeForksOneUpstream(t *testing.T) {
 	}
 }
 
-// TestRepoRoots_NonFork_PassesThrough verifies a repo with NULL root_name
-// appears under its raw name in the chip list and matches its own sessions.
+// TestRepoRoots_NonFork_PassesThrough verifies a session with no upstream
+// signal appears under its raw repo name and matches its own sessions.
 func TestRepoRoots_NonFork_PassesThrough(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
@@ -256,13 +234,12 @@ func TestRepoRoots_NonFork_PassesThrough(t *testing.T) {
 
 	user := testutil.CreateTestUser(t, env, "rr-nofork@test.com", "RR NoFork")
 
+	// No remotes/tracking_remote — this repo has no known upstream.
 	testutil.CreateTestSessionFull(t, env, user.ID, "rrn-standalone", testutil.TestSessionFullOpts{
 		RepoURL: "https://github.com/solo/standalone.git",
 		Branch:  "main",
 		Summary: "Standalone repo",
 	})
-
-	// No seedForkRootMapping call — this repo has no known root.
 
 	result, err := store.ListUserSessionsPaginated(context.Background(), user.ID, db.SessionListParams{})
 	if err != nil {

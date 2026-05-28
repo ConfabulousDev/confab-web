@@ -33,7 +33,7 @@ GitHub link CRUD for associating pull requests and commits with sessions.
 - **Upsert over insert-or-ignore**: Links can come from multiple sources (CLI sync, webhook, manual). Upsert ensures the latest source and URL are always recorded while preserving the creation timestamp.
 - **Two-mode title handling**: The `overwriteTitle` flag supports two use cases: explicit user actions (always overwrite) and background enrichment (fill-only, don't clobber user edits).
 - **Flat owner/repo/ref columns**: Stored denormalized rather than as a URL string, enabling efficient queries for PR aggregation in session list views (see `github_pr_refs` and `github_commit_refs` CTEs in `db/session/`).
-- **Fork→root inference happens outside this package (CF-494)**: the resolver lives in `db/git_remote_resolver.go` and is fed by CLI-shipped `git_info.remotes` + `tracking_remote`, not by PR links. `CreateGitHubLink` is intentionally pure — it never writes to `session_repos`. CF-491's PR-link inference fallback was retired in CF-233 because cross-repo PRs (sibling/dependency/cross-org) were being misread as upstream evidence.
+- **Fork→upstream resolution happens outside this package**: it's computed live at read time by `db.RepoRootExpr` from a session's own `git_info` (`remotes` + `tracking_remote`), not from PR links. `CreateGitHubLink` is intentionally pure — it has nothing to do with repo-filter collapsing. (Historical: CF-491's PR-link inference fallback was retired in CF-233; CF-510 then dropped the `session_repos` mapping table in favor of read-time resolution.)
 
 ## Testing
 

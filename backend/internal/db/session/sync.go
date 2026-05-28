@@ -54,7 +54,6 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 			span.SetStatus(codes.Error, err.Error())
 			return "", nil, fmt.Errorf("failed to update session metadata: %w", err)
 		}
-		s.upsertFilterLookups(ctx, params.GitInfo)
 		sid, files, err := s.getSyncFilesForSession(ctx, sessionID)
 		if err != nil {
 			span.RecordError(err)
@@ -76,7 +75,6 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 	_, err = s.conn().ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.Provider, params.CWD, params.TranscriptPath, params.GitInfo, params.Hostname, params.Username)
 	if err == nil {
 		span.SetAttributes(attribute.Bool("session.created", true))
-		s.upsertFilterLookups(ctx, params.GitInfo)
 		return sessionID, make(map[string]db.SyncFileState), nil
 	}
 
@@ -226,10 +224,6 @@ func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fi
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 
-	if len(gitInfo) > 0 {
-		s.upsertFilterLookups(ctx, gitInfo)
-	}
-
 	return nil
 }
 
@@ -277,24 +271,3 @@ func (s *Store) UpdateSyncFileChunkCount(ctx context.Context, sessionID, fileNam
 	return nil
 }
 
-func (s *Store) upsertFilterLookups(ctx context.Context, gitInfo json.RawMessage) {
-	if len(gitInfo) == 0 {
-		return
-	}
-	var info struct {
-		RepoURL string `json:"repo_url"`
-		Branch  string `json:"branch"`
-	}
-	if err := json.Unmarshal(gitInfo, &info); err != nil {
-		return
-	}
-	if info.RepoURL != "" {
-		repo := db.ExtractRepoName(info.RepoURL)
-		if repo != nil && *repo != "" {
-			s.conn().ExecContext(ctx, "INSERT INTO session_repos (repo_name) VALUES ($1) ON CONFLICT DO NOTHING", *repo)
-		}
-	}
-	if info.Branch != "" {
-		s.conn().ExecContext(ctx, "INSERT INTO session_branches (branch_name) VALUES ($1) ON CONFLICT DO NOTHING", info.Branch)
-	}
-}

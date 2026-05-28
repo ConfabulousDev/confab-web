@@ -2,42 +2,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 )
-
-// Querier is anything that can execute SQL — *sql.DB or *sql.Tx.
-type Querier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-}
-
-// RootSourceGitRemote is the only `root_source` value the app writes after
-// CF-233. The CHECK constraint on session_repos.root_source was dropped in
-// migration 48; the allowed-value enum lives here, per the project's
-// "db constraints in app" preference. CF-491's `pr_inference` source was
-// retired because the heuristic stamped wrong roots for cross-repo PRs.
-const RootSourceGitRemote = "git_remote"
-
-// RecordRepoRoot stamps a fork→root mapping onto session_repos. First-write-
-// wins via the `root_name IS NULL` guard; if a mapping already exists for the
-// fork, this call no-ops. Callers should treat errors as non-fatal (log and
-// continue): the next sync chunk on the same session retries.
-//
-// `source` must equal RootSourceGitRemote — unknown values return an error
-// without touching the DB. CF-494's git_remote resolver is the only writer.
-func RecordRepoRoot(ctx context.Context, q Querier, fork, root, source string) error {
-	if source != RootSourceGitRemote {
-		return fmt.Errorf("RecordRepoRoot: unsupported source %q (only %q is accepted)", source, RootSourceGitRemote)
-	}
-	_, err := q.ExecContext(ctx,
-		`UPDATE session_repos
-		   SET root_name = $2, root_source = $3
-		   WHERE repo_name = $1 AND root_name IS NULL`,
-		fork, root, source)
-	return err
-}
 
 // IsInvalidUUIDError checks if the error is a PostgreSQL invalid UUID format error.
 // Exported for use by sub-packages.
@@ -52,33 +20,14 @@ func IsUniqueViolation(err error) bool {
 	return strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "unique constraint")
 }
 
-// ExtractRepoFromGitInfo unmarshals a sessions.git_info JSON blob and returns
-// the owner/repo extracted from its `repo_url` field. Returns "" if gitInfo is
-// empty, malformed, or has no repo_url — callers should treat empty as "no
-// repo extractable" and skip downstream work. Mirrors the regex baked into
-// repoExtractExpr (db/repo_filter.go) on the SQL side.
-func ExtractRepoFromGitInfo(gitInfo []byte) string {
-	if len(gitInfo) == 0 {
-		return ""
-	}
-	var gi struct {
-		RepoURL string `json:"repo_url"`
-	}
-	if err := json.Unmarshal(gitInfo, &gi); err != nil || gi.RepoURL == "" {
-		return ""
-	}
-	repo := ExtractRepoName(gi.RepoURL)
-	if repo == nil {
-		return ""
-	}
-	return *repo
-}
-
 // ExtractRepoName extracts the org/repo from a git URL.
 // Examples:
 //   - "https://github.com/ConfabulousDev/confab-web.git" -> "ConfabulousDev/confab"
 //   - "git@github.com:ConfabulousDev/confab.git" -> "ConfabulousDev/confab"
 func ExtractRepoName(repoURL string) *string {
+	// CF-509: strip trailing slashes before the .git strip and the split, so
+	// "https://github.com/owner/repo/" yields "owner/repo" (not "repo/").
+	repoURL = strings.TrimRight(repoURL, "/")
 	// Remove .git suffix if present
 	repoURL = strings.TrimSuffix(repoURL, ".git")
 
