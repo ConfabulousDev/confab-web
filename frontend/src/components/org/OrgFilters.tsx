@@ -12,10 +12,9 @@ export interface OrgFiltersValue {
   // Canonical providers (`claude-code`, `codex`). Empty = aggregate across all
   // providers — same wire semantics as the trends filter.
   providers: string[];
-  // Repo names (owner/name form) to include. The backend filter is strict —
-  // empty `repos` matches no repo-tagged sessions. OrgPage auto-selects every
-  // available repo on first load so the user-visible default is "everything";
-  // `includeNoRepo` independently controls whether no-repo sessions count.
+  // Repo names (owner/name form) to include. Empty = include every repo
+  // (CF-506 semantics, matching /sessions). `includeNoRepo` independently
+  // controls whether sessions without a repo count.
   repos: string[];
   includeNoRepo: boolean;
 }
@@ -81,16 +80,9 @@ function OrgFilters({ availableProviders, availableRepos, value, onChange }: Org
     onChange({ ...value, includeNoRepo: !value.includeNoRepo });
   };
 
-  const handleSelectAllRepos = () => {
-    onChange({ ...value, repos: [...availableRepos] });
-  };
-
-  const handleDeselectAllRepos = () => {
+  const handleClearRepos = () => {
     onChange({ ...value, repos: [] });
   };
-
-  const allReposSelected =
-    availableRepos.length > 0 && value.repos.length === availableRepos.length;
 
   function getProviderButtonLabel(): string {
     if (value.providers.length === 0) return 'All Providers';
@@ -98,9 +90,13 @@ function OrgFilters({ availableProviders, availableRepos, value, onChange }: Org
     return `${value.providers.length} providers`;
   }
 
+  // CF-233 / CF-506: empty repos[] means "all repos". A subset selection
+  // shows the count; selecting every chip is semantically the same as the
+  // empty default, so it also reads "All Repos".
   function getRepoLabel(): string {
-    if (allReposSelected) return 'All Repos';
-    if (value.repos.length === 0) return 'No Repos';
+    if (value.repos.length === 0 || value.repos.length === availableRepos.length) {
+      return 'All Repos';
+    }
     const count = value.repos.length;
     return `${count} repo${count > 1 ? 's' : ''}`;
   }
@@ -207,12 +203,11 @@ function OrgFilters({ availableProviders, availableRepos, value, onChange }: Org
                     <div className={styles.divider} />
                     <div className={styles.sectionHeader}>
                       <span className={styles.sectionLabel}>Filter by repo</span>
-                      <button
-                        className={styles.toggleAllBtn}
-                        onClick={allReposSelected ? handleDeselectAllRepos : handleSelectAllRepos}
-                      >
-                        {allReposSelected ? 'Deselect all' : 'Select all'}
-                      </button>
+                      {value.repos.length > 0 && (
+                        <button className={styles.toggleAllBtn} onClick={handleClearRepos}>
+                          Clear
+                        </button>
+                      )}
                     </div>
                     {availableRepos.map((repo) => (
                       <label key={repo} className={styles.checkboxItem}>

@@ -12,10 +12,17 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
-// CF-491 — when a sync chunk contains a pr-link transcript line and the
-// session's git_info.repo_url extracts to a different owner/repo than the
-// PR's owner/repo, the resolver in HandleSyncChunk stamps the fork→root
-// mapping onto session_repos.
+// CF-491 originally — when a sync chunk contained a pr-link transcript line
+// and the session's git_info.repo_url extracted to a different owner/repo
+// than the PR's owner/repo, the resolver in HandleSyncChunk stamped a
+// fork→root mapping onto session_repos.
+//
+// CF-233 retires that path entirely. The pr_inference heuristic was too
+// aggressive: any PR link to a *different* repo (cross-org PR, dependency,
+// sibling repo) was treated as upstream evidence, producing misclassified
+// root mappings that surfaced as wrong repos under filters in /sessions,
+// /org, and /trends. CF-494's git_remote signal is the only authoritative
+// fork→upstream source after CF-233; pr_inference no longer runs.
 
 // readRootName returns the (root_name, root_source) stored on session_repos
 // for the given repo, or empty strings if the row or columns are NULL.
@@ -31,11 +38,11 @@ func readRootName(t *testing.T, env *testutil.TestEnvironment, repoName string) 
 	return root.String, source.String
 }
 
-// TestSyncChunk_PRLinkFromFork_RecordsRoot is the happy path: chunk has
-// git_info pointing to a fork, plus a pr-link line pointing to the upstream.
-// After the chunk lands, session_repos.root_name for the fork must equal the
-// upstream owner/repo.
-func TestSyncChunk_PRLinkFromFork_RecordsRoot(t *testing.T) {
+// TestSyncChunk_PRLinkFromFork_DoesNotStamp_CF233 is the inverted CF-491
+// test: a chunk whose git_info points to one repo and whose pr-link points
+// at a different repo must NOT stamp session_repos.root_name. The
+// pr_inference path is retired; only git_remote (CF-494) can collapse forks.
+func TestSyncChunk_PRLinkFromFork_DoesNotStamp_CF233(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
 	}
@@ -74,11 +81,62 @@ func TestSyncChunk_PRLinkFromFork_RecordsRoot(t *testing.T) {
 	testutil.RequireStatus(t, resp, http.StatusOK)
 
 	root, source := readRootName(t, env, "jackie/confab-web")
-	if root != "ConfabulousDev/confab-web" {
-		t.Errorf("expected jackie/confab-web -> ConfabulousDev/confab-web, got %q", root)
+	if root != "" {
+		t.Errorf("expected NULL root_name after CF-233 (pr_inference retired), got %q", root)
 	}
-	if source != "pr_inference" {
-		t.Errorf("expected root_source=pr_inference, got %q", source)
+	if source != "" {
+		t.Errorf("expected NULL root_source after CF-233, got %q", source)
+	}
+}
+
+// TestSyncChunk_PRLinkToUnrelatedRepo_DoesNotStamp_CF233 explicitly captures
+// the bug pr_inference produced: a PR opened from working-repo MyOrg/my-app
+// against a sibling repo MyOrg/some-library (not an upstream of my-app) used
+// to stamp my-app → some-library, silently moving my-app's sessions under
+// the wrong filter chip. After CF-233 the chunk handler must record nothing.
+func TestSyncChunk_PRLinkToUnrelatedRepo_DoesNotStamp_CF233(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "rr-cross@test.com", "RR Cross")
+	apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "ext-rr-cross")
+
+	ts := setupTestServerWithEnv(t, env)
+	client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+	// Working repo: MyOrg/my-app. PR target: MyOrg/some-library (sibling,
+	// not an upstream). Pre-CF-233 this would have stamped the misclassification.
+	prLine := `{"type":"pr-link","prNumber":42,"prUrl":"https://github.com/MyOrg/some-library/pull/42","prRepository":"MyOrg/some-library","sessionId":"abc","timestamp":"2025-01-01T00:00:00Z"}`
+
+	reqBody := api.SyncChunkRequest{
+		SessionID: sessionID,
+		FileName:  "transcript.jsonl",
+		FileType:  "transcript",
+		FirstLine: 1,
+		Lines: []string{
+			`{"type":"user","message":"open a PR against the shared lib"}`,
+			prLine,
+		},
+		Metadata: &api.SyncChunkMetadata{
+			GitInfo: json.RawMessage(`{"repo_url":"https://github.com/MyOrg/my-app.git","branch":"main"}`),
+		},
+	}
+
+	resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+	if err != nil {
+		t.Fatalf("sync request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	testutil.RequireStatus(t, resp, http.StatusOK)
+
+	root, _ := readRootName(t, env, "MyOrg/my-app")
+	if root != "" {
+		t.Errorf("MyOrg/my-app must not be stamped as a fork of MyOrg/some-library — got root_name=%q", root)
 	}
 }
 
@@ -271,10 +329,11 @@ func TestSyncChunk_GitRemoteFromFork_RecordsRoot(t *testing.T) {
 	}
 }
 
-// TestSyncChunk_OldShape_NoRemotes_FallsBackToPRLink — CF-494 acceptance #2.
-// Named regression guard: old-shape payloads (no remotes/tracking_remote)
-// continue to stamp via pr_inference as in CF-491.
-func TestSyncChunk_OldShape_NoRemotes_FallsBackToPRLink(t *testing.T) {
+// TestSyncChunk_OldShape_NoRemotes_DoesNotStamp_CF233 — old-shape payloads
+// (no remotes / tracking_remote) used to fall back to pr_inference. After
+// CF-233 they record nothing; sessions from pre-CF-494 CLIs stay
+// un-collapsed, which is the accurate posture given no upstream signal.
+func TestSyncChunk_OldShape_NoRemotes_DoesNotStamp_CF233(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
 	}
@@ -308,18 +367,18 @@ func TestSyncChunk_OldShape_NoRemotes_FallsBackToPRLink(t *testing.T) {
 	testutil.RequireStatus(t, resp, http.StatusOK)
 
 	root, source := readRootName(t, env, "jackie/confab-web")
-	if root != "ConfabulousDev/confab-web" {
-		t.Errorf("expected fallback stamp via pr_inference, got root=%q", root)
+	if root != "" {
+		t.Errorf("expected NULL root_name for old-shape payload after CF-233, got %q", root)
 	}
-	if source != "pr_inference" {
-		t.Errorf("expected root_source=pr_inference (fallback), got %q", source)
+	if source != "" {
+		t.Errorf("expected NULL root_source for old-shape payload after CF-233, got %q", source)
 	}
 }
 
-// TestSyncChunk_BothSignals_GitRemoteWins — CF-494 acceptance #3.
-// Both git_remote and pr-link signals fire in the same chunk; git_remote
-// runs first and first-write-wins seals the row.
-func TestSyncChunk_BothSignals_GitRemoteWins(t *testing.T) {
+// TestSyncChunk_BothSignals_OnlyGitRemoteStamps_CF233 — git_remote and
+// pr-link signals both present. After CF-233, only git_remote runs;
+// "first-write-wins" is moot because pr_inference no longer fires.
+func TestSyncChunk_BothSignals_OnlyGitRemoteStamps_CF233(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
 	}
@@ -364,7 +423,7 @@ func TestSyncChunk_BothSignals_GitRemoteWins(t *testing.T) {
 		t.Errorf("root = %q", root)
 	}
 	if source != "git_remote" {
-		t.Errorf("expected git_remote to win first-write-wins, got %q", source)
+		t.Errorf("after CF-233 pr_inference is gone; git_remote is the only writer, got %q", source)
 	}
 }
 

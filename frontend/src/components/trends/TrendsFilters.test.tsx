@@ -243,3 +243,101 @@ describe('TrendsFilters Owner filter (CF-495)', () => {
     expect(screen.queryByRole('button', { name: /owner/i })).toBeNull();
   });
 });
+
+// CF-233: empty repos[] means "all repos" (matches CF-506 backend semantics).
+// The button label and the dropdown's selection-toggle UX must reflect that.
+describe('TrendsFilters Repo filter label & Clear (CF-233)', () => {
+  const repos = ['ConfabulousDev/confab-web', 'jackie/notes', 'other/sandbox'];
+
+  it('shows "All Repos" label when repos state is empty (post-CF-506 default)', () => {
+    render(<TrendsFilters {...baseProps({ repos })} />);
+    expect(screen.getByRole('button', { name: /repository/i })).toHaveTextContent(/all repos/i);
+  });
+
+  it('shows "All Repos" label when every available repo is explicitly selected', () => {
+    render(
+      <TrendsFilters
+        {...baseProps({
+          repos,
+          value: { dateRange: defaultDateRange, repos, includeNoRepo: true, providers: [], owners: [] },
+        })}
+      />
+    );
+    expect(screen.getByRole('button', { name: /repository/i })).toHaveTextContent(/all repos/i);
+  });
+
+  it('shows "N repos" label when a subset is selected', () => {
+    render(
+      <TrendsFilters
+        {...baseProps({
+          repos,
+          value: {
+            dateRange: defaultDateRange,
+            repos: ['ConfabulousDev/confab-web', 'jackie/notes'],
+            includeNoRepo: true,
+            providers: [],
+            owners: [],
+          },
+        })}
+      />
+    );
+    expect(screen.getByRole('button', { name: /repository/i })).toHaveTextContent(/2 repos/i);
+  });
+
+  it('does NOT show a "Select all" affordance in any state (empty=all makes it redundant)', () => {
+    render(<TrendsFilters {...baseProps({ repos })} />);
+    fireEvent.click(screen.getByRole('button', { name: /repository/i }));
+    expect(screen.queryByText(/select all/i)).not.toBeInTheDocument();
+  });
+
+  it('hides the Clear button when repos state is empty (nothing to clear)', () => {
+    render(<TrendsFilters {...baseProps({ repos })} />);
+    fireEvent.click(screen.getByRole('button', { name: /repository/i }));
+    expect(screen.queryByRole('button', { name: /^clear$/i })).toBeNull();
+  });
+
+  it('shows the Clear button when at least one repo is selected', () => {
+    render(
+      <TrendsFilters
+        {...baseProps({
+          repos,
+          value: {
+            dateRange: defaultDateRange,
+            repos: ['ConfabulousDev/confab-web'],
+            includeNoRepo: true,
+            providers: [],
+            owners: [],
+          },
+        })}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repository/i }));
+    expect(screen.getByRole('button', { name: /^clear$/i })).toBeInTheDocument();
+  });
+
+  it('clicking Clear resets repos to [] but leaves includeNoRepo untouched', () => {
+    const onChange = vi.fn();
+    render(
+      <TrendsFilters
+        {...baseProps({
+          repos,
+          onChange,
+          value: {
+            dateRange: defaultDateRange,
+            repos: ['ConfabulousDev/confab-web', 'jackie/notes'],
+            includeNoRepo: false,
+            providers: [],
+            owners: [],
+          },
+        })}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /repository/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^clear$/i }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ repos: [], includeNoRepo: false }),
+    );
+  });
+});
