@@ -48,6 +48,8 @@ function Stateful({
   );
 }
 
+// CF-233 / CF-506: empty repos[] is the "All Repos" default — the button
+// label reads "All Repos" and no Clear affordance appears in the dropdown.
 export const Default: Story = {
   render: () => (
     <Stateful
@@ -56,7 +58,7 @@ export const Default: Story = {
       initialValue={{
         dateRange: DEFAULT_DATE_RANGE,
         providers: [],
-        repos: SAMPLE_REPOS,
+        repos: [],
         includeNoRepo: true,
       }}
     />
@@ -71,7 +73,7 @@ export const ProviderSelected: Story = {
       initialValue={{
         dateRange: DEFAULT_DATE_RANGE,
         providers: ['codex'],
-        repos: SAMPLE_REPOS,
+        repos: [],
         includeNoRepo: true,
       }}
     />
@@ -86,7 +88,7 @@ export const BothProvidersSelected: Story = {
       initialValue={{
         dateRange: DEFAULT_DATE_RANGE,
         providers: ['claude-code', 'codex'],
-        repos: SAMPLE_REPOS,
+        repos: [],
         includeNoRepo: true,
       }}
     />
@@ -132,7 +134,7 @@ export const SingleProviderAvailable: Story = {
       initialValue={{
         dateRange: DEFAULT_DATE_RANGE,
         providers: [],
-        repos: SAMPLE_REPOS,
+        repos: [],
         includeNoRepo: true,
       }}
     />

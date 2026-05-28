@@ -530,36 +530,13 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fork→root resolver chain. Both resolvers run unconditionally; ordering
-	// + first-write-wins on session_repos.root_name decides precedence.
-	//
-	// (1) CF-494 git_remote (primary, definitive): CLI ships git_info.remotes
-	//     + tracking_remote, the resolver derives fork→upstream directly.
-	// (2) CF-491 pr_inference (fallback, heuristic): if a PR link in the
-	//     transcript points at a different owner/repo than the chunk's
-	//     git_info.repo_url, infer that as the upstream.
-	//
-	// Both runs are non-fatal — a failure here never fails the chunk upload.
+	// Fork→root resolver: CF-494 git_remote, fed by CLI-shipped remotes +
+	// tracking_remote. Non-fatal — a failure here never fails the chunk upload.
+	// CF-491's pr_inference fallback was retired in CF-233 because any PR
+	// link to a different owner/repo (cross-org PR, dependency, sibling
+	// repo) was being treated as upstream evidence and silently
+	// misclassified working repos under unrelated roots.
 	resolveAndRecordRepoRoot(updateCtx, s.db.Conn(), log, req.SessionID, gitInfo, "chunk")
-
-	if fork := db.ExtractRepoFromGitInfo(gitInfo); fork != "" && len(prLinks) > 0 {
-		for _, link := range prLinks {
-			if link.LinkType != models.GitHubLinkTypePullRequest {
-				continue
-			}
-			root := link.Owner + "/" + link.Repo
-			if root == fork {
-				continue
-			}
-			if err := db.RecordRepoRoot(updateCtx, s.db.Conn(), fork, root, "pr_inference"); err != nil {
-				log.Warn("Failed to record repo root",
-					"error", err,
-					"session_id", req.SessionID,
-					"fork", fork,
-					"root", root)
-			}
-		}
-	}
 
 	// Codex rollout sidecar (CF-385). Runs after S3 + sync state are
 	// committed so a failure here leaves no orphan content — only a delayed
@@ -998,7 +975,7 @@ func resolveAndRecordRepoRoot(ctx context.Context, q db.Querier, log *slog.Logge
 	parsed, _ := db.ParseGitInfo(gitInfo)
 	fork, root, ok := db.ResolveForkFromRemotes(parsed)
 	if ok {
-		if err := db.RecordRepoRoot(ctx, q, fork, root, "git_remote"); err != nil {
+		if err := db.RecordRepoRoot(ctx, q, fork, root, db.RootSourceGitRemote); err != nil {
 			log.Warn("Failed to record repo root from git remotes",
 				"error", err,
 				"site", site,

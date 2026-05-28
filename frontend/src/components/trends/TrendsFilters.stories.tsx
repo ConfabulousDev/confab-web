@@ -72,3 +72,21 @@ export const BothProvidersSelected: Story = {
     />
   ),
 };
+
+// CF-233: a repo subset is selected — trigger label is "N repos", and the
+// dropdown's "Clear" button appears in the section header (it's hidden when
+// repos is empty, since there's nothing to clear). Reset goes back to the
+// empty-repos "All Repos" default.
+export const RepoSubsetSelected: Story = {
+  render: () => (
+    <Interactive
+      initial={{
+        dateRange: defaultDateRange,
+        repos: ['org/confab-web', 'org/confab-cli'],
+        includeNoRepo: true,
+        providers: [],
+        owners: [],
+      }}
+    />
+  ),
+};

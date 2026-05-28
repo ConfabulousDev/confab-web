@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-// CF-494 — primary fork→upstream resolver, fed by CLI-shipped git remotes.
+// CF-494 — fork→upstream resolver, fed by CLI-shipped git remotes. After
+// CF-233 this is the *only* writer of session_repos.root_name.
 //
 // The CLI (CF-493) ships the user's full set of git remotes plus the current
 // branch's tracking remote on every sync; the backend extracts a definitive
@@ -14,10 +15,11 @@ import (
 // validation package; handlers call validation.ValidateGitInfo first, then
 // ParseGitInfo + ResolveForkFromRemotes, then RecordRepoRoot.
 //
-// The existing PR-link resolver in api/sync.go::HandleSyncChunk remains as
-// a fallback for sessions with no tracking_remote configured or shipped
-// from old CLIs; first-write-wins via RecordRepoRoot's IS NULL guard means
-// git_remote wins when both fire on the same sync.
+// CF-491's PR-link inference fallback was retired in CF-233 — any PR link
+// to a different repo (cross-org, dependency, sibling) was being treated
+// as upstream evidence and silently misclassified working repos. Sessions
+// from CLIs without tracking_remote now stay un-collapsed, which is the
+// accurate posture absent a real upstream signal.
 
 // GitRemote is one entry in git_info.remotes. JSON tags match CF-493's
 // CLI-side struct exactly.

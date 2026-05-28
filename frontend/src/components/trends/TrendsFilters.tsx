@@ -85,11 +85,7 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
     onChange({ ...value, includeNoRepo: !value.includeNoRepo });
   };
 
-  const handleSelectAllRepos = () => {
-    onChange({ ...value, repos: [...repos] });
-  };
-
-  const handleDeselectAllRepos = () => {
+  const handleClearRepos = () => {
     onChange({ ...value, repos: [] });
   };
 
@@ -113,11 +109,13 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
     return `${value.owners.length} owners`;
   }
 
-  const allReposSelected = repos.length > 0 && value.repos.length === repos.length;
-
+  // CF-233 / CF-506: empty repos[] means "all repos". A subset selection
+  // shows the count; selecting every chip is semantically the same as the
+  // empty default, so it also reads "All Repos".
   function getRepoLabel(): string {
-    if (allReposSelected) return 'All Repos';
-    if (value.repos.length === 0) return 'No Repos';
+    if (value.repos.length === 0 || value.repos.length === repos.length) {
+      return 'All Repos';
+    }
     const count = value.repos.length;
     return `${count} repo${count > 1 ? 's' : ''}`;
   }
@@ -230,12 +228,11 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
                     <div className={styles.divider} />
                     <div className={styles.sectionHeader}>
                       <span className={styles.sectionLabel}>Filter by repo</span>
-                      <button
-                        className={styles.toggleAllBtn}
-                        onClick={allReposSelected ? handleDeselectAllRepos : handleSelectAllRepos}
-                      >
-                        {allReposSelected ? 'Deselect all' : 'Select all'}
-                      </button>
+                      {value.repos.length > 0 && (
+                        <button className={styles.toggleAllBtn} onClick={handleClearRepos}>
+                          Clear
+                        </button>
+                      )}
                     </div>
                     {repos.map((repo) => (
                       <label key={repo} className={styles.checkboxItem}>

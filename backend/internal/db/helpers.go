@@ -13,28 +13,24 @@ type Querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+// RootSourceGitRemote is the only `root_source` value the app writes after
+// CF-233. The CHECK constraint on session_repos.root_source was dropped in
+// migration 48; the allowed-value enum lives here, per the project's
+// "db constraints in app" preference. CF-491's `pr_inference` source was
+// retired because the heuristic stamped wrong roots for cross-repo PRs.
+const RootSourceGitRemote = "git_remote"
+
 // RecordRepoRoot stamps a fork→root mapping onto session_repos. First-write-
 // wins via the `root_name IS NULL` guard; if a mapping already exists for the
 // fork, this call no-ops. Callers should treat errors as non-fatal (log and
 // continue): the next sync chunk on the same session retries.
 //
-// Source values (CHECK constraint in migrations 000046 + 000047):
-//   - "git_remote": CLI shipped git_info.remotes + tracking_remote; CF-494
-//     resolver derived the mapping definitively.
-//   - "pr_inference": session_github_links pull_request row points at a
-//     different owner/repo than the session's git_repo_url; CF-491 resolver
-//     inferred the mapping.
-//   - "github_api" / "manual": reserved for future use.
-//
-// CF-494 v1 precedence tradeoff: first-write-wins means a prior
-// pr_inference row blocks a later git_remote write even though git_remote
-// is the stronger signal. In practice both signals converge on the same
-// owner/repo so the precedence rarely matters; the known divergence cases
-// (cross-org PRs, sibling-fork PRs) are uncommon. If telemetry shows real
-// divergence, relax the guard to allow git_remote to overwrite
-// pr_inference (e.g. WHERE root_name IS NULL OR root_source = 'pr_inference'
-// when source = 'git_remote').
+// `source` must equal RootSourceGitRemote — unknown values return an error
+// without touching the DB. CF-494's git_remote resolver is the only writer.
 func RecordRepoRoot(ctx context.Context, q Querier, fork, root, source string) error {
+	if source != RootSourceGitRemote {
+		return fmt.Errorf("RecordRepoRoot: unsupported source %q (only %q is accepted)", source, RootSourceGitRemote)
+	}
 	_, err := q.ExecContext(ctx,
 		`UPDATE session_repos
 		   SET root_name = $2, root_source = $3
