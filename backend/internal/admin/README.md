@@ -40,9 +40,9 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleCreateUserAPI` | `POST /api/v1/admin/users` | Creates a password-authenticated user (when password auth enabled) |
 | `HandleDeactivateUserAPI` | `POST /api/v1/admin/users/{id}/deactivate` | Sets user status to inactive |
 | `HandleActivateUserAPI` | `POST /api/v1/admin/users/{id}/activate` | Sets user status to active |
-| `HandleDeleteUserAPI` | `DELETE /api/v1/admin/users/{id}` | Deletes user, their S3 objects, then DB record. Returns closure capturing storage |
-| `HandleListSystemSharesAPI` | `GET /api/v1/admin/system-shares` | Returns all system-wide shares. Returns closure capturing frontendURL |
-| `HandleCreateSystemShareAPI` | `POST /api/v1/admin/system-shares` | Creates a system-wide share. Returns closure capturing frontendURL |
+| `HandleDeleteUserAPI` | `DELETE /api/v1/admin/users/{id}` | Deletes user, their S3 objects, then DB record |
+| `HandleListSystemSharesAPI` | `GET /api/v1/admin/system-shares` | Returns all system-wide shares |
+| `HandleCreateSystemShareAPI` | `POST /api/v1/admin/system-shares` | Creates a system-wide share |
 | `HandleGetSmartRecapPrompt` | `GET /api/v1/admin/settings/smart-recap-prompt` | Returns current prompt (custom or default) plus fixed sections |
 | `HandleGetSmartRecapPromptDefault` | `GET /api/v1/admin/settings/smart-recap-prompt/default` | Returns the hardcoded default instructions |
 | `HandleSetSmartRecapPrompt` | `PUT /api/v1/admin/settings/smart-recap-prompt` | Saves custom instructions (validates UTF-8, max 50k chars) |

@@ -13,6 +13,11 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
+// githubLinkColumns is the shared SELECT column list for session_github_links,
+// in the order the row scanners expect. Kept in one place so the read queries
+// cannot drift — a parallel column list is a ghost-field bug waiting to happen.
+const githubLinkColumns = "id, session_id, link_type, url, owner, repo, ref, title, source, created_at"
+
 // CreateGitHubLink creates or updates a GitHub link for a session (upsert).
 // On conflict (same session, link_type, owner, repo, ref), it updates source and url.
 // When overwriteTitle is true, the new title always wins.
@@ -63,12 +68,10 @@ func (s *Store) GetGitHubLinksForSession(ctx context.Context, sessionID string) 
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
 	defer span.End()
 
-	query := `
-		SELECT id, session_id, link_type, url, owner, repo, ref, title, source, created_at
+	query := `SELECT ` + githubLinkColumns + `
 		FROM session_github_links
 		WHERE session_id = $1
-		ORDER BY created_at DESC
-	`
+		ORDER BY created_at DESC`
 	rows, err := s.conn().QueryContext(ctx, query, sessionID)
 	if err != nil {
 		if db.IsInvalidUUIDError(err) {
@@ -150,11 +153,9 @@ func (s *Store) GetGitHubLinkByID(ctx context.Context, linkID int64) (*models.Gi
 		trace.WithAttributes(attribute.Int64("link.id", linkID)))
 	defer span.End()
 
-	query := `
-		SELECT id, session_id, link_type, url, owner, repo, ref, title, source, created_at
+	query := `SELECT ` + githubLinkColumns + `
 		FROM session_github_links
-		WHERE id = $1
-	`
+		WHERE id = $1`
 	var link models.GitHubLink
 	err := s.conn().QueryRowContext(ctx, query, linkID).Scan(
 		&link.ID,

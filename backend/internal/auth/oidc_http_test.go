@@ -119,13 +119,13 @@ func TestGetOIDCUser(t *testing.T) {
 		userBody    string
 		wantErr     bool
 		wantErrText string
-		check       func(t *testing.T, u *OIDCUser)
+		check       func(t *testing.T, u *oidcUser)
 	}{
 		{
 			name:       "success",
 			userStatus: http.StatusOK,
 			userBody:   `{"sub":"u1","email":"alice@example.com","email_verified":true,"name":"Alice"}`,
-			check: func(t *testing.T, u *OIDCUser) {
+			check: func(t *testing.T, u *oidcUser) {
 				if u.Sub != "u1" || u.Email != "alice@example.com" {
 					t.Errorf("unexpected user: %+v", u)
 				}

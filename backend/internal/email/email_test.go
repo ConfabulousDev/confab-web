@@ -181,13 +181,13 @@ func TestRateLimitedService(t *testing.T) {
 		service := NewRateLimitedService(mock, 5)
 
 		// Check if we can send 3 emails (should succeed)
-		err := service.CheckRateLimit(1, 3)
+		err := service.checkRateLimit(1, 3)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 
 		// Check if we can send 6 emails (should fail)
-		err = service.CheckRateLimit(1, 6)
+		err = service.checkRateLimit(1, 6)
 		if err != ErrRateLimitExceeded {
 			t.Errorf("expected ErrRateLimitExceeded, got %v", err)
 		}

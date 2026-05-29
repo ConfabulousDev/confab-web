@@ -20,6 +20,13 @@ import (
 
 var tracer = otel.Tracer("confab/storage")
 
+// recordSpanError marks the span as failed and records err on it. It is a
+// shorthand for the RecordError+SetStatus pair repeated across storage ops.
+func recordSpanError(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+}
+
 // Sentinel errors for storage operations
 var (
 	// ErrObjectNotFound indicates the requested object does not exist
@@ -94,16 +101,14 @@ func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
 
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		recordSpanError(span, err)
 		return nil, classifyStorageError(err, "download")
 	}
 	defer object.Close()
 
 	data, err := io.ReadAll(object)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		recordSpanError(span, err)
 		return nil, classifyStorageError(err, "download")
 	}
 
@@ -119,8 +124,7 @@ func (s *S3Storage) Delete(ctx context.Context, key string) error {
 
 	err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		recordSpanError(span, err)
 		return fmt.Errorf("failed to delete from S3: %w", err)
 	}
 	return nil
@@ -224,8 +228,7 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, provider stri
 		ContentType: "application/json",
 	})
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		recordSpanError(span, err)
 		return "", classifyStorageError(err, "upload chunk")
 	}
 
@@ -268,8 +271,7 @@ func (s *S3Storage) ListChunks(ctx context.Context, userID int64, provider strin
 		// Sanity check to prevent unbounded memory usage
 		if len(keys) > MaxChunksPerFile {
 			err := fmt.Errorf("list chunks: %w (limit: %d)", ErrTooManyChunks, MaxChunksPerFile)
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
+			recordSpanError(span, err)
 			return nil, err
 		}
 	}
@@ -314,8 +316,7 @@ func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, pr
 			return classifyStorageError(obj.Err, "list session chunks")
 		}
 		if err := s.Delete(ctx, obj.Key); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
+			recordSpanError(span, err)
 			return fmt.Errorf("failed to delete chunk %s: %w", obj.Key, err)
 		}
 		deletedCount++
@@ -347,8 +348,7 @@ func (s *S3Storage) DeleteAllUserData(ctx context.Context, userID int64) error {
 			return classifyStorageError(obj.Err, "list user objects")
 		}
 		if err := s.Delete(ctx, obj.Key); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
+			recordSpanError(span, err)
 			return fmt.Errorf("failed to delete object %s: %w", obj.Key, err)
 		}
 		deletedCount++

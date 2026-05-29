@@ -236,8 +236,8 @@ type OAuthConfig struct {
 	oidcMu        sync.Mutex     // protects lazy discovery
 }
 
-// GitHubUser represents GitHub user info from OAuth
-type GitHubUser struct {
+// githubUser represents GitHub user info from OAuth
+type githubUser struct {
 	ID        int64  `json:"id"`
 	Login     string `json:"login"`
 	Email     string `json:"email"`
@@ -245,8 +245,8 @@ type GitHubUser struct {
 	AvatarURL string `json:"avatar_url"`
 }
 
-// GitHubEmail represents email from GitHub API
-type GitHubEmail struct {
+// githubEmail represents email from GitHub API
+type githubEmail struct {
 	Email    string `json:"email"`
 	Primary  bool   `json:"primary"`
 	Verified bool   `json:"verified"`
@@ -723,7 +723,7 @@ func exchangeGitHubCode(code string, config *OAuthConfig) (string, error) {
 }
 
 // getGitHubUser fetches user info from GitHub
-func getGitHubUser(accessToken string) (*GitHubUser, error) {
+func getGitHubUser(accessToken string) (*githubUser, error) {
 	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
 	if err != nil {
 		return nil, err
@@ -738,7 +738,7 @@ func getGitHubUser(accessToken string) (*GitHubUser, error) {
 	}
 	defer resp.Body.Close()
 
-	var user GitHubUser
+	var user githubUser
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, err
 	}
@@ -777,7 +777,7 @@ func getGitHubPrimaryEmail(accessToken string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	var emails []GitHubEmail
+	var emails []githubEmail
 	if err := json.NewDecoder(resp.Body).Decode(&emails); err != nil {
 		return "", err
 	}
@@ -798,8 +798,8 @@ func getGitHubPrimaryEmail(accessToken string) (string, error) {
 // Google OAuth
 // ============================================================================
 
-// GoogleUser represents Google user info from OAuth
-type GoogleUser struct {
+// googleUser represents Google user info from OAuth
+type googleUser struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
@@ -1020,7 +1020,7 @@ func exchangeGoogleCode(code string, config *OAuthConfig) (string, error) {
 }
 
 // getGoogleUser fetches user info from Google
-func getGoogleUser(accessToken string) (*GoogleUser, error) {
+func getGoogleUser(accessToken string) (*googleUser, error) {
 	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
 	if err != nil {
 		return nil, err
@@ -1034,7 +1034,7 @@ func getGoogleUser(accessToken string) (*GoogleUser, error) {
 	}
 	defer resp.Body.Close()
 
-	var user GoogleUser
+	var user googleUser
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, err
 	}
@@ -1062,8 +1062,8 @@ type OIDCEndpoints struct {
 	Issuer                string `json:"issuer"`
 }
 
-// OIDCUser represents user info from the OIDC userinfo endpoint
-type OIDCUser struct {
+// oidcUser represents user info from the OIDC userinfo endpoint
+type oidcUser struct {
 	Sub           string      `json:"sub"`
 	Email         string      `json:"email"`
 	EmailVerified interface{} `json:"email_verified"` // bool or string "true"
@@ -1074,7 +1074,7 @@ type OIDCUser struct {
 // IsEmailVerified returns true if email_verified is explicitly true.
 // Handles both bool and string "true" representations.
 // Missing/null email_verified is treated as unverified (strict mode).
-func (u *OIDCUser) IsEmailVerified() bool {
+func (u *oidcUser) IsEmailVerified() bool {
 	switch v := u.EmailVerified.(type) {
 	case bool:
 		return v
@@ -1406,7 +1406,7 @@ func exchangeOIDCCode(code string, config *OAuthConfig, endpoints *OIDCEndpoints
 }
 
 // getOIDCUser fetches user info from the OIDC userinfo endpoint
-func getOIDCUser(accessToken string, endpoints *OIDCEndpoints) (*OIDCUser, error) {
+func getOIDCUser(accessToken string, endpoints *OIDCEndpoints) (*oidcUser, error) {
 	req, err := http.NewRequest("GET", endpoints.UserinfoEndpoint, nil)
 	if err != nil {
 		return nil, err
@@ -1425,7 +1425,7 @@ func getOIDCUser(accessToken string, endpoints *OIDCEndpoints) (*OIDCUser, error
 		return nil, fmt.Errorf("OIDC userinfo returned status %d", resp.StatusCode)
 	}
 
-	var user OIDCUser
+	var user oidcUser
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, err
 	}

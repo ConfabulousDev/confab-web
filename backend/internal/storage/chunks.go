@@ -80,8 +80,7 @@ func (s *S3Storage) DownloadAndMergeChunks(ctx context.Context, userID int64, pr
 
 	chunkKeys, err := s.ListChunks(ctx, userID, provider, externalID, fileName)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		recordSpanError(span, err)
 		return nil, err
 	}
 	if len(chunkKeys) == 0 {
@@ -90,8 +89,7 @@ func (s *S3Storage) DownloadAndMergeChunks(ctx context.Context, userID int64, pr
 
 	chunks, err := s.DownloadChunks(ctx, chunkKeys)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		recordSpanError(span, err)
 		return nil, err
 	}
 	if len(chunks) == 0 {
@@ -100,8 +98,7 @@ func (s *S3Storage) DownloadAndMergeChunks(ctx context.Context, userID int64, pr
 
 	merged, err := MergeChunks(chunks)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		recordSpanError(span, err)
 		return nil, err
 	}
 

@@ -213,7 +213,7 @@ func TestOIDCUser_IsEmailVerified(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			user := &OIDCUser{EmailVerified: tt.value}
+			user := &oidcUser{EmailVerified: tt.value}
 			if got := user.IsEmailVerified(); got != tt.expected {
 				t.Errorf("IsEmailVerified() = %v, want %v", got, tt.expected)
 			}

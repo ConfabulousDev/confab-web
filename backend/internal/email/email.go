@@ -66,9 +66,9 @@ func (s *RateLimitedService) SendShareInvitation(ctx context.Context, userID int
 	return s.service.SendShareInvitation(ctx, params)
 }
 
-// CheckRateLimit checks if sending n emails would exceed the rate limit
+// checkRateLimit checks if sending n emails would exceed the rate limit
 // Returns nil if allowed, ErrRateLimitExceeded if not
-func (s *RateLimitedService) CheckRateLimit(userID int64, count int) error {
+func (s *RateLimitedService) checkRateLimit(userID int64, count int) error {
 	if !s.limiter.AllowN(userID, s.limitPerHour, count) {
 		return ErrRateLimitExceeded
 	}
