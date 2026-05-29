@@ -136,7 +136,7 @@
   height: 16px;
 }
 
-/* Repo-filter section helpers — header label + select-all toggle + divider. */
+/* Repo-filter section helpers — header label + Clear button + divider. */
 .sectionHeader {
   display: flex;
   align-items: center;
@@ -152,7 +152,7 @@
   letter-spacing: 0.05em;
 }
 
-.toggleAllBtn {
+.clearBtn {
   padding: 0;
   background: none;
   border: none;
@@ -162,7 +162,7 @@
   transition: opacity var(--transition-base);
 }
 
-.toggleAllBtn:hover {
+.clearBtn:hover {
   opacity: 0.8;
 }
 

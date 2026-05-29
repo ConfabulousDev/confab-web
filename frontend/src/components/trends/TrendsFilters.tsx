@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { useDropdown } from '@/hooks';
 import type { DateRange } from '@/utils/dateRange';
 import { getDatePresets } from '@/utils/dateRange';
-import { CalendarIcon, RepoIcon, CheckIcon, RobotIcon, UserIcon } from '@/components/icons';
-import { getProviderIcon } from '@/components/providerIcon';
-import { PROVIDER_VALUES, providerLabel } from '@/utils/providers';
-import styles from './TrendsFilters.module.css';
+import { CalendarIcon, CheckIcon, UserIcon } from '@/components/icons';
+import { PROVIDER_VALUES } from '@/utils/providers';
+import ProviderFilter from '@/components/filters/ProviderFilter';
+import RepoFilter from '@/components/filters/RepoFilter';
+import styles from '@/styles/filterDropdown.module.css';
 
 export interface TrendsFiltersValue {
   dateRange: DateRange;
@@ -33,20 +34,10 @@ interface TrendsFiltersProps {
 
 function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFiltersProps) {
   const {
-    isOpen: providerIsOpen,
-    toggle: toggleProvider,
-    containerRef: providerContainerRef,
-  } = useDropdown<HTMLDivElement>();
-  const {
     isOpen: dateIsOpen,
     setIsOpen: setDateIsOpen,
     toggle: toggleDate,
     containerRef: dateContainerRef,
-  } = useDropdown<HTMLDivElement>();
-  const {
-    isOpen: repoIsOpen,
-    toggle: toggleRepo,
-    containerRef: repoContainerRef,
   } = useDropdown<HTMLDivElement>();
   const {
     isOpen: ownerIsOpen,
@@ -65,35 +56,9 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
 
   const datePresets = useMemo(() => getDatePresets(), []);
 
-  // Determine if we're showing a filtered subset
-  const isRepoFiltered =
-    (value.repos.length > 0 && value.repos.length < repos.length) || !value.includeNoRepo;
-
   const handleDateRangeChange = (preset: DateRange) => {
     onChange({ ...value, dateRange: preset });
     setDateIsOpen(false);
-  };
-
-  const handleRepoToggle = (repo: string) => {
-    const newRepos = value.repos.includes(repo)
-      ? value.repos.filter((r) => r !== repo)
-      : [...value.repos, repo];
-    onChange({ ...value, repos: newRepos });
-  };
-
-  const handleIncludeNoRepoToggle = () => {
-    onChange({ ...value, includeNoRepo: !value.includeNoRepo });
-  };
-
-  const handleClearRepos = () => {
-    onChange({ ...value, repos: [] });
-  };
-
-  const handleProviderToggle = (provider: string) => {
-    const next = value.providers.includes(provider)
-      ? value.providers.filter((p) => p !== provider)
-      : [...value.providers, provider];
-    onChange({ ...value, providers: next });
   };
 
   const handleOwnerToggle = (owner: string) => {
@@ -109,58 +74,14 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
     return `${value.owners.length} owners`;
   }
 
-  // CF-233 / CF-506: empty repos[] means "all repos". A subset selection
-  // shows the count; selecting every chip is semantically the same as the
-  // empty default, so it also reads "All Repos".
-  function getRepoLabel(): string {
-    if (value.repos.length === 0 || value.repos.length === repos.length) {
-      return 'All Repos';
-    }
-    const count = value.repos.length;
-    return `${count} repo${count > 1 ? 's' : ''}`;
-  }
-
-  function getProviderButtonLabel(): string {
-    if (value.providers.length === 0) return 'All Providers';
-    if (value.providers.length === 1) return providerLabel(value.providers[0] ?? '');
-    return `${value.providers.length} providers`;
-  }
-
   return (
     <div className={styles.container}>
       {/* Provider Filter (CF-424) — leftmost, mirroring FilterChipsBar's coarsest-cut ordering */}
-      <div className={styles.filterWrapper} ref={providerContainerRef}>
-        <button
-          className={`${styles.filterBtn} ${value.providers.length > 0 ? styles.active : ''}`}
-          onClick={toggleProvider}
-          title="Provider Filter"
-          aria-label="Provider Filter"
-          aria-expanded={providerIsOpen}
-        >
-          {RobotIcon}
-          <span className={styles.filterLabel}>{getProviderButtonLabel()}</span>
-        </button>
-
-        {providerIsOpen && (
-          <div className={styles.dropdown}>
-            <div className={styles.dropdownContent}>
-              <div className={styles.section}>
-                {PROVIDER_VALUES.map((p) => (
-                  <label key={p} className={styles.checkboxItem}>
-                    <input
-                      type="checkbox"
-                      checked={value.providers.includes(p)}
-                      onChange={() => handleProviderToggle(p)}
-                    />
-                    <span className={styles.providerIcon}>{getProviderIcon(p)}</span>
-                    <span>{providerLabel(p)}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <ProviderFilter
+        availableProviders={[...PROVIDER_VALUES]}
+        selectedProviders={value.providers}
+        onChange={(providers) => onChange({ ...value, providers })}
+      />
 
       {/* Date Range Filter */}
       <div className={styles.filterWrapper} ref={dateContainerRef}>
@@ -198,59 +119,12 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
       </div>
 
       {/* Repo Filter */}
-      <div className={styles.filterWrapper} ref={repoContainerRef}>
-        <button
-          className={`${styles.filterBtn} ${isRepoFiltered ? styles.active : ''}`}
-          onClick={toggleRepo}
-          title="Repository Filter"
-          aria-label="Repository Filter"
-          aria-expanded={repoIsOpen}
-        >
-          {RepoIcon}
-          <span className={styles.filterLabel}>{getRepoLabel()}</span>
-        </button>
-
-        {repoIsOpen && (
-          <div className={styles.dropdown}>
-            <div className={styles.dropdownContent}>
-              <div className={styles.section}>
-                <label className={styles.checkboxItem}>
-                  <input
-                    type="checkbox"
-                    checked={value.includeNoRepo}
-                    onChange={handleIncludeNoRepoToggle}
-                  />
-                  <span>Include sessions without repo</span>
-                </label>
-
-                {repos.length > 0 && (
-                  <>
-                    <div className={styles.divider} />
-                    <div className={styles.sectionHeader}>
-                      <span className={styles.sectionLabel}>Filter by repo</span>
-                      {value.repos.length > 0 && (
-                        <button className={styles.toggleAllBtn} onClick={handleClearRepos}>
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    {repos.map((repo) => (
-                      <label key={repo} className={styles.checkboxItem}>
-                        <input
-                          type="checkbox"
-                          checked={value.repos.includes(repo)}
-                          onChange={() => handleRepoToggle(repo)}
-                        />
-                        <span className={styles.repoName}>{repo}</span>
-                      </label>
-                    ))}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <RepoFilter
+        availableRepos={repos}
+        selectedRepos={value.repos}
+        includeNoRepo={value.includeNoRepo}
+        onChange={(next) => onChange({ ...value, ...next })}
+      />
 
       {/* Owner Filter (CF-495) — hidden when no owners are visible to the
           caller (single-user self-hosted with no shares). Self is pinned to

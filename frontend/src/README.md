@@ -9,6 +9,7 @@ with Storybook.
 | Directory | Purpose | Change this when... |
 |-----------|---------|---------------------|
 | `components/` | Shared UI components (Button, Alert, Modal, Header, etc.) | Adding reusable UI elements, changing design system |
+| `components/filters/` | Page-level filter dropdowns shared by OrgFilters/TrendsFilters: `RepoFilter` (repo multi-select + include-no-repo + Clear), `ProviderFilter` (provider multi-select). All styled from `styles/filterDropdown.module.css` (CF-508) | Changing repo/provider filter behavior; adding a new shared filter dropdown |
 | `components/session/` | Session detail view: provider-agnostic shell (`SessionViewer`, `SessionHeader`) that delegates per-provider transcript fetch / filter / rendering to `providers/` adapters (CF-417). The Summary tab is shared (`SessionSummaryPanel`, CF-364) | Changing session detail layout, adding session UI features |
 | `components/session/cards/` | Analytics card components + registry (TokensCard, ToolsCard, SmartRecapCard, etc.) | Adding new analytics cards, changing card layout |
 | `components/transcript/` | Claude transcript rendering: content blocks, code blocks, timeline/cost bars, and `attachments/` renderers for `attachment.*` side-channel rows + `away_summary` | Changing how Claude transcript messages are displayed |
