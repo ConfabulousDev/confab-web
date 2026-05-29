@@ -36,3 +36,22 @@
   background: #f97316;
   flex-shrink: 0;
 }
+
+/*
+ * Escalated tier (backend a minor/major version behind): red "soft pill" built
+ * from the error theme tokens, which already flip for light/dark in
+ * variables.css, so no separate [data-theme] rules are needed. The compound
+ * .badge.recommended selectors outrank the base [data-theme] .badge rules.
+ */
+.badge.recommended {
+  color: var(--color-error-text);
+  background: var(--color-error-bg);
+}
+
+.badge.recommended:hover {
+  background: var(--color-error-border);
+}
+
+.badge.recommended .dot {
+  background: var(--color-error);
+}

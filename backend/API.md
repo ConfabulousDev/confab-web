@@ -1965,6 +1965,7 @@ Returns the list of enabled authentication providers. No authentication required
     "latest": "v0.5.0",
     "latest_url": "https://github.com/ConfabulousDev/confab-web/releases/tag/v0.5.0",
     "update_available": true,
+    "update_severity": "recommended",
     "update_check_disabled": false,
     "update_check_failed": false
   }
@@ -1985,7 +1986,8 @@ Returns the list of enabled authentication providers. No authentication required
 | `version.current` | string | Running backend build tag (e.g., `"v0.4.1"`). Empty in local dev (`go run` without ldflags). |
 | `version.latest` | string | Latest stable release tag on GitHub. Omitted when the check is disabled or the GitHub fetch failed. |
 | `version.latest_url` | string | URL of the latest release notes (GitHub `html_url`). Omitted with `latest`. |
-| `version.update_available` | bool | `true` when the frontend should show the "Update available" badge. Forced `true` in local dev (empty `current`) so the badge is visible during development. |
+| `version.update_available` | bool | `true` when the frontend should show the update badge. Forced `true` in local dev (empty `current`) so the badge is visible during development. Equivalent to `update_severity != ""`. |
+| `version.update_severity` | string | Grades the badge's loudness by how far behind the build is. `"available"` (patch-only behind, or dev build) → regular badge "Update available"; `"recommended"` (minor or major behind) → red badge "Update recommended". Omitted when there is no update to badge. |
 | `version.update_check_disabled` | bool | `true` when the operator set `DISABLE_UPDATE_CHECK=true` or `ENABLE_SAAS_FOOTER=true` (SaaS users can't self-upgrade). |
 | `version.update_check_failed` | bool | `true` when the most recent GitHub fetch failed; cached for 15 min before retrying. |
 

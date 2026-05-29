@@ -5,12 +5,14 @@ interface UpdateBadgeViewProps {
   current: string;
   latest?: string;
   latestUrl?: string;
+  severity?: 'available' | 'recommended';
 }
 
-function UpdateBadgeView({ show, current, latest, latestUrl }: UpdateBadgeViewProps) {
+function UpdateBadgeView({ show, current, latest, latestUrl, severity }: UpdateBadgeViewProps) {
   if (!show || !latestUrl) return null;
 
   const title = current === '' ? `(dev) → ${latest}` : `${current} → ${latest}`;
+  const recommended = severity === 'recommended';
 
   return (
     <a
@@ -18,10 +20,10 @@ function UpdateBadgeView({ show, current, latest, latestUrl }: UpdateBadgeViewPr
       target="_blank"
       rel="noopener noreferrer"
       title={title}
-      className={styles.badge}
+      className={`${styles.badge} ${recommended ? styles.recommended : ''}`}
     >
       <span className={styles.dot} aria-hidden="true" />
-      Update available
+      {recommended ? 'Update recommended' : 'Update available'}
     </a>
   );
 }

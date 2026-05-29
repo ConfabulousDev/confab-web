@@ -83,6 +83,57 @@ describe('UpdateBadgeView', () => {
     const link = screen.getByRole('link', { name: /update available/i });
     expect(link).toHaveAttribute('title', '(dev) → v0.5.0');
   });
+
+  it('renders "Update recommended" with the red variant class when severity is recommended', () => {
+    render(
+      <UpdateBadgeView
+        show={true}
+        current="v0.4.1"
+        latest="v0.5.0"
+        latestUrl="https://x"
+        severity="recommended"
+      />,
+    );
+    const link = screen.getByRole('link', { name: /update recommended/i });
+    expect(link.className).toMatch(/recommended/);
+    expect(screen.queryByText(/update available/i)).not.toBeInTheDocument();
+  });
+
+  it('renders "Update available" without the red variant class when severity is available', () => {
+    render(
+      <UpdateBadgeView
+        show={true}
+        current="v0.4.1"
+        latest="v0.4.3"
+        latestUrl="https://x"
+        severity="available"
+      />,
+    );
+    const link = screen.getByRole('link', { name: /update available/i });
+    expect(link.className).not.toMatch(/recommended/);
+  });
+
+  it('defaults to "Update available" (regular) when severity is undefined (older backend)', () => {
+    render(
+      <UpdateBadgeView show={true} current="v0.4.1" latest="v0.5.0" latestUrl="https://x" />,
+    );
+    const link = screen.getByRole('link', { name: /update available/i });
+    expect(link.className).not.toMatch(/recommended/);
+  });
+
+  it('keeps the "current → latest" tooltip identical for the recommended tier', () => {
+    render(
+      <UpdateBadgeView
+        show={true}
+        current="v0.4.1"
+        latest="v0.5.0"
+        latestUrl="https://x"
+        severity="recommended"
+      />,
+    );
+    const link = screen.getByRole('link', { name: /update recommended/i });
+    expect(link).toHaveAttribute('title', 'v0.4.1 → v0.5.0');
+  });
 });
 
 describe('UpdateBadge container', () => {
@@ -148,6 +199,25 @@ describe('UpdateBadge container', () => {
       </Wrapper>,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders "Update recommended" when version.updateSeverity is recommended', () => {
+    const Wrapper = withConfig({
+      current: 'v0.4.1',
+      latest: 'v0.5.0',
+      latestUrl: 'https://x',
+      updateAvailable: true,
+      updateSeverity: 'recommended',
+      updateCheckDisabled: false,
+      updateCheckFailed: false,
+    });
+    render(
+      <Wrapper>
+        <UpdateBadge />
+      </Wrapper>,
+    );
+    const link = screen.getByRole('link', { name: /update recommended/i });
+    expect(link.className).toMatch(/recommended/);
   });
 
   it('hides when latestUrl is missing (defensive)', () => {

@@ -465,4 +465,52 @@ func TestHandleAuthConfigVersion(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("update_severity serializes verbatim when set", func(t *testing.T) {
+		s := &Server{
+			oauthConfig: &auth.OAuthConfig{},
+			updateChecker: fakeChecker{s: updatecheck.Status{
+				Current:         "v0.4.1",
+				Latest:          "v0.5.0",
+				LatestURL:       "https://example.test/r",
+				UpdateAvailable: true,
+				UpdateSeverity:  "recommended",
+			}},
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		body := rr.Body.String()
+		var resp authConfigResponse
+		if err := json.NewDecoder(strings.NewReader(body)).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.Version.UpdateSeverity != "recommended" {
+			t.Errorf("version.update_severity = %q, want %q", resp.Version.UpdateSeverity, "recommended")
+		}
+		if !strings.Contains(body, `"update_severity":"recommended"`) {
+			t.Errorf("response body missing update_severity; got: %s", body)
+		}
+	})
+
+	t.Run("update_severity is omitted from the wire when empty", func(t *testing.T) {
+		s := &Server{
+			oauthConfig: &auth.OAuthConfig{},
+			updateChecker: fakeChecker{s: updatecheck.Status{
+				Current:         "v0.5.0",
+				Latest:          "v0.5.0",
+				UpdateAvailable: false,
+			}},
+		}
+		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+		rr := httptest.NewRecorder()
+
+		s.handleAuthConfig(rr, req)
+
+		if strings.Contains(rr.Body.String(), "update_severity") {
+			t.Errorf("update_severity should be omitted when empty; got: %s", rr.Body.String())
+		}
+	})
 }

@@ -336,6 +336,107 @@ func TestStatusRespectsContextCancellation(t *testing.T) {
 	}
 }
 
+func TestUpdateSeverity(t *testing.T) {
+	cases := []struct {
+		name    string
+		current string
+		latest  string
+		want    string
+	}{
+		{"patch behind is available", "v0.4.1", "v0.4.3", "available"},
+		{"minor behind is recommended", "v0.4.1", "v0.5.0", "recommended"},
+		{"major behind is recommended", "v0.9.0", "v1.0.0", "recommended"},
+		{"big minor jump is recommended", "v0.4.1", "v0.9.0", "recommended"},
+		{"equal version has no badge", "v0.5.0", "v0.5.0", ""},
+		{"current ahead has no badge", "v0.5.0", "v0.4.0", ""},
+		{"dev build is available not red", "", "v0.5.0", "available"},
+		{"empty latest has no badge", "v0.4.1", "", ""},
+		{"unparseable current has no badge", "garbage", "v0.5.0", ""},
+		{"unparseable latest has no badge", "v0.4.1", "not-semver", ""},
+		{"patch within a higher minor line", "v1.2.3", "v1.2.9", "available"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := updateSeverity(tc.current, tc.latest)
+			if got != tc.want {
+				t.Errorf("updateSeverity(%q, %q) = %q, want %q", tc.current, tc.latest, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStatusSetsUpdateSeverityRecommendedOnMinorGap(t *testing.T) {
+	_, restore := withServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(releasePayload("v0.5.0", "https://example.test/r", false)))
+	}))
+	defer restore()
+
+	c := NewChecker("v0.4.1", false)
+	got := c.Status(context.Background())
+
+	if got.UpdateSeverity != "recommended" {
+		t.Errorf("UpdateSeverity = %q, want %q (v0.4.1 → v0.5.0 is a minor gap)", got.UpdateSeverity, "recommended")
+	}
+	if !got.UpdateAvailable {
+		t.Errorf("UpdateAvailable = false, want true when severity is set")
+	}
+}
+
+func TestStatusSetsUpdateSeverityAvailableOnPatchGap(t *testing.T) {
+	_, restore := withServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(releasePayload("v0.4.3", "https://example.test/r", false)))
+	}))
+	defer restore()
+
+	c := NewChecker("v0.4.1", false)
+	got := c.Status(context.Background())
+
+	if got.UpdateSeverity != "available" {
+		t.Errorf("UpdateSeverity = %q, want %q (v0.4.1 → v0.4.3 is a patch gap)", got.UpdateSeverity, "available")
+	}
+	if !got.UpdateAvailable {
+		t.Errorf("UpdateAvailable = false, want true when severity is set")
+	}
+}
+
+func TestStatusOmitsUpdateSeverityWhenUpToDate(t *testing.T) {
+	_, restore := withServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(releasePayload("v0.5.0", "https://example.test/r", false)))
+	}))
+	defer restore()
+
+	c := NewChecker("v0.5.0", false)
+	got := c.Status(context.Background())
+
+	if got.UpdateSeverity != "" {
+		t.Errorf("UpdateSeverity = %q, want empty when current == latest", got.UpdateSeverity)
+	}
+}
+
+func TestStatusOmitsUpdateSeverityWhenDisabled(t *testing.T) {
+	c := NewChecker("v0.4.1", true)
+	got := c.Status(context.Background())
+
+	if got.UpdateSeverity != "" {
+		t.Errorf("UpdateSeverity = %q, want empty when update check disabled", got.UpdateSeverity)
+	}
+}
+
+func TestStatusSetsUpdateSeverityAvailableForDevBuild(t *testing.T) {
+	_, restore := withServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(releasePayload("v0.5.0", "https://example.test/r", false)))
+	}))
+	defer restore()
+
+	c := NewChecker("", false)
+	got := c.Status(context.Background())
+
+	if got.UpdateSeverity != "available" {
+		t.Errorf("UpdateSeverity = %q, want %q (dev build shows regular badge, never red)", got.UpdateSeverity, "available")
+	}
+}
+
 func TestStatusHandlesEmptyTagFromGithub(t *testing.T) {
 	_, restore := withServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"tag_name": "", "html_url": "", "prerelease": false}`))

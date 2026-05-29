@@ -34,6 +34,7 @@ type Status struct {
 	Latest              string `json:"latest,omitempty"`
 	LatestURL           string `json:"latest_url,omitempty"`
 	UpdateAvailable     bool   `json:"update_available"`
+	UpdateSeverity      string `json:"update_severity,omitempty"`
 	UpdateCheckDisabled bool   `json:"update_check_disabled"`
 	UpdateCheckFailed   bool   `json:"update_check_failed"`
 }
@@ -90,11 +91,13 @@ func (c *Checker) Status(ctx context.Context) Status {
 		return c.cached
 	}
 
+	sev := updateSeverity(c.version, tag)
 	c.cached = Status{
 		Current:         c.version,
 		Latest:          tag,
 		LatestURL:       htmlURL,
-		UpdateAvailable: shouldBadge(c.version, tag),
+		UpdateAvailable: sev != "", // non-empty severity == badge should show
+		UpdateSeverity:  sev,
 	}
 	c.fetchedAt = time.Now()
 	c.cacheTTL = successTTL
@@ -116,6 +119,23 @@ func shouldBadge(current, latest string) bool {
 		return false
 	}
 	return semver.Compare(latest, current) > 0
+}
+
+// updateSeverity classifies how far the running build is behind the latest
+// release for the badge: "" (no badge), "available" (patch-only or dev build),
+// or "recommended" (minor or major behind).
+func updateSeverity(current, latest string) string {
+	if !shouldBadge(current, latest) {
+		return "" // no badge (includes equal, ahead, and unparseable versions)
+	}
+	if current == "" {
+		return "available" // dev build: regular badge, never red
+	}
+	// shouldBadge guarantees both are valid semver here.
+	if semver.MajorMinor(current) != semver.MajorMinor(latest) {
+		return "recommended" // minor or major behind
+	}
+	return "available" // patch-only behind
 }
 
 type githubRelease struct {

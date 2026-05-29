@@ -24,6 +24,7 @@ export async function fetchConfigWithRetry(): Promise<AppConfig> {
               latest: data.version.latest,
               latestUrl: data.version.latest_url,
               updateAvailable: data.version.update_available ?? false,
+              updateSeverity: data.version.update_severity,
               updateCheckDisabled: data.version.update_check_disabled ?? false,
               updateCheckFailed: data.version.update_check_failed ?? false,
             }

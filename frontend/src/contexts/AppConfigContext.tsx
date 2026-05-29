@@ -7,6 +7,7 @@ export interface VersionInfo {
   latest?: string;
   latestUrl?: string;
   updateAvailable: boolean;
+  updateSeverity?: 'available' | 'recommended';
   updateCheckDisabled: boolean;
   updateCheckFailed: boolean;
 }

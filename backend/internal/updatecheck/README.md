@@ -11,7 +11,8 @@ Reports whether the running backend build is behind the latest GitHub release of
 
 ## Exported API
 
-- `type Status struct` — snapshot serialized as the `version` object on `/api/v1/auth/config`. Fields: `Current`, `Latest`, `LatestURL`, `UpdateAvailable`, `UpdateCheckDisabled`, `UpdateCheckFailed`.
+- `type Status struct` — snapshot serialized as the `version` object on `/api/v1/auth/config`. Fields: `Current`, `Latest`, `LatestURL`, `UpdateAvailable`, `UpdateSeverity`, `UpdateCheckDisabled`, `UpdateCheckFailed`.
+  - `UpdateSeverity` (`update_severity,omitempty`) grades the badge's loudness: `""` (no badge), `"available"` (patch-only behind, or dev build — regular badge), `"recommended"` (minor or major behind — escalated/red badge). `UpdateAvailable` is derived as `UpdateSeverity != ""`, so the two never drift.
 - `type Checker struct` — owns the cache and HTTP client. Safe for concurrent use.
 - `NewChecker(version string, disabled bool) *Checker` — binds to the running version. When `disabled` is true the checker never contacts GitHub.
 - `(*Checker).Status(ctx) Status` — returns the cached status, refreshing if stale. Blocks up to `requestTimeout` (3 s) on the first call after a cache expiry.
@@ -22,7 +23,8 @@ Reports whether the running backend build is behind the latest GitHub release of
 - **TTLs**: 2 h after a successful fetch, 15 min after a failure. Tunables are package-level `var`s so tests can shrink them.
 - **GitHub headers**: `User-Agent: confab-backend/<version>`, `Accept: application/vnd.github+json`.
 - **Prerelease filter**: ignored even though `/releases/latest` returns only stable releases by design (defensive).
-- **Dev bias**: when `Current == ""` (local `go run` without `-ldflags`) the checker still fetches and forces `UpdateAvailable: true` so the badge is visible during development.
+- **Dev bias**: when `Current == ""` (local `go run` without `-ldflags`) the checker still fetches and forces `UpdateAvailable: true` so the badge is visible during development. Severity is pinned to `"available"` in this case — the dev badge is never red.
+- **Severity grading**: `updateSeverity(current, latest)` classifies the gap via `semver.MajorMinor` — a differing major/minor returns `"recommended"` (escalated/red badge), a patch-only gap returns `"available"`, and anything that wouldn't badge at all returns `""`.
 - **No concurrent-fetch dedupe**: two callers seeing a stale cache may both fetch GitHub; accepted because confab-web is single-tenant self-hosted and the surge is bounded.
 - **Logging**: `logger.Warn("github release check failed", ...)` on every failed attempt; the 15 min cooldown bounds the volume.
 

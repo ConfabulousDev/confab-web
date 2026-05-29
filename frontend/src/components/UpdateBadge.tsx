@@ -15,6 +15,7 @@ function UpdateBadge() {
       current={version.current}
       latest={version.latest}
       latestUrl={version.latestUrl}
+      severity={version.updateSeverity}
     />
   );
 }

@@ -15,8 +15,34 @@ export const UpdateAvailable: Story = {
   args: {
     show: true,
     current: 'v0.4.1',
+    latest: 'v0.4.3',
+    latestUrl: 'https://github.com/ConfabulousDev/confab-web/releases/tag/v0.4.3',
+    severity: 'available',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Patch behind (v0.4.1 → v0.4.3): the regular orange badge.',
+      },
+    },
+  },
+};
+
+export const UpdateRecommended: Story = {
+  args: {
+    show: true,
+    current: 'v0.4.1',
     latest: 'v0.5.0',
     latestUrl: 'https://github.com/ConfabulousDev/confab-web/releases/tag/v0.5.0',
+    severity: 'recommended',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Minor or major behind (v0.4.1 → v0.5.0): the red "Update recommended" badge, signalling the self-hosted backend has likely been outrun by auto-updating CLIs.',
+      },
+    },
   },
 };
 
