@@ -13,6 +13,7 @@ func TestGetModelFamily(t *testing.T) {
 		input    string
 		expected string
 	}{
+		{"claude-opus-4-8-20260515", "opus-4-8"},
 		{"claude-opus-4-6-20260201", "opus-4-6"},
 		{"claude-opus-4-5-20251101", "opus-4-5"},
 		{"claude-sonnet-4-20241022", "sonnet-4"},
@@ -48,6 +49,7 @@ func TestGetPricing(t *testing.T) {
 		model         string
 		expectedInput float64
 	}{
+		{"claude-opus-4-8-20260515", 5},
 		{"claude-opus-4-6-20260201", 5},
 		{"claude-opus-4-5-20251101", 5},
 		{"claude-sonnet-4-20241022", 3},
