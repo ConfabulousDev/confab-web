@@ -1,10 +1,16 @@
 import type { Preview } from '@storybook/react-vite'
 import { withThemeByDataAttribute } from '@storybook/addon-themes'
 import { ThemeProvider } from '../src/contexts/ThemeContext'
+import { setPricingTable } from '../src/utils/tokenStats'
+import { PRICING_FIXTURE } from '../src/test/pricingFixture'
 
 // Import global styles so components render correctly
 import '../src/styles/variables.css'
 import '../src/index.css'
+
+// The frontend bundles no price data (CF-515); install a frozen table so
+// cost-bearing stories render real numbers without a backend fetch.
+setPricingTable(PRICING_FIXTURE)
 
 const preview: Preview = {
   parameters: {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 )
 
 // ---------- loadWorkerConfig ----------
@@ -514,7 +515,12 @@ func TestLoadStalenessThresholds_SilentlyKeepsDefaultForGarbageString(t *testing
 // ---------- Worker.processSessions ----------
 
 func newTestWorker(fp *fakePrecomputer, cfg WorkerConfig) *Worker {
-	return &Worker{precomputer: fp, config: cfg}
+	// Disabled source (empty URL) → runOnce primes from the embedded table, no network.
+	return &Worker{
+		precomputer:   fp,
+		config:        cfg,
+		pricingSource: pricingsource.NewSource(pricingsource.Embedded(), "", time.Hour),
+	}
 }
 
 func sess(id string) analytics.StaleSession {

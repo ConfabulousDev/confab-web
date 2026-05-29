@@ -1,13 +1,10 @@
 package analytics
 
 import (
-	"os"
-	"path/filepath"
-	"regexp"
-	"runtime"
-	"strconv"
 	"testing"
+	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/shopspring/decimal"
 )
 
@@ -214,74 +211,51 @@ func TestCalculateTotalCost_NilServerToolUse(t *testing.T) {
 	}
 }
 
-// TestPricingTableSync reads the frontend MODEL_PRICING from tokenStats.ts
-// and verifies that all model families and pricing values match the Go
-// modelPricingTable. This cross-language test prevents pricing drift.
-func TestPricingTableSync(t *testing.T) {
-	// Find the frontend tokenStats.ts relative to this test file
-	_, thisFile, _, _ := runtime.Caller(0)
-	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
-	tsPath := filepath.Join(repoRoot, "frontend", "src", "utils", "tokenStats.ts")
+// TestFlattenEmbeddedNoCollision verifies the embedded provider-nested table
+// flattens to a family-keyed table without losing any family to a cross-provider
+// key collision (the flatten/GetPricing invariant).
+func TestFlattenEmbeddedNoCollision(t *testing.T) {
+	doc := pricingsource.Embedded()
+	flat := *flatten(doc)
 
-	data, err := os.ReadFile(tsPath)
-	if err != nil {
-		t.Skipf("Could not read tokenStats.ts (frontend not present): %v", err)
+	want := 0
+	for _, fams := range doc.Pricing {
+		want += len(fams)
 	}
-	tsContent := string(data)
-
-	// Parse TS MODEL_PRICING entries: 'family-name': { input: N, output: N, cacheWrite: N, cacheRead: N }
-	// Family names allow dots (OpenAI uses dotted versions like "gpt-5.5").
-	entryRe := regexp.MustCompile(`'([\w.-]+)':\s*\{\s*input:\s*([\d.]+),\s*output:\s*([\d.]+),\s*cacheWrite:\s*([\d.]+),\s*cacheRead:\s*([\d.]+)\s*\}`)
-	matches := entryRe.FindAllStringSubmatch(tsContent, -1)
-	if len(matches) == 0 {
-		t.Fatal("Could not parse any MODEL_PRICING entries from tokenStats.ts")
+	if len(flat) != want {
+		t.Errorf("flattened family count = %d, want %d (a collision dropped a family)", len(flat), want)
 	}
-
-	tsFamilies := make(map[string]ModelPricing)
-	for _, m := range matches {
-		family := m[1]
-		input, _ := strconv.ParseFloat(m[2], 64)
-		output, _ := strconv.ParseFloat(m[3], 64)
-		cacheWrite, _ := strconv.ParseFloat(m[4], 64)
-		cacheRead, _ := strconv.ParseFloat(m[5], 64)
-		tsFamilies[family] = ModelPricing{
-			Input:      decimal.NewFromFloat(input),
-			Output:     decimal.NewFromFloat(output),
-			CacheWrite: decimal.NewFromFloat(cacheWrite),
-			CacheRead:  decimal.NewFromFloat(cacheRead),
-		}
+	// Spot-check one family from each provider survived with the right rate.
+	if got := flat["opus-4-7"].Input; !got.Equal(decimal.NewFromFloat(5)) {
+		t.Errorf("flat[opus-4-7].Input = %s, want 5", got)
 	}
+	if got := flat["gpt-5"].CacheRead; !got.Equal(decimal.NewFromFloat(0.125)) {
+		t.Errorf("flat[gpt-5].CacheRead = %s, want 0.125", got)
+	}
+}
 
-	// Verify Go table is a subset of TS table
-	for family, goPricing := range modelPricingTable {
-		tsPricing, ok := tsFamilies[family]
-		if !ok {
-			t.Errorf("Model family %q exists in Go modelPricingTable but not in TS MODEL_PRICING", family)
-			continue
-		}
-		if !goPricing.Input.Equal(tsPricing.Input) {
-			t.Errorf("Family %q input mismatch: Go=%s, TS=%s", family, goPricing.Input, tsPricing.Input)
-		}
-		if !goPricing.Output.Equal(tsPricing.Output) {
-			t.Errorf("Family %q output mismatch: Go=%s, TS=%s", family, goPricing.Output, tsPricing.Output)
-		}
-		if !goPricing.CacheWrite.Equal(tsPricing.CacheWrite) {
-			t.Errorf("Family %q cacheWrite mismatch: Go=%s, TS=%s", family, goPricing.CacheWrite, tsPricing.CacheWrite)
-		}
-		if !goPricing.CacheRead.Equal(tsPricing.CacheRead) {
-			t.Errorf("Family %q cacheRead mismatch: Go=%s, TS=%s", family, goPricing.CacheRead, tsPricing.CacheRead)
-		}
+// TestSetActivePricingSwapsRates verifies a refreshed document changes what
+// GetPricing returns — the mechanism that lets a self-host pick up new prices
+// without a redeploy.
+func TestSetActivePricingSwapsRates(t *testing.T) {
+	t.Cleanup(func() { SetActivePricing(pricingsource.Embedded()) }) // restore the floor
+
+	// gpt-5 input is 1.25 in the embedded table; swap in a doc that changes it.
+	updated := pricingsource.Document{
+		SchemaVersion: 0,
+		UpdatedAt:     time.Now(),
+		Pricing: map[string]map[string]pricingsource.Rate{
+			"codex": {"gpt-5": {Input: 99, Output: 10, CacheWrite: 0, CacheRead: 0.125}},
+		},
+	}
+	SetActivePricing(updated)
+
+	if got := GetPricing("gpt-5").Input; !got.Equal(decimal.NewFromFloat(99)) {
+		t.Errorf("after swap GetPricing(gpt-5).Input = %s, want 99", got)
 	}
 
-	// Verify TS table is a subset of Go table
-	for family := range tsFamilies {
-		if _, ok := modelPricingTable[family]; !ok {
-			t.Errorf("Model family %q exists in TS MODEL_PRICING but not in Go modelPricingTable", family)
-		}
-	}
-
-	// Verify same count
-	if len(modelPricingTable) != len(tsFamilies) {
-		t.Errorf("Table size mismatch: Go has %d families, TS has %d", len(modelPricingTable), len(tsFamilies))
+	SetActivePricing(pricingsource.Embedded())
+	if got := GetPricing("gpt-5").Input; !got.Equal(decimal.NewFromFloat(1.25)) {
+		t.Errorf("after restore GetPricing(gpt-5).Input = %s, want embedded 1.25", got)
 	}
 }

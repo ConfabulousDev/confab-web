@@ -11,6 +11,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/honeycombio/otel-config-go/otelconfig"
 	"go.opentelemetry.io/otel"
@@ -42,10 +43,11 @@ type precomputerAPI interface {
 
 // Worker is the background analytics precompute worker.
 type Worker struct {
-	db          *db.DB
-	store       *storage.S3Storage
-	precomputer precomputerAPI
-	config      WorkerConfig
+	db            *db.DB
+	store         *storage.S3Storage
+	precomputer   precomputerAPI
+	config        WorkerConfig
+	pricingSource *pricingsource.Source // refreshes the active price table each cycle
 }
 
 // runWorker is the entry point for the background worker process.
@@ -107,12 +109,14 @@ func runWorker() {
 	analyticsStore := analytics.NewStore(database.Conn())
 	precomputer := analytics.NewPrecomputer(database.Conn(), store, analyticsStore, precomputeConfig, database)
 
-	// Create and run worker
+	// Create and run worker. The pricing source pulls the freshest price table
+	// from confabulous.dev (disabled on the SaaS instance, which is the source).
 	worker := &Worker{
-		db:          database,
-		store:       store,
-		precomputer: precomputer,
-		config:      workerConfig,
+		db:            database,
+		store:         store,
+		precomputer:   precomputer,
+		config:        workerConfig,
+		pricingSource: pricingsource.NewFromEnv(os.Getenv("ENABLE_SAAS_FOOTER") == "true"),
 	}
 
 	// Setup graceful shutdown
@@ -160,6 +164,11 @@ func (w *Worker) runOnce(ctx context.Context) {
 	defer span.End()
 
 	logger.Info("starting precomputation cycle")
+
+	// Refresh the active price table (best-effort, lazily cached behind a short
+	// timeout) so newly computed cards cost out at the freshest prices without a
+	// backend redeploy. Always returns a valid table (embedded floor at worst).
+	analytics.SetActivePricing(w.pricingSource.Effective(ctx))
 
 	// Bucket 1: Find sessions with stale regular cards
 	regularSessions, err := w.precomputer.FindStaleSessions(ctx, w.config.MaxSessions)

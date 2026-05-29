@@ -1,6 +1,12 @@
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+import { setPricingTable } from '@/utils/tokenStats';
+import { PRICING_FIXTURE } from './pricingFixture';
+
+// The frontend bundles no price data (CF-515); install a frozen table so cost
+// arithmetic is deterministic across the suite without a backend fetch.
+setPricingTable(PRICING_FIXTURE);
 
 // jsdom doesn't implement ResizeObserver, but components like ScrollNavButtons
 // instantiate one on mount. Provide a no-op stub so renders complete.

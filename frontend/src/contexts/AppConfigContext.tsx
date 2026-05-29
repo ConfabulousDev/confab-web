@@ -1,5 +1,6 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react';
 import { fetchConfigWithRetry } from './fetchAppConfig';
+import { fetchPricing } from './fetchPricing';
 import { defaultAppConfig } from './appConfigDefaults';
 
 export interface VersionInfo {
@@ -34,6 +35,9 @@ export function AppConfigProvider({ children }: AppConfigProviderProps) {
 
   useEffect(() => {
     fetchConfigWithRetry().then(setConfig);
+    // Install the model price table from our backend, concurrently. Not gated:
+    // cost UI renders well after this resolves (CF-515).
+    void fetchPricing();
   }, []);
 
   return (

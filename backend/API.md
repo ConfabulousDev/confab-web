@@ -1995,6 +1995,37 @@ Providers are returned in order: password, GitHub, Google, OIDC. Only enabled pr
 
 The `version` object surfaces the running backend build alongside the latest GitHub release so the frontend can render the "Update available" badge. The backend caches the GitHub response for 6 hours (15 minutes on failure) and never blocks the caller for longer than 3 seconds. See [`internal/updatecheck`](internal/updatecheck/) for details.
 
+### Model Pricing
+```
+GET /api/v1/pricing
+```
+
+Returns the effective per-million-token model price table. No authentication required. The frontend reads it at bootstrap to cost out token usage client-side; downstream self-hosted backends pull it from confabulous.dev to refresh their own table without a redeploy.
+
+**Response:**
+```json
+{
+  "schema_version": 0,
+  "updated_at": "2026-05-29T00:00:00Z",
+  "pricing": {
+    "claude-code": {
+      "opus-4-7": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 }
+    },
+    "codex": {
+      "gpt-5": { "input": 1.25, "output": 10, "cacheWrite": 0, "cacheRead": 0.125 }
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schema_version` | int | Document format version (currently `0`). A reader rejects a version higher than it understands and falls back to its embedded table. |
+| `updated_at` | string (RFC 3339) | When the price data was last changed. Drives "freshest-wins": a self-hosted backend adopts a remote table only when it is strictly newer than its embedded copy. |
+| `pricing` | object | Provider (`claude-code` / `codex`) → model family → rates. Rates are USD per million tokens. OpenAI cache writes are free (`cacheWrite: 0`); the cached-input rate is `cacheRead`. |
+
+**Caching:** sent with `Cache-Control: public, max-age=<refresh-interval>` (default 7200s) — a tiny, edge-cacheable payload. The serving backend refreshes its own table from `PRICING_SOURCE_URL` lazily (2h on success, 15m on failure) and always returns a valid table (its embedded floor at worst). See [`internal/pricingsource`](internal/pricingsource/) for details.
+
 ---
 
 ## Utility Endpoints

@@ -86,5 +86,5 @@ Each card has a dedicated analyzer file per provider, named `analyzer_<card>_<pr
 - [ ] Optional: typed HTTP-intake metadata sub-block (above).
 - [ ] Frontend adapter — see `frontend/src/providers/README.md` for the matching frontend checklist.
 - [ ] Per-provider test fixtures in `frontend/src/test-fixtures/session.ts::DEFAULTS_BY_PROVIDER`.
-- [ ] Pricing tables: `backend/internal/analytics/pricing.go` AND `frontend/src/utils/tokenStats.ts` (kept in sync by `TestPricingTableSync`).
+- [ ] Pricing: add the provider's families to the single source `backend/internal/pricingsource/pricing.json` (provider-nested) and bump `updated_at`. The frontend reads the table from the backend at runtime — no second table to update.
 - [ ] Ensure `TestRegistryCoversAllowedProviders` passes (it will if step 1 + step 3 are in sync).

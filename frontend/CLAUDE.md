@@ -33,12 +33,7 @@ Use CSS custom properties from `src/styles/variables.css`: `--color-bg-primary`,
 
 ## Updating model pricing
 
-When adding a new Anthropic or OpenAI model, update **both**:
-
-- `src/utils/tokenStats.ts` — `MODEL_PRICING['claude-code']` or `MODEL_PRICING['codex']`
-- `backend/internal/analytics/pricing.go` — `modelPricingTable`
-
-`TestPricingTableSync` enforces parity. OpenAI billing conventions are documented in `backend/internal/analytics/README.md`.
+The frontend bundles **no** price data. The table is fetched from this app's own backend at bootstrap (`GET /api/v1/pricing`) and installed via `setPricingTable` in `src/utils/tokenStats.ts`. The single source of truth is `backend/internal/pricingsource/pricing.json` — edit prices there. Tests and Storybook install a frozen fixture (`src/test/pricingFixture.ts`) so cost arithmetic is deterministic offline.
 
 ## Finding dead code
 

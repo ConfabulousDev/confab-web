@@ -156,6 +156,17 @@ Sharing behavior and UI customization.
 | `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright); off by default for self-hosted |
 | `ENABLE_SAAS_TERMLY` | `false` | No | Enable the Termly cookie-consent banner (SaaS only); off by default for self-hosted |
 
+## Model pricing
+
+*Applies to: web server, worker*
+
+Model token prices are no longer baked into the build — the backend pulls the latest price table from confabulous.dev so a self-hosted instance picks up new prices (and new models within an existing provider) without a redeploy. The fetch is best-effort: if the source is unreachable, invalid, or older than the build's embedded table, the embedded table is used. The managed instance auto-disables this (it is the source).
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `PRICING_SOURCE_URL` | `https://confabulous.dev/api/v1/pricing` | No | Where to pull the latest model price table from. Set to empty (`PRICING_SOURCE_URL=`) to disable fetching and use the embedded table only (air-gapped deployments). |
+| `PRICING_REFRESH_INTERVAL` | `2h` | No | How often to refresh the price table (Go duration, e.g. `2h`, `90m`). Failures are retried after 15 minutes. |
+
 ## Worker
 
 *Applies to: worker only*

@@ -11,10 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andybalholm/brotli"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 	csrf "filippo.io/csrf/gorilla"
 	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
@@ -23,9 +19,14 @@ import (
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/email"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/ConfabulousDev/confab-web/internal/ratelimit"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/updatecheck"
+	"github.com/andybalholm/brotli"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 // Operation timeout constants
@@ -41,10 +42,10 @@ const (
 
 // Request body size limits (t-shirt sizes)
 const (
-	MaxBodyXS = 2 * 1024        // 2KB - GET/DELETE safety buffer
-	MaxBodyS  = 16 * 1024       // 16KB - auth tokens, simple metadata
-	MaxBodyM  = 128 * 1024      // 128KB - API keys, shares, session updates
-	MaxBodyL  = 2 * 1024 * 1024 // 2MB - batch operations
+	MaxBodyXS = 2 * 1024         // 2KB - GET/DELETE safety buffer
+	MaxBodyS  = 16 * 1024        // 16KB - auth tokens, simple metadata
+	MaxBodyM  = 128 * 1024       // 128KB - API keys, shares, session updates
+	MaxBodyL  = 2 * 1024 * 1024  // 2MB - batch operations
 	MaxBodyXL = 16 * 1024 * 1024 // 16MB - sync chunk uploads
 )
 
@@ -58,24 +59,25 @@ func withMaxBody(limit int64, h http.HandlerFunc) http.HandlerFunc {
 
 // Server holds dependencies for API handlers
 type Server struct {
-	db                *db.DB
-	storage           *storage.S3Storage
-	oauthConfig       *auth.OAuthConfig
-	emailService      *email.RateLimitedService // Email service for share invitations (may be nil)
-	frontendURL       string                    // Base URL for the frontend (for building session URLs)
-	supportEmail      string                    // Support contact email address
-	sharesEnabled     bool                      // When true, share creation is enabled (ENABLE_SHARE_CREATION=true)
-	saasFooterEnabled bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
-	saasTermlyEnabled    bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
-	orgAnalyticsEnabled  bool                      // When true, org-wide analytics view is enabled (ENABLE_ORG_ANALYTICS=true)
-	smartRecapEnabled    bool                      // When true, smart recap generation is active (SMART_RECAP_ENABLED=true)
-	globalLimiter        ratelimit.RateLimiter     // Global rate limiter for all requests
-	authLimiter       ratelimit.RateLimiter     // Stricter limiter for auth endpoints
-	uploadLimiter     ratelimit.RateLimiter     // Stricter limiter for uploads
+	db                  *db.DB
+	storage             *storage.S3Storage
+	oauthConfig         *auth.OAuthConfig
+	emailService        *email.RateLimitedService // Email service for share invitations (may be nil)
+	frontendURL         string                    // Base URL for the frontend (for building session URLs)
+	supportEmail        string                    // Support contact email address
+	sharesEnabled       bool                      // When true, share creation is enabled (ENABLE_SHARE_CREATION=true)
+	saasFooterEnabled   bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
+	saasTermlyEnabled   bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
+	orgAnalyticsEnabled bool                      // When true, org-wide analytics view is enabled (ENABLE_ORG_ANALYTICS=true)
+	smartRecapEnabled   bool                      // When true, smart recap generation is active (SMART_RECAP_ENABLED=true)
+	globalLimiter       ratelimit.RateLimiter     // Global rate limiter for all requests
+	authLimiter         ratelimit.RateLimiter     // Stricter limiter for auth endpoints
+	uploadLimiter       ratelimit.RateLimiter     // Stricter limiter for uploads
 	validationLimiter   ratelimit.RateLimiter     // Moderate limiter for API key validation
 	clientErrorLimiter  ratelimit.RateLimiter     // Limiter for client error reporting
 	externalReadLimiter ratelimit.RateLimiter     // Limiter for external API read endpoints
 	updateChecker       UpdateChecker             // Reports whether a newer backend release is available (nil → treated as disabled)
+	pricingSource       *pricingsource.Source     // Serves the effective model price table on /api/v1/pricing
 }
 
 // NewServer creates a new API server. version is the running backend build
@@ -90,14 +92,14 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 	saasFooterEnabled := os.Getenv("ENABLE_SAAS_FOOTER") == "true"
 	updateCheckDisabled := os.Getenv("DISABLE_UPDATE_CHECK") == "true" || saasFooterEnabled
 	return &Server{
-		db:             database,
-		storage:        store,
-		oauthConfig:    oauthConfig,
-		emailService:   emailService,
-		frontendURL:    os.Getenv("FRONTEND_URL"),
-		supportEmail:   supportEmail,
-		sharesEnabled:     os.Getenv("ENABLE_SHARE_CREATION") == "true",
-		saasFooterEnabled: saasFooterEnabled,
+		db:                  database,
+		storage:             store,
+		oauthConfig:         oauthConfig,
+		emailService:        emailService,
+		frontendURL:         os.Getenv("FRONTEND_URL"),
+		supportEmail:        supportEmail,
+		sharesEnabled:       os.Getenv("ENABLE_SHARE_CREATION") == "true",
+		saasFooterEnabled:   saasFooterEnabled,
 		saasTermlyEnabled:   os.Getenv("ENABLE_SAAS_TERMLY") == "true",
 		orgAnalyticsEnabled: os.Getenv("ENABLE_ORG_ANALYTICS") == "true",
 		smartRecapEnabled:   os.Getenv("SMART_RECAP_ENABLED") == "true",
@@ -120,6 +122,9 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		// Generous read-only limit for machine consumers (agents, CLI, scripts)
 		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60),
 		updateChecker:       updatecheck.NewChecker(version, updateCheckDisabled),
+		// SaaS blanks the URL so the canonical instance serves its embedded
+		// table without fetching from itself; self-host pulls from confabulous.dev.
+		pricingSource: pricingsource.NewFromEnv(saasFooterEnabled),
 	}
 }
 
@@ -297,6 +302,10 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// Public auth config endpoint (no auth required)
 		r.Get("/auth/config", withMaxBody(MaxBodyXS, s.handleAuthConfig))
+
+		// Public model price table (no auth): the frontend reads it at bootstrap
+		// and downstream self-hosted backends pull it from confabulous.dev.
+		r.Get("/pricing", withMaxBody(MaxBodyXS, s.handlePricing))
 
 		// Protected routes require API key authentication (for CLI)
 		// No CSRF protection for API key routes (CLI doesn't use cookies)

@@ -4,7 +4,9 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
+	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/shopspring/decimal"
 )
 
@@ -17,197 +19,47 @@ type ModelPricing struct {
 	CacheRead  decimal.Decimal // Per million cache read tokens (0.1x input)
 }
 
-// modelPricingTable contains pricing for all supported model families.
+// activePricing holds the flat family→pricing table currently in effect, keyed
+// by family ("opus-4-7", "gpt-5", ...). It defaults to the embedded floor
+// (pricingsource.Embedded) and is swapped atomically by SetActivePricing when
+// the precompute worker pulls a newer remote table. GetPricing reads it
+// lock-free, so price updates land without a redeploy.
 //
-// Claude entries are keyed by family ("opus-4-7", "sonnet-4-6", ...) after
-// stripping the "claude-" prefix and trailing date suffix.
-//
-// OpenAI/Codex entries are keyed by their full short name ("gpt-5",
-// "gpt-5.5", "o3-mini") because OpenAI uses both dashes and dots in version
-// numbers. Date-pinned snapshots (e.g. "gpt-5-2026-05-01") are normalized
-// down to the unpinned key via stripOpenAIDateSuffix.
-//
-// Anthropic source: https://www.anthropic.com/pricing
-// OpenAI source: https://developers.openai.com/api/docs/pricing
-var modelPricingTable = map[string]ModelPricing{
-	// Opus 4.7
-	"opus-4-7": {
-		Input:      decimal.NewFromFloat(5),
-		Output:     decimal.NewFromFloat(25),
-		CacheWrite: decimal.NewFromFloat(6.25),
-		CacheRead:  decimal.NewFromFloat(0.50),
-	},
-	// Opus 4.6
-	"opus-4-6": {
-		Input:      decimal.NewFromFloat(5),
-		Output:     decimal.NewFromFloat(25),
-		CacheWrite: decimal.NewFromFloat(6.25),
-		CacheRead:  decimal.NewFromFloat(0.50),
-	},
-	// Opus 4.5
-	"opus-4-5": {
-		Input:      decimal.NewFromFloat(5),
-		Output:     decimal.NewFromFloat(25),
-		CacheWrite: decimal.NewFromFloat(6.25),
-		CacheRead:  decimal.NewFromFloat(0.50),
-	},
-	// Opus 4.1 and 4
-	"opus-4-1": {
-		Input:      decimal.NewFromFloat(15),
-		Output:     decimal.NewFromFloat(75),
-		CacheWrite: decimal.NewFromFloat(18.75),
-		CacheRead:  decimal.NewFromFloat(1.50),
-	},
-	"opus-4": {
-		Input:      decimal.NewFromFloat(15),
-		Output:     decimal.NewFromFloat(75),
-		CacheWrite: decimal.NewFromFloat(18.75),
-		CacheRead:  decimal.NewFromFloat(1.50),
-	},
-	// Sonnet 4.6, 4.5, 4, 3.7
-	"sonnet-4-6": {
-		Input:      decimal.NewFromFloat(3),
-		Output:     decimal.NewFromFloat(15),
-		CacheWrite: decimal.NewFromFloat(3.75),
-		CacheRead:  decimal.NewFromFloat(0.30),
-	},
-	"sonnet-4-5": {
-		Input:      decimal.NewFromFloat(3),
-		Output:     decimal.NewFromFloat(15),
-		CacheWrite: decimal.NewFromFloat(3.75),
-		CacheRead:  decimal.NewFromFloat(0.30),
-	},
-	"sonnet-4": {
-		Input:      decimal.NewFromFloat(3),
-		Output:     decimal.NewFromFloat(15),
-		CacheWrite: decimal.NewFromFloat(3.75),
-		CacheRead:  decimal.NewFromFloat(0.30),
-	},
-	"sonnet-3-7": {
-		Input:      decimal.NewFromFloat(3),
-		Output:     decimal.NewFromFloat(15),
-		CacheWrite: decimal.NewFromFloat(3.75),
-		CacheRead:  decimal.NewFromFloat(0.30),
-	},
-	// Haiku 4.5
-	"haiku-4-5": {
-		Input:      decimal.NewFromFloat(1),
-		Output:     decimal.NewFromFloat(5),
-		CacheWrite: decimal.NewFromFloat(1.25),
-		CacheRead:  decimal.NewFromFloat(0.10),
-	},
-	// Haiku 3.5
-	"haiku-3-5": {
-		Input:      decimal.NewFromFloat(0.80),
-		Output:     decimal.NewFromFloat(4),
-		CacheWrite: decimal.NewFromFloat(1.00),
-		CacheRead:  decimal.NewFromFloat(0.08),
-	},
-	// Opus 3 (deprecated)
-	"opus-3": {
-		Input:      decimal.NewFromFloat(15),
-		Output:     decimal.NewFromFloat(75),
-		CacheWrite: decimal.NewFromFloat(18.75),
-		CacheRead:  decimal.NewFromFloat(1.50),
-	},
-	// Haiku 3
-	"haiku-3": {
-		Input:      decimal.NewFromFloat(0.25),
-		Output:     decimal.NewFromFloat(1.25),
-		CacheWrite: decimal.NewFromFloat(0.30),
-		CacheRead:  decimal.NewFromFloat(0.03),
-	},
+// The single source of truth for the data is internal/pricingsource/pricing.json.
+var activePricing atomic.Pointer[map[string]ModelPricing]
 
-	// =====================
-	// OpenAI / Codex models
-	// =====================
-	// All entries set CacheWrite=0: OpenAI's prompt caching is automatic and
-	// free to write. Cached tokens are billed at the documented "cached input"
-	// rate, which the adapter handles by subtracting CachedInputTokens from
-	// InputTokens before applying the uncached rate.
-	// Source: https://developers.openai.com/api/docs/models/<model> (May 2026).
+func init() {
+	activePricing.Store(flatten(pricingsource.Embedded()))
+}
 
-	"gpt-5": {
-		Input:      decimal.NewFromFloat(1.25),
-		Output:     decimal.NewFromFloat(10.00),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.125),
-	},
-	"gpt-5-mini": {
-		Input:      decimal.NewFromFloat(0.25),
-		Output:     decimal.NewFromFloat(2.00),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.025),
-	},
-	"gpt-5-nano": {
-		Input:      decimal.NewFromFloat(0.05),
-		Output:     decimal.NewFromFloat(0.40),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.005),
-	},
-	"gpt-5.4-mini": {
-		Input:      decimal.NewFromFloat(0.75),
-		Output:     decimal.NewFromFloat(4.50),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.075),
-	},
-	"gpt-5.5": {
-		// Note: prompts >272K input tokens are billed at 2x input / 1.5x output
-		// for the session. Per-session size escalation is not currently modeled.
-		Input:      decimal.NewFromFloat(5.00),
-		Output:     decimal.NewFromFloat(30.00),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.50),
-	},
-	"gpt-4o": {
-		Input:      decimal.NewFromFloat(2.50),
-		Output:     decimal.NewFromFloat(10.00),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(1.25),
-	},
-	"gpt-4o-mini": {
-		Input:      decimal.NewFromFloat(0.15),
-		Output:     decimal.NewFromFloat(0.60),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.075),
-	},
-	"gpt-4-turbo": {
-		// Deprecated; no cached-input rate documented.
-		Input:      decimal.NewFromFloat(10.00),
-		Output:     decimal.NewFromFloat(30.00),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0),
-	},
-	"o1": {
-		Input:      decimal.NewFromFloat(15.00),
-		Output:     decimal.NewFromFloat(60.00),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(7.50),
-	},
-	"o1-mini": {
-		Input:      decimal.NewFromFloat(1.10),
-		Output:     decimal.NewFromFloat(4.40),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.55),
-	},
-	"o3": {
-		Input:      decimal.NewFromFloat(2.00),
-		Output:     decimal.NewFromFloat(8.00),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.50),
-	},
-	"o3-mini": {
-		Input:      decimal.NewFromFloat(1.10),
-		Output:     decimal.NewFromFloat(4.40),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.55),
-	},
-	"o4-mini": {
-		Input:      decimal.NewFromFloat(1.10),
-		Output:     decimal.NewFromFloat(4.40),
-		CacheWrite: decimal.NewFromFloat(0),
-		CacheRead:  decimal.NewFromFloat(0.275),
-	},
+// SetActivePricing swaps in a (validated) pricing document. The precompute
+// worker calls this with pricingsource.Effective() at the start of each cycle
+// so newly analyzed sessions cost out at the freshest prices.
+func SetActivePricing(doc pricingsource.Document) {
+	activePricing.Store(flatten(doc))
+}
+
+// flatten collapses the provider-nested document into a family-keyed table.
+// Family keys are unique across providers (Claude families like "opus-4-7" vs
+// OpenAI names like "gpt-5" are disjoint); a collision in a fetched document is
+// logged and the duplicate skipped (the embedded doc is collision-free by test).
+func flatten(doc pricingsource.Document) *map[string]ModelPricing {
+	table := make(map[string]ModelPricing)
+	for provider, families := range doc.Pricing {
+		for family, r := range families {
+			if _, dup := table[family]; dup {
+				slog.Warn("duplicate pricing family across providers; skipping", "family", family, "provider", provider)
+				continue
+			}
+			table[family] = ModelPricing{
+				Input:      decimal.NewFromFloat(r.Input),
+				Output:     decimal.NewFromFloat(r.Output),
+				CacheWrite: decimal.NewFromFloat(r.CacheWrite),
+				CacheRead:  decimal.NewFromFloat(r.CacheRead),
+			}
+		}
+	}
+	return &table
 }
 
 // zeroPricing is used when model is not found. Returns $0 cost rather than
@@ -271,11 +123,12 @@ func getModelFamily(modelName string) string {
 	return family + "-" + major
 }
 
-// GetPricing returns pricing for a model.
+// GetPricing returns pricing for a model from the currently-active table.
 // Returns zero pricing for unknown models and logs a warning.
 func GetPricing(modelName string) ModelPricing {
 	family := getModelFamily(modelName)
-	if pricing, ok := modelPricingTable[family]; ok {
+	table := *activePricing.Load()
+	if pricing, ok := table[family]; ok {
 		return pricing
 	}
 	slog.Warn("unknown model for pricing", "model", modelName, "family", family)

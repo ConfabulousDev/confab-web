@@ -34,50 +34,28 @@ export interface TokenUsage {
   cacheRead: number;
 }
 
-interface ModelPricing {
+export interface ModelPricing {
   input: number;
   output: number;
   cacheWrite: number;
   cacheRead: number;
 }
 
-// Provider-keyed pricing tables. Adding a third provider is one outer key
-// plus N inner rows — no code branches.
-// Sources:
-//   - https://www.anthropic.com/pricing
-//   - https://developers.openai.com/api/docs/pricing
-const MODEL_PRICING: Record<ProviderId, Record<string, ModelPricing>> = {
-  'claude-code': {
-    'opus-4-7': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
-    'opus-4-6': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
-    'opus-4-5': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
-    'opus-4-1': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
-    'opus-4': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
-    'sonnet-4-6': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
-    'sonnet-4-5': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
-    'sonnet-4': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
-    'sonnet-3-7': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
-    'haiku-4-5': { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.10 },
-    'haiku-3-5': { input: 0.80, output: 4, cacheWrite: 1.00, cacheRead: 0.08 },
-    'opus-3': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
-    'haiku-3': { input: 0.25, output: 1.25, cacheWrite: 0.30, cacheRead: 0.03 },
-  },
-  codex: {
-    'gpt-5': { input: 1.25, output: 10.00, cacheWrite: 0, cacheRead: 0.125 },
-    'gpt-5-mini': { input: 0.25, output: 2.00, cacheWrite: 0, cacheRead: 0.025 },
-    'gpt-5-nano': { input: 0.05, output: 0.40, cacheWrite: 0, cacheRead: 0.005 },
-    'gpt-5.4-mini': { input: 0.75, output: 4.50, cacheWrite: 0, cacheRead: 0.075 },
-    'gpt-5.5': { input: 5.00, output: 30.00, cacheWrite: 0, cacheRead: 0.50 },
-    'gpt-4o': { input: 2.50, output: 10.00, cacheWrite: 0, cacheRead: 1.25 },
-    'gpt-4o-mini': { input: 0.15, output: 0.60, cacheWrite: 0, cacheRead: 0.075 },
-    'gpt-4-turbo': { input: 10.00, output: 30.00, cacheWrite: 0, cacheRead: 0 },
-    'o1': { input: 15.00, output: 60.00, cacheWrite: 0, cacheRead: 7.50 },
-    'o1-mini': { input: 1.10, output: 4.40, cacheWrite: 0, cacheRead: 0.55 },
-    'o3': { input: 2.00, output: 8.00, cacheWrite: 0, cacheRead: 0.50 },
-    'o3-mini': { input: 1.10, output: 4.40, cacheWrite: 0, cacheRead: 0.55 },
-    'o4-mini': { input: 1.10, output: 4.40, cacheWrite: 0, cacheRead: 0.275 },
-  },
-};
+/** Provider-keyed price table: provider → model family → per-million rates. */
+export type PricingTable = Record<ProviderId, Record<string, ModelPricing>>;
+
+// The frontend bundles NO price data. The active table is fetched from this
+// app's own backend (GET /api/v1/pricing) once at bootstrap via
+// `setPricingTable`. The single source of truth is the backend's embedded
+// pricing.json (refreshable from confabulous.dev). Until the fetch lands the
+// table is empty — getPricing then warns and bills $0, but cost UI renders
+// only after auth + session-data load, by which point the table is populated.
+let activePricing: PricingTable = { 'claude-code': {}, codex: {} };
+
+/** Install the effective price table fetched from the backend (CF-515). */
+export function setPricingTable(table: PricingTable): void {
+  activePricing = table;
+}
 
 const ZERO_PRICING: ModelPricing = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
 
@@ -120,7 +98,7 @@ export function getModelFamily(provider: ProviderId, modelName: string): string 
 function getPricing(provider: ProviderId, modelName: string): ModelPricing {
   // `getModelFamily` performs the unknown-provider check.
   const family = getModelFamily(provider, modelName);
-  const pricing = MODEL_PRICING[provider][family];
+  const pricing = activePricing[provider]?.[family];
   if (!pricing) {
     console.warn(`Unknown model for pricing: ${modelName} (provider: ${provider}, family: ${family})`);
     return ZERO_PRICING;

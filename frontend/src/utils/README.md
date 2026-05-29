@@ -7,7 +7,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | File | Role |
 |------|------|
 | `formatting.ts` | Date/time formatting, duration formatting, model name extraction, repo name formatting |
-| `tokenStats.ts` | Token cost calculation, model pricing table, per-message cost computation |
+| `tokenStats.ts` | Token cost calculation, runtime pricing table (installed via `setPricingTable` from the backend), per-message cost computation |
 | `sessionMeta.ts` | Session duration and date computation from transcript timestamps |
 | `compactionStats.ts` | Compaction event counting, average compaction time, and response time formatting |
 | `highlightSearch.ts` | Search match highlighting in HTML and plain text |
@@ -55,11 +55,12 @@ components and arithmetic all read one shape downstream.
 | `formatCost` | `(usd: number) => string` | Format as "$0.42" or "<$0.01". |
 | `formatTokenCount` | `(count: number) => string` | Format as "500", "1.5k", "1.5M". |
 
-**Model pricing table** (`MODEL_PRICING`): provider-keyed nested
-`Record<ProviderId, Record<family, ModelPricing>>`. Adding a third provider
-is one outer key plus N inner rows — no code branches. OpenAI entries set
-`cacheWrite: 0` (writes are free) and put the documented cached-input rate
-in `cacheRead`. Unknown families fall back to zero pricing with a warning.
+**Active pricing table** (`activePricing`, `PricingTable`): provider-keyed
+nested `Record<ProviderId, Record<family, ModelPricing>>`. The frontend bundles
+**no** price data — the table is empty until `setPricingTable(...)` installs the
+table fetched from the backend (`GET /api/v1/pricing`) at bootstrap (CF-515).
+The single source is `backend/internal/pricingsource/pricing.json`. Unknown
+families fall back to zero pricing with a warning.
 
 **Server tool pricing**: `WEB_SEARCH_COST_PER_REQUEST = $0.01`, applied by
 the Claude adapter's `calculateMessageCost`. Not multiplied by fast mode.
@@ -116,11 +117,7 @@ the Claude adapter's `calculateMessageCost`. Not multiplied by fast mode.
 3. Add a `.test.ts` file with test cases
 
 ### Updating model pricing
-When adding a new Anthropic OR OpenAI model, update `MODEL_PRICING` in **both**:
-- `frontend/src/utils/tokenStats.ts` (this file)
-- `backend/internal/analytics/pricing.go` (backend)
-
-These tables must stay in sync; `TestPricingTableSync` enforces this. Look up current prices on the Anthropic pricing page or OpenAI's developer pricing page. For OpenAI entries set `cacheWrite: 0` (writes are free) and put the documented cached-input rate in `cacheRead`.
+Edit the single source — `backend/internal/pricingsource/pricing.json` — and bump its `updated_at`. The frontend has no bundled table to update; it fetches the effective table from the backend at runtime. Look up current prices on the Anthropic pricing page or OpenAI's developer pricing page. For OpenAI entries set `cacheWrite: 0` (writes are free) and put the documented cached-input rate in `cacheRead`.
 
 ## Invariants / Conventions
 

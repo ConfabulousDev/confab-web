@@ -70,9 +70,10 @@ plugin accepts property-access calls whose last segment starts with `use`.
 ## Adding a third provider
 
 1. Register the canonical id in `PROVIDER_VALUES` (Phase 1 / `utils/providers.ts`).
-2. Add pricing rows to `MODEL_PRICING['<id>']` in `utils/tokenStats.ts`
-   (CF-418); add the same families to `backend/internal/analytics/pricing.go`
-   so `TestPricingTableSync` passes.
+2. Add a `'<id>'` provider block with its model families to the single price
+   table, `backend/internal/pricingsource/pricing.json` (CF-515), and bump
+   `updated_at`. The frontend reads the table from the backend at runtime — no
+   frontend pricing edit needed.
 3. Write `frontend/src/providers/<id>Adapter.tsx`:
    - Type it as `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>`.
    - Wrap an existing transcript service, filter hook, dropdown component, and pane component.
