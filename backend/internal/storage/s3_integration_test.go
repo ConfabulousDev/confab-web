@@ -227,6 +227,118 @@ func TestDeleteAllUserDataRemovesEverythingForUser(t *testing.T) {
 	}
 }
 
+// TestDeleteAllSessionChunks_RemovesOnlyTargetProvider locks the provider-scoping
+// promise in the DeleteAllSessionChunks docstring (s3.go): for the same
+// (userID, externalID), chunks written under a *different* provider are NOT touched.
+func TestDeleteAllSessionChunks_RemovesOnlyTargetProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+	const userID int64 = 99
+	externalID := freshExternalID("provider-scope")
+
+	// Same (userID, externalID): one chunk under each provider.
+	if _, err := env.Storage.UploadChunk(ctx, userID, models.ProviderClaudeCode, externalID, "transcript.jsonl", 1, 5, []byte("cc")); err != nil {
+		t.Fatalf("UploadChunk(claude-code): %v", err)
+	}
+	if _, err := env.Storage.UploadChunk(ctx, userID, models.ProviderCodex, externalID, "transcript.jsonl", 1, 5, []byte("cx")); err != nil {
+		t.Fatalf("UploadChunk(codex): %v", err)
+	}
+
+	if err := env.Storage.DeleteAllSessionChunks(ctx, userID, models.ProviderClaudeCode, externalID); err != nil {
+		t.Fatalf("DeleteAllSessionChunks: %v", err)
+	}
+
+	// Target provider's chunks must be gone.
+	ccKeys, err := env.Storage.ListChunks(ctx, userID, models.ProviderClaudeCode, externalID, "transcript.jsonl")
+	if err != nil {
+		t.Fatalf("post-delete ListChunks(claude-code): %v", err)
+	}
+	if len(ccKeys) != 0 {
+		t.Errorf("target provider should have 0 chunks after delete, got %d", len(ccKeys))
+	}
+
+	// The other provider's chunk must survive.
+	cxKeys, err := env.Storage.ListChunks(ctx, userID, models.ProviderCodex, externalID, "transcript.jsonl")
+	if err != nil {
+		t.Fatalf("post-delete ListChunks(codex): %v", err)
+	}
+	if len(cxKeys) != 1 {
+		t.Errorf("other provider's chunk must survive: want 1, got %d", len(cxKeys))
+	}
+}
+
+// TestDeleteAllSessionChunks_Empty verifies that deleting over a prefix with no
+// objects is a clean no-op: ListObjects yields nothing, so the function returns nil.
+func TestDeleteAllSessionChunks_Empty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	if err := env.Storage.DeleteAllSessionChunks(context.Background(), 1, models.ProviderClaudeCode, freshExternalID("empty-session")); err != nil {
+		t.Errorf("DeleteAllSessionChunks over empty prefix should return nil, got %v", err)
+	}
+}
+
+// TestDeleteAllUserData_RemovesOnlyTargetUser locks the user-scoping boundary of
+// DeleteAllUserData: the {userID}/ prefix must not match a string-superset user ID
+// (deleting user 555 must not touch user 5550, whose decimal ID has 555 as a prefix).
+// It also asserts the target's own object is actually removed.
+func TestDeleteAllUserData_RemovesOnlyTargetUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+	const targetUser int64 = 555
+	const adjacentUser int64 = 5550 // decimal ID has targetUser ("555") as a prefix
+
+	targetKey, err := env.Storage.UploadChunk(ctx, targetUser, models.ProviderClaudeCode, freshExternalID("target"), "transcript.jsonl", 1, 5, []byte("t"))
+	if err != nil {
+		t.Fatalf("UploadChunk(target): %v", err)
+	}
+	adjacentKey, err := env.Storage.UploadChunk(ctx, adjacentUser, models.ProviderClaudeCode, freshExternalID("adjacent"), "transcript.jsonl", 1, 5, []byte("a"))
+	if err != nil {
+		t.Fatalf("UploadChunk(adjacent): %v", err)
+	}
+
+	if err := env.Storage.DeleteAllUserData(ctx, targetUser); err != nil {
+		t.Fatalf("DeleteAllUserData: %v", err)
+	}
+
+	// Target user's object must be gone.
+	if _, err := env.Storage.Download(ctx, targetKey); !errors.Is(err, storage.ErrObjectNotFound) {
+		t.Errorf("target user's object should be deleted, Download returned %v", err)
+	}
+
+	// The string-superset user's object must survive the {userID}/ prefix scope.
+	if _, err := env.Storage.Download(ctx, adjacentKey); err != nil {
+		t.Errorf("adjacent user (5550) object must survive delete of user 555: %v", err)
+	}
+}
+
+// TestDeleteAllUserData_Empty verifies that wiping a user with no objects is a
+// clean no-op (returns nil).
+func TestDeleteAllUserData_Empty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	if err := env.Storage.DeleteAllUserData(context.Background(), 123456); err != nil {
+		t.Errorf("DeleteAllUserData over empty prefix should return nil, got %v", err)
+	}
+}
+
 func TestNewS3StorageMissingBucket(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")

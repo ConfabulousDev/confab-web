@@ -56,7 +56,7 @@ All chunk methods take a `provider string` argument (one of `models.ProviderClau
 ## Testing
 
 - Unit tests: `chunks_test.go` (ParseChunkKey, MergeChunks), `s3_test.go` (`containsAny`, `classifyStorageError`, sentinel errors, `UploadChunk` bounds and provider validation).
-- Integration tests: `s3_integration_test.go` exercises real S3 round-trips through `testutil`'s MinIO container — `UploadChunk`/`Download`, missing-key classification, `ListChunks` ordering, `Delete`, `DeleteAllSessionChunks` (provider-scoped), `DeleteAllUserData`, and `NewS3Storage` with a missing bucket.
+- Integration tests: `s3_integration_test.go` exercises real S3 round-trips through `testutil`'s MinIO container — `UploadChunk`/`Download`, missing-key classification, `ListChunks` ordering, `Delete`, `DeleteAllSessionChunks` (session-scoped, cross-provider scoping, and empty-prefix no-op), `DeleteAllUserData` (cross-user `{userID}/` substring-boundary scoping and empty-prefix no-op), and `NewS3Storage` with a missing bucket.
 
 ## Dependencies
 
