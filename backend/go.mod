@@ -1,6 +1,6 @@
 module github.com/ConfabulousDev/confab-web
 
-go 1.25.10
+go 1.26.3
 
 require (
 	filippo.io/csrf v0.2.1
