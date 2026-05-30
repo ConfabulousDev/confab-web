@@ -1,3 +1,14 @@
+# Local development infrastructure for Confabulous.
+#
+# This file's only job is to back the local dev loop: Postgres, MinIO, and a
+# one-shot migration runner. You run the backend (`go run`) and frontend
+# (`npm run dev`) natively for hot reload — see "Local development" in README.md.
+#
+#   docker compose up -d --build      # start infra + apply your local migrations
+#
+# It does NOT run the app itself. To run the full product in Docker from the
+# prebuilt image, see SELF-HOSTING.md.
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -44,8 +55,13 @@ services:
       exit 0;
       "
 
+  # One-shot migration runner. Builds a tiny image (migrate CLI + your local SQL
+  # files) in seconds via the `migrate-runner` Dockerfile target — no app build.
+  # Use `--build` to pick up newly added migrations: docker compose up -d --build
   migrate:
-    build: .
+    build:
+      context: .
+      target: migrate-runner
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,56 +70,6 @@ services:
       DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
       # Optional: use a separate admin user for migrations
       # MIGRATE_DATABASE_URL: postgres://admin:pass@postgres:5432/confab?sslmode=disable
-
-  app:
-    build: .
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      minio-setup:
-        condition: service_completed_successfully
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      PORT: 8080
-      DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
-      S3_ENDPOINT: minio:9000
-      S3_USE_SSL: "false"
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
-      BUCKET_NAME: confab
-      FRONTEND_URL: http://localhost:8080
-      ALLOWED_ORIGINS: http://localhost:8080
-      CSRF_SECRET_KEY: local-dev-csrf-secret-key-minimum-32-characters
-      AUTH_PASSWORD_ENABLED: "true"
-      ADMIN_BOOTSTRAP_EMAIL: admin@local.dev
-      ADMIN_BOOTSTRAP_PASSWORD: localdevpassword
-      SUPER_ADMIN_EMAILS: admin@local.dev
-      INSECURE_DEV_MODE: "true"
-      # SaaS branding (off by default for self-hosted)
-      # ENABLE_SAAS_FOOTER: "true"
-      # ENABLE_SAAS_TERMLY: "true"
-      # Email disabled (not set)
-      # Smart recap disabled (ANTHROPIC_API_KEY not set)
-
-  worker:
-    build: .
-    command: ["./confab", "worker"]
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      minio-setup:
-        condition: service_completed_successfully
-    environment:
-      DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
-      S3_ENDPOINT: minio:9000
-      S3_USE_SSL: "false"
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
-      BUCKET_NAME: confab
-      WORKER_POLL_INTERVAL: 1m
-      WORKER_MAX_SESSIONS: "10"
-      # Smart recap disabled (ANTHROPIC_API_KEY not set)
 
 volumes:
   postgres_data:

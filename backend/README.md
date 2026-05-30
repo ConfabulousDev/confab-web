@@ -32,25 +32,16 @@ Backend service for Confab — the self-hosted Claude Code and Codex session ana
 
 ## Local Development
 
-### Prerequisites
+The dev loop runs through the root `Makefile` (`make dev`, or `make help` for all
+targets) — see **[Local Development](../README.md#local-development)** in the root README.
 
-- Docker & Docker Compose
-- Go 1.21+
+Backend-specific notes:
 
-### Quick Start
-
-```bash
-# Start PostgreSQL and MinIO
-docker-compose up -d
-
-# Install dependencies
-go mod download
-
-# Run server
-go run cmd/server/main.go
-```
-
-The server will start on `http://localhost:8080`
+- Run the server with `go run ./cmd/server`, not `go run cmd/server/main.go` — the
+  `cmd/server` package is multi-file (`main.go` + `worker.go`) and won't compile that way.
+- The backend reads all config from the environment. `make dev` / `make backend` load
+  `backend/.env` for you; if you invoke `go run` directly, source it first
+  (`set -a && . ./.env && set +a`).
 
 ### Environment Variables
 
@@ -78,18 +69,13 @@ Schema is managed via [`internal/db/migrations/`](internal/db/migrations/) using
 
 ## Development
 
+Backend targets (run from `backend/`, or via the root `Makefile`):
+
 ```bash
-# Run tests
-go test ./...
-
-# Run full test coverage (sharded, reliable — see internal/testutil/README.md)
-make coverage
-
-# Build binary
-go build -o bin/confab-backend cmd/server/main.go
-
-# Format code
-go fmt ./...
+make test       # go test ./...
+make coverage   # sharded coverage (see internal/testutil/README.md)
+make build      # build the binary
+make fmt        # gofmt
 ```
 
 ## License

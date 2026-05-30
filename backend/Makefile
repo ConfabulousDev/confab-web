@@ -1,39 +1,27 @@
-.PHONY: help dev build test coverage clean docker-up docker-down docker-logs
+# Backend-domain targets. The root Makefile (../Makefile) is the one-stop shop for
+# the dev loop and delegates here; these also work standalone from backend/.
 
-help: ## Show this help message
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Available targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+.DEFAULT_GOAL := help
+.PHONY: help build test coverage deps fmt clean
 
-dev: ## Run development server
-	go run cmd/server/main.go
+help: ## List available targets
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-build: ## Build binary
-	go build -o bin/confab-backend cmd/server/main.go
+build: ## Build the backend binary
+	go build -o bin/confab-backend ./cmd/server
 
 test: ## Run tests
-	go test -v ./...
+	go test ./...
 
 coverage: ## Run full backend test coverage (sharded, reliable)
 	./scripts/coverage.sh
 
-clean: ## Clean build artifacts
-	rm -rf bin/
-
-docker-up: ## Start PostgreSQL and MinIO
-	docker-compose up -d
-	@echo "Waiting for services to be healthy..."
-	@sleep 5
-	@echo "PostgreSQL: http://localhost:5432"
-	@echo "MinIO Console: http://localhost:9001 (minioadmin/minioadmin)"
-
-docker-down: ## Stop PostgreSQL and MinIO
-	docker-compose down
-
-docker-logs: ## Show docker logs
-	docker-compose logs -f
-
-deps: ## Download dependencies
+deps: ## Download and tidy dependencies
 	go mod download
 	go mod tidy
+
+fmt: ## Format code
+	go fmt ./...
+
+clean: ## Clean build artifacts
+	rm -rf bin/
