@@ -43,6 +43,17 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -installsuffix cgo
 # Stage 3: Migrate CLI
 FROM migrate/migrate:v4.19.1 AS migrate-cli
 
+# Stage 3b: Lightweight migration runner (used by docker-compose for local dev).
+# Builds in seconds — just the migrate CLI base plus the SQL files and script,
+# with no frontend or Go build. Kept before the final stage so the default build
+# target stays the full app image.
+FROM migrate/migrate:v4.19.1 AS migrate-runner
+WORKDIR /app
+COPY backend/internal/db/migrations/*.sql /app/migrations/
+COPY migrate_db.sh /app/migrate_db.sh
+RUN chmod +x /app/migrate_db.sh
+ENTRYPOINT []
+
 # Stage 4: Final Runtime Image
 FROM alpine:latest
 

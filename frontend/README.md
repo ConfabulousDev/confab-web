@@ -4,7 +4,7 @@ React + TypeScript single-page application for the Confab dashboard. For an arch
 
 ## Tech Stack
 
-- **React 18** with hooks
+- **React 19** with hooks
 - **TypeScript** with strict mode
 - **Vite** — dev server and build
 - **React Router** — client-side routing with `lazy()` code splitting
@@ -28,6 +28,8 @@ See [`src/README.md`](src/README.md) for the module-by-module index and data-flo
 - `src/utils/` — pure helpers (formatting, date ranges, pricing, providers).
 
 ## Development
+
+For the full stack, run `make dev` from the repo root — see [Local Development](../README.md#local-development). Frontend-only commands:
 
 ```bash
 npm install

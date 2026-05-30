@@ -36,27 +36,16 @@ Self-hosted analytics for your Claude Code and Codex sessions.
 
 ## Quickstart
 
-**Prerequisites:** Docker and Docker Compose
+Run your own instance in under a minute with the [Self-Hosting Guide](SELF-HOSTING.md#quickstart): one `docker-compose.yml`, `docker compose up -d`, and the dashboard is live at [http://localhost:8080](http://localhost:8080) (`admin@local.dev` / `localdevpassword`).
 
-### Start the Stack
-
-```bash
-docker compose up -d
-```
-
-Open [http://localhost:8080](http://localhost:8080) — log in with `admin@local.dev` / `localdevpassword`.
+Developing against the code? See [Local Development](#local-development).
 
 ### Connect the CLI
 
-Install the [Confab CLI](https://github.com/ConfabulousDev/confab):
+Install the [Confab CLI](https://github.com/ConfabulousDev/confab) and point it at your instance:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash
-```
-
-Point it at your server:
-
-```bash
 confab setup --backend-url http://localhost:8080
 ```
 
@@ -82,7 +71,7 @@ See the [Self-Hosting Guide](SELF-HOSTING.md) for complete deployment instructio
 
 ## Configuration
 
-Configuration is simple — everything is controlled through environment variables in `docker-compose.yml`. See [CONFIGURATION.md](CONFIGURATION.md) for the full reference.
+Configuration is simple — everything is controlled through environment variables. See [CONFIGURATION.md](CONFIGURATION.md) for the full reference.
 
 ## Deploying to a Cloud Host
 
@@ -108,38 +97,39 @@ Two production reference deployments:
 
 - [`frontend/src/README.md`](frontend/src/README.md) -- Module index, data flow, architectural patterns
 
-## Dev Setup
+## Local Development
+
+One path: infra in Docker, backend and frontend native for hot reload. Everything runs through the root `Makefile` — `make help` lists every target.
+
+**Prerequisites:** Docker & Docker Compose, Go 1.26+, Node.js 24+.
 
 ```bash
-# Start databases only
-docker compose up -d postgres minio minio-setup migrate
+make setup    # first run only: creates backend/.env, installs frontend deps
+make dev      # infra + backend + frontend in one terminal (Ctrl-C stops all)
+```
 
-# Backend (requires Go 1.21+)
-cp backend/.env.example backend/.env
-cd backend && go run cmd/server/main.go
+Open [http://localhost:5173](http://localhost:5173) and log in with `admin@example.com` / `change-me-immediately` (from `backend/.env`).
 
-# Frontend with hot-reload (requires Node.js 18+)
-cd frontend && npm install && npm run dev
+Prefer separate terminals? Run the pieces on their own:
+
+```bash
+make up         # infra (Postgres + MinIO) + migrations
+make backend    # backend → http://localhost:8080
+make frontend   # frontend → http://localhost:5173
 ```
 
 ### Running Tests
 
 ```bash
-# Backend unit tests (fast)
-cd backend && go test -short ./...
-
-# Backend integration tests (requires Docker)
-cd backend && go test ./...
-
-# Frontend tests
-cd frontend && npm test
+make test       # backend + frontend
+make coverage   # backend coverage (sharded)
 ```
 
 ### Project Structure
 
 ```
 confab-web/
-├── docker-compose.yml     # Local development stack
+├── docker-compose.yml     # Local dev infrastructure (Postgres + MinIO + migrate)
 ├── CONFIGURATION.md       # Full configuration reference
 ├── backend/               # Backend service (Go)
 │   ├── cmd/server/       # Server entry point
