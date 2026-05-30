@@ -36,6 +36,28 @@ export const Default: Story = {
       assistant_utilization_pct: 27.3, // 675000 / (675000 + 1800000) * 100
     },
     loading: false,
+    // CF-525: ~96k output tokens / 675s ≈ 142 tok/s.
+    tokenSpeed: 142,
+  },
+};
+
+/**
+ * CF-525: token speed unavailable (no timing, or Tokens card missing) renders
+ * as "—" while the rest of the card still shows.
+ */
+export const NoTokenSpeed: Story = {
+  args: {
+    data: {
+      user_turns: 15,
+      assistant_turns: 15,
+      avg_assistant_turn_ms: 45000,
+      avg_user_thinking_ms: 120000,
+      total_assistant_duration_ms: 675000,
+      total_user_duration_ms: 1800000,
+      assistant_utilization_pct: 27.3,
+    },
+    loading: false,
+    tokenSpeed: null,
   },
 };
 

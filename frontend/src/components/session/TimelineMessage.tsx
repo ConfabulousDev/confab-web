@@ -7,7 +7,7 @@ import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/ContentBlock';
 import { AttachmentContent, AwaySummary } from '@/components/transcript/attachments';
 import TILBadge from './TILBadge';
-import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage } from '@/utils/tokenStats';
+import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
 import { getRoleLabel } from './messageCategories';
 import styles from './TimelineMessage.module.css';
@@ -216,6 +216,19 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
     ? buildCostTooltip(claudeAdapter, displayUsage, messageCost, message)
     : '';
 
+  // CF-525: approximate per-message output speed. Duration is estimated as the
+  // gap to the immediately preceding entry's timestamp; the shared helper owns
+  // the omission rules (no predecessor, zero output, non-positive/garbled gap →
+  // null → badge hidden). Marked "~" because it's an estimate, not measured.
+  const prevTimestamp =
+    previousMessage && 'timestamp' in previousMessage && typeof previousMessage.timestamp === 'string'
+      ? previousMessage.timestamp
+      : undefined;
+  const messageSpeed =
+    displayUsage && timestamp
+      ? computeMessageTokenSpeed(displayUsage.output, prevTimestamp, timestamp)
+      : null;
+
   // Get model for assistant messages
   const model = isAssistantMessage(message) ? message.message.model : undefined;
 
@@ -278,6 +291,14 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
                   {displayUsage.cacheRead ? `${formatTokenCount(displayUsage.cacheRead)} hit` : null}
                 </span>
               ) : null}
+              {messageSpeed != null && (
+                <span
+                  className={styles.tokenPill}
+                  title="Estimated output speed — tokens/sec from time since the previous entry"
+                >
+                  ~{formatTokenSpeed(messageSpeed)}
+                </span>
+              )}
             </>
           )}
           {wireUsage?.speed === 'fast' && (

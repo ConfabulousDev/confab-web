@@ -9,6 +9,7 @@ import {
 import type { ConversationCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import { providerLabel } from '@/utils/providers';
+import { formatTokenSpeed } from '@/utils/tokenStats';
 import styles from '../SessionSummaryPanel.module.css';
 
 /**
@@ -46,6 +47,13 @@ function formatDuration(ms: number): string {
  */
 interface ConversationCardProps extends CardProps<ConversationCardData> {
   provider: string;
+  /**
+   * CF-525: precomputed output-tokens-per-second for the session. Computed by
+   * SessionSummaryPanel (the only place holding both the Tokens and
+   * Conversation card data); `null` when timing/output is unavailable, which
+   * renders as "—". The card stays presentational and does no token math.
+   */
+  tokenSpeed?: number | null;
 }
 
 /**
@@ -61,7 +69,7 @@ export function ConversationCardForRegistry(
   return <ConversationCard {...props} provider={props.provider ?? 'claude-code'} />;
 }
 
-export function ConversationCard({ data, loading, error, provider }: ConversationCardProps) {
+export function ConversationCard({ data, loading, error, provider, tokenSpeed }: ConversationCardProps) {
   if (error && !data) {
     return <CardError title="Conversation" error={error} icon={ConversationIcon} />;
   }
@@ -84,6 +92,7 @@ export function ConversationCard({ data, loading, error, provider }: Conversatio
     totalAssistantTime: `Total time ${agent} spent working across all prompts`,
     totalUserTime: 'Total time user spent between prompts',
     assistantUtilization: `Percentage of session time ${agent} was actively working`,
+    tokenSpeed: 'Output tokens generated per second (output ÷ assistant time)',
   };
 
   return (
@@ -105,6 +114,12 @@ export function ConversationCard({ data, loading, error, provider }: Conversatio
           tooltip={tooltips.totalAssistantTime}
         />
       )}
+      <StatRow
+        label="Token speed"
+        value={formatTokenSpeed(tokenSpeed ?? null)}
+        icon={ZapIcon}
+        tooltip={tooltips.tokenSpeed}
+      />
       {data.total_user_duration_ms != null && (
         <StatRow
           label="Total user time"

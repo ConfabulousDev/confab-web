@@ -9,6 +9,7 @@ import CardGrid from '@/components/CardGrid';
 import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api';
 import { getOrderedCards } from './cards';
 import GitHubLinksCard from './GitHubLinksCard';
+import { computeTokenSpeed } from '@/utils/tokenStats';
 import styles from './SessionSummaryPanel.module.css';
 
 // Lookup maps for card grid layout classes
@@ -194,6 +195,16 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
         cardDef.key === 'code_activity'
       ) {
         extraProps.provider = provider;
+      }
+      // CF-525: token speed lives on the Conversation card but needs the Tokens
+      // card's output count. Compute it once here — the only place holding every
+      // card — and pass a precomputed value, so the card stays presentational
+      // and never reaches into another card's data. null → renders as "—".
+      if (cardDef.key === 'conversation') {
+        extraProps.tokenSpeed = computeTokenSpeed(
+          cards.tokens?.output ?? 0,
+          cards.conversation?.total_assistant_duration_ms ?? 0,
+        );
       }
 
       return (

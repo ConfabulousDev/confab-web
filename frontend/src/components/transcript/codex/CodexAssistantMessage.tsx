@@ -7,6 +7,8 @@ import {
   buildCostTooltip,
   formatCost,
   formatTokenCount,
+  formatTokenSpeed,
+  computeMessageTokenSpeed,
 } from '@/utils/tokenStats';
 import { codexAdapter } from '@/providers/codexAdapter';
 import { cx } from '@/utils/utils';
@@ -43,6 +45,11 @@ export interface CodexAssistantMessageProps {
   isCostMode?: boolean;
   /** CF-362: precomputed cost for this row. Badges suppress when 0/missing. */
   messageCost?: number;
+  /**
+   * CF-525: raw ISO timestamp of the immediately preceding transcript entry,
+   * used to estimate this message's per-message output speed (tokens/sec).
+   */
+  prevTimestamp?: string;
 }
 
 export default function CodexAssistantMessage({
@@ -58,6 +65,7 @@ export default function CodexAssistantMessage({
   isCurrentSearchMatch,
   isCostMode,
   messageCost,
+  prevTimestamp,
 }: CodexAssistantMessageProps) {
   const phaseClass = item.phase === 'commentary' ? styles.commentary : styles.final;
   const className = cx(
@@ -87,6 +95,13 @@ export default function CodexAssistantMessage({
         }
       : null;
 
+  // CF-525: approximate per-message output speed, shown alongside the cost
+  // badges. The shared helper owns the omission rules (no predecessor, zero
+  // output, non-positive/garbled gap → null → badge hidden).
+  const tokenSpeed = costBadges
+    ? computeMessageTokenSpeed(costBadges.outputDisplay, prevTimestamp, item.timestamp)
+    : null;
+
   return (
     <div
       className={className}
@@ -111,6 +126,14 @@ export default function CodexAssistantMessage({
             {costBadges.cachedHit > 0 && (
               <span className={styles.cachePill} title={costBadges.tooltip}>
                 {formatTokenCount(costBadges.cachedHit)} hit
+              </span>
+            )}
+            {tokenSpeed != null && (
+              <span
+                className={styles.tokenPill}
+                title="Estimated output speed — tokens/sec from time since the previous entry"
+              >
+                ~{formatTokenSpeed(tokenSpeed)}
               </span>
             )}
           </>

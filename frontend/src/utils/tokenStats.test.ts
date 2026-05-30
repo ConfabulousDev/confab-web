@@ -10,6 +10,9 @@ import {
   formatTokenCount,
   formatCost,
   getModelFamily,
+  computeTokenSpeed,
+  formatTokenSpeed,
+  computeMessageTokenSpeed,
 } from './tokenStats';
 
 // ---------------------------------------------------------------------------
@@ -54,6 +57,110 @@ describe('formatCost', () => {
   it('shows <$0.01 for tiny non-zero costs', () => {
     expect(formatCost(0.001)).toBe('<$0.01');
     expect(formatCost(0.009)).toBe('<$0.01');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CF-525: token speed = output tokens generated per second.
+//
+// These tests are the locked spec contract (Phase 3b). The numerator is output
+// tokens only; the denominator is a duration in milliseconds (assistant
+// generation time for the exact surfaces, predecessor-timestamp delta for the
+// approximate per-message badge). Anything that can't divide cleanly is null,
+// which the UI renders as "—" (cards/Trends) or omits (per-message badge).
+// ---------------------------------------------------------------------------
+
+describe('computeTokenSpeed', () => {
+  it('computes output tokens per second for a normal duration', () => {
+    // 1000 output tokens over 10s = 100 tok/s
+    expect(computeTokenSpeed(1000, 10_000)).toBe(100);
+  });
+
+  it('computes fractional speeds', () => {
+    expect(computeTokenSpeed(500, 2000)).toBe(250);
+    expect(computeTokenSpeed(3, 1000)).toBe(3);
+  });
+
+  it('returns 0 when there are zero output tokens but real duration', () => {
+    // Distinct from null: the rate is genuinely zero, not unmeasurable.
+    expect(computeTokenSpeed(0, 5000)).toBe(0);
+  });
+
+  it('returns null when duration is zero (unmeasurable)', () => {
+    expect(computeTokenSpeed(1000, 0)).toBeNull();
+  });
+
+  it('returns null when duration is negative (clock skew / back-stepping)', () => {
+    expect(computeTokenSpeed(1000, -500)).toBeNull();
+  });
+
+  it('returns null when duration is NaN', () => {
+    expect(computeTokenSpeed(1000, Number.NaN)).toBeNull();
+  });
+
+  it('passes large throughput through unrounded', () => {
+    // Rounding/abbreviation is the formatter's job, not this function's.
+    expect(computeTokenSpeed(50_000, 1000)).toBe(50_000);
+  });
+});
+
+describe('formatTokenSpeed', () => {
+  it('renders null as an em dash', () => {
+    expect(formatTokenSpeed(null)).toBe('—');
+  });
+
+  it('renders a small integer speed', () => {
+    expect(formatTokenSpeed(85)).toBe('85 tok/s');
+  });
+
+  it('renders zero as a real value (not a dash)', () => {
+    expect(formatTokenSpeed(0)).toBe('0 tok/s');
+  });
+
+  it('rounds to the nearest whole token', () => {
+    expect(formatTokenSpeed(85.7)).toBe('86 tok/s');
+    expect(formatTokenSpeed(85.2)).toBe('85 tok/s');
+  });
+
+  it('abbreviates large speeds with a k-suffix (reusing formatTokenCount)', () => {
+    expect(formatTokenSpeed(1500)).toBe('1.5k tok/s');
+  });
+});
+
+describe('computeMessageTokenSpeed (approximate per-message)', () => {
+  // duration = thisTimestamp - prevTimestamp (immediately preceding entry).
+  const t0 = '2026-05-30T12:00:00.000Z';
+  const t2s = '2026-05-30T12:00:02.000Z'; // +2s
+  const t4s = '2026-05-30T12:00:04.000Z'; // +4s
+
+  it('computes speed from the gap to the previous entry', () => {
+    // 200 output tokens over a 2s gap = 100 tok/s
+    expect(computeMessageTokenSpeed(200, t0, t2s)).toBe(100);
+  });
+
+  it('uses the immediately preceding timestamp as the gap start', () => {
+    // 400 tokens over the 2s gap (t2s -> t4s) = 200 tok/s
+    expect(computeMessageTokenSpeed(400, t2s, t4s)).toBe(200);
+  });
+
+  it('returns null when there is no predecessor (first entry)', () => {
+    expect(computeMessageTokenSpeed(200, undefined, t0)).toBeNull();
+  });
+
+  it('returns null when output tokens are zero', () => {
+    expect(computeMessageTokenSpeed(0, t0, t2s)).toBeNull();
+  });
+
+  it('returns null when timestamps are equal (streamed blocks share a stamp)', () => {
+    expect(computeMessageTokenSpeed(200, t2s, t2s)).toBeNull();
+  });
+
+  it('returns null when the gap is negative (back-stepping timestamps)', () => {
+    expect(computeMessageTokenSpeed(200, t4s, t0)).toBeNull();
+  });
+
+  it('returns null when a timestamp is unparseable', () => {
+    expect(computeMessageTokenSpeed(200, 'not-a-date', t2s)).toBeNull();
   });
 });
 

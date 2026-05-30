@@ -191,3 +191,55 @@ export function formatTokenCount(count: number): string {
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
   return count.toString();
 }
+
+// CF-525: token speed = output tokens generated per second.
+//
+// One shared arithmetic surface so the three display surfaces (Conversation
+// card, Trends, transcript) never diverge. The numerator is output tokens
+// only; the denominator is a duration in ms — assistant generation time for
+// the exact surfaces, predecessor-timestamp delta for the approximate
+// per-message badge.
+
+/**
+ * Output tokens per second, or `null` when the duration can't yield a rate
+ * (zero, negative, or NaN — e.g. missing timing, clock skew, or shared
+ * streamed timestamps). Zero output with a real duration is a genuine `0`,
+ * not `null`. Rounding/abbreviation is the formatter's job.
+ */
+export function computeTokenSpeed(outputTokens: number, durationMs: number): number | null {
+  if (!(durationMs > 0)) return null; // 0, negative, NaN
+  return outputTokens / (durationMs / 1000);
+}
+
+/**
+ * Format a token speed for display: `"85 tok/s"`, `"1.5k tok/s"` (k-suffix via
+ * `formatTokenCount`), or `"—"` for `null`. The approximation `~` marker for
+ * the per-message badge is applied at the call site, not here, so the exact
+ * session/Trends numbers stay unqualified.
+ */
+export function formatTokenSpeed(speed: number | null): string {
+  if (speed == null) return '—';
+  return `${formatTokenCount(Math.round(speed))} tok/s`;
+}
+
+/**
+ * Approximate per-message token speed for the transcript badge. Duration is
+ * estimated as the gap between this assistant message's timestamp and the
+ * immediately preceding transcript entry's timestamp.
+ *
+ * Returns `null` (badge omitted) when there is no predecessor, when output is
+ * zero, when either timestamp is unparseable, or when the gap is non-positive
+ * (streamed blocks sharing a stamp, or clock skew). This is an estimate — the
+ * caller marks it as such.
+ */
+export function computeMessageTokenSpeed(
+  outputTokens: number,
+  prevTimestamp: string | undefined,
+  timestamp: string,
+): number | null {
+  if (outputTokens <= 0 || prevTimestamp == null) return null;
+  const prevMs = Date.parse(prevTimestamp);
+  const thisMs = Date.parse(timestamp);
+  if (Number.isNaN(prevMs) || Number.isNaN(thisMs)) return null;
+  return computeTokenSpeed(outputTokens, thisMs - prevMs);
+}
