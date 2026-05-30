@@ -11,7 +11,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `Card.tsx` | Shared building blocks: `CardWrapper`, `StatRow`, `CardLoading`, `CardError`, `SectionHeader` |
 | `TokensCard.tsx` | Token usage breakdown (input, output, cache) with estimated cost. Provider-aware via `getAdapter(provider)`: cost / fast-mode tooltips come from `tokensCostTooltip` / `tokensFastTooltip` on the adapter. "Cache created" row hidden when value is 0 (CF-436). Direct callers pass required `provider`; the registry uses `TokensCardForRegistry` (mirrors `ConversationCardForRegistry`). |
 | `SessionCard.tsx` | Session metadata: message counts, duration, models, compaction stats |
-| `ConversationCard.tsx` | Turn-based metrics: user/assistant turns, avg response time, utilization |
+| `ConversationCard.tsx` | Turn-based metrics: user/assistant turns, avg response time, token speed (output tokens/sec, CF-525), utilization. `tokenSpeed` is precomputed by `SessionSummaryPanel` and injected via `extraProps` (it needs the Tokens card's `output` plus this card's `total_assistant_duration_ms`), so the card stays presentational. |
 | `CodeActivityCard.tsx` | Code activity: files read/modified, lines added/removed, language breakdown |
 | `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts. Exports `prepareChartData` for testing. Defensively filters orphan `<unknown>` entries so a literal `<unknown>` bar never paints, even for stale ComputeResults predating the CF-438 backend skip. |
 | `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown. Provider-agnostic copy: Claude buckets by `subagent_type`, Codex (CF-443) buckets by `agent_role` (`"default"`, `"explorer"`). Renders for both providers via the registry's `agent_invocations + skill_invocations > 0` gate. |
@@ -102,6 +102,6 @@ synthetic payload so per-card `CustomTooltip` logic is exercised.
 ## Dependencies
 
 - `@/schemas/api` for card data types (`TokensCardData`, `SessionCardData`, etc.)
-- `@/utils/tokenStats` for cost formatting (`formatCost`)
+- `@/utils/tokenStats` for cost formatting (`formatCost`) and token-speed formatting (`formatTokenSpeed`, CF-525)
 - `@/utils/formatting` for duration/model formatting
 - `@/components/icons` for stat row icons

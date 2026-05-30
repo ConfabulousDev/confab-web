@@ -457,4 +457,86 @@ describe('TimelineMessage', () => {
       expect(screen.getByLabelText('Next User message')).toBeInTheDocument();
     });
   });
+
+  // CF-525: approximate per-message output-speed badge. The shared helper
+  // (computeMessageTokenSpeed) owns the arithmetic and omission rules; these
+  // tests lock the Claude render gate — the badge only shows in cost mode with
+  // a real predecessor timestamp, and is omitted when the gap can't yield a
+  // rate. Mirrors the Codex coverage in CodexAssistantMessage.test.tsx.
+  describe('token speed badge', () => {
+    // Fixes output at 1200 tokens; each case sets the timestamp so the gap to
+    // previousMessage (10:00:00) drives the rate (e.g. 10:00:02 → 600 tok/s).
+    function assistantWithOutput(timestamp: string): AssistantMessage {
+      return createAssistantMessage({
+        timestamp,
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          id: 'msg-1',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 100, output_tokens: 1200 },
+        },
+      });
+    }
+
+    const previousMessage = createUserMessage({ timestamp: '2025-01-15T10:00:00Z' });
+
+    it('shows the ~tok/s speed badge from the gap to the previous entry', () => {
+      render(
+        <TimelineMessage
+          message={assistantWithOutput('2025-01-15T10:00:02Z')}
+          previousMessage={previousMessage}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={true}
+          messageCost={0.42}
+        />
+      );
+
+      expect(screen.getByText('~600 tok/s')).toBeInTheDocument();
+    });
+
+    it('omits the speed badge when there is no previous entry', () => {
+      render(
+        <TimelineMessage
+          message={assistantWithOutput('2025-01-15T10:00:02Z')}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={true}
+          messageCost={0.42}
+        />
+      );
+
+      expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();
+    });
+
+    it('omits the speed badge outside cost mode', () => {
+      render(
+        <TimelineMessage
+          message={assistantWithOutput('2025-01-15T10:00:02Z')}
+          previousMessage={previousMessage}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={false}
+          messageCost={0.42}
+        />
+      );
+
+      expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();
+    });
+
+    it('omits the speed badge when the predecessor shares this timestamp (non-positive gap)', () => {
+      render(
+        <TimelineMessage
+          message={assistantWithOutput('2025-01-15T10:00:00Z')}
+          previousMessage={previousMessage}
+          toolNameMap={emptyToolNameMap}
+          isCostMode={true}
+          messageCost={0.42}
+        />
+      );
+
+      expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();
+    });
+  });
 });

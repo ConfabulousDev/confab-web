@@ -90,7 +90,10 @@ export const CostModeFinal: Story = {
     item: item({
       // CF-418: canonical TokenUsage (post-normalize).
       usage: { input: 12_345, output: 1_200, cacheWrite: 0, cacheRead: 0 },
+      timestamp: '2026-05-13T18:00:02Z',
     }),
+    // CF-525: predecessor 2s earlier → ~600 tok/s estimate beside the badges.
+    prevTimestamp: '2026-05-13T18:00:00Z',
     isCostMode: true,
     messageCost: 0.0274,
   },

@@ -132,7 +132,7 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - `SessionHeader.test.tsx` -- Title display, edit mode, metadata rendering
 - `SessionSummaryPanel.test.tsx` -- Card rendering, analytics polling integration
 - `SessionViewer.test.tsx` -- Summary-tab routing across providers (CF-364)
-- `TimelineMessage.test.tsx` -- Message rendering by role, cost display
+- `TimelineMessage.test.tsx` -- Message rendering by role, cost display, per-message token-speed badge (CF-525)
 - `TranscriptSearchBar.test.tsx` -- Search open/close, match navigation
 - `FilterDropdown.test.tsx` -- Open/close, tri-state rollup, subcategory expand, callback wiring
 - `CodexFilterDropdown.test.tsx` -- Same surface, tuned to Codex categories

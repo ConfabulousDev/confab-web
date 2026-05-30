@@ -283,5 +283,45 @@ describe('CodexAssistantMessage', () => {
       expect(tooltip).toContain('Cached (hit): 200');
       expect(tooltip).toContain('Reasoning: 250');
     });
+
+    // -------------------------------------------------------------------------
+    // CF-525 — approximate per-message output speed badge
+    // -------------------------------------------------------------------------
+
+    it('shows the ~tok/s speed badge from the gap to the previous entry', () => {
+      // output 1_200 over a 2s gap (12:00:00 → 12:00:02) = 600 tok/s.
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage, reasoningTokens, timestamp: '2026-05-13T12:00:02.000Z' })}
+          prevTimestamp="2026-05-13T12:00:00.000Z"
+          isCostMode
+          messageCost={0.42}
+        />,
+      );
+      expect(screen.getByText('~600 tok/s')).toBeInTheDocument();
+    });
+
+    it('omits the speed badge when there is no previous entry', () => {
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage, reasoningTokens })}
+          isCostMode
+          messageCost={0.42}
+        />,
+      );
+      expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();
+    });
+
+    it('omits the speed badge outside cost mode', () => {
+      render(
+        <CodexAssistantMessage
+          item={assistant({ usage, reasoningTokens, timestamp: '2026-05-13T12:00:02.000Z' })}
+          prevTimestamp="2026-05-13T12:00:00.000Z"
+          isCostMode={false}
+          messageCost={0.42}
+        />,
+      );
+      expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();
+    });
   });
 });

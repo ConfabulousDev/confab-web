@@ -444,6 +444,12 @@ export default function CodexMessageTimeline({
             const messageCost = isCostMode && unfilteredIdx !== undefined
               ? costByIndex.get(unfilteredIdx)
               : undefined;
+            // CF-525: raw timestamp of the immediately preceding unfiltered
+            // entry, for the approximate per-message token-speed estimate.
+            const prevTimestamp =
+              unfilteredIdx !== undefined && unfilteredIdx > 0
+                ? items[unfilteredIdx - 1]?.timestamp
+                : undefined;
 
             return (
               <div
@@ -465,6 +471,7 @@ export default function CodexMessageTimeline({
                   isCurrentSearchMatch,
                   isCostMode,
                   messageCost,
+                  prevTimestamp,
                 })}
               </div>
             );
@@ -526,6 +533,8 @@ interface RenderFlags {
   isCostMode?: boolean;
   /** CF-362: pre-computed $ cost for this row (assistant only). */
   messageCost?: number;
+  /** CF-525: raw timestamp of the preceding entry (assistant speed estimate). */
+  prevTimestamp?: string;
 }
 
 function renderItem(item: CodexRenderItem, flags: RenderFlags) {
@@ -552,6 +561,7 @@ function renderItem(item: CodexRenderItem, flags: RenderFlags) {
           kindLabel={kindLabel}
           isCostMode={flags.isCostMode}
           messageCost={flags.messageCost}
+          prevTimestamp={flags.prevTimestamp}
         />
       );
     case 'tool_call':

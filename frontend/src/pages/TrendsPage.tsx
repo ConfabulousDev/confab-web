@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useAuth, useDocumentTitle, useTrends, useURLFilters } from '@/hooks';
 import type { URLFiltersConfig } from '@/hooks';
 import { getDefaultDateRange } from '@/utils';
+import { computeTokenSpeed } from '@/utils/tokenStats';
 import PageHeader from '@/components/PageHeader';
 import TrendsFilters, { type TrendsFiltersValue } from '@/components/trends/TrendsFilters';
 import {
@@ -118,7 +119,20 @@ function TrendsPage() {
 
           {data && data.session_count > 0 && (
             <CardGrid>
-              <TrendsOverviewCard data={data.cards.overview} />
+              <TrendsOverviewCard
+                data={data.cards.overview}
+                // CF-525: aggregate token speed over the range. Numerator and
+                // denominator live in different card slices, so compute it here
+                // — the only place holding both — and pass the precomputed value.
+                tokenSpeed={
+                  data.cards.overview && data.cards.tokens
+                    ? computeTokenSpeed(
+                        data.cards.tokens.total_output_tokens,
+                        data.cards.overview.total_assistant_duration_ms,
+                      )
+                    : null
+                }
+              />
               <TrendsTokensCard data={data.cards.tokens} />
               <TrendsTopSessionsCard data={data.cards.top_sessions} />
               <TrendsActivityCard data={data.cards.activity} providersPresent={data.providers_present} />

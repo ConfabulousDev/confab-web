@@ -29,6 +29,23 @@ export const Default: Story = {
       total_assistant_duration_ms: 43200000, // 12 hours
       assistant_utilization_pct: 50.0,
     },
+    // CF-525: aggregate output speed over the range (precomputed by TrendsPage).
+    tokenSpeed: 178,
+  },
+};
+
+// CF-525: no assistant time in the range → token speed renders as "-".
+export const NoTokenSpeed: Story = {
+  args: {
+    data: {
+      session_count: 42,
+      total_duration_ms: 86400000,
+      avg_duration_ms: 2057142,
+      days_covered: 7,
+      total_assistant_duration_ms: 43200000,
+      assistant_utilization_pct: 50.0,
+    },
+    tokenSpeed: null,
   },
 };
 

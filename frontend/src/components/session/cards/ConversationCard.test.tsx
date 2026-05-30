@@ -74,6 +74,30 @@ describe('ConversationCard', () => {
     expect(getByText('96%')).toBeInTheDocument();
   });
 
+  // CF-525: token speed row is precomputed by SessionSummaryPanel and passed in.
+  it('renders the token speed when provided', () => {
+    const { getByText } = render(
+      <ConversationCard data={makeData()} loading={false} provider="claude-code" tokenSpeed={142} />
+    );
+    expect(getByText('Token speed')).toBeInTheDocument();
+    expect(getByText('142 tok/s')).toBeInTheDocument();
+  });
+
+  it('renders an em dash for token speed when it is null', () => {
+    const { getByText } = render(
+      <ConversationCard data={makeData()} loading={false} provider="claude-code" tokenSpeed={null} />
+    );
+    expect(getByText('Token speed')).toBeInTheDocument();
+    expect(getByText('—')).toBeInTheDocument();
+  });
+
+  it('renders an em dash for token speed when the prop is omitted', () => {
+    const { getByText } = render(
+      <ConversationCard data={makeData()} loading={false} provider="claude-code" />
+    );
+    expect(getByText('—')).toBeInTheDocument();
+  });
+
   it('renders loading state', () => {
     const { getByText } = render(
       <ConversationCard data={null} loading={true} provider="claude-code" />
