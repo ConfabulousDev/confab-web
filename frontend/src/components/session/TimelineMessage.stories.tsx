@@ -307,6 +307,24 @@ export const CostMode: Story = {
 };
 
 /**
+ * Cost mode with a predecessor entry — renders the approximate "~N tok/s"
+ * output-speed badge (CF-525). Speed is estimated from the gap to the previous
+ * entry: 2500 output tokens over a 5s gap (10:00:00 → 10:00:05) ≈ 500 tok/s.
+ * The `~` marks it as an estimate, not a measured rate.
+ */
+export const CostModeWithSpeed: Story = {
+  name: 'Cost Mode (Token Speed)',
+  args: {
+    message: mockAssistantMessage,
+    previousMessage: mockUserMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    isCostMode: true,
+    messageCost: 0.42,
+  },
+};
+
+/**
  * Cost mode with an expensive message (high-cost opus).
  */
 export const CostModeExpensive: Story = {
