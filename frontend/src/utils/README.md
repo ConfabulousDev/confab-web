@@ -51,7 +51,7 @@ components and arithmetic all read one shape downstream.
 | `calculateCost` | `(provider: ProviderId, model: string, usage: TokenUsage) => number` | Base arithmetic. Pure: no fast multiplier, no server-tool add-on (those live on the provider adapter). Throws on unknown provider; warns and returns 0 on unknown model within a known provider. |
 | `getModelFamily` | `(provider: ProviderId, modelName: string) => string` | Strip date suffixes / `claude-` prefix to produce a pricing-table key. Claude branch matches `opus|sonnet|haiku-N(-N)?`; Codex branch strips OpenAI's pinned `-YYYY-MM-DD` suffix. |
 | `buildCostTooltip` | `(adapter, usage, cost, message) => string` | Cost-badge tooltip. Base lines (`$cost`, blank, input, output) plus the adapter's optional `extendCostTooltip` (Claude: Cache/Speed/Tier/Web-search; Codex: rebuilds the body to show gross input + interleaved cached / reasoning sub-lines for byte-identical pre-refactor formatting). |
-| `normalizeClaudeUsage` | `(wire) => TokenUsage` | Bridge from Claude's wire shape (`input_tokens`, `cache_creation_input_tokens`, …) to canonical `TokenUsage`. Used by `transcriptService` at parse time and as the fallback for cached entries written before the parse-time stamping. |
+| `normalizeClaudeUsage` | `(wire) => TokenUsage` | Bridge from Claude's wire shape (`input_tokens`, `cache_creation_input_tokens`, …) to canonical `TokenUsage`. Used by `claudeTranscriptService` at parse time and as the fallback for cached entries written before the parse-time stamping. |
 | `formatCost` | `(usd: number) => string` | Format as "$0.42" or "<$0.01". |
 | `formatTokenCount` | `(count: number) => string` | Format as "500", "1.5k", "1.5M". |
 
