@@ -14,7 +14,7 @@ import type { CodexTokenUsageDetails } from '@/schemas/codexTranscript';
 import {
   type TranscriptValidationError,
   formatValidationErrorsForLog,
-} from '@/schemas/transcript';
+} from '@/schemas/claudeTranscript';
 import {
   RawCodexLineSchema,
   isKnownCodexLine,

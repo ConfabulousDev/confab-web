@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseMessage,
-  extractTextContent,
+  parseClaudeMessage,
+  extractClaudeTextContent,
   getRoleLabel,
-} from './messageParser';
+} from './claudeMessageParser';
 import type { UserMessage, AssistantMessage, PRLinkMessage, ContentBlock, UnknownMessage } from '@/types';
 
-describe('messageParser', () => {
-  describe('parseMessage', () => {
+describe('claudeMessageParser', () => {
+  describe('parseClaudeMessage', () => {
     it('should parse user message with string content', () => {
       const message: UserMessage = {
         type: 'user',
@@ -25,7 +25,7 @@ describe('messageParser', () => {
         },
       };
 
-      const result = parseMessage(message);
+      const result = parseClaudeMessage(message);
 
       expect(result.role).toBe('user');
       expect(result.timestamp).toBe('2024-01-15T10:30:00Z');
@@ -61,7 +61,7 @@ describe('messageParser', () => {
         },
       };
 
-      const result = parseMessage(message);
+      const result = parseClaudeMessage(message);
 
       expect(result.role).toBe('assistant');
       expect(result.messageModel).toBe('claude-sonnet-4-5-20250929');
@@ -79,7 +79,7 @@ describe('messageParser', () => {
         timestamp: '2024-01-15T10:30:00Z',
       };
 
-      const result = parseMessage(message);
+      const result = parseClaudeMessage(message);
 
       expect(result.role).toBe('system');
       expect(result.timestamp).toBe('2024-01-15T10:30:00Z');
@@ -91,14 +91,14 @@ describe('messageParser', () => {
     });
   });
 
-  describe('extractTextContent', () => {
+  describe('extractClaudeTextContent', () => {
     it('should extract text from multiple blocks', () => {
       const content: ContentBlock[] = [
         { type: 'text', text: 'First line' },
         { type: 'text', text: 'Second line' },
       ];
 
-      const result = extractTextContent(content);
+      const result = extractClaudeTextContent(content);
       expect(result).toBe('First line\n\nSecond line');
     });
 
@@ -107,7 +107,7 @@ describe('messageParser', () => {
         { type: 'thinking', thinking: 'Analyzing...', signature: 'sig-1' },
       ];
 
-      const result = extractTextContent(content);
+      const result = extractClaudeTextContent(content);
       expect(result).toContain('[Thinking]');
       expect(result).toContain('Analyzing...');
     });
@@ -128,7 +128,7 @@ describe('messageParser', () => {
     });
   });
 
-  describe('parseMessage with unknown message type', () => {
+  describe('parseClaudeMessage with unknown message type', () => {
     it('should return role "unknown" for unrecognized message types', () => {
       // Simulate an unknown message type that passed Zod validation via catch-all
       const unknownMessage: UnknownMessage = {
@@ -138,7 +138,7 @@ describe('messageParser', () => {
         timestamp: '2025-01-01T00:00:00Z',
       };
 
-      const result = parseMessage(unknownMessage);
+      const result = parseClaudeMessage(unknownMessage);
       expect(result.role).toBe('unknown');
       expect(result.content[0]).toEqual({
         type: 'text',
@@ -152,7 +152,7 @@ describe('messageParser', () => {
         timestamp: '2025-06-15T12:00:00Z',
       };
 
-      const result = parseMessage(unknownMessage);
+      const result = parseClaudeMessage(unknownMessage);
       expect(result.role).toBe('unknown');
       expect(result.timestamp).toBe('2025-06-15T12:00:00Z');
     });

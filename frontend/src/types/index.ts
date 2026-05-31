@@ -26,7 +26,7 @@ export type {
   QueuedCommandAttachment,
   DeferredToolsDeltaAttachment,
   McpInstructionsDeltaAttachment,
-} from '@/schemas/transcript';
+} from '@/schemas/claudeTranscript';
 
 // Re-export type guards
 export {
@@ -50,7 +50,7 @@ export {
   isQueuedCommandAttachment,
   isDeferredToolsDeltaAttachment,
   isMcpInstructionsDeltaAttachment,
-} from '@/schemas/transcript';
+} from '@/schemas/claudeTranscript';
 
 // Re-export utility functions
 export {
@@ -62,4 +62,4 @@ export {
   getCommandExpansionSkillName,
   stripCommandExpansionTags,
   warnIfKnownTypeCaughtByCatchall,
-} from '@/schemas/transcript';
+} from '@/schemas/claudeTranscript';

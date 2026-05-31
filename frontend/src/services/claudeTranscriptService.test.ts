@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseJSONL, fetchNewTranscriptMessages, fetchParsedTranscript, reportTranscriptErrors, _resetReportedSessions } from './transcriptService';
-import type { TranscriptValidationError } from '@/schemas/transcript';
+import { parseClaudeJSONL, fetchNewClaudeTranscriptMessages, fetchParsedClaudeTranscript, reportClaudeTranscriptErrors, _resetReportedClaudeSessions } from './claudeTranscriptService';
+import type { TranscriptValidationError } from '@/schemas/claudeTranscript';
 import * as api from './api';
 
 // Mock the api module
@@ -27,12 +27,12 @@ const createSystemMessage = (id: number) => JSON.stringify({
   level: 'info',
 });
 
-describe('parseJSONL', () => {
+describe('parseClaudeJSONL', () => {
   it('parses valid JSONL content', () => {
     const content = `${createSystemMessage(1)}
 ${createSystemMessage(2)}`;
 
-    const result = parseJSONL(content);
+    const result = parseClaudeJSONL(content);
 
     expect(result.successCount).toBe(2);
     expect(result.errorCount).toBe(0);
@@ -46,7 +46,7 @@ ${createSystemMessage(2)}`;
 ${createSystemMessage(2)}
 `;
 
-    const result = parseJSONL(content);
+    const result = parseClaudeJSONL(content);
 
     expect(result.successCount).toBe(2);
     expect(result.errorCount).toBe(0);
@@ -54,7 +54,7 @@ ${createSystemMessage(2)}
   });
 
   it('handles empty content', () => {
-    const result = parseJSONL('');
+    const result = parseClaudeJSONL('');
 
     expect(result.successCount).toBe(0);
     expect(result.errorCount).toBe(0);
@@ -67,7 +67,7 @@ ${createSystemMessage(2)}
 invalid json line
 ${createSystemMessage(2)}`;
 
-    const result = parseJSONL(content);
+    const result = parseClaudeJSONL(content);
 
     expect(result.successCount).toBe(2);
     expect(result.errorCount).toBe(1);
@@ -81,7 +81,7 @@ ${createSystemMessage(2)}`;
 {"type":"unknown","invalid":"data"}
 ${createSystemMessage(2)}`;
 
-    const result = parseJSONL(content);
+    const result = parseClaudeJSONL(content);
 
     // All 3 lines pass — the unknown type matches the catch-all schema
     expect(result.successCount).toBe(3);
@@ -116,7 +116,7 @@ ${createSystemMessage(2)}`;
 ${skippedLine}
 ${createSystemMessage(2)}`;
 
-    const result = parseJSONL(content);
+    const result = parseClaudeJSONL(content);
 
     // Skipped message should not appear in messages or errors
     expect(result.successCount).toBe(2);
@@ -161,7 +161,7 @@ ${createSystemMessage(2)}`;
       ]
     });
 
-    const result = parseJSONL(userMessageWithToolResult);
+    const result = parseClaudeJSONL(userMessageWithToolResult);
 
     expect(result.successCount).toBe(1);
     expect(result.errorCount).toBe(0);
@@ -170,7 +170,7 @@ ${createSystemMessage(2)}`;
   });
 });
 
-describe('fetchNewTranscriptMessages', () => {
+describe('fetchNewClaudeTranscriptMessages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -185,7 +185,7 @@ ${createSystemMessage(2)}`;
 
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(newContent);
 
-    const result = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 5);
+    const result = await fetchNewClaudeTranscriptMessages('session-123', 'transcript.jsonl', 5);
 
     expect(api.syncFilesAPI.getContent).toHaveBeenCalledWith('session-123', 'transcript.jsonl', 5);
     expect(result.newMessages).toHaveLength(2);
@@ -195,7 +195,7 @@ ${createSystemMessage(2)}`;
   it('returns empty when no new content', async () => {
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue('');
 
-    const result = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 10);
+    const result = await fetchNewClaudeTranscriptMessages('session-123', 'transcript.jsonl', 10);
 
     expect(result.newMessages).toHaveLength(0);
     expect(result.newTotalLineCount).toBe(10); // unchanged
@@ -204,7 +204,7 @@ ${createSystemMessage(2)}`;
   it('returns empty for whitespace-only content', async () => {
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue('   \n  \n  ');
 
-    const result = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 10);
+    const result = await fetchNewClaudeTranscriptMessages('session-123', 'transcript.jsonl', 10);
 
     expect(result.newMessages).toHaveLength(0);
     expect(result.newTotalLineCount).toBe(10);
@@ -217,7 +217,7 @@ ${createSystemMessage(2)}`;
 
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(content);
 
-    const result = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 0);
+    const result = await fetchNewClaudeTranscriptMessages('session-123', 'transcript.jsonl', 0);
 
     // Messages array only contains successfully parsed lines
     expect(result.newMessages).toHaveLength(2);
@@ -232,7 +232,7 @@ ${createSystemMessage(2)}`;
 
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(content);
 
-    const result = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 0);
+    const result = await fetchNewClaudeTranscriptMessages('session-123', 'transcript.jsonl', 0);
 
     expect(api.syncFilesAPI.getContent).toHaveBeenCalledWith('session-123', 'transcript.jsonl', 0);
     expect(result.newMessages).toHaveLength(1);
@@ -247,7 +247,7 @@ ${createSystemMessage(3)}`;
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(newContent);
 
     // Simulate starting with 100 existing messages
-    const result = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 100);
+    const result = await fetchNewClaudeTranscriptMessages('session-123', 'transcript.jsonl', 100);
 
     expect(result.newMessages).toHaveLength(3);
     expect(result.newTotalLineCount).toBe(103); // 100 + 3
@@ -265,7 +265,7 @@ ${createSystemMessage(3)}`;
 
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(initialContent);
 
-    const firstResult = await fetchNewTranscriptMessages('session-123', 'transcript.jsonl', 0);
+    const firstResult = await fetchNewClaudeTranscriptMessages('session-123', 'transcript.jsonl', 0);
 
     expect(firstResult.newMessages).toHaveLength(9); // 9 valid messages
     expect(firstResult.newTotalLineCount).toBe(10); // But 10 total lines
@@ -274,7 +274,7 @@ ${createSystemMessage(3)}`;
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue('');
 
     // Using the correct totalLineCount from first result
-    const secondResult = await fetchNewTranscriptMessages(
+    const secondResult = await fetchNewClaudeTranscriptMessages(
       'session-123',
       'transcript.jsonl',
       firstResult.newTotalLineCount // 10, not 9
@@ -289,11 +289,11 @@ ${createSystemMessage(3)}`;
   });
 });
 
-describe('reportTranscriptErrors', () => {
+describe('reportClaudeTranscriptErrors', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    _resetReportedSessions();
+    _resetReportedClaudeSessions();
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"status":"ok"}'));
   });
 
@@ -316,7 +316,7 @@ describe('reportTranscriptErrors', () => {
 
   it('sends errors to the backend with correct payload structure', () => {
     const errors = [makeError(42, 'assistant')];
-    reportTranscriptErrors('session-abc', errors);
+    reportClaudeTranscriptErrors('session-abc', errors);
 
     expect(fetchSpy).toHaveBeenCalledOnce();
     const [url, options] = fetchSpy.mock.calls[0]!;
@@ -344,7 +344,7 @@ describe('reportTranscriptErrors', () => {
       errors: [{ path: 'root', message: 'bad' }],
     }];
 
-    reportTranscriptErrors('session-long', errors);
+    reportClaudeTranscriptErrors('session-long', errors);
 
     const body = parseFetchBody(fetchSpy);
     expect(body.errors[0].raw_json_preview).toHaveLength(500);
@@ -352,7 +352,7 @@ describe('reportTranscriptErrors', () => {
 
   it('limits to 50 errors per report', () => {
     const errors = Array.from({ length: 100 }, (_, i) => makeError(i + 1));
-    reportTranscriptErrors('session-many', errors);
+    reportClaudeTranscriptErrors('session-many', errors);
 
     const body = parseFetchBody(fetchSpy);
     expect(body.errors).toHaveLength(50);
@@ -362,15 +362,15 @@ describe('reportTranscriptErrors', () => {
     fetchSpy.mockRejectedValue(new Error('Network error'));
 
     // Should not throw
-    expect(() => reportTranscriptErrors('session-fail', [makeError(1)])).not.toThrow();
+    expect(() => reportClaudeTranscriptErrors('session-fail', [makeError(1)])).not.toThrow();
   });
 });
 
-describe('error reporting dedup in fetchParsedTranscript', () => {
+describe('error reporting dedup in fetchParsedClaudeTranscript', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    _resetReportedSessions();
+    _resetReportedClaudeSessions();
     vi.clearAllMocks();
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"status":"ok"}'));
   });
@@ -389,15 +389,15 @@ ${createSystemMessage(2)}`;
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(contentWithError);
 
     // First call: should report errors
-    await fetchParsedTranscript('session-dedup', 'transcript.jsonl', true);
+    await fetchParsedClaudeTranscript('session-dedup', 'transcript.jsonl', true);
     expect(fetchSpy).toHaveBeenCalledOnce();
 
     // Second call (same session, skipCache): should NOT report again
-    await fetchParsedTranscript('session-dedup', 'transcript.jsonl', true);
+    await fetchParsedClaudeTranscript('session-dedup', 'transcript.jsonl', true);
     expect(fetchSpy).toHaveBeenCalledOnce(); // still 1
 
     // Different session: should report
-    await fetchParsedTranscript('session-dedup-2', 'transcript.jsonl', true);
+    await fetchParsedClaudeTranscript('session-dedup-2', 'transcript.jsonl', true);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
@@ -407,7 +407,7 @@ ${createSystemMessage(2)}`;
 
     vi.mocked(api.syncFilesAPI.getContent).mockResolvedValue(validContent);
 
-    await fetchParsedTranscript('session-no-errors', 'transcript.jsonl', true);
+    await fetchParsedClaudeTranscript('session-no-errors', 'transcript.jsonl', true);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

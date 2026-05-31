@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { UserMessage, AssistantMessage } from '@/types';
-import { extractMessageText } from '@/services/messageParser';
+import { extractClaudeMessageText } from '@/services/claudeMessageParser';
 import { useTranscriptSearch } from './useTranscriptSearch';
 
 // Helper to build minimal test messages
@@ -56,7 +56,7 @@ describe('useTranscriptSearch', () => {
 
   it('initializes with closed state and empty matches', () => {
     const messages = [makeUserMessage('hello world')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     expect(result.current.isOpen).toBe(false);
     expect(result.current.query).toBe('');
@@ -67,7 +67,7 @@ describe('useTranscriptSearch', () => {
 
   it('opens search', () => {
     const messages = [makeUserMessage('hello')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.open());
     expect(result.current.isOpen).toBe(true);
@@ -75,7 +75,7 @@ describe('useTranscriptSearch', () => {
 
   it('closes search and resets state', () => {
     const messages = [makeUserMessage('hello')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.open());
     act(() => result.current.setQuery('hello'));
@@ -93,7 +93,7 @@ describe('useTranscriptSearch', () => {
       makeAssistantMessage('goodbye world', 'a1'),
       makeUserMessage('hello again', 'u2'),
     ];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('hello'));
 
@@ -113,7 +113,7 @@ describe('useTranscriptSearch', () => {
       makeUserMessage('Hello World'),
       makeAssistantMessage('HELLO again'),
     ];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('hello'));
     act(() => { vi.advanceTimersByTime(200); });
@@ -123,7 +123,7 @@ describe('useTranscriptSearch', () => {
 
   it('returns empty matches for empty query', () => {
     const messages = [makeUserMessage('hello')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery(''));
     act(() => { vi.advanceTimersByTime(200); });
@@ -133,7 +133,7 @@ describe('useTranscriptSearch', () => {
 
   it('returns empty matches for whitespace-only query', () => {
     const messages = [makeUserMessage('hello')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('   '));
     act(() => { vi.advanceTimersByTime(200); });
@@ -143,7 +143,7 @@ describe('useTranscriptSearch', () => {
 
   it('returns empty matches when no messages match', () => {
     const messages = [makeUserMessage('hello'), makeAssistantMessage('world')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('zzzzz'));
     act(() => { vi.advanceTimersByTime(200); });
@@ -158,7 +158,7 @@ describe('useTranscriptSearch', () => {
       makeAssistantMessage('bar', 'a1'),
       makeUserMessage('foo again', 'u2'),
     ];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('foo'));
     act(() => { vi.advanceTimersByTime(200); });
@@ -182,7 +182,7 @@ describe('useTranscriptSearch', () => {
       makeAssistantMessage('other', 'a1'),
       makeUserMessage('test again', 'u2'),
     ];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('test'));
     act(() => { vi.advanceTimersByTime(200); });
@@ -200,7 +200,7 @@ describe('useTranscriptSearch', () => {
 
   it('does not crash when navigating with no matches', () => {
     const messages = [makeUserMessage('hello')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('zzz'));
     act(() => { vi.advanceTimersByTime(200); });
@@ -220,7 +220,7 @@ describe('useTranscriptSearch', () => {
       makeUserMessage('hello world', 'u2'),
     ];
     const { result, rerender } = renderHook(
-      ({ msgs }) => useTranscriptSearch(msgs, extractMessageText),
+      ({ msgs }) => useTranscriptSearch(msgs, extractClaudeMessageText),
       { initialProps: { msgs: allMessages } },
     );
 
@@ -247,7 +247,7 @@ describe('useTranscriptSearch', () => {
 
   it('debounces highlightQuery at 300ms separately from match-finding at 150ms', () => {
     const messages = [makeUserMessage('hello world')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('hello'));
 
@@ -263,7 +263,7 @@ describe('useTranscriptSearch', () => {
 
   it('clears highlightQuery on close', () => {
     const messages = [makeUserMessage('hello')];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.open());
     act(() => result.current.setQuery('hello'));
@@ -305,7 +305,7 @@ describe('useTranscriptSearch', () => {
       },
     };
     const messages = [msg];
-    const { result } = renderHook(() => useTranscriptSearch(messages, extractMessageText));
+    const { result } = renderHook(() => useTranscriptSearch(messages, extractClaudeMessageText));
 
     act(() => result.current.setQuery('special_file'));
     act(() => { vi.advanceTimersByTime(200); });

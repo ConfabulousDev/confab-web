@@ -7,9 +7,9 @@ API client and business logic services. All HTTP communication with the backend 
 | File | Role |
 |------|------|
 | `api.ts` | Centralized API client with Zod-validated endpoints, error classes, and auth handling |
-| `transcriptService.ts` | Claude Code transcript: fetching, JSONL parsing, validation, caching, incremental updates |
+| `claudeTranscriptService.ts` | Claude Code transcript: fetching, JSONL parsing, validation, caching, incremental updates |
 | `codexTranscriptService.ts` | Codex rollout transcript: parses the Codex JSONL shape, normalizes raw lines into render items, and mirrors the Claude fetch / poll surface |
-| `messageParser.ts` | Extracts display-ready data from raw Claude transcript messages |
+| `claudeMessageParser.ts` | Extracts display-ready data from raw Claude transcript messages |
 
 ## Key Components
 
@@ -45,20 +45,20 @@ class AuthenticationError extends APIError { /* always status 401 */ }
 class NetworkError extends Error { /* fetch TypeError */ }
 ```
 
-### transcriptService.ts -- Transcript Processing
+### claudeTranscriptService.ts -- Transcript Processing
 
 Handles the full lifecycle of transcript data:
 
 1. **Fetching**: `fetchTranscriptContent()` retrieves JSONL via `syncFilesAPI.getContent()`
-2. **Parsing**: `parseJSONL()` splits on newlines, validates each line with Zod, and pre-filters metadata-only records listed in `SKIPPED_MESSAGE_TYPES` (currently `progress`, `permission-mode`, `ai-title`, `last-prompt`). `attachment` rows are no longer pre-skipped — they parse via `AttachmentMessageSchema` and the categorizer hides noisy subtypes (CF-346)
+2. **Parsing**: `parseClaudeJSONL()` splits on newlines, validates each line with Zod, and pre-filters metadata-only records listed in `SKIPPED_MESSAGE_TYPES` (currently `progress`, `permission-mode`, `ai-title`, `last-prompt`). `attachment` rows are no longer pre-skipped — they parse via `AttachmentMessageSchema` and the categorizer hides noisy subtypes (CF-346)
 3. **Caching**: In-memory cache keyed by `sessionId-fileName`, with `skipCache` option for fresh loads
-4. **Incremental updates**: `fetchNewTranscriptMessages()` fetches only lines after a given offset
+4. **Incremental updates**: `fetchNewClaudeTranscriptMessages()` fetches only lines after a given offset
 5. **Error reporting**: Validation errors are reported to `/api/v1/client-errors` (fire-and-forget, deduplicated per session)
 
 Key exports:
-- `fetchParsedTranscript(sessionId, fileName, skipCache?)` -- Full transcript with metadata
-- `fetchNewTranscriptMessages(sessionId, fileName, currentLineCount)` -- Incremental fetch
-- `parseJSONL(jsonl)` -- Parse JSONL string into validated `TranscriptLine[]`
+- `fetchParsedClaudeTranscript(sessionId, fileName, skipCache?)` -- Full transcript with metadata
+- `fetchNewClaudeTranscriptMessages(sessionId, fileName, currentLineCount)` -- Incremental fetch
+- `parseClaudeJSONL(jsonl)` -- Parse JSONL string into validated `TranscriptLine[]`
 
 ### codexTranscriptService.ts -- Codex Transcript Processing
 
@@ -119,7 +119,7 @@ without re-fetching:
 
 Key exports:
 - `fetchParsedCodexTranscript(sessionId, fileName, skipCache?)` -- Initial
-  load with in-memory cache (mirrors `fetchParsedTranscript`).
+  load with in-memory cache (mirrors `fetchParsedClaudeTranscript`).
 - `fetchNewCodexLines(sessionId, fileName, currentLineCount)` -- Incremental
   poll, returns `{ newRawLines, newTotalLineCount }`. Callers append raw lines
   to their accumulated state and re-derive items via `useMemo`.
@@ -137,7 +137,7 @@ Key exports:
   `/api/v1/client-errors` with `category: 'codex_transcript_validation'`
   (separate from Claude's `transcript_validation` for independent triage).
 
-### messageParser.ts -- Message Display
+### claudeMessageParser.ts -- Message Display
 
 Transforms raw `TranscriptLine` objects into display-ready `ParsedMessageData`:
 - Determines role (`user`, `assistant`, `system`, `unknown`)
@@ -146,9 +146,9 @@ Transforms raw `TranscriptLine` objects into display-ready `ParsedMessageData`:
 - Handles all message types: user, assistant, system, summary, file-history-snapshot, queue-operation, pr-link, unknown
 
 Key exports:
-- `parseMessage(message)` -- Returns `ParsedMessageData`
-- `extractTextContent(content)` -- Plain text extraction for search indexing and clipboard
-- `extractMessageText(message)` -- CF-359 — bridges a `TranscriptLine` to the generic `useTranscriptSearch` hook (composes `parseMessage` + `extractTextContent`). Stable module reference so passing it as an effect-dependency doesn't churn the search index
+- `parseClaudeMessage(message)` -- Returns `ParsedMessageData`
+- `extractClaudeTextContent(content)` -- Plain text extraction for search indexing and clipboard
+- `extractClaudeMessageText(message)` -- CF-359 — bridges a `TranscriptLine` to the generic `useTranscriptSearch` hook (composes `parseClaudeMessage` + `extractClaudeTextContent`). Stable module reference so passing it as an effect-dependency doesn't churn the search index
 - `getRoleLabel(role, isToolResult)` -- Display label for message role
 
 ## How to Extend
@@ -160,10 +160,10 @@ Key exports:
 4. For endpoints needing custom behavior (e.g., 304 handling), use the `fetchRaw()` helper
 
 ### Adding a new message type
-1. Add the schema to `@/schemas/transcript.ts`
+1. Add the schema to `@/schemas/claudeTranscript.ts`
 2. Add a type guard in the same file
-3. Add a rendering branch in `messageParser.ts`'s `parseMessage()` function
-4. Update `extractTextContent()` if the new type has searchable text
+3. Add a rendering branch in `claudeMessageParser.ts`'s `parseClaudeMessage()` function
+4. Update `extractClaudeTextContent()` if the new type has searchable text
 
 ## Invariants / Conventions
 
@@ -183,15 +183,15 @@ Key exports:
 ## Testing
 
 - `api.test.ts` -- API client error handling, auth flow, response validation
-- `transcriptService.test.ts` -- JSONL parsing, validation error handling, incremental fetch
+- `claudeTranscriptService.test.ts` -- JSONL parsing, validation error handling, incremental fetch
 - `codexTranscriptService.test.ts` -- Codex JSONL parsing + normalization, fixture-driven (`src/test-fixtures/codex-rollout.jsonl`)
-- `messageParser.test.ts` -- Message parsing for all message types, text extraction
+- `claudeMessageParser.test.ts` -- Message parsing for all message types, text extraction
 
 ## Dependencies
 
 - `zod` (runtime response validation)
 - `@/schemas/api` (response schemas and types)
-- `@/schemas/transcript` (transcript line schemas)
+- `@/schemas/claudeTranscript` (transcript line schemas)
 - `@/schemas/codexTranscript` (Codex rollout schemas + `isKnown*` type predicates)
 - `@/types/codexRenderItem` (Codex render-item types)
 - `@/utils/sessionErrors` (401 redirect skip list)

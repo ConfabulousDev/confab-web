@@ -11,8 +11,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseTranscriptLineWithError } from '../src/schemas/transcript';
-import type { TranscriptValidationError, TranscriptLine } from '../src/schemas/transcript';
+import { parseTranscriptLineWithError } from '../src/schemas/claudeTranscript';
+import type { TranscriptValidationError, TranscriptLine } from '../src/schemas/claudeTranscript';
 
 interface ValidationResult {
   messages: TranscriptLine[];

@@ -519,14 +519,14 @@ export type CodexResponseMessage = z.infer<typeof CodexResponseMessageSchema>;
 
 // Re-export the existing validation-error shape so the Codex service doesn't
 // invent a new one (it's a thin wrapper, same fields).
-export type { TranscriptValidationError } from './transcript';
+export type { TranscriptValidationError } from './claudeTranscript';
 
 /**
  * Result of parsing a Codex rollout JSONL.
  */
 export interface CodexParseResult {
   rawLines: RawCodexLine[];
-  errors: import('./transcript').TranscriptValidationError[];
+  errors: import('./claudeTranscript').TranscriptValidationError[];
   totalLines: number;
   successCount: number;
   errorCount: number;

@@ -11,8 +11,8 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useURLFilters.ts` | Generic URL-synced filter state hook (string, string[], boolean, dateRange fields) |
 | `useURLFilters.test.ts` | Tests for `useURLFilters` |
 | `useSessionFilters.ts` | URL-synced session filter state (repos, branches, owners, providers, query) via `useURLFilters` |
-| `useTranscriptFilters.ts` | URL-synced Claude transcript message category filters via `useURLFilters` |
-| `useCodexTranscriptFilters.ts` | URL-synced Codex transcript category filters (CF-361) via `useURLFilters`. Shares the `?hide=` slot with `useTranscriptFilters`; foreign tokens are no-ops on read |
+| `useClaudeTranscriptFilters.ts` | URL-synced Claude transcript message category filters via `useURLFilters` |
+| `useCodexTranscriptFilters.ts` | URL-synced Codex transcript category filters (CF-361) via `useURLFilters`. Shares the `?hide=` slot with `useClaudeTranscriptFilters`; foreign tokens are no-ops on read |
 | `useCodexTranscriptFilters.test.ts` | Tests for the Codex transcript filter hook (default state, round-trip, toggles, foreign-token tolerance) |
 | `useLoadSession.ts` | Single session loading with typed error categories |
 | `useAnalyticsPolling.ts` | Session analytics polling with conditional 304 support |
@@ -55,9 +55,9 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 |------|-----------|-------------|
 | `useURLFilters` | `<T>(config) => URLFiltersResult<T>` | Generic URL filter persistence. Supports string, string[], boolean, and dateRange fields. Provides `setFilter`, `setAll`, `toggleArrayValue`, `clearAll`, and `commitHistory`. |
 | `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, providers, query) to URL search params via `useURLFilters`. |
-| `useTranscriptFilters` | `() => TranscriptFiltersResult` | Reads/writes Claude transcript message category visibility to URL `hide` param via `useURLFilters`. Provides toggle helpers for categories and subcategories. |
-| `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel of `useTranscriptFilters`. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |
-| `useTranscriptSearch` | `<T>(items, extractText) => TranscriptSearchResult` | Generic over item type. Builds a lowercased search index via `extractText`, debounces query (150ms search, 300ms highlight), provides match navigation. Shared by the Claude (`extractMessageText` from `services/messageParser`) and Codex (`extractCodexItemText` from `components/transcript/codex`) timelines. |
+| `useClaudeTranscriptFilters` | `() => ClaudeTranscriptFiltersResult` | Reads/writes Claude transcript message category visibility to URL `hide` param via `useURLFilters`. Provides toggle helpers for categories and subcategories. |
+| `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel of `useClaudeTranscriptFilters`. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |
+| `useTranscriptSearch` | `<T>(items, extractText) => TranscriptSearchResult` | Generic over item type. Builds a lowercased search index via `extractText`, debounces query (150ms search, 300ms highlight), provides match navigation. Shared by the Claude (`extractClaudeMessageText` from `services/claudeMessageParser`) and Codex (`extractCodexItemText` from `components/transcript/codex`) timelines. |
 | `useShareDialog` | `({ sessionId, userEmail?, onShareCreated? }) => UseShareDialogReturn` | Full share dialog state: form fields, email validation (Zod), create/revoke API calls. |
 | `useDropdown` | `<T extends HTMLElement>(initialOpen?: boolean) => UseDropdownReturn<T>` | Open/close state with click-outside detection and Escape key. `initialOpen` defaults to `false`; pass `true` in stories/tests to render open. |
 | `useSuccessMessage` | `(options?) => UseSuccessMessageReturn` | Auto-fading success message with optional URL param extraction. |
@@ -104,7 +104,7 @@ const { data, state, refetch, loading, error } = useSmartPolling(fetchFn, {
 ## Design Decisions
 
 - **React Query for auth only**: `useAuth` uses `@tanstack/react-query` for its caching and retry semantics. Other hooks use manual state management because they need custom polling behavior (visibility-aware, conditional 304) that doesn't fit React Query's model well.
-- **URL-synced filters**: `useURLFilters` is the generic engine for URL filter persistence. `useSessionFilters` and `useTranscriptFilters` are thin wrappers that define field configs. Pages like `TrendsPage` and `OrgPage` use `useURLFilters` directly.
+- **URL-synced filters**: `useURLFilters` is the generic engine for URL filter persistence. `useSessionFilters` and `useClaudeTranscriptFilters` are thin wrappers that define field configs. Pages like `TrendsPage` and `OrgPage` use `useURLFilters` directly.
 - **Adaptive relative time intervals**: `useRelativeTime` adjusts its update frequency based on timestamp age to avoid unnecessary renders for old timestamps while keeping recent ones fresh.
 
 ## Testing

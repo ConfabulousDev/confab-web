@@ -1,11 +1,11 @@
 // CF-417 spec: claudeAdapter satisfies the ProviderAdapter contract and
-// delegates to the existing transcriptService / messageCategories APIs.
+// delegates to the existing claudeTranscriptService / messageCategories APIs.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
-  fetchParsedTranscript,
-  fetchNewTranscriptMessages,
-} from '@/services/transcriptService';
+  fetchParsedClaudeTranscript,
+  fetchNewClaudeTranscriptMessages,
+} from '@/services/claudeTranscriptService';
 import {
   DEFAULT_FILTER_STATE,
   messageMatchesFilter,
@@ -16,9 +16,9 @@ import type { TokenUsage } from '@/utils/tokenStats';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
 import { claudeAdapter } from './claudeAdapter';
 
-vi.mock('@/services/transcriptService', () => ({
-  fetchParsedTranscript: vi.fn(),
-  fetchNewTranscriptMessages: vi.fn(),
+vi.mock('@/services/claudeTranscriptService', () => ({
+  fetchParsedClaudeTranscript: vi.fn(),
+  fetchNewClaudeTranscriptMessages: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -136,9 +136,9 @@ describe('claudeAdapter', () => {
     expect(claudeAdapter.supportsTILs).toBe(true);
   });
 
-  it('fetchInitial delegates to fetchParsedTranscript and reshapes the result', async () => {
+  it('fetchInitial delegates to fetchParsedClaudeTranscript and reshapes the result', async () => {
     const messages: TranscriptLine[] = [userMessage('u1', '2026-05-13T01:00:00Z')];
-    vi.mocked(fetchParsedTranscript).mockResolvedValue({
+    vi.mocked(fetchParsedClaudeTranscript).mockResolvedValue({
       sessionId: 's',
       messages,
       agents: [],
@@ -154,22 +154,22 @@ describe('claudeAdapter', () => {
 
     const result = await claudeAdapter.fetchInitial('s', 'transcript.jsonl', true);
 
-    expect(fetchParsedTranscript).toHaveBeenCalledWith('s', 'transcript.jsonl', true);
+    expect(fetchParsedClaudeTranscript).toHaveBeenCalledWith('s', 'transcript.jsonl', true);
     expect(result.items).toBe(messages);
     expect(result.raw).toBe(messages);
     expect(result.totalLines).toBe(1);
   });
 
-  it('fetchIncremental delegates to fetchNewTranscriptMessages', async () => {
+  it('fetchIncremental delegates to fetchNewClaudeTranscriptMessages', async () => {
     const newMessages: TranscriptLine[] = [userMessage('u2', '2026-05-13T01:01:00Z')];
-    vi.mocked(fetchNewTranscriptMessages).mockResolvedValue({
+    vi.mocked(fetchNewClaudeTranscriptMessages).mockResolvedValue({
       newMessages,
       newTotalLineCount: 5,
     });
 
     const result = await claudeAdapter.fetchIncremental('s', 'transcript.jsonl', 3);
 
-    expect(fetchNewTranscriptMessages).toHaveBeenCalledWith('s', 'transcript.jsonl', 3);
+    expect(fetchNewClaudeTranscriptMessages).toHaveBeenCalledWith('s', 'transcript.jsonl', 3);
     expect(result.newItems).toBe(newMessages);
     expect(result.newRaw).toBe(newMessages);
     expect(result.newTotalLineCount).toBe(5);
