@@ -8,9 +8,9 @@ import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { extractClaudeMessageText } from '@/services/claudeMessageParser';
 import { claudeAdapter } from '@/providers/claudeAdapter';
 import { normalizeClaudeUsage } from '@/utils/tokenStats';
-import TimelineMessage from './TimelineMessage';
-import TranscriptSearchBar from './TranscriptSearchBar';
-import { getClaudeRoleLabel } from './claudeCategories';
+import ClaudeTimelineMessage from './ClaudeTimelineMessage';
+import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
+import { getClaudeRoleLabel } from '@/components/session/claudeCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/claude/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
@@ -21,9 +21,9 @@ import {
   SCROLL_NAV_COST_MODE_RIGHT,
 } from '@/components/transcript/timelineUtils';
 import { useSegmentLayout } from '@/components/transcript/timelineSegments';
-import styles from './MessageTimeline.module.css';
+import styles from './ClaudeMessageTimeline.module.css';
 
-interface MessageTimelineProps {
+interface ClaudeMessageTimelineProps {
   messages: TranscriptLine[];
   allMessages: TranscriptLine[]; // Used for building tool name map
   targetMessageUuid?: string; // Deep-link target message UUID
@@ -109,7 +109,7 @@ function CostBarSlot({ messages, messageCosts, totalCost, selectedIndex, onSeek 
   );
 }
 
-function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, tilsByMessageUuid }: MessageTimelineProps) {
+function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, tilsByMessageUuid }: ClaudeMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -505,7 +505,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
                     <span className={styles.separatorLine} />
                   </div>
                 ) : (
-                  <TimelineMessage
+                  <ClaudeTimelineMessage
                     message={item.message}
                     toolNameMap={toolNameMap}
                     previousMessage={item.filteredIndex > 0 ? messages[item.filteredIndex - 1] : undefined}
@@ -570,4 +570,4 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
   );
 }
 
-export default MessageTimeline;
+export default ClaudeMessageTimeline;

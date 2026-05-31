@@ -1,6 +1,6 @@
 // Renders the transcript-tab content for Claude Code sessions.
 //
-// Thin wrapper around MessageTimeline: receives messages, filter results, and
+// Thin wrapper around ClaudeMessageTimeline: receives messages, filter results, and
 // cost-mode state from SessionViewer (which holds the state so the header can
 // render the filter chips and cost toggle alongside the timeline). Encapsulates
 // the loading / error / empty / timeline branching so the parent shell stays
@@ -8,7 +8,7 @@
 
 import type { TranscriptLine } from '@/types';
 import type { TIL } from '@/schemas/api';
-import MessageTimeline from './MessageTimeline';
+import ClaudeMessageTimeline from '@/components/transcript/claude/ClaudeMessageTimeline';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 
 export interface ClaudeTranscriptPaneProps {
@@ -37,7 +37,7 @@ export default function ClaudeTranscriptPane({
   }
 
   return (
-    <MessageTimeline
+    <ClaudeMessageTimeline
       messages={filteredMessages}
       allMessages={allMessages}
       targetMessageUuid={targetMessageUuid}

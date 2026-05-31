@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserMessage, AssistantMessage, TranscriptLine } from '@/types';
-import TimelineMessage from './TimelineMessage';
+import ClaudeTimelineMessage from './ClaudeTimelineMessage';
 
 // Mock the useCopyToClipboard hook to capture copied text
 const copiedTexts: string[] = [];
@@ -80,7 +80,7 @@ function createFileHistorySnapshot(): TranscriptLine {
 
 const emptyToolNameMap = new Map<string, string>();
 
-describe('TimelineMessage', () => {
+describe('ClaudeTimelineMessage', () => {
   beforeEach(() => {
     copiedTexts.length = 0;
   });
@@ -89,7 +89,7 @@ describe('TimelineMessage', () => {
     it('renders link button for messages with uuid and sessionId', () => {
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           sessionId="test-session-id"
@@ -102,7 +102,7 @@ describe('TimelineMessage', () => {
     it('does not render link button when sessionId is not provided', () => {
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
         />
@@ -114,7 +114,7 @@ describe('TimelineMessage', () => {
     it('does not render link button for messages without uuid', () => {
       const message = createFileHistorySnapshot();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           sessionId="test-session-id"
@@ -129,7 +129,7 @@ describe('TimelineMessage', () => {
       const message = createUserMessage({ uuid: 'my-msg-uuid' });
 
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           sessionId="test-session-id"
@@ -146,7 +146,7 @@ describe('TimelineMessage', () => {
     it('renders link button for assistant messages', () => {
       const message = createAssistantMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           sessionId="test-session-id"
@@ -161,7 +161,7 @@ describe('TimelineMessage', () => {
       const message = createUserMessage({ uuid: 'test-uuid' });
 
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           sessionId="session-abc"
@@ -181,7 +181,7 @@ describe('TimelineMessage', () => {
     it('applies deepLinkTarget class when isDeepLinkTarget is true', () => {
       const message = createUserMessage();
       const { container } = render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           isDeepLinkTarget={true}
@@ -195,7 +195,7 @@ describe('TimelineMessage', () => {
     it('does not apply deepLinkTarget class when isDeepLinkTarget is false', () => {
       const message = createUserMessage();
       const { container } = render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           isDeepLinkTarget={false}
@@ -209,7 +209,7 @@ describe('TimelineMessage', () => {
     it('applies both selected and deepLinkTarget classes simultaneously', () => {
       const message = createUserMessage();
       const { container } = render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           isSelected={true}
@@ -243,7 +243,7 @@ describe('TimelineMessage', () => {
         },
       });
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           isCostMode={true}
@@ -274,7 +274,7 @@ describe('TimelineMessage', () => {
         },
       });
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           isCostMode={true}
@@ -305,7 +305,7 @@ describe('TimelineMessage', () => {
         },
       });
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           isCostMode={true}
@@ -320,7 +320,7 @@ describe('TimelineMessage', () => {
     it('shows no cache section when both are zero', () => {
       const message = createAssistantMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           isCostMode={true}
@@ -337,7 +337,7 @@ describe('TimelineMessage', () => {
     it('still renders copy message button alongside link button', () => {
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           sessionId="test-session-id"
@@ -353,7 +353,7 @@ describe('TimelineMessage', () => {
     it('renders both skip buttons when both callbacks are provided', () => {
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           roleLabel="User"
@@ -369,7 +369,7 @@ describe('TimelineMessage', () => {
     it('renders only next button when onSkipToPrevious is absent', () => {
       const message = createAssistantMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           roleLabel="Assistant"
@@ -384,7 +384,7 @@ describe('TimelineMessage', () => {
     it('renders only previous button when onSkipToNext is absent', () => {
       const message = createAssistantMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           roleLabel="Assistant"
@@ -399,7 +399,7 @@ describe('TimelineMessage', () => {
     it('renders no skip buttons when neither callback is provided', () => {
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
         />
@@ -414,7 +414,7 @@ describe('TimelineMessage', () => {
       const onSkipToNext = vi.fn();
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           roleLabel="User"
@@ -431,7 +431,7 @@ describe('TimelineMessage', () => {
       const onSkipToPrevious = vi.fn();
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           roleLabel="User"
@@ -446,7 +446,7 @@ describe('TimelineMessage', () => {
     it('falls back to computed roleLabel when roleLabel prop is not provided', () => {
       const message = createUserMessage();
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={message}
           toolNameMap={emptyToolNameMap}
           onSkipToNext={() => {}}
@@ -486,7 +486,7 @@ describe('TimelineMessage', () => {
 
     it('shows the ~tok/s speed badge from the gap to the previous entry', () => {
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={assistantWithOutput('2025-01-15T10:00:02Z')}
           previousMessage={previousMessage}
           toolNameMap={emptyToolNameMap}
@@ -500,7 +500,7 @@ describe('TimelineMessage', () => {
 
     it('omits the speed badge when there is no previous entry', () => {
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={assistantWithOutput('2025-01-15T10:00:02Z')}
           toolNameMap={emptyToolNameMap}
           isCostMode={true}
@@ -513,7 +513,7 @@ describe('TimelineMessage', () => {
 
     it('omits the speed badge outside cost mode', () => {
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={assistantWithOutput('2025-01-15T10:00:02Z')}
           previousMessage={previousMessage}
           toolNameMap={emptyToolNameMap}
@@ -527,7 +527,7 @@ describe('TimelineMessage', () => {
 
     it('omits the speed badge when the predecessor shares this timestamp (non-positive gap)', () => {
       render(
-        <TimelineMessage
+        <ClaudeTimelineMessage
           message={assistantWithOutput('2025-01-15T10:00:00Z')}
           previousMessage={previousMessage}
           toolNameMap={emptyToolNameMap}

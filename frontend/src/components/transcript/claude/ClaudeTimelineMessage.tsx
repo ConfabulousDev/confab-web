@@ -6,13 +6,13 @@ import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, 
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/claude/ContentBlock';
 import { AttachmentContent, AwaySummary } from '@/components/transcript/claude/attachments';
-import TILBadge from './TILBadge';
+import TILBadge from '@/components/session/TILBadge';
 import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
-import { getClaudeRoleLabel } from './claudeCategories';
-import styles from './TimelineMessage.module.css';
+import { getClaudeRoleLabel } from '@/components/session/claudeCategories';
+import styles from './ClaudeTimelineMessage.module.css';
 
-interface TimelineMessageProps {
+interface ClaudeTimelineMessageProps {
   message: TranscriptLine;
   toolNameMap: Map<string, string>;
   previousMessage?: TranscriptLine;
@@ -183,7 +183,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage, tils }: TimelineMessageProps) {
+function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage, tils }: ClaudeTimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -416,4 +416,4 @@ function extractModelVariant(model: string): string {
   return parts[parts.length - 1] || model;
 }
 
-export default TimelineMessage;
+export default ClaudeTimelineMessage;

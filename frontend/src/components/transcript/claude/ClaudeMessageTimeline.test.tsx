@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import type { AssistantMessage, TranscriptLine } from '@/types';
-import MessageTimeline from './MessageTimeline';
+import ClaudeMessageTimeline from './ClaudeMessageTimeline';
 
 function assistantWithUsage(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
   return {
@@ -41,12 +41,12 @@ function assistantWithUsage(overrides: Partial<AssistantMessage> = {}): Assistan
   };
 }
 
-describe('MessageTimeline cost-mode scroll-nav offset (CF-369)', () => {
+describe('ClaudeMessageTimeline cost-mode scroll-nav offset (CF-369)', () => {
   it('sets inline right: 56px on ScrollNavButtons when isCostMode is on', () => {
     const msg = assistantWithUsage();
     const messages: TranscriptLine[] = [msg];
     render(
-      <MessageTimeline
+      <ClaudeMessageTimeline
         messages={messages}
         allMessages={messages}
         sessionId="test-session"
@@ -62,7 +62,7 @@ describe('MessageTimeline cost-mode scroll-nav offset (CF-369)', () => {
     const msg = assistantWithUsage();
     const messages: TranscriptLine[] = [msg];
     render(
-      <MessageTimeline
+      <ClaudeMessageTimeline
         messages={messages}
         allMessages={messages}
         sessionId="test-session"

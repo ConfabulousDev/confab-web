@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { UserMessage, AssistantMessage, SystemMessage, TranscriptLine } from '@/types';
-import TimelineMessage from './TimelineMessage';
+import ClaudeTimelineMessage from './ClaudeTimelineMessage';
 
 const emptyToolNameMap = new Map<string, string>();
 
@@ -81,8 +81,8 @@ const mockFileSnapshot: TranscriptLine = {
 };
 
 const meta = {
-  title: 'Session/TimelineMessage',
-  component: TimelineMessage,
+  title: 'Transcript/Claude/ClaudeTimelineMessage',
+  component: ClaudeTimelineMessage,
   parameters: {
     layout: 'padded',
   },
@@ -93,7 +93,7 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof TimelineMessage>;
+} satisfies Meta<typeof ClaudeTimelineMessage>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -9,10 +9,8 @@ Session viewer components for displaying session details, transcript timeline, a
 | `SessionViewer.tsx` | Top-level session viewer with Summary/Transcript tab switching. Provider-agnostic (CF-417): dispatches transcript fetch / filter / rendering through a `ProviderAdapter` resolved via `getAdapter(session.provider)` (see `frontend/src/providers/`). Owns the `isCostMode` toggle and composes the active adapter's `ClaudeFilterDropdown` into `SessionHeader`'s `filterSlot`. The Summary tab is shared (`SessionSummaryPanel`, CF-364) |
 | `SessionHeader.tsx` | Session header with title, metadata, share/delete actions, and a `filterSlot?: ReactNode` rendered into the actions row. SessionHeader is now provider-agnostic — the slot is filled by SessionViewer with the active adapter's filter dropdown (CF-417) |
 | `SessionSummaryPanel.tsx` | Summary tab for both providers: renders analytics cards via card registry, GitHub links, smart recap actions. Codex sessions get cards from `ComputeFromCodexRollout` (CF-350); the on-demand cache-miss path calls the same adapter synchronously (CF-364) |
-| `ClaudeTranscriptPane.tsx` | Transcript tab for Claude Code: thin wrapper around `MessageTimeline` that handles loading / error states (parent owns filter + cost state so the header can render chips) |
+| `ClaudeTranscriptPane.tsx` | Transcript tab for Claude Code: thin wrapper around `transcript/claude/ClaudeMessageTimeline` that handles loading / error states (parent owns filter + cost state so the header can render chips) |
 | `CodexTranscriptPane.tsx` | Transcript tab for Codex: presentational. Receives `items` (unfiltered, drives bar segments), `filteredItems` (drives the row list), `visibleIndices` (per CF-361, drives bar greying), `loading`, `error`, and `isCostMode` (CF-362) from `SessionViewer`. Accepts `targetLineId` (CF-360, the `?msg=` URL param reinterpreted as a stable `lineId` for Codex), forwarded unchanged to the timeline |
-| `MessageTimeline.tsx` | Claude transcript: virtualized message list with search, timeline bar, cost bar |
-| `TimelineMessage.tsx` | Single message row in the timeline (role badge, content blocks, cost, copy link) |
 | `TranscriptSearchBar.tsx` | Cmd+F search bar with match count and prev/next navigation |
 | `ClaudeFilterDropdown.tsx` | Hierarchical dropdown for filtering Claude messages by category/subcategory. Imports `FilterDropdownShared.module.css` (shared chrome with `CodexFilterDropdown`) |
 | `CodexFilterDropdown.tsx` | Hierarchical dropdown for filtering Codex transcripts (CF-361). Two hierarchical parents (`assistant`, `tool_call`) plus five flat categories (`user`, `reasoning_hidden`, `compacted`, `turn_separator`, `unknown`). Same visual chrome as Claude's dropdown via shared CSS module |
@@ -85,10 +83,10 @@ interface CodexFilterState {
 ## Key Components
 
 - **SessionViewer** -- Orchestrates the entire session view. Supports controlled and uncontrolled tab modes. Provider-agnostic since CF-417: looks up an adapter via `getAdapter(session.provider)` and delegates transcript fetch + polling (`useTranscriptData`), filter state (`adapter.useFilters`), filter matching (`adapter.itemMatchesFilter`), deep-link reset (`adapter.useDeepLinkFilterReset`), model extraction (`adapter.extractModel`), session-meta computation (`adapter.computeMeta`), TIL fetching (`useSessionTILs(sessionId, adapter.supportsTILs)`), filter dropdown rendering (`<adapter.ClaudeFilterDropdown>`), and pane rendering (`<adapter.TranscriptPane>`). The Summary tab routes to `SessionSummaryPanel` for both providers (CF-364). All per-provider branching lives in `frontend/src/providers/` — `SessionViewer.tsx` has zero `isCodex` references.
-- **ClaudeTranscriptPane** -- Stateless wrapper around `MessageTimeline` that handles the loading / error / timeline branching for Claude sessions. Filter and cost-mode state live in `SessionViewer` so the header can render the chips and toggle alongside the timeline.
+- **ClaudeTranscriptPane** -- Stateless wrapper around `transcript/claude/ClaudeMessageTimeline` that handles the loading / error / timeline branching for Claude sessions. Filter and cost-mode state live in `SessionViewer` so the header can render the chips and toggle alongside the timeline.
 - **CodexTranscriptPane** -- Presentational since CF-386. Receives `rawLines`, `loading`, `error`, and (CF-362) `isCostMode` from `SessionViewer` and re-derives render items via `useMemo`. Mirrors `ClaudeTranscriptPane`'s stateless shape so both providers have a single canonical owner (`SessionViewer`) for transcript data.
 - **SessionSummaryPanel** -- Polls analytics via `useAnalyticsPolling`, renders ordered cards from the card registry, and provides smart recap regeneration. Provider-agnostic — Codex sessions display the same cards as Claude, with provider-specific shape captured in the backend adapter (`gpt-5` model strings, `cache_creation=0`, `files_read=0`, etc.).
-- **MessageTimeline** -- Uses `@tanstack/react-virtual` for virtualized rendering of potentially thousands of messages. Integrates `TranscriptSearchBar`, `TimelineBar`, and `CostBar`.
+- **ClaudeMessageTimeline** (in `transcript/claude/`) -- Uses `@tanstack/react-virtual` for virtualized rendering of potentially thousands of messages. Integrates `TranscriptSearchBar`, `TimelineBar`, and `CostBar`.
 - **ClaudeFilterDropdown** -- Hierarchical filter with three top-level categories with subcategories (user, assistant, attachment) plus flat chips for system, away-summary, file-history-snapshot, summary, queue-operation, and pr-link. The attachment chip groups hook output, file edits, queued commands, deferred tools, and mcp instructions. Default state: only user + assistant + unknown are visible; everything else is opt-in.
 - **CodexFilterDropdown** (CF-361) -- Codex parallel of `ClaudeFilterDropdown`. Two hierarchical parents (`assistant` with `commentary`/`final`, `tool_call` with `exec_command`/`apply_patch`/`web_search`/`generic`) plus six flat chips (`user`, `reasoning_hidden`, `compacted`, `turn_separator`, `turn_aborted` — added in CF-368 for the aborted-turn divider — `unknown`). Default state visible for everything except `reasoning_hidden` (opt-in). Imports `FilterDropdownShared.module.css` for visual parity with the Claude dropdown.
 
@@ -100,7 +98,7 @@ interface CodexFilterState {
 3. Update `countClaudeCategories()` and `claudeItemMatchesFilter()`
 4. Add the filter chip to `ClaudeFilterDropdown.tsx`
 5. Add the new path to `SUB_KEYS` / `FLAT_KEYS` and the `stateFromPaths` / `pathsFromState` round-trip in `@/hooks/useTranscriptFilters.ts` (so the chip persists in the `?hide=` URL param)
-6. If the new category needs a custom body renderer (like attachments or away-summary), wire a dispatch branch in `TimelineMessage.tsx`'s content render block
+6. If the new category needs a custom body renderer (like attachments or away-summary), wire a dispatch branch in `transcript/claude/ClaudeTimelineMessage.tsx`'s content render block
 
 ### Adding a new Codex category filter (CF-361)
 1. Add the new key to `CodexCategory` (or extend an existing sub union) in `codexCategories.ts`
@@ -132,7 +130,7 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - `SessionHeader.test.tsx` -- Title display, edit mode, metadata rendering
 - `SessionSummaryPanel.test.tsx` -- Card rendering, analytics polling integration
 - `SessionViewer.test.tsx` -- Summary-tab routing across providers (CF-364)
-- `TimelineMessage.test.tsx` -- Message rendering by role, cost display, per-message token-speed badge (CF-525)
+- `transcript/claude/ClaudeTimelineMessage.test.tsx` -- Message rendering by role, cost display, per-message token-speed badge (CF-525)
 - `TranscriptSearchBar.test.tsx` -- Search open/close, match navigation
 - `ClaudeFilterDropdown.test.tsx` -- Open/close, tri-state rollup, subcategory expand, callback wiring
 - `CodexFilterDropdown.test.tsx` -- Same surface, tuned to Codex categories
@@ -143,7 +141,7 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 
 ## Dependencies
 
-- `@tanstack/react-virtual` (MessageTimeline virtualization)
+- `@tanstack/react-virtual` (ClaudeMessageTimeline virtualization)
 - `@/hooks/useAnalyticsPolling` (analytics data)
 - `@/hooks/useTranscriptSearch` (transcript search)
 - `@/hooks/useVisibility` (pause polling when tab hidden)
