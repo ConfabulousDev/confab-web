@@ -77,7 +77,7 @@ layer.
 | `CodexTurnAbortedDivider.tsx` | CF-368: divider for `event_msg.turn_aborted` (user interrupted / replaced / review-ended / budget-limited turn). Visible label is `Turn aborted · <reason> · <duration>` with each segment dropped when the underlying field is empty/zero. Mirrors `CodexCompactedDivider`'s shape; copy-link-only chrome. Exports `turnAbortedLabel(reason, durationMs)` so the search projection uses the exact rendered string |
 | `CodexUnknownItem.tsx` | Forward-compat fallback. Click-to-expand `details` showing raw JSON for any line whose top-level `type` or nested `payload.type` doesn't match a known schema. Accepts `isSelected` + `isDeepLinkTarget` + `sessionId`; copy-text uses `stringifyForDisplay(rawLine)` so users can dump the unknown payload |
 | `codexFormat.ts` | Shared formatters: `formatCodexTimestamp`, `formatDurationMs`, `leafFileName`, `stringifyForDisplay` |
-| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint), `.newSpeaker` (extra top margin), `.deepLinkTarget` (composes `deepLinkPulse` from `@/styles/animations.module.css`; accent ring overrides the grey selection ring on hover), `.searchMatch` (amber ring — CF-359; source-ordered after `.selected` / `.deepLinkTarget` so it wins via the cascade), and `.costBadge` / `.tokenPill` / `.cachePill` composed from `@/styles/badges.module.css` (CF-362; shared with Claude `TimelineMessage.module.css`) |
+| `CodexMessage.module.css` | Shared chat-row chrome for user / assistant messages. Defines `.selected` (inset ring + tint), `.newSpeaker` (extra top margin), `.deepLinkTarget` (composes `deepLinkPulse` from `@/styles/animations.module.css`; accent ring overrides the grey selection ring on hover), `.searchMatch` (amber ring — CF-359; source-ordered after `.selected` / `.deepLinkTarget` so it wins via the cascade), and `.costBadge` / `.tokenPill` / `.cachePill` composed from `@/styles/badges.module.css` (CF-362; shared with Claude `ClaudeTimelineMessage.module.css`) |
 | `CodexToolCallBlock.module.css` | Tool-call card chrome (header, status badge, command/output blocks, file list, query chips, `.planSummary` for CF-368's `update_plan` body). Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
 | `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, turn-aborted divider (CF-368), unknown fallback. Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359) |
 | `CodexRowActions.module.css` | CF-360 button-strip chrome (icon button states, copy-success colour) |
@@ -184,7 +184,7 @@ interface BlendedSegmentLayout<S extends BlendedSegment> {
 ## How to Extend
 
 ### Adding a new content block type
-1. Add the block schema to `@/schemas/transcript.ts`
+1. Add the block schema to `@/schemas/claudeTranscript.ts`
 2. Add a type guard (e.g., `isNewBlock`) in the same file
 3. Add a rendering branch in `ContentBlock.tsx` before the unknown-block fallback
 4. Update the `KNOWN_BLOCK_TYPES` list in `transcript.ts` to suppress schema drift warnings
@@ -239,13 +239,13 @@ interface BlendedSegmentLayout<S extends BlendedSegment> {
 - `codex/CodexUnknownItem.test.tsx` -- Raw-line render, search auto-open + stay-open contract, click-to-toggle, row-actions gating.
 - `codex/CodexReasoningHidden.test.tsx` -- Marker render, row-actions gating, selection class table.
 - `codex/CodexTurnSeparator.test.tsx` -- Turn label, duration + TTFT segments, row-actions gating.
-- Additional integration via `TimelineMessage.test.tsx` and Storybook stories (`ContentBlock.stories.tsx`, `CostBar.stories.tsx`, `TimelineBar.stories.tsx`).
+- Additional integration via `claude/ClaudeTimelineMessage.test.tsx` and Storybook stories (`claude/ContentBlock.stories.tsx`, `CostBar.stories.tsx`, `claude/TimelineBar.stories.tsx`).
 
 ## Dependencies
 
 - `marked` + `dompurify` (markdown rendering and XSS sanitization, accessed via `@/utils/markdown.renderMarkdownToHtml`)
 - `prismjs` (syntax highlighting in CodeBlock; includes the `diff` grammar for `apply_patch` raw views and the standard set of language grammars)
-- `@tanstack/react-virtual` (CodexMessageTimeline virtualization, same as MessageTimeline)
+- `@tanstack/react-virtual` (CodexMessageTimeline virtualization, same as ClaudeMessageTimeline)
 - `@/hooks/useCopyToClipboard` (copy button in CodeBlock and BashOutput)
 - `@/utils/highlightSearch` (search match highlighting)
 - `@/utils/utils` (`stripAnsi` for terminal escape code removal; `isRecord` for the Codex shape readers)

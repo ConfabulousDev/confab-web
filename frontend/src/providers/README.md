@@ -9,7 +9,7 @@ Per-provider transcript adapters (CF-417). `SessionViewer` and
 | File | Purpose |
 | --- | --- |
 | `types.ts` | `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>` interface, `FilterAPI`, `TranscriptPaneProps`, `SessionMetaFallback` / `SessionMetaResult`. Two views of the same adapter: `ClaudeAdapter` / `CodexAdapter` (concrete-typed for implementers) and `OpaqueAdapter` (`unknown`-typed for consumers). |
-| `claudeAdapter.tsx` | Wraps `transcriptService`, `useTranscriptFilters`, `FilterDropdown`, `ClaudeTranscriptPane`. `supportsTILs: true`. Claude has no separate "raw" stream — `TranscriptLine[]` doubles as both `TRaw` and `TItem`, with `normalize` as the identity function. |
+| `claudeAdapter.tsx` | Wraps `claudeTranscriptService`, `useClaudeTranscriptFilters`, `ClaudeFilterDropdown`, `ClaudeTranscriptPane`. `supportsTILs: true`. Claude has no separate "raw" stream — `TranscriptLine[]` doubles as both `TRaw` and `TItem`, with `normalize` as the identity function. |
 | `codexAdapter.tsx` | Wraps `codexTranscriptService`, `useCodexTranscriptFilters`, `CodexFilterDropdown`, `CodexTranscriptPane`. `supportsTILs: false`. `computeMeta` walks rawLines for min/max `timestamp`. |
 | `registry.ts` | `getAdapter(provider: string): OpaqueAdapter`. Normalizes `provider` (lowercase, whitespace → `-`), then looks up in a record keyed by `PROVIDER_VALUES`. **Throws on unknown providers** — backend already normalizes on read, so this only fires on a backend-first rollout. |
 | `useTranscriptData.ts` | Shared hook: initial fetch + visibility-gated polling. Single hook, both providers. Skipped when a Storybook `seed` is supplied. |

@@ -134,7 +134,7 @@ Watch for chunks exceeding 500 KB - consider code-splitting.
 ### Files to Prioritize for Review
 
 **Largest/most complex:**
-1. `schemas/transcript.ts` (~545 lines) - Validation
+1. `schemas/claudeTranscript.ts` (~545 lines) - Validation
 2. `pages/ShareLinksPage.tsx` (~347 lines) - Complex UI
 3. `pages/APIKeysPage.tsx` (~316 lines) - Complex UI
 

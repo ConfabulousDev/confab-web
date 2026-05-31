@@ -3,7 +3,7 @@
 Renders Claude Code `attachment.*` JSONL rows and the `system.away_summary`
 resume-context blurb in the transcript view (CF-346). Each component is a leaf
 renderer; dispatch by subtype happens in `AttachmentContent.tsx`. The outer
-`TimelineMessage` card chrome (role label, timestamp, copy button) wraps these
+`ClaudeTimelineMessage` card chrome (role label, timestamp, copy button) wraps these
 components in the same way it wraps `FileSnapshotContent`.
 
 ## Files
@@ -27,7 +27,7 @@ components in the same way it wraps `FileSnapshotContent`.
 - `AwaySummary.tsx` — Markdown renderer for `system.away_summary` content.
   Returns `null` for empty/whitespace content. Reuses the `.summary` purple
   card style (the distinguishing `Resume Summary` role label is in
-  `TimelineMessage` via `getRoleLabel`).
+  `ClaudeTimelineMessage` via `getClaudeRoleLabel`).
 - `index.ts` — Barrel exports.
 - `_chrome.module.css` — Shared `.header` and `.badge` rules consumed via CSS
   Modules `composes:` from the per-card `*.module.css` files.
@@ -45,16 +45,16 @@ session UUIDs) and a shared smoke-test file:
 
 ## Adding a new attachment subtype
 
-1. Add a Zod branch in `frontend/src/schemas/transcript.ts` (inside
+1. Add a Zod branch in `frontend/src/schemas/claudeTranscript.ts` (inside
    `AttachmentInnerSchema`).
 2. Export the inferred type and a discriminator helper
    (`isXxxAttachment`).
 3. Re-export both from `frontend/src/types/index.ts`.
 4. Add (or reuse) a subcategory in
-   `frontend/src/components/session/messageCategories.ts` — extend
-   `AttachmentSubcategory`, `HierarchicalCounts`, `FilterState`,
-   `DEFAULT_FILTER_STATE`, `categorizeAttachmentMessage`.
-5. Add a sub-chip in `FilterDropdown.tsx`.
+   `frontend/src/components/session/claudeCategories.ts` — extend
+   `ClaudeAttachmentSubcategory`, `ClaudeHierarchicalCounts`, `ClaudeFilterState`,
+   `DEFAULT_CLAUDE_FILTER_STATE`, `categorizeAttachmentMessage`.
+5. Add a sub-chip in `ClaudeFilterDropdown.tsx`.
 6. Add a renderer here, wire it into `AttachmentContent.tsx`, and add a
    `.stories.tsx` + a test block in `attachments.test.tsx`.
 

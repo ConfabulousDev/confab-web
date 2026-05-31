@@ -97,7 +97,7 @@ interface CodexFilterState {
 2. Add default visibility to `DEFAULT_CLAUDE_FILTER_STATE`
 3. Update `countClaudeCategories()` and `claudeItemMatchesFilter()`
 4. Add the filter chip to `ClaudeFilterDropdown.tsx`
-5. Add the new path to `SUB_KEYS` / `FLAT_KEYS` and the `stateFromPaths` / `pathsFromState` round-trip in `@/hooks/useTranscriptFilters.ts` (so the chip persists in the `?hide=` URL param)
+5. Add the new path to `SUB_KEYS` / `FLAT_KEYS` and the `stateFromPaths` / `pathsFromState` round-trip in `@/hooks/useClaudeTranscriptFilters.ts` (so the chip persists in the `?hide=` URL param)
 6. If the new category needs a custom body renderer (like attachments or away-summary), wire a dispatch branch in `transcript/claude/ClaudeTimelineMessage.tsx`'s content render block
 
 ### Adding a new Codex category filter (CF-361)
@@ -145,7 +145,7 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - `@/hooks/useAnalyticsPolling` (analytics data)
 - `@/hooks/useTranscriptSearch` (transcript search)
 - `@/hooks/useVisibility` (pause polling when tab hidden)
-- `@/services/transcriptService` (Claude fetch/parse)
+- `@/services/claudeTranscriptService` (Claude fetch/parse)
 - `@/services/codexTranscriptService` (Codex fetch/parse/normalize)
 - `@/components/transcript/` (TimelineBar, CostBar)
 - `@/components/transcript/codex/` (Codex render components)
