@@ -10,7 +10,7 @@ import { claudeAdapter } from '@/providers/claudeAdapter';
 import { normalizeClaudeUsage } from '@/utils/tokenStats';
 import TimelineMessage from './TimelineMessage';
 import TranscriptSearchBar from './TranscriptSearchBar';
-import { getRoleLabel } from './messageCategories';
+import { getClaudeRoleLabel } from './claudeCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import { TimelineBar } from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
@@ -233,7 +233,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       if (!msg) continue;
-      const label = getRoleLabel(msg);
+      const label = getClaudeRoleLabel(msg);
       const prevIdx = lastSeenByRole.get(label);
       if (prevIdx !== undefined) {
         next.set(prevIdx, i);
@@ -514,7 +514,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
                     isCurrentSearchMatch={search.currentMatchFilteredIndex === item.filteredIndex}
                     searchQuery={search.isOpen ? search.highlightQuery : undefined}
                     sessionId={sessionId}
-                    roleLabel={getRoleLabel(item.message)}
+                    roleLabel={getClaudeRoleLabel(item.message)}
                     isCostMode={isCostMode}
                     messageCost={isCostMode ? messageCosts.get(item.index) : undefined}
                     correctedTokenUsage={isCostMode ? correctedUsageByIndex.get(item.index) : undefined}

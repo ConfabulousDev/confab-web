@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import FilterDropdown from './FilterDropdown';
-import type { HierarchicalCounts, FilterState } from './messageCategories';
+import ClaudeFilterDropdown from './ClaudeFilterDropdown';
+import type { ClaudeHierarchicalCounts, ClaudeFilterState } from './claudeCategories';
 
-function makeCounts(overrides: Partial<HierarchicalCounts> = {}): HierarchicalCounts {
+function makeCounts(overrides: Partial<ClaudeHierarchicalCounts> = {}): ClaudeHierarchicalCounts {
   return {
     user: { total: 5, prompt: 3, 'tool-result': 1, skill: 1 },
     assistant: { total: 5, text: 3, 'tool-use': 1, thinking: 1 },
@@ -27,7 +27,7 @@ function makeCounts(overrides: Partial<HierarchicalCounts> = {}): HierarchicalCo
   };
 }
 
-function makeFilterState(overrides: Partial<FilterState> = {}): FilterState {
+function makeFilterState(overrides: Partial<ClaudeFilterState> = {}): ClaudeFilterState {
   return {
     user: { prompt: true, 'tool-result': true, skill: true },
     assistant: { text: true, 'tool-use': true, thinking: true },
@@ -51,8 +51,8 @@ function makeFilterState(overrides: Partial<FilterState> = {}): FilterState {
 
 function renderDropdown(
   overrides: {
-    counts?: Partial<HierarchicalCounts>;
-    filterState?: Partial<FilterState>;
+    counts?: Partial<ClaudeHierarchicalCounts>;
+    filterState?: Partial<ClaudeFilterState>;
   } = {}
 ) {
   const handlers = {
@@ -62,7 +62,7 @@ function renderDropdown(
     onToggleAttachmentSubcategory: vi.fn(),
   };
   const utils = render(
-    <FilterDropdown
+    <ClaudeFilterDropdown
       counts={makeCounts(overrides.counts)}
       filterState={makeFilterState(overrides.filterState)}
       {...handlers}
@@ -71,7 +71,7 @@ function renderDropdown(
   return { ...utils, ...handlers };
 }
 
-describe('FilterDropdown', () => {
+describe('ClaudeFilterDropdown', () => {
   it('does not show dropdown until the filter button is clicked', () => {
     const { queryByText } = renderDropdown();
     expect(queryByText('Message Filters')).toBeNull();

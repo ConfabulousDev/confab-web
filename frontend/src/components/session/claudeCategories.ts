@@ -20,7 +20,7 @@ import {
 
 // Message categories for filtering - matches top-level transcript types plus
 // the synthetic categories introduced in CF-346.
-export type MessageCategory =
+export type ClaudeCategory =
   | 'user'
   | 'assistant'
   | 'system'
@@ -33,9 +33,9 @@ export type MessageCategory =
   | 'unknown';
 
 // Subcategory types for hierarchical filtering
-export type UserSubcategory = 'prompt' | 'tool-result' | 'skill';
-export type AssistantSubcategory = 'text' | 'tool-use' | 'thinking';
-export type AttachmentSubcategory =
+export type ClaudeUserSubcategory = 'prompt' | 'tool-result' | 'skill';
+export type ClaudeAssistantSubcategory = 'text' | 'tool-use' | 'thinking';
+export type ClaudeAttachmentSubcategory =
   | 'hook'
   | 'file-edit'
   | 'queued-command'
@@ -43,19 +43,19 @@ export type AttachmentSubcategory =
   | 'mcp-instructions';
 
 // Subcategory counts for hierarchical categories
-export interface UserSubcategoryCounts {
+export interface ClaudeUserSubcategoryCounts {
   prompt: number;
   'tool-result': number;
   skill: number;
 }
 
-export interface AssistantSubcategoryCounts {
+export interface ClaudeAssistantSubcategoryCounts {
   text: number;
   'tool-use': number;
   thinking: number;
 }
 
-export interface AttachmentSubcategoryCounts {
+export interface ClaudeAttachmentSubcategoryCounts {
   hook: number;
   'file-edit': number;
   'queued-command': number;
@@ -64,10 +64,10 @@ export interface AttachmentSubcategoryCounts {
 }
 
 // Hierarchical counts structure
-export interface HierarchicalCounts {
-  user: { total: number } & UserSubcategoryCounts;
-  assistant: { total: number } & AssistantSubcategoryCounts;
-  attachment: { total: number } & AttachmentSubcategoryCounts;
+export interface ClaudeHierarchicalCounts {
+  user: { total: number } & ClaudeUserSubcategoryCounts;
+  assistant: { total: number } & ClaudeAssistantSubcategoryCounts;
+  attachment: { total: number } & ClaudeAttachmentSubcategoryCounts;
   system: number;
   'file-history-snapshot': number;
   summary: number;
@@ -78,7 +78,7 @@ export interface HierarchicalCounts {
 }
 
 // Filter state - tracks which subcategories are visible
-export interface FilterState {
+export interface ClaudeFilterState {
   user: { prompt: boolean; 'tool-result': boolean; skill: boolean };
   assistant: { text: boolean; 'tool-use': boolean; thinking: boolean };
   attachment: {
@@ -99,7 +99,7 @@ export interface FilterState {
 
 // Default filter state: user and assistant visible with all subs; attachments,
 // away-summary, and the other side-channel categories all hidden (opt-in).
-export const DEFAULT_FILTER_STATE: FilterState = {
+export const DEFAULT_CLAUDE_FILTER_STATE: ClaudeFilterState = {
   user: { prompt: true, 'tool-result': true, skill: true },
   assistant: { text: true, 'tool-use': true, thinking: true },
   attachment: {
@@ -122,7 +122,7 @@ export const DEFAULT_FILTER_STATE: FilterState = {
  * Get the subcategory for a user message.
  * Priority: skill > tool-result > prompt
  */
-function categorizeUserMessage(message: UserMessage): UserSubcategory {
+function categorizeUserMessage(message: UserMessage): ClaudeUserSubcategory {
   if (isSkillExpansionMessage(message)) return 'skill';
   if (isToolResultMessage(message)) return 'tool-result';
   return 'prompt';
@@ -132,7 +132,7 @@ function categorizeUserMessage(message: UserMessage): UserSubcategory {
  * Get the subcategory for an assistant message.
  * Priority: thinking > tool-use > text (a message can have multiple block types)
  */
-function categorizeAssistantMessage(message: AssistantMessage): AssistantSubcategory {
+function categorizeAssistantMessage(message: AssistantMessage): ClaudeAssistantSubcategory {
   const content = message.message.content;
 
   if (content.some(isThinkingBlock)) return 'thinking';
@@ -146,7 +146,7 @@ function categorizeAssistantMessage(message: AssistantMessage): AssistantSubcate
  * command_permissions, or any future subtype). Returning null means the row
  * is parsed but never rendered.
  */
-function categorizeAttachmentMessage(message: AttachmentMessage): AttachmentSubcategory | null {
+function categorizeAttachmentMessage(message: AttachmentMessage): ClaudeAttachmentSubcategory | null {
   if (isHookSuccessAttachment(message) || isHookBlockingErrorAttachment(message)) return 'hook';
   if (isEditedTextFileAttachment(message)) return 'file-edit';
   if (isQueuedCommandAttachment(message)) return 'queued-command';
@@ -166,8 +166,8 @@ function isAwaySummaryMessage(message: TranscriptLine): boolean {
 /**
  * Count messages in each category with hierarchical subcategories
  */
-export function countHierarchicalCategories(messages: TranscriptLine[]): HierarchicalCounts {
-  const counts: HierarchicalCounts = {
+export function countClaudeCategories(messages: TranscriptLine[]): ClaudeHierarchicalCounts {
+  const counts: ClaudeHierarchicalCounts = {
     user: { total: 0, prompt: 0, 'tool-result': 0, skill: 0 },
     assistant: { total: 0, text: 0, 'tool-use': 0, thinking: 0 },
     attachment: {
@@ -231,7 +231,7 @@ export function countHierarchicalCategories(messages: TranscriptLine[]): Hierarc
 /**
  * Get role label for display (used by TimelineMessage header and skip navigation)
  */
-export function getRoleLabel(message: TranscriptLine): string {
+export function getClaudeRoleLabel(message: TranscriptLine): string {
   if (isUserMessage(message)) {
     const content = message.message.content;
     if (Array.isArray(content)) {
@@ -288,7 +288,7 @@ function hasDisplayableContent(message: TranscriptLine): boolean {
 /**
  * Check if a message matches the current filter state
  */
-export function messageMatchesFilter(message: TranscriptLine, filterState: FilterState): boolean {
+export function claudeItemMatchesFilter(message: TranscriptLine, filterState: ClaudeFilterState): boolean {
   // Skip messages with no displayable content (e.g. interrupted empty responses)
   if (!hasDisplayableContent(message)) return false;
 

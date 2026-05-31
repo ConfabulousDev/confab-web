@@ -1,18 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import FilterDropdown from './FilterDropdown';
+import ClaudeFilterDropdown from './ClaudeFilterDropdown';
 import type {
-  MessageCategory,
-  UserSubcategory,
-  AssistantSubcategory,
-  AttachmentSubcategory,
-  HierarchicalCounts,
-  FilterState,
-} from './messageCategories';
-import { DEFAULT_FILTER_STATE } from './messageCategories';
+  ClaudeCategory,
+  ClaudeUserSubcategory,
+  ClaudeAssistantSubcategory,
+  ClaudeAttachmentSubcategory,
+  ClaudeHierarchicalCounts,
+  ClaudeFilterState,
+} from './claudeCategories';
+import { DEFAULT_CLAUDE_FILTER_STATE } from './claudeCategories';
 
 // Sample hierarchical counts for stories
-const sampleCounts: HierarchicalCounts = {
+const sampleCounts: ClaudeHierarchicalCounts = {
   user: { total: 194, prompt: 40, 'tool-result': 152, skill: 2 },
   assistant: { total: 271, text: 50, 'tool-use': 180, thinking: 41 },
   attachment: { total: 0, hook: 0, 'file-edit': 0, 'queued-command': 0, 'deferred-tools': 0, 'mcp-instructions': 0 },
@@ -27,15 +27,15 @@ const sampleCounts: HierarchicalCounts = {
 
 // Interactive wrapper component
 function FilterDropdownInteractive({
-  initialFilterState = DEFAULT_FILTER_STATE,
+  initialFilterState = DEFAULT_CLAUDE_FILTER_STATE,
   counts = sampleCounts,
 }: {
-  initialFilterState?: FilterState;
-  counts?: HierarchicalCounts;
+  initialFilterState?: ClaudeFilterState;
+  counts?: ClaudeHierarchicalCounts;
 }) {
   const [filterState, setFilterState] = useState(initialFilterState);
 
-  const handleToggleCategory = (category: MessageCategory) => {
+  const handleToggleCategory = (category: ClaudeCategory) => {
     setFilterState((prev) => {
       const next = { ...prev };
       if (category === 'user') {
@@ -61,21 +61,21 @@ function FilterDropdownInteractive({
     });
   };
 
-  const handleToggleUserSubcategory = (subcategory: UserSubcategory) => {
+  const handleToggleUserSubcategory = (subcategory: ClaudeUserSubcategory) => {
     setFilterState((prev) => ({
       ...prev,
       user: { ...prev.user, [subcategory]: !prev.user[subcategory] },
     }));
   };
 
-  const handleToggleAssistantSubcategory = (subcategory: AssistantSubcategory) => {
+  const handleToggleAssistantSubcategory = (subcategory: ClaudeAssistantSubcategory) => {
     setFilterState((prev) => ({
       ...prev,
       assistant: { ...prev.assistant, [subcategory]: !prev.assistant[subcategory] },
     }));
   };
 
-  const handleToggleAttachmentSubcategory = (subcategory: AttachmentSubcategory) => {
+  const handleToggleAttachmentSubcategory = (subcategory: ClaudeAttachmentSubcategory) => {
     setFilterState((prev) => ({
       ...prev,
       attachment: { ...prev.attachment, [subcategory]: !prev.attachment[subcategory] },
@@ -83,7 +83,7 @@ function FilterDropdownInteractive({
   };
 
   return (
-    <FilterDropdown
+    <ClaudeFilterDropdown
       counts={counts}
       filterState={filterState}
       onToggleCategory={handleToggleCategory}
@@ -95,7 +95,7 @@ function FilterDropdownInteractive({
 }
 
 const meta: Meta<typeof FilterDropdownInteractive> = {
-  title: 'Session/FilterDropdown',
+  title: 'Session/ClaudeFilterDropdown',
   component: FilterDropdownInteractive,
   parameters: {
     layout: 'centered',
