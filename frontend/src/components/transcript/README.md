@@ -1,24 +1,26 @@
 # transcript/
 
-Rendering components for transcript content. Claude Code components live at the
-top level (code blocks, bash output, timeline navigation bars, the main content
-dispatcher, and the `attachments/` renderers for side-channel `attachment.*`
-rows + `system.away_summary` blurbs). Codex components live under `codex/` and
+Rendering components for transcript content. Shared primitives (code blocks,
+bash output, the cost bar, and the timeline layout utilities) live at the top
+level and are consumed by both providers via `../`. Claude-only components live
+under `claude/` (the content-block dispatcher, the Claude timeline bar, and the
+`attachments/` renderers for side-channel `attachment.*` rows +
+`system.away_summary` blurbs); Codex-only components live under `codex/` and
 consume a separate render-item model produced by `services/codexTranscriptService`.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `ContentBlock.tsx` | Dispatcher that renders content blocks by type (text, thinking, tool_use, tool_result, image, unknown). Uses the shared `renderMarkdownToHtml` helper from `@/utils/markdown` |
-| `CodeBlock.tsx` | Syntax-highlighted code with Prism.js, copy button, line truncation, and search highlighting |
-| `BashOutput.tsx` | Terminal-style bash command output with error styling |
-| `CostBar.tsx` | Provider-agnostic vertical cost heatmap bar. Driven by `{ layout, costByIndex, segmentUniqueCounts, totalCost, onSeek }` — caller computes the layout (via `useSegmentLayout` / `useCodexSegmentLayout`) and the per-segment unique-call counts (`message.id` dedup for Claude; assistant-kind count for Codex). Intensity = cost per API call (CF-362) |
-| `TimelineBar.tsx` | Vertical timeline bar showing user/assistant turn segments with duration tooltips |
-| `timelineFormat.ts` | `formatDuration` — shared `1h 15m` / `5m 30s` / `500ms` formatter for both Claude and Codex tooltip prose |
-| `timelineSegments.ts` | Claude segment compute (`useSegmentLayout`) + generic `useBlendedSegmentLayout` hook (size + position math, also consumed by Codex's bar) |
-| `timelineUtils.ts` | Provider-neutral helpers shared by Claude & Codex timelines: `formatTimeSeparator` (>5min idle-gap label), `retryOnAnimationFrame` (virtualizer scroll positioning), `addCmdFListener` (Cmd/Ctrl+F intercept that opens the search bar — CF-359), and `SCROLL_NAV_COST_MODE_RIGHT` (CF-369 — 56px rightOffset both timelines pass to `ScrollNavButtons` in cost mode so the floating buttons clear the CostBar / TimelineBar rail) |
-| `attachments/` | Renderers for `attachment.*` subtypes (hook output, edited files, queued commands, tool deltas) and `system.away_summary`. See `attachments/README.md` |
+| `CodeBlock.tsx` | (shared) Syntax-highlighted code with Prism.js, copy button, line truncation, and search highlighting |
+| `BashOutput.tsx` | (shared) Terminal-style bash command output with error styling |
+| `CostBar.tsx` | (shared) Provider-agnostic vertical cost heatmap bar. Driven by `{ layout, costByIndex, segmentUniqueCounts, totalCost, onSeek }` — caller computes the layout (via `useSegmentLayout` / `useCodexSegmentLayout`) and the per-segment unique-call counts (`message.id` dedup for Claude; assistant-kind count for Codex). Intensity = cost per API call (CF-362) |
+| `timelineFormat.ts` | (shared) `formatDuration` — shared `1h 15m` / `5m 30s` / `500ms` formatter for both Claude and Codex tooltip prose |
+| `timelineSegments.ts` | (shared) Claude segment compute (`useSegmentLayout`) + generic `useBlendedSegmentLayout` hook (size + position math, also consumed by Codex's bar) |
+| `timelineUtils.ts` | (shared) Provider-neutral helpers shared by Claude & Codex timelines: `formatTimeSeparator` (>5min idle-gap label), `retryOnAnimationFrame` (virtualizer scroll positioning), `addCmdFListener` (Cmd/Ctrl+F intercept that opens the search bar — CF-359), and `SCROLL_NAV_COST_MODE_RIGHT` (CF-369 — 56px rightOffset both timelines pass to `ScrollNavButtons` in cost mode so the floating buttons clear the CostBar / TimelineBar rail) |
+| `claude/ContentBlock.tsx` | (Claude) Dispatcher that renders content blocks by type (text, thinking, tool_use, tool_result, image, unknown). Uses the shared `renderMarkdownToHtml` helper from `@/utils/markdown` |
+| `claude/TimelineBar.tsx` | (Claude) Vertical timeline bar showing user/assistant turn segments with duration tooltips |
+| `claude/attachments/` | (Claude) Renderers for `attachment.*` subtypes (hook output, edited files, queued commands, tool deltas) and `system.away_summary`. See `claude/attachments/README.md` |
 | `codex/` | Codex transcript renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback, virtualized timeline, turn-based timeline bar). See "Codex transcript renderers" below |
 
 ## Key Components

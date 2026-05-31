@@ -1,5 +1,5 @@
 import type { EditedTextFileAttachment } from '@/types';
-import CodeBlock from '../CodeBlock';
+import CodeBlock from '../../CodeBlock';
 import styles from './EditedFileSnippet.module.css';
 
 interface EditedFileSnippetProps {

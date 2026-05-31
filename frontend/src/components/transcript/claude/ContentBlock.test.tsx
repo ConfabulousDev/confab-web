@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import ContentBlock from './ContentBlock';
 import type { ContentBlock as ContentBlockType } from '@/types';
 
-vi.mock('./CodeBlock', () => ({
+vi.mock('../CodeBlock', () => ({
   default: ({ code, language }: { code: string; language: string }) => (
     <pre data-testid="codeblock" data-language={language}>
       {code}
@@ -11,7 +11,7 @@ vi.mock('./CodeBlock', () => ({
   ),
 }));
 
-vi.mock('./BashOutput', () => ({
+vi.mock('../BashOutput', () => ({
   default: ({ output }: { output: string }) => (
     <pre data-testid="bash-output">{output}</pre>
   ),

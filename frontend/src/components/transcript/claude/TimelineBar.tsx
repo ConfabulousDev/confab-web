@@ -1,7 +1,7 @@
 import { useCallback, useState, useRef } from 'react';
 import type { TranscriptLine } from '@/types';
-import { useSegmentLayout, type TimelineSegment } from './timelineSegments';
-import { formatDuration } from './timelineFormat';
+import { useSegmentLayout, type TimelineSegment } from '../timelineSegments';
+import { formatDuration } from '../timelineFormat';
 import styles from './TimelineBar.module.css';
 
 interface TimelineBarProps {

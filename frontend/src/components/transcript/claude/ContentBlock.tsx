@@ -2,8 +2,8 @@ import type { ContentBlock as ContentBlockType } from '@/types';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, isToolReferenceBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
 import { stripAnsi, renderMarkdownToHtml, tryParseAsJson } from '@/utils';
 import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
-import CodeBlock from './CodeBlock';
-import BashOutput from './BashOutput';
+import CodeBlock from '../CodeBlock';
+import BashOutput from '../BashOutput';
 import styles from './ContentBlock.module.css';
 
 interface ContentBlockProps {

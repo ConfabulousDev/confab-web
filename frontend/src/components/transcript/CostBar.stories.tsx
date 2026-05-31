@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState, useMemo } from 'react';
 import { CostBar } from './CostBar';
-import { TimelineBar } from './TimelineBar';
+import { TimelineBar } from './claude/TimelineBar';
 import { useSegmentLayout } from './timelineSegments';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
 import { isAssistantMessage } from '@/types';

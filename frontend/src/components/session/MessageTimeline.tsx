@@ -12,7 +12,7 @@ import TimelineMessage from './TimelineMessage';
 import TranscriptSearchBar from './TranscriptSearchBar';
 import { getClaudeRoleLabel } from './claudeCategories';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
-import { TimelineBar } from '@/components/transcript/TimelineBar';
+import { TimelineBar } from '@/components/transcript/claude/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
 import {
   addCmdFListener,
