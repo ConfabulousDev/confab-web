@@ -48,3 +48,8 @@ deploy-logs/
 
 # Lean Forge (code hardening process artifacts)
 .lean-forge/
+
+# Claude Code local session artifacts (plans, audit reports, etc.)
+# but keep checked-in skills/ tooling
+.claude/*
+!.claude/skills/
