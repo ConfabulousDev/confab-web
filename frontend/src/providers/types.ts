@@ -22,13 +22,13 @@ import type { TranscriptLine } from '@/types';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 import type {
-  FilterState,
-  HierarchicalCounts,
-  MessageCategory,
-  UserSubcategory,
-  AssistantSubcategory,
-  AttachmentSubcategory,
-} from '@/components/session/messageCategories';
+  ClaudeFilterState,
+  ClaudeHierarchicalCounts,
+  ClaudeCategory,
+  ClaudeUserSubcategory,
+  ClaudeAssistantSubcategory,
+  ClaudeAttachmentSubcategory,
+} from '@/components/session/claudeCategories';
 import type {
   CodexFilterState,
   CodexHierarchicalCounts,
@@ -146,10 +146,10 @@ export interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
 }
 
 export interface ClaudeToggles {
-  toggleCategory: (category: MessageCategory) => void;
-  toggleUserSubcategory: (sub: UserSubcategory) => void;
-  toggleAssistantSubcategory: (sub: AssistantSubcategory) => void;
-  toggleAttachmentSubcategory: (sub: AttachmentSubcategory) => void;
+  toggleCategory: (category: ClaudeCategory) => void;
+  toggleUserSubcategory: (sub: ClaudeUserSubcategory) => void;
+  toggleAssistantSubcategory: (sub: ClaudeAssistantSubcategory) => void;
+  toggleAttachmentSubcategory: (sub: ClaudeAttachmentSubcategory) => void;
 }
 
 export interface CodexToggles {
@@ -161,9 +161,9 @@ export interface CodexToggles {
 export type ClaudeAdapter = ProviderAdapter<
   TranscriptLine,
   TranscriptLine,
-  FilterState,
+  ClaudeFilterState,
   ClaudeToggles,
-  HierarchicalCounts
+  ClaudeHierarchicalCounts
 >;
 
 export type CodexAdapter = ProviderAdapter<

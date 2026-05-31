@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateParsedTranscriptLine } from '@/schemas/claudeTranscript';
-import { countHierarchicalCategories, messageMatchesFilter, DEFAULT_FILTER_STATE, getRoleLabel } from './messageCategories';
-import type { FilterState } from './messageCategories';
+import { countClaudeCategories, claudeItemMatchesFilter, DEFAULT_CLAUDE_FILTER_STATE, getClaudeRoleLabel } from './claudeCategories';
+import type { ClaudeFilterState } from './claudeCategories';
 
 function parseLine(obj: unknown) {
   const result = validateParsedTranscriptLine(obj, JSON.stringify(obj), 0);
@@ -19,9 +19,9 @@ const prLinkMessage = parseLine({
 });
 
 describe('messageCategories', () => {
-  describe('countHierarchicalCategories', () => {
+  describe('countClaudeCategories', () => {
     it('counts pr-link messages', () => {
-      const counts = countHierarchicalCategories([prLinkMessage]);
+      const counts = countClaudeCategories([prLinkMessage]);
       expect(counts['pr-link']).toBe(1);
     });
 
@@ -33,23 +33,23 @@ describe('messageCategories', () => {
         sessionId: 'session-123',
       });
 
-      const counts = countHierarchicalCategories([prLinkMessage, queueOp]);
+      const counts = countClaudeCategories([prLinkMessage, queueOp]);
       expect(counts['pr-link']).toBe(1);
       expect(counts['queue-operation']).toBe(1);
     });
   });
 
-  describe('messageMatchesFilter', () => {
+  describe('claudeItemMatchesFilter', () => {
     it('hides pr-link by default', () => {
-      expect(messageMatchesFilter(prLinkMessage, DEFAULT_FILTER_STATE)).toBe(false);
+      expect(claudeItemMatchesFilter(prLinkMessage, DEFAULT_CLAUDE_FILTER_STATE)).toBe(false);
     });
 
     it('shows pr-link when filter is enabled', () => {
-      const filterState: FilterState = {
-        ...DEFAULT_FILTER_STATE,
+      const filterState: ClaudeFilterState = {
+        ...DEFAULT_CLAUDE_FILTER_STATE,
         'pr-link': true,
       };
-      expect(messageMatchesFilter(prLinkMessage, filterState)).toBe(true);
+      expect(claudeItemMatchesFilter(prLinkMessage, filterState)).toBe(true);
     });
 
     it('hides system messages by default (deep-link filter reset scenario)', () => {
@@ -66,7 +66,7 @@ describe('messageCategories', () => {
         subtype: 'info',
         content: 'System info message',
       });
-      expect(messageMatchesFilter(systemMessage, DEFAULT_FILTER_STATE)).toBe(false);
+      expect(claudeItemMatchesFilter(systemMessage, DEFAULT_CLAUDE_FILTER_STATE)).toBe(false);
     });
 
     it('shows system messages after filter reset with system enabled', () => {
@@ -83,11 +83,11 @@ describe('messageCategories', () => {
         subtype: 'info',
         content: 'System info message',
       });
-      const resetState: FilterState = { ...DEFAULT_FILTER_STATE, system: true };
-      expect(messageMatchesFilter(systemMessage, resetState)).toBe(true);
+      const resetState: ClaudeFilterState = { ...DEFAULT_CLAUDE_FILTER_STATE, system: true };
+      expect(claudeItemMatchesFilter(systemMessage, resetState)).toBe(true);
     });
 
-    it('shows user messages with DEFAULT_FILTER_STATE (deep-link targets visible after reset)', () => {
+    it('shows user messages with DEFAULT_CLAUDE_FILTER_STATE (deep-link targets visible after reset)', () => {
       const userMessage = parseLine({
         type: 'user',
         uuid: 'user-uuid-1',
@@ -100,7 +100,7 @@ describe('messageCategories', () => {
         version: '1.0.0',
         message: { role: 'user', content: 'Hello' },
       });
-      expect(messageMatchesFilter(userMessage, DEFAULT_FILTER_STATE)).toBe(true);
+      expect(claudeItemMatchesFilter(userMessage, DEFAULT_CLAUDE_FILTER_STATE)).toBe(true);
     });
 
     it('hides assistant messages with only empty thinking blocks', () => {
@@ -126,7 +126,7 @@ describe('messageCategories', () => {
           usage: { input_tokens: 100, output_tokens: 50 },
         },
       });
-      expect(messageMatchesFilter(emptyThinkingMessage, DEFAULT_FILTER_STATE)).toBe(false);
+      expect(claudeItemMatchesFilter(emptyThinkingMessage, DEFAULT_CLAUDE_FILTER_STATE)).toBe(false);
     });
 
     it('shows assistant messages with non-empty thinking blocks', () => {
@@ -152,7 +152,7 @@ describe('messageCategories', () => {
           usage: { input_tokens: 100, output_tokens: 50 },
         },
       });
-      expect(messageMatchesFilter(thinkingMessage, DEFAULT_FILTER_STATE)).toBe(true);
+      expect(claudeItemMatchesFilter(thinkingMessage, DEFAULT_CLAUDE_FILTER_STATE)).toBe(true);
     });
 
     it('routes away_summary system rows to away-summary, not system', () => {
@@ -169,7 +169,7 @@ describe('messageCategories', () => {
         subtype: 'away_summary',
         content: 'You stepped away. Here is what changed.',
       });
-      const counts = countHierarchicalCategories([awaySummary]);
+      const counts = countClaudeCategories([awaySummary]);
       expect(counts['away-summary']).toBe(1);
       expect(counts.system).toBe(0);
     });
@@ -198,7 +198,7 @@ describe('messageCategories', () => {
         attachmentLine({ type: 'deferred_tools_delta', addedNames: ['X'], removedNames: [] }, '5'),
         attachmentLine({ type: 'mcp_instructions_delta', addedNames: ['Y'], removedNames: [] }, '6'),
       ];
-      const counts = countHierarchicalCategories(messages);
+      const counts = countClaudeCategories(messages);
       expect(counts.attachment.hook).toBe(2);
       expect(counts.attachment['file-edit']).toBe(1);
       expect(counts.attachment['queued-command']).toBe(1);
@@ -228,20 +228,20 @@ describe('messageCategories', () => {
         attachmentLine({ type: 'command_permissions', allowedTools: [] }, '3'),
         attachmentLine({ type: 'future_unknown', whatever: true }, '4'),
       ];
-      const counts = countHierarchicalCategories(messages);
+      const counts = countClaudeCategories(messages);
       expect(counts.attachment.total).toBe(0);
     });
 
-    it('DEFAULT_FILTER_STATE hides all attachment subs and away-summary', () => {
-      expect(DEFAULT_FILTER_STATE.attachment.hook).toBe(false);
-      expect(DEFAULT_FILTER_STATE.attachment['file-edit']).toBe(false);
-      expect(DEFAULT_FILTER_STATE.attachment['queued-command']).toBe(false);
-      expect(DEFAULT_FILTER_STATE.attachment['deferred-tools']).toBe(false);
-      expect(DEFAULT_FILTER_STATE.attachment['mcp-instructions']).toBe(false);
-      expect(DEFAULT_FILTER_STATE['away-summary']).toBe(false);
+    it('DEFAULT_CLAUDE_FILTER_STATE hides all attachment subs and away-summary', () => {
+      expect(DEFAULT_CLAUDE_FILTER_STATE.attachment.hook).toBe(false);
+      expect(DEFAULT_CLAUDE_FILTER_STATE.attachment['file-edit']).toBe(false);
+      expect(DEFAULT_CLAUDE_FILTER_STATE.attachment['queued-command']).toBe(false);
+      expect(DEFAULT_CLAUDE_FILTER_STATE.attachment['deferred-tools']).toBe(false);
+      expect(DEFAULT_CLAUDE_FILTER_STATE.attachment['mcp-instructions']).toBe(false);
+      expect(DEFAULT_CLAUDE_FILTER_STATE['away-summary']).toBe(false);
     });
 
-    it('messageMatchesFilter respects each attachment sub-chip independently', () => {
+    it('claudeItemMatchesFilter respects each attachment sub-chip independently', () => {
       const hookRow = parseLine({
         type: 'attachment',
         uuid: 'att-h',
@@ -254,15 +254,15 @@ describe('messageCategories', () => {
         version: '2.1.140',
         attachment: { type: 'hook_success', hookName: 'h', hookEvent: 'SessionStart', toolUseID: 't', stdout: 'x', stderr: '', exitCode: 0, durationMs: 1 },
       });
-      expect(messageMatchesFilter(hookRow, DEFAULT_FILTER_STATE)).toBe(false);
-      const hookOn: FilterState = { ...DEFAULT_FILTER_STATE, attachment: { ...DEFAULT_FILTER_STATE.attachment, hook: true } };
-      expect(messageMatchesFilter(hookRow, hookOn)).toBe(true);
+      expect(claudeItemMatchesFilter(hookRow, DEFAULT_CLAUDE_FILTER_STATE)).toBe(false);
+      const hookOn: ClaudeFilterState = { ...DEFAULT_CLAUDE_FILTER_STATE, attachment: { ...DEFAULT_CLAUDE_FILTER_STATE.attachment, hook: true } };
+      expect(claudeItemMatchesFilter(hookRow, hookOn)).toBe(true);
       // file-edit on should NOT show a hook row
-      const fileOn: FilterState = { ...DEFAULT_FILTER_STATE, attachment: { ...DEFAULT_FILTER_STATE.attachment, 'file-edit': true } };
-      expect(messageMatchesFilter(hookRow, fileOn)).toBe(false);
+      const fileOn: ClaudeFilterState = { ...DEFAULT_CLAUDE_FILTER_STATE, attachment: { ...DEFAULT_CLAUDE_FILTER_STATE.attachment, 'file-edit': true } };
+      expect(claudeItemMatchesFilter(hookRow, fileOn)).toBe(false);
     });
 
-    it('messageMatchesFilter hides noisy attachment subtypes regardless of chip state', () => {
+    it('claudeItemMatchesFilter hides noisy attachment subtypes regardless of chip state', () => {
       const reminder = parseLine({
         type: 'attachment',
         uuid: 'att-r',
@@ -275,15 +275,15 @@ describe('messageCategories', () => {
         version: '2.1.140',
         attachment: { type: 'task_reminder', content: 'r', itemCount: 1 },
       });
-      const allOn: FilterState = {
-        ...DEFAULT_FILTER_STATE,
+      const allOn: ClaudeFilterState = {
+        ...DEFAULT_CLAUDE_FILTER_STATE,
         attachment: { hook: true, 'file-edit': true, 'queued-command': true, 'deferred-tools': true, 'mcp-instructions': true },
         'away-summary': true,
       };
-      expect(messageMatchesFilter(reminder, allOn)).toBe(false);
+      expect(claudeItemMatchesFilter(reminder, allOn)).toBe(false);
     });
 
-    it('messageMatchesFilter respects the away-summary chip', () => {
+    it('claudeItemMatchesFilter respects the away-summary chip', () => {
       const awaySummary = parseLine({
         type: 'system',
         uuid: 'sys-uuid-aw',
@@ -297,15 +297,15 @@ describe('messageCategories', () => {
         subtype: 'away_summary',
         content: 'Summary content',
       });
-      expect(messageMatchesFilter(awaySummary, DEFAULT_FILTER_STATE)).toBe(false);
+      expect(claudeItemMatchesFilter(awaySummary, DEFAULT_CLAUDE_FILTER_STATE)).toBe(false);
       // Enabling system alone should NOT show it (it's not a system match)
-      const sysOn: FilterState = { ...DEFAULT_FILTER_STATE, system: true };
-      expect(messageMatchesFilter(awaySummary, sysOn)).toBe(false);
-      const awayOn: FilterState = { ...DEFAULT_FILTER_STATE, 'away-summary': true };
-      expect(messageMatchesFilter(awaySummary, awayOn)).toBe(true);
+      const sysOn: ClaudeFilterState = { ...DEFAULT_CLAUDE_FILTER_STATE, system: true };
+      expect(claudeItemMatchesFilter(awaySummary, sysOn)).toBe(false);
+      const awayOn: ClaudeFilterState = { ...DEFAULT_CLAUDE_FILTER_STATE, 'away-summary': true };
+      expect(claudeItemMatchesFilter(awaySummary, awayOn)).toBe(true);
     });
 
-    it('getRoleLabel returns Attachment for attachment rows', () => {
+    it('getClaudeRoleLabel returns Attachment for attachment rows', () => {
       const attachmentRow = parseLine({
         type: 'attachment',
         uuid: 'att-h',
@@ -318,10 +318,10 @@ describe('messageCategories', () => {
         version: '2.1.140',
         attachment: { type: 'hook_success', hookName: 'h', hookEvent: 'SessionStart', toolUseID: 't', stdout: '', stderr: '', exitCode: 0, durationMs: 1 },
       });
-      expect(getRoleLabel(attachmentRow)).toBe('Attachment');
+      expect(getClaudeRoleLabel(attachmentRow)).toBe('Attachment');
     });
 
-    it('getRoleLabel returns Resume Summary for away_summary system rows', () => {
+    it('getClaudeRoleLabel returns Resume Summary for away_summary system rows', () => {
       const awaySummary = parseLine({
         type: 'system',
         uuid: 'sys-uuid-aw',
@@ -335,10 +335,10 @@ describe('messageCategories', () => {
         subtype: 'away_summary',
         content: 'Summary',
       });
-      expect(getRoleLabel(awaySummary)).toBe('Resume Summary');
+      expect(getClaudeRoleLabel(awaySummary)).toBe('Resume Summary');
     });
 
-    it('shows assistant messages with DEFAULT_FILTER_STATE (deep-link targets visible after reset)', () => {
+    it('shows assistant messages with DEFAULT_CLAUDE_FILTER_STATE (deep-link targets visible after reset)', () => {
       const assistantMessage = parseLine({
         type: 'assistant',
         uuid: 'asst-uuid-1',
@@ -361,7 +361,7 @@ describe('messageCategories', () => {
           usage: { input_tokens: 100, output_tokens: 50 },
         },
       });
-      expect(messageMatchesFilter(assistantMessage, DEFAULT_FILTER_STATE)).toBe(true);
+      expect(claudeItemMatchesFilter(assistantMessage, DEFAULT_CLAUDE_FILTER_STATE)).toBe(true);
     });
   });
 });

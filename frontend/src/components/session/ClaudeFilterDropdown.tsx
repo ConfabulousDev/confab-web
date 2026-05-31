@@ -2,39 +2,39 @@ import { useState } from 'react';
 import { useDropdown } from '@/hooks';
 import { FilterIcon, CheckIcon } from '../icons';
 import type {
-  MessageCategory,
-  UserSubcategory,
-  AssistantSubcategory,
-  AttachmentSubcategory,
-  HierarchicalCounts,
-  FilterState,
-} from './messageCategories';
+  ClaudeCategory,
+  ClaudeUserSubcategory,
+  ClaudeAssistantSubcategory,
+  ClaudeAttachmentSubcategory,
+  ClaudeHierarchicalCounts,
+  ClaudeFilterState,
+} from './claudeCategories';
 import type { SidebarItemColor } from '../PageSidebar';
 import styles from './FilterDropdownShared.module.css';
 
-interface FilterDropdownProps {
-  counts: HierarchicalCounts;
-  filterState: FilterState;
-  onToggleCategory: (category: MessageCategory) => void;
-  onToggleUserSubcategory: (subcategory: UserSubcategory) => void;
-  onToggleAssistantSubcategory: (subcategory: AssistantSubcategory) => void;
-  onToggleAttachmentSubcategory: (subcategory: AttachmentSubcategory) => void;
+interface ClaudeFilterDropdownProps {
+  counts: ClaudeHierarchicalCounts;
+  filterState: ClaudeFilterState;
+  onToggleCategory: (category: ClaudeCategory) => void;
+  onToggleUserSubcategory: (subcategory: ClaudeUserSubcategory) => void;
+  onToggleAssistantSubcategory: (subcategory: ClaudeAssistantSubcategory) => void;
+  onToggleAttachmentSubcategory: (subcategory: ClaudeAttachmentSubcategory) => void;
 }
 
 // Subcategory configurations
-const USER_SUBCATEGORIES: Array<{ key: UserSubcategory; label: string }> = [
+const USER_SUBCATEGORIES: Array<{ key: ClaudeUserSubcategory; label: string }> = [
   { key: 'prompt', label: 'Prompts' },
   { key: 'tool-result', label: 'Tool Results' },
   { key: 'skill', label: 'Skills' },
 ];
 
-const ASSISTANT_SUBCATEGORIES: Array<{ key: AssistantSubcategory; label: string }> = [
+const ASSISTANT_SUBCATEGORIES: Array<{ key: ClaudeAssistantSubcategory; label: string }> = [
   { key: 'text', label: 'Text' },
   { key: 'tool-use', label: 'Tool Use' },
   { key: 'thinking', label: 'Thinking' },
 ];
 
-const ATTACHMENT_SUBCATEGORIES: Array<{ key: AttachmentSubcategory; label: string }> = [
+const ATTACHMENT_SUBCATEGORIES: Array<{ key: ClaudeAttachmentSubcategory; label: string }> = [
   { key: 'hook', label: 'Hook' },
   { key: 'file-edit', label: 'File Edit' },
   { key: 'queued-command', label: 'Queued Command' },
@@ -64,7 +64,7 @@ const FLAT_CATEGORIES: FlatFilterItem[] = [
 // Checkbox state types
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
-function FilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSubcategory, onToggleAssistantSubcategory, onToggleAttachmentSubcategory }: FilterDropdownProps) {
+function ClaudeFilterDropdown({ counts, filterState, onToggleCategory, onToggleUserSubcategory, onToggleAssistantSubcategory, onToggleAttachmentSubcategory }: ClaudeFilterDropdownProps) {
   const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
 
   // Expand/collapse state for hierarchical categories
@@ -375,4 +375,4 @@ function MinusIcon() {
   );
 }
 
-export default FilterDropdown;
+export default ClaudeFilterDropdown;

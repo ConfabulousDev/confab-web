@@ -1,6 +1,6 @@
 // Claude Code provider adapter (CF-417).
 //
-// Wraps the existing claudeTranscriptService / useClaudeTranscriptFilters / FilterDropdown /
+// Wraps the existing claudeTranscriptService / useClaudeTranscriptFilters / ClaudeFilterDropdown /
 // ClaudeTranscriptPane modules to satisfy the `ProviderAdapter` contract.
 // No data-layer reimplementation; everything delegates.
 
@@ -11,10 +11,10 @@ import {
 } from '@/services/claudeTranscriptService';
 import { useClaudeTranscriptFilters } from '@/hooks/useClaudeTranscriptFilters';
 import {
-  DEFAULT_FILTER_STATE,
-  countHierarchicalCategories,
-  messageMatchesFilter,
-} from '@/components/session/messageCategories';
+  DEFAULT_CLAUDE_FILTER_STATE,
+  countClaudeCategories,
+  claudeItemMatchesFilter,
+} from '@/components/session/claudeCategories';
 import { isAssistantMessage } from '@/types';
 import { computeSessionMeta } from '@/utils/sessionMeta';
 import {
@@ -22,7 +22,7 @@ import {
   FAST_MODE_MULTIPLIER,
   WEB_SEARCH_COST_PER_REQUEST,
 } from '@/utils/tokenStats';
-import FilterDropdown from '@/components/session/FilterDropdown';
+import ClaudeFilterDropdown from '@/components/session/ClaudeFilterDropdown';
 import ClaudeTranscriptPane from '@/components/session/ClaudeTranscriptPane';
 import type { ClaudeAdapter } from './types';
 
@@ -74,8 +74,8 @@ export const claudeAdapter: ClaudeAdapter = {
     };
   },
 
-  countCategories: countHierarchicalCategories,
-  itemMatchesFilter: messageMatchesFilter,
+  countCategories: countClaudeCategories,
+  itemMatchesFilter: claudeItemMatchesFilter,
 
   tokensCostTooltip:
     'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
@@ -128,9 +128,9 @@ export const claudeAdapter: ClaudeAdapter = {
       if (!targetId || items.length === 0) return;
       const target = items.find((m) => 'uuid' in m && m.uuid === targetId);
       if (!target) return;
-      if (messageMatchesFilter(target, filters.state)) return;
+      if (claudeItemMatchesFilter(target, filters.state)) return;
       filters.setState(
-        { ...DEFAULT_FILTER_STATE, system: target.type === 'system' },
+        { ...DEFAULT_CLAUDE_FILTER_STATE, system: target.type === 'system' },
         { replace: true },
       );
     }, [targetId, items, filters]);
@@ -138,7 +138,7 @@ export const claudeAdapter: ClaudeAdapter = {
 
   FilterDropdown({ counts, filters }) {
     return (
-      <FilterDropdown
+      <ClaudeFilterDropdown
         counts={counts}
         filterState={filters.state}
         onToggleCategory={filters.toggles.toggleCategory}

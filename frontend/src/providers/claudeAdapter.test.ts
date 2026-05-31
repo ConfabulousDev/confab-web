@@ -7,10 +7,10 @@ import {
   fetchNewClaudeTranscriptMessages,
 } from '@/services/claudeTranscriptService';
 import {
-  DEFAULT_FILTER_STATE,
-  messageMatchesFilter,
-  countHierarchicalCategories,
-} from '@/components/session/messageCategories';
+  DEFAULT_CLAUDE_FILTER_STATE,
+  claudeItemMatchesFilter,
+  countClaudeCategories,
+} from '@/components/session/claudeCategories';
 import { computeSessionMeta } from '@/utils/sessionMeta';
 import type { TokenUsage } from '@/utils/tokenStats';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
@@ -205,20 +205,20 @@ describe('claudeAdapter', () => {
     expect(meta.sessionDate?.toISOString()).toBe(expected.sessionDate?.toISOString());
   });
 
-  it('countCategories delegates to countHierarchicalCategories', () => {
+  it('countCategories delegates to countClaudeCategories', () => {
     const messages: TranscriptLine[] = [
       userMessage('u1', '2026-05-13T01:00:00Z'),
       assistantMessage('a1', '2026-05-13T01:05:00Z'),
     ];
     expect(claudeAdapter.countCategories(messages)).toEqual(
-      countHierarchicalCategories(messages),
+      countClaudeCategories(messages),
     );
   });
 
-  it('itemMatchesFilter delegates to messageMatchesFilter', () => {
+  it('itemMatchesFilter delegates to claudeItemMatchesFilter', () => {
     const msg = userMessage('u1', '2026-05-13T01:00:00Z');
-    expect(claudeAdapter.itemMatchesFilter(msg, DEFAULT_FILTER_STATE)).toBe(
-      messageMatchesFilter(msg, DEFAULT_FILTER_STATE),
+    expect(claudeAdapter.itemMatchesFilter(msg, DEFAULT_CLAUDE_FILTER_STATE)).toBe(
+      claudeItemMatchesFilter(msg, DEFAULT_CLAUDE_FILTER_STATE),
     );
   });
 

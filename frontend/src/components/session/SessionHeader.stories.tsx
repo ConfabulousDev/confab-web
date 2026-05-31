@@ -2,21 +2,21 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import SessionHeader from './SessionHeader';
-import FilterDropdown from './FilterDropdown';
+import ClaudeFilterDropdown from './ClaudeFilterDropdown';
 import CodexFilterDropdown from './CodexFilterDropdown';
 import type {
-  MessageCategory,
-  UserSubcategory,
-  AssistantSubcategory,
-  AttachmentSubcategory,
-  HierarchicalCounts,
-  FilterState,
-} from './messageCategories';
-import { DEFAULT_FILTER_STATE } from './messageCategories';
+  ClaudeCategory,
+  ClaudeUserSubcategory,
+  ClaudeAssistantSubcategory,
+  ClaudeAttachmentSubcategory,
+  ClaudeHierarchicalCounts,
+  ClaudeFilterState,
+} from './claudeCategories';
+import { DEFAULT_CLAUDE_FILTER_STATE } from './claudeCategories';
 import type { GitInfo } from '@/types';
 
 // Sample hierarchical counts
-const sampleCounts: HierarchicalCounts = {
+const sampleCounts: ClaudeHierarchicalCounts = {
   user: { total: 194, prompt: 40, 'tool-result': 152, skill: 2 },
   assistant: { total: 271, text: 50, 'tool-use': 180, thinking: 41 },
   attachment: { total: 0, hook: 0, 'file-edit': 0, 'queued-command': 0, 'deferred-tools': 0, 'mcp-instructions': 0 },
@@ -35,16 +35,16 @@ const sampleGitInfo: GitInfo = {
   commit_sha: 'abc123',
 };
 
-// Composes the Claude FilterDropdown locally and drives its state via React.
+// Composes the Claude ClaudeFilterDropdown locally and drives its state via React.
 // Used by stories that want an interactive filter chip. Mirrors what
 // SessionViewer does at runtime via the claude provider adapter.
 function useClaudeFilterSlot(
-  counts: HierarchicalCounts = sampleCounts,
-  initial: FilterState = DEFAULT_FILTER_STATE,
+  counts: ClaudeHierarchicalCounts = sampleCounts,
+  initial: ClaudeFilterState = DEFAULT_CLAUDE_FILTER_STATE,
 ) {
   const [filterState, setFilterState] = useState(initial);
 
-  const handleToggleCategory = (category: MessageCategory) => {
+  const handleToggleCategory = (category: ClaudeCategory) => {
     setFilterState((prev) => {
       const next = { ...prev };
       if (category === 'user') {
@@ -70,15 +70,15 @@ function useClaudeFilterSlot(
     });
   };
 
-  const handleToggleUserSubcategory = (sub: UserSubcategory) =>
+  const handleToggleUserSubcategory = (sub: ClaudeUserSubcategory) =>
     setFilterState((prev) => ({ ...prev, user: { ...prev.user, [sub]: !prev.user[sub] } }));
-  const handleToggleAssistantSubcategory = (sub: AssistantSubcategory) =>
+  const handleToggleAssistantSubcategory = (sub: ClaudeAssistantSubcategory) =>
     setFilterState((prev) => ({ ...prev, assistant: { ...prev.assistant, [sub]: !prev.assistant[sub] } }));
-  const handleToggleAttachmentSubcategory = (sub: AttachmentSubcategory) =>
+  const handleToggleAttachmentSubcategory = (sub: ClaudeAttachmentSubcategory) =>
     setFilterState((prev) => ({ ...prev, attachment: { ...prev.attachment, [sub]: !prev.attachment[sub] } }));
 
   return (
-    <FilterDropdown
+    <ClaudeFilterDropdown
       counts={counts}
       filterState={filterState}
       onToggleCategory={handleToggleCategory}
@@ -90,11 +90,11 @@ function useClaudeFilterSlot(
 }
 
 // Interactive wrapper that mirrors how SessionViewer composes the header:
-// builds the FilterDropdown locally and forwards it as `filterSlot`.
+// builds the ClaudeFilterDropdown locally and forwards it as `filterSlot`.
 function SessionHeaderInteractive(
   props: Omit<React.ComponentProps<typeof SessionHeader>, 'filterSlot'> & {
-    counts?: HierarchicalCounts;
-    initialFilterState?: FilterState;
+    counts?: ClaudeHierarchicalCounts;
+    initialFilterState?: ClaudeFilterState;
   },
 ) {
   const { counts, initialFilterState, ...rest } = props;

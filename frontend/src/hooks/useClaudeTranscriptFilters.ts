@@ -1,32 +1,32 @@
 import { useCallback, useMemo } from 'react';
 import { useURLFilters, type URLFiltersConfig } from './useURLFilters';
 import {
-  DEFAULT_FILTER_STATE,
-  type FilterState,
-  type MessageCategory,
-  type UserSubcategory,
-  type AssistantSubcategory,
-  type AttachmentSubcategory,
-} from '@/components/session/messageCategories';
+  DEFAULT_CLAUDE_FILTER_STATE,
+  type ClaudeFilterState,
+  type ClaudeCategory,
+  type ClaudeUserSubcategory,
+  type ClaudeAssistantSubcategory,
+  type ClaudeAttachmentSubcategory,
+} from '@/components/session/claudeCategories';
 
-// Wire format: `hide` is a `string[]` of dot-paths into FilterState
+// Wire format: `hide` is a `string[]` of dot-paths into ClaudeFilterState
 // (e.g. 'user.prompt', 'attachment.hook', 'away-summary'). A path appears in
-// the array iff the matching FilterState boolean is `false` (i.e. hidden).
+// the array iff the matching ClaudeFilterState boolean is `false` (i.e. hidden).
 //
 // All filter wiring funnels through `pathsFromState` / `stateFromPaths` so the
 // path list is the single source of truth — DEFAULT_HIDDEN is derived from
-// DEFAULT_FILTER_STATE rather than maintained independently.
+// DEFAULT_CLAUDE_FILTER_STATE rather than maintained independently.
 
 const SUB_KEYS = {
-  user: ['prompt', 'tool-result', 'skill'] as const satisfies readonly UserSubcategory[],
-  assistant: ['text', 'tool-use', 'thinking'] as const satisfies readonly AssistantSubcategory[],
+  user: ['prompt', 'tool-result', 'skill'] as const satisfies readonly ClaudeUserSubcategory[],
+  assistant: ['text', 'tool-use', 'thinking'] as const satisfies readonly ClaudeAssistantSubcategory[],
   attachment: [
     'hook',
     'file-edit',
     'queued-command',
     'deferred-tools',
     'mcp-instructions',
-  ] as const satisfies readonly AttachmentSubcategory[],
+  ] as const satisfies readonly ClaudeAttachmentSubcategory[],
 };
 
 const FLAT_KEYS = [
@@ -37,9 +37,9 @@ const FLAT_KEYS = [
   'pr-link',
   'away-summary',
   'unknown',
-] as const satisfies readonly Exclude<MessageCategory, 'user' | 'assistant' | 'attachment'>[];
+] as const satisfies readonly Exclude<ClaudeCategory, 'user' | 'assistant' | 'attachment'>[];
 
-function pathsFromState(state: FilterState): string[] {
+function pathsFromState(state: ClaudeFilterState): string[] {
   const hidden: string[] = [];
   for (const sub of SUB_KEYS.user) {
     if (!state.user[sub]) hidden.push(`user.${sub}`);
@@ -56,7 +56,7 @@ function pathsFromState(state: FilterState): string[] {
   return hidden;
 }
 
-function stateFromPaths(hide: string[]): FilterState {
+function stateFromPaths(hide: string[]): ClaudeFilterState {
   const hidden = new Set(hide);
   const visible = (path: string) => !hidden.has(path);
   return {
@@ -87,9 +87,9 @@ function stateFromPaths(hide: string[]): FilterState {
   };
 }
 
-// Derive the default-hidden list from DEFAULT_FILTER_STATE so the two never
+// Derive the default-hidden list from DEFAULT_CLAUDE_FILTER_STATE so the two never
 // drift. Anything visible-by-default is omitted from `?hide=...`.
-const DEFAULT_HIDDEN = pathsFromState(DEFAULT_FILTER_STATE);
+const DEFAULT_HIDDEN = pathsFromState(DEFAULT_CLAUDE_FILTER_STATE);
 
 const TRANSCRIPT_FILTERS_CONFIG: URLFiltersConfig = {
   hide: { type: 'string[]', default: DEFAULT_HIDDEN, paramName: 'hide' },
@@ -100,12 +100,12 @@ interface HideFilters {
 }
 
 interface ClaudeTranscriptFiltersResult {
-  filterState: FilterState;
-  setFilterState: (state: FilterState, opts?: { replace?: boolean }) => void;
-  toggleCategory: (category: MessageCategory) => void;
-  toggleUserSubcategory: (subcategory: UserSubcategory) => void;
-  toggleAssistantSubcategory: (subcategory: AssistantSubcategory) => void;
-  toggleAttachmentSubcategory: (subcategory: AttachmentSubcategory) => void;
+  filterState: ClaudeFilterState;
+  setFilterState: (state: ClaudeFilterState, opts?: { replace?: boolean }) => void;
+  toggleCategory: (category: ClaudeCategory) => void;
+  toggleUserSubcategory: (subcategory: ClaudeUserSubcategory) => void;
+  toggleAssistantSubcategory: (subcategory: ClaudeAssistantSubcategory) => void;
+  toggleAttachmentSubcategory: (subcategory: ClaudeAttachmentSubcategory) => void;
 }
 
 export function useClaudeTranscriptFilters(): ClaudeTranscriptFiltersResult {
@@ -117,14 +117,14 @@ export function useClaudeTranscriptFilters(): ClaudeTranscriptFiltersResult {
   );
 
   const setFilterState = useCallback(
-    (state: FilterState, opts?: { replace?: boolean }) => {
+    (state: ClaudeFilterState, opts?: { replace?: boolean }) => {
       setFilter('hide', pathsFromState(state), opts);
     },
     [setFilter],
   );
 
   const toggleCategory = useCallback(
-    (category: MessageCategory) => {
+    (category: ClaudeCategory) => {
       const next = { ...filterState };
       if (category === 'user') {
         const allVisible = SUB_KEYS.user.every((k) => filterState.user[k]);
@@ -150,8 +150,8 @@ export function useClaudeTranscriptFilters(): ClaudeTranscriptFiltersResult {
   );
 
   const toggleUserSubcategory = useCallback(
-    (subcategory: UserSubcategory) => {
-      const next: FilterState = {
+    (subcategory: ClaudeUserSubcategory) => {
+      const next: ClaudeFilterState = {
         ...filterState,
         user: { ...filterState.user, [subcategory]: !filterState.user[subcategory] },
       };
@@ -161,8 +161,8 @@ export function useClaudeTranscriptFilters(): ClaudeTranscriptFiltersResult {
   );
 
   const toggleAssistantSubcategory = useCallback(
-    (subcategory: AssistantSubcategory) => {
-      const next: FilterState = {
+    (subcategory: ClaudeAssistantSubcategory) => {
+      const next: ClaudeFilterState = {
         ...filterState,
         assistant: { ...filterState.assistant, [subcategory]: !filterState.assistant[subcategory] },
       };
@@ -172,8 +172,8 @@ export function useClaudeTranscriptFilters(): ClaudeTranscriptFiltersResult {
   );
 
   const toggleAttachmentSubcategory = useCallback(
-    (subcategory: AttachmentSubcategory) => {
-      const next: FilterState = {
+    (subcategory: ClaudeAttachmentSubcategory) => {
+      const next: ClaudeFilterState = {
         ...filterState,
         attachment: { ...filterState.attachment, [subcategory]: !filterState.attachment[subcategory] },
       };

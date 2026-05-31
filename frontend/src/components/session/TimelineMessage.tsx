@@ -9,7 +9,7 @@ import { AttachmentContent, AwaySummary } from '@/components/transcript/attachme
 import TILBadge from './TILBadge';
 import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
-import { getRoleLabel } from './messageCategories';
+import { getClaudeRoleLabel } from './claudeCategories';
 import styles from './TimelineMessage.module.css';
 
 interface TimelineMessageProps {
@@ -41,7 +41,7 @@ interface TimelineMessageProps {
  */
 function getStyleClass(message: TranscriptLine): string {
   // `away_summary` system rows reuse the summary card chrome (per CF-346
-  // decision #9) — distinguishing role label lives in getRoleLabel.
+  // decision #9) — distinguishing role label lives in getClaudeRoleLabel.
   if (isSystemMessage(message) && message.subtype === 'away_summary') return 'summary';
   // Map hyphenated types to camelCase CSS class names
   switch (message.type) {
@@ -188,7 +188,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
   const styleClass = getStyleClass(message);
-  const roleLabel = getRoleLabel(message);
+  const roleLabel = getClaudeRoleLabel(message);
   const isAwaySummary = isSystemMessage(message) && message.subtype === 'away_summary';
   // Attachment rows have no obvious text representation, so skip the
   // getContentBlocks work entirely — the dedicated AttachmentContent
@@ -241,7 +241,7 @@ function TimelineMessage({ message, toolNameMap, previousMessage, isSelected, is
     : null;
 
   // Check if this is from a different role than the previous message
-  const previousRole = previousMessage ? getRoleLabel(previousMessage) : null;
+  const previousRole = previousMessage ? getClaudeRoleLabel(previousMessage) : null;
   const isDifferentRole = previousRole !== roleLabel;
 
   // Get message UUID if available (user, assistant, system messages have it)
