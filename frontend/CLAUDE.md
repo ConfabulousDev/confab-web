@@ -27,6 +27,10 @@ npm run build-storybook   # verify stories build
 npm run storybook         # local preview
 ```
 
+## Code intelligence (TS LSP)
+
+If the TypeScript LSP is available, use it when it helps — go-to-definition, find-references, and hover types beat grep for cross-file symbol and type work. Skip it when a plain read or grep is quicker.
+
 ## Theming
 
 Use CSS custom properties from `src/styles/variables.css`: `--color-bg-primary`, `--color-text-primary`, `--color-accent`, `--color-border`, etc. Never hardcode colors. Test changes under both `[data-theme="light"]` and `[data-theme="dark"]`.

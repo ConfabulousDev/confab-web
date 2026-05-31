@@ -27,6 +27,10 @@ Sharded (parallel package-at-a-time, what CI runs):
 
 Integration tests use `testutil.SetupTestEnvironment(t)` for a containerized Postgres + MinIO.
 
+## Code intelligence (Go LSP)
+
+If the Go LSP is available, use it when it helps — go-to-definition, find-references, and hover types beat grep for cross-file symbol and type work. Skip it when a plain read or grep is quicker.
+
 ## When adding a field to a shared DB struct
 
 Adding a column to `db.SessionDetail`, `db.SessionListItem`, or any struct loaded from SQL in more than one place:
