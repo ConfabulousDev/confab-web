@@ -6,7 +6,7 @@ import {
   type TranscriptParseResult,
   validateParsedTranscriptLine,
   formatValidationErrorsForLog,
-} from '@/schemas/transcript';
+} from '@/schemas/claudeTranscript';
 import { isAssistantMessage } from '@/types';
 import { normalizeClaudeUsage } from '@/utils/tokenStats';
 import { syncFilesAPI } from './api';
@@ -29,7 +29,7 @@ const reportedSessions = new Set<string>();
  * Uses raw fetch (bypasses APIClient) so 401s don't redirect the user.
  * Fire-and-forget: errors are silently ignored.
  */
-export function reportTranscriptErrors(sessionId: string, errors: TranscriptValidationError[]): void {
+export function reportClaudeTranscriptErrors(sessionId: string, errors: TranscriptValidationError[]): void {
   const payload = {
     category: 'transcript_validation',
     session_id: sessionId,
@@ -59,7 +59,7 @@ export function reportTranscriptErrors(sessionId: string, errors: TranscriptVali
 }
 
 /** Reset the dedup set (exposed for testing) */
-export function _resetReportedSessions(): void {
+export function _resetReportedClaudeSessions(): void {
   reportedSessions.clear();
 }
 
@@ -123,7 +123,7 @@ async function fetchTranscriptContent(
  * Each line is validated against the TranscriptLine schema.
  * Returns structured parse result with detailed errors for UI display.
  */
-export function parseJSONL(jsonl: string): TranscriptParseResult {
+export function parseClaudeJSONL(jsonl: string): TranscriptParseResult {
   const lines = jsonl.split('\n').filter((line) => line.trim());
   const messages: TranscriptLine[] = [];
   const errors: TranscriptValidationError[] = [];
@@ -211,7 +211,7 @@ async function fetchTranscriptWithErrors(
 
   // Fetch and parse
   const content = await fetchTranscriptContent(sessionId, fileName);
-  const parseResult = parseJSONL(content);
+  const parseResult = parseClaudeJSONL(content);
 
   const entry: CacheEntry = {
     messages: parseResult.messages,
@@ -240,7 +240,7 @@ function getFirstVersion(messages: TranscriptLine[]): string {
 /**
  * Fetch and parse a complete transcript with metadata
  */
-export async function fetchParsedTranscript(
+export async function fetchParsedClaudeTranscript(
   sessionId: string,
   fileName: string,
   skipCache?: boolean
@@ -250,7 +250,7 @@ export async function fetchParsedTranscript(
   // Report validation errors to backend for observability (fire-and-forget, deduped by session)
   if (errors.length > 0 && !reportedSessions.has(sessionId)) {
     reportedSessions.add(sessionId);
-    reportTranscriptErrors(sessionId, errors);
+    reportClaudeTranscriptErrors(sessionId, errors);
   }
 
   // Extract metadata - filter to messages with timestamp property
@@ -284,7 +284,7 @@ export async function fetchParsedTranscript(
  * @param currentLineCount - Number of lines already loaded (fetch lines after this)
  * @returns Object with newMessages array and the new total line count
  */
-export async function fetchNewTranscriptMessages(
+export async function fetchNewClaudeTranscriptMessages(
   sessionId: string,
   fileName: string,
   currentLineCount: number
@@ -298,7 +298,7 @@ export async function fetchNewTranscriptMessages(
   }
 
   // Parse the new content
-  const parseResult = parseJSONL(content);
+  const parseResult = parseClaudeJSONL(content);
 
   // New total is previous count plus total lines fetched (not just successful parses)
   // This ensures line_offset stays in sync with actual file line numbers

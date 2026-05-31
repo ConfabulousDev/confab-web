@@ -31,7 +31,7 @@ interface ParsedMessageData {
 /**
  * Parse a transcript line into display-ready message data
  */
-export function parseMessage(message: TranscriptLine): ParsedMessageData {
+export function parseClaudeMessage(message: TranscriptLine): ParsedMessageData {
   let role: 'user' | 'assistant' | 'system' | 'unknown' = 'user';
   let timestamp: string | undefined;
   let content: ContentBlock[] = [];
@@ -102,14 +102,14 @@ export function parseMessage(message: TranscriptLine): ParsedMessageData {
  * `TranscriptLine` to the generic `useTranscriptSearch` hook (which
  * lowercases when building its index, so callers don't have to).
  */
-export function extractMessageText(message: TranscriptLine): string {
-  return extractTextContent(parseMessage(message).content);
+export function extractClaudeMessageText(message: TranscriptLine): string {
+  return extractClaudeTextContent(parseClaudeMessage(message).content);
 }
 
 /**
  * Extract plain text content from a message for copying
  */
-export function extractTextContent(content: ContentBlock[]): string {
+export function extractClaudeTextContent(content: ContentBlock[]): string {
   const parts: string[] = [];
 
   for (const block of content) {

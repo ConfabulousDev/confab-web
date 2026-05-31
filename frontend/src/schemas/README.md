@@ -7,7 +7,7 @@ Zod validation schemas and the TypeScript type system for the Confab frontend. A
 | File | Role |
 |------|------|
 | `api.ts` | Zod schemas for all API responses: sessions, analytics, trends, org, auth, shares, GitHub links |
-| `transcript.ts` | Zod schemas for Claude Code transcript JSONL: message types, content blocks, token usage |
+| `claudeTranscript.ts` | Zod schemas for Claude Code transcript JSONL: message types, content blocks, token usage |
 | `codexTranscript.ts` | Zod schemas for Codex rollout JSONL: top-level line envelopes, response_item / event_msg payload variants, forward-compat catch-all branches, and `isKnownCodexLine` / `isKnownResponseItemPayload` / `isKnownEventPayload` type predicates |
 | `validation.ts` | Zod schemas for form input validation: share forms, API key creation, email validation |
 
@@ -47,7 +47,7 @@ All types are inferred from Zod schemas via `z.infer<>`:
 - `User` -- Current user (email, name, avatar)
 - `SessionShare`, `APIKey`, `GitHubLink`, `GitInfo`
 
-### transcript.ts -- Transcript Types
+### claudeTranscript.ts -- Transcript Types
 
 **Content blocks** (discriminated union on `type`):
 - `TextBlock` -- `{ type: 'text', text: string }`
@@ -138,11 +138,11 @@ normalizer's output, defined separately in `@/types/codexRenderItem`.
 3. Add to the appropriate parent schema if it's part of a larger response (e.g., add to `AnalyticsCardsSchema`)
 
 ### Adding a new transcript message type
-1. Define the message schema in `transcript.ts`
+1. Define the message schema in `claudeTranscript.ts`
 2. Add it to the `TranscriptLineSchema` union **before** `UnknownMessageSchema`
 3. Add the type string to `KNOWN_MESSAGE_TYPES`
 4. Export a type guard function
-5. Update `messageParser.ts` to handle the new type
+5. Update `claudeMessageParser.ts` to handle the new type
 
 ### Adding a new Codex top-level line type
 1. Define the schema in `codexTranscript.ts` (use `.passthrough()` + `z.string()` over `z.literal()` for non-tag fields, per forward-compat conventions).
@@ -166,7 +166,7 @@ normalizer's output, defined separately in `@/types/codexRenderItem`.
 - **Schemas validate external data**: Schemas are designed to validate data we don't control (API responses, transcript files). They use `.passthrough()` and `z.string()` (instead of `z.enum()`) for forward compatibility with new field values.
 - **Union ordering matters**: In discriminated unions (`TranscriptLineSchema`, `ContentBlockSchema`, `RawCodexLineSchema`, `CodexResponseItemPayloadSchema`, `CodexEventPayloadSchema`), the catch-all branch must be last. Zod tries branches in order and returns the first match.
 - **Type predicates for narrowing**: When a union has a catch-all whose discriminator is `z.string()`, TypeScript's switch-narrowing widens the payload to `unknown` because the catch-all matches any literal. The `isKnown*` predicates in `codexTranscript.ts` filter out the catch-all so a subsequent `switch (line.type)` discriminates cleanly. Same trick applies to nested payload unions.
-- **Type guards re-exported from `@/types`**: The `src/types/index.ts` file re-exports all type guards and types from `schemas/transcript.ts`. Components import from `@/types`, not directly from schemas.
+- **Type guards re-exported from `@/types`**: The `src/types/index.ts` file re-exports all type guards and types from `schemas/claudeTranscript.ts`. Components import from `@/types`, not directly from schemas.
 - **Schema drift detection**: `warnIfKnownTypeCaughtByCatchall()` logs a console warning when a message with a known `type` string falls through to the catch-all schema, indicating the specific schema needs updating.
 - **`AnnotatedItem` backward compatibility**: Accepts both plain strings (legacy) and `{ text, message_id? }` objects, normalizing strings to objects via `.transform()`.
 
@@ -175,11 +175,11 @@ normalizer's output, defined separately in `@/types/codexRenderItem`.
 - **Zod over TypeScript-only types**: Runtime validation catches backend contract changes immediately rather than letting corrupt data flow through the app silently. Every API call and transcript line is validated.
 - **Forward-compatible schemas**: New message types and content block types from future Claude Code versions won't crash the app. Unknown types render with fallback UI and trigger console warnings for developer visibility.
 - **Inferred types**: Types are derived from schemas via `z.infer<>` rather than defined separately. This eliminates the possibility of types and schemas drifting apart.
-- **Separated validation concerns**: `api.ts` validates server responses, `transcript.ts` validates external JSONL data, `validation.ts` validates user input. Different trust levels require different schema styles.
+- **Separated validation concerns**: `api.ts` validates server responses, `claudeTranscript.ts` validates external JSONL data, `validation.ts` validates user input. Different trust levels require different schema styles.
 
 ## Testing
 
-- `transcript.test.ts` -- Transcript line parsing, validation error formatting, type guards
+- `claudeTranscript.test.ts` -- Transcript line parsing, validation error formatting, type guards
 - `codexTranscript.test.ts` -- Every documented top-level type and nested payload variant, forward-compat catch-all behavior, `.passthrough()` preservation
 - `validation.test.ts` -- Share form validation, email validation, API key name validation
 

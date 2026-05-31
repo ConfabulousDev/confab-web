@@ -1,15 +1,15 @@
 // Claude Code provider adapter (CF-417).
 //
-// Wraps the existing transcriptService / useTranscriptFilters / FilterDropdown /
+// Wraps the existing claudeTranscriptService / useClaudeTranscriptFilters / FilterDropdown /
 // ClaudeTranscriptPane modules to satisfy the `ProviderAdapter` contract.
 // No data-layer reimplementation; everything delegates.
 
 import { useEffect } from 'react';
 import {
-  fetchParsedTranscript,
-  fetchNewTranscriptMessages,
-} from '@/services/transcriptService';
-import { useTranscriptFilters } from '@/hooks/useTranscriptFilters';
+  fetchParsedClaudeTranscript,
+  fetchNewClaudeTranscriptMessages,
+} from '@/services/claudeTranscriptService';
+import { useClaudeTranscriptFilters } from '@/hooks/useClaudeTranscriptFilters';
 import {
   DEFAULT_FILTER_STATE,
   countHierarchicalCategories,
@@ -31,13 +31,13 @@ export const claudeAdapter: ClaudeAdapter = {
   supportsTILs: true,
 
   async fetchInitial(sessionId, fileName, skipCache) {
-    const parsed = await fetchParsedTranscript(sessionId, fileName, skipCache);
+    const parsed = await fetchParsedClaudeTranscript(sessionId, fileName, skipCache);
     // Claude has no separate "raw" stream — TranscriptLine[] doubles as raw + items.
     return { items: parsed.messages, totalLines: parsed.totalLines, raw: parsed.messages };
   },
 
   async fetchIncremental(sessionId, fileName, currentLineCount) {
-    const { newMessages, newTotalLineCount } = await fetchNewTranscriptMessages(
+    const { newMessages, newTotalLineCount } = await fetchNewClaudeTranscriptMessages(
       sessionId,
       fileName,
       currentLineCount,
@@ -61,7 +61,7 @@ export const claudeAdapter: ClaudeAdapter = {
   },
 
   useFilters() {
-    const hook = useTranscriptFilters();
+    const hook = useClaudeTranscriptFilters();
     return {
       state: hook.filterState,
       setState: hook.setFilterState,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateParsedTranscriptLine } from '@/schemas/transcript';
+import { validateParsedTranscriptLine } from '@/schemas/claudeTranscript';
 import { countHierarchicalCategories, messageMatchesFilter, DEFAULT_FILTER_STATE, getRoleLabel } from './messageCategories';
 import type { FilterState } from './messageCategories';
 

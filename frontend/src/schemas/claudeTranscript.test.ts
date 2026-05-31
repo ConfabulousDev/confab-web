@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { UserMessage, UnknownBlock, UnknownMessage, AttachmentMessage } from './transcript';
+import type { UserMessage, UnknownBlock, UnknownMessage, AttachmentMessage } from './claudeTranscript';
 import {
   isCommandExpansionMessage,
   getCommandExpansionSkillName,
@@ -17,7 +17,7 @@ import {
   isDeferredToolsDeltaAttachment,
   isMcpInstructionsDeltaAttachment,
   warnIfKnownTypeCaughtByCatchall,
-} from './transcript';
+} from './claudeTranscript';
 
 // Helper to create a minimal UserMessage with string content
 function makeUserMessage(content: UserMessage['message']['content']): UserMessage {

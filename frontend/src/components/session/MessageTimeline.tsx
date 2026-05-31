@@ -5,7 +5,7 @@ import type { TIL } from '@/schemas/api';
 import type { TokenUsage } from '@/utils/tokenStats';
 import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
-import { extractMessageText } from '@/services/messageParser';
+import { extractClaudeMessageText } from '@/services/claudeMessageParser';
 import { claudeAdapter } from '@/providers/claudeAdapter';
 import { normalizeClaudeUsage } from '@/utils/tokenStats';
 import TimelineMessage from './TimelineMessage';
@@ -116,7 +116,7 @@ function MessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, 
   const hasScrolledToTarget = useRef(false);
 
   // Transcript search
-  const search = useTranscriptSearch(messages, extractMessageText);
+  const search = useTranscriptSearch(messages, extractClaudeMessageText);
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);

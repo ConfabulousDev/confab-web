@@ -99,7 +99,7 @@ interface HideFilters {
   hide: string[];
 }
 
-interface TranscriptFiltersResult {
+interface ClaudeTranscriptFiltersResult {
   filterState: FilterState;
   setFilterState: (state: FilterState, opts?: { replace?: boolean }) => void;
   toggleCategory: (category: MessageCategory) => void;
@@ -108,7 +108,7 @@ interface TranscriptFiltersResult {
   toggleAttachmentSubcategory: (subcategory: AttachmentSubcategory) => void;
 }
 
-export function useTranscriptFilters(): TranscriptFiltersResult {
+export function useClaudeTranscriptFilters(): ClaudeTranscriptFiltersResult {
   const { filters, setFilter } = useURLFilters<HideFilters>(TRANSCRIPT_FILTERS_CONFIG);
 
   const filterState = useMemo(
