@@ -8,6 +8,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+# Full SHA + build timestamp baked into the binary, surfaced at GET /api/v1/version.
+COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Local-only: deploy breadcrumb logs
 if [ -z "$CI" ]; then
@@ -61,7 +64,7 @@ migrate -database "$PRODUCTION_DATABASE_URL" -path internal/db/migrations versio
 echo ""
 echo "Deploying to Fly.io..."
 cd "$SCRIPT_DIR"
-flyctl deploy
+flyctl deploy --build-arg COMMIT="$COMMIT_SHA" --build-arg BUILD_TIME="$BUILD_TIME"
 
 echo ""
 echo "=== Deployment complete ==="

@@ -83,6 +83,6 @@ func NewServer(t *testing.T, env *testutil.TestEnvironment, opts Options) *testu
 		}
 	}
 
-	srv := api.NewServer(env.DB, env.Storage, &cfg, nil, "")
+	srv := api.NewServer(env.DB, env.Storage, &cfg, nil, api.BuildInfo{})
 	return testutil.StartTestServer(t, env, srv.SetupRoutes())
 }

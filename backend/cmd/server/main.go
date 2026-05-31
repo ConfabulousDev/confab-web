@@ -22,7 +22,13 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-var version string
+// Build identity, injected via -ldflags at release/deploy time (see Dockerfile,
+// release.yml, deploy-to-fly.sh). Empty for `go run` dev builds.
+var (
+	version   string
+	commit    string
+	buildTime string
+)
 
 // logFatal is a test seam over logger.Fatal so fatal branches are reachable
 // without os.Exit(1). Production keeps the real Fatal.
@@ -125,7 +131,11 @@ func main() {
 	}
 
 	// Create API server
-	server := api.NewServer(database, store, config.OAuthConfig, emailService, version)
+	server := api.NewServer(database, store, config.OAuthConfig, emailService, api.BuildInfo{
+		Version:   version,
+		Commit:    commit,
+		BuildTime: buildTime,
+	})
 	router := server.SetupRoutes()
 
 	// Wrap router with OpenTelemetry HTTP instrumentation

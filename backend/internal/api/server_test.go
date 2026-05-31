@@ -75,7 +75,7 @@ func TestParseAllowedOrigins(t *testing.T) {
 // Claude Code sessions, Codex sessions, or both; the bullet list must not
 // claim it only deletes "Claude Code session transcripts".
 func TestDeleteAccountHelpPage_ProviderNeutral(t *testing.T) {
-	server := NewServer(&db.DB{}, &storage.S3Storage{}, &auth.OAuthConfig{}, nil, "")
+	server := NewServer(&db.DB{}, &storage.S3Storage{}, &auth.OAuthConfig{}, nil, BuildInfo{})
 
 	req := httptest.NewRequest(http.MethodGet, "/help/delete-account", nil)
 	rr := httptest.NewRecorder()

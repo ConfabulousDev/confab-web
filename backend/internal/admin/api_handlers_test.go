@@ -33,7 +33,7 @@ func setupTestServer(t *testing.T, env *testutil.TestEnvironment) *testutil.Test
 		PasswordEnabled: true,
 	}
 
-	apiServer := api.NewServer(env.DB, env.Storage, &oauthConfig, nil, "")
+	apiServer := api.NewServer(env.DB, env.Storage, &oauthConfig, nil, api.BuildInfo{})
 	handler := apiServer.SetupRoutes()
 
 	return testutil.StartTestServer(t, env, handler)

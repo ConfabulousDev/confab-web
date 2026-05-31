@@ -1995,6 +1995,32 @@ Providers are returned in order: password, GitHub, Google, OIDC. Only enabled pr
 
 The `version` object surfaces the running backend build alongside the latest GitHub release so the frontend can render the "Update available" badge. The backend caches the GitHub response for 6 hours (15 minutes on failure) and never blocks the caller for longer than 3 seconds. See [`internal/updatecheck`](internal/updatecheck/) for details.
 
+### Backend Version
+```
+GET /api/v1/version
+```
+
+Reports what build this backend *is*. No authentication required and **no external dependency** — it never touches the database, the update checker, or the network, so it's always fast and safe for liveness probes, post-deploy verification, and the CLI capability probe. "Is there a newer release available?" is a separate question that stays in [`/api/v1/auth/config`](#auth-config) (which does fetch from GitHub).
+
+**Response:**
+```json
+{
+  "version": "v0.4.3",
+  "commit": "224ede8a1b2c3d4e5f60718293a4b5c6d7e8f901",
+  "build_time": "2026-05-29T21:00:00Z",
+  "go_version": "go1.26.3"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | string | Running backend build tag (e.g., `"v0.4.3"`). Reports `"dev"` for non-release builds (`go run`, or a `flyctl` deploy without a release tag). |
+| `go_version` | string | Go runtime version the binary was built with (`runtime.Version()`). |
+| `commit` | string | Full git SHA the binary was built from. Set via `-ldflags` at build time; **omitted** when unset (e.g. `go run` dev build). |
+| `build_time` | string (RFC 3339) | UTC timestamp of the build. Set via `-ldflags` at build time; **omitted** when unset. |
+
+`commit` and `build_time` are injected at build time (see `Dockerfile`, `.github/workflows/release.yml`, and `deploy-to-fly.sh`); `version` and `go_version` are always present. Unlike `version.current` in `/api/v1/auth/config`, this endpoint carries no update-check fields.
+
 ### Model Pricing
 ```
 GET /api/v1/pricing

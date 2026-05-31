@@ -78,13 +78,15 @@ type Server struct {
 	externalReadLimiter ratelimit.RateLimiter     // Limiter for external API read endpoints
 	updateChecker       UpdateChecker             // Reports whether a newer backend release is available (nil → treated as disabled)
 	pricingSource       *pricingsource.Source     // Serves the effective model price table on /api/v1/pricing
+	buildInfo           BuildInfo                 // Compile-time build identity served on /api/v1/version
 }
 
-// NewServer creates a new API server. version is the running backend build
-// (set via -ldflags at release time, empty in dev). The update check is
-// suppressed for SaaS deploys (ENABLE_SAAS_FOOTER) since those users can't
-// self-upgrade, and can be force-disabled via DISABLE_UPDATE_CHECK.
-func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAuthConfig, emailService *email.RateLimitedService, version string) *Server {
+// NewServer creates a new API server. build carries the running backend build
+// identity (set via -ldflags at release/deploy time, empty in dev); its version
+// drives both the /api/v1/version endpoint and the update check. The update
+// check is suppressed for SaaS deploys (ENABLE_SAAS_FOOTER) since those users
+// can't self-upgrade, and can be force-disabled via DISABLE_UPDATE_CHECK.
+func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAuthConfig, emailService *email.RateLimitedService, build BuildInfo) *Server {
 	supportEmail := os.Getenv("SUPPORT_EMAIL")
 	if supportEmail == "" {
 		supportEmail = "support@example.com"
@@ -121,10 +123,11 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		// External API: 30 req/sec, burst of 60 per user
 		// Generous read-only limit for machine consumers (agents, CLI, scripts)
 		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60),
-		updateChecker:       updatecheck.NewChecker(version, updateCheckDisabled),
+		updateChecker:       updatecheck.NewChecker(build.Version, updateCheckDisabled),
 		// SaaS blanks the URL so the canonical instance serves its embedded
 		// table without fetching from itself; self-host pulls from confabulous.dev.
 		pricingSource: pricingsource.NewFromEnv(saasFooterEnabled),
+		buildInfo:     build,
 	}
 }
 
@@ -302,6 +305,10 @@ func (s *Server) SetupRoutes() http.Handler {
 
 		// Public auth config endpoint (no auth required)
 		r.Get("/auth/config", withMaxBody(MaxBodyXS, s.handleAuthConfig))
+
+		// Public build-info endpoint (no auth, no external deps): reports what
+		// build this server is. "Is there a newer release?" stays in /auth/config.
+		r.Get("/version", withMaxBody(MaxBodyXS, s.handleVersion))
 
 		// Public model price table (no auth): the frontend reads it at bootstrap
 		// and downstream self-hosted backends pull it from confabulous.dev.
