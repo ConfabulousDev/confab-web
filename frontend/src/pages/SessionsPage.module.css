@@ -32,7 +32,8 @@
 
 .sessionsTable th {
   text-align: left;
-  padding: var(--spacing-sm);
+  /* ~10% vertical shrink from var(--spacing-sm) = 8px to keep header tight. */
+  padding: 7px var(--spacing-sm);
   font-size: var(--font-xs);
   font-weight: var(--font-semibold);
   color: var(--color-text-muted);

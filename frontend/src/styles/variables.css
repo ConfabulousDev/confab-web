@@ -98,6 +98,11 @@
   --spacing-2xl: 32px;
   --spacing-3xl: 48px;
 
+  /* Shared control height — search input, dimension/filter buttons,
+     refresh button, pagination prev/next. Keeping these matched gives
+     toolbars and filter bars a consistent vertical rhythm. */
+  --control-height: 28px;
+
   /* Border Radius */
   --radius-sm: 3px;
   --radius-md: 4px;

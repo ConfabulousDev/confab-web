@@ -116,7 +116,7 @@ function SessionsPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Session</th>
+                      <th>Title</th>
                       <th className={styles.costHeader}>Est. Cost</th>
                       <th>Activity</th>
                     </tr>

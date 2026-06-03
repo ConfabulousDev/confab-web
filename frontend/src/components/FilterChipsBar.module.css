@@ -32,7 +32,8 @@
 
 .searchInput {
   width: 100%;
-  padding: 6px 8px 6px 32px;
+  height: var(--control-height);
+  padding: 0 8px 0 32px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: var(--font-sm);
@@ -66,7 +67,8 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
+  height: var(--control-height);
+  padding: 0 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-primary);
@@ -248,9 +250,21 @@
   transition: all var(--transition-fast);
 }
 
+/* Dark mode: --color-bg-secondary (#1f1f1f) sits too close to the page
+   background (#171717), so the chips read as flat. Bump to --color-bg-hover
+   (#2a2a2a) + slightly stronger border for a more distinct shading. */
+:global([data-theme="dark"]) .chip {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-dark);
+}
+
 .chip:hover {
   background: var(--color-bg-hover);
   border-color: var(--color-border-dark);
+}
+
+:global([data-theme="dark"]) .chip:hover {
+  background: var(--color-bg-active);
 }
 
 .chipDimension {

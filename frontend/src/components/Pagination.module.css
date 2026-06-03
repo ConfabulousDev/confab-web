@@ -5,7 +5,8 @@
 }
 
 .navBtn {
-  padding: 3px 8px;
+  height: var(--control-height);
+  padding: 0 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-primary);
