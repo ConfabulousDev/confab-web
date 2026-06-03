@@ -1,24 +1,7 @@
-.pageWrapper {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.mainContent {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
+.pageWrapper { composes: pageWrapper from './pageLayout.module.css'; }
+.mainContent { composes: mainContent from './pageLayout.module.css'; }
 .title { composes: pageTitle from './pageLayout.module.css'; }
-
-.container {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--page-padding-y) var(--page-padding-x);
-}
+.container { composes: container from './pageLayout.module.css'; }
 
 .loading {
   display: flex;
