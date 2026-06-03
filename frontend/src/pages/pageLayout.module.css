@@ -16,7 +16,7 @@
 }
 
 .container {
-  padding: var(--spacing-md);
+  padding: var(--page-padding-y) var(--page-padding-x);
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -77,7 +77,7 @@
 .filterBar {
   background: var(--color-bg-primary);
   border-bottom: 1px solid var(--color-border);
-  padding: var(--spacing-sm) var(--spacing-xl);
+  padding: var(--spacing-sm) var(--page-padding-x);
   flex-shrink: 0;
 }
 
@@ -89,8 +89,3 @@
   font-size: var(--font-sm);
 }
 
-@media (max-width: 768px) {
-  .container {
-    padding: var(--spacing-md);
-  }
-}

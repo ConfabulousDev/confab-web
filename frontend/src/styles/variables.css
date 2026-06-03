@@ -103,6 +103,15 @@
      toolbars and filter bars a consistent vertical rhythm. */
   --control-height: 28px;
 
+  /* Single source of truth for the padding inside the main content pane.
+     `--page-padding-x` is also applied to PageHeader and filter bar so the
+     toolbar, filter chips, and body content all share one left edge.
+     Page-specific layouts (Home/Policies hero, NotFound centred, etc.)
+     opt out intentionally. Shrink-on-mobile lives below in a media query
+     so every consumer picks it up automatically. */
+  --page-padding-x: var(--spacing-xl);
+  --page-padding-y: var(--spacing-lg);
+
   /* Border Radius */
   --radius-sm: 3px;
   --radius-md: 4px;
@@ -253,4 +262,14 @@
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.6);
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.5);
   --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Tighter page padding on narrow viewports. All chrome consumers
+   (PageHeader, .filterBar, .container) re-read these tokens, so a single
+   override here keeps mobile horizontal alignment intact. */
+@media (max-width: 768px) {
+  :root {
+    --page-padding-x: var(--spacing-md);
+    --page-padding-y: var(--spacing-md);
+  }
 }

@@ -1,10 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Chip from '@/components/Chip';
-import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon } from '@/components/icons';
+import PageHeader from '@/components/PageHeader';
+import FilterChipsBar from '@/components/FilterChipsBar';
+import Pagination from '@/components/Pagination';
+import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, RefreshIcon } from '@/components/icons';
 import { getProviderIcon } from '@/components/providerIcon';
 import { formatRelativeTime, formatDuration } from '@/utils';
 import { formatCost } from '@/utils/tokenStats';
+import type { SessionFilterOptions } from '@/schemas/api';
 import styles from './SessionsPage.module.css';
+
+const mockFilterOptions: SessionFilterOptions = {
+  repos: ['ConfabulousDev/confab-web', 'ConfabulousDev/confab', 'internal/confab'],
+  branches: ['main', 'develop', 'feature/quickstart', 'feature/codex-attachments'],
+  owners: ['alice@example.com', 'bob@example.com', 'carol@example.com'],
+  providers: ['claude-code', 'codex'],
+};
+
+const noopFilterHandlers = {
+  onToggleRepo: () => {},
+  onToggleBranch: () => {},
+  onToggleOwner: () => {},
+  onToggleProvider: () => {},
+  onQueryChange: () => {},
+  onClearAll: () => {},
+};
 
 // Type for mock session data
 interface MockSession {
@@ -214,6 +234,57 @@ function SessionListTable({ sessions }: SessionListTableProps) {
   );
 }
 
+// Full page chrome — PageHeader (with refresh + Pagination) + filter bar +
+// scrollable container — mirrors the live SessionsPage layout for verifying
+// the shared toolbar / filter spacing end-to-end.
+interface SessionsPageChromeProps {
+  sessions: MockSession[];
+  filters?: {
+    repos: string[];
+    branches: string[];
+    owners: string[];
+    providers: string[];
+    query: string;
+  };
+}
+
+const emptyFilters = { repos: [], branches: [], owners: [], providers: [], query: '' };
+
+function SessionsPageChrome({ sessions, filters = emptyFilters }: SessionsPageChromeProps) {
+  return (
+    <div className={styles.pageWrapper}>
+      <div className={styles.mainContent}>
+        <PageHeader
+          leftContent={<h1 className={styles.title}>Sessions</h1>}
+          actions={
+            <div className={styles.toolbarActions}>
+              <Pagination hasMore canGoPrev onNext={() => {}} onPrev={() => {}} />
+              <button
+                className={styles.refreshBtn}
+                aria-label="Refresh sessions"
+                title="Refresh sessions"
+              >
+                {RefreshIcon}
+              </button>
+            </div>
+          }
+        />
+        <div className={styles.filterBar}>
+          <FilterChipsBar
+            filters={filters}
+            filterOptions={mockFilterOptions}
+            currentUserEmail="alice@example.com"
+            {...noopFilterHandlers}
+          />
+        </div>
+        <div className={styles.container}>
+          <SessionListTable sessions={sessions} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const meta: Meta<typeof SessionListTable> = {
   title: 'Pages/SessionsPage',
   component: SessionListTable,
@@ -379,4 +450,27 @@ export const CodexOnly: Story = {
   args: {
     sessions: mockCodexSessions,
   },
+};
+
+// Full-chrome stories — render PageHeader + FilterChipsBar + table together
+// for end-to-end visual verification of toolbar/filter spacing & control heights.
+export const FullPage: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <SessionsPageChrome sessions={mockSessions} />,
+};
+
+export const FullPageWithActiveFilters: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <SessionsPageChrome
+      sessions={mockSessions}
+      filters={{
+        repos: ['ConfabulousDev/confab-web'],
+        branches: ['main'],
+        owners: ['alice@example.com'],
+        providers: ['claude-code'],
+        query: 'auth',
+      }}
+    />
+  ),
 };

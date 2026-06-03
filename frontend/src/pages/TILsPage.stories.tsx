@@ -1,9 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { TILWithSession } from '@/schemas/api';
+import type { TILWithSession, SessionFilterOptions } from '@/schemas/api';
 import TILCard from '@/components/TILCard';
+import PageHeader from '@/components/PageHeader';
+import FilterChipsBar from '@/components/FilterChipsBar';
+import Pagination from '@/components/Pagination';
+import { RefreshIcon } from '@/components/icons';
 import { useColumnCount, distributeToColumns } from '@/hooks';
 import { useMemo } from 'react';
 import styles from './TILsPage.module.css';
+
+const mockFilterOptions: Pick<SessionFilterOptions, 'repos' | 'branches' | 'owners'> = {
+  repos: ['ConfabulousDev/confab-web', 'ConfabulousDev/confab'],
+  branches: ['main', 'feature/ci-containers', 'feature/zod-schemas'],
+  owners: ['jackie@confab.dev', 'teammate@confab.dev'],
+};
+
+const noopFilterHandlers = {
+  onToggleRepo: () => {},
+  onToggleBranch: () => {},
+  onToggleOwner: () => {},
+  onToggleProvider: () => {},
+  onQueryChange: () => {},
+  onClearAll: () => {},
+};
+
+const emptyFilters = { repos: [], branches: [], owners: [], providers: [], query: '' };
 
 const makeTIL = (id: number, overrides: Partial<TILWithSession> = {}): TILWithSession => ({
   id,
@@ -101,6 +122,57 @@ function MockMasonryGrid({ tils }: { tils: TILWithSession[] }) {
   );
 }
 
+// Full page chrome — PageHeader (with refresh + Pagination) + filter bar +
+// scrollable masonry — mirrors the live TILsPage so the shared toolbar /
+// filter spacing can be verified end-to-end. TILs hides the Provider filter
+// because the TILs endpoint doesn't support provider filtering.
+interface TILsPageChromeProps {
+  tils: TILWithSession[];
+  filters?: {
+    repos: string[];
+    branches: string[];
+    owners: string[];
+    providers: string[];
+    query: string;
+  };
+}
+
+function TILsPageChrome({ tils, filters = emptyFilters }: TILsPageChromeProps) {
+  return (
+    <div className={styles.pageWrapper}>
+      <div className={styles.mainContent}>
+        <PageHeader
+          leftContent={<h1 className={styles.title}>TILs</h1>}
+          actions={
+            <div className={styles.toolbarActions}>
+              <Pagination hasMore canGoPrev onNext={() => {}} onPrev={() => {}} />
+              <button
+                className={styles.refreshBtn}
+                aria-label="Refresh TILs"
+                title="Refresh TILs"
+              >
+                {RefreshIcon}
+              </button>
+            </div>
+          }
+        />
+        <div className={styles.filterBar}>
+          <FilterChipsBar
+            filters={filters}
+            filterOptions={mockFilterOptions}
+            currentUserEmail="jackie@confab.dev"
+            showProviderFilter={false}
+            {...noopFilterHandlers}
+          />
+        </div>
+        <div className={styles.container}>
+          <MockMasonryGrid tils={tils} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const meta: Meta = {
   title: 'Pages/TILsPage',
   parameters: { layout: 'fullscreen' },
@@ -138,5 +210,26 @@ export const EmptyState: Story = {
     <div className={styles.emptyState}>
       No TILs yet. Use <code>/til</code> in Claude Code to save learnings from your sessions.
     </div>
+  ),
+};
+
+// Full-chrome stories — render PageHeader + FilterChipsBar + masonry together
+// for end-to-end visual verification of the shared toolbar / filter spacing.
+export const FullPage: Story = {
+  render: () => <TILsPageChrome tils={sampleTILs} />,
+};
+
+export const FullPageWithActiveFilters: Story = {
+  render: () => (
+    <TILsPageChrome
+      tils={sampleTILs}
+      filters={{
+        repos: ['ConfabulousDev/confab-web'],
+        branches: ['main'],
+        owners: ['jackie@confab.dev'],
+        providers: [],
+        query: 'postgres',
+      }}
+    />
   ),
 };

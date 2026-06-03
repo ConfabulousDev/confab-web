@@ -4,8 +4,10 @@
   justify-content: space-between;
   align-items: center;
   /* ~10% vertical shrink from var(--spacing-md) = 12px to keep the
-     subheader tighter without crowding controls. */
-  padding: 11px var(--spacing-xl);
+     subheader tighter without crowding controls. Horizontal padding shares
+     `--page-padding-x` with the filter bar and main content so toolbar
+     title, filter chips, and body content all line up on one left edge. */
+  padding: 11px var(--page-padding-x);
   background: var(--color-bg-primary);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
@@ -59,13 +61,14 @@
   flex-shrink: 0;
 }
 
-/* Responsive */
+/* Responsive — keep horizontal padding driven by --page-padding-x so the
+   subheader, filter bar, and content body stay aligned on mobile. */
 @media (max-width: 768px) {
   .header {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--spacing-sm);
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm) var(--page-padding-x);
   }
 
   .actions {
