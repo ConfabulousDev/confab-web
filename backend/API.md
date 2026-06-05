@@ -169,7 +169,7 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 |-------|------|----------|-------------|
 | `session_id` | string | Yes | UUID from sync/init response |
 | `file_name` | string | Yes | Name of the file being synced |
-| `file_type` | string | Yes | `"transcript"` or `"agent"` |
+| `file_type` | string | Yes | `"transcript"`, `"agent"`, or `"workflow_journal"` (see [Workflow files](#workflow-files) below) |
 | `first_line` | int | Yes | Line number of first line (1-indexed, must be contiguous) |
 | `lines` | string[] | Yes | Array of line contents |
 | `metadata` | object | No | Optional metadata (only processed for transcript files) |
@@ -189,6 +189,26 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 - Chunks must be contiguous (no gaps or overlaps with previous chunks)
 - Max 30,000 chunks per file
 - Request body supports zstd compression
+
+#### Workflow files
+
+Claude **workflow** subagents (the `Workflow` tool) write their transcripts and a
+run journal under a path-encoded `file_name`. The CLI uploads them with these
+exact names so the run grouping (`<runId>`) is recoverable from the path alone:
+
+| `file_name` | `file_type` | Parsed? | Analytics |
+|-------------|-------------|---------|-----------|
+| `subagents/workflows/<runId>/agent-<id>.jsonl` | `agent` | yes (transcript) | tokens attributed to the session, no double count |
+| `subagents/workflows/<runId>/journal.jsonl` | `workflow_journal` | no | excluded from token/transcript compute (append-only event log) |
+
+- Slashes in `file_name` are permitted (they become extra S3 key segments). Read
+  them back via the [file read endpoint](#download-session-file) with the
+  `file_name` query parameter URL-encoded.
+- `workflow_journal` is stored and surfaced in the session `files[]` API but is
+  never Claude-parsed and never contributes to analytics.
+- A backend's support for these files is discoverable via
+  [`GET /api/v1/capabilities`](#capabilities); older backends omit that endpoint,
+  and the CLI then skips workflow uploads.
 
 #### Codex Rollout Metadata
 
@@ -373,8 +393,8 @@ Authorization: Bearer <api_key>
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `files[].file_name` | string | File name (e.g., `transcript.jsonl`, `agent-{id}.jsonl`) |
-| `files[].file_type` | string | `"transcript"` or `"agent"` |
+| `files[].file_name` | string | File name (e.g., `transcript.jsonl`, `agent-{id}.jsonl`, `subagents/workflows/{runId}/agent-{id}.jsonl`) |
+| `files[].file_type` | string | `"transcript"`, `"agent"`, or `"workflow_journal"` (see [Workflow files](#workflow-files)) |
 | `files[].last_synced_line` | integer | Number of lines synced for this file |
 | `files[].updated_at` | string | ISO 8601 timestamp of last sync |
 
@@ -2020,6 +2040,35 @@ Reports what build this backend *is*. No authentication required and **no extern
 | `build_time` | string (RFC 3339) | UTC timestamp of the build. Set via `-ldflags` at build time; **omitted** when unset. |
 
 `commit` and `build_time` are injected at build time (see `Dockerfile`, `.github/workflows/release.yml`, and `deploy-to-fly.sh`); `version` and `go_version` are always present. Unlike `version.current` in `/api/v1/auth/config`, this endpoint carries no update-check fields.
+
+### Capabilities
+```
+GET /api/v1/capabilities
+```
+
+Advertises optional backend features so a newer CLI can gate behavior on what
+this (possibly older, self-hosted) backend supports. No authentication required
+and **no external dependency** — the signal is static for a given build. The
+response body **is** the capabilities map (no outer wrapper).
+
+**Response:**
+```json
+{
+  "workflow_files": true,
+  "workflow_journal": true
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workflow_files` | bool | Backend resolves path-encoded workflow subagent file names (`subagents/workflows/<runId>/agent-<id>.jsonl`) and attributes their tokens. |
+| `workflow_journal` | bool | Backend accepts, stores, and serves the `workflow_journal` file_type (the run journal), excluding it from analytics. See [Workflow files](#workflow-files). |
+
+Both fields are always `true` on a build that ships this endpoint — its very
+presence is the signal. **Older backends omit this endpoint entirely** (404);
+the CLI reads that as "workflow files unsupported" and skips those uploads,
+keeping the rollout order safe (backend first, then CLI). New capability fields
+may be added over time; clients must treat any absent field as `false`.
 
 ### Model Pricing
 ```
