@@ -94,6 +94,7 @@ export const cardRegistry: CardDefinition[] = [
     title: 'Workflows',
     component: WorkflowsCard,
     order: 7,
+    span: 2,
     size: 'standard',
     shouldRender: (data: WorkflowsCardData | null) =>
       !!data && data.runs.length > 0,

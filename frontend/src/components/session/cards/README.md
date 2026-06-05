@@ -52,7 +52,7 @@ All cards are registered in `registry.ts` as an ordered array of `CardDefinition
 5. Code Activity (standard)
 6. Tools (`span: 2`, tall, hidden when `total_calls === 0`)
 7. Agents and Skills (`span: 2`, tall, hidden when no invocations)
-8. Workflows (standard, hidden when `runs.length === 0`)
+8. Workflows (`span: 2`, hidden when `runs.length === 0`)
 9. Redactions (compact, hidden when `total_redactions === 0`)
 
 Cards with `shouldRender` returning false are not rendered at all (no empty grid cell).
