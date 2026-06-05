@@ -285,6 +285,25 @@ const RedactionsCardDataSchema = z.object({
   redaction_counts: z.record(z.string(), z.number()), // Type -> count
 });
 
+// Workflows card: per-run aggregates for Claude Code workflow subagent runs (CF-534).
+// Derived server-side from subagents/workflows/<runId>/agent-<id>.jsonl + journal.jsonl.
+const WorkflowRunSchema = z.object({
+  run_id: z.string(),
+  agent_count: z.number(),
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cache_creation: z.number(),
+  cache_read: z.number(),
+  estimated_usd: z.string(), // Decimal as string for precision
+  succeeded_agents: z.number(), // From journal result-line presence
+  has_journal: z.boolean(), // False when no journal.jsonl → status omitted
+  duration_ms: z.number(), // Activity span across the run's agent files
+});
+
+const WorkflowsCardDataSchema = z.object({
+  runs: z.array(WorkflowRunSchema),
+});
+
 // AnnotatedItem: a list item with optional message reference.
 // Backwards-compatible: accepts plain strings (legacy) or objects (new).
 const AnnotatedItemObjectSchema = z.object({ text: z.string(), message_id: z.string().optional() });
@@ -325,6 +344,7 @@ const AnalyticsCardsSchema = z.object({
   conversation: ConversationCardDataSchema.optional(),
   agents_and_skills: AgentsAndSkillsCardDataSchema.optional(),
   redactions: RedactionsCardDataSchema.optional(),
+  workflows: WorkflowsCardDataSchema.optional(),
   smart_recap: SmartRecapCardDataSchema.optional(),
 });
 
@@ -527,6 +547,8 @@ export type CodeActivityCardData = z.infer<typeof CodeActivityCardDataSchema>;
 export type ConversationCardData = z.infer<typeof ConversationCardDataSchema>;
 export type AgentsAndSkillsCardData = z.infer<typeof AgentsAndSkillsCardDataSchema>;
 export type RedactionsCardData = z.infer<typeof RedactionsCardDataSchema>;
+export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
+export type WorkflowsCardData = z.infer<typeof WorkflowsCardDataSchema>;
 export type AnnotatedItem = z.infer<typeof AnnotatedItemSchema>;
 export type SmartRecapCardData = z.infer<typeof SmartRecapCardDataSchema>;
 export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;

@@ -722,6 +722,16 @@ func insertAllCards(t *testing.T, env *testutil.TestEnvironment, sessionID strin
 	if err != nil {
 		t.Fatalf("failed to insert redactions card: %v", err)
 	}
+
+	// Workflows card
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_workflows (
+			session_id, version, computed_at, up_to_line, runs
+		) VALUES ($1, $2, $3, $4, '[]')
+	`, sessionID, analytics.WorkflowsCardVersion, now, upToLine)
+	if err != nil {
+		t.Fatalf("failed to insert workflows card: %v", err)
+	}
 }
 
 // insertSmartRecapCard inserts a smart recap card with the given parameters.
@@ -1312,6 +1322,16 @@ func insertAllCardsWithComputedAt(t *testing.T, env *testutil.TestEnvironment, s
 	if err != nil {
 		t.Fatalf("failed to insert redactions card: %v", err)
 	}
+
+	// Workflows card
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_workflows (
+			session_id, version, computed_at, up_to_line, runs
+		) VALUES ($1, $2, $3, $4, '[]')
+	`, sessionID, analytics.WorkflowsCardVersion, computedAt, upToLine)
+	if err != nil {
+		t.Fatalf("failed to insert workflows card: %v", err)
+	}
 }
 
 // insertAllCardsWithWrongTokensVersion inserts all 7 cards but with the specified version
@@ -1401,6 +1421,16 @@ func insertAllCardsWithWrongTokensVersion(t *testing.T, env *testutil.TestEnviro
 	`, sessionID, analytics.RedactionsCardVersion, computedAt, upToLine)
 	if err != nil {
 		t.Fatalf("failed to insert redactions card: %v", err)
+	}
+
+	// Workflows card (correct version)
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_workflows (
+			session_id, version, computed_at, up_to_line, runs
+		) VALUES ($1, $2, $3, $4, '[]')
+	`, sessionID, analytics.WorkflowsCardVersion, computedAt, upToLine)
+	if err != nil {
+		t.Fatalf("failed to insert workflows card: %v", err)
 	}
 }
 
@@ -1754,6 +1784,7 @@ func TestFindStaleSessions_VersionMismatch_AlwaysFound(t *testing.T) {
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_conversation (session_id, version, computed_at, up_to_line, user_turns, assistant_turns, avg_assistant_turn_ms, avg_user_thinking_ms, total_assistant_duration_ms, total_user_duration_ms, assistant_utilization_pct) VALUES ($1, $2, $3, $4, 0, 0, 0, 0, 0, 0, 0)`, sessionID, analytics.ConversationCardVersion, now, 100)
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_agents_and_skills (session_id, version, computed_at, up_to_line, agent_invocations, skill_invocations, agent_stats, skill_stats) VALUES ($1, $2, $3, $4, 0, 0, '{}', '{}')`, sessionID, analytics.AgentsAndSkillsCardVersion, now, 100)
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_redactions (session_id, version, computed_at, up_to_line, total_redactions, redaction_counts) VALUES ($1, $2, $3, $4, 0, '{}')`, sessionID, analytics.RedactionsCardVersion, now, 100)
+	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_workflows (session_id, version, computed_at, up_to_line, runs) VALUES ($1, $2, $3, $4, '[]')`, sessionID, analytics.WorkflowsCardVersion, now, 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
@@ -3167,4 +3198,64 @@ func bytes_NewlineCount(b []byte) int {
 		}
 	}
 	return n
+}
+
+// TestWorkflowsCard_StoreRoundTrip verifies the workflows card's runs (stored as
+// JSONB) survive an upsert→get round-trip with all per-run fields intact.
+func TestWorkflowsCard_StoreRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "wf-roundtrip@test.com", "WF User")
+	sessionID := testutil.CreateTestSession(t, env, user.ID, "wf-roundtrip-external-id")
+
+	store := analytics.NewStore(env.DB.Conn())
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	want := analytics.WorkflowRun{
+		RunID:           "wf-2026-06-05_abc",
+		AgentCount:      3,
+		InputTokens:     1000,
+		OutputTokens:    500,
+		CacheCreation:   40,
+		CacheRead:       60,
+		EstimatedUSD:    "0.1234",
+		SucceededAgents: 2,
+		HasJournal:      true,
+		DurationMs:      1500,
+	}
+	cards := &analytics.Cards{
+		Workflows: &analytics.WorkflowsCardRecord{
+			SessionID:  sessionID,
+			Version:    analytics.WorkflowsCardVersion,
+			ComputedAt: now,
+			UpToLine:   42,
+			Runs:       []analytics.WorkflowRun{want},
+		},
+	}
+	if err := store.UpsertCards(env.Ctx, cards); err != nil {
+		t.Fatalf("UpsertCards: %v", err)
+	}
+
+	got, err := store.GetCards(env.Ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetCards: %v", err)
+	}
+	if got.Workflows == nil {
+		t.Fatal("Workflows card missing after round-trip")
+	}
+	if got.Workflows.UpToLine != 42 || got.Workflows.Version != analytics.WorkflowsCardVersion {
+		t.Errorf("Workflows meta = {version:%d up_to_line:%d}, want {version:%d up_to_line:42}",
+			got.Workflows.Version, got.Workflows.UpToLine, analytics.WorkflowsCardVersion)
+	}
+	if len(got.Workflows.Runs) != 1 {
+		t.Fatalf("len(Runs) = %d, want 1", len(got.Workflows.Runs))
+	}
+	if got.Workflows.Runs[0] != want {
+		t.Errorf("Runs[0] = %+v, want %+v", got.Workflows.Runs[0], want)
+	}
 }

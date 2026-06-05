@@ -39,7 +39,7 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	cards := &Cards{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	errs := make(chan error, 7)
+	errs := make(chan error, 8)
 
 	// Helper to run a getter in parallel
 	runGet := func(name string, fn func() error) {
@@ -129,6 +129,17 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 		return nil
 	})
 
+	runGet("workflows", func() error {
+		result, err := s.getWorkflowsCard(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		cards.Workflows = result
+		mu.Unlock()
+		return nil
+	})
+
 	wg.Wait()
 	close(errs)
 
@@ -163,7 +174,7 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	defer span.End()
 
 	var wg sync.WaitGroup
-	errs := make(chan error, 7)
+	errs := make(chan error, 8)
 
 	// Helper to run an upsert in parallel
 	runUpsert := func(name string, fn func() error) {
@@ -215,6 +226,12 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	if cards.Redactions != nil {
 		runUpsert("redactions", func() error {
 			return s.upsertRedactionsCard(ctx, cards.Redactions)
+		})
+	}
+
+	if cards.Workflows != nil {
+		runUpsert("workflows", func() error {
+			return s.upsertWorkflowsCard(ctx, cards.Workflows)
 		})
 	}
 
@@ -794,6 +811,71 @@ func (s *Store) upsertRedactionsCard(ctx context.Context, record *RedactionsCard
 }
 
 // =============================================================================
+// Workflows card operations
+// =============================================================================
+
+func (s *Store) getWorkflowsCard(ctx context.Context, sessionID string) (*WorkflowsCardRecord, error) {
+	query := `
+		SELECT session_id, version, computed_at, up_to_line, runs
+		FROM session_card_workflows
+		WHERE session_id = $1
+	`
+
+	var record WorkflowsCardRecord
+	var runsJSON []byte
+	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&record.SessionID,
+		&record.Version,
+		&record.ComputedAt,
+		&record.UpToLine,
+		&runsJSON,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(runsJSON, &record.Runs); err != nil {
+		return nil, fmt.Errorf("parsing runs: %w", err)
+	}
+
+	return &record, nil
+}
+
+func (s *Store) upsertWorkflowsCard(ctx context.Context, record *WorkflowsCardRecord) error {
+	runs := record.Runs
+	if runs == nil {
+		runs = []WorkflowRun{}
+	}
+	runsJSON, err := json.Marshal(runs)
+	if err != nil {
+		return fmt.Errorf("marshaling runs: %w", err)
+	}
+
+	query := `
+		INSERT INTO session_card_workflows (
+			session_id, version, computed_at, up_to_line, runs
+		) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (session_id) DO UPDATE SET
+			version = EXCLUDED.version,
+			computed_at = EXCLUDED.computed_at,
+			up_to_line = EXCLUDED.up_to_line,
+			runs = EXCLUDED.runs
+	`
+
+	_, err = s.db.ExecContext(ctx, query,
+		record.SessionID,
+		record.Version,
+		record.ComputedAt,
+		record.UpToLine,
+		runsJSON,
+	)
+	return err
+}
+
+// =============================================================================
 // Conversion helpers
 // =============================================================================
 
@@ -916,6 +998,22 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 		}
 	}
 
+	// Workflows is always written (empty runs for non-workflow sessions), so the
+	// card participates in the all-cards-exist staleness gate like the others.
+	if _, hasErr := r.CardErrors["workflows"]; !hasErr {
+		runs := r.Workflows
+		if runs == nil {
+			runs = []WorkflowRun{}
+		}
+		cards.Workflows = &WorkflowsCardRecord{
+			SessionID:  sessionID,
+			Version:    WorkflowsCardVersion,
+			ComputedAt: now,
+			UpToLine:   lineCount,
+			Runs:       runs,
+		}
+	}
+
 	return cards
 }
 
@@ -949,6 +1047,9 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 	case c.Redactions != nil:
 		response.ComputedAt = c.Redactions.ComputedAt
 		response.ComputedLines = c.Redactions.UpToLine
+	case c.Workflows != nil:
+		response.ComputedAt = c.Workflows.ComputedAt
+		response.ComputedLines = c.Workflows.UpToLine
 	}
 
 	if c.Tokens != nil {
@@ -1060,6 +1161,13 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		response.Cards["redactions"] = RedactionsCardData{
 			TotalRedactions: c.Redactions.TotalRedactions,
 			RedactionCounts: c.Redactions.RedactionCounts,
+		}
+	}
+
+	// Only include workflows card if the session has workflow runs (hide if empty)
+	if c.Workflows != nil && len(c.Workflows.Runs) > 0 {
+		response.Cards["workflows"] = WorkflowsCardData{
+			Runs: c.Workflows.Runs,
 		}
 	}
 

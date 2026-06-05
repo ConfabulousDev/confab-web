@@ -195,6 +195,10 @@ func TestRegularCardRecord_IsValid(t *testing.T) {
 		{"redactions nil", (*RedactionsCardRecord)(nil), upTo, false},
 		{"redactions valid", &RedactionsCardRecord{Version: RedactionsCardVersion, UpToLine: upTo}, upTo, true},
 		{"redactions wrong version", &RedactionsCardRecord{Version: RedactionsCardVersion - 1, UpToLine: upTo}, upTo, false},
+
+		{"workflows nil", (*WorkflowsCardRecord)(nil), upTo, false},
+		{"workflows valid", &WorkflowsCardRecord{Version: WorkflowsCardVersion, UpToLine: upTo}, upTo, true},
+		{"workflows wrong version", &WorkflowsCardRecord{Version: WorkflowsCardVersion + 1, UpToLine: upTo}, upTo, false},
 	}
 
 	for _, tt := range tests {
@@ -218,6 +222,7 @@ func TestCards_AllValid(t *testing.T) {
 		Conversation:    &ConversationCardRecord{Version: ConversationCardVersion, UpToLine: upTo},
 		AgentsAndSkills: &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion, UpToLine: upTo},
 		Redactions:      &RedactionsCardRecord{Version: RedactionsCardVersion, UpToLine: upTo},
+		Workflows:       &WorkflowsCardRecord{Version: WorkflowsCardVersion, UpToLine: upTo},
 	}
 
 	if !allFresh.AllValid(upTo) {

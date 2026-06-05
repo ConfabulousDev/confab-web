@@ -16,6 +16,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `ToolsCard.tsx` | Tool usage stats: per-tool success/error counts. Exports `prepareChartData` for testing. Defensively filters orphan `<unknown>` entries so a literal `<unknown>` bar never paints, even for stale ComputeResults predating the CF-438 backend skip. |
 | `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown. Provider-agnostic copy: Claude buckets by `subagent_type`, Codex (CF-443) buckets by `agent_role` (`"default"`, `"explorer"`). Renders for both providers via the registry's `agent_invocations + skill_invocations > 0` gate. |
 | `RedactionsCard.tsx` | Redaction counts by type (shown only when redactions exist) |
+| `WorkflowsCard.tsx` | Per-run workflow subagent aggregates (CF-534): one row per run labelled `Run 1…N` (opaque `run_id` in hover title), showing agent count, a token subtotal, cost, an activity-span duration, and a `succeeded/total completed` count when the run journal was uploaded (`has_journal`). Backend-sourced (`cards.workflows`); hidden when there are no runs. |
 | `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links. `MessageLink` short-circuits when `item.message_id` is empty — this is the intentional state for Codex sessions (Codex rollout JSONL has no stable per-message id; the backend `PrepareCodexTranscript` synthesizes ids only for the LLM's internal use, and `codexProvider.ClearMessageIDs()` zeroes them before the card is saved). Claude sessions render the icon link; Codex sessions render plain text. |
 | `index.ts` | Barrel export: `getOrderedCards()` |
 
@@ -51,7 +52,8 @@ All cards are registered in `registry.ts` as an ordered array of `CardDefinition
 5. Code Activity (standard)
 6. Tools (`span: 2`, tall, hidden when `total_calls === 0`)
 7. Agents and Skills (`span: 2`, tall, hidden when no invocations)
-8. Redactions (compact, hidden when `total_redactions === 0`)
+8. Workflows (standard, hidden when `runs.length === 0`)
+9. Redactions (compact, hidden when `total_redactions === 0`)
 
 Cards with `shouldRender` returning false are not rendered at all (no empty grid cell).
 
@@ -93,6 +95,7 @@ See the `/add-session-card` skill for a full step-by-step playbook including bac
 - `ToolsCard.test.tsx` -- Subtitle pluralization, empty-state hiding, tooltip payload
 - `AgentsAndSkillsCard.test.tsx` -- Loading/error/empty paths, agent+skill legend
 - `RedactionsCard.test.tsx` -- Sort-by-count ordering, singular/plural tooltip
+- `WorkflowsCard.test.tsx` -- Per-run rows, agent-count pluralization, journal status / no-journal, empty + loading states
 - `CodeActivityCard.test.tsx` -- Stat rows and conditional File extensions section
 
 Chart-based card tests run under a global `recharts` mock in `src/test/setup.ts`

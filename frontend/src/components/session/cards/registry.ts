@@ -5,12 +5,14 @@ import { ToolsCard } from './ToolsCard';
 import { ConversationCardForRegistry } from './ConversationCard';
 import { AgentsAndSkillsCard } from './AgentsAndSkillsCard';
 import { RedactionsCard } from './RedactionsCard';
+import { WorkflowsCard } from './WorkflowsCard';
 import { SmartRecapCard } from './SmartRecapCard';
 import type { CardDefinition } from './types';
 import type {
   ToolsCardData,
   AgentsAndSkillsCardData,
   RedactionsCardData,
+  WorkflowsCardData,
 } from '@/schemas/api';
 
 /**
@@ -88,10 +90,19 @@ export const cardRegistry: CardDefinition[] = [
       !!data && data.agent_invocations + data.skill_invocations > 0,
   },
   {
+    key: 'workflows',
+    title: 'Workflows',
+    component: WorkflowsCard,
+    order: 7,
+    size: 'standard',
+    shouldRender: (data: WorkflowsCardData | null) =>
+      !!data && data.runs.length > 0,
+  },
+  {
     key: 'redactions',
     title: 'Redactions',
     component: RedactionsCard,
-    order: 7,
+    order: 8,
     size: 'compact',
     shouldRender: (data: RedactionsCardData | null) =>
       !!data && data.total_redactions > 0,

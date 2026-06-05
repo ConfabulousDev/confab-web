@@ -786,7 +786,7 @@ func TestComputeStreaming_MatchesFileCollection(t *testing.T) {
 		idx++
 		return agent, nil
 	}
-	streamResult, err := ComputeStreaming(context.Background(), fc.Main, provider)
+	streamResult, err := ComputeStreaming(context.Background(), fc.Main, provider, nil)
 	if err != nil {
 		t.Fatalf("ComputeStreaming failed: %v", err)
 	}
@@ -857,7 +857,7 @@ func TestComputeStreaming_ProviderErrors(t *testing.T) {
 		}
 	}
 
-	result, err := ComputeStreaming(context.Background(), main, provider)
+	result, err := ComputeStreaming(context.Background(), main, provider, nil)
 	if err != nil {
 		t.Fatalf("ComputeStreaming failed: %v", err)
 	}
@@ -887,7 +887,7 @@ func TestComputeStreaming_NoAgents(t *testing.T) {
 		return nil, io.EOF
 	}
 
-	result, err := ComputeStreaming(context.Background(), main, provider)
+	result, err := ComputeStreaming(context.Background(), main, provider, nil)
 	if err != nil {
 		t.Fatalf("ComputeStreaming failed: %v", err)
 	}

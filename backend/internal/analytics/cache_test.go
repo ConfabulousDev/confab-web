@@ -93,6 +93,13 @@ func TestCardsAllValid(t *testing.T) {
 				TotalRedactions: 2,
 				RedactionCounts: map[string]int{"GITHUB_TOKEN": 1, "API_KEY": 1},
 			},
+			Workflows: &WorkflowsCardRecord{
+				SessionID:  "test-session",
+				Version:    WorkflowsCardVersion,
+				ComputedAt: now,
+				UpToLine:   upToLine,
+				Runs:       []WorkflowRun{},
+			},
 		}
 	}
 
@@ -107,6 +114,7 @@ func TestCardsAllValid(t *testing.T) {
 		cards.Conversation.Version = version
 		cards.AgentsAndSkills.Version = version
 		cards.Redactions.Version = version
+		cards.Workflows.Version = version
 		return cards
 	}
 
@@ -268,6 +276,7 @@ func TestCardsAllValid_Exhaustive(t *testing.T) {
 				Conversation:   &ConversationCardRecord{Version: ConversationCardVersion, ComputedAt: now, UpToLine: lineCount},
 				AgentsAndSkills: &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion, ComputedAt: now, UpToLine: lineCount},
 				Redactions:     &RedactionsCardRecord{Version: RedactionsCardVersion, ComputedAt: now, UpToLine: lineCount},
+				Workflows:      &WorkflowsCardRecord{Version: WorkflowsCardVersion, ComputedAt: now, UpToLine: lineCount},
 			}
 
 			// Nil out this one field

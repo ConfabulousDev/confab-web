@@ -76,6 +76,9 @@ type ComputeResult struct {
 	TotalRedactions int
 	RedactionCounts map[string]int
 
+	// Workflow runs (from WorkflowsAnalyzer; empty for non-workflow sessions)
+	Workflows []WorkflowRun
+
 	// Validation stats (from parsing)
 	ValidationErrorCount int
 

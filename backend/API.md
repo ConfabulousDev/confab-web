@@ -199,7 +199,7 @@ exact names so the run grouping (`<runId>`) is recoverable from the path alone:
 | `file_name` | `file_type` | Parsed? | Analytics |
 |-------------|-------------|---------|-----------|
 | `subagents/workflows/<runId>/agent-<id>.jsonl` | `agent` | yes (transcript) | tokens attributed to the session, no double count |
-| `subagents/workflows/<runId>/journal.jsonl` | `workflow_journal` | no | excluded from token/transcript compute (append-only event log) |
+| `subagents/workflows/<runId>/journal.jsonl` | `workflow_journal` | status only | excluded from token/transcript compute; parsed for per-agent success in the Workflows card (`cards.workflows`) |
 
 - Slashes in `file_name` are permitted (they become extra S3 key segments). Read
   them back via the [file read endpoint](#download-session-file) with the
@@ -1531,6 +1531,22 @@ Returns computed analytics for a session. Uses the same canonical access model a
         "GITHUB_TOKEN": 3,
         "API_KEY": 2
       }
+    },
+    "workflows": {
+      "runs": [
+        {
+          "run_id": "wf-2026-06-05_a1b2c3",
+          "agent_count": 6,
+          "input_tokens": 42000,
+          "output_tokens": 18000,
+          "cache_creation": 12000,
+          "cache_read": 96000,
+          "estimated_usd": "1.84",
+          "succeeded_agents": 6,
+          "has_journal": true,
+          "duration_ms": 132000
+        }
+      ]
     }
   }
 }
@@ -1580,6 +1596,18 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.redactions` | object\|null | Redaction metrics (null/omitted if no redactions) |
 | `cards.redactions.total_redactions` | int | Total count of [REDACTED:TYPE] markers found |
 | `cards.redactions.redaction_counts` | object | Map of redaction type to occurrence count |
+| `cards.workflows` | object\|null | Workflow subagent runs (null/omitted if the session has no workflow runs) |
+| `cards.workflows.runs` | array | Per-run aggregates, ordered by run start time |
+| `cards.workflows.runs[].run_id` | string | Opaque workflow run ID (the `<runId>` path segment) |
+| `cards.workflows.runs[].agent_count` | int | Number of subagent files in the run |
+| `cards.workflows.runs[].input_tokens` | int | Input tokens summed across the run's agents |
+| `cards.workflows.runs[].output_tokens` | int | Output tokens summed across the run's agents |
+| `cards.workflows.runs[].cache_creation` | int | Cache-write tokens summed across the run's agents |
+| `cards.workflows.runs[].cache_read` | int | Cache-read tokens summed across the run's agents |
+| `cards.workflows.runs[].estimated_usd` | string | Estimated cost for the run |
+| `cards.workflows.runs[].succeeded_agents` | int | Agents with a journal `result` line (0 when `has_journal` is false) |
+| `cards.workflows.runs[].has_journal` | bool | Whether a run journal was uploaded; when false, `succeeded_agents` is not meaningful |
+| `cards.workflows.runs[].duration_ms` | int | Activity span from the run's first to last agent timestamp (0 if unknown) |
 | `card_errors` | object\|null | Map of card key to error message for failed computations (graceful degradation) |
 | `smart_recap_quota` | object\|null | Per-user quota info (present when quota is capped and viewer is owner; omitted when unlimited or non-owner) |
 | `smart_recap_quota.used` | int | Recaps generated this month |
@@ -1881,7 +1909,7 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
 |-------|------|-------------|
 | `start_date` | string | Required. ISO-8601 with explicit timezone (`Z` or `±hh:mm`). Filter: `sessions.last_message_at >= start_date`. |
 | `end_date` | string | Optional. Same format as `start_date`. Filter: `last_message_at < end_date`. Must be after `start_date`. |
-| `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_smart_recap`. |
+| `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_workflows`, `session_card_smart_recap`. |
 | `reason` | string | Required, 1–500 chars. Stored in the audit row. |
 | `dry_run` | bool | Defaults to `true`. `false` to actually delete. |
 

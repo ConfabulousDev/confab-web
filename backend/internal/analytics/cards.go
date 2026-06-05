@@ -17,6 +17,7 @@ var AllCardTableNames = []string{
 	"session_card_conversation",
 	"session_card_agents_and_skills",
 	"session_card_redactions",
+	"session_card_workflows",
 	"session_card_smart_recap",
 }
 
@@ -39,6 +40,7 @@ const (
 	ConversationCardVersion    = 3 // v3: AssistantTurns = user-prompt-triggered sequences (deduped)
 	AgentsAndSkillsCardVersion = 2 // v2: Codex subagent + skill support (CF-443)
 	RedactionsCardVersion      = 2 // v2: filter out "TYPE" placeholder
+	WorkflowsCardVersion       = 1 // v1: per-run workflow subagent aggregates (CF-534)
 	SmartRecapCardVersion      = 1 // v1: initial AI-powered session recap
 	SearchIndexVersion         = 1 // v1: initial full-text search index
 )
@@ -169,6 +171,34 @@ type RedactionsCardRecord struct {
 	RedactionCounts  map[string]int `json:"redaction_counts"` // Type -> count (e.g., "GITHUB_TOKEN" -> 5)
 }
 
+// WorkflowRun is a single workflow run's aggregate. It is both the JSONB
+// storage shape (in session_card_workflows.runs) and the API wire shape, so
+// json tags are snake_case to match the frontend. Runs are stored already
+// ordered (by start time), so StartedAt is used only at compute time for
+// sorting and is not serialized.
+type WorkflowRun struct {
+	RunID           string    `json:"run_id"`
+	AgentCount      int       `json:"agent_count"`
+	InputTokens     int64     `json:"input_tokens"`
+	OutputTokens    int64     `json:"output_tokens"`
+	CacheCreation   int64     `json:"cache_creation"`
+	CacheRead       int64     `json:"cache_read"`
+	EstimatedUSD    string    `json:"estimated_usd"` // Decimal as string for precision
+	SucceededAgents int       `json:"succeeded_agents"`
+	HasJournal      bool      `json:"has_journal"`
+	DurationMs      int64     `json:"duration_ms"`
+	StartedAt       time.Time `json:"-"` // compute-time ordering only; not persisted/served
+}
+
+// WorkflowsCardRecord is the DB record for the workflows card.
+type WorkflowsCardRecord struct {
+	SessionID  string        `json:"session_id"`
+	Version    int           `json:"version"`
+	ComputedAt time.Time     `json:"computed_at"`
+	UpToLine   int64         `json:"up_to_line"`
+	Runs       []WorkflowRun `json:"runs"`
+}
+
 // SmartRecapCardRecord is the DB record for the AI-generated smart recap card.
 // Unlike other cards, this uses time-based invalidation due to LLM cost.
 type SmartRecapCardRecord struct {
@@ -216,6 +246,7 @@ type Cards struct {
 	Conversation    *ConversationCardRecord
 	AgentsAndSkills *AgentsAndSkillsCardRecord
 	Redactions      *RedactionsCardRecord
+	Workflows       *WorkflowsCardRecord
 
 	// Per-card computation errors (graceful degradation)
 	CardErrors map[string]string
@@ -305,6 +336,11 @@ type RedactionsCardData struct {
 	RedactionCounts map[string]int `json:"redaction_counts"` // Type -> count
 }
 
+// WorkflowsCardData is the API response format for the workflows card.
+type WorkflowsCardData struct {
+	Runs []WorkflowRun `json:"runs"`
+}
+
 // SmartRecapCardData is the API response format for the AI-generated smart recap card.
 type SmartRecapCardData struct {
 	Recap                     string          `json:"recap"`
@@ -380,6 +416,11 @@ func (c *RedactionsCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == RedactionsCardVersion && c.UpToLine == currentLineCount
 }
 
+// IsValid checks if a workflows card record is valid for the current line count.
+func (c *WorkflowsCardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == WorkflowsCardVersion && c.UpToLine == currentLineCount
+}
+
 // HasValidVersion checks if a smart recap card record exists with the correct version.
 // Used by API handlers to determine if a cached card can be returned.
 func (c *SmartRecapCardRecord) HasValidVersion() bool {
@@ -413,5 +454,6 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		c.CodeActivity.IsValid(currentLineCount) &&
 		c.Conversation.IsValid(currentLineCount) &&
 		c.AgentsAndSkills.IsValid(currentLineCount) &&
-		c.Redactions.IsValid(currentLineCount)
+		c.Redactions.IsValid(currentLineCount) &&
+		c.Workflows.IsValid(currentLineCount)
 }

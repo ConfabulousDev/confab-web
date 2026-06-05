@@ -39,14 +39,27 @@ func ComputeFromFileCollection(ctx context.Context, fc *FileCollection) (*Comput
 		return agent, nil
 	}
 
-	return ComputeStreaming(ctx, fc.Main, agentProvider)
+	return ComputeStreaming(ctx, fc.Main, agentProvider, nil)
+}
+
+// WorkflowInputs carries the side data the WorkflowsAnalyzer needs that the
+// generic streaming loop doesn't model: the runId for each agent file (resolved
+// from file names by the caller, keyed by agent id) and each run's journal
+// content. Nil when the session has no workflow files (e.g. Codex, or tests).
+type WorkflowInputs struct {
+	RunIDByAgentID map[string]string
+	Journals       map[string][]byte // runId -> journal.jsonl content
 }
 
 // ComputeStreaming computes analytics by streaming agent files one at a time through all analyzers.
 // The main file is processed first, then each agent file from the provider is processed and discarded.
 // Peak memory: O(main) + O(largest single agent) instead of O(all agents).
 // Uses collect-errors pattern: individual card failures don't fail the whole computation.
-func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider AgentProvider) (*ComputeResult, error) {
+//
+// wf is optional: when non-nil, the WorkflowsAnalyzer is driven explicitly
+// alongside the generic processors (it is not a FileProcessor — see
+// analyzer_workflows.go).
+func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider AgentProvider, wf *WorkflowInputs) (*ComputeResult, error) {
 	ctx, span := tracer.Start(ctx, "analytics.compute_streaming",
 		trace.WithAttributes(
 			attribute.Int64("main.lines", int64(len(main.Lines))),
@@ -79,6 +92,13 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 		p.ProcessFile(main, true)
 	}
 
+	// WorkflowsAnalyzer is driven explicitly (not a FileProcessor): it needs a
+	// runId per agent + the run journals, neither of which the generic loop models.
+	var workflowsAnalyzer *WorkflowsAnalyzer
+	if wf != nil {
+		workflowsAnalyzer = &WorkflowsAnalyzer{}
+	}
+
 	// Phase 2: Stream agent files one at a time
 	agentFilesSeen := make(map[string]bool)
 	skippedAgentFiles := 0
@@ -103,11 +123,23 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 		for _, p := range processors {
 			p.ProcessFile(agent, false)
 		}
+		if workflowsAnalyzer != nil {
+			workflowsAnalyzer.ProcessAgent(agent, wf.RunIDByAgentID[agent.AgentID])
+		}
 	}
 
 	// Phase 3: Finalize all analyzers
 	for _, p := range processors {
 		p.Finalize(func(agentID string) bool { return agentFilesSeen[agentID] })
+	}
+
+	// Phase 3b: fold in per-run journal status, then collect workflow runs.
+	var workflowRuns []WorkflowRun
+	if workflowsAnalyzer != nil {
+		for runID, content := range wf.Journals {
+			workflowsAnalyzer.ProcessJournal(runID, content)
+		}
+		workflowRuns = workflowsAnalyzer.Result()
 	}
 
 	span.SetAttributes(
@@ -181,6 +213,9 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 		// Redactions
 		TotalRedactions: redactions.TotalRedactions,
 		RedactionCounts: redactions.RedactionCounts,
+
+		// Workflows
+		Workflows: workflowRuns,
 
 		// Metadata
 		ValidationErrorCount: validationErrorCount,
