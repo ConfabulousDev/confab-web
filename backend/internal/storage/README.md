@@ -39,6 +39,7 @@ All chunk methods take a `provider string` argument (one of `models.ProviderClau
 
 - Chunk keys include the canonical provider segment (`claude-code` or `codex`). The path is `{userID}/{provider}/{externalID}/chunks/{fileName}/chunk_{first:08d}_{last:08d}.jsonl`. Storage rejects legacy `"Claude Code"` and any non-canonical value.
 - Chunk keys use zero-padded 8-digit line numbers to ensure lexicographic sort equals numeric sort.
+- `fileName` may itself contain slashes (e.g. the workflow subagent path `subagents/workflows/<runId>/agent-<id>.jsonl`, CF-532). Those slashes simply become extra S3 key segments; `chunkPrefix`/`UploadChunk`/`ListChunks`/`DownloadAndMergeChunks` round-trip them unchanged.
 - `ListChunks` enforces `MaxChunksPerFile` as a hard limit to prevent unbounded memory from listing.
 - `MergeChunks` enforces `MaxMergeLines` to prevent memory exhaustion from corrupted chunk filenames.
 - The bucket must exist before `NewS3Storage` is called; the server will not auto-create buckets.

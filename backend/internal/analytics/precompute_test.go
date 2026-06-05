@@ -45,6 +45,26 @@ func TestExtractAgentID(t *testing.T) {
 			fileName: "abc123.jsonl",
 			want:     "",
 		},
+		{
+			name:     "nested workflow agent path resolves to id (CF-532)",
+			fileName: "subagents/workflows/run-123/agent-abc123.jsonl",
+			want:     "abc123",
+		},
+		{
+			name:     "nested workflow agent path with long id (CF-532)",
+			fileName: "subagents/workflows/wf_abc/agent-abc123-def456.jsonl",
+			want:     "abc123-def456",
+		},
+		{
+			name:     "flat nested agent path resolves to id (CF-532)",
+			fileName: "subagents/agent-xyz.jsonl",
+			want:     "xyz",
+		},
+		{
+			name:     "nested workflow journal is not an agent file (CF-532)",
+			fileName: "subagents/workflows/run-123/journal.jsonl",
+			want:     "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -97,8 +117,7 @@ func TestPrecomputeConfig_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// The config validation logic is in worker.go's loadPrecomputeConfig
 			// This test documents the expected behavior
-			isValid := tt.config.SmartRecapEnabled == false || (
-				tt.config.AnthropicAPIKey != "" &&
+			isValid := tt.config.SmartRecapEnabled == false || (tt.config.AnthropicAPIKey != "" &&
 				tt.config.SmartRecapModel != "" &&
 				tt.config.SmartRecapQuota > 0)
 

@@ -314,6 +314,11 @@ func (s *Server) SetupRoutes() http.Handler {
 		// and downstream self-hosted backends pull it from confabulous.dev.
 		r.Get("/pricing", withMaxBody(MaxBodyXS, s.handlePricing))
 
+		// Public capability probe (no auth, no external deps): advertises optional
+		// workflow-file support so a newer CLI can gate uploads on this backend
+		// (CF-532). Absent on older backends → CLI treats it as unsupported.
+		r.Get("/capabilities", withMaxBody(MaxBodyXS, s.handleCapabilities))
+
 		// Protected routes require API key authentication (for CLI)
 		// No CSRF protection for API key routes (CLI doesn't use cookies)
 		r.Group(func(r chi.Router) {

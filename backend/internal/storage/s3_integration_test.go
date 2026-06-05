@@ -107,6 +107,49 @@ func TestListChunksReturnsSortedKeys(t *testing.T) {
 	}
 }
 
+// TestUploadDownloadChunk_SlashedFileName locks the CF-532 contract that the
+// chunk engine tolerates a path-encoded file_name (workflow subagent transcripts
+// arrive as "subagents/workflows/<runId>/agent-<id>.jsonl"). The slashes become
+// extra S3 key segments; upload → list → merge must still round-trip.
+func TestUploadDownloadChunk_SlashedFileName(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+
+	ctx := context.Background()
+	externalID := freshExternalID("slash")
+	const fileName = "subagents/workflows/run-123/agent-abc123.jsonl"
+
+	c1 := []byte("{\"line\":1}\n{\"line\":2}\n")
+	c2 := []byte("{\"line\":3}\n")
+
+	if _, err := env.Storage.UploadChunk(ctx, 7, models.ProviderClaudeCode, externalID, fileName, 1, 2, c1); err != nil {
+		t.Fatalf("UploadChunk(1,2): %v", err)
+	}
+	if _, err := env.Storage.UploadChunk(ctx, 7, models.ProviderClaudeCode, externalID, fileName, 3, 3, c2); err != nil {
+		t.Fatalf("UploadChunk(3,3): %v", err)
+	}
+
+	keys, err := env.Storage.ListChunks(ctx, 7, models.ProviderClaudeCode, externalID, fileName)
+	if err != nil {
+		t.Fatalf("ListChunks: %v", err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("expected 2 chunks for slashed file_name, got %d (%v)", len(keys), keys)
+	}
+
+	merged, err := env.Storage.DownloadAndMergeChunks(ctx, 7, models.ProviderClaudeCode, externalID, fileName)
+	if err != nil {
+		t.Fatalf("DownloadAndMergeChunks: %v", err)
+	}
+	want := "{\"line\":1}\n{\"line\":2}\n{\"line\":3}\n"
+	if string(merged) != want {
+		t.Errorf("merged slashed-file content = %q, want %q", merged, want)
+	}
+}
+
 func TestListChunksEmpty(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
