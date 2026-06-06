@@ -6,6 +6,7 @@ describe('cardRegistry', () => {
     const keys = cardRegistry.map((c) => c.key);
 
     expect(keys).toContain('tokens');
+    expect(keys).toContain('tokens_v2');
     expect(keys).toContain('session');
     expect(keys).toContain('conversation');
     expect(keys).toContain('code_activity');
@@ -16,7 +17,9 @@ describe('cardRegistry', () => {
     expect(keys).toContain('smart_recap');
     // Note: cost is now part of tokens card, compaction is part of session card
     // Note: agents and skills are now combined into a single card
-    expect(keys).toHaveLength(9);
+    // tokens_v2 is the hierarchical per-provider breakdown (OpenCode); it
+    // supersedes the flat tokens card at render time when present.
+    expect(keys).toHaveLength(10);
   });
 
   it('has unique keys', () => {
@@ -63,6 +66,6 @@ describe('getOrderedCards', () => {
     const ordered = getOrderedCards();
     const keys = ordered.map((c) => c.key);
 
-    expect(keys).toEqual(['smart_recap', 'tokens', 'session', 'conversation', 'code_activity', 'tools', 'agents_and_skills', 'workflows', 'redactions']);
+    expect(keys).toEqual(['smart_recap', 'tokens', 'tokens_v2', 'session', 'conversation', 'code_activity', 'tools', 'agents_and_skills', 'workflows', 'redactions']);
   });
 });

@@ -137,7 +137,9 @@ If you need a new computation that feeds into an existing card (or is used only 
 
 ### Card Staleness
 
-A card is **valid** when `Version == current constant` AND `UpToLine == session's current total line count`. The `IsValid` method on each record type encodes this. `Cards.AllValid` checks all seven regular cards.
+A card is **valid** when `Version == current constant` AND `UpToLine == session's current total line count`. The `IsValid` method on each record type encodes this. `Cards.AllValid` checks every **universal** card (the ones computed for every session).
+
+**Optional (provider-specific) cards** are excluded from `Cards.AllValid`. `tokens_v2` (the hierarchical per-provider/per-model breakdown, currently OpenCode-only) is the first such card: it is produced only when `ComputeResult.TokensV2` is non-nil, so adding it to `AllValid` would make every Claude/Codex session fail the cache gate and recompute on every request. Its freshness piggybacks on the universal cards, which are computed in the same pass at the same line count. `TestCardsAllValid_Exhaustive` enforces this split via `optionalCardFields`. When adding such a card, give it an `IsValid` method and a `Cards` field, register `get`/`upsert` in `GetCards`/`UpsertCards`, but do **not** add it to `AllValid`.
 
 Smart recap uses different staleness rules: `HasValidVersion()` checks only the version (time-based invalidation), while `IsUpToDate()` checks version and `UpToLine >= currentLineCount` (used by the precomputer). A fourth staleness category (admin-triggered regeneration) marks cards as stale when `computed_at < regen_requested_at` from the `admin_settings` table; this is indicated by a non-nil `RegenRequestedAt` field on `StaleSession`.
 

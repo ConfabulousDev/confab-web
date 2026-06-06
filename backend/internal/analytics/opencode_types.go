@@ -8,24 +8,23 @@ type opencodeRollout struct {
 
 type OpenCodeMessage struct {
 	Info  OpenCodeMessageInfo `json:"info"`
-	Parts json.RawMessage     `json:"parts"`
-	Raw   json.RawMessage
+	Parts []OpenCodePart      `json:"parts"`
 }
 
 type OpenCodeMessageInfo struct {
-	ID         string         `json:"id"`
-	SessionID  string         `json:"sessionID"`
-	Role       string         `json:"role"`
-	ParentID   string         `json:"parentID,omitempty"`
-	ModelID    string         `json:"modelID,omitempty"`
-	ProviderID string         `json:"providerID,omitempty"`
-	Mode       string         `json:"mode,omitempty"`
-	Agent      string         `json:"agent,omitempty"`
-	Finish     *string        `json:"finish,omitempty"`
-	Cost       float64        `json:"cost"`
-	Tokens     OpenCodeTokens `json:"tokens"`
+	ID         string          `json:"id"`
+	SessionID  string          `json:"sessionID"`
+	Role       string          `json:"role"`
+	ParentID   string          `json:"parentID,omitempty"`
+	ModelID    string          `json:"modelID,omitempty"`
+	ProviderID string          `json:"providerID,omitempty"`
+	Mode       string          `json:"mode,omitempty"`
+	Agent      string          `json:"agent,omitempty"`
+	Finish     *string         `json:"finish,omitempty"`
+	Cost       float64         `json:"cost"`
+	Tokens     OpenCodeTokens  `json:"tokens"`
 	Error      json.RawMessage `json:"error,omitempty"`
-	Time       OpenCodeTime   `json:"time"`
+	Time       OpenCodeTime    `json:"time"`
 }
 
 type OpenCodeTokens struct {
@@ -46,23 +45,23 @@ type OpenCodeTime struct {
 }
 
 type OpenCodePart struct {
-	ID        string          `json:"id"`
-	Type      string          `json:"type"`
-	SessionID string          `json:"sessionID,omitempty"`
-	MessageID string          `json:"messageID,omitempty"`
-	CallID    string          `json:"callID,omitempty"`
-	Tool      string          `json:"tool,omitempty"`
-	Text      string          `json:"text,omitempty"`
-	State     json.RawMessage `json:"state,omitempty"`
-	Auto      *bool           `json:"auto,omitempty"`
-	Snapshot  string          `json:"snapshot,omitempty"`
-	Reason    string          `json:"reason,omitempty"`
-	Cost      float64         `json:"cost,omitempty"`
-	Tokens    *OpenCodeTokens `json:"tokens,omitempty"`
-	Files     []string        `json:"files,omitempty"`
-	Name      string          `json:"name,omitempty"`
-	Prompt    string          `json:"prompt,omitempty"`
-	Model     json.RawMessage `json:"model,omitempty"`
+	ID        string             `json:"id"`
+	Type      string             `json:"type"`
+	SessionID string             `json:"sessionID,omitempty"`
+	MessageID string             `json:"messageID,omitempty"`
+	CallID    string             `json:"callID,omitempty"`
+	Tool      string             `json:"tool,omitempty"`
+	Text      string             `json:"text,omitempty"`
+	State     *OpenCodeToolState `json:"state,omitempty"`
+	Auto      *bool              `json:"auto,omitempty"`
+	Snapshot  string             `json:"snapshot,omitempty"`
+	Reason    string             `json:"reason,omitempty"`
+	Cost      float64            `json:"cost,omitempty"`
+	Tokens    *OpenCodeTokens    `json:"tokens,omitempty"`
+	Files     []string           `json:"files,omitempty"`
+	Name      string             `json:"name,omitempty"`
+	Prompt    string             `json:"prompt,omitempty"`
+	Model     json.RawMessage    `json:"model,omitempty"`
 }
 
 type OpenCodeToolState struct {

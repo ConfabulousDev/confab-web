@@ -1487,6 +1487,39 @@ Returns computed analytics for a session. Uses the same canonical access model a
       "fast_turns": 10,
       "fast_cost_usd": "0.90"
     },
+    "tokens_v2": {
+      "total_cost_usd": "1.230000",
+      "total_input": 150000,
+      "total_output": 50000,
+      "by_provider": {
+        "anthropic": {
+          "cost_usd": "0.950000",
+          "models": {
+            "claude-sonnet-4-20250514": {
+              "input": 100000,
+              "output": 30000,
+              "cache_read": 20000,
+              "cache_write": 5000,
+              "reasoning": 10000,
+              "cost_usd": "0.950000"
+            }
+          }
+        },
+        "openai": {
+          "cost_usd": "0.280000",
+          "models": {
+            "gpt-4o": {
+              "input": 50000,
+              "output": 20000,
+              "cache_read": 10000,
+              "cache_write": 0,
+              "reasoning": 0,
+              "cost_usd": "0.280000"
+            }
+          }
+        }
+      }
+    },
     "session": {
       "duration_ms": 3600000,
       "models_used": ["claude-sonnet-4-20241022", "claude-opus-4"]
@@ -1567,6 +1600,11 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.tokens.estimated_usd` | string | Estimated API cost (assumes 5-min prompt caching) |
 | `cards.tokens.fast_turns` | int\|omitted | Turns using fast mode (omitted if no fast mode usage) |
 | `cards.tokens.fast_cost_usd` | string\|omitted | Cost from fast mode turns (omitted if no fast mode usage) |
+| `cards.tokens_v2` | object\|omitted | Hierarchical per-provider/per-model token breakdown. Present only for sessions spanning multiple LLM providers (OpenCode); omitted for Claude/Codex. Supersedes `cards.tokens` in the UI when present. Optional card — not part of the cache-validity gate. |
+| `cards.tokens_v2.total_cost_usd` | string | Total estimated cost across all providers (decimal as string, 6dp). Sourced from OpenCode's reported per-message cost; falls back to Confab's pricing table only for models OpenCode reports no cost for. |
+| `cards.tokens_v2.total_input` | int | Total input tokens (normalized per provider; matches `cards.tokens.input`) |
+| `cards.tokens_v2.total_output` | int | Total output tokens (matches `cards.tokens.output`) |
+| `cards.tokens_v2.by_provider` | object | Map of provider id → `{cost_usd, models}`. Each model entry has `input`, `output`, `cache_read`, `cache_write`, `reasoning`, `cost_usd`. |
 | `cards.session.duration_ms` | int\|null | Session duration in ms (null if single message) |
 | `cards.session.models_used` | string[] | Unique model IDs used in the session |
 | `cards.tools.total_calls` | int | Total number of tool invocations |

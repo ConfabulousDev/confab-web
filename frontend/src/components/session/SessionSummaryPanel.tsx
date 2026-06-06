@@ -166,6 +166,13 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
       const cardData = cards[cardDef.key] ?? null;
       const cardError = cardErrors[cardDef.key];
 
+      // tokens_v2 (hierarchical per-provider breakdown) supersedes the flat
+      // tokens card when present, so OpenCode multi-provider sessions show a
+      // single Tokens card rather than two.
+      if (cardDef.key === 'tokens' && cards.tokens_v2 != null) {
+        return null;
+      }
+
       // Skip rendering wrapper if card wouldn't render (avoids empty grid cells)
       // But always render if there's an error (to show the error state)
       if (!cardError && cardDef.shouldRender && !loading && !cardDef.shouldRender(cardData)) {

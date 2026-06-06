@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"encoding/json"
 	"sort"
 
 	"github.com/shopspring/decimal"
@@ -31,28 +30,6 @@ func ComputeFromOpenCodeRollout(r *opencodeRollout) *ComputeResult {
 	return result
 }
 
-func parseParts(raw json.RawMessage) []OpenCodePart {
-	if len(raw) == 0 {
-		return nil
-	}
-	var parts []OpenCodePart
-	if err := json.Unmarshal(raw, &parts); err != nil {
-		return nil
-	}
-	return parts
-}
-
-func parseToolState(raw json.RawMessage) *OpenCodeToolState {
-	if len(raw) == 0 {
-		return nil
-	}
-	var state OpenCodeToolState
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return nil
-	}
-	return &state
-}
-
 func getStringInput(state *OpenCodeToolState, key string) string {
 	if state == nil || state.Input == nil {
 		return ""
@@ -69,7 +46,8 @@ func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
 		modelID    string
 	}
 	type modelTokens struct {
-		input, output, cacheRead, cacheWrite int64
+		input, output, cacheRead, cacheWrite, reasoning int64
+		reportedCost                                    decimal.Decimal // sum of OpenCode's per-message info.cost
 	}
 	byModel := make(map[modelKey]*modelTokens)
 
@@ -87,12 +65,29 @@ func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
 		mt.output += msg.Info.Tokens.Output
 		mt.cacheRead += msg.Info.Tokens.Cache.Read
 		mt.cacheWrite += msg.Info.Tokens.Cache.Write
+		mt.reasoning += msg.Info.Tokens.Reasoning
+		if msg.Info.Cost > 0 {
+			mt.reportedCost = mt.reportedCost.Add(decimal.NewFromFloat(msg.Info.Cost))
+		}
 	}
 
 	var totalInput, totalOutput, totalCacheRead, totalCacheWrite int64
 	var totalCost decimal.Decimal
 
+	// Accumulate the tokens_v2 tree with decimal provider costs, serialized to
+	// strings only at the end to avoid repeated string round-trips.
+	type provAccum struct {
+		models map[string]TokensV2Model
+		cost   decimal.Decimal
+	}
+	byProvider := make(map[string]*provAccum)
+
 	for key, mt := range byModel {
+		// Normalize tokens per the provider's billing convention. OpenAI bills
+		// cached input as a subset of `input` and never charges for cache
+		// writes; everyone else (Anthropic-style) bills cache writes and treats
+		// cache reads as independent of input. These normalized counts drive the
+		// displayed token breakdown and the pricing-table cost fallback below.
 		var input, cacheWrite int64
 		switch key.providerID {
 		case "openai":
@@ -112,9 +107,46 @@ func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
 		totalCacheRead += mt.cacheRead
 		totalCacheWrite += cacheWrite
 
-		pricing := GetPricing(key.modelID)
-		cost := CalculateCost(pricing, input, mt.output, cacheWrite, mt.cacheRead)
+		// Cost source (hybrid): OpenCode reports an authoritative per-message
+		// cost that already encodes each of its 75+ providers' real pricing, so
+		// prefer the summed reported cost. Fall back to our pricing table only
+		// when OpenCode reported nothing for the group (cost 0) — e.g. local
+		// models or older daemons — using the family-resolved table. The table
+		// prices only a handful of OpenCode models, so without this preference
+		// the long tail of providers would bill $0.
+		var cost decimal.Decimal
+		if mt.reportedCost.IsPositive() {
+			cost = mt.reportedCost
+		} else {
+			cost = CalculateCost(GetPricing(key.modelID), input, mt.output, cacheWrite, mt.cacheRead)
+		}
 		totalCost = totalCost.Add(cost)
+
+		// Build the hierarchical tokens_v2 tree alongside the flat totals so the
+		// nested per-provider/per-model breakdown stays consistent with the flat
+		// tokens card (same normalized inputs, same cost).
+		prov := byProvider[key.providerID]
+		if prov == nil {
+			prov = &provAccum{models: make(map[string]TokensV2Model)}
+			byProvider[key.providerID] = prov
+		}
+		prov.models[key.modelID] = TokensV2Model{
+			Input:      input,
+			Output:     mt.output,
+			CacheRead:  mt.cacheRead,
+			CacheWrite: cacheWrite,
+			Reasoning:  mt.reasoning,
+			CostUSD:    cost.StringFixed(decimalCostScale),
+		}
+		prov.cost = prov.cost.Add(cost)
+	}
+
+	providers := make(map[string]TokensV2Provider, len(byProvider))
+	for id, acc := range byProvider {
+		providers[id] = TokensV2Provider{
+			CostUSD: acc.cost.StringFixed(decimalCostScale),
+			Models:  acc.models,
+		}
 	}
 
 	out.InputTokens = totalInput
@@ -124,7 +156,18 @@ func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
 	out.EstimatedCostUSD = totalCost
 	out.FastTurns = 0
 	out.FastCostUSD = decimal.Zero
+
+	out.TokensV2 = &TokensV2Data{
+		TotalCostUSD: totalCost.StringFixed(decimalCostScale),
+		TotalInput:   totalInput,
+		TotalOutput:  totalOutput,
+		ByProvider:   providers,
+	}
 }
+
+// decimalCostScale is the fixed number of decimal places used when serializing
+// tokens_v2 costs as strings. Matches the frontend's decimal-string parsing.
+const decimalCostScale = 6
 
 func computeOpenCodeSession(out *ComputeResult, r *opencodeRollout) {
 	models := map[string]struct{}{}
@@ -140,7 +183,7 @@ func computeOpenCodeSession(out *ComputeResult, r *opencodeRollout) {
 			out.HumanPrompts++
 		} else if msg.Info.Role == "assistant" {
 			out.AssistantMessages++
-			parts := parseParts(msg.Parts)
+			parts := msg.Parts
 			hasText := false
 			hasReasoning := false
 			for _, p := range parts {
@@ -150,7 +193,7 @@ func computeOpenCodeSession(out *ComputeResult, r *opencodeRollout) {
 				case "reasoning":
 					hasReasoning = true
 				case "tool":
-					state := parseToolState(p.State)
+					state := p.State
 					if state != nil && (state.Status == "completed" || state.Status == "error") {
 						out.ToolCalls++
 						if state.Output != "" {
@@ -200,12 +243,12 @@ func computeOpenCodeTools(out *ComputeResult, r *opencodeRollout) {
 		if msg.Info.Role != "assistant" {
 			continue
 		}
-		parts := parseParts(msg.Parts)
+		parts := msg.Parts
 		for _, p := range parts {
 			if p.Type != "tool" {
 				continue
 			}
-			state := parseToolState(p.State)
+			state := p.State
 			if state == nil {
 				continue
 			}
@@ -235,25 +278,26 @@ func computeOpenCodeCodeActivity(out *ComputeResult, r *opencodeRollout) {
 		if msg.Info.Role != "assistant" {
 			continue
 		}
-		parts := parseParts(msg.Parts)
+		parts := msg.Parts
 		for _, p := range parts {
 			if p.Type != "tool" {
 				continue
 			}
-			state := parseToolState(p.State)
+			state := p.State
 			if state == nil || state.Status != "completed" {
 				continue
 			}
+			fp := getStringInput(state, "file_path")
 			switch p.Tool {
 			case "Read":
-				if fp, ok := state.Input["file_path"].(string); ok && fp != "" {
+				if fp != "" {
 					out.FilesRead++
 					if lang := languageFromPath(fp); lang != "" {
 						out.LanguageBreakdown[lang]++
 					}
 				}
 			case "Write":
-				if fp, ok := state.Input["file_path"].(string); ok && fp != "" {
+				if fp != "" {
 					out.FilesModified++
 					if lang := languageFromPath(fp); lang != "" {
 						out.LanguageBreakdown[lang]++
@@ -261,7 +305,7 @@ func computeOpenCodeCodeActivity(out *ComputeResult, r *opencodeRollout) {
 					out.LinesAdded += countLines(getStringInput(state, "content"))
 				}
 			case "Edit":
-				if fp, ok := state.Input["file_path"].(string); ok && fp != "" {
+				if fp != "" {
 					out.FilesModified++
 					if lang := languageFromPath(fp); lang != "" {
 						out.LanguageBreakdown[lang]++
@@ -341,7 +385,7 @@ func computeOpenCodeAgentsAndSkills(out *ComputeResult, r *opencodeRollout) {
 		if msg.Info.Role != "assistant" {
 			continue
 		}
-		parts := parseParts(msg.Parts)
+		parts := msg.Parts
 		for _, p := range parts {
 			if p.Type != "subtask" {
 				continue
@@ -372,13 +416,13 @@ func computeOpenCodeRedactions(out *ComputeResult, r *opencodeRollout) {
 	}
 
 	for _, msg := range r.Messages {
-		parts := parseParts(msg.Parts)
+		parts := msg.Parts
 		for _, p := range parts {
 			switch p.Type {
 			case "text":
 				count(p.Text)
 			case "tool":
-				state := parseToolState(p.State)
+				state := p.State
 				if state != nil {
 					count(state.Output)
 					count(state.Error)

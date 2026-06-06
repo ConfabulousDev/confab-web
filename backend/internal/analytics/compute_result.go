@@ -19,6 +19,11 @@ type ComputeResult struct {
 	FastTurns   int
 	FastCostUSD decimal.Decimal
 
+	// Hierarchical per-provider/per-model token breakdown (from TokensAnalyzer).
+	// Optional: populated only by providers whose sessions span multiple LLM
+	// providers (OpenCode). Nil for Claude/Codex, which omit the tokens_v2 card.
+	TokensV2 *TokensV2Data
+
 	// Message counts (from SessionAnalyzer)
 	TotalMessages     int
 	UserMessages      int

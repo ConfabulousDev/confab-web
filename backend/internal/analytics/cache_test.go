@@ -243,9 +243,18 @@ func TestTokensCardRecordIsValid(t *testing.T) {
 	})
 }
 
+// optionalCardFields are *CardRecord fields on Cards that are intentionally
+// excluded from AllValid because they are provider-specific (not produced for
+// every session). Adding one to AllValid would make sessions that never emit it
+// recompute on every request. See TokensV2CardRecord's doc comment.
+var optionalCardFields = map[string]bool{
+	"TokensV2": true,
+}
+
 // TestCardsAllValid_Exhaustive uses reflect to verify that AllValid checks every
-// *CardRecord field in the Cards struct. If a new card type is added to Cards but
-// AllValid is not updated, this test fails.
+// universal *CardRecord field in the Cards struct. If a new universal card type
+// is added to Cards but AllValid is not updated, this test fails. Optional
+// provider-specific cards (optionalCardFields) are exempt by design.
 func TestCardsAllValid_Exhaustive(t *testing.T) {
 	// Use reflect.TypeOf(Cards{}) to find all *XxxCardRecord fields
 	cardsType := reflect.TypeOf(Cards{})
@@ -253,6 +262,9 @@ func TestCardsAllValid_Exhaustive(t *testing.T) {
 	for i := 0; i < cardsType.NumField(); i++ {
 		field := cardsType.Field(i)
 		if field.Type.Kind() == reflect.Ptr && strings.HasSuffix(field.Type.Elem().Name(), "CardRecord") {
+			if optionalCardFields[field.Name] {
+				continue
+			}
 			cardFields = append(cardFields, field.Name)
 		}
 	}
@@ -287,6 +299,26 @@ func TestCardsAllValid_Exhaustive(t *testing.T) {
 			}
 		})
 	}
+
+	// Optional cards must NOT affect AllValid: a session with every universal
+	// card valid but no tokens_v2 card (e.g. Claude/Codex) must still be a cache
+	// hit, or it would recompute on every request.
+	t.Run("optional_TokensV2_nil_still_valid", func(t *testing.T) {
+		cards := &Cards{
+			Tokens:          &TokensCardRecord{Version: TokensCardVersion, ComputedAt: now, UpToLine: lineCount, EstimatedCostUSD: decimal.Zero},
+			Session:         &SessionCardRecord{Version: SessionCardVersion, ComputedAt: now, UpToLine: lineCount},
+			Tools:           &ToolsCardRecord{Version: ToolsCardVersion, ComputedAt: now, UpToLine: lineCount},
+			CodeActivity:    &CodeActivityCardRecord{Version: CodeActivityCardVersion, ComputedAt: now, UpToLine: lineCount},
+			Conversation:    &ConversationCardRecord{Version: ConversationCardVersion, ComputedAt: now, UpToLine: lineCount},
+			AgentsAndSkills: &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion, ComputedAt: now, UpToLine: lineCount},
+			Redactions:      &RedactionsCardRecord{Version: RedactionsCardVersion, ComputedAt: now, UpToLine: lineCount},
+			Workflows:       &WorkflowsCardRecord{Version: WorkflowsCardVersion, ComputedAt: now, UpToLine: lineCount},
+			// TokensV2 intentionally nil
+		}
+		if !cards.AllValid(lineCount) {
+			t.Error("AllValid returned false with TokensV2=nil; optional cards must not gate the cache")
+		}
+	})
 }
 
 func TestSessionCardRecordIsValid(t *testing.T) {

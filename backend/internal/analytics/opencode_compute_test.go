@@ -1,7 +1,7 @@
 package analytics
 
 import (
-	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -19,9 +19,9 @@ func opencodeMinimalRollout() *opencodeRollout {
 					ProviderID: "anthropic",
 					Time:       OpenCodeTime{Created: 1717689500000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01JX0000000000000000000001", Type: "text", Text: "Find all Go files"},
-				}),
+				},
 			},
 			{
 				Info: OpenCodeMessageInfo{
@@ -40,26 +40,18 @@ func opencodeMinimalRollout() *opencodeRollout {
 					},
 					Time: OpenCodeTime{Created: 1717689600000, Completed: ptrInt64(1717689605000)},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01JX0000000000000000000002", Type: "step-start", Snapshot: "abc123"},
 					{ID: "prt_01JX0000000000000000000003", Type: "reasoning", Text: "Let me check the files..."},
 					{ID: "prt_01JX0000000000000000000004", Type: "tool", CallID: "call_0", Tool: "Bash",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"command": "ls"}, Output: "file1\nfile2"})},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"command": "ls"}, Output: "file1\nfile2"}},
 					{ID: "prt_01JX0000000000000000000005", Type: "text", Text: "I found 2 files."},
 					{ID: "prt_01JX0000000000000000000006", Type: "step-finish", Reason: "tool-calls", Cost: 0.015,
 						Tokens: &OpenCodeTokens{Input: 10000, Output: 5000, Reasoning: 2000, Cache: OpenCodeCache{Read: 3000, Write: 2000}}},
-				}),
+				},
 			},
 		},
 	}
-}
-
-func mustMarshalJSON(v interface{}) json.RawMessage {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return b
 }
 
 func TestComputeFromOpenCodeRollout_HappyPath(t *testing.T) {
@@ -131,12 +123,12 @@ func TestComputeFromOpenCodeRollout_FailedTool(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Bash",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"command": "ls"}, Output: "ok"})},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"command": "ls"}, Output: "ok"}},
 					{ID: "prt_02", Type: "tool", CallID: "call_1", Tool: "Bash",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "error", Input: map[string]interface{}{"command": "rm -rf /"}, Error: "permission denied"})},
-				}),
+						State: &OpenCodeToolState{Status: "error", Input: map[string]interface{}{"command": "rm -rf /"}, Error: "permission denied"}},
+				},
 			},
 		},
 	}
@@ -176,10 +168,10 @@ func TestComputeFromOpenCodeRollout_Compaction(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "compaction", Auto: &autoTrue},
 					{ID: "prt_02", Type: "compaction", Auto: &autoFalse},
-				}),
+				},
 			},
 		},
 	}
@@ -207,11 +199,11 @@ func TestComputeFromOpenCodeRollout_Redactions(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "text", Text: "user email is [REDACTED:EMAIL]"},
 					{ID: "prt_02", Type: "tool", CallID: "call_0", Tool: "Bash",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Output: "found token [REDACTED:API_KEY] in env"})},
-				}),
+						State: &OpenCodeToolState{Status: "completed", Output: "found token [REDACTED:API_KEY] in env"}},
+				},
 			},
 		},
 	}
@@ -242,10 +234,10 @@ func TestComputeFromOpenCodeRollout_SubtaskAgents(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "subtask", Name: "explore", Prompt: "Search for X"},
 					{ID: "prt_02", Type: "subtask", Name: "build", Prompt: "Implement Y"},
-				}),
+				},
 			},
 		},
 	}
@@ -267,6 +259,35 @@ func TestComputeFromOpenCodeRollout_SubtaskAgents(t *testing.T) {
 	}
 }
 
+func TestPrepareOpenCodeTranscript(t *testing.T) {
+	r := opencodeMinimalRollout()
+	transcript, idMap := PrepareOpenCodeTranscript(r)
+
+	for _, want := range []string{
+		"<transcript>",
+		"</transcript>",
+		"<user id=\"1\">Find all Go files</user>",
+		"<assistant id=\"2\">",
+		"<thinking>Let me check the files...</thinking>",
+		"I found 2 files.",
+		"<tool id=\"3\" name=\"Bash\">ls</tool>",
+		"<tool_result id=\"4\" tool_id=\"3\" status=\"completed\">file1\nfile2</tool_result>",
+	} {
+		if !strings.Contains(transcript, want) {
+			t.Errorf("transcript missing %q\n---\n%s", want, transcript)
+		}
+	}
+
+	// IDs are kept (OpenCode ULIDs are stable anchors) and map back to the
+	// containing message id.
+	if idMap[1] != "msg_01JX0000000000000000000001" {
+		t.Errorf("idMap[1] = %q, want user message ULID", idMap[1])
+	}
+	if idMap[2] != "msg_01JX0000000000000000000002" {
+		t.Errorf("idMap[2] = %q, want assistant message ULID", idMap[2])
+	}
+}
+
 func TestComputeFromOpenCodeRollout_AgentModeSwitchesNotCounted(t *testing.T) {
 	finish := "stop"
 	r := &opencodeRollout{
@@ -279,10 +300,10 @@ func TestComputeFromOpenCodeRollout_AgentModeSwitchesNotCounted(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "agent", Name: "plan"},
 					{ID: "prt_02", Type: "agent", Name: "build"},
-				}),
+				},
 			},
 		},
 	}

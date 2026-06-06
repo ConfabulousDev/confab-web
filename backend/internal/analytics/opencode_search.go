@@ -5,7 +5,7 @@ import "strings"
 func extractOpenCodeSearchText(r *opencodeRollout) string {
 	var b strings.Builder
 	for _, msg := range r.Messages {
-		parts := parseParts(msg.Parts)
+		parts := msg.Parts
 		for _, p := range parts {
 			switch p.Type {
 			case "text":
@@ -18,7 +18,7 @@ func extractOpenCodeSearchText(r *opencodeRollout) string {
 					b.WriteString(p.Tool)
 					b.WriteByte('\n')
 				}
-				state := parseToolState(p.State)
+				state := p.State
 				if state != nil && state.Output != "" {
 					const maxLen = 500
 					output := state.Output

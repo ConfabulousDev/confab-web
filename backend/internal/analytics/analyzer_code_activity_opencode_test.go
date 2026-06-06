@@ -16,12 +16,12 @@ func TestComputeOpenCodeCodeActivity_ReadTool(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Read",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/main.go"}})},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/main.go"}}},
 					{ID: "prt_02", Type: "tool", CallID: "call_1", Tool: "Read",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/utils.py"}})},
-				}),
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/utils.py"}}},
+				},
 			},
 		},
 	}
@@ -52,14 +52,14 @@ func TestComputeOpenCodeCodeActivity_WriteTool(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Write",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed",
+						State: &OpenCodeToolState{Status: "completed",
 							Input: map[string]interface{}{
 								"file_path": "src/main.go",
 								"content":   "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n",
-							}})},
-				}),
+							}}},
+				},
 			},
 		},
 	}
@@ -87,15 +87,15 @@ func TestComputeOpenCodeCodeActivity_EditTool(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Edit",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed",
+						State: &OpenCodeToolState{Status: "completed",
 							Input: map[string]interface{}{
 								"file_path":  "src/main.go",
 								"old_string": "old line\nanother old",
 								"new_string": "new line\nanother new\nextra line",
-							}})},
-				}),
+							}}},
+				},
 			},
 		},
 	}
@@ -126,14 +126,14 @@ func TestComputeOpenCodeCodeActivity_SearchTools(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Grep",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "TODO"}})},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "TODO"}}},
 					{ID: "prt_02", Type: "tool", CallID: "call_1", Tool: "Glob",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "**/*.go"}})},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "**/*.go"}}},
 					{ID: "prt_03", Type: "tool", CallID: "call_2", Tool: "Grep",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "FIXME"}})},
-				}),
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "FIXME"}}},
+				},
 			},
 		},
 	}
@@ -158,12 +158,12 @@ func TestComputeOpenCodeCodeActivity_PendingToolsExcluded(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689600000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Read",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "pending", Input: map[string]interface{}{"file_path": "src/main.go"}})},
+						State: &OpenCodeToolState{Status: "pending", Input: map[string]interface{}{"file_path": "src/main.go"}}},
 					{ID: "prt_02", Type: "tool", CallID: "call_1", Tool: "Read",
-						State: mustMarshalJSON(OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/utils.go"}})},
-				}),
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/utils.go"}}},
+				},
 			},
 		},
 	}
@@ -185,9 +185,9 @@ func TestComputeOpenCodeConversation_TurnWindows(t *testing.T) {
 					ID: "msg_01", SessionID: "ses_01", Role: "user",
 					Time: OpenCodeTime{Created: 1717689500000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "text", Text: "first prompt"},
-				}),
+				},
 			},
 			{
 				Info: OpenCodeMessageInfo{
@@ -197,18 +197,18 @@ func TestComputeOpenCodeConversation_TurnWindows(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
 					Time:   OpenCodeTime{Created: 1717689510000, Completed: ptrInt64(1717689515000)},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_02", Type: "text", Text: "reply 1"},
-				}),
+				},
 			},
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_03", SessionID: "ses_01", Role: "user",
 					Time: OpenCodeTime{Created: 1717689530000},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_03", Type: "text", Text: "second prompt"},
-				}),
+				},
 			},
 			{
 				Info: OpenCodeMessageInfo{
@@ -218,9 +218,9 @@ func TestComputeOpenCodeConversation_TurnWindows(t *testing.T) {
 					Tokens: OpenCodeTokens{Input: 2000, Output: 1000},
 					Time:   OpenCodeTime{Created: 1717689540000, Completed: ptrInt64(1717689550000)},
 				},
-				Parts: mustMarshalJSON([]OpenCodePart{
+				Parts: []OpenCodePart{
 					{ID: "prt_04", Type: "text", Text: "reply 2"},
-				}),
+				},
 			},
 		},
 	}

@@ -11,6 +11,7 @@ import (
 // for per-table DELETE statements during an invalidation run.
 var AllCardTableNames = []string{
 	"session_card_tokens",
+	"session_card_tokens_v2",
 	"session_card_session",
 	"session_card_tools",
 	"session_card_code_activity",
@@ -34,6 +35,7 @@ func IsKnownCardTableName(name string) bool {
 // Card version constants - increment when compute logic changes
 const (
 	TokensCardVersion          = 3 // v3: dedup by message.id (fixes multi-line + replay over-counting)
+	TokensV2CardVersion        = 1 // v1: hierarchical per-provider/per-model breakdown (OpenCode)
 	SessionCardVersion         = 5 // v5: dedup assistant counts by message.id, non-exclusive breakdown
 	ToolsCardVersion           = 3 // v3: Codex spawn_agent/wait_agent excluded — surfaced via AgentsAndSkills (CF-443)
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
@@ -64,6 +66,49 @@ type TokensCardRecord struct {
 	// Fast mode breakdown
 	FastTurns   int             `json:"fast_turns"`
 	FastCostUSD decimal.Decimal `json:"fast_cost_usd"`
+}
+
+// TokensV2Model is one model's token + cost breakdown within a provider. It is
+// both the JSONB storage shape (nested under TokensV2Data) and the API wire
+// shape, so json tags are snake_case to match the frontend Zod schema. Costs
+// are decimal strings for precision.
+type TokensV2Model struct {
+	Input      int64  `json:"input"`
+	Output     int64  `json:"output"`
+	CacheRead  int64  `json:"cache_read"`
+	CacheWrite int64  `json:"cache_write"`
+	Reasoning  int64  `json:"reasoning"`
+	CostUSD    string `json:"cost_usd"`
+}
+
+// TokensV2Provider aggregates one provider's models and total cost.
+type TokensV2Provider struct {
+	CostUSD string                   `json:"cost_usd"`
+	Models  map[string]TokensV2Model `json:"models"`
+}
+
+// TokensV2Data is the hierarchical token-usage tree: session totals plus a
+// per-provider → per-model breakdown. Stored verbatim as JSONB in
+// session_card_tokens_v2.data and served verbatim as the tokens_v2 card.
+type TokensV2Data struct {
+	TotalCostUSD string                      `json:"total_cost_usd"`
+	TotalInput   int64                       `json:"total_input"`
+	TotalOutput  int64                       `json:"total_output"`
+	ByProvider   map[string]TokensV2Provider `json:"by_provider"`
+}
+
+// TokensV2CardRecord is the DB record for the hierarchical tokens card. Unlike
+// the flat tokens card it is provider-specific (OpenCode only for now) and is
+// therefore an optional card: it is excluded from Cards.AllValid so sessions
+// that never produce it (Claude/Codex) do not recompute on every request. Its
+// freshness piggybacks on the universal cards, which are computed in the same
+// pass at the same line count.
+type TokensV2CardRecord struct {
+	SessionID  string       `json:"session_id"`
+	Version    int          `json:"version"`
+	ComputedAt time.Time    `json:"computed_at"`
+	UpToLine   int64        `json:"up_to_line"`
+	Data       TokensV2Data `json:"data"`
 }
 
 // SessionCardRecord is the DB record for the session card (includes compaction and message breakdown).
@@ -240,6 +285,7 @@ type SearchIndexRecord struct {
 // Cards aggregates all card data for a session.
 type Cards struct {
 	Tokens          *TokensCardRecord
+	TokensV2        *TokensV2CardRecord // optional; OpenCode only — not part of AllValid
 	Session         *SessionCardRecord
 	Tools           *ToolsCardRecord
 	CodeActivity    *CodeActivityCardRecord
@@ -373,6 +419,7 @@ type CardValidator interface {
 // Compile-time checks that all card types implement CardValidator.
 var (
 	_ CardValidator = (*TokensCardRecord)(nil)
+	_ CardValidator = (*TokensV2CardRecord)(nil)
 	_ CardValidator = (*SessionCardRecord)(nil)
 	_ CardValidator = (*ToolsCardRecord)(nil)
 	_ CardValidator = (*CodeActivityCardRecord)(nil)
@@ -384,6 +431,14 @@ var (
 // IsValid checks if a tokens card record is valid for the current line count.
 func (c *TokensCardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == TokensCardVersion && c.UpToLine == currentLineCount
+}
+
+// IsValid checks if a tokens_v2 card record is valid for the current line count.
+// Note: tokens_v2 is intentionally NOT part of Cards.AllValid (it is an optional,
+// provider-specific card). This method exists for symmetry and direct freshness
+// checks.
+func (c *TokensV2CardRecord) IsValid(currentLineCount int64) bool {
+	return c != nil && c.Version == TokensV2CardVersion && c.UpToLine == currentLineCount
 }
 
 // IsValid checks if a session card record is valid for the current line count.
