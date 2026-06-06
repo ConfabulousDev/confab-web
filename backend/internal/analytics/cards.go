@@ -97,12 +97,14 @@ type TokensV2Data struct {
 	ByProvider   map[string]TokensV2Provider `json:"by_provider"`
 }
 
-// TokensV2CardRecord is the DB record for the hierarchical tokens card. Unlike
-// the flat tokens card it is provider-specific (OpenCode only for now) and is
-// therefore an optional card: it is excluded from Cards.AllValid so sessions
-// that never produce it (Claude/Codex) do not recompute on every request. Its
-// freshness piggybacks on the universal cards, which are computed in the same
-// pass at the same line count.
+// TokensV2CardRecord is the DB record for the hierarchical (per-provider /
+// per-model) tokens card. It is a universal card written for every session and
+// participates in Cards.AllValid and the staleness gate exactly like the others
+// — for providers that don't yet build the per-model tree (Claude/Codex) it is
+// written with empty Data, mirroring the Workflows card's "always written, empty
+// for N/A sessions" pattern. It is served (ToResponse) only when it has provider
+// data, so non-OpenCode API responses are unchanged. The long-term plan is for
+// tokens_v2 to replace the flat tokens card for all providers.
 type TokensV2CardRecord struct {
 	SessionID  string       `json:"session_id"`
 	Version    int          `json:"version"`
@@ -434,9 +436,6 @@ func (c *TokensCardRecord) IsValid(currentLineCount int64) bool {
 }
 
 // IsValid checks if a tokens_v2 card record is valid for the current line count.
-// Note: tokens_v2 is intentionally NOT part of Cards.AllValid (it is an optional,
-// provider-specific card). This method exists for symmetry and direct freshness
-// checks.
 func (c *TokensV2CardRecord) IsValid(currentLineCount int64) bool {
 	return c != nil && c.Version == TokensV2CardVersion && c.UpToLine == currentLineCount
 }
@@ -504,6 +503,7 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		return false
 	}
 	return c.Tokens.IsValid(currentLineCount) &&
+		c.TokensV2.IsValid(currentLineCount) &&
 		c.Session.IsValid(currentLineCount) &&
 		c.Tools.IsValid(currentLineCount) &&
 		c.CodeActivity.IsValid(currentLineCount) &&

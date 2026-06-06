@@ -45,106 +45,102 @@ func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
 		providerID string
 		modelID    string
 	}
-	type modelTokens struct {
+	type modelAgg struct {
 		input, output, cacheRead, cacheWrite, reasoning int64
-		reportedCost                                    decimal.Decimal // sum of OpenCode's per-message info.cost
+		cost                                            decimal.Decimal
 	}
-	byModel := make(map[modelKey]*modelTokens)
+	byModel := make(map[modelKey]*modelAgg)
 
 	for _, msg := range r.Messages {
-		if msg.Info.Role != "assistant" || msg.Info.Finish == nil {
+		// OpenCode emits an assistant JSONL line only once the turn is settled
+		// (finish set) or errored, so every assistant message carries final
+		// token + cost accounting. No finish gate — gating on finish would drop
+		// errored turns' tokens/cost.
+		if msg.Info.Role != "assistant" {
 			continue
 		}
-		key := modelKey{msg.Info.ProviderID, msg.Info.ModelID}
-		mt := byModel[key]
-		if mt == nil {
-			mt = &modelTokens{}
-			byModel[key] = mt
+
+		// Normalize tokens to the provider's billing convention, per message.
+		// OpenAI bills cached input as a subset of `input` and never charges
+		// cache writes; everyone else (Anthropic-style) bills writes and treats
+		// reads as independent of input.
+		input := msg.Info.Tokens.Input
+		cacheWrite := msg.Info.Tokens.Cache.Write
+		if msg.Info.ProviderID == "openai" {
+			input -= msg.Info.Tokens.Cache.Read
+			if input < 0 {
+				input = 0
+			}
+			cacheWrite = 0
 		}
-		mt.input += msg.Info.Tokens.Input
-		mt.output += msg.Info.Tokens.Output
-		mt.cacheRead += msg.Info.Tokens.Cache.Read
-		mt.cacheWrite += msg.Info.Tokens.Cache.Write
-		mt.reasoning += msg.Info.Tokens.Reasoning
+
+		// Cost source (hybrid), decided per message: prefer OpenCode's
+		// authoritative reported `info.cost` (it already encodes each of its 75+
+		// providers' real pricing); fall back to our family-resolved pricing
+		// table only when this message reported nothing. Per-message (not
+		// per-group) so a session mixing reported and unreported messages bills
+		// each correctly instead of letting one reported message zero-rate its
+		// silent siblings.
+		var cost decimal.Decimal
 		if msg.Info.Cost > 0 {
-			mt.reportedCost = mt.reportedCost.Add(decimal.NewFromFloat(msg.Info.Cost))
+			cost = decimal.NewFromFloat(msg.Info.Cost)
+		} else {
+			cost = CalculateCost(GetPricing(msg.Info.ModelID), input, msg.Info.Tokens.Output, cacheWrite, msg.Info.Tokens.Cache.Read)
 		}
+
+		key := modelKey{msg.Info.ProviderID, msg.Info.ModelID}
+		agg := byModel[key]
+		if agg == nil {
+			agg = &modelAgg{}
+			byModel[key] = agg
+		}
+		agg.input += input
+		agg.output += msg.Info.Tokens.Output
+		agg.cacheRead += msg.Info.Tokens.Cache.Read
+		agg.cacheWrite += cacheWrite
+		agg.reasoning += msg.Info.Tokens.Reasoning
+		agg.cost = agg.cost.Add(cost)
 	}
 
 	var totalInput, totalOutput, totalCacheRead, totalCacheWrite int64
 	var totalCost decimal.Decimal
 
 	// Accumulate the tokens_v2 tree with decimal provider costs, serialized to
-	// strings only at the end to avoid repeated string round-trips.
+	// strings only at the end. Costs use decimal.String() (full precision, no
+	// fixed scale) to match the flat tokens card's serialization exactly.
 	type provAccum struct {
 		models map[string]TokensV2Model
 		cost   decimal.Decimal
 	}
 	byProvider := make(map[string]*provAccum)
 
-	for key, mt := range byModel {
-		// Normalize tokens per the provider's billing convention. OpenAI bills
-		// cached input as a subset of `input` and never charges for cache
-		// writes; everyone else (Anthropic-style) bills cache writes and treats
-		// cache reads as independent of input. These normalized counts drive the
-		// displayed token breakdown and the pricing-table cost fallback below.
-		var input, cacheWrite int64
-		switch key.providerID {
-		case "openai":
-			uncached := mt.input - mt.cacheRead
-			if uncached < 0 {
-				uncached = 0
-			}
-			input = uncached
-			cacheWrite = 0
-		default:
-			input = mt.input
-			cacheWrite = mt.cacheWrite
-		}
+	for key, agg := range byModel {
+		totalInput += agg.input
+		totalOutput += agg.output
+		totalCacheRead += agg.cacheRead
+		totalCacheWrite += agg.cacheWrite
+		totalCost = totalCost.Add(agg.cost)
 
-		totalInput += input
-		totalOutput += mt.output
-		totalCacheRead += mt.cacheRead
-		totalCacheWrite += cacheWrite
-
-		// Cost source (hybrid): OpenCode reports an authoritative per-message
-		// cost that already encodes each of its 75+ providers' real pricing, so
-		// prefer the summed reported cost. Fall back to our pricing table only
-		// when OpenCode reported nothing for the group (cost 0) — e.g. local
-		// models or older daemons — using the family-resolved table. The table
-		// prices only a handful of OpenCode models, so without this preference
-		// the long tail of providers would bill $0.
-		var cost decimal.Decimal
-		if mt.reportedCost.IsPositive() {
-			cost = mt.reportedCost
-		} else {
-			cost = CalculateCost(GetPricing(key.modelID), input, mt.output, cacheWrite, mt.cacheRead)
-		}
-		totalCost = totalCost.Add(cost)
-
-		// Build the hierarchical tokens_v2 tree alongside the flat totals so the
-		// nested per-provider/per-model breakdown stays consistent with the flat
-		// tokens card (same normalized inputs, same cost).
 		prov := byProvider[key.providerID]
 		if prov == nil {
 			prov = &provAccum{models: make(map[string]TokensV2Model)}
 			byProvider[key.providerID] = prov
 		}
 		prov.models[key.modelID] = TokensV2Model{
-			Input:      input,
-			Output:     mt.output,
-			CacheRead:  mt.cacheRead,
-			CacheWrite: cacheWrite,
-			Reasoning:  mt.reasoning,
-			CostUSD:    cost.StringFixed(decimalCostScale),
+			Input:      agg.input,
+			Output:     agg.output,
+			CacheRead:  agg.cacheRead,
+			CacheWrite: agg.cacheWrite,
+			Reasoning:  agg.reasoning,
+			CostUSD:    agg.cost.String(),
 		}
-		prov.cost = prov.cost.Add(cost)
+		prov.cost = prov.cost.Add(agg.cost)
 	}
 
 	providers := make(map[string]TokensV2Provider, len(byProvider))
 	for id, acc := range byProvider {
 		providers[id] = TokensV2Provider{
-			CostUSD: acc.cost.StringFixed(decimalCostScale),
+			CostUSD: acc.cost.String(),
 			Models:  acc.models,
 		}
 	}
@@ -158,16 +154,12 @@ func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
 	out.FastCostUSD = decimal.Zero
 
 	out.TokensV2 = &TokensV2Data{
-		TotalCostUSD: totalCost.StringFixed(decimalCostScale),
+		TotalCostUSD: totalCost.String(),
 		TotalInput:   totalInput,
 		TotalOutput:  totalOutput,
 		ByProvider:   providers,
 	}
 }
-
-// decimalCostScale is the fixed number of decimal places used when serializing
-// tokens_v2 costs as strings. Matches the frontend's decimal-string parsing.
-const decimalCostScale = 6
 
 func computeOpenCodeSession(out *ComputeResult, r *opencodeRollout) {
 	models := map[string]struct{}{}
@@ -326,8 +318,19 @@ func computeOpenCodeConversation(out *ComputeResult, r *opencodeRollout) {
 		role string
 	}
 	var events []event
+	var userTurns, assistantTurns int
 	for _, msg := range r.Messages {
 		events = append(events, event{msg.Info.Time.Created, msg.Info.Role})
+		switch msg.Info.Role {
+		case "user":
+			userTurns++
+		case "assistant":
+			// Completed turns only (errored/unfinished turns still count as
+			// assistant *messages* in the session card, but not as turns here).
+			if msg.Info.Finish != nil {
+				assistantTurns++
+			}
+		}
 	}
 	sort.SliceStable(events, func(i, j int) bool { return events[i].ts < events[j].ts })
 
@@ -372,12 +375,8 @@ func computeOpenCodeConversation(out *ComputeResult, r *opencodeRollout) {
 		}
 	}
 
-	out.UserTurns = out.UserMessages
-	for _, msg := range r.Messages {
-		if msg.Info.Role == "assistant" && msg.Info.Finish != nil {
-			out.AssistantTurns++
-		}
-	}
+	out.UserTurns = userTurns
+	out.AssistantTurns = assistantTurns
 }
 
 func computeOpenCodeAgentsAndSkills(out *ComputeResult, r *opencodeRollout) {

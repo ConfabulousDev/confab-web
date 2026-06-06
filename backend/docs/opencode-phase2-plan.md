@@ -8,6 +8,55 @@ This plan covers the **confab-web** repo (backend + frontend). The CLI Phase 2 w
 
 ---
 
+## Implementation Status (as built — 2026-06-06)
+
+This plan was written ahead of implementation; the sections below are the
+original design. What actually shipped on the `opencode-phase2-backend-wip`
+branch differs in a few deliberate ways — read this first:
+
+- **Backend: complete and wired end-to-end.** `opencodeProvider` implements
+  `Parse` (loads the `transcript` sync file, merges S3 chunks, deserializes one
+  `OpenCodeMessage` per JSONL line), `ComputeCards`, `SearchText`, and
+  `PrepareTranscript` (smart-recap XML with `idMap` → stable message ULIDs).
+- **Analyzers are consolidated, not split.** The "8 per-card analyzer files"
+  in §4 / the File Manifest were implemented as a single
+  `internal/analytics/opencode_compute.go` (orchestrated by
+  `ComputeFromOpenCodeRollout`). There are no `analyzer_*_opencode.go` files;
+  the per-card test files are named after the cards they cover.
+- **Token cost is hybrid, not pure recompute.** Prefer OpenCode's reported
+  per-message `info.cost` (summed per provider+model); fall back to the pricing
+  table only when a group reports `0`. Correct across OpenCode's 75+ providers;
+  resolves open question #3 in `opencode-integration-architecture.md`.
+- **`tokens_v2` is a universal peer card (always written).** It is written for
+  every session — with empty `by_provider` for providers that don't yet build
+  the per-model tree (Claude/Codex) — so it participates in `Cards.AllValid` and
+  `FindStaleSessions` exactly like the other cards, mirroring the Workflows
+  card's "always written, empty for N/A sessions" pattern. The API serves it
+  only when it has provider data, so non-OpenCode responses are unchanged and
+  the frontend keeps showing the flat `tokens` card for them. The flat `tokens`
+  card is still computed for OpenCode (it feeds trends/org aggregation); the
+  session view suppresses it when `tokens_v2` has data. Long-term, `tokens_v2`
+  will replace the flat `tokens` card for all providers. See
+  `internal/analytics/README.md` → "Always-written cards".
+- **Messages are parsed once.** `OpenCodeMessage.Parts` is `[]OpenCodePart` and
+  `OpenCodePart.State` is `*OpenCodeToolState` (parsed in `Parse`), not
+  re-unmarshaled per analyzer.
+- **Frontend transcript rendering is NOT built yet.** The §3 adapter,
+  §5 `OpenCodeFilterDropdown`, and §6 `OpenCodeTranscriptPane` are **stubs**
+  (`opencodeAdapter` returns empty data; `TranscriptPane`/`FilterDropdown`
+  render `null`). An OpenCode session currently renders its summary cards
+  (including `tokens_v2`) but a blank transcript pane. Full transcript
+  rendering + deep-link landing is deferred to a later phase. What *is* wired
+  on the frontend: provider registration, the `TokensV2Card` + Zod schema +
+  registry entry, the OpenCode icon, and pricing.
+- **User-facing docs / marketing copy intentionally NOT updated.** The §Docs
+  changes (provider page, FAQ, "OpenCode supported" copy) are held until the
+  CLI daemon ships and data flows end-to-end. The provider IS already visible
+  in the UI provider filters and the home-page "Works with" list, however,
+  because `opencode` was added to `PROVIDER_VALUES`.
+
+---
+
 ## Decisions Log
 
 | Decision | Choice | Rationale |

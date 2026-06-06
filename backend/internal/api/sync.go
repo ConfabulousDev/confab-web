@@ -434,6 +434,14 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	//      envelope, tool_use blocks). Gated on provider AND file_type.
 	parseClaudeCode := provider == models.ProviderClaudeCode && req.FileType == "transcript"
 	extractTimestamps := req.FileType == "transcript"
+	// Timestamp extraction is per-line but provider-shaped: Claude Code and Codex
+	// carry a top-level ISO-8601 "timestamp"; OpenCode carries info.time.created
+	// (epoch ms). Pick the matching extractor so every provider populates
+	// session.last_message_at.
+	extractTimestamp := extractTimestampFromLine
+	if provider == models.ProviderOpencode {
+		extractTimestamp = extractOpenCodeTimestampFromLine
+	}
 
 	var content bytes.Buffer
 	var latestTimestamp *time.Time
@@ -444,7 +452,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		content.WriteString("\n")
 
 		if extractTimestamps {
-			if ts := extractTimestampFromLine(line); ts != nil {
+			if ts := extractTimestamp(line); ts != nil {
 				if latestTimestamp == nil || ts.After(*latestTimestamp) {
 					latestTimestamp = ts
 				}
@@ -980,6 +988,39 @@ func extractTimestampFromLine(line string) *time.Time {
 		}
 	}
 
+	return &ts
+}
+
+// extractOpenCodeTimestampFromLine pulls the message creation time from an
+// OpenCode transcript line. OpenCode messages carry info.time.created as epoch
+// milliseconds (not a top-level ISO-8601 "timestamp" like Claude/Codex), so it
+// needs its own extractor. Returns nil for lines without a positive created time.
+func extractOpenCodeTimestampFromLine(line string) *time.Time {
+	// Quick check to avoid parsing lines without a created time.
+	if !strings.Contains(line, `"created"`) {
+		return nil
+	}
+
+	var entry struct {
+		Info struct {
+			Time struct {
+				Created int64 `json:"created"`
+			} `json:"time"`
+		} `json:"info"`
+	}
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return nil
+	}
+	if entry.Info.Time.Created <= 0 {
+		return nil
+	}
+	// Reject absurd future timestamps from malformed/hostile transcript data —
+	// an out-of-range `created` would otherwise sort the session to the top of
+	// every "most recent" ordering. Allow a small clock-skew window.
+	ts := time.UnixMilli(entry.Info.Time.Created).UTC()
+	if ts.After(time.Now().Add(48 * time.Hour)) {
+		return nil
+	}
 	return &ts
 }
 

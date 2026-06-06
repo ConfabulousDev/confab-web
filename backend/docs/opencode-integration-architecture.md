@@ -248,5 +248,5 @@ OpenCode supports 75+ LLM providers, so the "provider" in Confab's sense is "ope
 
 1. **Subagents:** OpenCode has `agent` and `subtask` part types. Does the daemon track subagent sessions as separate `sync_files` (like Codex) or inline them in the parent message parts?
 2. **SSE event replay:** On SSE reconnect, how far back does OpenCode buffer events? Do we need to re-list all sessions?
-3. **Token cost:** OpenCode API returns `cost` per message — do we use this value directly or compute from model pricing tables?
+3. ~~**Token cost:** OpenCode API returns `cost` per message — do we use this value directly or compute from model pricing tables?~~ **Resolved (hybrid):** prefer OpenCode's reported per-message `info.cost`, summed per `(providerID, modelID)`; fall back to Confab's pricing table only when a group reports `0`. This is correct across OpenCode's 75+ providers (most unpriced by our table, which would otherwise bill `$0`) while staying robust when cost is unreported. See `computeOpenCodeTokens` in `internal/analytics/opencode_compute.go`.
 4. **File diffs:** OpenCode tracks `FileDiff` at the session level (`session.diff` SSE event) — should these be extracted for the summary card?

@@ -95,6 +95,11 @@ function CustomTooltip({ active, payload, showBreakdown }: CustomTooltipProps) {
 
 // Providers with no cache-write concept (Codex/OpenAI today) hide the
 // Cache row's "Create / " prefix rather than dashing it.
+// TODO(opencode): this hardcodes "only Codex lacks cache-write", but OpenCode
+// aggregates many providers (OpenAI, Gemini, DeepSeek, …) that mostly don't bill
+// cache writes either. Once OpenCode token data lands, drive this off whether the
+// provider actually has cache_write > 0 in the data rather than a provider-id
+// allowlist (which also tidies the Codex special-case).
 function providerHasCacheWrite(providerId: string): boolean {
   return providerId !== 'codex';
 }

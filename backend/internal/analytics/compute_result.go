@@ -20,8 +20,10 @@ type ComputeResult struct {
 	FastCostUSD decimal.Decimal
 
 	// Hierarchical per-provider/per-model token breakdown (from TokensAnalyzer).
-	// Optional: populated only by providers whose sessions span multiple LLM
-	// providers (OpenCode). Nil for Claude/Codex, which omit the tokens_v2 card.
+	// Populated only by providers that build the tree (OpenCode); nil for
+	// Claude/Codex. ToCards still always writes a tokens_v2 record (empty data
+	// when this is nil), so the card participates uniformly in AllValid and
+	// staleness; only the API serialization omits it when it has no provider data.
 	TokensV2 *TokensV2Data
 
 	// Message counts (from SessionAnalyzer)

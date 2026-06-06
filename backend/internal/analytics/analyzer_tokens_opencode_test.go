@@ -110,8 +110,8 @@ func TestComputeOpenCodeTokens_V2Tree(t *testing.T) {
 	if v2.TotalOutput != out.OutputTokens || v2.TotalOutput != 8000 {
 		t.Errorf("TotalOutput = %d, want 8000 (== flat OutputTokens %d)", v2.TotalOutput, out.OutputTokens)
 	}
-	if v2.TotalCostUSD != out.EstimatedCostUSD.StringFixed(decimalCostScale) {
-		t.Errorf("TotalCostUSD = %q, want %q (flat cost)", v2.TotalCostUSD, out.EstimatedCostUSD.StringFixed(decimalCostScale))
+	if v2.TotalCostUSD != out.EstimatedCostUSD.String() {
+		t.Errorf("TotalCostUSD = %q, want %q (flat cost)", v2.TotalCostUSD, out.EstimatedCostUSD.String())
 	}
 
 	if len(v2.ByProvider) != 2 {
@@ -154,8 +154,8 @@ func TestComputeOpenCodeTokens_PrefersReportedCost(t *testing.T) {
 	if out == nil || out.TokensV2 == nil {
 		t.Fatal("TokensV2 not populated")
 	}
-	want := "0.420000"
-	if got := out.EstimatedCostUSD.StringFixed(decimalCostScale); got != want {
+	want := "0.42"
+	if got := out.EstimatedCostUSD.String(); got != want {
 		t.Errorf("EstimatedCostUSD = %s, want %s (reported cost, not $0 pricing fallback)", got, want)
 	}
 	if out.TokensV2.TotalCostUSD != want {

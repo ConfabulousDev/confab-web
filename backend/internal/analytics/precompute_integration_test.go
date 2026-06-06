@@ -732,6 +732,16 @@ func insertAllCards(t *testing.T, env *testutil.TestEnvironment, sessionID strin
 	if err != nil {
 		t.Fatalf("failed to insert workflows card: %v", err)
 	}
+
+	// Tokens v2 card (always-written peer card; empty data for non-OpenCode)
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_tokens_v2 (
+			session_id, version, computed_at, up_to_line, data
+		) VALUES ($1, $2, $3, $4, '{}')
+	`, sessionID, analytics.TokensV2CardVersion, now, upToLine)
+	if err != nil {
+		t.Fatalf("failed to insert tokens_v2 card: %v", err)
+	}
 }
 
 // insertSmartRecapCard inserts a smart recap card with the given parameters.
@@ -1332,6 +1342,16 @@ func insertAllCardsWithComputedAt(t *testing.T, env *testutil.TestEnvironment, s
 	if err != nil {
 		t.Fatalf("failed to insert workflows card: %v", err)
 	}
+
+	// Tokens v2 card (always-written peer card; empty data for non-OpenCode)
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_tokens_v2 (
+			session_id, version, computed_at, up_to_line, data
+		) VALUES ($1, $2, $3, $4, '{}')
+	`, sessionID, analytics.TokensV2CardVersion, computedAt, upToLine)
+	if err != nil {
+		t.Fatalf("failed to insert tokens_v2 card: %v", err)
+	}
 }
 
 // insertAllCardsWithWrongTokensVersion inserts all 7 cards but with the specified version
@@ -1431,6 +1451,16 @@ func insertAllCardsWithWrongTokensVersion(t *testing.T, env *testutil.TestEnviro
 	`, sessionID, analytics.WorkflowsCardVersion, computedAt, upToLine)
 	if err != nil {
 		t.Fatalf("failed to insert workflows card: %v", err)
+	}
+
+	// Tokens v2 card (correct version — only the flat tokens card is mismatched)
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_tokens_v2 (
+			session_id, version, computed_at, up_to_line, data
+		) VALUES ($1, $2, $3, $4, '{}')
+	`, sessionID, analytics.TokensV2CardVersion, computedAt, upToLine)
+	if err != nil {
+		t.Fatalf("failed to insert tokens_v2 card: %v", err)
 	}
 }
 
@@ -1785,6 +1815,7 @@ func TestFindStaleSessions_VersionMismatch_AlwaysFound(t *testing.T) {
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_agents_and_skills (session_id, version, computed_at, up_to_line, agent_invocations, skill_invocations, agent_stats, skill_stats) VALUES ($1, $2, $3, $4, 0, 0, '{}', '{}')`, sessionID, analytics.AgentsAndSkillsCardVersion, now, 100)
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_redactions (session_id, version, computed_at, up_to_line, total_redactions, redaction_counts) VALUES ($1, $2, $3, $4, 0, '{}')`, sessionID, analytics.RedactionsCardVersion, now, 100)
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_workflows (session_id, version, computed_at, up_to_line, runs) VALUES ($1, $2, $3, $4, '[]')`, sessionID, analytics.WorkflowsCardVersion, now, 100)
+	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_tokens_v2 (session_id, version, computed_at, up_to_line, data) VALUES ($1, $2, $3, $4, '{}')`, sessionID, analytics.TokensV2CardVersion, now, 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{

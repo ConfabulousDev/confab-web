@@ -179,7 +179,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 				-- Check if ALL cards exist (not missing)
 				CASE WHEN tc.session_id IS NOT NULL AND sc.session_id IS NOT NULL AND tl.session_id IS NOT NULL
 				     AND ca.session_id IS NOT NULL AND cv.session_id IS NOT NULL AND as_card.session_id IS NOT NULL
-				     AND rd.session_id IS NOT NULL AND wf.session_id IS NOT NULL
+				     AND rd.session_id IS NOT NULL AND wf.session_id IS NOT NULL AND tv.session_id IS NOT NULL
 				THEN TRUE ELSE FALSE END AS all_cards_exist,
 				-- Check if any existing card has wrong version (only meaningful when all cards exist)
 				CASE WHEN (tc.session_id IS NOT NULL AND tc.version != $1)
@@ -190,20 +190,23 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 				     OR (as_card.session_id IS NOT NULL AND as_card.version != $6)
 				     OR (rd.session_id IS NOT NULL AND rd.version != $7)
 				     OR (wf.session_id IS NOT NULL AND wf.version != $15)
+				     OR (tv.session_id IS NOT NULL AND tv.version != $16)
 				THEN TRUE ELSE FALSE END AS has_version_mismatch,
 				-- Minimum up_to_line across all cards (most stale point)
 				LEAST(
 					COALESCE(tc.up_to_line, 0), COALESCE(sc.up_to_line, 0),
 					COALESCE(tl.up_to_line, 0), COALESCE(ca.up_to_line, 0),
 					COALESCE(cv.up_to_line, 0), COALESCE(as_card.up_to_line, 0),
-					COALESCE(rd.up_to_line, 0), COALESCE(wf.up_to_line, 0)
+					COALESCE(rd.up_to_line, 0), COALESCE(wf.up_to_line, 0),
+					COALESCE(tv.up_to_line, 0)
 				) AS min_up_to_line,
 				-- Oldest computed_at across all cards (earliest computation)
 				LEAST(
 					COALESCE(tc.computed_at, NOW()), COALESCE(sc.computed_at, NOW()),
 					COALESCE(tl.computed_at, NOW()), COALESCE(ca.computed_at, NOW()),
 					COALESCE(cv.computed_at, NOW()), COALESCE(as_card.computed_at, NOW()),
-					COALESCE(rd.computed_at, NOW()), COALESCE(wf.computed_at, NOW())
+					COALESCE(rd.computed_at, NOW()), COALESCE(wf.computed_at, NOW()),
+					COALESCE(tv.computed_at, NOW())
 				) AS min_computed_at,
 				s.last_sync_at
 			FROM session_lines sl
@@ -216,6 +219,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 			LEFT JOIN session_card_agents_and_skills as_card ON sl.session_id = as_card.session_id
 			LEFT JOIN session_card_redactions rd ON sl.session_id = rd.session_id
 			LEFT JOIN session_card_workflows wf ON sl.session_id = wf.session_id
+			LEFT JOIN session_card_tokens_v2 tv ON sl.session_id = tv.session_id
 			-- Provider filter: pq.Array(models.AllowedProviders) is the
 			-- permanent allowlist (canonical forms + legacy aliases). See
 			-- internal/models/provider.go for the OSS self-hosted aliasing
@@ -284,6 +288,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 		limit,                             // $13
 		pq.Array(models.AllowedProviders), // $14
 		WorkflowsCardVersion,              // $15
+		TokensV2CardVersion,               // $16
 	)
 	if err != nil {
 		span.RecordError(err)

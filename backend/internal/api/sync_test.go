@@ -215,3 +215,62 @@ func TestExtractTimestampFromLine(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractOpenCodeTimestampFromLine(t *testing.T) {
+	// wantMs is the expected epoch-millisecond value; 0 means "expect nil".
+	tests := []struct {
+		name   string
+		line   string
+		wantMs int64
+	}{
+		{
+			name:   "opencode assistant message",
+			line:   `{"info":{"id":"msg_01","role":"assistant","time":{"created":1717689600000,"completed":1717689605000}},"parts":[]}`,
+			wantMs: 1717689600000,
+		},
+		{
+			name:   "opencode user message (created only)",
+			line:   `{"info":{"id":"msg_00","role":"user","time":{"created":1717689500000}},"parts":[]}`,
+			wantMs: 1717689500000,
+		},
+		{
+			name: "no created field",
+			line: `{"info":{"id":"msg_01","role":"assistant","time":{}},"parts":[]}`,
+		},
+		{
+			name: "zero created value",
+			line: `{"info":{"time":{"created":0}}}`,
+		},
+		{
+			name: "absurd future epoch rejected",
+			line: `{"info":{"time":{"created":999999999999999999}}}`,
+		},
+		{
+			name: "claude-shaped line has no info.time.created",
+			line: `{"type":"assistant","timestamp":"2025-01-15T11:30:00.000Z"}`,
+		},
+		{
+			name: "malformed json",
+			line: `{"info":{"time":{"created":1717689600000`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractOpenCodeTimestampFromLine(tt.line)
+			if tt.wantMs == 0 {
+				if got != nil {
+					t.Errorf("extractOpenCodeTimestampFromLine() = %v, want nil", got)
+				}
+				return
+			}
+			want := time.UnixMilli(tt.wantMs).UTC()
+			if got == nil {
+				t.Fatalf("extractOpenCodeTimestampFromLine() = nil, want %v", want)
+			}
+			if !got.Equal(want) {
+				t.Errorf("extractOpenCodeTimestampFromLine() = %v, want %v", got, want)
+			}
+		})
+	}
+}

@@ -983,18 +983,22 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 		}
 	}
 
-	// tokens_v2 is optional: only providers that build the hierarchical tree
-	// (OpenCode) populate r.TokensV2. It is excluded from Cards.AllValid, so a
-	// nil tree simply means no tokens_v2 card for this session.
-	if r.TokensV2 != nil {
-		if _, hasErr := r.CardErrors["tokens_v2"]; !hasErr {
-			cards.TokensV2 = &TokensV2CardRecord{
-				SessionID:  sessionID,
-				Version:    TokensV2CardVersion,
-				ComputedAt: now,
-				UpToLine:   lineCount,
-				Data:       *r.TokensV2,
-			}
+	// tokens_v2 is always written (empty data for providers that don't yet build
+	// the per-provider/per-model tree, e.g. Claude/Codex), so it participates in
+	// AllValid and the staleness gate exactly like the other cards — mirroring the
+	// Workflows card's "always written, empty for N/A sessions" pattern. It will
+	// eventually replace the flat tokens card for all providers.
+	if _, hasErr := r.CardErrors["tokens_v2"]; !hasErr {
+		data := TokensV2Data{TotalCostUSD: "0", ByProvider: map[string]TokensV2Provider{}}
+		if r.TokensV2 != nil {
+			data = *r.TokensV2
+		}
+		cards.TokensV2 = &TokensV2CardRecord{
+			SessionID:  sessionID,
+			Version:    TokensV2CardVersion,
+			ComputedAt: now,
+			UpToLine:   lineCount,
+			Data:       data,
 		}
 	}
 
@@ -1176,10 +1180,12 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		response.Cards["tokens"] = tokensCard
 	}
 
-	// tokens_v2: hierarchical per-provider/per-model breakdown (OpenCode). The
-	// stored Data is already the API wire shape, so it is served verbatim. The
-	// frontend renders tokens_v2 in place of the flat tokens card when present.
-	if c.TokensV2 != nil {
+	// tokens_v2: hierarchical per-provider/per-model breakdown. Cached for every
+	// session (empty for providers that don't build the tree yet) so it shares the
+	// uniform staleness gate, but served only when it actually has provider data —
+	// so non-OpenCode responses are unchanged and the frontend keeps showing the
+	// flat tokens card. The stored Data is already the API wire shape.
+	if c.TokensV2 != nil && len(c.TokensV2.Data.ByProvider) > 0 {
 		response.Cards["tokens_v2"] = c.TokensV2.Data
 	}
 

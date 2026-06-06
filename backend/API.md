@@ -1600,7 +1600,7 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.tokens.estimated_usd` | string | Estimated API cost (assumes 5-min prompt caching) |
 | `cards.tokens.fast_turns` | int\|omitted | Turns using fast mode (omitted if no fast mode usage) |
 | `cards.tokens.fast_cost_usd` | string\|omitted | Cost from fast mode turns (omitted if no fast mode usage) |
-| `cards.tokens_v2` | object\|omitted | Hierarchical per-provider/per-model token breakdown. Present only for sessions spanning multiple LLM providers (OpenCode); omitted for Claude/Codex. Supersedes `cards.tokens` in the UI when present. Optional card — not part of the cache-validity gate. |
+| `cards.tokens_v2` | object\|omitted | Hierarchical per-provider/per-model token breakdown. Cached for every session and part of the cache-validity gate, but **included in the response only when it has provider data** (currently OpenCode); omitted for Claude/Codex until their per-model trees are built. Supersedes `cards.tokens` in the UI when present, and is intended to eventually replace it for all providers. |
 | `cards.tokens_v2.total_cost_usd` | string | Total estimated cost across all providers (decimal as string, 6dp). Sourced from OpenCode's reported per-message cost; falls back to Confab's pricing table only for models OpenCode reports no cost for. |
 | `cards.tokens_v2.total_input` | int | Total input tokens (normalized per provider; matches `cards.tokens.input`) |
 | `cards.tokens_v2.total_output` | int | Total output tokens (matches `cards.tokens.output`) |

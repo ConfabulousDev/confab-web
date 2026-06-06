@@ -216,6 +216,7 @@ func TestCards_AllValid(t *testing.T) {
 
 	allFresh := &Cards{
 		Tokens:          &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo},
+		TokensV2:        &TokensV2CardRecord{Version: TokensV2CardVersion, UpToLine: upTo},
 		Session:         &SessionCardRecord{Version: SessionCardVersion, UpToLine: upTo},
 		Tools:           &ToolsCardRecord{Version: ToolsCardVersion, UpToLine: upTo},
 		CodeActivity:    &CodeActivityCardRecord{Version: CodeActivityCardVersion, UpToLine: upTo},
