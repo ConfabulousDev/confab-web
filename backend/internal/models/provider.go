@@ -20,6 +20,7 @@ package models
 const (
 	ProviderClaudeCode = "claude-code"
 	ProviderCodex      = "codex"
+	ProviderOpencode   = "opencode"
 )
 
 // ProviderClaudeCodeLegacy is the pre-CF-347 display form that older
@@ -33,6 +34,7 @@ const ProviderClaudeCodeLegacy = "Claude Code"
 var CanonicalProviders = []string{
 	ProviderClaudeCode,
 	ProviderCodex,
+	ProviderOpencode,
 }
 
 // LegacyAliases maps non-canonical session_type values to canonical form.
@@ -56,6 +58,7 @@ var LegacyAliases = map[string]string{
 var AllowedProviders = []string{
 	ProviderClaudeCode,
 	ProviderCodex,
+	ProviderOpencode,
 	ProviderClaudeCodeLegacy,
 }
 

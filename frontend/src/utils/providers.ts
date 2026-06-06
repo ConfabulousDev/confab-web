@@ -19,9 +19,9 @@
 // those when a third provider lands.
 
 import type { ReactNode } from 'react';
-import { ClaudeCodeIcon, CodexIcon } from '@/components/icons';
+import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon } from '@/components/icons';
 
-export const PROVIDER_VALUES = ['claude-code', 'codex'] as const;
+export const PROVIDER_VALUES = ['claude-code', 'codex', 'opencode'] as const;
 export type ProviderId = (typeof PROVIDER_VALUES)[number];
 
 /**
@@ -79,6 +79,14 @@ export const PROVIDER_METADATA: Record<ProviderId, ProviderMetadata> = {
         searches: "Codex's web_search_call is not counted as file search",
       },
     },
+  },
+  opencode: {
+    id: 'opencode',
+    label: 'OpenCode',
+    brandDisplayName: 'OpenCode',
+    icon: OpenCodeIcon,
+    brandColor: '#6366f1',
+    resumeCommand: { idLabel: 'Copy OpenCode ID', commandHint: 'for opencode resume' },
   },
 };
 

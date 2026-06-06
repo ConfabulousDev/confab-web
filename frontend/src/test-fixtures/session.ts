@@ -26,6 +26,10 @@ const DEFAULTS_BY_PROVIDER: Record<ProviderId, ProviderDefaults> = {
     externalIdPrefix: 'codex-fixture',
     transcriptFileName: 'rollout.jsonl',
   },
+  opencode: {
+    externalIdPrefix: 'opencode-fixture',
+    transcriptFileName: 'messages.jsonl',
+  },
 };
 
 const FIXTURE_TIMESTAMP = '2026-05-13T01:00:00Z';

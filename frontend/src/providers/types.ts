@@ -174,6 +174,14 @@ export type CodexAdapter = ProviderAdapter<
   CodexHierarchicalCounts
 >;
 
+export type OpenCodeAdapter = ProviderAdapter<
+  unknown,
+  unknown,
+  { user: boolean; assistant: boolean; tool: boolean },
+  { toggleCategory: (cat: 'user' | 'assistant' | 'tool') => void },
+  { user: number; assistant: number; tool: number }
+>;
+
 /**
  * Consumer-facing adapter shape. All payload types are widened to `unknown`
  * so SessionViewer treats items, raw lines, filter state, and counts

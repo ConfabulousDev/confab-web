@@ -97,6 +97,15 @@ export const CodexIcon = (
   </svg>
 );
 
+// OpenCode icon — angle brackets symbol representing code/terminal.
+// Brand color is a blue-violet (#6366f1).
+export const OpenCodeIcon = (
+  <svg data-testid="icon-opencode" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </svg>
+);
+
 // Terminal icon for Session card header
 export const TerminalIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

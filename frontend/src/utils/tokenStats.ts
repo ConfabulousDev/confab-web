@@ -50,7 +50,7 @@ export type PricingTable = Record<ProviderId, Record<string, ModelPricing>>;
 // pricing.json (refreshable from confabulous.dev). Until the fetch lands the
 // table is empty — getPricing then warns and bills $0, but cost UI renders
 // only after auth + session-data load, by which point the table is populated.
-let activePricing: PricingTable = { 'claude-code': {}, codex: {} };
+let activePricing: PricingTable = { 'claude-code': {}, codex: {}, opencode: {} };
 
 /** Install the effective price table fetched from the backend (CF-515). */
 export function setPricingTable(table: PricingTable): void {

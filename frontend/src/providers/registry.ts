@@ -12,6 +12,7 @@
 import { PROVIDER_VALUES, type ProviderId } from '@/utils/providers';
 import { claudeAdapter } from './claudeAdapter';
 import { codexAdapter } from './codexAdapter';
+import { opencodeAdapter } from './opencodeAdapter';
 import type { OpaqueAdapter } from './types';
 
 // Each concrete adapter is fully typed against `ClaudeAdapter` / `CodexAdapter`
@@ -21,6 +22,7 @@ import type { OpaqueAdapter } from './types';
 const REGISTRY: Record<ProviderId, OpaqueAdapter> = {
   'claude-code': claudeAdapter as unknown as OpaqueAdapter,
   codex: codexAdapter as unknown as OpaqueAdapter,
+  opencode: opencodeAdapter as unknown as OpaqueAdapter,
 };
 /* eslint-enable @typescript-eslint/consistent-type-assertions */
 
