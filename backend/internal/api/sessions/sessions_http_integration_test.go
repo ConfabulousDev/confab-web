@@ -427,7 +427,11 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 		var result db.SessionListResult
 		testutil.ParseJSON(t, resp, &result)
 
-		want := map[string]bool{models.ProviderClaudeCode: false, models.ProviderCodex: false}
+		want := map[string]bool{
+			models.ProviderClaudeCode: false,
+			models.ProviderCodex:      false,
+			models.ProviderOpencode:   false,
+		}
 		for _, p := range result.FilterOptions.Providers {
 			if _, ok := want[p]; ok {
 				want[p] = true
@@ -438,8 +442,8 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 				t.Errorf("filter_options.providers missing %q (got %v)", p, result.FilterOptions.Providers)
 			}
 		}
-		if len(result.FilterOptions.Providers) != 2 {
-			t.Errorf("filter_options.providers = %v, want exactly 2 entries", result.FilterOptions.Providers)
+		if len(result.FilterOptions.Providers) != len(want) {
+			t.Errorf("filter_options.providers = %v, want exactly %d entries", result.FilterOptions.Providers, len(want))
 		}
 	})
 
