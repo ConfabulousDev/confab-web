@@ -74,7 +74,7 @@ describe('TokensV2Card', () => {
   });
 
   it('renders loading state', () => {
-    const { container } = render(<TokensV2Card data={null} loading={true} />);
+    render(<TokensV2Card data={null} loading={true} />);
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
@@ -85,7 +85,7 @@ describe('TokensV2Card', () => {
 
   it('returns null when no data and not loading', () => {
     const { container } = render(<TokensV2Card data={null} loading={false} />);
-    expect(container).toBeEmptyDOMElement();
+    expect(container.firstChild).toBeNull();
   });
 
   it('renders single provider without provider section header', () => {

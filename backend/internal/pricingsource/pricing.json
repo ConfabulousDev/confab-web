@@ -1,6 +1,6 @@
 {
   "schema_version": 0,
-  "updated_at": "2026-05-29T22:00:00Z",
+  "updated_at": "2026-06-06T04:15:00Z",
   "pricing": {
     "claude-code": {
       "opus-4-8": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 },
@@ -32,6 +32,16 @@
       "o3": { "input": 2.0, "output": 8.0, "cacheWrite": 0, "cacheRead": 0.5 },
       "o3-mini": { "input": 1.1, "output": 4.4, "cacheWrite": 0, "cacheRead": 0.55 },
       "o4-mini": { "input": 1.1, "output": 4.4, "cacheWrite": 0, "cacheRead": 0.275 }
+    },
+    "opencode": {
+      "gemini-2.5-pro": { "input": 1.25, "output": 5.0, "cacheWrite": 0, "cacheRead": 0.315 },
+      "gemini-2.5-flash": { "input": 0.075, "output": 0.3, "cacheWrite": 0, "cacheRead": 0.01875 },
+      "deepseek-v3": { "input": 0.27, "output": 1.1, "cacheWrite": 0, "cacheRead": 0.07 },
+      "deepseek-r1": { "input": 0.55, "output": 2.19, "cacheWrite": 0, "cacheRead": 0.14 },
+      "grok-3": { "input": 3.0, "output": 15.0, "cacheWrite": 0, "cacheRead": 0 },
+      "grok-3-mini": { "input": 0.3, "output": 0.5, "cacheWrite": 0, "cacheRead": 0 },
+      "mistral-large-2411": { "input": 2.0, "output": 6.0, "cacheWrite": 0, "cacheRead": 0 },
+      "mistral-small-2501": { "input": 0.1, "output": 0.3, "cacheWrite": 0, "cacheRead": 0 }
     }
   }
 }

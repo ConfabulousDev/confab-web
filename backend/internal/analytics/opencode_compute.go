@@ -3,7 +3,6 @@ package analytics
 import (
 	"encoding/json"
 	"sort"
-	"strings"
 
 	"github.com/shopspring/decimal"
 )
@@ -52,6 +51,16 @@ func parseToolState(raw json.RawMessage) *OpenCodeToolState {
 		return nil
 	}
 	return &state
+}
+
+func getStringInput(state *OpenCodeToolState, key string) string {
+	if state == nil || state.Input == nil {
+		return ""
+	}
+	if v, ok := state.Input[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
@@ -249,12 +258,7 @@ func computeOpenCodeCodeActivity(out *ComputeResult, r *opencodeRollout) {
 					if lang := languageFromPath(fp); lang != "" {
 						out.LanguageBreakdown[lang]++
 					}
-					if content, ok := state.Input["content"].(string); ok {
-						out.LinesAdded += strings.Count(content, "\n")
-						if len(content) > 0 && !strings.HasSuffix(content, "\n") {
-							out.LinesAdded++
-						}
-					}
+					out.LinesAdded += countLines(getStringInput(state, "content"))
 				}
 			case "Edit":
 				if fp, ok := state.Input["file_path"].(string); ok && fp != "" {
@@ -262,18 +266,8 @@ func computeOpenCodeCodeActivity(out *ComputeResult, r *opencodeRollout) {
 					if lang := languageFromPath(fp); lang != "" {
 						out.LanguageBreakdown[lang]++
 					}
-					if oldStr, ok := state.Input["old_string"].(string); ok {
-						out.LinesRemoved += strings.Count(oldStr, "\n")
-						if len(oldStr) > 0 && !strings.HasSuffix(oldStr, "\n") {
-							out.LinesRemoved++
-						}
-					}
-					if newStr, ok := state.Input["new_string"].(string); ok {
-						out.LinesAdded += strings.Count(newStr, "\n")
-						if len(newStr) > 0 && !strings.HasSuffix(newStr, "\n") {
-							out.LinesAdded++
-						}
-					}
+					out.LinesRemoved += countLines(getStringInput(state, "old_string"))
+					out.LinesAdded += countLines(getStringInput(state, "new_string"))
 				}
 			case "Grep", "Glob":
 				out.SearchCount++
@@ -363,7 +357,6 @@ func computeOpenCodeAgentsAndSkills(out *ComputeResult, r *opencodeRollout) {
 			out.AgentStats[name].Success++
 		}
 	}
-	out.TotalSkillInvocations = 0
 }
 
 func computeOpenCodeRedactions(out *ComputeResult, r *opencodeRollout) {

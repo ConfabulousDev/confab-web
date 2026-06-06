@@ -201,6 +201,28 @@ const TokensCardDataSchema = z.object({
   fast_cost_usd: z.string().optional(),
 });
 
+// tokens_v2: hierarchical per-provider per-model breakdown (OpenCode only for now)
+const TokensV2ModelSchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cache_read: z.number(),
+  cache_write: z.number(),
+  reasoning: z.number(),
+  cost_usd: z.string().refine((s) => /^-?\d+(\.\d+)?$/.test(s), { message: 'Invalid decimal' }),
+});
+
+const TokensV2ProviderSchema = z.object({
+  cost_usd: z.string().refine((s) => /^-?\d+(\.\d+)?$/.test(s), { message: 'Invalid decimal' }),
+  models: z.record(z.string(), TokensV2ModelSchema),
+});
+
+const TokensV2CardDataSchema = z.object({
+  total_cost_usd: z.string().refine((s) => /^-?\d+(\.\d+)?$/.test(s), { message: 'Invalid decimal' }),
+  total_input: z.number(),
+  total_output: z.number(),
+  by_provider: z.record(z.string(), TokensV2ProviderSchema),
+});
+
 // Session card includes compaction info (consolidated from previous separate compaction card)
 // Note: Messages with text+tool_use count as text_responses, not tool_calls.
 // Therefore assistant_messages may not equal text_responses + tool_calls + thinking_blocks.
@@ -338,6 +360,7 @@ const SmartRecapQuotaInfoSchema = z.object({
 // Note: cost is now part of tokens card, compaction is now part of session card
 const AnalyticsCardsSchema = z.object({
   tokens: TokensCardDataSchema.optional(),
+  tokens_v2: TokensV2CardDataSchema.optional(),
   session: SessionCardDataSchema.optional(),
   tools: ToolsCardDataSchema.optional(),
   code_activity: CodeActivityCardDataSchema.optional(),

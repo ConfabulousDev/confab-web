@@ -1,8 +1,10 @@
-import type {
-  ProviderAdapter,
-  OpenCodeAdapter,
-} from './types';
-import type { OpenCodeRenderItem, OpenCodeFilterState, OpenCodeHierarchicalCounts } from '@/components/session/opencodeCategories';
+// OpenCode provider adapter (Phase 3b stub).
+//
+// Minimal implementation to satisfy the ProviderAdapter contract.
+// Full implementation will be added in Phase 4.
+
+import type { OpenCodeAdapter } from './types';
+import type { OpenCodeRenderItem, OpenCodeFilterState } from '@/components/session/opencodeCategories';
 import {
   countOpenCodeCategories,
   opencodeItemMatchesFilter,
@@ -10,30 +12,37 @@ import {
 } from '@/components/session/opencodeCategories';
 import { useState } from 'react';
 
-type OpenCodeRawLine = { info: { role: string; modelID?: string; providerID?: string; time: { created: number } }; parts: unknown[] };
+interface OpenCodeRawLine {
+  info: { role: string; modelID?: string; providerID?: string; time: { created: number } };
+  parts: unknown[];
+}
 
 export const opencodeAdapter: OpenCodeAdapter = {
   id: 'opencode',
   supportsTILs: false,
 
-  async fetchInitial(_sessionId: string, _fileName: string) {
-    return { items: [] as OpenCodeRenderItem[], totalLines: 0, raw: [] as OpenCodeRawLine[] };
+  async fetchInitial() {
+    const items: OpenCodeRenderItem[] = [];
+    const raw: OpenCodeRawLine[] = [];
+    return { items, totalLines: 0, raw };
   },
 
-  async fetchIncremental(_sessionId: string, _fileName: string, _currentLineCount: number) {
-    return { newItems: [] as OpenCodeRenderItem[], newRaw: [] as OpenCodeRawLine[], newTotalLineCount: 0 };
+  async fetchIncremental() {
+    const newItems: OpenCodeRenderItem[] = [];
+    const newRaw: OpenCodeRawLine[] = [];
+    return { newItems, newRaw, newTotalLineCount: 0 };
   },
 
   normalize(raw: OpenCodeRawLine[]) {
-    return raw as unknown as OpenCodeRenderItem[];
+    return raw;
   },
 
-  extractModel(_raw: OpenCodeRawLine[], _items: OpenCodeRenderItem[]) {
-    return null;
+  extractModel(): string | undefined {
+    return undefined;
   },
 
   computeMeta(_items: OpenCodeRenderItem[], _raw: OpenCodeRawLine[], fallback: { firstSeen?: string; lastSyncAt?: string }) {
-    return { durationMs: null, sessionDate: fallback.firstSeen ? new Date(fallback.firstSeen) : null };
+    return { durationMs: undefined, sessionDate: fallback.firstSeen ? new Date(fallback.firstSeen) : undefined };
   },
 
   useFilters() {
@@ -52,10 +61,10 @@ export const opencodeAdapter: OpenCodeAdapter = {
   countCategories: countOpenCodeCategories,
   itemMatchesFilter: opencodeItemMatchesFilter,
 
-  useDeepLinkFilterReset(_items: OpenCodeRenderItem[], _targetId: string | undefined, _filters: ReturnType<OpenCodeAdapter['useFilters']>) {
+  useDeepLinkFilterReset() {
   },
 
-  calculateMessageCost(_model: string | null, _usage: { input: number; output: number; cacheWrite: number; cacheRead: number }, _message: unknown) {
+  calculateMessageCost() {
     return 0;
   },
 

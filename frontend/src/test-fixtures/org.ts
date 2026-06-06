@@ -46,6 +46,18 @@ const DEFAULTS_BY_PROVIDER: Record<ProviderId, ProviderDefaults> = {
     avgAssistantTimeMs: 6_000_000,
     avgUserTimeMs: 3_000_000,
   },
+  opencode: {
+    emailDomain: 'example.com',
+    sessionCount: 10,
+    totalCostUSD: '32.00',
+    totalDurationMs: 90_000_000,
+    totalAssistantTimeMs: 60_000_000,
+    totalUserTimeMs: 30_000_000,
+    avgCostUSD: '3.20',
+    avgDurationMs: 9_000_000,
+    avgAssistantTimeMs: 6_000_000,
+    avgUserTimeMs: 3_000_000,
+  },
 };
 
 let nextID = 1;

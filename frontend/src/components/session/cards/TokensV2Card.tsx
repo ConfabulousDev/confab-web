@@ -47,7 +47,6 @@ export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardDat
   if (!data) return null;
 
   const totalCost = parseFloat(data.total_cost_usd);
-  const isZeroCost = totalCost === 0;
   const providerEntries = Object.entries(data.by_provider);
 
   return (
@@ -56,7 +55,6 @@ export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardDat
         label="Estimated cost"
         value={formatCost(totalCost)}
         icon={DollarIcon}
-        valueClassName={isZeroCost ? undefined : undefined}
       />
       <StatRow
         label="Input"

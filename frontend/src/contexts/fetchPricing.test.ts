@@ -19,6 +19,7 @@ describe('fetchPricing', () => {
     const table: PricingTable = {
       'claude-code': { 'opus-4-7': { input: 7, output: 25, cacheWrite: 6.25, cacheRead: 0.5 } },
       codex: {},
+      opencode: {},
     };
     mockFetch({ schema_version: 0, updated_at: '2026-06-01T00:00:00Z', pricing: table });
 

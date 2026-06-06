@@ -37,4 +37,14 @@ export const PRICING_FIXTURE: PricingTable = {
     'o3-mini': { input: 1.1, output: 4.4, cacheWrite: 0, cacheRead: 0.55 },
     'o4-mini': { input: 1.1, output: 4.4, cacheWrite: 0, cacheRead: 0.275 },
   },
+  opencode: {
+    'gemini-2.5-pro': { input: 1.25, output: 5.0, cacheWrite: 0, cacheRead: 0.315 },
+    'gemini-2.5-flash': { input: 0.075, output: 0.3, cacheWrite: 0, cacheRead: 0.01875 },
+    'deepseek-v3': { input: 0.27, output: 1.1, cacheWrite: 0, cacheRead: 0.07 },
+    'deepseek-r1': { input: 0.55, output: 2.19, cacheWrite: 0, cacheRead: 0.14 },
+    'grok-3': { input: 3.0, output: 15.0, cacheWrite: 0, cacheRead: 0 },
+    'grok-3-mini': { input: 0.3, output: 0.5, cacheWrite: 0, cacheRead: 0 },
+    'mistral-large-2411': { input: 2.0, output: 6.0, cacheWrite: 0, cacheRead: 0 },
+    'mistral-small-2501': { input: 0.1, output: 0.3, cacheWrite: 0, cacheRead: 0 },
+  },
 };
