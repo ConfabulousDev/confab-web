@@ -97,12 +97,26 @@ export const CodexIcon = (
   </svg>
 );
 
-// OpenCode icon — angle brackets symbol representing code/terminal.
-// Brand color is a blue-violet (#6366f1).
+// OpenCode mark — the official "o" glyph from the brand kit (opencode.ai/brand):
+// a blocky monochrome letterform with a shaded lower counter. Paths taken from
+// the official favicon geometry (square viewBox cropped to the glyph so it reads
+// at ~14px tall, matching ClaudeCodeIcon/CodexIcon).
+//
+// Unlike Claude/Codex (saturated brand fills), OpenCode's brand is MONOCHROME,
+// so the mark uses `currentColor` — rendering near-black on light themes and
+// off-white on dark, mirroring the brand's own light/dark logo variants. The
+// counter is the same currentColor at 0.4 opacity to preserve the two-tone look.
+// (The chart-series `brandColor` in providers.ts is decoupled: recharts needs a
+// fixed hex, so it pins the official mid-gray #656363.)
 export const OpenCodeIcon = (
-  <svg data-testid="icon-opencode" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="16 18 22 12 16 6" />
-    <polyline points="8 6 2 12 8 18" />
+  <svg data-testid="icon-opencode" width="14" height="14" viewBox="96 96 320 320" fill="none">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z"
+      fill="currentColor"
+    />
+    <path d="M320 224V352H192V224H320Z" fill="currentColor" fillOpacity="0.4" />
   </svg>
 );
 

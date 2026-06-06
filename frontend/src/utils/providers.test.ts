@@ -6,7 +6,7 @@ import {
   getProviderMetadataOrFallback,
   providerLabel,
 } from './providers';
-import { ClaudeCodeIcon, CodexIcon } from '@/components/icons';
+import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon } from '@/components/icons';
 
 // CF-416 (Phase 1 of frontend provider abstraction).
 //
@@ -57,6 +57,20 @@ describe('PROVIDER_METADATA', () => {
     expect(meta.brandColor).toBe('#10a37f');
     expect(meta.resumeCommand.idLabel).toBe('Copy Codex ID');
     expect(meta.resumeCommand.commandHint).toBe('for codex resume');
+  });
+
+  // CF-544: pins the official OpenCode branding (icon mark + grayscale
+  // brandColor) against future drift. brandColor is the official medium-dark
+  // gray #656363 (the monochrome brand) — NOT the placeholder #6366f1 it
+  // replaced.
+  it('pins the opencode entry strings (UI contract)', () => {
+    const meta = PROVIDER_METADATA.opencode;
+    expect(meta.label).toBe('OpenCode');
+    expect(meta.brandDisplayName).toBe('OpenCode');
+    expect(meta.icon).toBe(OpenCodeIcon);
+    expect(meta.brandColor).toBe('#656363');
+    expect(meta.resumeCommand.idLabel).toBe('Copy OpenCode ID');
+    expect(meta.resumeCommand.commandHint).toBe('for opencode resume');
   });
 });
 

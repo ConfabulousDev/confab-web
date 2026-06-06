@@ -14,9 +14,9 @@
 // 'neutral' fallback policies below).
 //
 // Marketing prose hardcoded outside this file: Quickstart.tsx, HeroCards.tsx,
-// QuickstartCTA.tsx all spell out "Claude Code and Codex" in conjunctive
-// sentences that don't generate cleanly at N != 2 providers. Hand-update
-// those when a third provider lands.
+// QuickstartCTA.tsx spell out the provider list ("Claude Code, Codex, and
+// OpenCode") in conjunctive sentences that don't generate cleanly from the
+// registry. Hand-update those when another provider lands.
 
 import type { ReactNode } from 'react';
 import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon } from '@/components/icons';
@@ -85,7 +85,13 @@ export const PROVIDER_METADATA: Record<ProviderId, ProviderMetadata> = {
     label: 'OpenCode',
     brandDisplayName: 'OpenCode',
     icon: OpenCodeIcon,
-    brandColor: '#6366f1',
+    // OpenCode's brand is monochrome grayscale (opencode.ai/brand). brandColor
+    // drives the Trends chart series, which recharts needs as a fixed hex (not
+    // currentColor / a CSS var), so it pins the official medium-dark gray
+    // #656363 — readable on both light and dark chart backgrounds and distinct
+    // from the #9ca3af unknown-provider gray. The OpenCodeIcon mark is
+    // intentionally decoupled (uses currentColor) so it adapts per theme.
+    brandColor: '#656363',
     resumeCommand: { idLabel: 'Copy OpenCode ID', commandHint: 'for opencode resume' },
   },
 };

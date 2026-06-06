@@ -5,9 +5,9 @@ description: Frequently asked questions about Confabulous, the managed instance,
 
 ## General
 
-### Is OpenCode support in the works?
+### Is OpenCode supported?
 
-Quite possibly. Please [file an issue](https://github.com/ConfabulousDev/confab/issues/new) to indicate your interest.
+Yes — OpenCode sessions sync and analyze like any other provider. See [OpenCode](/providers/opencode/).
 
 ### Do you accept code contributions?
 

@@ -50,7 +50,7 @@ const cards: HeroCard[] = [
     icon: '📖',
     title: 'Review',
     description:
-      'Browse your Claude Code and Codex sessions with full conversation history and context.',
+      'Browse your Claude Code, Codex, and OpenCode sessions with full conversation history and context.',
     demoUrl: `${DEMO_SESSION}?tab=transcript`,
     docsLinks: [{ label: 'Docs', href: `${DOCS}/features/sessions/` }],
   },
@@ -58,11 +58,12 @@ const cards: HeroCard[] = [
     icon: '🔌',
     title: 'Multi-provider support',
     description:
-      'Started with Claude Code, added Codex, more on the way (OpenCode next). One dashboard for every AI coding session.',
+      'Claude Code, Codex, and OpenCode — one dashboard for every AI coding session.',
     demoUrl: `${DEMO}/sessions?provider=codex`,
     docsLinks: [
       { label: 'Claude Code', href: `${DOCS}/providers/claude-code/` },
       { label: 'Codex', href: `${DOCS}/providers/codex/` },
+      { label: 'OpenCode', href: `${DOCS}/providers/opencode/` },
     ],
   },
   {
@@ -104,7 +105,7 @@ const cards: HeroCard[] = [
     icon: '⚙️',
     title: 'How it works',
     description:
-      'Learn how Confab syncs and organizes your Claude Code and Codex sessions on your own server.',
+      'Learn how Confab syncs and organizes your Claude Code, Codex, and OpenCode sessions on your own server.',
     docsLinks: [{ label: 'Docs', href: `${DOCS}/architecture/overview/` }],
   },
 ];

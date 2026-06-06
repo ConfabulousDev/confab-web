@@ -30,7 +30,7 @@ function Quickstart() {
       <div className={styles.icon}>🚀</div>
       <h2 className={styles.headline}>Quickstart</h2>
       <p className={styles.description}>
-        Install the CLI to automatically sync your <em>Claude Code and Codex</em> sessions.
+        Install the CLI to automatically sync your <em>Claude Code, Codex, and OpenCode</em> sessions.
       </p>
       <p className={styles.platformNote}>macOS, Linux & WSL</p>
 

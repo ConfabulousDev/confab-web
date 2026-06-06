@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import QuickstartCTA from './QuickstartCTA';
 
 const DISMISS_KEY = 'quickstart-cta-dismissed';
-const BANNER_TEXT = 'Set up session syncing to track your own Claude Code and Codex sessions.';
+const BANNER_TEXT = 'Set up session syncing to track your own Claude Code, Codex, and OpenCode sessions.';
 
 // Mock localStorage since jsdom may not provide a fully functional implementation
 function createMockLocalStorage() {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getProviderIcon } from './providerIcon';
-import { ClaudeCodeIcon, CodexIcon, RobotIcon } from './icons';
+import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, RobotIcon } from './icons';
 
 // getProviderIcon is the single seam SessionsPage / SessionHeader / any
 // future session-row component uses to pick the brand icon for a session.
@@ -23,6 +23,11 @@ describe('getProviderIcon', () => {
 
   it('returns ClaudeCodeIcon for the canonical claude-code provider', () => {
     expect(getProviderIcon('claude-code')).toBe(ClaudeCodeIcon);
+  });
+
+  // CF-544: pins the OpenCode mark to opencode sessions.
+  it('returns OpenCodeIcon for the canonical opencode provider', () => {
+    expect(getProviderIcon('opencode')).toBe(OpenCodeIcon);
   });
 
   it('returns ClaudeCodeIcon for the legacy "Claude Code" display form', () => {
