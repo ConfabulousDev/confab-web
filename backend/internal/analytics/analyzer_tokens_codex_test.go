@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
@@ -45,7 +46,7 @@ func TestComputeCodexTokens_TicketRollout_ReasoningNotAdded(t *testing.T) {
 		ReasoningOutputTokens: 6_002,
 		TotalTokens:           22_164_827,
 	})
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -82,7 +83,7 @@ func TestComputeCodexTokens_OutputInvariantUnderReasoning(t *testing.T) {
 				ReasoningOutputTokens: tc.reasoning,
 				TotalTokens:           12000,
 			})
-			out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
+			out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{r})
 			if out == nil {
 				t.Fatal("ComputeFromCodexRollout returned nil")
 			}
@@ -106,7 +107,7 @@ func TestComputeCodexTokens_DefensiveReasoningGreaterThanOutput(t *testing.T) {
 		ReasoningOutputTokens: 999,
 		TotalTokens:           110,
 	})
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{r})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{r})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -133,7 +134,7 @@ func TestComputeCodexTokens_MultiRolloutReasoningExcluded(t *testing.T) {
 		ReasoningOutputTokens: 200,
 		TotalTokens:           2800,
 	})
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{main, sub})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{main, sub})
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}

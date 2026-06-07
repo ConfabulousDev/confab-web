@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -332,6 +333,10 @@ func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleS
 			attribute.Int64("session.total_lines", session.TotalLines),
 		))
 	defer span.End()
+
+	// Enrich the ctx logger so any unknown-model pricing warning emitted deep in
+	// the compute path is traceable to this session.
+	ctx = logger.WithLogger(ctx, logger.Ctx(ctx).With("session_id", session.SessionID, "provider", session.Provider))
 
 	sp, err := ProviderFor(session.Provider)
 	if err != nil {

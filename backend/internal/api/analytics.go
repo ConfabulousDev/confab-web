@@ -284,7 +284,10 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			return
 		}
 
-		computed := sp.ComputeCards(r.Context(), rollout)
+		// Enrich the ctx logger so any unknown-model pricing warning emitted deep
+		// in the compute path is traceable to this session.
+		computeCtx := logger.WithLogger(r.Context(), log.With("session_id", sessionID, "provider", sessionProvider))
+		computed := sp.ComputeCards(computeCtx, rollout)
 		if computed.ValidationErrorCount > 0 {
 			log.Warn("Transcript validation errors detected",
 				"session_id", sessionID,

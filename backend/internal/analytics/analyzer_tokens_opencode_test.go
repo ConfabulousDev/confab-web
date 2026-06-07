@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -33,7 +34,7 @@ func TestComputeOpenCodeTokens_AnthropicProvider(t *testing.T) {
 			}),
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -63,7 +64,7 @@ func TestComputeOpenCodeTokens_OpenAIProvider(t *testing.T) {
 			}),
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -97,7 +98,7 @@ func TestComputeOpenCodeTokens_V2Tree(t *testing.T) {
 			}),
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil || out.TokensV2 == nil {
 		t.Fatal("TokensV2 not populated")
 	}
@@ -150,7 +151,7 @@ func TestComputeOpenCodeTokens_PrefersReportedCost(t *testing.T) {
 	// long-tail case — OpenCode supports 75+ providers, most unpriced by us.
 	msg := opencodeAssistantMsg("deepseek", "future-model-2099", OpenCodeTokens{Input: 1000, Output: 500})
 	msg.Info.Cost = 0.42
-	out := ComputeFromOpenCodeRollout(&opencodeRollout{Messages: []*OpenCodeMessage{msg}})
+	out := ComputeFromOpenCodeRollout(context.Background(), &opencodeRollout{Messages: []*OpenCodeMessage{msg}})
 	if out == nil || out.TokensV2 == nil {
 		t.Fatal("TokensV2 not populated")
 	}
@@ -179,7 +180,7 @@ func TestComputeOpenCodeTokens_MultiProviderSession(t *testing.T) {
 			}),
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -209,7 +210,7 @@ func TestComputeOpenCodeTokens_UnknownModel(t *testing.T) {
 			}),
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -233,7 +234,7 @@ func TestComputeOpenCodeTokens_FastTurnsAlwaysZero(t *testing.T) {
 			}),
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -255,7 +256,7 @@ func TestComputeOpenCodeTokens_CostPrecision(t *testing.T) {
 			}),
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}

@@ -274,10 +274,10 @@ func TestTokensAnalyzer_AgentUsage(t *testing.T) {
 			"agentId":     "abc123",
 			"totalTokens": float64(1000),
 			"usage": map[string]interface{}{
-				"input_tokens":                 float64(50),
-				"output_tokens":                float64(200),
-				"cache_creation_input_tokens":  float64(100),
-				"cache_read_input_tokens":      float64(500),
+				"input_tokens":                float64(50),
+				"output_tokens":               float64(200),
+				"cache_creation_input_tokens": float64(100),
+				"cache_read_input_tokens":     float64(500),
 			},
 		}) + "\n"
 

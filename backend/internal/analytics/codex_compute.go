@@ -1,6 +1,11 @@
 package analytics
 
-import "github.com/ConfabulousDev/confab-web/internal/codex"
+import (
+	"context"
+
+	"github.com/ConfabulousDev/confab-web/internal/codex"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
+)
 
 // ComputeFromCodexRollout maps a parsed Codex rollout slice (main +
 // subagents, CF-403) onto the canonical ComputeResult shape. Per-card compute
@@ -33,7 +38,7 @@ import "github.com/ConfabulousDev/confab-web/internal/codex"
 //   - Redactions: per-rollout dispatch over parser-surfaced strings.
 //   - ValidationErrorCount: sums across rollouts so the frontend counter
 //     reflects the union of main + subagent parse anomalies.
-func ComputeFromCodexRollout(rollouts []*codex.ParsedRollout) *ComputeResult {
+func ComputeFromCodexRollout(ctx context.Context, rollouts []*codex.ParsedRollout) *ComputeResult {
 	if len(rollouts) == 0 || rollouts[0] == nil {
 		return &ComputeResult{}
 	}
@@ -47,7 +52,7 @@ func ComputeFromCodexRollout(rollouts []*codex.ParsedRollout) *ComputeResult {
 	}
 
 	// Tokens and Session aggregate across all rollouts internally.
-	computeCodexTokens(result, rollouts)
+	computeCodexTokens(logger.Ctx(ctx), result, rollouts)
 	computeCodexSession(result, rollouts)
 
 	// Conversation stays main-only: turn counts + timing reflect user-perceived

@@ -25,11 +25,11 @@ func TestUpsertSearchIndex_InsertAndGet(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	record := &analytics.SearchIndexRecord{
-		SessionID:      sessionID,
-		Version:        analytics.SearchIndexVersion,
+		SessionID:       sessionID,
+		Version:         analytics.SearchIndexVersion,
 		IndexedUpToLine: 42,
-		RecapIndexedAt: &now,
-		MetadataHash:   "abc123hash",
+		RecapIndexedAt:  &now,
+		MetadataHash:    "abc123hash",
 	}
 	content := &analytics.SearchIndexContent{
 		MetadataText:     "Fix authentication bug",

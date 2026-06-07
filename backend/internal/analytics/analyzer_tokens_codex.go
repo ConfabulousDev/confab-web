@@ -1,6 +1,8 @@
 package analytics
 
 import (
+	"log/slog"
+
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/shopspring/decimal"
 )
@@ -15,7 +17,7 @@ import (
 //   - CacheCreationTokens stays 0; OpenAI doesn't charge for cache writes.
 //
 // Pricing uses the main rollout's model.
-func computeCodexTokens(out *ComputeResult, rollouts []*codex.ParsedRollout) {
+func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.ParsedRollout) {
 	var totalUncached, totalCached, totalOutput int64
 	for _, r := range rollouts {
 		if r == nil {
@@ -39,7 +41,7 @@ func computeCodexTokens(out *ComputeResult, rollouts []*codex.ParsedRollout) {
 	if len(rollouts) > 0 && rollouts[0] != nil {
 		pricingModel = rollouts[0].Model
 	}
-	pricing := GetPricing(pricingModel)
+	pricing := pricingForModel(log, pricingModel)
 	out.EstimatedCostUSD = CalculateCost(
 		pricing,
 		out.InputTokens,

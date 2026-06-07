@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -61,7 +62,7 @@ func TestCodexAggregation_TokensAcrossSubagents(t *testing.T) {
 		rolloutWithUserMessage("gpt-5", "sub1", "exec_command", t0.Add(10*time.Second)),
 		rolloutWithUserMessage("gpt-5", "sub2", "exec_command", t0.Add(20*time.Second)),
 	}
-	out := ComputeFromCodexRollout(rollouts)
+	out := ComputeFromCodexRollout(context.Background(), rollouts)
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -80,7 +81,7 @@ func TestCodexAggregation_ToolsAcrossSubagents(t *testing.T) {
 		rolloutWithUserMessage("gpt-5", "main", "exec_command", t0),
 		rolloutWithUserMessage("gpt-5", "sub", "apply_patch", t0.Add(10*time.Second)),
 	}
-	out := ComputeFromCodexRollout(rollouts)
+	out := ComputeFromCodexRollout(context.Background(), rollouts)
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -103,7 +104,7 @@ func TestCodexAggregation_SessionModelsUsedUnion(t *testing.T) {
 		rolloutWithUserMessage("gpt-5", "main", "exec_command", t0),
 		rolloutWithUserMessage("gpt-5-mini", "sub", "exec_command", t0.Add(10*time.Second)),
 	}
-	out := ComputeFromCodexRollout(rollouts)
+	out := ComputeFromCodexRollout(context.Background(), rollouts)
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -138,7 +139,7 @@ func TestCodexAggregation_CodeActivityAcrossSubagents(t *testing.T) {
 			}},
 		},
 	}
-	out := ComputeFromCodexRollout(rollouts)
+	out := ComputeFromCodexRollout(context.Background(), rollouts)
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -173,7 +174,7 @@ func TestCodexAggregation_RedactionsAcrossSubagents(t *testing.T) {
 			}},
 		},
 	}
-	out := ComputeFromCodexRollout(rollouts)
+	out := ComputeFromCodexRollout(context.Background(), rollouts)
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -196,7 +197,7 @@ func TestCodexAggregation_ConversationCardExcludesSubagents(t *testing.T) {
 		// Subagent adds another user/assistant pair — must NOT count.
 		rolloutWithUserMessage("gpt-5", "sub user", "exec_command", t0.Add(10*time.Second)),
 	}
-	out := ComputeFromCodexRollout(rollouts)
+	out := ComputeFromCodexRollout(context.Background(), rollouts)
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -261,7 +262,7 @@ func TestCodexAggregation_ValidationErrorCountSums(t *testing.T) {
 		{ValidationErrors: []codex.ValidationError{{Line: 1, Reason: "main bad"}}},
 		{ValidationErrors: []codex.ValidationError{{Line: 1, Reason: "subagent A bad"}, {Line: 2, Reason: "subagent A bad #2"}}},
 	}
-	out := ComputeFromCodexRollout(rollouts)
+	out := ComputeFromCodexRollout(context.Background(), rollouts)
 	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
@@ -273,15 +274,15 @@ func TestCodexAggregation_ValidationErrorCountSums(t *testing.T) {
 // TestCodexAggregation_EmptySliceProducesEmptyResult asserts a nil/empty
 // slice yields a zero-valued ComputeResult, never a nil pointer.
 func TestCodexAggregation_EmptySliceProducesEmptyResult(t *testing.T) {
-	out := ComputeFromCodexRollout(nil)
+	out := ComputeFromCodexRollout(context.Background(), nil)
 	if out == nil {
-		t.Fatal("ComputeFromCodexRollout(nil) returned nil pointer; expected empty ComputeResult")
+		t.Fatal("ComputeFromCodexRollout(context.Background(), nil) returned nil pointer; expected empty ComputeResult")
 	}
 	if out.UserMessages != 0 || out.TotalToolCalls != 0 {
 		t.Errorf("expected zero counts on empty input, got users=%d tools=%d", out.UserMessages, out.TotalToolCalls)
 	}
-	out = ComputeFromCodexRollout([]*codex.ParsedRollout{})
+	out = ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{})
 	if out == nil {
-		t.Fatal("ComputeFromCodexRollout(empty slice) returned nil pointer; expected empty ComputeResult")
+		t.Fatal("ComputeFromCodexRollout(context.Background(), empty slice) returned nil pointer; expected empty ComputeResult")
 	}
 }

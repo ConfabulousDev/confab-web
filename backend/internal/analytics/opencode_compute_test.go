@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -56,7 +57,7 @@ func opencodeMinimalRollout() *opencodeRollout {
 
 func TestComputeFromOpenCodeRollout_HappyPath(t *testing.T) {
 	r := opencodeMinimalRollout()
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -99,7 +100,7 @@ func TestComputeFromOpenCodeRollout_HappyPath(t *testing.T) {
 }
 
 func TestComputeFromOpenCodeRollout_EmptyRollout(t *testing.T) {
-	out := ComputeFromOpenCodeRollout(&opencodeRollout{})
+	out := ComputeFromOpenCodeRollout(context.Background(), &opencodeRollout{})
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -132,7 +133,7 @@ func TestComputeFromOpenCodeRollout_FailedTool(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -175,7 +176,7 @@ func TestComputeFromOpenCodeRollout_Compaction(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -207,7 +208,7 @@ func TestComputeFromOpenCodeRollout_Redactions(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -241,7 +242,7 @@ func TestComputeFromOpenCodeRollout_SubtaskAgents(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -307,7 +308,7 @@ func TestComputeFromOpenCodeRollout_AgentModeSwitchesNotCounted(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}

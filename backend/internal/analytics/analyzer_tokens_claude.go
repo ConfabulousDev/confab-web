@@ -1,6 +1,10 @@
 package analytics
 
-import "github.com/shopspring/decimal"
+import (
+	"log/slog"
+
+	"github.com/shopspring/decimal"
+)
 
 // TokensResult contains token usage and cost metrics.
 type TokensResult struct {
@@ -21,6 +25,13 @@ type TokensResult struct {
 type TokensAnalyzer struct {
 	result   TokensResult
 	mainFile *TranscriptFile
+	// mainModel is the main session's model, used to price file-less sub-agents
+	// (their usage carries no model name). Captured from the main transcript.
+	mainModel string
+	// log is the session-scoped logger (enriched upstream with session_id +
+	// provider) used to attribute unknown-model warnings. Nil on test/Analyze
+	// paths; pricingForModel falls back to the default logger.
+	log *slog.Logger
 }
 
 // ProcessFile accumulates token counts from a single file.
@@ -32,6 +43,12 @@ func (a *TokensAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 	}
 
 	for _, group := range file.AssistantMessageGroups() {
+		// Capture the first concrete main-session model; file-less sub-agents
+		// inherit it for pricing (see Finalize).
+		if isMain && a.mainModel == "" && group.Model != "" && group.Model != "<synthetic>" {
+			a.mainModel = group.Model
+		}
+
 		if group.FinalUsage == nil {
 			continue
 		}
@@ -42,7 +59,7 @@ func (a *TokensAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 		a.result.CacheCreationTokens += usage.CacheCreationInputTokens
 		a.result.CacheReadTokens += usage.CacheReadInputTokens
 
-		pricing := GetPricing(group.Model)
+		pricing := pricingForModel(a.log, group.Model)
 		cost := CalculateTotalCost(pricing, usage)
 		a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
 
@@ -73,7 +90,11 @@ func (a *TokensAnalyzer) Finalize(hasAgentFile func(string) bool) {
 			a.result.CacheCreationTokens += usage.CacheCreationInputTokens
 			a.result.CacheReadTokens += usage.CacheReadInputTokens
 
-			pricing := GetPricing("")
+			// File-less sub-agents carry token usage but no model name, so price
+			// them at the main session model they were spawned under. If the main
+			// session itself has no resolvable model, pricingForModel treats the
+			// empty name as an expected sentinel (zero cost, DEBUG, no WARN).
+			pricing := pricingForModel(a.log, a.mainModel)
 			cost := CalculateTotalCost(pricing, usage)
 			a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
 

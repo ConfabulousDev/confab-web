@@ -389,7 +389,7 @@ func TestParseRollout_ImplicitTurn(t *testing.T) {
 // TestParseRollout_ModelFromTurnContext covers the Codex CLI ~0.130+ layout
 // where `model` is absent from session_meta and lives in the per-turn
 // turn_context envelope instead. Without this, rollout.Model stays empty and
-// GetPricing returns zero — surfacing as $0.00 in the cost card.
+// pricing resolves to zero — surfacing as $0.00 in the cost card.
 func TestParseRollout_ModelFromTurnContext(t *testing.T) {
 	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s1","model_provider":"openai","cwd":"/x"}}
 {"timestamp":"2026-05-13T01:00:00.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1}}

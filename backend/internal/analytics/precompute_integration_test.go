@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
-	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // =============================================================================
@@ -2260,7 +2260,7 @@ func TestIndependentThresholds_RegularCardsHigherBaseMin_Found(t *testing.T) {
 	// Use different thresholds for regular vs recap
 	regularThresholds := analytics.StalenessThresholds{
 		ThresholdPct:    0.20,
-		BaseMinLines:    5,  // Low floor
+		BaseMinLines:    5, // Low floor
 		BaseMinTime:     3 * time.Minute,
 		MinInitialLines: 10,
 		MinSessionAge:   10 * time.Minute,

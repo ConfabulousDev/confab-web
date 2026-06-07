@@ -54,7 +54,7 @@ func (p *codexProvider) Parse(ctx context.Context, input ParseInput) (Rollout, e
 
 func (p *codexProvider) ComputeCards(ctx context.Context, rollout Rollout) *ComputeResult {
 	r := rollout.(*codexRollout)
-	return ComputeFromCodexRollout(r.materialize(ctx))
+	return ComputeFromCodexRollout(ctx, r.materialize(ctx))
 }
 
 func (p *codexProvider) SearchText(ctx context.Context, rollout Rollout) string {

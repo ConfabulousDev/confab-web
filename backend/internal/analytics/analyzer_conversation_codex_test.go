@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func TestComputeCodexConversation_HappyPath(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rollout})
 
 	assertI64Ptr(t, "TotalAssistantDurationMs", out.TotalAssistantDurationMs, 30000)
 	assertI64Ptr(t, "AvgAssistantTurnMs", out.AvgAssistantTurnMs, 15000)
@@ -75,7 +76,7 @@ func TestComputeCodexConversation_NoAssistant(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rollout})
 
 	assertNilI64(t, "TotalAssistantDurationMs", out.TotalAssistantDurationMs)
 	assertNilI64(t, "AvgAssistantTurnMs", out.AvgAssistantTurnMs)
@@ -106,7 +107,7 @@ func TestComputeCodexConversation_TrailingAssistant(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rollout})
 
 	assertI64Ptr(t, "TotalAssistantDurationMs", out.TotalAssistantDurationMs, 15000)
 	assertI64Ptr(t, "AvgAssistantTurnMs", out.AvgAssistantTurnMs, 15000)
@@ -147,7 +148,7 @@ func TestComputeCodexConversation_MidStreamPromptsAcrossTurns(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rollout})
 
 	// Window 1: user@0 → asst@5  → duration 5s
 	// Window 2 (trailing): user@30 → asst@40 → duration 10s
@@ -196,7 +197,7 @@ func TestComputeCodexConversation_ZeroTimestampSkipped(t *testing.T) {
 			},
 		}},
 	}
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rollout})
 
 	assertI64Ptr(t, "TotalAssistantDurationMs", out.TotalAssistantDurationMs, 20000)
 	assertI64Ptr(t, "AvgAssistantTurnMs", out.AvgAssistantTurnMs, 10000)
@@ -240,7 +241,7 @@ func TestComputeCodexConversation_ReasoningExtendsAssistant(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rollout})
 
 	assertI64Ptr(t, "TotalAssistantDurationMs (reasoning extends to CompletedAt)", out.TotalAssistantDurationMs, 30000)
 	assertI64Ptr(t, "AvgAssistantTurnMs", out.AvgAssistantTurnMs, 30000)
@@ -278,7 +279,7 @@ func TestComputeCodexConversation_ReasoningWithoutCompletedAt(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromCodexRollout([]*codex.ParsedRollout{rollout})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rollout})
 
 	assertI64Ptr(t, "TotalAssistantDurationMs (no synthetic, asst stays at 10s)", out.TotalAssistantDurationMs, 10000)
 	assertI64Ptr(t, "AvgAssistantTurnMs", out.AvgAssistantTurnMs, 10000)

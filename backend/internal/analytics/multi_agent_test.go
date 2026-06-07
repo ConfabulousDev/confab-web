@@ -630,7 +630,7 @@ func TestEmptyAgentFile(t *testing.T) {
 	}) + "\n"
 
 	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{
-		"agent1": {},          // empty
+		"agent1": {},         // empty
 		"agent2": []byte(""), // empty string
 	})
 	if err != nil {

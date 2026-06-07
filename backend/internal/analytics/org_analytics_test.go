@@ -25,8 +25,8 @@ func TestGetOrgAnalytics_EmptyResults(t *testing.T) {
 
 	now := time.Now().UTC()
 	req := analytics.OrgAnalyticsRequest{
-		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
-		EndTS:    now.Add(24 * time.Hour).Unix(),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
 		TZOffset:      0,
 		IncludeNoRepo: true,
 	}
@@ -122,8 +122,8 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 	insertCards(sid2a, 0.50, 10000, 20000, 30000)
 
 	req := analytics.OrgAnalyticsRequest{
-		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
-		EndTS:    now.Add(24 * time.Hour).Unix(),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
 		TZOffset:      0,
 		IncludeNoRepo: true,
 	}
@@ -234,8 +234,8 @@ func TestGetOrgAnalytics_DateRangeFiltering(t *testing.T) {
 	pastStart := pastEnd.Add(-7 * 24 * time.Hour)
 
 	req := analytics.OrgAnalyticsRequest{
-		StartTS:  pastStart.Unix(),
-		EndTS:    pastEnd.Unix(),
+		StartTS:       pastStart.Unix(),
+		EndTS:         pastEnd.Unix(),
 		TZOffset:      0,
 		IncludeNoRepo: true,
 	}
@@ -314,8 +314,8 @@ func TestGetOrgAnalytics_DeactivatedUsersExcluded(t *testing.T) {
 	}
 
 	req := analytics.OrgAnalyticsRequest{
-		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
-		EndTS:    now.Add(24 * time.Hour).Unix(),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
 		TZOffset:      0,
 		IncludeNoRepo: true,
 	}
@@ -392,8 +392,8 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 	}
 
 	req := analytics.OrgAnalyticsRequest{
-		StartTS:  now.Add(-7 * 24 * time.Hour).Unix(),
-		EndTS:    now.Add(24 * time.Hour).Unix(),
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
 		TZOffset:      0,
 		IncludeNoRepo: true,
 	}

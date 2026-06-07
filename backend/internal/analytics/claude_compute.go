@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -66,8 +67,12 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 		))
 	defer span.End()
 
+	// Session-scoped logger (upstream enriches it with session_id + provider) so
+	// any unknown-model pricing warning is traceable.
+	log := logger.Ctx(ctx)
+
 	// Initialize all analyzers
-	tokensAnalyzer := &TokensAnalyzer{}
+	tokensAnalyzer := &TokensAnalyzer{log: log}
 	sessionAnalyzer := &SessionAnalyzer{}
 	toolsAnalyzer := &ToolsAnalyzer{}
 	codeActivityAnalyzer := &CodeActivityAnalyzer{}
@@ -96,7 +101,7 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 	// runId per agent + the run journals, neither of which the generic loop models.
 	var workflowsAnalyzer *WorkflowsAnalyzer
 	if wf != nil {
-		workflowsAnalyzer = &WorkflowsAnalyzer{}
+		workflowsAnalyzer = &WorkflowsAnalyzer{log: log}
 	}
 
 	// Phase 2: Stream agent files one at a time

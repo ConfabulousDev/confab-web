@@ -44,34 +44,39 @@ func TestGetModelFamily(t *testing.T) {
 	}
 }
 
-func TestGetPricing(t *testing.T) {
+func TestLookupPricing(t *testing.T) {
 	tests := []struct {
 		model         string
+		wantOK        bool
 		expectedInput float64
 	}{
-		{"claude-opus-4-8-20260515", 5},
-		{"claude-opus-4-6-20260201", 5},
-		{"claude-opus-4-5-20251101", 5},
-		{"claude-sonnet-4-20241022", 3},
-		{"claude-haiku-3-5-20241022", 0.80},
-		{"unknown-model", 0}, // unknown models return zero pricing
+		{"claude-opus-4-8-20260515", true, 5},
+		{"claude-opus-4-6-20260201", true, 5},
+		{"claude-opus-4-5-20251101", true, 5},
+		{"claude-sonnet-4-20241022", true, 3},
+		{"claude-haiku-3-5-20241022", true, 0.80},
+		{"unknown-model", false, 0}, // unknown non-empty model: not found, zero pricing
+		{"", false, 0},              // empty model: not found, zero pricing (expected sentinel)
 		// OpenAI / Codex
-		{"gpt-5", 1.25},
-		{"gpt-5-mini", 0.25},
-		{"gpt-5-nano", 0.05},
-		{"gpt-5.5", 5.00},
-		{"gpt-4o", 2.50},
-		{"gpt-4o-mini", 0.15},
-		{"o1", 15.00},
-		{"o3-mini", 1.10},
+		{"gpt-5", true, 1.25},
+		{"gpt-5-mini", true, 0.25},
+		{"gpt-5-nano", true, 0.05},
+		{"gpt-5.5", true, 5.00},
+		{"gpt-4o", true, 2.50},
+		{"gpt-4o-mini", true, 0.15},
+		{"o1", true, 15.00},
+		{"o3-mini", true, 1.10},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			pricing := GetPricing(tt.model)
+			pricing, ok := LookupPricing(tt.model)
+			if ok != tt.wantOK {
+				t.Errorf("LookupPricing(%q) ok = %v, want %v", tt.model, ok, tt.wantOK)
+			}
 			expected := decimal.NewFromFloat(tt.expectedInput)
 			if !pricing.Input.Equal(expected) {
-				t.Errorf("GetPricing(%q).Input = %s, want %s", tt.model, pricing.Input, expected)
+				t.Errorf("LookupPricing(%q).Input = %s, want %s", tt.model, pricing.Input, expected)
 			}
 		})
 	}
@@ -79,7 +84,7 @@ func TestGetPricing(t *testing.T) {
 
 func TestCalculateCost(t *testing.T) {
 	// Test with Sonnet 4 pricing: input=$3, output=$15, cacheWrite=$3.75, cacheRead=$0.30 per million
-	pricing := GetPricing("claude-sonnet-4-20241022")
+	pricing, _ := LookupPricing("claude-sonnet-4-20241022")
 
 	// 1 million input tokens = $3
 	cost := CalculateCost(pricing, 1_000_000, 0, 0, 0)
@@ -105,7 +110,7 @@ func TestCalculateCost(t *testing.T) {
 }
 
 func TestCalculateTotalCost_StandardSpeed(t *testing.T) {
-	pricing := GetPricing("claude-sonnet-4-20241022")
+	pricing, _ := LookupPricing("claude-sonnet-4-20241022")
 	usage := &TokenUsage{
 		InputTokens:  1_000_000,
 		OutputTokens: 0,
@@ -121,7 +126,7 @@ func TestCalculateTotalCost_StandardSpeed(t *testing.T) {
 func TestCalculateTotalCost_FastMode(t *testing.T) {
 	// Opus 4.6: input=$5, output=$25 per million
 	// Fast mode: 6x all token costs
-	pricing := GetPricing("claude-opus-4-6-20260201")
+	pricing, _ := LookupPricing("claude-opus-4-6-20260201")
 	usage := &TokenUsage{
 		InputTokens:  1_000_000,
 		OutputTokens: 100_000,
@@ -139,7 +144,7 @@ func TestCalculateTotalCost_FastMode(t *testing.T) {
 
 func TestCalculateTotalCost_FastModeWithCache(t *testing.T) {
 	// Verify fast mode 6x applies to cache costs too
-	pricing := GetPricing("claude-opus-4-6-20260201")
+	pricing, _ := LookupPricing("claude-opus-4-6-20260201")
 	usage := &TokenUsage{
 		InputTokens:              0,
 		OutputTokens:             0,
@@ -158,7 +163,7 @@ func TestCalculateTotalCost_FastModeWithCache(t *testing.T) {
 }
 
 func TestCalculateTotalCost_WebSearchCost(t *testing.T) {
-	pricing := GetPricing("claude-sonnet-4-20241022")
+	pricing, _ := LookupPricing("claude-sonnet-4-20241022")
 	usage := &TokenUsage{
 		InputTokens:  100_000,
 		OutputTokens: 10_000,
@@ -179,7 +184,7 @@ func TestCalculateTotalCost_WebSearchCost(t *testing.T) {
 }
 
 func TestCalculateTotalCost_FastModeWithWebSearch(t *testing.T) {
-	pricing := GetPricing("claude-opus-4-6-20260201")
+	pricing, _ := LookupPricing("claude-opus-4-6-20260201")
 	usage := &TokenUsage{
 		InputTokens:  1_000_000,
 		OutputTokens: 0,
@@ -200,7 +205,7 @@ func TestCalculateTotalCost_FastModeWithWebSearch(t *testing.T) {
 }
 
 func TestCalculateTotalCost_NilServerToolUse(t *testing.T) {
-	pricing := GetPricing("claude-sonnet-4-20241022")
+	pricing, _ := LookupPricing("claude-sonnet-4-20241022")
 	usage := &TokenUsage{
 		InputTokens:  1_000_000,
 		OutputTokens: 0,
@@ -215,7 +220,7 @@ func TestCalculateTotalCost_NilServerToolUse(t *testing.T) {
 
 // TestFlattenEmbeddedNoCollision verifies the embedded provider-nested table
 // flattens to a family-keyed table without losing any family to a cross-provider
-// key collision (the flatten/GetPricing invariant).
+// key collision (the flatten/LookupPricing invariant).
 func TestFlattenEmbeddedNoCollision(t *testing.T) {
 	doc := pricingsource.Embedded()
 	flat := *flatten(doc)
@@ -237,7 +242,7 @@ func TestFlattenEmbeddedNoCollision(t *testing.T) {
 }
 
 // TestSetActivePricingSwapsRates verifies a refreshed document changes what
-// GetPricing returns — the mechanism that lets a self-host pick up new prices
+// LookupPricing returns — the mechanism that lets a self-host pick up new prices
 // without a redeploy.
 func TestSetActivePricingSwapsRates(t *testing.T) {
 	t.Cleanup(func() { SetActivePricing(pricingsource.Embedded()) }) // restore the floor
@@ -252,12 +257,12 @@ func TestSetActivePricingSwapsRates(t *testing.T) {
 	}
 	SetActivePricing(updated)
 
-	if got := GetPricing("gpt-5").Input; !got.Equal(decimal.NewFromFloat(99)) {
-		t.Errorf("after swap GetPricing(gpt-5).Input = %s, want 99", got)
+	if got, _ := LookupPricing("gpt-5"); !got.Input.Equal(decimal.NewFromFloat(99)) {
+		t.Errorf("after swap LookupPricing(gpt-5).Input = %s, want 99", got.Input)
 	}
 
 	SetActivePricing(pricingsource.Embedded())
-	if got := GetPricing("gpt-5").Input; !got.Equal(decimal.NewFromFloat(1.25)) {
-		t.Errorf("after restore GetPricing(gpt-5).Input = %s, want embedded 1.25", got)
+	if got, _ := LookupPricing("gpt-5"); !got.Input.Equal(decimal.NewFromFloat(1.25)) {
+		t.Errorf("after restore LookupPricing(gpt-5).Input = %s, want embedded 1.25", got.Input)
 	}
 }

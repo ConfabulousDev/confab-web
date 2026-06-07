@@ -1,12 +1,15 @@
 package analytics
 
 import (
+	"context"
+	"log/slog"
 	"sort"
 
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/shopspring/decimal"
 )
 
-func ComputeFromOpenCodeRollout(r *opencodeRollout) *ComputeResult {
+func ComputeFromOpenCodeRollout(ctx context.Context, r *opencodeRollout) *ComputeResult {
 	if r == nil || len(r.Messages) == 0 {
 		return &ComputeResult{}
 	}
@@ -19,7 +22,7 @@ func ComputeFromOpenCodeRollout(r *opencodeRollout) *ComputeResult {
 		RedactionCounts:   make(map[string]int),
 	}
 
-	computeOpenCodeTokens(result, r)
+	computeOpenCodeTokens(logger.Ctx(ctx), result, r)
 	computeOpenCodeSession(result, r)
 	computeOpenCodeTools(result, r)
 	computeOpenCodeCodeActivity(result, r)
@@ -40,7 +43,7 @@ func getStringInput(state *OpenCodeToolState, key string) string {
 	return ""
 }
 
-func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
+func computeOpenCodeTokens(log *slog.Logger, out *ComputeResult, r *opencodeRollout) {
 	type modelKey struct {
 		providerID string
 		modelID    string
@@ -85,7 +88,7 @@ func computeOpenCodeTokens(out *ComputeResult, r *opencodeRollout) {
 		if msg.Info.Cost > 0 {
 			cost = decimal.NewFromFloat(msg.Info.Cost)
 		} else {
-			cost = CalculateCost(GetPricing(msg.Info.ModelID), input, msg.Info.Tokens.Output, cacheWrite, msg.Info.Tokens.Cache.Read)
+			cost = CalculateCost(pricingForModel(log, msg.Info.ModelID), input, msg.Info.Tokens.Output, cacheWrite, msg.Info.Tokens.Cache.Read)
 		}
 
 		key := modelKey{msg.Info.ProviderID, msg.Info.ModelID}

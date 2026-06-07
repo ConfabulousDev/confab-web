@@ -22,7 +22,7 @@ type ModelPricing struct {
 // activePricing holds the flat family→pricing table currently in effect, keyed
 // by family ("opus-4-7", "gpt-5", ...). It defaults to the embedded floor
 // (pricingsource.Embedded) and is swapped atomically by SetActivePricing when
-// the precompute worker pulls a newer remote table. GetPricing reads it
+// the precompute worker pulls a newer remote table. LookupPricing reads it
 // lock-free, so price updates land without a redeploy.
 //
 // The single source of truth for the data is internal/pricingsource/pricing.json.
@@ -123,15 +123,47 @@ func getModelFamily(modelName string) string {
 	return family + "-" + major
 }
 
-// GetPricing returns pricing for a model from the currently-active table.
-// Returns zero pricing for unknown models and logs a warning.
-func GetPricing(modelName string) ModelPricing {
+// LookupPricing resolves a model's pricing from the currently-active table.
+// It is pure: no logging, no side effects. The bool reports whether the model
+// was recognized. An empty model name is an expected sentinel (some token
+// sources, e.g. file-less Claude sub-agents, legitimately carry no model) and
+// returns (zeroPricing, false). Callers decide how to surface a miss.
+func LookupPricing(modelName string) (ModelPricing, bool) {
+	if modelName == "" {
+		return zeroPricing, false
+	}
 	family := getModelFamily(modelName)
 	table := *activePricing.Load()
 	if pricing, ok := table[family]; ok {
+		return pricing, true
+	}
+	return zeroPricing, false
+}
+
+// pricingForModel resolves pricing and applies the project's logging policy for
+// misses, attributing them to the given logger (which upstream enriches with
+// session_id + provider so a warning is traceable):
+//   - known model  → its pricing.
+//   - empty model   → zero pricing, DEBUG only. Empty is an expected sentinel, not
+//     an anomaly, so it must never spam WARN during precompute.
+//   - non-empty but unknown → zero pricing, WARN. This is a genuine gap in
+//     pricing.json worth surfacing loudly (carries model + family + context).
+//
+// A nil logger falls back to the default logger (test/Analyze paths that don't
+// thread a session-scoped logger).
+func pricingForModel(log *slog.Logger, modelName string) ModelPricing {
+	if log == nil {
+		log = slog.Default()
+	}
+	pricing, ok := LookupPricing(modelName)
+	if ok {
 		return pricing
 	}
-	slog.Warn("unknown model for pricing", "model", modelName, "family", family)
+	if modelName == "" {
+		log.Debug("skipping pricing lookup: empty model")
+		return zeroPricing
+	}
+	log.Warn("unknown model for pricing", "model", modelName, "family", getModelFamily(modelName))
 	return zeroPricing
 }
 

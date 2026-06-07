@@ -87,7 +87,7 @@ func (p *opencodeProvider) ComputeCards(ctx context.Context, rollout Rollout) *C
 	if !ok || r == nil {
 		return &ComputeResult{}
 	}
-	return ComputeFromOpenCodeRollout(r)
+	return ComputeFromOpenCodeRollout(ctx, r)
 }
 
 func (p *opencodeProvider) SearchText(ctx context.Context, rollout Rollout) string {

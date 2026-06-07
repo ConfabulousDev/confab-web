@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"testing"
 )
 
@@ -25,7 +26,7 @@ func TestComputeOpenCodeCodeActivity_ReadTool(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -63,7 +64,7 @@ func TestComputeOpenCodeCodeActivity_WriteTool(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -99,7 +100,7 @@ func TestComputeOpenCodeCodeActivity_EditTool(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -137,7 +138,7 @@ func TestComputeOpenCodeCodeActivity_SearchTools(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -167,7 +168,7 @@ func TestComputeOpenCodeCodeActivity_PendingToolsExcluded(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -224,7 +225,7 @@ func TestComputeOpenCodeConversation_TurnWindows(t *testing.T) {
 			},
 		},
 	}
-	out := ComputeFromOpenCodeRollout(r)
+	out := ComputeFromOpenCodeRollout(context.Background(), r)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
