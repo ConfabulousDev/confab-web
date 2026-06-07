@@ -3,7 +3,6 @@ import type { SessionDetail, TranscriptLine } from '@/types';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
 import { getAdapter } from '@/providers/registry';
 import { useTranscriptData } from '@/providers/useTranscriptData';
-import { useSessionTILs } from '@/providers/useSessionTILs';
 import SessionHeader from './SessionHeader';
 import SessionSummaryPanel from './SessionSummaryPanel';
 import styles from './SessionViewer.module.css';
@@ -97,8 +96,6 @@ function SessionViewer({
 
   adapter.useDeepLinkFilterReset(items, targetId, filters);
 
-  const tilsByMessageUuid = useSessionTILs(session.id, adapter.supportsTILs);
-
   const sessionMeta = useMemo(() => {
     const { durationMs, sessionDate } = adapter.computeMeta(items, raw, {
       firstSeen: session.first_seen,
@@ -185,9 +182,7 @@ function SessionViewer({
           {activeTab === 'summary' ? (
             // CF-364: Summary tab is provider-agnostic. Codex sessions get
             // analytics from ComputeFromCodexRollout (CF-350) via the same
-            // SessionSummaryPanel. Smart-recap deep-links and TIL badges
-            // skip on Codex via adapter.supportsTILs, since both anchor to
-            // message UUIDs that Codex messages don't carry.
+            // SessionSummaryPanel.
             <SessionSummaryPanel
               sessionId={session.id}
               isOwner={isOwner}
@@ -207,7 +202,6 @@ function SessionViewer({
                 error={error}
                 targetId={targetId}
                 isCostMode={isCostMode}
-                tilsByMessageUuid={tilsByMessageUuid}
               />
             </div>
           )}

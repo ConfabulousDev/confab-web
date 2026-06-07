@@ -1,7 +1,6 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TranscriptLine } from '@/types';
-import type { TIL } from '@/schemas/api';
 import type { TokenUsage } from '@/utils/tokenStats';
 import { isAssistantMessage, isToolUseBlock } from '@/types';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
@@ -29,7 +28,6 @@ interface ClaudeMessageTimelineProps {
   targetMessageUuid?: string; // Deep-link target message UUID
   sessionId?: string; // Session ID for copy-link URLs
   isCostMode?: boolean; // When true, show cost heatmap and per-message cost badges
-  tilsByMessageUuid?: Map<string, TIL[]>; // TILs keyed by message UUID
 }
 
 // Item types for virtual list
@@ -109,7 +107,7 @@ function CostBarSlot({ messages, messageCosts, totalCost, selectedIndex, onSeek 
   );
 }
 
-function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, tilsByMessageUuid }: ClaudeMessageTimelineProps) {
+function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode }: ClaudeMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -518,9 +516,6 @@ function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessi
                     isCostMode={isCostMode}
                     messageCost={isCostMode ? messageCosts.get(item.index) : undefined}
                     correctedTokenUsage={isCostMode ? correctedUsageByIndex.get(item.index) : undefined}
-                    tils={tilsByMessageUuid && 'uuid' in item.message && typeof item.message.uuid === 'string'
-                      ? tilsByMessageUuid.get(item.message.uuid)
-                      : undefined}
                     onSkipToNext={nextOfSameRole.has(item.filteredIndex)
                       ? () => scrollToFilteredIndex(nextOfSameRole.get(item.filteredIndex)!)
                       : undefined}

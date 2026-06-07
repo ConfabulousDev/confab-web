@@ -34,20 +34,6 @@ vi.mock('@/hooks/useAnalyticsPolling', () => ({
   })),
 }));
 
-// Stub the TIL list call — SessionViewer skips it for Codex, but for the
-// non-Codex tab-switching baseline we don't want a real network call either.
-vi.mock('@/services/api', async () => {
-  const actual = await vi.importActual<typeof import('@/services/api')>(
-    '@/services/api'
-  );
-  return {
-    ...actual,
-    tilsAPI: {
-      listForSession: vi.fn(() => Promise.resolve({ tils: [] })),
-    },
-  };
-});
-
 // Stub heavy transcript panes — we're only asserting Summary-tab routing.
 vi.mock('./ClaudeTranscriptPane', () => ({
   default: () => <div data-testid="claude-transcript-pane" />,

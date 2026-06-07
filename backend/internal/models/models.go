@@ -101,13 +101,3 @@ type GitHubLink struct {
 	CreatedAt time.Time        `json:"created_at"`
 }
 
-// TIL represents a "Today I Learned" note linked to a session transcript position
-type TIL struct {
-	ID          int64     `json:"id"`
-	Title       string    `json:"title"`
-	Summary     string    `json:"summary"`
-	SessionID   string    `json:"session_id"`
-	MessageUUID *string   `json:"message_uuid,omitempty"`
-	OwnerID     int64     `json:"-"` // Used for ownership authorization checks — never serialized to prevent leaking internal user IDs
-	CreatedAt   time.Time `json:"created_at"`
-}

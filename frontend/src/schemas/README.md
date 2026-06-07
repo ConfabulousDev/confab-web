@@ -47,8 +47,6 @@ All types are inferred from Zod schemas via `z.infer<>`:
 - `User` -- Current user (email, name, avatar)
 - `SessionShare`, `APIKey`, `GitHubLink`, `GitInfo`
 
-### claudeTranscript.ts -- Transcript Types
-
 **Content blocks** (discriminated union on `type`):
 - `TextBlock` -- `{ type: 'text', text: string }`
 - `ThinkingBlock` -- `{ type: 'thinking', thinking: string }`

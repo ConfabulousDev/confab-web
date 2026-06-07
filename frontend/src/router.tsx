@@ -13,7 +13,6 @@ const APIKeysPage = lazy(() => import('@/pages/APIKeysPage'));
 const ShareLinksPage = lazy(() => import('@/pages/ShareLinksPage'));
 const TrendsPage = lazy(() => import('@/pages/TrendsPage'));
 const OrgPage = lazy(() => import('@/pages/OrgPage'));
-const TILsPage = lazy(() => import('@/pages/TILsPage'));
 const AdminPage = lazy(() => import('@/pages/admin/AdminPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const PoliciesPage = lazy(() => import('@/pages/PoliciesPage'));
@@ -89,7 +88,6 @@ export const router = createBrowserRouter([
       { index: true, element: page(<HomePage />) },
       { path: 'sessions', element: page(<SessionsPage />, true) },
       { path: 'trends', element: page(<TrendsPage />, true) },
-      { path: 'tils', element: page(<TILsPage />, true) },
       { path: 'org', element: page(<OrgAnalyticsRoute><OrgPage /></OrgAnalyticsRoute>, true) },
       { path: 'sessions/:id', element: page(<SessionDetailPage />) },
       { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },

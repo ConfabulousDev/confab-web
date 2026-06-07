@@ -30,7 +30,7 @@ The setup flow:
 1. **Authenticates** against the backend via a browser device-login flow. Pass `--api-key cfb_...` to skip the device flow and use a key directly.
 2. **Auto-detects** which provider CLIs (`claude`, `codex`) are installed on your `PATH`.
 3. **Installs the sync hooks** into each detected CLI's configuration.
-4. **Installs the bundled skills** (`/til` and `/retro`) for each detected CLI.
+4. **Installs the bundled skills** (`/retro`) for each detected CLI.
 
 Pass `--provider claude-code` or `--provider codex` to restrict setup to one provider.
 
@@ -61,4 +61,4 @@ The directory is created on first `confab setup`. Deleting it forces a clean re-
 ## Next steps
 
 - [Commands](/cli/commands/) — full subcommand reference.
-- [Skills](/cli/skills/) — the bundled `/til` and `/retro` slash commands.
+- [Skills](/cli/skills/) — the bundled `/retro` slash commands.

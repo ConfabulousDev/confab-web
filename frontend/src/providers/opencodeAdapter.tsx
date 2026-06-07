@@ -58,7 +58,6 @@ function opencodeSessionMeta(
 
 export const opencodeAdapter: OpenCodeAdapter = {
   id: 'opencode',
-  supportsTILs: false,
 
   async fetchInitial(sessionId, fileName, skipCache) {
     const parsed = await fetchParsedOpenCodeTranscript(sessionId, fileName, skipCache);

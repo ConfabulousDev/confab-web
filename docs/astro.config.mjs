@@ -102,7 +102,6 @@ export default defineConfig({
             { label: 'Sessions', slug: 'features/sessions' },
             { label: 'Per-session analytics', slug: 'features/analytics' },
             { label: 'PR linking', slug: 'features/pr-linking' },
-            { label: 'TILs', slug: 'features/tils' },
             { label: 'Trends', slug: 'features/trends' },
             { label: 'Organization analytics', slug: 'features/organization-analytics' },
             { label: 'Sharing', slug: 'features/sharing' },

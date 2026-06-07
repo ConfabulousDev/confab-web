@@ -39,7 +39,7 @@ For programmatic integrations — third-party tools that want to query sessions 
 
 ### Web endpoints (session auth)
 
-Everything the dashboard talks to: list sessions, fetch session detail, regenerate smart recap, manage shares, trends, TILs.
+Everything the dashboard talks to: list sessions, fetch session detail, regenerate smart recap, manage shares, trends.
 
 [Full web endpoint reference →](https://github.com/ConfabulousDev/confab-web/blob/main/backend/API.md#web-endpoints-session-auth)
 

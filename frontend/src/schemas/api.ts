@@ -635,57 +635,6 @@ export type OrgAnalyticsResponse = z.infer<typeof OrgAnalyticsResponseSchema>;
 export type OrgReposResponse = z.infer<typeof OrgReposResponseSchema>;
 
 // ============================================================================
-// TIL Schemas
-// ============================================================================
-
-export const TILSchema = z.object({
-  id: z.number(),
-  title: z.string(),
-  summary: z.string(),
-  session_id: z.string(),
-  message_uuid: z.string().nullable().optional(),
-  created_at: z.string(),
-});
-
-const TILWithSessionSchema = TILSchema.extend({
-  session_title: z.string().nullable().optional(),
-  git_repo: z.string().nullable().optional(),
-  git_branch: z.string().nullable().optional(),
-  owner_email: z.string(),
-  is_owner: z.boolean(),
-  access_type: z.string(),
-  // CF-475: backend joins `sessions.session_type`, normalized to canonical
-  // form (`claude-code` | `codex`). Used by the TIL list page to decide
-  // whether the deep-link target is a message_uuid (Claude) or a timestamp
-  // (Codex).
-  provider: z.string(),
-});
-
-const TILFilterOptionsSchema = z.object({
-  repos: z.array(z.string()),
-  branches: z.array(z.string()),
-  owners: z.array(z.string()),
-});
-
-export const TILListResponseSchema = z.object({
-  tils: z.array(TILWithSessionSchema),
-  has_more: z.boolean(),
-  next_cursor: z.string().optional().default(''),
-  page_size: z.number(),
-  filter_options: TILFilterOptionsSchema,
-});
-
-export const SessionTILsResponseSchema = z.object({
-  tils: z.array(TILSchema),
-});
-
-export type TIL = z.infer<typeof TILSchema>;
-export type TILWithSession = z.infer<typeof TILWithSessionSchema>;
-export type TILFilterOptions = z.infer<typeof TILFilterOptionsSchema>;
-export type TILListResponse = z.infer<typeof TILListResponseSchema>;
-export type SessionTILsResponse = z.infer<typeof SessionTILsResponseSchema>;
-
-// ============================================================================
 // Admin Schemas
 // ============================================================================
 

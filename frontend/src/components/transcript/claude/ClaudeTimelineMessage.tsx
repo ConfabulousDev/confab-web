@@ -1,12 +1,10 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
-import type { TIL } from '@/schemas/api';
 import type { TokenUsage } from '@/utils/tokenStats';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/claude/ContentBlock';
 import { AttachmentContent, AwaySummary } from '@/components/transcript/claude/attachments';
-import TILBadge from '@/components/session/TILBadge';
 import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
 import { getClaudeRoleLabel } from '@/components/session/claudeCategories';
@@ -18,22 +16,15 @@ interface ClaudeTimelineMessageProps {
   previousMessage?: TranscriptLine;
   isSelected?: boolean;
   isDeepLinkTarget?: boolean;
-  /** Whether this message is the currently active search match (drives both
-   *  the amber box-shadow and the active highlight color on inline marks) */
   isCurrentSearchMatch?: boolean;
   searchQuery?: string;
   sessionId?: string;
+  roleLabel?: string;
   onSkipToNext?: () => void;
   onSkipToPrevious?: () => void;
-  roleLabel?: string;
   isCostMode?: boolean;
   messageCost?: number;
-  /** Corrected token usage from the final (last) line of a deduplicated message group.
-   *  Used for tooltip display when available, since the raw message.usage may have
-   *  intermediate output_tokens (not the final count). */
   correctedTokenUsage?: TokenUsage;
-  /** TILs anchored to this message */
-  tils?: TIL[];
 }
 
 /**
@@ -183,7 +174,7 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
   );
 }
 
-function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage, tils }: ClaudeTimelineMessageProps) {
+function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage }: ClaudeTimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
 
@@ -272,7 +263,6 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
           <span className={styles.role}>{roleLabel}</span>
           {agentId && <span className={styles.agentBadge}>{agentId}</span>}
           {skillName && <span className={styles.skillBadge}>/{skillName}</span>}
-          {tils && tils.length > 0 && <TILBadge tils={tils} />}
           {timestamp && <span className={styles.timestamp}>{formatTimestamp(timestamp)}</span>}
         </div>
         <div className={styles.headerRight}>

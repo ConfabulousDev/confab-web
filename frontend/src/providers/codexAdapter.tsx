@@ -63,8 +63,6 @@ function codexSessionMeta(
 
 export const codexAdapter: CodexAdapter = {
   id: 'codex',
-  supportsTILs: false,
-
   async fetchInitial(sessionId, fileName, skipCache) {
     const parsed = await fetchParsedCodexTranscript(sessionId, fileName, skipCache);
     return { items: parsed.items, totalLines: parsed.totalLines, raw: parsed.rawLines };

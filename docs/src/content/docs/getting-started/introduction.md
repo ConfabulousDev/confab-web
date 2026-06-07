@@ -10,7 +10,6 @@ Confabulous is an **open-source platform** for archiving, searching, and analyzi
 - A **dashboard** showing every session you've ever run, with full transcripts and analytics.
 - **Cost tracking** across providers, models, and time.
 - **Smart Recaps** — AI-generated summaries of what each session accomplished.
-- **TILs** — Today-I-Learned snippets surfaced from your sessions.
 - **Trends** — usage and cost trends for your own sessions over time.
 - **Organization Analytics** — per-user aggregated cost and usage across the whole team, for trusted-team deployments.
 - **Sharing** — fine-grained per-session sharing, or open policies for high-trust deployments.

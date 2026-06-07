@@ -17,7 +17,6 @@
 import type { FC } from 'react';
 import type { ProviderId } from '@/utils/providers';
 import type { TokenUsage } from '@/utils/tokenStats';
-import type { TIL } from '@/schemas/api';
 import type { TranscriptLine } from '@/types';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
@@ -61,7 +60,6 @@ export interface TranscriptPaneProps<TItem> {
   /** Provider-specific opaque id. Claude: message UUID. Codex: lineId. */
   targetId?: string;
   isCostMode: boolean;
-  tilsByMessageUuid: Map<string, TIL[]>;
 }
 
 export interface SessionMetaFallback {
@@ -76,8 +74,6 @@ export interface SessionMetaResult {
 
 export interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
   readonly id: ProviderId;
-  readonly supportsTILs: boolean;
-
   fetchInitial(
     sessionId: string,
     fileName: string,

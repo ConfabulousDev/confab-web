@@ -32,10 +32,10 @@ The individual `confab hook session-start` / `session-end` / `pre-tool-use` / `p
 
 | Command | What it does |
 |---------|--------------|
-| `confab skills add` | Install the bundled `/til` and `/retro` skills for detected providers (also done automatically by `confab setup`). |
+| `confab skills add` | Install the bundled skills for detected providers (also done automatically by `confab setup`). |
 | `confab skills remove` | Remove the bundled skills. |
 
-See [Skills](/cli/skills/) for what `/til` and `/retro` actually do.
+See [Skills](/cli/skills/) for what the skills actually do.
 
 ## Sync daemon
 
@@ -57,11 +57,10 @@ The sync daemon is the long-running process that streams transcript chunks to th
 | `confab session download <id>` | Download the raw JSONL transcript files for an uploaded session. |
 | `confab session list-files <id>` | List transcript-file metadata for an uploaded session. |
 
-## TIL and retro
+## Retro
 
 | Command | What it does |
 |---------|--------------|
-| `confab til --session <id> --title <t> --summary <s>` | Save a TIL ("Today I Learned") to the backend. Normally invoked by the `/til` skill; see [Skills](/cli/skills/). |
 | `confab retro <session-id> [--output-dir <dir>]` | Fetch the condensed transcript plus structured metadata for retrospective analysis. Normally invoked by the `/retro` skill. |
 
 ## Utilities
@@ -76,4 +75,4 @@ The sync daemon is the long-running process that streams transcript chunks to th
 
 - `--backend-url` — passed to commands that hit the backend (`setup`, `login`, `save`, `til`, `retro`, `session ...`). When omitted, the CLI uses the URL stored in `~/.confab/config.json` from the last `setup` / `login`.
 - `--api-key` — bypass the device-login flow for `setup` / `login`.
-- `--provider <claude-code|codex>` — disambiguate which provider a command targets. Defaults vary per command; `confab list`, `save`, and `til` route through the provider interface so adding a new provider doesn't require changes here.
+- `--provider <claude-code|codex>` — disambiguate which provider a command targets. Defaults vary per command; `confab list` and `save` route through the provider interface so adding a new provider doesn't require changes here.
