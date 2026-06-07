@@ -28,8 +28,6 @@ import type { ClaudeAdapter } from './types';
 
 export const claudeAdapter: ClaudeAdapter = {
   id: 'claude-code',
-  supportsTILs: true,
-
   async fetchInitial(sessionId, fileName, skipCache) {
     const parsed = await fetchParsedClaudeTranscript(sessionId, fileName, skipCache);
     // Claude has no separate "raw" stream — TranscriptLine[] doubles as raw + items.
@@ -157,7 +155,6 @@ export const claudeAdapter: ClaudeAdapter = {
     error,
     targetId,
     isCostMode,
-    tilsByMessageUuid,
   }) {
     return (
       <ClaudeTranscriptPane
@@ -168,7 +165,6 @@ export const claudeAdapter: ClaudeAdapter = {
         sessionId={sessionId}
         targetMessageUuid={targetId}
         isCostMode={isCostMode}
-        tilsByMessageUuid={tilsByMessageUuid}
       />
     );
   },

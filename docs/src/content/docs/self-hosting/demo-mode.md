@@ -23,7 +23,7 @@ When unset, every demo-mode predicate short-circuits to today's behavior — the
 | --- | --- |
 | View their own sessions | ✅ |
 | View shared sessions | ✅ |
-| View public Trends and TILs | ✅ |
+| View public Trends | ✅ |
 | Upload new sessions | ❌ |
 | Share or unshare sessions | ❌ |
 | Change account settings | ❌ |

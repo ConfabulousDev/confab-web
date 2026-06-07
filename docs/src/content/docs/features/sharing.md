@@ -15,4 +15,4 @@ For high-trust deployments (e.g. a small team), you can flip an instance-wide co
 
 ## Visibility model
 
-The session visibility predicate is the single source of truth across the dashboard, Sessions API, TILs API, and Trends. See [Architecture overview](/architecture/overview/).
+The session visibility predicate is the single source of truth across the dashboard, Sessions API, and Trends. See [Architecture overview](/architecture/overview/).

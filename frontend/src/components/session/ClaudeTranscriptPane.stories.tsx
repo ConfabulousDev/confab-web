@@ -68,7 +68,6 @@ export const Loaded: Story = {
     allMessages: sampleMessages,
     sessionId: 'storybook',
     isCostMode: false,
-    tilsByMessageUuid: new Map(),
   },
 };
 
@@ -80,7 +79,6 @@ export const Loading: Story = {
     allMessages: [],
     sessionId: 'storybook',
     isCostMode: false,
-    tilsByMessageUuid: new Map(),
   },
 };
 
@@ -92,6 +90,5 @@ export const ErrorState: Story = {
     allMessages: [],
     sessionId: 'storybook',
     isCostMode: false,
-    tilsByMessageUuid: new Map(),
   },
 };

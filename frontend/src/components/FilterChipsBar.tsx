@@ -25,8 +25,7 @@ interface FilterChipsBarProps {
   onQueryChange: (value: string) => void;
   onClearAll: () => void;
   onCommitHistory?: () => void;
-  // CF-393: Provider chip is opt-in. The session-listing endpoint supports
-  // ?provider= filtering; the TILs endpoint does not, so TILsPage omits it.
+  // CF-393: Provider chip is opt-in.
   showProviderFilter?: boolean;
 }
 

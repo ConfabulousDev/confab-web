@@ -81,14 +81,6 @@ const cards: HeroCard[] = [
     docsLinks: [{ label: 'Docs', href: `${DOCS}/features/pr-linking/` }],
   },
   {
-    icon: '💡',
-    title: 'Today I Learned',
-    description:
-      'Capture insights and learnings from your sessions. Search, filter, and share with your team.',
-    demoUrl: `${DEMO}/tils`,
-    docsLinks: [{ label: 'Docs', href: `${DOCS}/features/tils/` }],
-  },
-  {
     icon: '🔗',
     title: 'Share',
     description: 'Generate shareable links to collaborate on sessions with your team.',

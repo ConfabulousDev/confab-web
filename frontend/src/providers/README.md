@@ -9,11 +9,10 @@ Per-provider transcript adapters (CF-417). `SessionViewer` and
 | File | Purpose |
 | --- | --- |
 | `types.ts` | `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>` interface, `FilterAPI`, `TranscriptPaneProps`, `SessionMetaFallback` / `SessionMetaResult`. Two views of the same adapter: `ClaudeAdapter` / `CodexAdapter` (concrete-typed for implementers) and `OpaqueAdapter` (`unknown`-typed for consumers). |
-| `claudeAdapter.tsx` | Wraps `claudeTranscriptService`, `useClaudeTranscriptFilters`, `ClaudeFilterDropdown`, `ClaudeTranscriptPane`. `supportsTILs: true`. Claude has no separate "raw" stream — `TranscriptLine[]` doubles as both `TRaw` and `TItem`, with `normalize` as the identity function. |
-| `codexAdapter.tsx` | Wraps `codexTranscriptService`, `useCodexTranscriptFilters`, `CodexFilterDropdown`, `CodexTranscriptPane`. `supportsTILs: false`. `computeMeta` walks rawLines for min/max `timestamp`. |
+| `claudeAdapter.tsx` | Wraps `claudeTranscriptService`, `useClaudeTranscriptFilters`, `ClaudeFilterDropdown`, `ClaudeTranscriptPane`. Claude has no separate "raw" stream — `TranscriptLine[]` doubles as both `TRaw` and `TItem`, with `normalize` as the identity function. |
+| `codexAdapter.tsx` | Wraps `codexTranscriptService`, `useCodexTranscriptFilters`, `CodexFilterDropdown`, `CodexTranscriptPane`. `computeMeta` walks rawLines for min/max `timestamp`. |
 | `registry.ts` | `getAdapter(provider: string): OpaqueAdapter`. Normalizes `provider` (lowercase, whitespace → `-`), then looks up in a record keyed by `PROVIDER_VALUES`. **Throws on unknown providers** — backend already normalizes on read, so this only fires on a backend-first rollout. |
 | `useTranscriptData.ts` | Shared hook: initial fetch + visibility-gated polling. Single hook, both providers. Skipped when a Storybook `seed` is supplied. |
-| `useSessionTILs.ts` | Shared hook: fetches TILs when `adapter.supportsTILs === true`; returns an empty Map otherwise. |
 | `registry.test.ts` | Drift guard: every `PROVIDER_VALUES` entry must resolve to a distinct adapter; unknown providers must throw. |
 | `claudeAdapter.test.ts` / `codexAdapter.test.ts` | Per-adapter delegation + pure-method tests. Services are mocked with `vi.mock`. |
 
@@ -22,7 +21,6 @@ Per-provider transcript adapters (CF-417). `SessionViewer` and
 ```ts
 interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
   readonly id: ProviderId;
-  readonly supportsTILs: boolean;
   fetchInitial(sessionId, fileName, skipCache?): Promise<{ items, totalLines, raw }>;
   fetchIncremental(sessionId, fileName, currentLineCount): Promise<{ newItems, newRaw, newTotalLineCount }>;
   normalize(raw): TItem[];
@@ -77,7 +75,7 @@ plugin accepts property-access calls whose last segment starts with `use`.
 3. Write `frontend/src/providers/<id>Adapter.tsx`:
    - Type it as `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>`.
    - Wrap an existing transcript service, filter hook, dropdown component, and pane component.
-   - Decide `supportsTILs`; pick `useDeepLinkFilterReset` semantics.
+    - Decide `useDeepLinkFilterReset` semantics.
    - Implement `calculateMessageCost(model, usage, message)` (typically just
      `calculateCost('<id>', model, usage)` plus any provider-specific
      adjustments) and an `extendCostTooltip` if the tooltip needs extra lines.

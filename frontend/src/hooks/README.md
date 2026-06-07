@@ -23,7 +23,6 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useShareDialog.ts` | Share dialog form state and API interactions |
 | `useAppConfig.ts` | App configuration context accessor |
 | `useTheme.ts` | Theme state (light/dark) with toggle |
-| `useTILs.ts` | TIL data fetching and mutations (create, update, delete) |
 | `useDocumentTitle.ts` | Sets document title with "| Confabulous" suffix |
 | `useCopyToClipboard.ts` | Clipboard copy with success feedback timer |
 | `useSuccessMessage.ts` | Auto-dismissing success messages (optional URL param support) |
@@ -116,9 +115,8 @@ Most hooks have co-located test files:
 - `useOrgAnalytics.test.tsx`
 - `useShareDialog.test.ts`, `useSmartPolling.test.ts`
 - `useSuccessMessage.test.tsx`
-- `useTILs.test.tsx`
-- `useTranscriptSearch.test.ts`, `useRelativeTime.test.ts`
 - `useTrends.test.tsx`
+- `useTranscriptSearch.test.ts`, `useRelativeTime.test.ts`
 - `useVisibility.test.ts`, `useUserActivity.test.ts`
 - `useServerRecovery.test.tsx`
 - `useURLFilters.test.ts`

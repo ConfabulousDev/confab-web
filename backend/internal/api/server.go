@@ -343,8 +343,6 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Session metadata update (by external_id for CLI convenience)
 			r.Patch("/sessions/{external_id}/summary", withMaxBody(MaxBodyM, s.handleUpdateSessionSummary))
 
-			// TIL creation (CLI only)
-			r.Post("/tils", withMaxBody(MaxBodyM, HandleCreateTIL(s.db)))
 		})
 
 		// Protected routes for web dashboard (require web session)
@@ -395,10 +393,6 @@ func (s *Server) SetupRoutes() http.Handler {
 
 			// Client error reporting (for frontend observability)
 			r.Post("/client-errors", withMaxBody(MaxBodyM, ratelimit.HandlerFunc(s.clientErrorLimiter, HandleReportClientErrors())))
-
-			// TIL management (web dashboard)
-			r.Get("/tils", withMaxBody(MaxBodyXS, HandleListTILs(s.db)))
-			r.Delete("/tils/{id}", withMaxBody(MaxBodyXS, HandleDeleteTIL(s.db)))
 
 			// Admin API routes (JSON) — inherits CSRF + RequireSession from parent group
 			r.Route("/admin", func(r chi.Router) {
@@ -453,9 +447,6 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions/{id}/analytics", withMaxBody(MaxBodyXS, HandleGetSessionAnalytics(s.db, s.storage)))
 			// GitHub links - list (viewable by anyone with session access)
 			r.Get("/sessions/{id}/github-links", withMaxBody(MaxBodyXS, HandleListGitHubLinks(s.db)))
-			// TILs — read access follows session access model (canonical access)
-			r.Get("/tils/{id}", withMaxBody(MaxBodyXS, HandleGetTIL(s.db)))
-			r.Get("/sessions/{id}/tils", withMaxBody(MaxBodyXS, HandleListSessionTILs(s.db)))
 		})
 
 		// External API routes (API key auth, dedicated rate limiter)
@@ -468,7 +459,6 @@ func (s *Server) SetupRoutes() http.Handler {
 			r.Get("/sessions/{id}/condensed-transcript", withMaxBody(MaxBodyXS, s.handleCondensedTranscript))
 			r.Get("/sessions/{id}/files", withMaxBody(MaxBodyXS, s.handleListSessionFiles))
 			r.Get("/sessions/{id}/files/download", withMaxBody(MaxBodyXS, s.handleDownloadSessionFile))
-			r.Get("/tils/export", withMaxBody(MaxBodyXS, s.handleExportTILs))
 		})
 
 	})

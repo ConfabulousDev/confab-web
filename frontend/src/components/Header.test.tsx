@@ -88,29 +88,12 @@ describe('Header nav links — owner pre-filter', () => {
     );
   });
 
-  it('TILs link pre-fills ?owner=<email> for a normal authenticated user', () => {
-    signInAs('alice@example.com');
-    renderHeader();
-    const link = screen.getByRole('link', { name: 'TILs' });
-    expect(link.getAttribute('href')).toBe(
-      `/tils?owner=${encodeURIComponent('alice@example.com')}`
-    );
-  });
-
   it('Sessions link omits ?owner= when the current user IS the demo identity', () => {
     window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
     signInAs('demo@confabulous.dev');
     renderHeader();
     const link = screen.getByRole('link', { name: 'Sessions' });
     expect(link.getAttribute('href')).toBe('/sessions');
-  });
-
-  it('TILs link omits ?owner= when the current user IS the demo identity', () => {
-    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
-    signInAs('demo@confabulous.dev');
-    renderHeader();
-    const link = screen.getByRole('link', { name: 'TILs' });
-    expect(link.getAttribute('href')).toBe('/tils');
   });
 
   it('Sessions link still pre-fills ?owner= when demo mode is on but the user is NOT the demo identity', () => {
@@ -120,16 +103,6 @@ describe('Header nav links — owner pre-filter', () => {
     const link = screen.getByRole('link', { name: 'Sessions' });
     expect(link.getAttribute('href')).toBe(
       `/sessions?owner=${encodeURIComponent('alice@example.com')}`
-    );
-  });
-
-  it('TILs link still pre-fills ?owner= when demo mode is on but the user is NOT the demo identity', () => {
-    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
-    signInAs('alice@example.com');
-    renderHeader();
-    const link = screen.getByRole('link', { name: 'TILs' });
-    expect(link.getAttribute('href')).toBe(
-      `/tils?owner=${encodeURIComponent('alice@example.com')}`
     );
   });
 

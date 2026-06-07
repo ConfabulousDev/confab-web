@@ -1,9 +1,9 @@
 ---
 title: Skills
-description: Bundled slash commands installed by confab setup — /til and /retro.
+description: Bundled slash commands installed by confab setup — /retro.
 ---
 
-`confab setup` ships two **bundled skills** — slash commands that get installed into your provider CLIs (Claude Code, Codex) and that you invoke from inside an active session. Both are pre-wired to talk to the backend you authed against during setup, so there's no extra config.
+`confab setup` ships one **bundled skill** — a slash command that gets installed into your provider CLIs (Claude Code, Codex) and that you invoke from inside an active session. Both are pre-wired to talk to the backend you authed against during setup, so there's no extra config.
 
 ## How skills are installed
 
@@ -17,42 +17,7 @@ When you run `confab setup`, the CLI:
 
 You can install or remove skills manually with `confab skills add` / `confab skills remove` (see [Commands](/cli/commands/#skills)).
 
-The bundled skills are:
-
-## `/til` — Today I learned
-
-Captures a short knowledge snippet from the current session and saves it to your Confabulous backend, where it surfaces in the [TILs feed](/features/tils/).
-
-### Usage
-
-Inside an active Claude Code or Codex session:
-
-```
-/til <what you learned>
-```
-
-The agent:
-
-1. Uses your message as the TIL title.
-2. Writes a 2–3 sentence summary that captures what was learned and why it matters, drawing on the conversation context.
-3. Invokes `confab til` under the hood to persist the TIL to the backend.
-4. Briefly confirms back to you that the TIL was saved.
-
-The TIL deep-links back to the exact message in the originating session, so future-you can click through to the full context.
-
-### Under the hood
-
-The skill is allowed to invoke `confab til *`. Behind the scenes:
-
-```bash
-# Claude Code:
-confab til --session "${CLAUDE_SESSION_ID}" --title "<title>" --summary "<summary>"
-
-# Codex:
-confab til --provider codex --session "${CODEX_THREAD_ID}" --title "<title>" --summary "<summary>"
-```
-
-For Codex, the CLI normalizes subagent thread IDs to the root thread before saving — so TILs from a subagent attach to the parent session.
+The bundled skill is:
 
 ## `/retro` — Session retrospective
 

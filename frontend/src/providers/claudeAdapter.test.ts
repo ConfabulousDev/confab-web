@@ -131,9 +131,8 @@ function zeroUsage(): TokenUsage {
 }
 
 describe('claudeAdapter', () => {
-  it('has id="claude-code" and supportsTILs=true', () => {
+  it('has id="claude-code"', () => {
     expect(claudeAdapter.id).toBe('claude-code');
-    expect(claudeAdapter.supportsTILs).toBe(true);
   });
 
   it('fetchInitial delegates to fetchParsedClaudeTranscript and reshapes the result', async () => {

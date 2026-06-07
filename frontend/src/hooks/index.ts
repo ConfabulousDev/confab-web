@@ -12,7 +12,6 @@ export { useDropdown } from './useDropdown';
 export { useVisibility } from './useVisibility';
 export { useTrends } from './useTrends';
 export { useOrgAnalytics } from './useOrgAnalytics';
-export { useTILsFetch } from './useTILs';
 export { useColumnCount, distributeToColumns } from './useColumnCount';
 export { useURLFilters } from './useURLFilters';
 export type { URLFiltersConfig } from './useURLFilters';

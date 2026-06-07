@@ -16,7 +16,6 @@ Session viewer components for displaying session details, transcript timeline, a
 | `CodexFilterDropdown.tsx` | Hierarchical dropdown for filtering Codex transcripts (CF-361). Two hierarchical parents (`assistant`, `tool_call`) plus five flat categories (`user`, `reasoning_hidden`, `compacted`, `turn_separator`, `unknown`). Same visual chrome as Claude's dropdown via shared CSS module |
 | `FilterDropdownShared.module.css` | CSS chrome shared by `ClaudeFilterDropdown` (Claude) and `CodexFilterDropdown` (Codex) |
 | `GitHubLinksCard.tsx` | Card displaying linked GitHub PRs and commits |
-| `TILBadge.tsx` | Badge indicating a session has associated TIL entries |
 | `GitInfoMeta.tsx` | Git branch/commit metadata display in session header |
 | `MetaItem.tsx` | Small metadata item (icon + label + value) used in header |
 | `claudeCategories.ts` | Claude message categorization logic, filter state types, and filter matching |
@@ -82,7 +81,7 @@ interface CodexFilterState {
 
 ## Key Components
 
-- **SessionViewer** -- Orchestrates the entire session view. Supports controlled and uncontrolled tab modes. Provider-agnostic since CF-417: looks up an adapter via `getAdapter(session.provider)` and delegates transcript fetch + polling (`useTranscriptData`), filter state (`adapter.useFilters`), filter matching (`adapter.itemMatchesFilter`), deep-link reset (`adapter.useDeepLinkFilterReset`), model extraction (`adapter.extractModel`), session-meta computation (`adapter.computeMeta`), TIL fetching (`useSessionTILs(sessionId, adapter.supportsTILs)`), filter dropdown rendering (`<adapter.ClaudeFilterDropdown>`), and pane rendering (`<adapter.TranscriptPane>`). The Summary tab routes to `SessionSummaryPanel` for both providers (CF-364). All per-provider branching lives in `frontend/src/providers/` — `SessionViewer.tsx` has zero `isCodex` references.
+- **SessionViewer** -- Orchestrates the entire session view. Supports controlled and uncontrolled tab modes. Provider-agnostic since CF-417: looks up an adapter via `getAdapter(session.provider)` and delegates transcript fetch + polling (`useTranscriptData`), filter state (`adapter.useFilters`), filter matching (`adapter.itemMatchesFilter`), deep-link reset (`adapter.useDeepLinkFilterReset`), model extraction (`adapter.extractModel`), session-meta computation (`adapter.computeMeta`), filter dropdown rendering (`<adapter.ClaudeFilterDropdown>`), and pane rendering (`<adapter.TranscriptPane>`). The Summary tab routes to `SessionSummaryPanel` for both providers (CF-364). All per-provider branching lives in `frontend/src/providers/` — `SessionViewer.tsx` has zero `isCodex` references.
 - **ClaudeTranscriptPane** -- Stateless wrapper around `transcript/claude/ClaudeMessageTimeline` that handles the loading / error / timeline branching for Claude sessions. Filter and cost-mode state live in `SessionViewer` so the header can render the chips and toggle alongside the timeline.
 - **CodexTranscriptPane** -- Presentational since CF-386. Receives `rawLines`, `loading`, `error`, and (CF-362) `isCostMode` from `SessionViewer` and re-derives render items via `useMemo`. Mirrors `ClaudeTranscriptPane`'s stateless shape so both providers have a single canonical owner (`SessionViewer`) for transcript data.
 - **SessionSummaryPanel** -- Polls analytics via `useAnalyticsPolling`, renders ordered cards from the card registry, and provides smart recap regeneration. Provider-agnostic — Codex sessions display the same cards as Claude, with provider-specific shape captured in the backend adapter (`gpt-5` model strings, `cache_creation=0`, `files_read=0`, etc.).
@@ -114,7 +113,7 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 ## Invariants / Conventions
 
 - **Transcript polling**: New transcript lines are fetched incrementally using `line_offset` to avoid re-downloading the entire transcript. The `lineCountRef` tracks total JSONL lines (not parsed messages) to stay in sync with the backend. Since CF-386 a single provider-aware poll useEffect in `SessionViewer` covers both Claude (via `fetchNewTranscriptMessages`) and Codex (via `fetchNewCodexLines`).
-- **Provider branching**: `SessionViewer` dispatches on `session.provider` for the Transcript pane only — `'codex'` → `CodexTranscriptPane`, anything else (including the legacy `'Claude Code'` value backfilled by the API) → `ClaudeTranscriptPane`. The Summary tab uses `SessionSummaryPanel` for both providers (CF-364), backed by Codex analytics from `ComputeFromCodexRollout` (CF-350). TIL badges and smart-recap deep-links remain Claude-only because both anchor to message UUIDs that Codex messages don't carry.
+- **Provider branching**: `SessionViewer` dispatches on `session.provider` for the Transcript pane only — `'codex'` → `CodexTranscriptPane`, anything else (including the legacy `'Claude Code'` value backfilled by the API) → `ClaudeTranscriptPane`. The Summary tab uses `SessionSummaryPanel` for both providers (CF-364), backed by Codex analytics from `ComputeFromCodexRollout` (CF-350).
 - **Storybook bypass**: `SessionViewer` and `SessionSummaryPanel` accept `initial*` props to skip API calls in Storybook stories.
 - **Deep linking**: When `targetId` is set but the target message is hidden by filters, filters are automatically reset to make it visible. The shell-level prop is provider-opaque (CF-367): Claude interprets it as a message UUID, Codex as a stable `lineId` (CF-360). `SessionViewer` forwards it to the active provider's adapter, which passes it through to the pane's provider-internal prop (`targetMessageUuid` for Claude, `targetLineId` for Codex). CF-361 wired the Codex parallel of the auto-reset: if the target's category is currently hidden, `setCodexFilterState({ ...DEFAULT_CODEX_FILTER_STATE, reasoning_hidden: target.kind === 'reasoning_hidden' }, { replace: true })` runs so the target becomes visible (the post-default override matters only for `reasoning_hidden` targets, since that's the only default-hidden Codex category).
 - **URL filter grammar**: Claude and Codex filter hooks share the `?hide=` URL slot with provider-specific token grammars. Foreign tokens (e.g. `attachment.hook` on a Codex session) are silently ignored on read; a write from the Codex hook drops them. Cross-provider URL navigation degrades gracefully.
@@ -130,11 +129,9 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - `SessionHeader.test.tsx` -- Title display, edit mode, metadata rendering
 - `SessionSummaryPanel.test.tsx` -- Card rendering, analytics polling integration
 - `SessionViewer.test.tsx` -- Summary-tab routing across providers (CF-364)
-- `transcript/claude/ClaudeTimelineMessage.test.tsx` -- Message rendering by role, cost display, per-message token-speed badge (CF-525)
 - `TranscriptSearchBar.test.tsx` -- Search open/close, match navigation
 - `ClaudeFilterDropdown.test.tsx` -- Open/close, tri-state rollup, subcategory expand, callback wiring
 - `CodexFilterDropdown.test.tsx` -- Same surface, tuned to Codex categories
-- `TILBadge.test.tsx` -- Label pluralization, popover open + link to /tils, click-propagation guard
 - `claudeCategories.test.ts` -- Message classification and filter matching logic
 - `codexCategories.test.ts` -- Codex categorization rules + `codexItemMatchesFilter` contract (CF-361)
 - `CodexTranscriptPane.test.tsx` -- Loading/error/empty prop contract after CF-361 lifted normalization to `SessionViewer`

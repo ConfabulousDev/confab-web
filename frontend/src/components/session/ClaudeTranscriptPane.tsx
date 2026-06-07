@@ -7,7 +7,6 @@
 // focused on routing.
 
 import type { TranscriptLine } from '@/types';
-import type { TIL } from '@/schemas/api';
 import ClaudeMessageTimeline from '@/components/transcript/claude/ClaudeMessageTimeline';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 
@@ -19,7 +18,6 @@ export interface ClaudeTranscriptPaneProps {
   sessionId: string;
   targetMessageUuid?: string;
   isCostMode: boolean;
-  tilsByMessageUuid: Map<string, TIL[]>;
 }
 
 export default function ClaudeTranscriptPane({
@@ -30,7 +28,6 @@ export default function ClaudeTranscriptPane({
   sessionId,
   targetMessageUuid,
   isCostMode,
-  tilsByMessageUuid,
 }: ClaudeTranscriptPaneProps) {
   if (loading || error) {
     return <TranscriptPaneStatus loading={loading} error={error} />;
@@ -43,7 +40,6 @@ export default function ClaudeTranscriptPane({
       targetMessageUuid={targetMessageUuid}
       sessionId={sessionId}
       isCostMode={isCostMode}
-      tilsByMessageUuid={tilsByMessageUuid}
     />
   );
 }

@@ -11,7 +11,6 @@ const ALL_TITLES = [
   'Multi-provider support',
   'Retro',
   'PR Linking',
-  'Today I Learned',
   'Share',
   'Self-Hosted',
   'How it works',
@@ -27,7 +26,7 @@ function linkPosition(ariaLabel: string): number {
 }
 
 describe('HeroCards', () => {
-  it('renders all 12 cards as h3 headings', () => {
+  it('renders all 11 cards as h3 headings', () => {
     render(<HeroCards />);
     for (const title of ALL_TITLES) {
       expect(screen.getByRole('heading', { name: title, level: 3 })).toBeInTheDocument();

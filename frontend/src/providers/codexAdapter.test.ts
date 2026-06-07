@@ -44,9 +44,8 @@ function rawLine(jsonl: string): RawCodexLine {
 }
 
 describe('codexAdapter', () => {
-  it('has id="codex" and supportsTILs=false', () => {
+  it('has id="codex"', () => {
     expect(codexAdapter.id).toBe('codex');
-    expect(codexAdapter.supportsTILs).toBe(false);
   });
 
   it('fetchInitial delegates to fetchParsedCodexTranscript and reshapes the result', async () => {
