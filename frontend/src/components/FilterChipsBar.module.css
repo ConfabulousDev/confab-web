@@ -169,6 +169,11 @@
   cursor: pointer;
   text-align: left;
   width: 100%;
+  /* Set the inherited text color so currentColor-based provider icons (the
+     OpenCode mark) track the theme. Without this the <button> falls back to the
+     UA-default text color (no color-scheme is set), rendering the icon dark in
+     dark mode. The label has its own color; only the icon relied on inheritance. */
+  color: var(--color-text-primary);
   transition: background var(--transition-fast);
 }
 
