@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -1461,6 +1462,126 @@ func TestListUserSessionsPaginated_QuerySearch(t *testing.T) {
 	}
 	if len(result.Sessions) != 1 {
 		t.Errorf("Expected 1 session matching commit SHA 'abc123', got %d", len(result.Sessions))
+	}
+}
+
+// TestListUserSessionsPaginated_IDSearch tests CF-573: searching by confab ID
+// (sessions.id UUID) or external session ID (sessions.external_id) returns the
+// matching session, via full value or prefix, gated by a 4-char minimum length.
+func TestListUserSessionsPaginated_IDSearch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "idsearch@test.com", "ID Search User")
+
+	// external_id is a realistic agent-assigned UUID-shaped string; confabID is the
+	// returned sessions.id UUID. A second session ensures matches are specific.
+	externalID := "9f8b7c6d-1234-4abc-9def-001122334455"
+	confabID := testutil.CreateTestSessionFull(t, env, user.ID, externalID, testutil.TestSessionFullOpts{
+		Summary: "Session reachable by its identifiers",
+	})
+	otherExternalID := "00aa11bb-5678-4cde-8123-aabbccddeeff"
+	otherConfabID := testutil.CreateTestSessionFull(t, env, user.ID, otherExternalID, testutil.TestSessionFullOpts{
+		Summary: "Some other unrelated session",
+	})
+
+	ctx := context.Background()
+
+	search := func(q string) []db.SessionListItem {
+		t.Helper()
+		result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Query: &q})
+		if err != nil {
+			t.Fatalf("ID search %q failed: %v", q, err)
+		}
+		return result.Sessions
+	}
+
+	assertOnly := func(q, wantConfabID string) {
+		t.Helper()
+		got := search(q)
+		if len(got) != 1 {
+			t.Fatalf("query %q: expected 1 session, got %d", q, len(got))
+		}
+		if got[0].ID != wantConfabID {
+			t.Errorf("query %q: expected session %s, got %s", q, wantConfabID, got[0].ID)
+		}
+	}
+
+	// Full external session ID returns that session.
+	assertOnly(externalID, confabID)
+
+	// First 8 chars of external_id (as shown in the list chip) returns that session.
+	assertOnly(externalID[:8], confabID)
+
+	// Full confab UUID returns that session.
+	assertOnly(confabID, confabID)
+
+	// Confab UUID prefix (>= 4 chars) returns that session.
+	assertOnly(confabID[:12], confabID)
+
+	// Case-insensitive: uppercased confab UUID prefix still matches.
+	assertOnly(strings.ToUpper(confabID[:12]), confabID)
+
+	// A non-matching ID-shaped query returns nothing.
+	if got := search("deadbeef-0000-4000-8000-000000000000"); len(got) != 0 {
+		t.Errorf("non-matching ID query: expected 0 sessions, got %d", len(got))
+	}
+
+	// Sanity: the other session is reachable by its own external_id prefix only.
+	assertOnly(otherExternalID[:8], otherConfabID)
+}
+
+// TestListUserSessionsPaginated_IDSearchMinLength tests CF-573: queries shorter
+// than 4 chars do not trigger ID matching, so a short external_id prefix that
+// has no FTS match returns nothing.
+func TestListUserSessionsPaginated_IDSearchMinLength(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "idshort@test.com", "ID Short User")
+
+	// external_id starting with "abc" — a 3-char prefix must NOT surface it.
+	externalID := "abcd1234-5678-4abc-9def-aabbccddeeff"
+	testutil.CreateTestSessionFull(t, env, user.ID, externalID, testutil.TestSessionFullOpts{
+		Summary: "Min length guard session",
+	})
+
+	ctx := context.Background()
+
+	// 3-char prefix: below the 4-char gate, no ID matching, and no FTS index → 0 results.
+	q := externalID[:3]
+	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Query: &q})
+	if err != nil {
+		t.Fatalf("short-prefix search failed: %v", err)
+	}
+	if len(result.Sessions) != 0 {
+		t.Errorf("3-char prefix %q: expected 0 sessions (below 4-char gate), got %d", q, len(result.Sessions))
+	}
+
+	// 4-char prefix: at the gate, ID matching applies → 1 result.
+	q4 := externalID[:4]
+	result, err = store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Query: &q4})
+	if err != nil {
+		t.Fatalf("4-char-prefix search failed: %v", err)
+	}
+	if len(result.Sessions) != 1 {
+		t.Errorf("4-char prefix %q: expected 1 session, got %d", q4, len(result.Sessions))
 	}
 }
 

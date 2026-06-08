@@ -275,12 +275,27 @@ func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (common
 			tsqueryParam := pb.add(tsquery)
 			rawQueryParam := pb.add(*params.Query)
 			searchJoin = "\n\t\t\tLEFT JOIN session_search_index ssi ON s.id = ssi.session_id"
-			commonFilters += "\n\t\t\t\tAND (ssi.search_vector @@ to_tsquery('english', " + tsqueryParam + ")" +
-				" OR EXISTS (SELECT 1 FROM session_github_links sgl WHERE sgl.session_id = s.id AND sgl.link_type = 'commit' AND LOWER(sgl.ref) LIKE LOWER(" + rawQueryParam + ")||'%'))"
+			searchPredicate := "ssi.search_vector @@ to_tsquery('english', " + tsqueryParam + ")" +
+				" OR EXISTS (SELECT 1 FROM session_github_links sgl WHERE sgl.session_id = s.id AND sgl.link_type = 'commit' AND LOWER(sgl.ref) LIKE LOWER(" + rawQueryParam + ")||'%')"
+			// CF-573: also match session identifiers by prefix — the confab UUID
+			// (s.id) and the agent-assigned external_id. Gated to queries >=
+			// idSearchMinLen chars so short prefixes don't surface unrelated IDs.
+			// Casting the column (s.id::text) rather than the user input means the
+			// cast can never error on a non-UUID query.
+			if len(*params.Query) >= idSearchMinLen {
+				searchPredicate += " OR LOWER(s.external_id) LIKE LOWER(" + rawQueryParam + ")||'%'" +
+					" OR s.id::text LIKE LOWER(" + rawQueryParam + ")||'%'"
+			}
+			commonFilters += "\n\t\t\t\tAND (" + searchPredicate + ")"
 		}
 	}
 	return
 }
+
+// idSearchMinLen is the minimum query length before session-ID prefix matching
+// (confab UUID + external_id) kicks in. Below it, only FTS and commit-SHA search
+// apply. The 8-char external_id chip prefix and full UUIDs comfortably exceed it.
+const idSearchMinLen = 4
 
 var tsquerySpecialChars = regexp.MustCompile(`[&|!<>():'\\]`)
 
