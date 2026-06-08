@@ -44,6 +44,18 @@ func TestHandleCapabilities(t *testing.T) {
 		}
 	})
 
+	t.Run("advertises opencode_subagents as true (CF-539)", func(t *testing.T) {
+		s := &Server{}
+		rr, resp := getCapabilities(t, s)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+		if !resp.OpencodeSubagents {
+			t.Error("opencode_subagents must be true on a build that ingests OpenCode subagent JSONL files (file_type='agent')")
+		}
+	})
+
 	t.Run("response is application/json", func(t *testing.T) {
 		s := &Server{}
 		rr, _ := getCapabilities(t, s)
@@ -58,7 +70,7 @@ func TestHandleCapabilities(t *testing.T) {
 		rr, _ := getCapabilities(t, s)
 
 		body := rr.Body.String()
-		for _, key := range []string{`"workflow_files"`, `"workflow_journal"`} {
+		for _, key := range []string{`"workflow_files"`, `"workflow_journal"`, `"opencode_subagents"`} {
 			if !strings.Contains(body, key) {
 				t.Errorf("response body missing %s; got: %s", key, body)
 			}

@@ -26,8 +26,8 @@ func opencodeAssistantMsg(providerID, modelID string, tokens OpenCodeTokens) *Op
 }
 
 func TestComputeOpenCodeTokens_AnthropicProvider(t *testing.T) {
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			opencodeAssistantMsg("anthropic", "claude-sonnet-4-20250514", OpenCodeTokens{
 				Input: 10000, Output: 5000, Reasoning: 2000,
 				Cache: OpenCodeCache{Read: 3000, Write: 2000},
@@ -56,8 +56,8 @@ func TestComputeOpenCodeTokens_AnthropicProvider(t *testing.T) {
 }
 
 func TestComputeOpenCodeTokens_OpenAIProvider(t *testing.T) {
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			opencodeAssistantMsg("openai", "gpt-4o", OpenCodeTokens{
 				Input: 10000, Output: 2000, Reasoning: 500,
 				Cache: OpenCodeCache{Read: 4000, Write: 0},
@@ -86,8 +86,8 @@ func TestComputeOpenCodeTokens_OpenAIProvider(t *testing.T) {
 }
 
 func TestComputeOpenCodeTokens_V2Tree(t *testing.T) {
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			opencodeAssistantMsg("anthropic", "claude-sonnet-4-20250514", OpenCodeTokens{
 				Input: 10000, Output: 5000, Reasoning: 2000,
 				Cache: OpenCodeCache{Read: 3000, Write: 2000},
@@ -151,7 +151,7 @@ func TestComputeOpenCodeTokens_PrefersReportedCost(t *testing.T) {
 	// long-tail case — OpenCode supports 75+ providers, most unpriced by us.
 	msg := opencodeAssistantMsg("deepseek", "future-model-2099", OpenCodeTokens{Input: 1000, Output: 500})
 	msg.Info.Cost = 0.42
-	out := ComputeFromOpenCodeRollout(context.Background(), &opencodeRollout{Messages: []*OpenCodeMessage{msg}})
+	out := ComputeFromOpenCodeRollout(context.Background(), [][]*OpenCodeMessage{{msg}})
 	if out == nil || out.TokensV2 == nil {
 		t.Fatal("TokensV2 not populated")
 	}
@@ -168,8 +168,8 @@ func TestComputeOpenCodeTokens_PrefersReportedCost(t *testing.T) {
 }
 
 func TestComputeOpenCodeTokens_MultiProviderSession(t *testing.T) {
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			opencodeAssistantMsg("anthropic", "claude-sonnet-4-20250514", OpenCodeTokens{
 				Input: 10000, Output: 5000,
 				Cache: OpenCodeCache{Read: 3000, Write: 2000},
@@ -203,8 +203,8 @@ func TestComputeOpenCodeTokens_MultiProviderSession(t *testing.T) {
 }
 
 func TestComputeOpenCodeTokens_UnknownModel(t *testing.T) {
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			opencodeAssistantMsg("unknown-provider", "future-model-2099", OpenCodeTokens{
 				Input: 1000, Output: 500,
 			}),
@@ -227,8 +227,8 @@ func TestComputeOpenCodeTokens_UnknownModel(t *testing.T) {
 }
 
 func TestComputeOpenCodeTokens_FastTurnsAlwaysZero(t *testing.T) {
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			opencodeAssistantMsg("anthropic", "claude-sonnet-4-20250514", OpenCodeTokens{
 				Input: 10000, Output: 5000,
 			}),
@@ -248,8 +248,8 @@ func TestComputeOpenCodeTokens_FastTurnsAlwaysZero(t *testing.T) {
 }
 
 func TestComputeOpenCodeTokens_CostPrecision(t *testing.T) {
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			opencodeAssistantMsg("anthropic", "claude-sonnet-4-20250514", OpenCodeTokens{
 				Input: 1000000, Output: 500000,
 				Cache: OpenCodeCache{Read: 500000, Write: 100000},

@@ -1,10 +1,33 @@
 package analytics
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
+// opencodeRollout holds a parsed OpenCode session: the main thread's messages
+// loaded eagerly during Parse, plus the list of subagent agent-file infos kept
+// until first traversal then cached on cachedAgents. ValidationErrors
+// accumulate per-line schema failures (from loadOpenCodeMessages) and
+// whole-file materialize failures (subagent download/parse) using the shared
+// LineValidationError type, mirroring Claude's wire shape so a future API
+// surface needs no new contract. Single-goroutine per the Rollout contract.
+//
+// Field naming mirrors codexRollout: `main` is the root rollout's messages,
+// agentFileInfo / cachedAgents handle the subagent sidecar files (CF-539).
 type opencodeRollout struct {
-	Messages []*OpenCodeMessage
+	main             []*OpenCodeMessage
+	agentFileInfo    []opencodeAgentFileInfo
+	downloader       opencodeAgentDownloader
+	cachedAgents     [][]*OpenCodeMessage
+	validationErrors []LineValidationError
 }
+
+type opencodeAgentFileInfo struct {
+	FileName string
+}
+
+type opencodeAgentDownloader func(ctx context.Context, fileName string) ([]byte, error)
 
 type OpenCodeMessage struct {
 	Info  OpenCodeMessageInfo `json:"info"`

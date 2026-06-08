@@ -11,7 +11,13 @@ import (
 // message in the frontend (OpenCode message IDs are stable, so the provider
 // keeps them — see opencodeProvider.ClearMessageIDs).
 //
-// Layout mirrors the Claude/Codex transcripts:
+// Multi-rollout layout (CF-539): iterates [main, ...subagents], emitting each
+// rollout's turns inline in the same XML envelope, no <subagent> wrapper.
+// Matches Claude's TranscriptBuilder.ProcessFile per-file pattern and Codex's
+// PrepareCodexTranscript per-rollout loop. The counter is shared across
+// rollouts so the LLM's cross-references resolve uniquely.
+//
+// Layout:
 //
 //	<transcript>
 //	<user id="1">prompt text</user>
@@ -23,14 +29,12 @@ import (
 //	<tool_result id="4" tool_id="3">file1\nfile2</tool_result>
 //	<compaction id="5" />
 //	</transcript>
-func PrepareOpenCodeTranscript(r *opencodeRollout) (string, map[int]string) {
+func PrepareOpenCodeTranscript(rollouts [][]*OpenCodeMessage) (string, map[int]string) {
 	cfg := DefaultFormatConfig()
 	idMap := make(map[int]string)
 	counter := 0
 	var b strings.Builder
 
-	// anchor records idMap[id] = message ULID when the id is non-empty, so the
-	// recap can resolve cited ids to deep-link anchors.
 	anchor := func(id int, messageID string) {
 		if messageID != "" {
 			idMap[id] = messageID
@@ -38,61 +42,63 @@ func PrepareOpenCodeTranscript(r *opencodeRollout) (string, map[int]string) {
 	}
 
 	b.WriteString("<transcript>\n")
-	for _, msg := range r.Messages {
-		parts := msg.Parts
-		switch msg.Info.Role {
-		case "user":
-			text := joinOpenCodeText(parts, "text")
-			if text == "" {
-				continue
-			}
-			counter++
-			anchor(counter, msg.Info.ID)
-			fmt.Fprintf(&b, "<user id=\"%d\">%s</user>\n",
-				counter, xmlEscape(cfg.truncate(text, cfg.MaxUserChars)))
-
-		case "assistant":
-			thinking := joinOpenCodeText(parts, "reasoning")
-			text := joinOpenCodeText(parts, "text")
-			if thinking != "" || text != "" {
+	for _, messages := range rollouts {
+		for _, msg := range messages {
+			parts := msg.Parts
+			switch msg.Info.Role {
+			case "user":
+				text := joinOpenCodeText(parts, "text")
+				if text == "" {
+					continue
+				}
 				counter++
 				anchor(counter, msg.Info.ID)
-				fmt.Fprintf(&b, "<assistant id=\"%d\">\n", counter)
-				if thinking != "" {
-					fmt.Fprintf(&b, "<thinking>%s</thinking>\n",
-						xmlEscape(cfg.truncate(thinking, cfg.MaxThinkingChars)))
-				}
-				if text != "" {
-					b.WriteString(xmlEscape(cfg.truncate(text, cfg.MaxAssistantChars)))
-					b.WriteByte('\n')
-				}
-				b.WriteString("</assistant>\n")
-			}
+				fmt.Fprintf(&b, "<user id=\"%d\">%s</user>\n",
+					counter, xmlEscape(cfg.truncate(text, cfg.MaxUserChars)))
 
-			for _, p := range parts {
-				switch p.Type {
-				case "tool":
-					state := p.State
-					if state == nil || (state.Status != "completed" && state.Status != "error") {
-						continue
-					}
+			case "assistant":
+				thinking := joinOpenCodeText(parts, "reasoning")
+				text := joinOpenCodeText(parts, "text")
+				if thinking != "" || text != "" {
 					counter++
 					anchor(counter, msg.Info.ID)
-					toolID := counter
-					fmt.Fprintf(&b, "<tool id=\"%d\" name=\"%s\">%s</tool>\n",
-						toolID, xmlEscape(p.Tool),
-						xmlEscape(cfg.truncate(toolInputSummary(state), cfg.MaxAssistantChars)))
-					if state.Output != "" {
+					fmt.Fprintf(&b, "<assistant id=\"%d\">\n", counter)
+					if thinking != "" {
+						fmt.Fprintf(&b, "<thinking>%s</thinking>\n",
+							xmlEscape(cfg.truncate(thinking, cfg.MaxThinkingChars)))
+					}
+					if text != "" {
+						b.WriteString(xmlEscape(cfg.truncate(text, cfg.MaxAssistantChars)))
+						b.WriteByte('\n')
+					}
+					b.WriteString("</assistant>\n")
+				}
+
+				for _, p := range parts {
+					switch p.Type {
+					case "tool":
+						state := p.State
+						if state == nil || (state.Status != "completed" && state.Status != "error") {
+							continue
+						}
 						counter++
 						anchor(counter, msg.Info.ID)
-						fmt.Fprintf(&b, "<tool_result id=\"%d\" tool_id=\"%d\" status=\"%s\">%s</tool_result>\n",
-							counter, toolID, state.Status,
-							xmlEscape(cfg.truncate(state.Output, cfg.MaxAssistantChars)))
+						toolID := counter
+						fmt.Fprintf(&b, "<tool id=\"%d\" name=\"%s\">%s</tool>\n",
+							toolID, xmlEscape(p.Tool),
+							xmlEscape(cfg.truncate(toolInputSummary(state), cfg.MaxAssistantChars)))
+						if state.Output != "" {
+							counter++
+							anchor(counter, msg.Info.ID)
+							fmt.Fprintf(&b, "<tool_result id=\"%d\" tool_id=\"%d\" status=\"%s\">%s</tool_result>\n",
+								counter, toolID, state.Status,
+								xmlEscape(cfg.truncate(state.Output, cfg.MaxAssistantChars)))
+						}
+					case "compaction":
+						counter++
+						anchor(counter, msg.Info.ID)
+						fmt.Fprintf(&b, "<compaction id=\"%d\" />\n", counter)
 					}
-				case "compaction":
-					counter++
-					anchor(counter, msg.Info.ID)
-					fmt.Fprintf(&b, "<compaction id=\"%d\" />\n", counter)
 				}
 			}
 		}

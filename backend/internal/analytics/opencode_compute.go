@@ -9,8 +9,24 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func ComputeFromOpenCodeRollout(ctx context.Context, r *opencodeRollout) *ComputeResult {
-	if r == nil || len(r.Messages) == 0 {
+// ComputeFromOpenCodeRollout maps a parsed OpenCode session — main plus any
+// subagent rollouts uploaded as file_type='agent' (CF-539) — onto the
+// canonical ComputeResult shape. The slice convention is [main, ...subagents].
+//
+// Per-card aggregation rules (cross-provider parity table is in CF-539 spec):
+//   - Tokens / tokens_v2: sum across all rollouts; each assistant message
+//     is self-describing (providerID + modelID), so the same byModel
+//     accumulator naturally produces the merged tokens_v2.by_provider tree.
+//     No double-count because OpenCode's per-message token data lives only
+//     in that session's JSONL — children's cost is never in the parent.
+//   - Session: sum per-turn counts; union ModelsUsed; DurationMs spans
+//     min/max time.created across ALL rollouts.
+//   - Conversation: rollouts[0] only — user-perceived turn structure does
+//     not include subagent reasoning. (Codex parity.)
+//   - Tools / CodeActivity / Agents&Skills / Redactions: per-rollout
+//     dispatch — each analyzer already += into out.*, so this composes.
+func ComputeFromOpenCodeRollout(ctx context.Context, rollouts [][]*OpenCodeMessage) *ComputeResult {
+	if len(rollouts) == 0 || len(rollouts[0]) == 0 {
 		return &ComputeResult{}
 	}
 
@@ -22,13 +38,25 @@ func ComputeFromOpenCodeRollout(ctx context.Context, r *opencodeRollout) *Comput
 		RedactionCounts:   make(map[string]int),
 	}
 
-	computeOpenCodeTokens(logger.Ctx(ctx), result, r)
-	computeOpenCodeSession(result, r)
-	computeOpenCodeTools(result, r)
-	computeOpenCodeCodeActivity(result, r)
-	computeOpenCodeConversation(result, r)
-	computeOpenCodeAgentsAndSkills(result, r)
-	computeOpenCodeRedactions(result, r)
+	// Tokens and Session aggregate across all rollouts internally.
+	computeOpenCodeTokens(logger.Ctx(ctx), result, rollouts)
+	computeOpenCodeSession(result, rollouts)
+
+	// Conversation stays main-only: turn counts + timing reflect user-perceived
+	// structure, not subagent reasoning overlapping invisibly with the main thread.
+	computeOpenCodeConversation(result, rollouts[0])
+
+	// Remaining analyzers accumulate via += on result fields, so per-rollout
+	// dispatch produces the cross-rollout total.
+	for _, messages := range rollouts {
+		if len(messages) == 0 {
+			continue
+		}
+		computeOpenCodeTools(result, messages)
+		computeOpenCodeCodeActivity(result, messages)
+		computeOpenCodeAgentsAndSkills(result, messages)
+		computeOpenCodeRedactions(result, messages)
+	}
 
 	return result
 }
@@ -43,7 +71,7 @@ func getStringInput(state *OpenCodeToolState, key string) string {
 	return ""
 }
 
-func computeOpenCodeTokens(log *slog.Logger, out *ComputeResult, r *opencodeRollout) {
+func computeOpenCodeTokens(log *slog.Logger, out *ComputeResult, rollouts [][]*OpenCodeMessage) {
 	type modelKey struct {
 		providerID string
 		modelID    string
@@ -54,55 +82,57 @@ func computeOpenCodeTokens(log *slog.Logger, out *ComputeResult, r *opencodeRoll
 	}
 	byModel := make(map[modelKey]*modelAgg)
 
-	for _, msg := range r.Messages {
-		// OpenCode emits an assistant JSONL line only once the turn is settled
-		// (finish set) or errored, so every assistant message carries final
-		// token + cost accounting. No finish gate — gating on finish would drop
-		// errored turns' tokens/cost.
-		if msg.Info.Role != "assistant" {
-			continue
-		}
-
-		// Normalize tokens to the provider's billing convention, per message.
-		// OpenAI bills cached input as a subset of `input` and never charges
-		// cache writes; everyone else (Anthropic-style) bills writes and treats
-		// reads as independent of input.
-		input := msg.Info.Tokens.Input
-		cacheWrite := msg.Info.Tokens.Cache.Write
-		if msg.Info.ProviderID == "openai" {
-			input -= msg.Info.Tokens.Cache.Read
-			if input < 0 {
-				input = 0
+	for _, messages := range rollouts {
+		for _, msg := range messages {
+			// OpenCode emits an assistant JSONL line only once the turn is settled
+			// (finish set) or errored, so every assistant message carries final
+			// token + cost accounting. No finish gate — gating on finish would drop
+			// errored turns' tokens/cost.
+			if msg.Info.Role != "assistant" {
+				continue
 			}
-			cacheWrite = 0
-		}
 
-		// Cost source (hybrid), decided per message: prefer OpenCode's
-		// authoritative reported `info.cost` (it already encodes each of its 75+
-		// providers' real pricing); fall back to our family-resolved pricing
-		// table only when this message reported nothing. Per-message (not
-		// per-group) so a session mixing reported and unreported messages bills
-		// each correctly instead of letting one reported message zero-rate its
-		// silent siblings.
-		var cost decimal.Decimal
-		if msg.Info.Cost > 0 {
-			cost = decimal.NewFromFloat(msg.Info.Cost)
-		} else {
-			cost = CalculateCost(pricingForModel(log, msg.Info.ModelID), input, msg.Info.Tokens.Output, cacheWrite, msg.Info.Tokens.Cache.Read)
-		}
+			// Normalize tokens to the provider's billing convention, per message.
+			// OpenAI bills cached input as a subset of `input` and never charges
+			// cache writes; everyone else (Anthropic-style) bills writes and treats
+			// reads as independent of input.
+			input := msg.Info.Tokens.Input
+			cacheWrite := msg.Info.Tokens.Cache.Write
+			if msg.Info.ProviderID == "openai" {
+				input -= msg.Info.Tokens.Cache.Read
+				if input < 0 {
+					input = 0
+				}
+				cacheWrite = 0
+			}
 
-		key := modelKey{msg.Info.ProviderID, msg.Info.ModelID}
-		agg := byModel[key]
-		if agg == nil {
-			agg = &modelAgg{}
-			byModel[key] = agg
+			// Cost source (hybrid), decided per message: prefer OpenCode's
+			// authoritative reported `info.cost` (it already encodes each of its 75+
+			// providers' real pricing); fall back to our family-resolved pricing
+			// table only when this message reported nothing. Per-message (not
+			// per-group) so a session mixing reported and unreported messages bills
+			// each correctly instead of letting one reported message zero-rate its
+			// silent siblings.
+			var cost decimal.Decimal
+			if msg.Info.Cost > 0 {
+				cost = decimal.NewFromFloat(msg.Info.Cost)
+			} else {
+				cost = CalculateCost(pricingForModel(log, msg.Info.ModelID), input, msg.Info.Tokens.Output, cacheWrite, msg.Info.Tokens.Cache.Read)
+			}
+
+			key := modelKey{msg.Info.ProviderID, msg.Info.ModelID}
+			agg := byModel[key]
+			if agg == nil {
+				agg = &modelAgg{}
+				byModel[key] = agg
+			}
+			agg.input += input
+			agg.output += msg.Info.Tokens.Output
+			agg.cacheRead += msg.Info.Tokens.Cache.Read
+			agg.cacheWrite += cacheWrite
+			agg.reasoning += msg.Info.Tokens.Reasoning
+			agg.cost = agg.cost.Add(cost)
 		}
-		agg.input += input
-		agg.output += msg.Info.Tokens.Output
-		agg.cacheRead += msg.Info.Tokens.Cache.Read
-		agg.cacheWrite += cacheWrite
-		agg.reasoning += msg.Info.Tokens.Reasoning
-		agg.cost = agg.cost.Add(cost)
 	}
 
 	var totalInput, totalOutput, totalCacheRead, totalCacheWrite int64
@@ -164,61 +194,63 @@ func computeOpenCodeTokens(log *slog.Logger, out *ComputeResult, r *opencodeRoll
 	}
 }
 
-func computeOpenCodeSession(out *ComputeResult, r *opencodeRollout) {
+func computeOpenCodeSession(out *ComputeResult, rollouts [][]*OpenCodeMessage) {
 	models := map[string]struct{}{}
 	var minTime, maxTime *int64
 
-	for _, msg := range r.Messages {
-		if msg.Info.ModelID != "" {
-			models[msg.Info.ModelID] = struct{}{}
-		}
+	for _, messages := range rollouts {
+		for _, msg := range messages {
+			if msg.Info.ModelID != "" {
+				models[msg.Info.ModelID] = struct{}{}
+			}
 
-		if msg.Info.Role == "user" {
-			out.UserMessages++
-			out.HumanPrompts++
-		} else if msg.Info.Role == "assistant" {
-			out.AssistantMessages++
-			parts := msg.Parts
-			hasText := false
-			hasReasoning := false
-			for _, p := range parts {
-				switch p.Type {
-				case "text":
-					hasText = true
-				case "reasoning":
-					hasReasoning = true
-				case "tool":
-					state := p.State
-					if state != nil && (state.Status == "completed" || state.Status == "error") {
-						out.ToolCalls++
-						if state.Output != "" {
-							out.ToolResults++
+			if msg.Info.Role == "user" {
+				out.UserMessages++
+				out.HumanPrompts++
+			} else if msg.Info.Role == "assistant" {
+				out.AssistantMessages++
+				parts := msg.Parts
+				hasText := false
+				hasReasoning := false
+				for _, p := range parts {
+					switch p.Type {
+					case "text":
+						hasText = true
+					case "reasoning":
+						hasReasoning = true
+					case "tool":
+						state := p.State
+						if state != nil && (state.Status == "completed" || state.Status == "error") {
+							out.ToolCalls++
+							if state.Output != "" {
+								out.ToolResults++
+							}
 						}
-					}
-				case "compaction":
-					if p.Auto != nil {
-						if *p.Auto {
-							out.CompactionAuto++
-						} else {
-							out.CompactionManual++
+					case "compaction":
+						if p.Auto != nil {
+							if *p.Auto {
+								out.CompactionAuto++
+							} else {
+								out.CompactionManual++
+							}
 						}
 					}
 				}
+				if hasText {
+					out.TextResponses++
+				}
+				if hasReasoning {
+					out.ThinkingBlocks++
+				}
 			}
-			if hasText {
-				out.TextResponses++
-			}
-			if hasReasoning {
-				out.ThinkingBlocks++
-			}
-		}
 
-		ts := msg.Info.Time.Created
-		if minTime == nil || ts < *minTime {
-			minTime = &ts
-		}
-		if maxTime == nil || ts > *maxTime {
-			maxTime = &ts
+			ts := msg.Info.Time.Created
+			if minTime == nil || ts < *minTime {
+				minTime = &ts
+			}
+			if maxTime == nil || ts > *maxTime {
+				maxTime = &ts
+			}
 		}
 	}
 
@@ -233,8 +265,8 @@ func computeOpenCodeSession(out *ComputeResult, r *opencodeRollout) {
 	}
 }
 
-func computeOpenCodeTools(out *ComputeResult, r *opencodeRollout) {
-	for _, msg := range r.Messages {
+func computeOpenCodeTools(out *ComputeResult, messages []*OpenCodeMessage) {
+	for _, msg := range messages {
 		if msg.Info.Role != "assistant" {
 			continue
 		}
@@ -268,8 +300,8 @@ func computeOpenCodeTools(out *ComputeResult, r *opencodeRollout) {
 	}
 }
 
-func computeOpenCodeCodeActivity(out *ComputeResult, r *opencodeRollout) {
-	for _, msg := range r.Messages {
+func computeOpenCodeCodeActivity(out *ComputeResult, messages []*OpenCodeMessage) {
+	for _, msg := range messages {
 		if msg.Info.Role != "assistant" {
 			continue
 		}
@@ -315,14 +347,14 @@ func computeOpenCodeCodeActivity(out *ComputeResult, r *opencodeRollout) {
 	}
 }
 
-func computeOpenCodeConversation(out *ComputeResult, r *opencodeRollout) {
+func computeOpenCodeConversation(out *ComputeResult, messages []*OpenCodeMessage) {
 	type event struct {
 		ts   int64
 		role string
 	}
 	var events []event
 	var userTurns, assistantTurns int
-	for _, msg := range r.Messages {
+	for _, msg := range messages {
 		events = append(events, event{msg.Info.Time.Created, msg.Info.Role})
 		switch msg.Info.Role {
 		case "user":
@@ -382,8 +414,8 @@ func computeOpenCodeConversation(out *ComputeResult, r *opencodeRollout) {
 	out.AssistantTurns = assistantTurns
 }
 
-func computeOpenCodeAgentsAndSkills(out *ComputeResult, r *opencodeRollout) {
-	for _, msg := range r.Messages {
+func computeOpenCodeAgentsAndSkills(out *ComputeResult, messages []*OpenCodeMessage) {
+	for _, msg := range messages {
 		if msg.Info.Role != "assistant" {
 			continue
 		}
@@ -405,7 +437,7 @@ func computeOpenCodeAgentsAndSkills(out *ComputeResult, r *opencodeRollout) {
 	}
 }
 
-func computeOpenCodeRedactions(out *ComputeResult, r *opencodeRollout) {
+func computeOpenCodeRedactions(out *ComputeResult, messages []*OpenCodeMessage) {
 	count := func(s string) {
 		matches := redactionPattern.FindAllStringSubmatch(s, -1)
 		for _, m := range matches {
@@ -417,7 +449,7 @@ func computeOpenCodeRedactions(out *ComputeResult, r *opencodeRollout) {
 		}
 	}
 
-	for _, msg := range r.Messages {
+	for _, msg := range messages {
 		parts := msg.Parts
 		for _, p := range parts {
 			switch p.Type {
