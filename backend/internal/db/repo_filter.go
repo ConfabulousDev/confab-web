@@ -3,9 +3,9 @@ package db
 import "fmt"
 
 // CF-510 — centralized SQL fragments for repo extraction + fork→upstream
-// resolution. These exist so the call sites (Sessions filter list/match, TILs
-// filter list/match, org_repos, org_analytics, trends) share one source of
-// truth for the regex and the resolution logic.
+// resolution. These exist so the call sites (Sessions filter list/match,
+// org_repos, org_analytics, trends) share one source of truth for the regex
+// and the resolution logic.
 //
 // Resolution is computed live from each session's own git_info — there is no
 // shared lookup table. A session's upstream is whatever its tracking_remote

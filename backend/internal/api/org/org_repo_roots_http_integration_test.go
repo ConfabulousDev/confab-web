@@ -19,7 +19,7 @@ import (
 
 // CF-510 — Org analytics surfaces (org repo list and org analytics
 // per-user metrics) collapse forks into their upstream root, consistent with
-// Sessions and TILs filter behavior. The upstream is resolved live by
+// Sessions filter behavior. The upstream is resolved live by
 // db.RepoRootExpr from each fork session's own git_info (remotes +
 // tracking_remote).
 
