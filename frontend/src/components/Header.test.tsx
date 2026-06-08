@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Header from './Header';
+
+const DOCS_URL = 'https://docs.confabulous.dev';
+const GITHUB_ISSUES_URL = 'https://github.com/ConfabulousDev/confab-web/issues';
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('@/hooks/useAppConfig', () => ({
@@ -134,6 +137,51 @@ describe('Header nav links — owner pre-filter', () => {
     expect(link.getAttribute('href')).toBe(
       `/trends?owner=${encodeURIComponent('alice@example.com')}`
     );
+  });
+});
+
+// CF-571: docs + GitHub-issue links in the avatar dropdown. These must be
+// visible to every authenticated user regardless of SaaS config — the
+// useAppConfig mock above omits saasFooterEnabled, so their presence here is
+// the self-hosted guarantee.
+describe('Header dropdown — docs & issue links (CF-571)', () => {
+  function openMenu() {
+    fireEvent.click(screen.getByLabelText('User menu'));
+  }
+
+  it('renders a Documentation link to the docs site', () => {
+    signInAs('alice@example.com');
+    renderHeader();
+    openMenu();
+    const link = screen.getByRole('link', { name: 'Documentation' });
+    expect(link).toHaveAttribute('href', DOCS_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('renders a Report an issue link to the GitHub issues page', () => {
+    signInAs('alice@example.com');
+    renderHeader();
+    openMenu();
+    const link = screen.getByRole('link', { name: 'Report an issue' });
+    expect(link).toHaveAttribute('href', GITHUB_ISSUES_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('still shows docs & issue links for the demo identity', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    signInAs('demo@confabulous.dev');
+    renderHeader();
+    openMenu();
+    expect(screen.getByRole('link', { name: 'Documentation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Report an issue' })).toBeInTheDocument();
+  });
+
+  it('does not render the dropdown links when unauthenticated', () => {
+    renderHeader();
+    expect(screen.queryByRole('link', { name: 'Documentation' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Report an issue' })).toBeNull();
   });
 });
 

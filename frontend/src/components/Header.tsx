@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppConfig } from '@/hooks/useAppConfig';
 import { getDemoIdentity, isDemoViewer } from '@/utils/demoIdentity';
+import { DOCS_URL, GITHUB_ISSUES_URL } from '@/utils/externalLinks';
 import ThemeToggle from './ThemeToggle';
 import UpdateBadge from './UpdateBadge';
 import styles from './Header.module.css';
@@ -128,6 +129,28 @@ function Header() {
                 Admin
               </Link>
             )}
+            <div className={styles.dropdownDivider} />
+            {/* CF-571: docs + issue reporting reachable in-app on every
+                deployment, including self-hosted (the SaaS footer is hidden
+                there). */}
+            <a
+              href={DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.dropdownItem}
+              onClick={() => setMenuOpen(false)}
+            >
+              Documentation
+            </a>
+            <a
+              href={GITHUB_ISSUES_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.dropdownItem}
+              onClick={() => setMenuOpen(false)}
+            >
+              Report an issue
+            </a>
             <div className={styles.dropdownDivider} />
             {/* CF-483: the demo identity has no real session to log out
                 of — clicking Logout just re-impersonates on the next

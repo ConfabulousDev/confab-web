@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAppConfig } from '@/hooks/useAppConfig';
 import { isDemoViewer } from '@/utils/demoIdentity';
+import { DOCS_URL, GITHUB_ISSUES_URL } from '@/utils/externalLinks';
 import Alert from '@/components/Alert';
 import styles from './LoginPage.module.css';
 
@@ -223,6 +224,13 @@ function LoginPage() {
             ))}
           </div>
         )}
+
+        {/* CF-571: surface docs + issue reporting on the login screen so
+            self-hosters can find help before signing in. */}
+        <div className={styles.helpLinks}>
+          <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">Docs</a>
+          <a href={GITHUB_ISSUES_URL} target="_blank" rel="noopener noreferrer">Report an issue</a>
+        </div>
       </div>
     </div>
   );

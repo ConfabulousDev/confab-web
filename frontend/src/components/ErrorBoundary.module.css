@@ -62,6 +62,15 @@
   background-color: var(--color-bg-hover);
 }
 
+.reportLine {
+  margin: 0 0 0.5rem;
+  font-size: var(--font-sm);
+}
+
+.reportLink {
+  color: var(--color-accent);
+}
+
 .errorDetails {
   margin-top: 1rem;
   padding: 1rem;

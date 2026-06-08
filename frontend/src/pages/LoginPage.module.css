@@ -149,3 +149,22 @@
   color: var(--color-text-primary);
   border: 1px solid var(--color-border);
 }
+
+/* CF-571: understated docs / report-issue links below the auth options */
+.helpLinks {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+}
+
+.helpLinks a {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.helpLinks a:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
