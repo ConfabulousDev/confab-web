@@ -803,7 +803,7 @@ func (s *Store) aggregateProvidersPresent(ctx context.Context, tq trendsQuery) (
 // so the lists are static across active filters — mirrors SessionFilterOptions.
 //
 // Owners are lowercased and alphabetical. Repos use db.RepoRootExpr (CF-491
-// canonical) so fork→root collapsing is honored identically to Sessions/TILs.
+// canonical) so fork→root collapsing is honored identically to Sessions.
 func (s *Store) aggregateFilterOptions(ctx context.Context, userID int64, shareAllSessions bool) (TrendsFilterOptions, error) {
 	query := `WITH ` + db.VisibleSessionsCTE(shareAllSessions) + `,
 		visible_unique AS (

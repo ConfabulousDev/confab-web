@@ -26,10 +26,6 @@ Shared domain types used across the backend. This is a leaf package with no inte
 - **`GitHubLinkSource`** -- String enum: `"cli_hook"`, `"manual"`, `"transcript"`.
 - **`GitHubLink`** -- A link between a session and a GitHub artifact (commit or PR).
 
-### TILs
-
-- **`TIL`** -- A "Today I Learned" entry linked to a session, with title, body, and timestamps.
-
 ## How to Extend
 
 ### Adding a new domain type

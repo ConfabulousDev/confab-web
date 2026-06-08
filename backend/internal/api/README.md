@@ -20,10 +20,8 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `user.go` | `GET /api/v1/me` -- returns authenticated user info with onboarding status (`has_own_sessions`, `has_api_keys`) |
 | `deletes.go` | `DELETE /api/v1/sessions/{id}` -- deletes session from S3 and database (owner-only) |
 | `github_links.go` | GitHub link CRUD: `POST /api/v1/sessions/{id}/github-links`, `GET /api/v1/sessions/{id}/github-links`, `DELETE /api/v1/sessions/{id}/github-links/{linkID}`. Also contains `ParseGitHubURL` and `extractPRLinkFromLine` for transcript-based PR link extraction |
-| `tils.go` | TIL endpoints: `POST /api/v1/tils` (CLI write), `GET /api/v1/tils` (list owner TILs), `DELETE /api/v1/tils/{id}` (owner-only), `GET /api/v1/tils/{id}` (single, optional auth), `GET /api/v1/sessions/{id}/tils` (per-session, optional auth) |
-| `til_export.go` | TIL export endpoint: `GET /api/v1/tils/export` (external API, API key auth). Returns paginated TILs enriched with session URLs and transcript deep links for machine consumers. CF-475 — `pickExportDeepLinkTarget` mirrors the frontend `buildTILDeepLink` rule: Claude TILs use `message_uuid`; Codex TILs (always null `message_uuid`) fall back to `created_at` (RFC 3339), which the Codex transcript resolves to the closest row. |
 | `external.go` | External API endpoints (API key auth + dedicated rate limiter): condensed transcript (`GET /sessions/{id}/condensed-transcript`), session file list (`GET /sessions/{id}/files`), session file download (`GET /sessions/{id}/files/download`). Shared helpers: `serveCondensedTranscript`, `serveSessionFiles`, `serveSessionFileDownload` |
-| `access.go` | `CheckCanonicalAccess`, `RequireCanonicalRead`, and `RespondCanonicalAccessError` -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, GitHub links, and TIL endpoints |
+| `access.go` | `CheckCanonicalAccess`, `RequireCanonicalRead`, and `RespondCanonicalAccessError` -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, and GitHub links |
 | `auth_config.go` | `GET /api/v1/auth/config` -- public endpoint returning enabled auth providers, feature flags, and a `version` object (current build, latest GitHub release, `update_available`, `update_severity`). Holds the `UpdateChecker` interface so tests can inject a canned `updatecheck.Status` without GitHub round-trips |
 | `version.go` | `GET /api/v1/version` -- public, dependency-free build-info endpoint (no DB / update-checker / network). Returns `version` (or `"dev"`), `go_version`, and optional `commit` / `build_time`. Defines the `BuildInfo` type passed into `NewServer` and stored on `Server.buildInfo` |
 | `client_errors.go` | `POST /api/v1/client-errors` -- accepts frontend error reports for server-side logging/observability |
@@ -58,7 +56,7 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
    - `csrfMiddleware` + `auth.RequireSession` group -- for web dashboard endpoints
    - `csrfWhenSession` + `auth.RequireSessionOrAPIKey` group -- for endpoints used by both CLI and web
    - `auth.OptionalAuth` group -- for endpoints supporting unauthenticated access (public shares)
-   - External API group (`auth.RequireAPIKey` + `externalReadLimiter`) -- for machine-consumable endpoints (condensed transcript, TIL export)
+   - External API group (`auth.RequireAPIKey` + `externalReadLimiter`) -- for machine-consumable endpoints (condensed transcript)
 
 4. **Wrap with `withMaxBody`** using the appropriate size constant (`MaxBodyXS` through `MaxBodyXL`).
 
@@ -102,11 +100,10 @@ Add it to the middleware chain in `SetupRoutes`. Order matters -- see the number
   - `demo/` — CF-483 demo-mode tests (auto-impersonate, read-only enforcement, demo cookie).
   - `auth/` — API keys, device code, GitHub links (HTTP part), shares, `/api/v1/me`.
   - `org/` — `/api/v1/org/analytics`, `/api/v1/org/repos`, `/api/v1/trends`.
-  - `til/` — `POST/GET/DELETE /api/v1/tils*` plus export.
   - `external/` — external API: condensed transcript, session files, file download.
 - Run with `cd backend && DOCKER_HOST=unix:///Users/santaclaude/.orbstack/run/docker.sock go test ./internal/api/...`
 - Use `-short` to skip integration tests during development.
-- **Adding a new HTTP integration test:** pick the relevant sub-package (or create one if it's a new feature group), write `package <feature>_test`, and call `apitest.NewServer(t, env, apitest.Options{...})`. Use only the exported `api.*` surface — anything unexported you need is either testable as a unit in this package, or the symbol should be exported (e.g. `MeResponse`, `CreateTILRequest` are exported precisely so wire tests can decode into them).
+- **Adding a new HTTP integration test:** pick the relevant sub-package (or create one if it's a new feature group), write `package <feature>_test`, and call `apitest.NewServer(t, env, apitest.Options{...})`. Use only the exported `api.*` surface — anything unexported you need is either testable as a unit in this package, or the symbol should be exported (e.g. `MeResponse` is exported precisely so wire tests can decode into it).
 
 ## Dependencies
 

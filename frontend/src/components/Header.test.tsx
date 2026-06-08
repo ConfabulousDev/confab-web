@@ -110,7 +110,7 @@ describe('Header nav links — owner pre-filter', () => {
   });
 
   // CF-495: Trends link participates in the same owner-pre-fill convention
-  // as Sessions/TILs (#210). Normal users get ?owner=<self>; demo viewer gets
+  // as Sessions (#210). Normal users get ?owner=<self>; demo viewer gets
   // bare /trends so the page can aggregate across all visible sessions.
   it('Trends link pre-fills ?owner=<email> for a normal authenticated user', () => {
     signInAs('alice@example.com');

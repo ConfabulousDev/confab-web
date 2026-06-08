@@ -569,7 +569,7 @@ CSRF is enforced by [`filippo.io/csrf`](https://pkg.go.dev/filippo.io/csrf) via 
 | Upload (sync) | 2.78 req/s | 2000 | User ID | `POST /api/v1/sync/{init,chunk,event}` |
 | Validation | 0.5 req/s | 10 | Client IP | `GET /api/v1/auth/validate` |
 | Client error | 0.5 req/s | 5 | Client IP | `POST /api/v1/client-errors` |
-| External read | 30 req/s | 60 | API key user | External read endpoints (condensed transcript, file list/download, TIL export) |
+| External read | 30 req/s | 60 | API key user | External read endpoints (condensed transcript, file list/download) |
 
 Numbers come from `NewServer()` in `internal/api/server.go` — see [`PERFORMANCE.md`](PERFORMANCE.md) for the rationale and tuning notes.
 

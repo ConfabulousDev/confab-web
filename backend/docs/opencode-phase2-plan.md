@@ -576,7 +576,6 @@ Key adapter methods:
 - `computeMeta`: min/max `info.time.created` across messages
 - `calculateMessageCost`: use `info.cost` directly (OpenCode reports cost) or compute from pricing
 - `tokensCostTooltip`: "Cost computed from per-model pricing across all providers used"
-- `supportsTILs`: `false`
 
 ### 4. Transcript Categories (Minimal MVP)
 

@@ -93,7 +93,6 @@ docker load. If it flakes, use `make coverage`.
    - `CreateTestAPIKeyWithToken()` - Create API key and return raw token
    - `CreateTestWebSessionWithToken()` - Create web session and return token
    - `CreateTestSyncFile()` - Insert sync file into database
-   - `CreateTestTIL()` - Insert TIL into database
    - `ParseJSON()` - Decode JSON response
    - `RequireStatus()` - Check HTTP status code
 
