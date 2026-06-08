@@ -9,8 +9,8 @@ The `confab` CLI is built on [Cobra](https://github.com/spf13/cobra). Run `confa
 
 | Command | What it does |
 |---------|--------------|
-| `confab setup --backend-url <url>` | One-command onboarding: auth + install hooks + install bundled skills for every detected provider. See [Overview](/cli/overview/#setup). |
-| `confab status` | Print backend auth state and per-provider hook/skill status. Detects orphan hooks (hook installed but the provider CLI isn't on `PATH`). |
+| `confab setup --backend-url <url>` | One-command onboarding: auth + wire up sync + install bundled skills for every detected provider. See [Overview](/cli/overview/#setup). |
+| `confab status` | Print backend auth state and per-provider sync/skill status. Detects orphans (sync installed but the provider CLI isn't on `PATH`). |
 | `confab login --backend-url <url>` | Just the auth step (device-code flow, or `--api-key` to skip). |
 | `confab logout` | Clear stored credentials. |
 | `confab update` | Check for and install a newer CLI release. |
@@ -19,7 +19,7 @@ The `confab` CLI is built on [Cobra](https://github.com/spf13/cobra). Run `confa
 
 ## Hooks
 
-Hooks are the bridge between your provider CLI (Claude Code, Codex) and the sync daemon. `confab setup` installs them automatically; these commands are for manual repair.
+Hooks are the bridge between your provider CLI (Claude Code, Codex) and the sync daemon. `confab setup` installs them automatically; these commands are for manual repair. OpenCode uses an installed plugin rather than hooks — see [How sync works](/cli/overview/#how-sync-works).
 
 | Command | What it does |
 |---------|--------------|
@@ -57,6 +57,8 @@ The sync daemon is the long-running process that streams transcript chunks to th
 | `confab session download <id>` | Download the raw JSONL transcript files for an uploaded session. |
 | `confab session list-files <id>` | List transcript-file metadata for an uploaded session. |
 
+OpenCode is **live-sync only** — it's captured automatically while you work, so `confab list` and `confab save` cover Claude Code and Codex only.
+
 ## Retro
 
 | Command | What it does |
@@ -75,4 +77,4 @@ The sync daemon is the long-running process that streams transcript chunks to th
 
 - `--backend-url` — passed to commands that hit the backend (`setup`, `login`, `save`, `til`, `retro`, `session ...`). When omitted, the CLI uses the URL stored in `~/.confab/config.json` from the last `setup` / `login`.
 - `--api-key` — bypass the device-login flow for `setup` / `login`.
-- `--provider <claude-code|codex>` — disambiguate which provider a command targets. Defaults vary per command; `confab list` and `save` route through the provider interface so adding a new provider doesn't require changes here.
+- `--provider <claude-code|codex|opencode>` — disambiguate which provider a command targets. Defaults vary per command, and `confab list` and `save` cover Claude Code and Codex only — OpenCode is live-sync only. These commands route through the provider interface so adding a new provider doesn't require changes here.

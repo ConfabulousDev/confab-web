@@ -3,7 +3,7 @@ title: Introduction
 description: What Confabulous is, who it's for, and what you can do with it.
 ---
 
-Confabulous is an **open-source platform** for archiving, searching, and analyzing your Claude Code and OpenAI Codex sessions. Use the free managed instance at [confabulous.dev](https://confabulous.dev), or self-host the whole stack on your own infrastructure.
+Confabulous is an **open-source platform** for archiving, searching, and analyzing your Claude Code, OpenAI Codex, and OpenCode sessions. Use the free managed instance at [confabulous.dev](https://confabulous.dev), or self-host the whole stack on your own infrastructure.
 
 ## What you get
 
@@ -22,6 +22,6 @@ Confabulous is an **open-source platform** for archiving, searching, and analyzi
 
 ## How it works
 
-The CLI watches your local Claude Code and Codex session transcripts and streams them to your backend in real time, chunk by chunk, as each session progresses. The backend parses, analyzes, and stores them; the web UI is a thin shell over that data.
+The CLI watches your local Claude Code, Codex, and OpenCode sessions and streams them to your backend in real time, chunk by chunk, as each session progresses. The backend parses, analyzes, and stores them; the web UI is a thin shell over that data.
 
 See [Concepts](/getting-started/concepts/) for a deeper model of the moving parts.

@@ -3,16 +3,17 @@ title: Skills
 description: Bundled slash commands installed by confab setup — /retro.
 ---
 
-`confab setup` ships one **bundled skill** — a slash command that gets installed into your provider CLIs (Claude Code, Codex) and that you invoke from inside an active session. Both are pre-wired to talk to the backend you authed against during setup, so there's no extra config.
+`confab setup` ships one **bundled skill** — a slash command that gets installed into your provider CLIs (Claude Code, Codex, OpenCode) and that you invoke from inside an active session. It's pre-wired to talk to the backend you authed against during setup, so there's no extra config.
 
 ## How skills are installed
 
 When you run `confab setup`, the CLI:
 
-1. Auto-detects which provider CLIs (`claude`, `codex`) are on your `PATH`.
+1. Auto-detects which provider CLIs (`claude`, `codex`, `opencode`) are on your `PATH`.
 2. For each detected provider, writes the skill's `SKILL.md` into the provider's skills directory:
    - Claude Code: `~/.claude/skills/<skill>/SKILL.md`
    - Codex: `~/.codex/skills/<skill>/SKILL.md`
+   - OpenCode: `~/.config/opencode/skills/<skill>/SKILL.md`
 3. If you'd previously customized the skill, the existing file is backed up to `SKILL.md.bak` before being overwritten — so re-running setup never silently drops your edits.
 
 You can install or remove skills manually with `confab skills add` / `confab skills remove` (see [Commands](/cli/commands/#skills)).
@@ -27,11 +28,11 @@ Three things `/retro` is good for:
 
 - **Replay your own work.** Pull a previous session's condensed transcript into a fresh agent so you can pick up where you left off, even days later.
 - **Learn from teammates.** Load a teammate's session — even one run in a different provider — and reference how they solved a tricky problem.
-- **Synthesize a reusable skill.** When a session captures a workflow worth keeping, ask the agent to distill it into a Claude Code or Codex skill on the spot.
+- **Synthesize a reusable skill.** When a session captures a workflow worth keeping, ask the agent to distill it into a Claude Code, Codex, or OpenCode skill on the spot.
 
 ### Usage
 
-Inside a fresh Claude Code or Codex session:
+Inside a fresh Claude Code, Codex, or OpenCode session:
 
 ```
 /retro <session-id> [optional question or focus]

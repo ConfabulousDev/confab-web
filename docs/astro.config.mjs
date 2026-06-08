@@ -47,7 +47,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Confabulous',
-      description: 'Open-source analytics for your Claude Code and Codex sessions — managed or self-hosted.',
+      description: 'Open-source analytics for your Claude Code, Codex, and OpenCode sessions — managed or self-hosted.',
       customCss: ['./src/styles/custom.css'],
       head,
       social: [

@@ -164,7 +164,7 @@ curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.
 confab setup --backend-url http://localhost:8080
 ```
 
-Start a Claude Code or Codex session — it appears in the dashboard automatically.
+Start a Claude Code, Codex, or OpenCode session — it appears in the dashboard automatically.
 
 ## 2. Production setup
 

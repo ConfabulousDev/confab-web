@@ -5,11 +5,11 @@ description: The core data model and how Confabulous's pieces fit together.
 
 ## Sessions
 
-A **session** is one continuous conversation with an AI coding agent — every Claude Code or Codex conversation is one Confabulous session.
+A **session** is one continuous conversation with an AI coding agent — every Claude Code, Codex, or OpenCode conversation is one Confabulous session.
 
 ## Providers
 
-Confabulous treats Claude Code and Codex as **providers** — each has its own parser, analytics, and transcript shape, but they share a common UI and aggregate analytics.
+Confabulous treats Claude Code, Codex, and OpenCode as **providers** — each has its own parser, analytics, and transcript shape, but they share a common UI and aggregate analytics. See the [provider pages](/providers/claude-code/) for what each one captures.
 
 ## Smart recap
 

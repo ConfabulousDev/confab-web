@@ -34,11 +34,11 @@ Or for a self-hosted instance:
 confab setup --backend-url https://confab.your-company.com
 ```
 
-The setup flow opens a browser tab to authorize the CLI against your account, then stores an API token in `~/.confab/` and installs sync hooks plus the `/retro` skill for every supported provider CLI (`claude`, `codex`) detected on your `PATH`.
+The setup flow opens a browser tab to authorize the CLI against your account, then stores an API token in `~/.confab/` and wires up real-time sync plus the `/retro` skill for every supported provider CLI (`claude`, `codex`, `opencode`) detected on your `PATH`.
 
 ## 4. Start a session
 
-Start any Claude Code or Codex session. The CLI streams transcripts to your backend in real time — open your dashboard and you'll see the session appear and update live as you work.
+Start any Claude Code, Codex, or OpenCode session. The CLI streams transcripts to your backend in real time — open your dashboard and you'll see the session appear and update live as you work.
 
 ## What's next
 

@@ -5,6 +5,10 @@ description: Two-way links between Confabulous sessions and the GitHub PRs and c
 
 Confabulous links each session to the pull requests and commits the agent produced during that session, and the inverse direction is also wired up: every linked PR and commit carries a reference back to its originating session.
 
+:::note
+GitHub commit and PR linking is available for Claude Code and Codex sessions. OpenCode sessions are synced and analyzed, but do not produce these links.
+:::
+
 ## Confabulous → GitHub
 
 Every session that touches a git repo records the commits it created and any PRs those commits land in. The session detail view surfaces these as a chip row above the transcript: each chip is a clickable link to the PR or commit on GitHub.

@@ -15,7 +15,7 @@ Clicking a session opens a three-pane view:
 
 ## Filters
 
-- **Provider** — Claude Code, Codex.
+- **Provider** — Claude Code, Codex, OpenCode.
 - **Repo** — forks roll up to their upstream root automatically.
 - **Owner** — who ran the session.
 - **Date range**.
