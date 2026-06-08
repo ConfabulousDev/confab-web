@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import type { ReactNode } from 'react';
+import { GITHUB_ISSUES_URL } from '@/utils/externalLinks';
 import styles from './ErrorBoundary.module.css';
 
 interface Props {
@@ -82,6 +83,18 @@ class ErrorBoundary extends Component<Props, State> {
                 Go Home
               </button>
             </div>
+            {/* CF-571: give users a route to report the crash upstream,
+                available on self-hosted instances too. */}
+            <p className={styles.reportLine}>
+              <a
+                href={GITHUB_ISSUES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.reportLink}
+              >
+                Report an issue
+              </a>
+            </p>
             {import.meta.env.DEV && this.state.error && (
               <details className={styles.errorDetails}>
                 <summary>Error Details (Development Only)</summary>

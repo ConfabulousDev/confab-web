@@ -12,7 +12,7 @@ Page-level components corresponding to routes. All pages are lazy-loaded for cod
 | `TrendsPage.tsx` | Trends analytics dashboard with date range, repo, provider, and owner (CF-495) filters. Document title + heading "Trends" (was "Personal Trends"). Owner + repo dropdown options come from `data.filter_options` — no side-call to `/api/sessions`. Owner-narrowed empty state offers a one-click clear-filter CTA. |
 | `OrgPage.tsx` | Organization-level analytics with per-user table |
 | `APIKeysPage.tsx` | API key management (create, list, delete) |
-| `LoginPage.tsx` | OAuth login page with provider selection |
+| `LoginPage.tsx` | OAuth login page with provider selection. Carries understated "Docs" (`DOCS_URL`) and "Report an issue" (`GITHUB_ISSUES_URL`) links below the auth options (CF-571); these only render when the form is shown (not during single-provider auto-redirect). |
 | `PoliciesPage.tsx` | Legal policies page (SaaS mode only) |
 | `NotFoundPage.tsx` | 404 page |
 | `pageLayout.module.css` | Shared page layout styles (layout, page title, refresh button, toolbar actions, filter bar) |

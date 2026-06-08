@@ -226,6 +226,33 @@ describe('LoginPage', () => {
     });
   });
 
+  // CF-571: the login screen surfaces docs + report-issue links so users
+  // (incl. self-hosters on a password/multi-provider screen) can find help
+  // before signing in.
+  it('renders a Docs link to the docs site', async () => {
+    mockFetchConfig(twoProviders);
+    renderWithRouter();
+    await waitFor(() => {
+      expect(screen.getByText('Continue with GitHub')).toBeInTheDocument();
+    });
+    const link = screen.getByRole('link', { name: 'Docs' });
+    expect(link).toHaveAttribute('href', 'https://docs.confabulous.dev');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('renders a Report an issue link to the GitHub issues page', async () => {
+    mockFetchConfig(twoProviders);
+    renderWithRouter();
+    await waitFor(() => {
+      expect(screen.getByText('Continue with GitHub')).toBeInTheDocument();
+    });
+    const link = screen.getByRole('link', { name: 'Report an issue' });
+    expect(link).toHaveAttribute('href', 'https://github.com/ConfabulousDev/confab-web/issues');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
   it('returns null for single OAuth provider (auto-redirect)', async () => {
     mockFetchConfig([
       { name: 'github', display_name: 'GitHub', login_url: '/auth/github/login' },

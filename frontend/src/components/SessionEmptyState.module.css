@@ -22,3 +22,13 @@
   color: var(--color-text-muted);
   margin: var(--spacing-sm) 0 0 0;
 }
+
+.docsHint {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  margin: var(--spacing-lg) 0 0 0;
+}
+
+.docsLink {
+  color: var(--color-accent);
+}

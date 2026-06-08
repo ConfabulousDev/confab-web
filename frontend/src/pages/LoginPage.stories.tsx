@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Alert from '@/components/Alert';
+import { DOCS_URL, GITHUB_ISSUES_URL } from '@/utils/externalLinks';
 import styles from './LoginPage.module.css';
 
 const SUPPORT_EMAIL = 'support@example.com';
@@ -124,6 +125,12 @@ function LoginPageLayout({ emailHint, error, showPassword = false, providers = [
             ))}
           </div>
         )}
+
+        {/* CF-571: mirrors the docs / report-issue links in LoginPage.tsx */}
+        <div className={styles.helpLinks}>
+          <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">Docs</a>
+          <a href={GITHUB_ISSUES_URL} target="_blank" rel="noopener noreferrer">Report an issue</a>
+        </div>
       </div>
     </div>
   );
