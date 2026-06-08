@@ -1399,7 +1399,8 @@ response body **is** the capabilities map (no outer wrapper).
 ```json
 {
   "workflow_files": true,
-  "workflow_journal": true
+  "workflow_journal": true,
+  "opencode_subagents": true
 }
 ```
 
@@ -1407,12 +1408,14 @@ response body **is** the capabilities map (no outer wrapper).
 |-------|------|-------------|
 | `workflow_files` | bool | Backend resolves path-encoded workflow subagent file names (`subagents/workflows/<runId>/agent-<id>.jsonl`) and attributes their tokens. |
 | `workflow_journal` | bool | Backend accepts, stores, and serves the `workflow_journal` file_type (the run journal), excluding it from analytics. See [Workflow files](#workflow-files). |
+| `opencode_subagents` | bool | Backend ingests OpenCode subagent JSONL files uploaded as `file_type='agent'` under the root session and aggregates their tokens / tools / code-activity / agents into the parent session's analytics (Codex-style merge; Conversation card stays main-only). CF-539. |
 
-Both fields are always `true` on a build that ships this endpoint — its very
+All fields are always `true` on a build that ships this endpoint — its very
 presence is the signal. **Older backends omit this endpoint entirely** (404);
-the CLI reads that as "workflow files unsupported" and skips those uploads,
-keeping the rollout order safe (backend first, then CLI). New capability fields
-may be added over time; clients must treat any absent field as `false`.
+the CLI reads that as "all advertised capabilities unsupported" and skips those
+uploads, keeping the rollout order safe (backend first, then CLI). New
+capability fields may be added over time; clients must treat any absent field
+as `false`.
 
 ### Model Pricing
 ```

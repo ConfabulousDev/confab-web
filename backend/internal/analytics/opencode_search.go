@@ -1,32 +1,36 @@
 package analytics
 
-import "strings"
+// opencodeToolOutputPreviewBytes caps how much of any single tool output we
+// fold into the search index. Per-output bound; the overall index size is
+// further bounded by searchTextBuilder's maxUserMessagesBytes cap.
+const opencodeToolOutputPreviewBytes = 500
 
-func extractOpenCodeSearchText(r *opencodeRollout) string {
-	var b strings.Builder
-	for _, msg := range r.Messages {
-		parts := msg.Parts
-		for _, p := range parts {
-			switch p.Type {
-			case "text":
-				if p.Text != "" {
-					b.WriteString(p.Text)
-					b.WriteByte('\n')
-				}
-			case "tool":
-				if p.Tool != "" {
-					b.WriteString(p.Tool)
-					b.WriteByte('\n')
-				}
-				state := p.State
-				if state != nil && state.Output != "" {
-					const maxLen = 500
-					output := state.Output
-					if len(output) > maxLen {
-						output = output[:maxLen]
+// extractOpenCodeSearchText flattens user/assistant text and tool
+// names+outputs across [main, ...subagents] into the Weight C search-index
+// content. Honors maxUserMessagesBytes with UTF-8-safe truncation via the
+// shared searchTextBuilder (CF-539 — subagent transcripts contribute to
+// search recall; the overall cap prevents an N-subagent session from
+// exploding the index row).
+func extractOpenCodeSearchText(rollouts [][]*OpenCodeMessage) string {
+	if len(rollouts) == 0 {
+		return ""
+	}
+	b := newSearchTextBuilder(maxUserMessagesBytes)
+	for _, messages := range rollouts {
+		for _, msg := range messages {
+			for _, p := range msg.Parts {
+				switch p.Type {
+				case "text":
+					b.Add(p.Text)
+				case "tool":
+					b.Add(p.Tool)
+					if p.State != nil && p.State.Output != "" {
+						output := p.State.Output
+						if len(output) > opencodeToolOutputPreviewBytes {
+							output = output[:opencodeToolOutputPreviewBytes]
+						}
+						b.Add(output)
 					}
-					b.WriteString(output)
-					b.WriteByte('\n')
 				}
 			}
 		}

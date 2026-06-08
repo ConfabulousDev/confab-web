@@ -13,6 +13,10 @@ type capabilitiesResponse struct {
 	// WorkflowJournal reports support for the workflow_journal file_type
 	// (subagents/workflows/<runId>/journal.jsonl).
 	WorkflowJournal bool `json:"workflow_journal"`
+	// OpencodeSubagents reports support for ingesting OpenCode subagent JSONL
+	// files uploaded as file_type='agent' under the root session (CF-539).
+	// A CF-538 CLI gates upload of subagent files on this flag.
+	OpencodeSubagents bool `json:"opencode_subagents"`
 }
 
 // handleCapabilities reports the workflow-file capabilities of this build.
@@ -22,7 +26,8 @@ type capabilitiesResponse struct {
 // entirely, so the CLI reads a 404/absent signal as "unsupported".
 func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, capabilitiesResponse{
-		WorkflowFiles:   true,
-		WorkflowJournal: true,
+		WorkflowFiles:     true,
+		WorkflowJournal:   true,
+		OpencodeSubagents: true,
 	})
 }

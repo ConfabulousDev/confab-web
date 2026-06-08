@@ -7,8 +7,8 @@ import (
 
 func TestComputeOpenCodeCodeActivity_ReadTool(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -43,8 +43,8 @@ func TestComputeOpenCodeCodeActivity_ReadTool(t *testing.T) {
 
 func TestComputeOpenCodeCodeActivity_WriteTool(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -78,8 +78,8 @@ func TestComputeOpenCodeCodeActivity_WriteTool(t *testing.T) {
 
 func TestComputeOpenCodeCodeActivity_EditTool(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -117,8 +117,8 @@ func TestComputeOpenCodeCodeActivity_EditTool(t *testing.T) {
 
 func TestComputeOpenCodeCodeActivity_SearchTools(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -149,8 +149,8 @@ func TestComputeOpenCodeCodeActivity_SearchTools(t *testing.T) {
 
 func TestComputeOpenCodeCodeActivity_PendingToolsExcluded(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -179,8 +179,8 @@ func TestComputeOpenCodeCodeActivity_PendingToolsExcluded(t *testing.T) {
 
 func TestComputeOpenCodeConversation_TurnWindows(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "user",

@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-func opencodeMinimalRollout() *opencodeRollout {
+func opencodeMinimalRollout() [][]*OpenCodeMessage {
 	finish := "stop"
-	return &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	return [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID:         "msg_01JX0000000000000000000001",
@@ -100,7 +100,7 @@ func TestComputeFromOpenCodeRollout_HappyPath(t *testing.T) {
 }
 
 func TestComputeFromOpenCodeRollout_EmptyRollout(t *testing.T) {
-	out := ComputeFromOpenCodeRollout(context.Background(), &opencodeRollout{})
+	out := ComputeFromOpenCodeRollout(context.Background(), nil)
 	if out == nil {
 		t.Fatal("ComputeFromOpenCodeRollout returned nil")
 	}
@@ -114,8 +114,8 @@ func TestComputeFromOpenCodeRollout_EmptyRollout(t *testing.T) {
 
 func TestComputeFromOpenCodeRollout_FailedTool(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -159,8 +159,8 @@ func TestComputeFromOpenCodeRollout_Compaction(t *testing.T) {
 	autoTrue := true
 	autoFalse := false
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -190,8 +190,8 @@ func TestComputeFromOpenCodeRollout_Compaction(t *testing.T) {
 
 func TestComputeFromOpenCodeRollout_Redactions(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -225,8 +225,8 @@ func TestComputeFromOpenCodeRollout_Redactions(t *testing.T) {
 
 func TestComputeFromOpenCodeRollout_SubtaskAgents(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",
@@ -291,8 +291,8 @@ func TestPrepareOpenCodeTranscript(t *testing.T) {
 
 func TestComputeFromOpenCodeRollout_AgentModeSwitchesNotCounted(t *testing.T) {
 	finish := "stop"
-	r := &opencodeRollout{
-		Messages: []*OpenCodeMessage{
+	r := [][]*OpenCodeMessage{
+		{
 			{
 				Info: OpenCodeMessageInfo{
 					ID: "msg_01", SessionID: "ses_01", Role: "assistant",

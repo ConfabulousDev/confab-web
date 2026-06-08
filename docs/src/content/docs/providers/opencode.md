@@ -23,6 +23,10 @@ Each OpenCode session produces these cards:
 - **Conversation** — turn structure, active time, message counts.
 - **Repo activity** — files touched, language breakdown.
 
+## Subagent aggregation
+
+When an OpenCode session spawns subagents (`explore`, `build`, etc.), Confabulous aggregates the main thread plus every subagent thread for most analytics cards. The Conversation card stays main-only by design (it reflects user-perceived turn structure, not subagent reasoning). Subagent uploads require a recent CLI and backend; older deployments simply skip them.
+
 ## Pricing
 
 Because OpenCode runs models from many providers, each session is priced against the published rates for whichever model produced it.
