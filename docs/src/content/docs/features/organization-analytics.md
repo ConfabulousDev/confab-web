@@ -13,7 +13,7 @@ A single page with one row per user and filters across the top:
 
 - **Per-user totals** — session count, total cost, total duration, total assistant time, total user time.
 - **Per-user averages** — cost per session, duration per session, assistant/user time per session.
-- **Filters** — date range (up to 90 days), provider (Claude Code / Codex), repo.
+- **Filters** — date range (up to 90 days), provider (Claude Code / Codex / OpenCode), repo.
 
 The repo filter rolls forks up to their upstream root automatically, matching the behavior on Sessions and Trends.
 

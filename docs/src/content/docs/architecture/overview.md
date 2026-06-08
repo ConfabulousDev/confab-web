@@ -15,7 +15,7 @@ description: How the Confabulous backend and frontend fit together.
 
 ## Provider abstraction
 
-Both the parser and the analytics pipeline are organized around a `SessionProvider` interface, with one implementation per provider (Claude Code, Codex). Adding a third provider is documented in `backend/internal/analytics/PROVIDER_EXTENSION.md`.
+Both the parser and the analytics pipeline are organized around a `SessionProvider` interface, with one implementation per provider (Claude Code, Codex, OpenCode). Adding another provider is documented in `backend/internal/analytics/PROVIDER_EXTENSION.md`.
 
 ## Session visibility
 

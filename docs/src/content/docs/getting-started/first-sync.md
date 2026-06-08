@@ -3,7 +3,7 @@ title: First sync
 description: What to expect the first time the CLI streams sessions to your Confabulous server.
 ---
 
-After running `confab setup`, the CLI watches your local Claude Code and Codex session transcripts and streams them to your backend in real time as each session progresses.
+After running `confab setup`, the CLI watches your local Claude Code, Codex, and OpenCode sessions and streams them to your backend in real time as each session progresses.
 
 ## What gets uploaded
 

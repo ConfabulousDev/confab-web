@@ -1,6 +1,6 @@
 ---
 title: CLI overview
-description: The confab CLI that syncs your Claude Code and Codex sessions in real time.
+description: The confab CLI that syncs your Claude Code, Codex, and OpenCode sessions in real time.
 ---
 
 The `confab` CLI is the bridge between your local AI coding sessions and the Confabulous backend. It lives in a separate repository: [ConfabulousDev/confab](https://github.com/ConfabulousDev/confab).
@@ -28,17 +28,19 @@ confab setup --backend-url https://your-confab-instance.example.com
 The setup flow:
 
 1. **Authenticates** against the backend via a browser device-login flow. Pass `--api-key cfb_...` to skip the device flow and use a key directly.
-2. **Auto-detects** which provider CLIs (`claude`, `codex`) are installed on your `PATH`.
-3. **Installs the sync hooks** into each detected CLI's configuration.
+2. **Auto-detects** which provider CLIs (`claude`, `codex`, `opencode`) are installed on your `PATH`.
+3. **Wires up real-time sync** for each detected CLI.
 4. **Installs the bundled skills** (`/retro`) for each detected CLI.
 
-Pass `--provider claude-code` or `--provider codex` to restrict setup to one provider.
+Pass `--provider claude-code`, `--provider codex`, or `--provider opencode` to restrict setup to one provider.
 
-To verify everything landed correctly, run `confab status` — it prints the backend URL, auth state, and per-provider hook/skill state, with remediation hints if anything's off.
+To verify everything landed correctly, run `confab status` — it prints the backend URL, auth state, and per-provider sync/skill state, with remediation hints if anything's off.
 
 ## How sync works
 
 Sync is driven by the **hooks** `confab setup` installs into each provider CLI's configuration. When Claude Code or Codex runs a session, it invokes these hooks at key lifecycle points (session start, user prompt submit, tool use, session end) — and the hooks stream new transcript chunks to your backend in real time, chunk by chunk. You don't have to wait for the session to end before it appears on the dashboard: new messages, tool calls, and analytics surface as they happen.
+
+OpenCode has no native hook system, so `confab setup` installs a small plugin instead. On each session the plugin starts the sync daemon, which reads OpenCode's local database and streams sessions through the same real-time pipeline. See [OpenCode](/providers/opencode/) for the details.
 
 A persistent sync **daemon** is spawned per session to handle the streaming. You don't manage it directly — it starts on `session-start` and exits when the session ends — but you can inspect or restart it with `confab sync status` / `confab sync start` if needed.
 

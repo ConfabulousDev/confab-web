@@ -32,7 +32,7 @@ docs/src/content/docs/
 ├── getting-started/           # Audience-specific onboarding (end users vs admins)
 ├── self-hosting/              # Deployment walkthrough, samples, config reference, demo mode
 ├── cli/                       # confab CLI overview, commands, bundled skills
-├── providers/                 # Per-provider details (claude-code, codex)
+├── providers/                 # Per-provider details (claude-code, codex, opencode)
 ├── features/                  # Per-feature docs (sessions, TILs, trends, org analytics, sharing, smart recap)
 ├── api/                       # API reference (index linking into backend/API.md)
 └── architecture/              # System architecture
