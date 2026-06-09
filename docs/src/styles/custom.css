@@ -1,13 +1,80 @@
 @import url('https://fonts.googleapis.com/css2?family=Lobster&display=swap');
 
-/* Brand wordmark — matches the cursive Lobster mark used in the main app. */
+/* ---------------------------------------------------------------------------
+   App-aligned theme tokens (CF-569)
+
+   Map Starlight's CSS custom properties onto the main app's "dive watch"
+   design system so the docs site reads as the same product. Source of truth:
+   frontend/src/styles/variables.css — keep these values in sync with it.
+
+   Starlight derives almost every surface from a grayscale ramp
+   (--sl-color-white = foreground … --sl-color-black = page bg, with
+   --sl-color-gray-1..7 in between) plus an accent triple
+   (--sl-color-accent-low/-/-high). We override the ramp + accent and only the
+   few derived surfaces whose default mapping doesn't match the app
+   (bg-nav, bg-sidebar, bg-inline-code, and dark-mode text-accent). Everything
+   else (--sl-color-text, hairlines, …) resolves from the ramp automatically.
+
+   Dark values live under :root (Starlight's default mode); light values under
+   :root[data-theme='light'], mirroring Starlight's own props.css structure.
+   --------------------------------------------------------------------------- */
+
+/* Dark mode (default) — app dark tokens. */
+:root {
+  --sl-color-white: #f5f5f5;            /* headings / strongest text */
+  --sl-color-gray-1: #f5f5f5;
+  --sl-color-gray-2: #f5f5f5;           /* body text (--sl-color-text) */
+  --sl-color-gray-3: #b8b8b8;           /* secondary text */
+  --sl-color-gray-4: #8a8a8a;           /* muted text */
+  --sl-color-gray-5: #333333;           /* borders / hairlines */
+  --sl-color-gray-6: #1f1f1f;           /* raised surface / hairline */
+  --sl-color-black: #0d0d0d;            /* page background */
+
+  --sl-color-accent-low: #15294a;
+  --sl-color-accent: #60a5fa;
+  --sl-color-accent-high: #93c5fd;
+  --sl-color-text-accent: #60a5fa;      /* links — exact app accent */
+
+  --sl-color-bg-nav: #171717;           /* header chrome = app surface-primary */
+  --sl-color-bg-sidebar: #171717;       /* sidebar chrome = app surface-primary */
+  --sl-color-bg-inline-code: #1f1f1f;
+}
+
+/* Light mode — app light tokens. */
+:root[data-theme='light'] {
+  --sl-color-white: #1a1a1a;            /* headings / strongest text */
+  --sl-color-gray-1: #1a1a1a;
+  --sl-color-gray-2: #1a1a1a;           /* body text (--sl-color-text) */
+  --sl-color-gray-3: #666666;           /* secondary text */
+  --sl-color-gray-4: #999999;           /* muted text */
+  --sl-color-gray-5: #cccccc;
+  --sl-color-gray-6: #e5e5e5;           /* border */
+  --sl-color-gray-7: #f5f5f5;
+  --sl-color-black: #fafafa;            /* page background */
+
+  --sl-color-accent-low: #e6f0fa;
+  --sl-color-accent: #0066cc;
+  --sl-color-accent-high: #004080;
+  --sl-color-text-accent: #0066cc;      /* links — exact app accent */
+
+  --sl-color-bg-nav: #ffffff;           /* header chrome = app surface-primary */
+  --sl-color-bg-sidebar: #ffffff;       /* sidebar chrome = app surface-primary */
+  --sl-color-bg-inline-code: #f5f5f5;
+}
+
+/* Brand wordmark — matches the cursive Lobster mark used in the main app.
+   The app renders it in --color-text-primary (not the accent), so pin the
+   color to --sl-color-white (= app primary text) rather than let it inherit
+   Starlight's accent-colored nav-link styling. */
 .site-title,
 a.site-title span,
-a.site-title {
+a.site-title,
+a.site-title:hover {
   font-family: 'Lobster', cursive;
   font-weight: 400;
   font-size: 1.8rem;
   letter-spacing: 0.01em;
+  color: var(--sl-color-white);
 }
 
 /* Splash hero title also gets the wordmark treatment. */
@@ -18,15 +85,57 @@ a.site-title {
   letter-spacing: 0.01em;
 }
 
-/* Enlarge the social (GitHub) icon in the header. */
+/* Enlarge the social (GitHub) icon in the header. The app renders header
+   icons in a neutral text color (accent is reserved for links/CTAs), so
+   override Starlight's accent-colored default to a muted neutral that
+   brightens on hover. */
 starlight-menu-button + .social-icons a,
 .social-icons a {
   padding: 0.4em;
+  color: var(--sl-color-gray-3);
+}
+
+.social-icons a:hover {
+  color: var(--sl-color-white);
 }
 
 .social-icons a svg {
   width: 1.5em;
   height: 1.5em;
+}
+
+/* Hero CTA button — match the app's compact filled-accent button rather than
+   Starlight's full-width pill. The app primary button uses --radius-md (4px)
+   rounding and tight padding. Starlight's defaults are much larger: a full
+   pill, ~15px vertical padding at desktop, and a 1.5rem (24px) icon that
+   dominates the height. We override the radius, padding, and icon size so the
+   button reads as the app's button (font size is left at Starlight's default).
+   The accent fill (--sl-color-text-accent) already matches --color-primary, so
+   colors are left as Starlight derives them. */
+.sl-link-button {
+  border-radius: 6px;
+}
+
+.sl-link-button.primary {
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 0.4rem 0.95rem;
+}
+
+/* Shrink the trailing arrow icon (Starlight renders it at 1.5rem, which sets
+   the button height). Plain `svg` selector — this is a global stylesheet, so
+   `:global()` would be an invalid selector here and silently dropped. */
+.sl-link-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Starlight bumps the action button to ~15px vertical padding at desktop;
+   keep it compact instead (font size left at Starlight's default). */
+@media (min-width: 50rem) {
+  .sl-link-button.primary {
+    padding: 0.45rem 1rem;
+  }
 }
 
 /* Tone in-content headings down ~10% from Starlight defaults. Covers both
