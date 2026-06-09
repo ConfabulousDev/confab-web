@@ -167,7 +167,7 @@
 }
 
 /* CF-574: header row pairing the "Unknown content block" label with the
-   "Report this message" affordance. */
+   "Report bug" affordance. */
 .unknownBlockHeader {
   display: flex;
   align-items: center;

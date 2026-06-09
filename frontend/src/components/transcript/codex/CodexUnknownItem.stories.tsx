@@ -43,7 +43,7 @@ export const UnknownResponseItemPayload: Story = {
   },
 };
 
-// CF-574: with the "Report this message" affordance (needs a sessionId for the
+// CF-574: with the "Report bug" affordance (needs a sessionId for the
 // per-row actions to render alongside it).
 export const WithReportButton: Story = {
   args: {

@@ -27,7 +27,7 @@ describe('ReportUnknownButton', () => {
   it('renders a new-tab link to GitHub issues/new', () => {
     render(<ReportUnknownButton descriptor={descriptor} />, { wrapper: withConfig('1.0.0') });
 
-    const link = screen.getByRole('link', { name: /report this message/i });
+    const link = screen.getByRole('link', { name: /report bug/i });
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     expect(link.getAttribute('href')).toContain('/issues/new');
@@ -36,14 +36,14 @@ describe('ReportUnknownButton', () => {
   it('encodes the unrecognized type into the prefilled issue', () => {
     render(<ReportUnknownButton descriptor={descriptor} />, { wrapper: withConfig('1.0.0') });
 
-    const href = screen.getByRole('link', { name: /report this message/i }).getAttribute('href') ?? '';
+    const href = screen.getByRole('link', { name: /report bug/i }).getAttribute('href') ?? '';
     expect(href).toContain(encodeURIComponent('mystery_type'));
   });
 
   it('includes the Confab app version from context in the prefilled body', () => {
     render(<ReportUnknownButton descriptor={descriptor} />, { wrapper: withConfig('9.9.9') });
 
-    const href = screen.getByRole('link', { name: /report this message/i }).getAttribute('href') ?? '';
+    const href = screen.getByRole('link', { name: /report bug/i }).getAttribute('href') ?? '';
     const body = new URL(href).searchParams.get('body') ?? '';
     expect(body).toContain('9.9.9');
   });
