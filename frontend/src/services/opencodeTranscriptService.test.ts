@@ -44,14 +44,19 @@ const assistantLine = {
 };
 
 describe('parseOpenCodeJSONL', () => {
-  it('parses valid lines, skips blank and malformed', () => {
+  it('parses valid lines, skips blank, surfaces malformed as invalid entries (CF-574)', () => {
     const jsonl = [line(userLine), '', '   ', '{not json', line(assistantLine)].join('\n');
     const { rawLines, totalLines } = parseOpenCodeJSONL(jsonl);
-    // 3 non-empty lines (user, malformed, assistant); malformed dropped.
+    // 3 non-empty lines (user, malformed, assistant); malformed kept, not dropped.
     expect(totalLines).toBe(3);
-    expect(rawLines).toHaveLength(2);
-    expect(rawLines[0]?.info.role).toBe('user');
-    expect(rawLines[1]?.info.role).toBe('assistant');
+    expect(rawLines).toHaveLength(3);
+    expect(rawLines[1]).toMatchObject({ __invalid: true, raw: '{not json' });
+  });
+
+  it('surfaces shape-invalid (but JSON-valid) lines as invalid entries', () => {
+    const { rawLines } = parseOpenCodeJSONL(line({ not: 'a message' }));
+    expect(rawLines).toHaveLength(1);
+    expect(rawLines[0]).toMatchObject({ __invalid: true });
   });
 
   it('returns empty for empty input', () => {
@@ -99,6 +104,69 @@ describe('normalizeOpenCodeLines', () => {
       parts: [{ type: 'step-start' }],
     };
     expect(normalizeOpenCodeLines([empty])).toHaveLength(0);
+  });
+});
+
+describe('normalizeOpenCodeLines — CF-574 unknown surfacing', () => {
+  it('surfaces an unrecognized message role as an unknown item', () => {
+    const weird: RawOpenCodeLine = {
+      info: { id: 'msg_x', role: 'orchestrator', time: { created: 5 } },
+      parts: [{ type: 'text', text: 'hi' }],
+    };
+    const items = normalizeOpenCodeLines([weird]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: 'unknown',
+      reason: 'unrecognized message role',
+      unrecognizedType: 'orchestrator',
+    });
+  });
+
+  it('surfaces an unrecognized part type as an unknown item', () => {
+    const asst: RawOpenCodeLine = {
+      info: { id: 'msg_y', role: 'assistant', time: { created: 6 } },
+      parts: [
+        { type: 'text', text: 'done' },
+        { id: 'prt_weird', type: 'future_part_type' },
+      ],
+    };
+    const unknowns = normalizeOpenCodeLines([asst]).filter((i) => i.kind === 'unknown');
+    expect(unknowns).toHaveLength(1);
+    expect(unknowns[0]).toMatchObject({
+      kind: 'unknown',
+      reason: 'unrecognized part type',
+      unrecognizedType: 'future_part_type',
+    });
+  });
+
+  it('does NOT surface known-but-ignored part types or non-terminal tools as unknown', () => {
+    const asst: RawOpenCodeLine = {
+      info: { id: 'msg_z', role: 'assistant', time: { created: 7 } },
+      parts: [
+        { type: 'step-start' },
+        { type: 'snapshot' },
+        { type: 'tool', tool: 'Read', state: { status: 'pending' } },
+      ],
+    };
+    expect(normalizeOpenCodeLines([asst]).filter((i) => i.kind === 'unknown')).toHaveLength(0);
+  });
+
+  it('surfaces a malformed line as an unknown item with the raw text', () => {
+    const { rawLines } = parseOpenCodeJSONL('{not json');
+    const items = normalizeOpenCodeLines(rawLines);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: 'unknown',
+      reason: 'malformed line',
+      rawLine: '{not json',
+    });
+  });
+
+  it('gives unknown items stable ids based on stream position', () => {
+    const { rawLines } = parseOpenCodeJSONL(['{bad1', '{bad2'].join('\n'));
+    const items = normalizeOpenCodeLines(rawLines);
+    const ids = items.map((i) => i.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 

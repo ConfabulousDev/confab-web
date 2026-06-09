@@ -8,7 +8,8 @@ API client and business logic services. All HTTP communication with the backend 
 |------|------|
 | `api.ts` | Centralized API client with Zod-validated endpoints, error classes, and auth handling |
 | `claudeTranscriptService.ts` | Claude Code transcript: fetching, JSONL parsing, validation, caching, incremental updates |
-| `codexTranscriptService.ts` | Codex rollout transcript: parses the Codex JSONL shape, normalizes raw lines into render items, and mirrors the Claude fetch / poll surface |
+| `codexTranscriptService.ts` | Codex rollout transcript: parses the Codex JSONL shape, normalizes raw lines into render items, and mirrors the Claude fetch / poll surface. CF-574: each fall-through that produces a `CodexUnknownItem` now sets `reason` (`CodexUnknownReason`) + the precise `unrecognizedType` for the "Report this message" affordance |
+| `opencodeTranscriptService.ts` | OpenCode transcript: parses the per-message `{ info, parts }` JSONL, normalizes into `OpenCodeRenderItem[]`, and mirrors the Claude/Codex fetch / poll surface. CF-574: the accumulated stream is `OpenCodeRawEntry[]` (`RawOpenCodeLine \| OpenCodeInvalidLine`) — malformed lines are kept (not dropped) and, alongside unrecognized message roles and unrecognized part types (outside `KNOWN_OPENCODE_PART_TYPES`), surface as `kind:'unknown'` render items. Non-terminal tool statuses and known-but-ignored part types are deliberate skips, not unknowns |
 | `claudeMessageParser.ts` | Extracts display-ready data from raw Claude transcript messages |
 
 ## Key Components

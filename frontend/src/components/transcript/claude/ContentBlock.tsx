@@ -4,6 +4,8 @@ import { stripAnsi, renderMarkdownToHtml, tryParseAsJson } from '@/utils';
 import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
 import CodeBlock from '../CodeBlock';
 import BashOutput from '../BashOutput';
+import ReportUnknownButton from '../ReportUnknownButton';
+import { computeKeyFingerprint } from '@/utils/reportUnknown';
 import styles from './ContentBlock.module.css';
 
 interface ContentBlockProps {
@@ -148,7 +150,17 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
 
   return (
     <div className={styles.unknownBlock}>
-      <em>Unknown content block: {block.type}</em>
+      <div className={styles.unknownBlockHeader}>
+        <em>Unknown content block: {block.type}</em>
+        <ReportUnknownButton
+          descriptor={{
+            provider: 'claude',
+            surface: 'content block',
+            type: String(block.type),
+            keyFingerprint: computeKeyFingerprint(block),
+          }}
+        />
+      </div>
       {bestEffortText && (
         <pre className={styles.unknownBlockContent}>{bestEffortText}</pre>
       )}

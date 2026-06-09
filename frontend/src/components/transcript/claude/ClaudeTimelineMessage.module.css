@@ -273,6 +273,11 @@
   overflow: hidden;
 }
 
+/* CF-574: "Report this message" affordance on an unknown message row. */
+.reportRow {
+  display: flex;
+}
+
 /* File snapshot content */
 .snapshotContent {
   font-size: var(--font-sm);

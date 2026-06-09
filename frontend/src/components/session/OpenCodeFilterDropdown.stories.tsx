@@ -16,7 +16,11 @@ const meta: Meta<typeof OpenCodeFilterDropdown> = {
 export default meta;
 type Story = StoryObj<typeof OpenCodeFilterDropdown>;
 
-function Interactive({ counts }: { counts: { user: number; assistant: number; tool: number } }) {
+function Interactive({
+  counts,
+}: {
+  counts: { user: number; assistant: number; tool: number; unknown: number };
+}) {
   const [state, setState] = useState<OpenCodeFilterState>({ ...DEFAULT_OPENCODE_FILTER_STATE });
   return (
     <OpenCodeFilterDropdown
@@ -28,9 +32,13 @@ function Interactive({ counts }: { counts: { user: number; assistant: number; to
 }
 
 export const Default: Story = {
-  render: () => <Interactive counts={{ user: 4, assistant: 6, tool: 9 }} />,
+  render: () => <Interactive counts={{ user: 4, assistant: 6, tool: 9, unknown: 0 }} />,
 };
 
 export const SomeEmptyCategories: Story = {
-  render: () => <Interactive counts={{ user: 2, assistant: 3, tool: 0 }} />,
+  render: () => <Interactive counts={{ user: 2, assistant: 3, tool: 0, unknown: 0 }} />,
+};
+
+export const WithUnknownRows: Story = {
+  render: () => <Interactive counts={{ user: 2, assistant: 3, tool: 4, unknown: 2 }} />,
 };

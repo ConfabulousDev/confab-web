@@ -4,10 +4,12 @@ import type { TokenUsage } from '@/utils/tokenStats';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/claude/ContentBlock';
+import ReportUnknownButton from '@/components/transcript/ReportUnknownButton';
+import { computeKeyFingerprint } from '@/utils/reportUnknown';
 import { AttachmentContent, AwaySummary } from '@/components/transcript/claude/attachments';
 import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
-import { getClaudeRoleLabel } from '@/components/session/claudeCategories';
+import { getClaudeRoleLabel, isUnknownClaudeMessage } from '@/components/session/claudeCategories';
 import styles from './ClaudeTimelineMessage.module.css';
 
 interface ClaudeTimelineMessageProps {
@@ -180,6 +182,11 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
 
   const styleClass = getStyleClass(message);
   const roleLabel = getClaudeRoleLabel(message);
+  // CF-574: a genuinely unrecognized message type renders an empty body — offer
+  // a "Report this message" affordance so the parser gap can be reported. Use
+  // the precise predicate (not roleLabel === 'Unknown', which also matches
+  // known-but-unlabeled types like `pr-link`).
+  const isUnknownMessage = isUnknownClaudeMessage(message);
   const isAwaySummary = isSystemMessage(message) && message.subtype === 'away_summary';
   // Attachment rows have no obvious text representation, so skip the
   // getContentBlocks work entirely — the dedicated AttachmentContent
@@ -385,6 +392,18 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
               isCurrentSearchMatch={isCurrentSearchMatch}
             />
           ))
+        )}
+        {isUnknownMessage && (
+          <div className={styles.reportRow}>
+            <ReportUnknownButton
+              descriptor={{
+                provider: 'claude',
+                surface: 'message',
+                type: String(message.type),
+                keyFingerprint: computeKeyFingerprint(message),
+              }}
+            />
+          </div>
         )}
       </div>
     </div>

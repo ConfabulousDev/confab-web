@@ -14,22 +14,61 @@ import type { TokenUsage } from '@/utils/tokenStats';
 import { syncFilesAPI } from './api';
 
 // ============================================================================
+// Raw entry types
+// ============================================================================
+
+/** A line that failed JSON.parse or the (permissive) shape schema. CF-574 keeps
+ *  it in the stream — instead of dropping it — so it surfaces as an "unknown"
+ *  row that can be reported. `raw` is the parsed object (shape failure) or the
+ *  original line string (JSON.parse failure). */
+export interface OpenCodeInvalidLine {
+  __invalid: true;
+  raw: unknown;
+}
+
+/** Accumulated transcript stream element: a validated line or an invalid one. */
+export type OpenCodeRawEntry = RawOpenCodeLine | OpenCodeInvalidLine;
+
+function isInvalidEntry(entry: OpenCodeRawEntry): entry is OpenCodeInvalidLine {
+  return typeof entry === 'object' && entry !== null && '__invalid' in entry;
+}
+
+// Part `type` discriminators OpenCode emits (12 total; see
+// backend/docs/opencode-sqlite-format.md). We render text/reasoning/tool and
+// intentionally ignore the rest — a part type OUTSIDE this set is a genuine
+// parser gap (CF-574) rather than a deliberate skip.
+const KNOWN_OPENCODE_PART_TYPES = new Set([
+  'text',
+  'reasoning',
+  'tool',
+  'file',
+  'step-start',
+  'step-finish',
+  'snapshot',
+  'patch',
+  'agent',
+  'subtask',
+  'compaction',
+  'retry',
+]);
+
+// ============================================================================
 // JSONL parsing
 // ============================================================================
 
 export interface OpenCodeParseResult {
-  rawLines: RawOpenCodeLine[];
+  rawLines: OpenCodeRawEntry[];
   /** Count of non-empty lines (including those that failed to parse), so the
    *  line-offset incremental fetch stays in sync with the file. */
   totalLines: number;
 }
 
-/** Parse an OpenCode transcript JSONL string into validated raw lines.
- *  Empty lines are skipped; malformed lines are dropped (logged) but do not
- *  abort the parse. */
+/** Parse an OpenCode transcript JSONL string into stream entries. Empty lines
+ *  are skipped; malformed lines (bad JSON or bad shape) are kept as
+ *  `OpenCodeInvalidLine` entries (CF-574) so they surface as unknown rows. */
 export function parseOpenCodeJSONL(jsonl: string): OpenCodeParseResult {
   const lines = jsonl.split('\n').filter((line) => line.trim().length > 0);
-  const rawLines: RawOpenCodeLine[] = [];
+  const rawLines: OpenCodeRawEntry[] = [];
   let errorCount = 0;
 
   for (const line of lines) {
@@ -38,6 +77,7 @@ export function parseOpenCodeJSONL(jsonl: string): OpenCodeParseResult {
       parsed = JSON.parse(line);
     } catch {
       errorCount++;
+      rawLines.push({ __invalid: true, raw: line });
       continue;
     }
     const result = RawOpenCodeLineSchema.safeParse(parsed);
@@ -45,11 +85,12 @@ export function parseOpenCodeJSONL(jsonl: string): OpenCodeParseResult {
       rawLines.push(result.data);
     } else {
       errorCount++;
+      rawLines.push({ __invalid: true, raw: parsed });
     }
   }
 
   if (errorCount > 0) {
-    console.warn(`OpenCode transcript: skipped ${errorCount} unparseable line(s)`);
+    console.warn(`OpenCode transcript: surfaced ${errorCount} unparseable line(s) as unknown rows`);
   }
 
   return { rawLines, totalLines: lines.length };
@@ -100,12 +141,48 @@ function usageFromTokens(line: RawOpenCodeLine): TokenUsage | undefined {
 
 const TERMINAL_TOOL_STATUSES = new Set(['completed', 'error']);
 
-/** Transform validated raw OpenCode lines into the render-item stream.
- *  Pure + synchronous; safe inside `useMemo`. */
-export function normalizeOpenCodeLines(rawLines: RawOpenCodeLine[]): OpenCodeRenderItem[] {
+/** Emit an unknown render item for each part whose `type` is not one OpenCode is
+ *  known to emit (CF-574). Known-but-unhandled types (file, step-start, …) and
+ *  non-terminal tool statuses are deliberate skips, not parser gaps. */
+function pushUnknownParts(
+  items: OpenCodeRenderItem[],
+  line: RawOpenCodeLine,
+  lineIndex: number,
+  created: number,
+): void {
+  line.parts.forEach((part, partIdx) => {
+    if (KNOWN_OPENCODE_PART_TYPES.has(part.type)) return;
+    items.push({
+      kind: 'unknown',
+      id: part.id ?? `oc-unknown-part-${lineIndex}-${partIdx}`,
+      reason: 'unrecognized part type',
+      unrecognizedType: part.type,
+      rawLine: part,
+      timeCreated: created,
+    });
+  });
+}
+
+/** Transform accumulated raw OpenCode entries into the render-item stream.
+ *  Pure + synchronous; safe inside `useMemo`. The entry's index in the full
+ *  (append-only) stream provides a stable id for unknown rows with no natural id. */
+export function normalizeOpenCodeLines(rawLines: OpenCodeRawEntry[]): OpenCodeRenderItem[] {
   const items: OpenCodeRenderItem[] = [];
 
-  for (const line of rawLines) {
+  rawLines.forEach((entry, lineIndex) => {
+    if (isInvalidEntry(entry)) {
+      items.push({
+        kind: 'unknown',
+        id: `oc-unknown-${lineIndex}`,
+        reason: 'malformed line',
+        unrecognizedType: '(unparseable)',
+        rawLine: entry.raw,
+        timeCreated: 0,
+      });
+      return;
+    }
+
+    const line = entry;
     const info = line.info;
     const created = info.time?.created ?? 0;
     const msgId = info.id ?? '';
@@ -115,7 +192,8 @@ export function normalizeOpenCodeLines(rawLines: RawOpenCodeLine[]): OpenCodeRen
       if (text.length > 0) {
         items.push({ kind: 'user', id: msgId, text, timeCreated: created });
       }
-      continue;
+      pushUnknownParts(items, line, lineIndex, created);
+      return;
     }
 
     if (info.role === 'assistant') {
@@ -135,6 +213,8 @@ export function normalizeOpenCodeLines(rawLines: RawOpenCodeLine[]): OpenCodeRen
         });
       }
 
+      pushUnknownParts(items, line, lineIndex, created);
+
       line.parts.forEach((part, partIdx) => {
         if (part.type !== 'tool') return;
         const status = part.state?.status;
@@ -152,16 +232,28 @@ export function normalizeOpenCodeLines(rawLines: RawOpenCodeLine[]): OpenCodeRen
           timeCreated: created,
         });
       });
+      return;
     }
-  }
+
+    // Unrecognized message role — surface instead of silently dropping (CF-574).
+    items.push({
+      kind: 'unknown',
+      id: msgId || `oc-unknown-${lineIndex}`,
+      reason: 'unrecognized message role',
+      unrecognizedType: info.role,
+      rawLine: line,
+      timeCreated: created,
+    });
+  });
 
   return items;
 }
 
-/** First non-empty modelID across the messages, or undefined. */
-export function extractOpenCodeModel(rawLines: RawOpenCodeLine[]): string | undefined {
-  for (const line of rawLines) {
-    if (line.info.modelID) return line.info.modelID;
+/** First non-empty modelID across the (valid) messages, or undefined. */
+export function extractOpenCodeModel(rawLines: OpenCodeRawEntry[]): string | undefined {
+  for (const entry of rawLines) {
+    if (isInvalidEntry(entry)) continue;
+    if (entry.info.modelID) return entry.info.modelID;
   }
   return undefined;
 }
@@ -171,7 +263,7 @@ export function extractOpenCodeModel(rawLines: RawOpenCodeLine[]): string | unde
 // ============================================================================
 
 interface CacheEntry {
-  rawLines: RawOpenCodeLine[];
+  rawLines: OpenCodeRawEntry[];
   totalLines: number;
 }
 
@@ -197,7 +289,7 @@ async function fetchWithCache(
 export interface ParsedOpenCodeTranscript {
   sessionId: string;
   items: OpenCodeRenderItem[];
-  rawLines: RawOpenCodeLine[];
+  rawLines: OpenCodeRawEntry[];
   totalLines: number;
 }
 
@@ -223,7 +315,7 @@ export async function fetchNewOpenCodeLines(
   sessionId: string,
   fileName: string,
   currentLineCount: number,
-): Promise<{ newRawLines: RawOpenCodeLine[]; newTotalLineCount: number }> {
+): Promise<{ newRawLines: OpenCodeRawEntry[]; newTotalLineCount: number }> {
   const content = await syncFilesAPI.getContent(sessionId, fileName, currentLineCount);
   if (!content.trim()) {
     return { newRawLines: [], newTotalLineCount: currentLineCount };

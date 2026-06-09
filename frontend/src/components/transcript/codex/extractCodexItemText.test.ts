@@ -183,6 +183,7 @@ describe('extractCodexItemText', () => {
     const item: CodexRenderItem = {
       kind: 'unknown', lineId: '0', timestamp: ts,
       rawLine: { type: 'newfangled_event', payload: { ip: '192.0.2.1' } },
+      reason: 'unknown-line-type', unrecognizedType: 'newfangled_event',
     };
     const text = extractCodexItemText(item);
     expect(text).toContain('newfangled_event');

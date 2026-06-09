@@ -1,11 +1,16 @@
 // Forward-compat fallback row for unrecognized Codex line shapes.
-// Renders a small chip with the raw JSON behind a click-to-expand so a
-// new line type lands somewhere visible instead of being silently dropped.
+// Renders a small chip with the raw JSON behind a click-to-expand (shared
+// UnknownRawDetails shell) so a new line type lands somewhere visible instead
+// of being silently dropped, plus a CF-574 "Report this message" affordance.
 
-import { useMemo, useState } from 'react';
-import type { CodexUnknownItem as CodexUnknownItemType } from '@/types/codexRenderItem';
-import { escapeHtml, getHighlightClass, highlightTextInHtml } from '@/utils/highlightSearch';
-import { cx } from '@/utils/utils';
+import { useMemo } from 'react';
+import {
+  CODEX_UNKNOWN_REASON_LABELS,
+  type CodexUnknownItem as CodexUnknownItemType,
+} from '@/types/codexRenderItem';
+import { computeKeyFingerprint } from '@/utils/reportUnknown';
+import ReportUnknownButton from '@/components/transcript/ReportUnknownButton';
+import UnknownRawDetails from '@/components/transcript/UnknownRawDetails';
 import { formatCodexTimestamp, stringifyForDisplay } from './codexFormat';
 import CodexRowActions from './CodexRowActions';
 import styles from './CodexDividers.module.css';
@@ -35,58 +40,39 @@ export default function CodexUnknownItem({
   isCurrentSearchMatch,
 }: CodexUnknownItemProps) {
   const raw = useMemo(() => stringifyForDisplay(item.rawLine), [item.rawLine]);
-  const queryMatches =
-    !!searchQuery && raw.toLowerCase().includes(searchQuery.toLowerCase());
 
-  // Controlled `open` so the user can still toggle. CF-359 auto-opens the
-  // <details> when a search match lands inside so the highlighted <mark>
-  // is visible without an extra click — parallel to the Claude view where
-  // thinking-block content is always shown inline. We force-open on the
-  // rising edge of `queryMatches` (React-recommended "adjust state when a
-  // prop changes" pattern; mirrors `useTranscriptSearch.ts`).
-  const [open, setOpen] = useState(false);
-  const [prevQueryMatches, setPrevQueryMatches] = useState(false);
-  if (queryMatches !== prevQueryMatches) {
-    setPrevQueryMatches(queryMatches);
-    if (queryMatches) setOpen(true);
-  }
-
-  const rawHtml = useMemo(() => {
-    let html = escapeHtml(raw);
-    if (searchQuery) {
-      html = highlightTextInHtml(html, searchQuery, getHighlightClass(isCurrentSearchMatch ?? false));
-    }
-    return html;
-  }, [raw, searchQuery, isCurrentSearchMatch]);
-
-  const className = cx(
-    styles.unknown,
-    isSelected && styles.selected,
-    isDeepLinkTarget && styles.deepLinkTarget,
-    isCurrentSearchMatch && styles.searchMatch,
-  );
   return (
-    <details
-      className={className}
-      data-kind="unknown"
-      open={open}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
-    >
-      <summary>
-        <span>Unrecognized line</span>
-        <span className={styles.unknownTimestamp}>
-          {formatCodexTimestamp(item.timestamp)}
-        </span>
-        {sessionId && (
-          <CodexRowActions
-            sessionId={sessionId}
-            timestamp={item.timestamp}
-            copyText={raw}
-            kindLabel="unrecognized row"
+    <UnknownRawDetails
+      label="Unrecognized line"
+      rawText={raw}
+      isSelected={isSelected}
+      isDeepLinkTarget={isDeepLinkTarget}
+      searchQuery={searchQuery}
+      isCurrentSearchMatch={isCurrentSearchMatch}
+      summaryAside={
+        <span className={styles.unknownTimestamp}>{formatCodexTimestamp(item.timestamp)}</span>
+      }
+      actions={
+        <>
+          <ReportUnknownButton
+            descriptor={{
+              provider: 'codex',
+              surface: 'line',
+              type: item.unrecognizedType,
+              reason: CODEX_UNKNOWN_REASON_LABELS[item.reason],
+              keyFingerprint: computeKeyFingerprint(item.rawLine),
+            }}
           />
-        )}
-      </summary>
-      <pre className={styles.unknownRaw} dangerouslySetInnerHTML={{ __html: rawHtml }} />
-    </details>
+          {sessionId && (
+            <CodexRowActions
+              sessionId={sessionId}
+              timestamp={item.timestamp}
+              copyText={raw}
+              kindLabel="unrecognized row"
+            />
+          )}
+        </>
+      }
+    />
   );
 }

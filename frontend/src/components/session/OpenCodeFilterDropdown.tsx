@@ -24,6 +24,7 @@ const CATEGORIES: Array<{ category: OpenCodeCategory; label: string; color: stri
   { category: 'user', label: 'User', color: '#16a34a' },
   { category: 'assistant', label: 'Assistant', color: '#2563eb' },
   { category: 'tool', label: 'Tool Call', color: '#d97706' },
+  { category: 'unknown', label: 'Unknown', color: '#dc2626' },
 ];
 
 export default function OpenCodeFilterDropdown({

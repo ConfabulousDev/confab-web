@@ -12,6 +12,8 @@ const baseItem: CodexUnknownItemType = {
   lineId: '7',
   timestamp: '2025-01-01T12:34:56Z',
   rawLine: { foo: 'bar', nested: { value: 42 } },
+  reason: 'unknown-line-type',
+  unrecognizedType: 'bar',
 };
 
 describe('CodexUnknownItem', () => {

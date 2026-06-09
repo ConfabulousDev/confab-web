@@ -1,0 +1,29 @@
+/* CF-574: small inline icon + text link for reporting an UNKNOWN row. Matches
+   the transcript icon-button convention (currentColor SVG, theme variables). */
+
+.report {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 2px var(--spacing-xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  font-weight: var(--font-regular);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.report:hover {
+  color: var(--color-accent);
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
+}
+
+.report:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

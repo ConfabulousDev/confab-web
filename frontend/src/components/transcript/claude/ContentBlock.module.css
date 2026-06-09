@@ -166,6 +166,15 @@
   margin: var(--spacing-xs) 0;
 }
 
+/* CF-574: header row pairing the "Unknown content block" label with the
+   "Report this message" affordance. */
+.unknownBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
 .unknownBlockContent {
   font-style: normal;
   margin-top: var(--spacing-xs);

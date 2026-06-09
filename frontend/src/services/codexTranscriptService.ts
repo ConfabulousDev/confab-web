@@ -370,7 +370,14 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
     // Filter the catch-all branch first so the subsequent switch narrows
     // cleanly to one of the five known shapes.
     if (!isKnownCodexLine(line)) {
-      items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
+      items.push({
+        kind: 'unknown',
+        lineId,
+        timestamp: line.timestamp,
+        rawLine: line,
+        reason: 'unknown-line-type',
+        unrecognizedType: readStringField(line, 'type'),
+      });
       return;
     }
 
@@ -414,6 +421,13 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
   return items;
 }
 
+/** Best-effort read of a string field off an unknown value; '(none)' if absent.
+ *  Used to label CF-574 unknown items with the precise unrecognized type/role. */
+function readStringField(value: unknown, key: string): string {
+  if (isRecord(value) && typeof value[key] === 'string') return value[key];
+  return '(none)';
+}
+
 function handleResponseItem(
   line: CodexResponseItemLine,
   lineId: string,
@@ -423,7 +437,14 @@ function handleResponseItem(
 ): void {
   const payload = line.payload;
   if (!isKnownResponseItemPayload(payload)) {
-    items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
+    items.push({
+      kind: 'unknown',
+      lineId,
+      timestamp: line.timestamp,
+      rawLine: line,
+      reason: 'unknown-response-payload',
+      unrecognizedType: readStringField(payload, 'type'),
+    });
     return;
   }
 
@@ -454,7 +475,14 @@ function handleResponseItem(
       const draft = callIdToDraft.get(payload.call_id);
       if (!draft) {
         // No matching call — surface as unknown to avoid silent drops.
-        items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
+        items.push({
+          kind: 'unknown',
+          lineId,
+          timestamp: line.timestamp,
+          rawLine: line,
+          reason: 'unmatched-tool-output',
+          unrecognizedType: 'function_call_output',
+        });
         return;
       }
       const existing = items[draft.index];
@@ -499,7 +527,14 @@ function handleResponseItem(
     case 'custom_tool_call_output': {
       const draft = callIdToDraft.get(payload.call_id);
       if (!draft) {
-        items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
+        items.push({
+          kind: 'unknown',
+          lineId,
+          timestamp: line.timestamp,
+          rawLine: line,
+          reason: 'unmatched-tool-output',
+          unrecognizedType: 'custom_tool_call_output',
+        });
         return;
       }
       const existing = items[draft.index];
@@ -576,7 +611,14 @@ function handleResponseMessage(
     }
     default:
       // Unknown role — keep as unknown item so it surfaces in the UI.
-      items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
+      items.push({
+        kind: 'unknown',
+        lineId,
+        timestamp: line.timestamp,
+        rawLine: line,
+        reason: 'unknown-role',
+        unrecognizedType: readStringField(msg, 'role'),
+      });
   }
 }
 
@@ -600,7 +642,14 @@ function handleEventMsg(
 ): EventMsgResult {
   const payload = line.payload;
   if (!isKnownEventPayload(payload)) {
-    items.push({ kind: 'unknown', lineId, timestamp: line.timestamp, rawLine: line });
+    items.push({
+      kind: 'unknown',
+      lineId,
+      timestamp: line.timestamp,
+      rawLine: line,
+      reason: 'unknown-event-payload',
+      unrecognizedType: readStringField(payload, 'type'),
+    });
     return {};
   }
 

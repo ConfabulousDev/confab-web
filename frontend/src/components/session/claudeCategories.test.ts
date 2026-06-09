@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateParsedTranscriptLine } from '@/schemas/claudeTranscript';
-import { countClaudeCategories, claudeItemMatchesFilter, DEFAULT_CLAUDE_FILTER_STATE, getClaudeRoleLabel } from './claudeCategories';
+import { countClaudeCategories, claudeItemMatchesFilter, DEFAULT_CLAUDE_FILTER_STATE, getClaudeRoleLabel, isUnknownClaudeMessage } from './claudeCategories';
 import type { ClaudeFilterState } from './claudeCategories';
 
 function parseLine(obj: unknown) {
@@ -336,6 +336,23 @@ describe('messageCategories', () => {
         content: 'Summary',
       });
       expect(getClaudeRoleLabel(awaySummary)).toBe('Resume Summary');
+    });
+
+    it('isUnknownClaudeMessage is false for known-but-unlabeled pr-link rows', () => {
+      // pr-link has no getClaudeRoleLabel case (renders as "Unknown") but is a
+      // recognized type — the CF-574 report affordance must NOT appear on it.
+      expect(getClaudeRoleLabel(prLinkMessage)).toBe('Unknown');
+      expect(isUnknownClaudeMessage(prLinkMessage)).toBe(false);
+    });
+
+    it('isUnknownClaudeMessage is true for an unrecognized message type', () => {
+      const mystery = parseLine({
+        type: 'future_message_type',
+        uuid: 'mystery-uuid',
+        timestamp: '2026-04-20T22:35:57.594Z',
+        sessionId: 'session-1',
+      });
+      expect(isUnknownClaudeMessage(mystery)).toBe(true);
     });
 
     it('shows assistant messages with DEFAULT_CLAUDE_FILTER_STATE (deep-link targets visible after reset)', () => {

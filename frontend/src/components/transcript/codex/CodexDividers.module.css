@@ -19,8 +19,7 @@
 .turnSeparator.selected.deepLinkTarget,
 .reasoningHidden.selected.deepLinkTarget,
 .compacted.selected.deepLinkTarget,
-.turnAborted.selected.deepLinkTarget,
-.unknown.selected.deepLinkTarget {
+.turnAborted.selected.deepLinkTarget {
   box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
@@ -113,24 +112,9 @@
   color: var(--color-text-muted);
 }
 
-.unknown {
-  margin: var(--spacing-xs) 0;
-  padding: var(--spacing-xs) var(--spacing-md);
-  border: 1px dashed var(--color-warning, var(--color-border));
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-secondary);
-  font-size: var(--font-xs);
-}
-
-.unknown summary {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  font-weight: var(--font-semibold);
-}
-
+/* The unknown-row shell now lives in the shared UnknownRawDetails component
+   (CF-574); only the Codex-specific timestamp styling remains here, passed in
+   via the shared component's `summaryAside` slot. */
 .unknownTimestamp {
   margin-left: auto;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
@@ -139,25 +123,12 @@
   font-weight: var(--font-regular);
 }
 
-.unknownRaw {
-  margin: var(--spacing-xs) 0 0 0;
-  padding: var(--spacing-sm);
-  background: var(--color-bg-primary);
-  border-radius: var(--radius-sm);
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
-  font-size: 0.85em;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
 /* CF-359: active (n-of-N) search match — amber ring. MUST stay after
    `.selected` and `.deepLinkTarget` so equal-specificity source order
    makes it win over selection. */
 .turnSeparator.searchMatch,
 .reasoningHidden.searchMatch,
 .compacted.searchMatch,
-.turnAborted.searchMatch,
-.unknown.searchMatch {
+.turnAborted.searchMatch {
   box-shadow: inset 0 0 0 2px var(--color-warning);
 }
