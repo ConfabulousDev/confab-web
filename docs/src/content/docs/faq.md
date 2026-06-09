@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: Frequently asked questions about Confabulous, the managed instance, and self-hosting.
+description: Frequently asked questions about Confabulous and the managed instance.
 ---
 
 ## General
@@ -11,7 +11,7 @@ Yes — OpenCode sessions sync and analyze like any other provider. See [OpenCod
 
 ### Do you accept code contributions?
 
-Not at this time. Feature requests and "problem to be solved" descriptions are welcome — please open an issue. Expect quick implementation turnaround once the product spec is locked down.
+Yes — contributions are welcome. See the [contributing guide](https://github.com/ConfabulousDev/confab-web/blob/main/CONTRIBUTING.md) to get started. Bug reports and feature requests are welcome too — [open an issue](https://github.com/ConfabulousDev/confab-web/issues/new).
 
 ## confabulous.dev (managed instance)
 
@@ -26,7 +26,3 @@ No.
 ### Do you use my data for AI training?
 
 No.
-
-## Self-hosting
-
-Coming soon.

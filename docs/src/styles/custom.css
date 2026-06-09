@@ -62,14 +62,19 @@
   --sl-color-bg-inline-code: #f5f5f5;
 }
 
-/* Brand wordmark — matches the cursive Lobster mark used in the main app. */
+/* Brand wordmark — matches the cursive Lobster mark used in the main app.
+   The app renders it in --color-text-primary (not the accent), so pin the
+   color to --sl-color-white (= app primary text) rather than let it inherit
+   Starlight's accent-colored nav-link styling. */
 .site-title,
 a.site-title span,
-a.site-title {
+a.site-title,
+a.site-title:hover {
   font-family: 'Lobster', cursive;
   font-weight: 400;
   font-size: 1.8rem;
   letter-spacing: 0.01em;
+  color: var(--sl-color-white);
 }
 
 /* Splash hero title also gets the wordmark treatment. */
@@ -80,15 +85,57 @@ a.site-title {
   letter-spacing: 0.01em;
 }
 
-/* Enlarge the social (GitHub) icon in the header. */
+/* Enlarge the social (GitHub) icon in the header. The app renders header
+   icons in a neutral text color (accent is reserved for links/CTAs), so
+   override Starlight's accent-colored default to a muted neutral that
+   brightens on hover. */
 starlight-menu-button + .social-icons a,
 .social-icons a {
   padding: 0.4em;
+  color: var(--sl-color-gray-3);
+}
+
+.social-icons a:hover {
+  color: var(--sl-color-white);
 }
 
 .social-icons a svg {
   width: 1.5em;
   height: 1.5em;
+}
+
+/* Hero CTA button — match the app's compact filled-accent button rather than
+   Starlight's full-width pill. The app primary button uses --radius-md (4px)
+   rounding and tight padding. Starlight's defaults are much larger: a full
+   pill, ~15px vertical padding at desktop, and a 1.5rem (24px) icon that
+   dominates the height. We override the radius, padding, and icon size so the
+   button reads as the app's button (font size is left at Starlight's default).
+   The accent fill (--sl-color-text-accent) already matches --color-primary, so
+   colors are left as Starlight derives them. */
+.sl-link-button {
+  border-radius: 6px;
+}
+
+.sl-link-button.primary {
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 0.4rem 0.95rem;
+}
+
+/* Shrink the trailing arrow icon (Starlight renders it at 1.5rem, which sets
+   the button height). Plain `svg` selector — this is a global stylesheet, so
+   `:global()` would be an invalid selector here and silently dropped. */
+.sl-link-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Starlight bumps the action button to ~15px vertical padding at desktop;
+   keep it compact instead (font size left at Starlight's default). */
+@media (min-width: 50rem) {
+  .sl-link-button.primary {
+    padding: 0.45rem 1rem;
+  }
 }
 
 /* Tone in-content headings down ~10% from Starlight defaults. Covers both
