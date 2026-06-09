@@ -18,7 +18,7 @@ Session viewer components for displaying session details, transcript timeline, a
 | `GitHubLinksCard.tsx` | Card displaying linked GitHub PRs and commits |
 | `GitInfoMeta.tsx` | Git branch/commit metadata display in session header |
 | `MetaItem.tsx` | Small metadata item (icon + label + value) used in header |
-| `claudeCategories.ts` | Claude message categorization logic, filter state types, and filter matching. CF-574: `isUnknownClaudeMessage(message)` — precise predicate for the catch-all "unknown" bucket (excludes known-but-unlabeled types like `pr-link` that `getClaudeRoleLabel` also renders as "Unknown"); gates the transcript "Report this message" affordance |
+| `claudeCategories.ts` | Claude message categorization logic, filter state types, and filter matching. CF-574: `isUnknownClaudeMessage(message)` — precise predicate for the catch-all "unknown" bucket (excludes known-but-unlabeled types like `pr-link` that `getClaudeRoleLabel` also renders as "Unknown"); gates the transcript "Report bug" affordance |
 | `codexCategories.ts` | Codex render-item categorization (CF-361): `CodexFilterState`, `CodexHierarchicalCounts`, `categorizeCodexToolCall`, `countCodexCategories`, `codexItemMatchesFilter`, `DEFAULT_CODEX_FILTER_STATE` |
 | `index.ts` | Barrel export: `SessionViewer` component and `ViewTab` type |
 

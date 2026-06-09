@@ -76,6 +76,11 @@ describe('buildUnknownReportIssue', () => {
     expect(body).not.toContain('unrecognized response_item payload type');
     expect(body).toContain('future_payload_type');
   });
+
+  it('does not include a "what were you doing" free-text prompt', () => {
+    const { body } = buildUnknownReportIssue(baseDescriptor, '1.2.3');
+    expect(body.toLowerCase()).not.toContain('what were you doing');
+  });
 });
 
 describe('redaction contract', () => {

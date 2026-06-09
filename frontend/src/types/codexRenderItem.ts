@@ -173,7 +173,7 @@ export interface CodexTurnAbortedItem {
 
 /**
  * Which fall-through path classified a line as unknown. Drives the triage hint
- * in a CF-574 "Report this message" issue — the single most useful signal for
+ * in a CF-574 "Report bug" issue — the single most useful signal for
  * why the parser didn't recognize the line.
  */
 export type CodexUnknownReason =

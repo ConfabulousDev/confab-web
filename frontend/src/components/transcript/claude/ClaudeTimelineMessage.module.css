@@ -273,7 +273,7 @@
   overflow: hidden;
 }
 
-/* CF-574: "Report this message" affordance on an unknown message row. */
+/* CF-574: "Report bug" affordance on an unknown message row. */
 .reportRow {
   display: flex;
 }

@@ -1,7 +1,7 @@
 // Forward-compat fallback row for unrecognized Codex line shapes.
 // Renders a small chip with the raw JSON behind a click-to-expand (shared
 // UnknownRawDetails shell) so a new line type lands somewhere visible instead
-// of being silently dropped, plus a CF-574 "Report this message" affordance.
+// of being silently dropped, plus a CF-574 "Report bug" affordance.
 
 import { useMemo } from 'react';
 import {
