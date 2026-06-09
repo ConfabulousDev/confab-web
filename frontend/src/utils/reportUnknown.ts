@@ -1,4 +1,4 @@
-// CF-574: privacy-conscious "Report this message" plumbing for UNKNOWN transcript
+// CF-574: privacy-conscious "Report bug" plumbing for UNKNOWN transcript
 // rows. The descriptor is a small NORMALIZED fingerprint of an unrecognized
 // message/line — it deliberately carries key *names* and a type string, never
 // payload values, text, tool I/O, or file paths. All redaction lives here so the
@@ -72,7 +72,6 @@ export function buildUnknownReportIssue(
     }`,
   );
   if (appVersion) lines.push(`- **Confab version:** ${appVersion}`);
-  lines.push('', '**What were you doing when you saw this?**', '', '<!-- describe here -->');
 
   return { title, body: lines.join('\n') };
 }

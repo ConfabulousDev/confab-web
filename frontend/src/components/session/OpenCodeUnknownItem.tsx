@@ -1,6 +1,6 @@
 // CF-574: forward-compat fallback row for unrecognized OpenCode shapes (unknown
 // message role, unrecognized part type, or a malformed line). Built on the
-// shared UnknownRawDetails shell with a "Report this message" affordance, so a
+// shared UnknownRawDetails shell with a "Report bug" affordance, so a
 // new OpenCode message type surfaces and can be reported instead of being
 // silently dropped.
 

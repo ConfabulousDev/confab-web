@@ -1,4 +1,4 @@
-// CF-574: shared "Report this message" affordance for UNKNOWN transcript rows.
+// CF-574: shared "Report bug" affordance for UNKNOWN transcript rows.
 // Opens GitHub's prefilled New Issue form in a new tab with privacy-conscious
 // structural metadata only (provider, type, key names, Confab version) — never
 // message content. All redaction lives in `reportUnknown.ts`.
@@ -20,7 +20,7 @@ export default function ReportUnknownButton({ descriptor }: ReportUnknownButtonP
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title="Report this unrecognized message on GitHub (no message content is shared)"
+      title="Report this unrecognized row as a bug on GitHub (no message content is shared)"
     >
       <svg
         width="13"
@@ -36,7 +36,7 @@ export default function ReportUnknownButton({ descriptor }: ReportUnknownButtonP
         <path d="M3.5 14.5V2.5" />
         <path d="M3.5 3c2.5-1.5 5 1.5 7.5 0v6c-2.5 1.5-5-1.5-7.5 0" />
       </svg>
-      <span>Report this message</span>
+      <span>Report bug</span>
     </a>
   );
 }

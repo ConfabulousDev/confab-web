@@ -183,7 +183,7 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
   const styleClass = getStyleClass(message);
   const roleLabel = getClaudeRoleLabel(message);
   // CF-574: a genuinely unrecognized message type renders an empty body — offer
-  // a "Report this message" affordance so the parser gap can be reported. Use
+  // a "Report bug" affordance so the parser gap can be reported. Use
   // the precise predicate (not roleLabel === 'Unknown', which also matches
   // known-but-unlabeled types like `pr-link`).
   const isUnknownMessage = isUnknownClaudeMessage(message);
