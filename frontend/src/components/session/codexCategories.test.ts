@@ -86,6 +86,8 @@ const unknown: CodexUnknownItem = {
   lineId: '13',
   timestamp: TS,
   rawLine: {},
+  reason: 'unknown-line-type',
+  unrecognizedType: '(none)',
 };
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,70 @@
+/* CF-574: shared UNKNOWN-row shell (Codex + OpenCode). Dashed warning box with a
+   collapsible raw-JSON body, ported from the former Codex-only `.unknown` rules
+   so selection/deep-link/search rings behave identically across providers. */
+
+.unknown {
+  margin: var(--spacing-xs) 0;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 1px dashed var(--color-warning, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  font-size: var(--font-xs);
+}
+
+.unknown summary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-semibold);
+}
+
+/* Right-aligned cluster: timestamp aside + actions. */
+.right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: var(--font-regular);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.raw {
+  margin: var(--spacing-xs) 0 0 0;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Selection ring (matches the Codex divider/sub-row convention). */
+.selected {
+  box-shadow: inset 0 0 0 2px var(--color-border-dark);
+  background: var(--color-bg-primary);
+}
+
+/* CF-360: deep-link landing target — same pulse as message/tool rows. */
+.deepLinkTarget {
+  composes: deepLinkPulse from '@/styles/animations.module.css';
+}
+
+/* Deep-link wins over selection. */
+.unknown.selected.deepLinkTarget {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+/* CF-359: active (n-of-N) search match — amber ring. MUST stay after `.selected`
+   and `.deepLinkTarget` so equal-specificity source order makes it win. */
+.unknown.searchMatch {
+  box-shadow: inset 0 0 0 2px var(--color-warning);
+}

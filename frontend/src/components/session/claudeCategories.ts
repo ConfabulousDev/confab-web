@@ -258,6 +258,28 @@ export function getClaudeRoleLabel(message: TranscriptLine): string {
 }
 
 /**
+ * CF-574: true only when a message's type lands in the catch-all "unknown"
+ * bucket — a genuine parser gap, NOT a known-but-unlabeled type such as
+ * `pr-link` (which `getClaudeRoleLabel` also renders as "Unknown"). Mirrors the
+ * flat-category fall-through in `claudeItemMatchesFilter` so the "Report this
+ * message" affordance only appears on truly unrecognized rows.
+ */
+export function isUnknownClaudeMessage(message: TranscriptLine): boolean {
+  if (isUserMessage(message) || isAssistantMessage(message)) return false;
+  if (isAttachmentMessage(message) || isAwaySummaryMessage(message)) return false;
+  switch (message.type) {
+    case 'system':
+    case 'summary':
+    case 'file-history-snapshot':
+    case 'queue-operation':
+    case 'pr-link':
+      return false;
+    default:
+      return true;
+  }
+}
+
+/**
  * Check if a message has any displayable content.
  * Messages with only whitespace text (e.g. interrupted assistant responses
  * with content: [{type: "text", text: "\n\n"}]) render as empty cards.

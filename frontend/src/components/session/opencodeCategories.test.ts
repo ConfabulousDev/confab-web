@@ -70,8 +70,13 @@ describe('countOpenCodeCategories', () => {
 });
 
 describe('opencodeItemMatchesFilter', () => {
-  const allVisible: OpenCodeFilterState = { user: true, assistant: true, tool: true };
-  const allHidden: OpenCodeFilterState = { user: false, assistant: false, tool: false };
+  const allVisible: OpenCodeFilterState = { user: true, assistant: true, tool: true, unknown: true };
+  const allHidden: OpenCodeFilterState = {
+    user: false,
+    assistant: false,
+    tool: false,
+    unknown: false,
+  };
 
   it('shows all items when all filters are on', () => {
     expect(opencodeItemMatchesFilter(userItem, allVisible)).toBe(true);

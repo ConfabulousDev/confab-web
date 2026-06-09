@@ -117,7 +117,14 @@ describe('skipNavKey', () => {
 
   it('returns null for unknown', () => {
     expect(
-      skipNavKey({ kind: 'unknown', lineId: '0', timestamp: ts, rawLine: {} }),
+      skipNavKey({
+        kind: 'unknown',
+        lineId: '0',
+        timestamp: ts,
+        rawLine: {},
+        reason: 'unknown-line-type',
+        unrecognizedType: '(none)',
+      }),
     ).toBeNull();
   });
 });

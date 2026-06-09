@@ -172,6 +172,27 @@ export interface CodexTurnAbortedItem {
 }
 
 /**
+ * Which fall-through path classified a line as unknown. Drives the triage hint
+ * in a CF-574 "Report this message" issue — the single most useful signal for
+ * why the parser didn't recognize the line.
+ */
+export type CodexUnknownReason =
+  | 'unknown-line-type' // top-level `type` not recognized
+  | 'unknown-response-payload' // `response_item.payload.type` not recognized
+  | 'unknown-event-payload' // `event_msg.payload.type` not recognized
+  | 'unknown-role' // `message.role` not recognized
+  | 'unmatched-tool-output'; // tool output with no matching call
+
+/** Human-readable classification hints for a CF-574 report (Codex). */
+export const CODEX_UNKNOWN_REASON_LABELS: Record<CodexUnknownReason, string> = {
+  'unknown-line-type': 'unrecognized top-level line type',
+  'unknown-response-payload': 'unrecognized response_item payload type',
+  'unknown-event-payload': 'unrecognized event_msg payload type',
+  'unknown-role': 'unrecognized message role',
+  'unmatched-tool-output': 'tool output with no matching tool call',
+};
+
+/**
  * Forward-compat fallback. Any line whose top-level `type` (or nested
  * `payload.type`) is unrecognized lands here so the timeline still renders
  * something useful instead of crashing or silently dropping content.
@@ -181,6 +202,10 @@ export interface CodexUnknownItem {
   lineId: string;
   timestamp: CodexTimestamp;
   rawLine: unknown;
+  /** CF-574: which classification path produced this unknown item. */
+  reason: CodexUnknownReason;
+  /** CF-574: the precise unrecognized type/role string for triage. */
+  unrecognizedType: string;
 }
 
 /** Discriminated union over `kind`. */

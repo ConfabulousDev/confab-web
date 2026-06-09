@@ -12,6 +12,7 @@ import { formatCost } from '@/utils/tokenStats';
 import { cx } from '@/utils/utils';
 import { retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import type { OpenCodeRenderItem } from './opencodeCategories';
+import OpenCodeUnknownItem from './OpenCodeUnknownItem';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './OpenCodeTranscriptPane.module.css';
 
@@ -94,7 +95,10 @@ function Row({ item, isCostMode }: { item: OpenCodeRenderItem; isCostMode?: bool
   if (item.kind === 'assistant') {
     return <AssistantRow item={item} isCostMode={isCostMode} />;
   }
-  return <ToolRow item={item} />;
+  if (item.kind === 'tool') {
+    return <ToolRow item={item} />;
+  }
+  return <OpenCodeUnknownItem item={item} />;
 }
 
 export default function OpenCodeTranscriptPane({

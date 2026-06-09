@@ -41,7 +41,7 @@ import type {
   OpenCodeCategory,
   OpenCodeRenderItem,
 } from '@/components/session/opencodeCategories';
-import type { RawOpenCodeLine } from '@/schemas/opencodeTranscript';
+import type { OpenCodeRawEntry } from '@/services/opencodeTranscriptService';
 
 export interface FilterAPI<TFilterState, TToggles> {
   state: TFilterState;
@@ -182,7 +182,7 @@ export interface OpenCodeToggles {
 }
 
 export type OpenCodeAdapter = ProviderAdapter<
-  RawOpenCodeLine,
+  OpenCodeRawEntry,
   OpenCodeRenderItem,
   OpenCodeFilterState,
   OpenCodeToggles,
