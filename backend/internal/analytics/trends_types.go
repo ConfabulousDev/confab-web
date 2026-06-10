@@ -28,6 +28,11 @@ type TrendsRequest struct {
 	// The HTTP handler / worker reads database.ShareAllSessions and assigns
 	// it here. CF-495.
 	ShareAllSessions bool
+	// TopSessionsLimit bounds the Costliest Sessions card (?top_n=). Values
+	// outside the {10,25,50} allowlist (including the int zero-value when the
+	// caller omits it) are normalized to 10 inside aggregateTopSessions, so the
+	// data layer never emits LIMIT 0.
+	TopSessionsLimit int
 }
 
 // =============================================================================

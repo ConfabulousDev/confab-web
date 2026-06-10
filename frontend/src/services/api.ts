@@ -569,6 +569,9 @@ export interface TrendsParams {
   // aggregate across all visible owners. Serialized as comma-separated
   // `?owner=a,b` to match the session-listing wire format.
   owners?: string[];
+  // h7xe: Costliest Sessions limit, serialized as `?top_n=`. Omitted = backend
+  // default (10). The backend normalizes anything off the {10,25,50} allowlist.
+  topN?: number;
 }
 
 // Convert a local YYYY-MM-DD date string to epoch seconds at local midnight
@@ -612,6 +615,10 @@ export const trendsAPI = {
     // Empty / omitted = aggregate across all visible owners.
     if (params.owners && params.owners.length > 0) {
       searchParams.set('owner', params.owners.join(','));
+    }
+    // h7xe: Costliest Sessions limit. Omitted = backend default.
+    if (params.topN !== undefined) {
+      searchParams.set('top_n', String(params.topN));
     }
 
     const queryString = searchParams.toString();

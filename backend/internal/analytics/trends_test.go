@@ -2087,3 +2087,95 @@ func equalStringSlices(a, b []string) bool {
 	}
 	return true
 }
+
+// TestGetTrends_TopSessionsLimit verifies the configurable-N behavior of the
+// Costliest Sessions card (h7xe / ?top_n=): the limit is honored for the
+// {10,25,50} allowlist, ordering stays cost-descending, and any value outside
+// the allowlist — including the int zero-value — is normalized to 10.
+func TestGetTrends_TopSessionsLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "trends-topn@test.com", "Trends TopN User")
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	// Seed 30 priced sessions with strictly descending costs so ordering and
+	// limit boundaries are unambiguous. Session i has cost (30 - i).
+	const seeded = 30
+	for i := 0; i < seeded; i++ {
+		name := "topn-session-" + decimal.NewFromInt(int64(i)).String()
+		sid := testutil.CreateTestSession(t, env, user.ID, name)
+		card := &analytics.TokensCardRecord{
+			SessionID:        sid,
+			Version:          analytics.TokensCardVersion,
+			ComputedAt:       time.Now().UTC(),
+			UpToLine:         100,
+			InputTokens:      1000,
+			OutputTokens:     500,
+			EstimatedCostUSD: decimal.NewFromInt(int64(seeded - i)),
+		}
+		if err := store.UpsertCards(ctx, &analytics.Cards{Tokens: card}); err != nil {
+			t.Fatalf("UpsertCards (session %d) failed: %v", i, err)
+		}
+	}
+
+	now := time.Now().UTC()
+	baseReq := func(limit int) analytics.TrendsRequest {
+		return analytics.TrendsRequest{
+			StartTS:          now.Add(-7 * 24 * time.Hour).Unix(),
+			EndTS:            now.Add(24 * time.Hour).Unix(),
+			TZOffset:         0,
+			Repos:            []string{},
+			IncludeNoRepo:    true,
+			TopSessionsLimit: limit,
+		}
+	}
+
+	cases := []struct {
+		name      string
+		limit     int
+		wantCount int
+	}{
+		{"limit 10", 10, 10},
+		{"limit 25", 25, 25},
+		{"limit 50 capped by seeded count", 50, seeded},
+		{"zero-value normalizes to 10", 0, 10},
+		{"off-allowlist 15 normalizes to 10", 15, 10},
+		{"oversized 999 normalizes to 10", 999, 10},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := store.GetTrends(ctx, user.ID, baseReq(tc.limit))
+			if err != nil {
+				t.Fatalf("GetTrends failed: %v", err)
+			}
+			if resp.Cards.TopSessions == nil {
+				t.Fatal("expected TopSessions card to be non-nil")
+			}
+			got := len(resp.Cards.TopSessions.Sessions)
+			if got != tc.wantCount {
+				t.Fatalf("TopSessions length = %d, want %d", got, tc.wantCount)
+			}
+
+			// Costs must be in descending order; the top row is the max cost.
+			sessions := resp.Cards.TopSessions.Sessions
+			for i := 1; i < len(sessions); i++ {
+				prev, _ := decimal.NewFromString(sessions[i-1].EstimatedCostUSD)
+				cur, _ := decimal.NewFromString(sessions[i].EstimatedCostUSD)
+				if prev.LessThan(cur) {
+					t.Fatalf("sessions not cost-descending at index %d: %s < %s",
+						i, sessions[i-1].EstimatedCostUSD, sessions[i].EstimatedCostUSD)
+				}
+			}
+			if top, _ := decimal.NewFromString(sessions[0].EstimatedCostUSD); !top.Equal(decimal.NewFromInt(seeded)) {
+				t.Errorf("top session cost = %s, want %d", sessions[0].EstimatedCostUSD, seeded)
+			}
+		})
+	}
+}

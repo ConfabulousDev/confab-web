@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { TrendsTopSessionsCard } from './TrendsTopSessionsCard';
 import type { TrendsTopSessionsCard as TrendsTopSessionsCardData } from '@/schemas/api';
 
@@ -46,5 +46,54 @@ describe('TrendsTopSessionsCard provider icons', () => {
     expect(within(row!).getByTestId('icon-chat')).toBeInTheDocument();
     expect(within(row!).queryByTestId('icon-claude')).not.toBeInTheDocument();
     expect(within(row!).queryByTestId('icon-codex')).not.toBeInTheDocument();
+  });
+});
+
+// h7xe: the card exposes a 10/25/50 segmented control for the top-N limit,
+// rendered only when an onTopNChange handler is supplied (the page wires it to
+// the ?top_n= URL filter). Selecting a value drives a refetch; while a refetch
+// is in flight the control is disabled.
+describe('TrendsTopSessionsCard configurable N (h7xe)', () => {
+  const data: TrendsTopSessionsCardData = {
+    sessions: [
+      {
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        title: 'Some session',
+        provider: 'claude-code',
+        estimated_cost_usd: '5.00',
+        duration_ms: 60000,
+        git_repo: 'org/repo',
+      },
+    ],
+  };
+
+  it('renders 10 / 25 / 50 options when onTopNChange is provided', () => {
+    render(<TrendsTopSessionsCard data={data} topN={10} onTopNChange={() => {}} />);
+    expect(screen.getByRole('button', { name: '10' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '25' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '50' })).toBeInTheDocument();
+  });
+
+  it('marks the active N with aria-pressed', () => {
+    render(<TrendsTopSessionsCard data={data} topN={25} onTopNChange={() => {}} />);
+    expect(screen.getByRole('button', { name: '25' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '10' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('calls onTopNChange with the chosen number', () => {
+    const onTopNChange = vi.fn();
+    render(<TrendsTopSessionsCard data={data} topN={10} onTopNChange={onTopNChange} />);
+    fireEvent.click(screen.getByRole('button', { name: '50' }));
+    expect(onTopNChange).toHaveBeenCalledWith(50);
+  });
+
+  it('disables the control while loading', () => {
+    render(<TrendsTopSessionsCard data={data} topN={10} onTopNChange={() => {}} loading />);
+    expect(screen.getByRole('button', { name: '25' })).toBeDisabled();
+  });
+
+  it('omits the control when no onTopNChange handler is supplied', () => {
+    render(<TrendsTopSessionsCard data={data} />);
+    expect(screen.queryByRole('button', { name: '25' })).not.toBeInTheDocument();
   });
 });

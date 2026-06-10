@@ -118,6 +118,26 @@ export const Default: Story = {
   },
 };
 
+// h7xe: with an onTopNChange handler the card renders the 10/25/50 selector.
+export const WithTopNSelector: Story = {
+  args: {
+    ...Default.args,
+    topN: 25,
+    onTopNChange: () => {},
+  },
+};
+
+// h7xe: while a selector-driven refetch is in flight the list dims and the
+// segmented control is disabled.
+export const Loading: Story = {
+  args: {
+    ...Default.args,
+    topN: 10,
+    onTopNChange: () => {},
+    loading: true,
+  },
+};
+
 export const FewSessions: Story = {
   args: {
     data: {

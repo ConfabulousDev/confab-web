@@ -204,7 +204,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	})
 
 	runAgg("top_sessions", func() error {
-		topSessions, err := s.aggregateTopSessions(ctx, tq)
+		topSessions, err := s.aggregateTopSessions(ctx, tq, req.TopSessionsLimit)
 		if err != nil {
 			return err
 		}
@@ -623,9 +623,28 @@ func (s *Store) aggregateTools(ctx context.Context, tq trendsQuery) (*TrendsTool
 	}, nil
 }
 
-// aggregateTopSessions returns the top 10 most expensive sessions ranked by cost.
-func (s *Store) aggregateTopSessions(ctx context.Context, tq trendsQuery) (*TrendsTopSessionsCard, error) {
-	query := tq.cteSQL + `
+// allowedTopSessionsLimits is the set of N values the Costliest Sessions card
+// (?top_n=) accepts. Any other value — including the int zero-value when the
+// caller omits the field — is normalized to the default by normalizeTopN.
+var allowedTopSessionsLimits = map[int]bool{10: true, 25: true, 50: true}
+
+const defaultTopSessionsLimit = 10
+
+// normalizeTopN clamps an arbitrary limit to the allowlist, defaulting anything
+// off-list to defaultTopSessionsLimit so the data layer never emits LIMIT 0.
+func normalizeTopN(limit int) int {
+	if allowedTopSessionsLimits[limit] {
+		return limit
+	}
+	return defaultTopSessionsLimit
+}
+
+// aggregateTopSessions returns the top N most expensive sessions ranked by cost.
+// limit is normalized to the {10,25,50} allowlist; the resulting int is a vetted
+// constant, so formatting it directly into the SQL is injection-safe and — unlike
+// appending a bind arg — keeps the parallel-shared tq.args slice untouched.
+func (s *Store) aggregateTopSessions(ctx context.Context, tq trendsQuery, limit int) (*TrendsTopSessionsCard, error) {
+	query := tq.cteSQL + fmt.Sprintf(`
 		SELECT
 			fs.id,
 			s.external_id,
@@ -640,8 +659,8 @@ func (s *Store) aggregateTopSessions(ctx context.Context, tq trendsQuery) (*Tren
 		LEFT JOIN session_card_session sess ON fs.id = sess.session_id
 		WHERE t.estimated_cost_usd > 0
 		ORDER BY t.estimated_cost_usd DESC
-		LIMIT 10
-	`
+		LIMIT %d
+	`, normalizeTopN(limit))
 
 	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {

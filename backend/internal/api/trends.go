@@ -140,6 +140,11 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			owners[i] = strings.ToLower(v)
 		}
 
+		// top_n bounds the Costliest Sessions card. Parse best-effort; the
+		// analytics layer normalizes anything off the {10,25,50} allowlist
+		// (including 0 from an unparseable value) to the default.
+		topN, _ := strconv.Atoi(r.URL.Query().Get("top_n"))
+
 		req := analytics.TrendsRequest{
 			StartTS:          dr.StartTS,
 			EndTS:            dr.EndTS,
@@ -149,6 +154,7 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			Providers:        providers,
 			Owners:           owners,
 			ShareAllSessions: database.ShareAllSessions,
+			TopSessionsLimit: topN,
 		}
 
 		response, err := analyticsStore.GetTrends(r.Context(), userID, req)

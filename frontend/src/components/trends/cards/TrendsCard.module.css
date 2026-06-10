@@ -83,3 +83,9 @@
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
 }
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
