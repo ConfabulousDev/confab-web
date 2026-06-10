@@ -433,7 +433,7 @@ Uses canonical access model (CF-132). Validates the file exists in the session's
 
 #### Get Trends
 ```
-GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>&provider=<providers>&owner=<emails>
+GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>&provider=<providers>&owner=<emails>&top_n=<n>
 ```
 
 Returns aggregated analytics across sessions **visible to the authenticated user**. Visibility follows the same model as `GET /api/v1/sessions` — owned ∪ private-share ∪ system-share, or all sessions when `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` is on.
@@ -448,6 +448,7 @@ Returns aggregated analytics across sessions **visible to the authenticated user
 | include_no_repo | boolean | No | true | Include sessions without a git repo |
 | provider | string | No | all | Comma-separated canonical AI providers (`claude-code`, `codex`). Case-insensitive; the legacy DB form `Claude Code` is rejected on the wire. Returns `400` for unknown values. Omitted/empty aggregates across all providers. |
 | owner | string | No | all | Comma-separated owner emails to narrow the visible set (CF-495). Case-insensitive. **Privacy invariant**: narrows within the visible set; cannot broaden access. `?owner=ghost@x.com` for an owner the caller can't see returns zero rows (no 403, no existence leak). Omitted/empty aggregates across all visible owners. Max 50 values. |
+| top_n | integer | No | 10 | Limit for the `top_sessions` (Costliest Sessions) card. Allowlist: `10`, `25`, `50`. Any other value — including unparseable or omitted — is normalized to `10`. Does not affect any other card. |
 
 **Constraints:**
 - Maximum date range: 90 days

@@ -6,8 +6,17 @@ import { formatCost } from '@/utils/tokenStats';
 import type { TrendsTopSessionsCard as TrendsTopSessionsCardData } from '@/schemas/api';
 import styles from './TrendsTopSessionsCard.module.css';
 
+// N options for the Costliest Sessions limit; mirrors the backend allowlist.
+const TOP_N_OPTIONS = [10, 25, 50] as const;
+
 interface TrendsTopSessionsCardProps {
   data: TrendsTopSessionsCardData | null;
+  /** Currently selected N (defaults to the backend default of 10). */
+  topN?: number;
+  /** When provided, renders the 10/25/50 selector wired to this handler. */
+  onTopNChange?: (n: number) => void;
+  /** Dims the list and disables the selector while a refetch is in flight. */
+  loading?: boolean;
 }
 
 /** Strip org prefix from "org/repo" → "repo" */
@@ -23,15 +32,59 @@ function getRowProviderIcon(provider: string) {
   return getProviderMetadataOrFallback(provider, 'neutral')?.icon ?? ChatIcon;
 }
 
-export function TrendsTopSessionsCard({ data }: TrendsTopSessionsCardProps) {
+function TopNSelector({
+  topN,
+  onTopNChange,
+  disabled,
+}: {
+  topN: number;
+  onTopNChange: (n: number) => void;
+  disabled: boolean;
+}) {
+  return (
+    <span className={styles.topNSelector} role="group" aria-label="Number of sessions">
+      {TOP_N_OPTIONS.map((n) => (
+        <button
+          key={n}
+          type="button"
+          className={styles.topNOption}
+          aria-pressed={n === topN}
+          disabled={disabled}
+          onClick={() => onTopNChange(n)}
+        >
+          {n}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+export function TrendsTopSessionsCard({
+  data,
+  topN = 10,
+  onTopNChange,
+  loading = false,
+}: TrendsTopSessionsCardProps) {
   if (!data || data.sessions.length === 0) return null;
 
   const subtitle = `Top ${data.sessions.length} by cost`;
+  const headerAction = onTopNChange ? (
+    <TopNSelector topN={topN} onTopNChange={onTopNChange} disabled={loading} />
+  ) : undefined;
 
   return (
     <div className={styles.wrapper}>
-      <TrendsCard title="Costliest Sessions" icon={TrendingUpIcon} subtitle={subtitle}>
-        <div className={styles.sessionList}>
+      <TrendsCard
+        title="Costliest Sessions"
+        icon={TrendingUpIcon}
+        subtitle={subtitle}
+        headerAction={headerAction}
+      >
+        <div
+          className={styles.sessionList}
+          data-loading={loading || undefined}
+          aria-busy={loading || undefined}
+        >
           {data.sessions.map((session, index) => (
             <a
               key={session.id}

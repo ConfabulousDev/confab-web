@@ -88,3 +88,50 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* h7xe: 10/25/50 segmented control in the card header. */
+.topNSelector {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-primary);
+}
+
+.topNOption {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background-color 0.1s, color 0.1s;
+}
+
+.topNOption:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.topNOption[aria-pressed='true'] {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.topNOption:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Dim the list while a refetch driven by the selector is in flight. */
+.sessionList[data-loading] {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.1s;
+}

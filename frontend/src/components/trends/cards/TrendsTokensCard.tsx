@@ -119,6 +119,17 @@ function CostValue({ usd, className }: { usd: string; className?: string }) {
   );
 }
 
+// Elevated grand-total headline, rendered identically in single- and
+// multi-provider modes so the total cost reads the same regardless of layout.
+function TotalCostRow({ usd }: { usd: string }) {
+  return (
+    <div className={styles.totalCostRow} data-testid="trends-total-cost">
+      <span className={styles.totalCostLabel}>Total Cost</span>
+      <CostValue usd={usd} className={styles.totalCostValue} />
+    </div>
+  );
+}
+
 // Tri-state cache row, parameterized so single-provider and per-provider
 // sections share the same rules. Returns null when both numbers are 0.
 function CacheRow({
@@ -172,31 +183,21 @@ function TokensStatRows({
 
 interface TrendsTokensPerProviderListProps {
   entries: Array<[string, TrendsTokensPerProvider]>;
-  totalCostUSD: string;
 }
 
-function TrendsTokensPerProviderList({
-  entries,
-  totalCostUSD,
-}: TrendsTokensPerProviderListProps) {
+function TrendsTokensPerProviderList({ entries }: TrendsTokensPerProviderListProps) {
   return (
-    <>
-      <div className={styles.totalCostRow}>
-        <span className={styles.totalCostLabel}>Total Cost</span>
-        <CostValue usd={totalCostUSD} className={styles.totalCostValue} />
-      </div>
-      <div className={styles.providerSections}>
-        {entries.map(([providerId, e]) => (
-          <section key={providerId} className={styles.providerSection}>
-            <header className={styles.providerHeader}>{providerLabel(providerId)}</header>
-            <div className={styles.providerRows}>
-              <StatRow label="Cost" value={<CostValue usd={e.total_cost_usd} />} />
-              <TokensStatRows providerId={providerId} data={e} />
-            </div>
-          </section>
-        ))}
-      </div>
-    </>
+    <div className={styles.providerSections}>
+      {entries.map(([providerId, e]) => (
+        <section key={providerId} className={styles.providerSection}>
+          <header className={styles.providerHeader}>{providerLabel(providerId)}</header>
+          <div className={styles.providerRows}>
+            <StatRow label="Cost" value={<CostValue usd={e.total_cost_usd} />} />
+            <TokensStatRows providerId={providerId} data={e} />
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -245,16 +246,13 @@ export function TrendsTokensCard({ data }: TrendsTokensCardProps) {
 
   return (
     <TrendsCard title="Tokens & Cost" icon={TokenIcon}>
+      {/* h7xe: the grand-total headline renders identically in both modes, so
+          it lives above the layout branch rather than inside each one. */}
+      <TotalCostRow usd={data.total_cost_usd} />
       {multiProvider ? (
-        <TrendsTokensPerProviderList
-          entries={perProviderEntries}
-          totalCostUSD={data.total_cost_usd}
-        />
+        <TrendsTokensPerProviderList entries={perProviderEntries} />
       ) : (
-        <>
-          <StatRow label="Total Cost" value={<CostValue usd={data.total_cost_usd} />} />
-          <TokensStatRows providerId={singleProviderId} data={data} />
-        </>
+        <TokensStatRows providerId={singleProviderId} data={data} />
       )}
 
       {hasChartData && (

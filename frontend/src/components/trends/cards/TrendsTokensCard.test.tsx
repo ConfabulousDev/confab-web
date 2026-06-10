@@ -41,6 +41,36 @@ function makeData(
   };
 }
 
+// h7xe: the grand-total cost is promoted to a single elevated headline rendered
+// identically in single- and multi-provider modes (previously single-provider
+// used a plain StatRow). Both render the shared TotalCostRow carrying the
+// `trends-total-cost` testid.
+describe('TrendsTokensCard grand-total headline (h7xe)', () => {
+  it('renders the elevated total-cost headline in single-provider mode', () => {
+    const data = makeData(
+      { 'claude-code': entry({ total_input_tokens: 1000, total_cost_usd: '5.00' }) },
+      { total_cost_usd: '5.00' },
+    );
+    render(<TrendsTokensCard data={data} />);
+    const headline = screen.getByTestId('trends-total-cost');
+    expect(headline).toBeInTheDocument();
+    expect(headline.textContent).toMatch(/\$5\.00/);
+  });
+
+  it('renders the elevated total-cost headline in multi-provider mode', () => {
+    const data = makeData(
+      {
+        'claude-code': entry({ total_input_tokens: 5_000_000, total_cost_usd: '125.00' }),
+        codex: entry({ total_input_tokens: 800_000, total_cost_usd: '4.25' }),
+      },
+      { total_cost_usd: '129.25' },
+    );
+    render(<TrendsTokensCard data={data} />);
+    const headline = screen.getByTestId('trends-total-cost');
+    expect(headline.textContent).toMatch(/\$129\.25/);
+  });
+});
+
 describe('TrendsTokensCard caveat removal (CF-435)', () => {
   it('never renders the CF-424 muted caveat regardless of per_provider shape', () => {
     const data = makeData({

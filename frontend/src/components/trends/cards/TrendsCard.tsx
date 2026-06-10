@@ -4,10 +4,12 @@ interface TrendsCardProps {
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
+  /** Optional control rendered on the right of the header (e.g. a selector). */
+  headerAction?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export function TrendsCard({ title, subtitle, icon, children }: TrendsCardProps) {
+export function TrendsCard({ title, subtitle, icon, headerAction, children }: TrendsCardProps) {
   return (
     <div className={styles.card}>
       <div className={styles.header}>
@@ -15,7 +17,12 @@ export function TrendsCard({ title, subtitle, icon, children }: TrendsCardProps)
           {icon && <span className={styles.icon}>{icon}</span>}
           {title}
         </span>
-        {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
+        {(subtitle || headerAction) && (
+          <span className={styles.headerRight}>
+            {subtitle && <span className={styles.subtitle}>{subtitle}</span>}
+            {headerAction}
+          </span>
+        )}
       </div>
       <div className={styles.content}>{children}</div>
     </div>
