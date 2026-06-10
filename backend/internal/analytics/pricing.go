@@ -87,6 +87,7 @@ func isOpenAIModel(name string) bool {
 
 // getModelFamily extracts the pricing-table key from a full model name.
 //   - Claude:  "claude-opus-4-5-20251101" -> "opus-4-5"
+//   - Claude:  "claude-fable-5"           -> "fable-5"
 //   - OpenAI:  "gpt-5-2026-05-01"          -> "gpt-5"
 //   - OpenAI:  "gpt-5.5"                   -> "gpt-5.5" (pass-through)
 func getModelFamily(modelName string) string {
@@ -104,7 +105,7 @@ func getModelFamily(modelName string) string {
 	}
 
 	family := parts[0]
-	if family != "opus" && family != "sonnet" && family != "haiku" {
+	if family != "opus" && family != "sonnet" && family != "haiku" && family != "fable" {
 		return name
 	}
 

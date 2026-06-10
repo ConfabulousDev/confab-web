@@ -175,6 +175,11 @@ describe('getModelFamily', () => {
     expect(getModelFamily('claude-code', 'claude-haiku-3-5-20241022')).toBe('haiku-3-5');
   });
 
+  it('resolves the fable family with or without a date suffix', () => {
+    expect(getModelFamily('claude-code', 'claude-fable-5')).toBe('fable-5');
+    expect(getModelFamily('claude-code', 'claude-fable-5-20260601')).toBe('fable-5');
+  });
+
   it('strips OpenAI pinned-snapshot date suffix for Codex models', () => {
     expect(getModelFamily('codex', 'gpt-5-2026-05-01')).toBe('gpt-5');
     expect(getModelFamily('codex', 'gpt-4o-mini-2024-11-20')).toBe('gpt-4o-mini');

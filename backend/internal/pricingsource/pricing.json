@@ -1,8 +1,9 @@
 {
   "schema_version": 0,
-  "updated_at": "2026-06-06T04:15:00Z",
+  "updated_at": "2026-06-10T00:00:00Z",
   "pricing": {
     "claude-code": {
+      "fable-5": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheRead": 1.0 },
       "opus-4-8": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 },
       "opus-4-7": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 },
       "opus-4-6": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 },
