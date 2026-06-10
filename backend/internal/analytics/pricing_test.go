@@ -13,6 +13,8 @@ func TestGetModelFamily(t *testing.T) {
 		input    string
 		expected string
 	}{
+		{"claude-fable-5", "fable-5"},
+		{"claude-fable-5-20260601", "fable-5"},
 		{"claude-opus-4-8-20260515", "opus-4-8"},
 		{"claude-opus-4-6-20260201", "opus-4-6"},
 		{"claude-opus-4-5-20251101", "opus-4-5"},

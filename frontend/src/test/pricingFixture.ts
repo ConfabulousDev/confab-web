@@ -7,6 +7,7 @@ import type { PricingTable } from '@/utils/tokenStats';
 
 export const PRICING_FIXTURE: PricingTable = {
   'claude-code': {
+    'fable-5': { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 1.0 },
     'opus-4-8': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
     'opus-4-7': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
     'opus-4-6': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },

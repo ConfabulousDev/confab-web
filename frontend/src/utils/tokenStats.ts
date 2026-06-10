@@ -79,6 +79,7 @@ function assertKnownProvider(provider: string): asserts provider is ProviderId {
 /**
  * Extract pricing-table key from a full model name. Provider-aware.
  *  - `claude-code` / `claude-opus-4-5-20251101` → `'opus-4-5'`
+ *  - `claude-code` / `claude-fable-5`            → `'fable-5'`
  *  - `codex` / `gpt-5-2026-05-01`               → `'gpt-5'`
  *  - `codex` / `gpt-5.5`                         → `'gpt-5.5'` (pass-through)
  *
@@ -91,7 +92,7 @@ export function getModelFamily(provider: ProviderId, modelName: string): string 
   }
   // Claude: strip the `claude-` prefix, then match the family pattern.
   const name = modelName.replace(/^claude-/, '');
-  const match = name.match(/^(opus|sonnet|haiku)-(\d(?:-\d)?)(?!\d)/);
+  const match = name.match(/^(opus|sonnet|haiku|fable)-(\d(?:-\d)?)(?!\d)/);
   return match ? `${match[1]}-${match[2]}` : name;
 }
 
