@@ -53,3 +53,4 @@ deploy-logs/
 # but keep checked-in skills/ tooling
 .claude/*
 !.claude/skills/
+.kata.local.toml
