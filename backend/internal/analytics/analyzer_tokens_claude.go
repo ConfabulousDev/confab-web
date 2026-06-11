@@ -3,6 +3,7 @@ package analytics
 import (
 	"log/slog"
 
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/shopspring/decimal"
 )
 
@@ -17,6 +18,12 @@ type TokensResult struct {
 	// Fast mode breakdown
 	FastTurns   int
 	FastCostUSD decimal.Decimal
+
+	// TokensV2 is the per-provider → per-model breakdown built alongside the flat
+	// totals. by_provider has a single canonical-agent key ("claude-code"); model
+	// keys are getModelFamily() families, with fast turns under "<family> · fast".
+	// Its TotalCostUSD reconciles exactly with EstimatedCostUSD.
+	TokensV2 *TokensV2Data
 }
 
 // TokensAnalyzer extracts token usage and cost metrics from transcripts.
@@ -32,6 +39,77 @@ type TokensAnalyzer struct {
 	// provider) used to attribute unknown-model warnings. Nil on test/Analyze
 	// paths; pricingForModel falls back to the default logger.
 	log *slog.Logger
+	// byModel accumulates the per-model tokens_v2 breakdown alongside the flat
+	// totals, keyed by getModelFamily() family (fast turns under "<family> · fast").
+	// Lazily initialized so a zero-value analyzer needs no constructor.
+	byModel map[string]*v2ModelAgg
+}
+
+// v2ModelAgg accumulates one model family's tokens + cost for the tokens_v2 tree.
+// reasoning stays 0 for Claude (its usage carries none) and is populated by Codex;
+// cacheCreation stays 0 for Codex (OpenAI doesn't bill cache writes).
+type v2ModelAgg struct {
+	input, output, cacheCreation, cacheRead, reasoning int64
+	cost                                               decimal.Decimal
+}
+
+// buildV2Tree assembles a single-provider tokens_v2 tree from already-aggregated
+// per-model entries, keyed under the canonical agent id. Returns nil for a
+// token-less session so the card stays empty (unserved), matching the prior
+// Claude/Codex behavior. The two providers accumulate byModel at their own sites
+// (Claude in ProcessFile/Finalize, Codex in computeCodexTokens) — this only does
+// the mechanical map→tree assembly they shared.
+func buildV2Tree(providerID string, byModel map[string]*v2ModelAgg) *TokensV2Data {
+	if len(byModel) == 0 {
+		return nil
+	}
+	modelEntries := make(map[string]TokensV2Model, len(byModel))
+	var totalInput, totalOutput int64
+	totalCost := decimal.Zero
+	for key, agg := range byModel {
+		modelEntries[key] = TokensV2Model{
+			Input:      agg.input,
+			Output:     agg.output,
+			CacheRead:  agg.cacheRead,
+			CacheWrite: agg.cacheCreation,
+			Reasoning:  agg.reasoning,
+			CostUSD:    agg.cost.String(),
+		}
+		totalInput += agg.input
+		totalOutput += agg.output
+		totalCost = totalCost.Add(agg.cost)
+	}
+	return &TokensV2Data{
+		TotalCostUSD: totalCost.String(),
+		TotalInput:   totalInput,
+		TotalOutput:  totalOutput,
+		ByProvider: map[string]TokensV2Provider{
+			providerID: {CostUSD: totalCost.String(), Models: modelEntries},
+		},
+	}
+}
+
+// accumulateV2 folds one group/agent's usage into the per-model tree. The cost is
+// the same value already added to the flat total, so the v2 tree reconciles with
+// EstimatedCostUSD exactly. Fast turns route to a synthetic "<family> · fast" key.
+func (a *TokensAnalyzer) accumulateV2(model string, fast bool, usage *TokenUsage, cost decimal.Decimal) {
+	key := getModelFamily(model)
+	if fast {
+		key += fastModelKeySuffix
+	}
+	if a.byModel == nil {
+		a.byModel = make(map[string]*v2ModelAgg)
+	}
+	agg := a.byModel[key]
+	if agg == nil {
+		agg = &v2ModelAgg{}
+		a.byModel[key] = agg
+	}
+	agg.input += usage.InputTokens
+	agg.output += usage.OutputTokens
+	agg.cacheCreation += usage.CacheCreationInputTokens
+	agg.cacheRead += usage.CacheReadInputTokens
+	agg.cost = agg.cost.Add(cost)
 }
 
 // ProcessFile accumulates token counts from a single file.
@@ -62,6 +140,7 @@ func (a *TokensAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 		pricing := pricingForModel(a.log, group.Model)
 		cost := CalculateTotalCost(pricing, usage)
 		a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
+		a.accumulateV2(group.Model, group.IsFastMode, usage, cost)
 
 		if group.IsFastMode {
 			a.result.FastTurns++
@@ -97,6 +176,7 @@ func (a *TokensAnalyzer) Finalize(hasAgentFile func(string) bool) {
 			pricing := pricingForModel(a.log, a.mainModel)
 			cost := CalculateTotalCost(pricing, usage)
 			a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
+			a.accumulateV2(a.mainModel, usage.Speed == SpeedFast, usage, cost)
 
 			if usage.Speed == SpeedFast {
 				a.result.FastTurns++
@@ -106,8 +186,11 @@ func (a *TokensAnalyzer) Finalize(hasAgentFile func(string) bool) {
 	}
 }
 
-// Result returns the accumulated token metrics.
+// Result returns the accumulated token metrics, including the per-model tokens_v2
+// tree assembled from byModel. Idempotent: callers (claude_compute, Analyze) may
+// call it once after ProcessFile/Finalize have run.
 func (a *TokensAnalyzer) Result() *TokensResult {
+	a.result.TokensV2 = buildV2Tree(models.ProviderClaudeCode, a.byModel)
 	return &a.result
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
@@ -528,5 +529,28 @@ func CreateTestSearchIndex(t *testing.T, env *TestEnvironment, sessionID string,
 	_, err := env.DB.Exec(env.Ctx, query, sessionID, text, indexedUpToLine)
 	if err != nil {
 		t.Fatalf("failed to create test search index: %v", err)
+	}
+}
+
+// SeedTokensV2Card upserts a session_card_tokens_v2 row carrying the given
+// per-model tree at the current TokensV2CardVersion. It lets tests exercise the
+// per-model cost aggregation (c30r/2hh1) without running the full analyzer.
+// Build `data` with multiple model keys (and a "<family> · fast" variant) to
+// cover the breakdown; up_to_line is fixed at a nonzero sentinel.
+func SeedTokensV2Card(t *testing.T, env *TestEnvironment, sessionID string, data analytics.TokensV2Data) {
+	t.Helper()
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshal tokens_v2 data: %v", err)
+	}
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_tokens_v2 (session_id, version, computed_at, up_to_line, data)
+		VALUES ($1, $2, now(), $3, $4)
+		ON CONFLICT (session_id) DO UPDATE
+		SET version = EXCLUDED.version, computed_at = EXCLUDED.computed_at,
+		    up_to_line = EXCLUDED.up_to_line, data = EXCLUDED.data`,
+		sessionID, analytics.TokensV2CardVersion, int64(100), jsonData)
+	if err != nil {
+		t.Fatalf("seed tokens_v2 card: %v", err)
 	}
 }

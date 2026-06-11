@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/shopspring/decimal"
 )
 
@@ -19,6 +20,13 @@ import (
 // Pricing uses the main rollout's model.
 func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.ParsedRollout) {
 	var totalUncached, totalCached, totalOutput int64
+
+	// Per-model accumulation for tokens_v2, grouped by model family with
+	// per-rollout pricing (7eje). pricingByFamily memoizes the lookup so an
+	// unknown model WARNs at most once per session regardless of rollout count.
+	byModel := make(map[string]*v2ModelAgg)
+	pricingByFamily := make(map[string]ModelPricing)
+
 	for _, r := range rollouts {
 		if r == nil {
 			continue
@@ -31,7 +39,27 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 		totalUncached += uncached
 		totalCached += tu.CachedInputTokens
 		totalOutput += tu.OutputTokens
+
+		family := getModelFamily(r.Model)
+		pricing, ok := pricingByFamily[family]
+		if !ok {
+			pricing = pricingForModel(log, r.Model)
+			pricingByFamily[family] = pricing
+		}
+		agg := byModel[family]
+		if agg == nil {
+			agg = &v2ModelAgg{}
+			byModel[family] = agg
+		}
+		agg.input += uncached
+		agg.output += tu.OutputTokens
+		agg.cacheRead += tu.CachedInputTokens
+		agg.reasoning += tu.ReasoningOutputTokens
+		// Cache writes stay 0 (OpenAI bills none); reasoning is a subset of output
+		// (CF-471), so it bills implicitly at the output rate — not added here.
+		agg.cost = agg.cost.Add(CalculateCost(pricing, uncached, tu.OutputTokens, 0, tu.CachedInputTokens))
 	}
+
 	out.InputTokens = totalUncached
 	out.CacheReadTokens = totalCached
 	out.CacheCreationTokens = 0
@@ -51,4 +79,6 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 	)
 	out.FastTurns = 0
 	out.FastCostUSD = decimal.Zero
+
+	out.TokensV2 = buildV2Tree(models.ProviderCodex, byModel)
 }

@@ -93,6 +93,7 @@ docker load. If it flakes, use `make coverage`.
    - `CreateTestAPIKeyWithToken()` - Create API key and return raw token
    - `CreateTestWebSessionWithToken()` - Create web session and return token
    - `CreateTestSyncFile()` - Insert sync file into database
+   - `SeedTokensV2Card()` - Upsert a `session_card_tokens_v2` row (per-model tree) at the current version, for exercising per-model cost aggregation without the analyzer
    - `ParseJSON()` - Decode JSON response
    - `RequireStatus()` - Check HTTP status code
 

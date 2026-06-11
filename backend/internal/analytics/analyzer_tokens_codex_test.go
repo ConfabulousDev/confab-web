@@ -143,3 +143,70 @@ func TestComputeCodexTokens_MultiRolloutReasoningExcluded(t *testing.T) {
 		t.Errorf("OutputTokens = %d, want %d (sum of wire output_tokens across rollouts; reasoning excluded)", out.OutputTokens, wantOutput)
 	}
 }
+
+// TestComputeCodexTokens_V2Tree is the 7eje contract for Codex: the per-model
+// tokens_v2 tree under the canonical agent id "codex", keyed by getModelFamily()
+// families, grouped per-rollout model, with reasoning surfaced per model and
+// cache_creation held at 0 (OpenAI bills no cache writes).
+func TestComputeCodexTokens_V2Tree(t *testing.T) {
+	main := &codex.ParsedRollout{
+		Model: "gpt-5",
+		Turns: []codex.Turn{{Model: "gpt-5"}},
+		TokenUsage: codex.TokenUsage{
+			InputTokens:           10_000,
+			CachedInputTokens:     4_000,
+			OutputTokens:          2_000,
+			ReasoningOutputTokens: 500,
+			TotalTokens:           12_000,
+		},
+	}
+	sub := &codex.ParsedRollout{
+		Model: "gpt-5-mini",
+		Turns: []codex.Turn{{Model: "gpt-5-mini"}},
+		TokenUsage: codex.TokenUsage{
+			InputTokens:           1_000,
+			CachedInputTokens:     0,
+			OutputTokens:          300,
+			ReasoningOutputTokens: 50,
+			TotalTokens:           1_300,
+		},
+	}
+
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{main, sub})
+	if out == nil || out.TokensV2 == nil {
+		t.Fatal("TokensV2 not populated")
+	}
+	v2 := out.TokensV2
+
+	prov, ok := v2.ByProvider["codex"]
+	if !ok || len(v2.ByProvider) != 1 {
+		t.Fatalf("ByProvider = %+v, want single key codex", v2.ByProvider)
+	}
+
+	gpt5, ok := prov.Models["gpt-5"]
+	if !ok {
+		t.Fatalf("missing model gpt-5: %+v", prov.Models)
+	}
+	// uncached input = 10000 - 4000; cache_read = 4000; output = 2000; reasoning = 500.
+	if gpt5.Input != 6_000 || gpt5.CacheRead != 4_000 || gpt5.Output != 2_000 {
+		t.Errorf("gpt-5 input/cacheRead/output = %d/%d/%d, want 6000/4000/2000", gpt5.Input, gpt5.CacheRead, gpt5.Output)
+	}
+	if gpt5.Reasoning != 500 {
+		t.Errorf("gpt-5 reasoning = %d, want 500", gpt5.Reasoning)
+	}
+	if gpt5.CacheWrite != 0 {
+		t.Errorf("gpt-5 cacheWrite = %d, want 0 (OpenAI bills no cache writes)", gpt5.CacheWrite)
+	}
+
+	mini, ok := prov.Models["gpt-5-mini"]
+	if !ok {
+		t.Fatalf("missing model gpt-5-mini: %+v", prov.Models)
+	}
+	if mini.Input != 1_000 || mini.Output != 300 || mini.Reasoning != 50 {
+		t.Errorf("gpt-5-mini input/output/reasoning = %d/%d/%d, want 1000/300/50", mini.Input, mini.Output, mini.Reasoning)
+	}
+
+	if v2.TotalInput != 7_000 || v2.TotalOutput != 2_300 {
+		t.Errorf("totals input/output = %d/%d, want 7000/2300", v2.TotalInput, v2.TotalOutput)
+	}
+}
