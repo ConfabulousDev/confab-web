@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDuration, formatRelativeTime, formatModelName, formatRepoName, formatDateString, formatDateTime } from './formatting';
+import { formatDuration, formatRelativeTime, formatModelName, formatModelDisplayName, formatRepoName, formatDateString, formatDateTime } from './formatting';
 
 describe('formatDuration', () => {
   describe('without decimalSeconds option', () => {
@@ -179,5 +179,33 @@ describe('formatDateTime', () => {
     expect(typeof result).toBe('string');
     // Should include date parts
     expect(result).toMatch(/Jan|15|2024/);
+  });
+});
+
+// mp4e: formatModelDisplayName is the shared user-friendly model formatter
+// (lifted + generalized from the CF-437 SessionCard one). It must handle BOTH
+// full model ids (with date suffixes) AND the bare family keys the tokens_v2
+// tree stores for Claude/Codex (no `claude-` prefix, no date).
+describe('formatModelDisplayName', () => {
+  it.each([
+    // Bare family keys (tokens_v2 Claude/Codex form)
+    ['opus-4-1', 'Opus 4.1'],
+    ['opus-4-5', 'Opus 4.5'],
+    ['sonnet-4', 'Sonnet 4'],
+    ['haiku-4-5', 'Haiku 4.5'],
+    // Full Claude ids (OpenCode raw form) — date suffix must not leak into version
+    ['claude-sonnet-4-20250514', 'Sonnet 4'],
+    ['claude-opus-4-5-20251101', 'Opus 4.5'],
+    // OpenAI families
+    ['gpt-5', 'GPT-5'],
+    ['gpt-4o', 'GPT-4o'],
+    ['gpt-5-codex', 'GPT-5 Codex'],
+    // OpenAI o-series — preserved lowercase
+    ['o3-mini', 'o3-mini'],
+    // Unknown / empty → passthrough (the card maps '' to "Unknown")
+    ['mistral-7b', 'mistral-7b'],
+    ['', ''],
+  ])('formats %s -> %s', (input, expected) => {
+    expect(formatModelDisplayName(input)).toBe(expected);
   });
 });

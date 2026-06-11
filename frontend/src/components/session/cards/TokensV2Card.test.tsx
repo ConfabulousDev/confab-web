@@ -67,10 +67,11 @@ describe('TokensV2Card', () => {
     expect(screen.getAllByText('$0.28').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders model names', () => {
+  it('renders formatted model names (not raw ids)', () => {
     render(<TokensV2Card data={makeData()} loading={false} />);
-    expect(screen.getByText('claude-sonnet-4-20250514')).toBeInTheDocument();
-    expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+    expect(screen.getByText('Sonnet 4')).toBeInTheDocument();
+    expect(screen.getByText('GPT-4o')).toBeInTheDocument();
+    expect(screen.queryByText('claude-sonnet-4-20250514')).not.toBeInTheDocument();
   });
 
   it('renders loading state', () => {
@@ -88,31 +89,78 @@ describe('TokensV2Card', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders single provider without provider section header', () => {
+  it('multi-provider DOES render provider section headers', () => {
+    render(<TokensV2Card data={makeData()} loading={false} />);
+    // by_provider keys (vendor ids) pass through providerLabel unchanged.
+    expect(screen.getByText('anthropic')).toBeInTheDocument();
+    expect(screen.getByText('openai')).toBeInTheDocument();
+  });
+
+  it('single provider collapses the provider wrapper (no provider header)', () => {
     const singleProvider = makeData({
       by_provider: {
-        anthropic: {
-          cost_usd: '0.95',
+        'claude-code': {
+          cost_usd: '4.20',
           models: {
-            'claude-sonnet-4-20250514': {
-              input: 100000,
-              output: 30000,
-              cache_read: 20000,
-              cache_write: 5000,
-              reasoning: 10000,
-              cost_usd: '0.95',
+            'opus-4-8': {
+              input: 1000000, output: 300000, cache_read: 800000,
+              cache_write: 0, reasoning: 0, cost_usd: '3.50',
             },
           },
         },
       },
     });
     render(<TokensV2Card data={singleProvider} loading={false} />);
-    expect(screen.getAllByText('$0.95').length).toBeGreaterThanOrEqual(1);
+    // The provider label ("Claude Code") must NOT be rendered as a section header.
+    expect(screen.queryByText('Claude Code')).not.toBeInTheDocument();
+    // The model section still renders, with a formatted label.
+    expect(screen.getByText('Opus 4.8')).toBeInTheDocument();
   });
 
-  it('shows zero cost with warning style', () => {
+  it('renders a fast model variant with the · fast suffix preserved', () => {
+    const withFast = makeData({
+      by_provider: {
+        'claude-code': {
+          cost_usd: '4.20',
+          models: {
+            'opus-4-8': {
+              input: 1000000, output: 300000, cache_read: 0,
+              cache_write: 0, reasoning: 0, cost_usd: '3.50',
+            },
+            'opus-4-8 · fast': {
+              input: 200000, output: 40000, cache_read: 0,
+              cache_write: 0, reasoning: 0, cost_usd: '0.70',
+            },
+          },
+        },
+      },
+    });
+    render(<TokensV2Card data={withFast} loading={false} />);
+    expect(screen.getByText('Opus 4.8')).toBeInTheDocument();
+    expect(screen.getByText('Opus 4.8 · fast')).toBeInTheDocument();
+  });
+
+  it('maps the empty-string model key to "Unknown"', () => {
+    const withUnknown = makeData({
+      by_provider: {
+        'claude-code': {
+          cost_usd: '0.00',
+          models: {
+            '': {
+              input: 5000, output: 1000, cache_read: 0,
+              cache_write: 0, reasoning: 0, cost_usd: '0',
+            },
+          },
+        },
+      },
+    });
+    render(<TokensV2Card data={withUnknown} loading={false} />);
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+  });
+
+  it('shows the unpriced ($0) warning tooltip on the cost row', () => {
     render(<TokensV2Card data={makeData({ total_cost_usd: '0.00' })} loading={false} />);
-    const costEl = screen.getByText('$0.00');
-    expect(costEl).toBeInTheDocument();
+    const costRow = screen.getByText('Estimated cost').closest('div');
+    expect(costRow).toHaveAttribute('title', 'Cost unavailable — session may use models not yet in the pricing table');
   });
 });

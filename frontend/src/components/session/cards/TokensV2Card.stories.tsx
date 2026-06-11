@@ -111,6 +111,67 @@ export const HighUsage: Story = {
   },
 };
 
+// 7eje/mp4e: Claude/Codex use the canonical agent id as the single by_provider
+// key and getModelFamily() families as model keys (fast under "<family> · fast").
+// Single provider → no provider section header; model labels are formatted.
+export const ClaudeSingleModel: Story = {
+  args: {
+    loading: false,
+    data: {
+      total_cost_usd: '4.20',
+      total_input: 1_000_000,
+      total_output: 300_000,
+      by_provider: {
+        'claude-code': {
+          cost_usd: '4.20',
+          models: {
+            'opus-4-8': { input: 1_000_000, output: 300_000, cache_read: 800_000, cache_write: 50_000, reasoning: 0, cost_usd: '4.20' },
+          },
+        },
+      },
+    },
+  },
+};
+
+export const ClaudeWithFastVariant: Story = {
+  args: {
+    loading: false,
+    data: {
+      total_cost_usd: '4.90',
+      total_input: 1_200_000,
+      total_output: 340_000,
+      by_provider: {
+        'claude-code': {
+          cost_usd: '4.90',
+          models: {
+            'opus-4-8': { input: 1_000_000, output: 300_000, cache_read: 800_000, cache_write: 0, reasoning: 0, cost_usd: '3.50' },
+            'opus-4-8 · fast': { input: 200_000, output: 40_000, cache_read: 0, cache_write: 0, reasoning: 0, cost_usd: '1.40' },
+          },
+        },
+      },
+    },
+  },
+};
+
+export const CodexWithReasoning: Story = {
+  args: {
+    loading: false,
+    data: {
+      total_cost_usd: '2.15',
+      total_input: 600_000,
+      total_output: 90_000,
+      by_provider: {
+        codex: {
+          cost_usd: '2.15',
+          models: {
+            'gpt-5': { input: 600_000, output: 90_000, cache_read: 400_000, cache_write: 0, reasoning: 18_000, cost_usd: '2.15' },
+          },
+        },
+      },
+    },
+  },
+};
+
 export const Loading: Story = {
   args: { loading: true, data: null },
 };

@@ -166,9 +166,11 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
       const cardData = cards[cardDef.key] ?? null;
       const cardError = cardErrors[cardDef.key];
 
-      // tokens_v2 (hierarchical per-provider breakdown) supersedes the flat
-      // tokens card when present, so OpenCode multi-provider sessions show a
-      // single Tokens card rather than two.
+      // tokens_v2 (per-model breakdown) supersedes the flat tokens card whenever
+      // it's present, so every session shows a single Tokens card rather than
+      // two. As of 7eje this applies to all providers (Claude/Codex + OpenCode),
+      // not just OpenCode; the flat card remains the fallback for sessions whose
+      // v2 tree hasn't been computed yet.
       if (cardDef.key === 'tokens' && cards.tokens_v2 != null) {
         return null;
       }
