@@ -21,9 +21,19 @@ const defaultDateRange = {
   label: 'Last 7 Days',
 };
 
+const sampleModels = ['opus-4-5', 'opus-4-5 · fast', 'gpt-5'];
+
 function Interactive({ initial }: { initial: TrendsFiltersValue }) {
   const [value, setValue] = useState<TrendsFiltersValue>(initial);
-  return <TrendsFilters repos={sampleRepos} owners={[]} value={value} onChange={setValue} />;
+  return (
+    <TrendsFilters
+      repos={sampleRepos}
+      owners={[]}
+      models={sampleModels}
+      value={value}
+      onChange={setValue}
+    />
+  );
 }
 
 // CF-424: empty providers state = "All Providers" label, both checkboxes unchecked.
@@ -36,6 +46,7 @@ export const Default: Story = {
         includeNoRepo: true,
         providers: [],
         owners: [],
+        models: [],
       }}
     />
   ),
@@ -52,6 +63,7 @@ export const OneProviderSelected: Story = {
         includeNoRepo: true,
         providers: ['claude-code'],
         owners: [],
+        models: [],
       }}
     />
   ),
@@ -68,6 +80,7 @@ export const BothProvidersSelected: Story = {
         includeNoRepo: true,
         providers: ['claude-code', 'codex'],
         owners: [],
+        models: [],
       }}
     />
   ),
@@ -86,6 +99,7 @@ export const RepoSubsetSelected: Story = {
         includeNoRepo: true,
         providers: [],
         owners: [],
+        models: [],
       }}
     />
   ),

@@ -433,7 +433,7 @@ Uses canonical access model (CF-132). Validates the file exists in the session's
 
 #### Get Trends
 ```
-GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>&provider=<providers>&owner=<emails>&top_n=<n>
+GET /api/v1/trends?start_ts=<epoch>&end_ts=<epoch>&tz_offset=<minutes>&repos=<repos>&include_no_repo=<bool>&provider=<providers>&owner=<emails>&model=<models>&top_n=<n>
 ```
 
 Returns aggregated analytics across sessions **visible to the authenticated user**. Visibility follows the same model as `GET /api/v1/sessions` — owned ∪ private-share ∪ system-share, or all sessions when `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` is on.
@@ -448,11 +448,13 @@ Returns aggregated analytics across sessions **visible to the authenticated user
 | include_no_repo | boolean | No | true | Include sessions without a git repo |
 | provider | string | No | all | Comma-separated canonical AI providers (`claude-code`, `codex`). Case-insensitive; the legacy DB form `Claude Code` is rejected on the wire. Returns `400` for unknown values. Omitted/empty aggregates across all providers. |
 | owner | string | No | all | Comma-separated owner emails to narrow the visible set (CF-495). Case-insensitive. **Privacy invariant**: narrows within the visible set; cannot broaden access. `?owner=ghost@x.com` for an owner the caller can't see returns zero rows (no 403, no existence leak). Omitted/empty aggregates across all visible owners. Max 50 values. |
+| model | string | No | all | Comma-separated model-family keys to narrow the visible set (2hh1), e.g. `opus-4-5`, `opus-4-5 · fast`, `gpt-5` — sourced from `filter_options.models`. **Session-level**: a session matches if any of its `tokens_v2` models normalizes to a selected family (OpenCode's raw vendor keys are normalized before comparison); per-card costs are NOT re-scoped to the selected model's portion. AND-combined with `provider`. Case-insensitive, max 50 values. Omitted/empty = all models. |
 | top_n | integer | No | 10 | Limit for the `top_sessions` (Costliest Sessions) card. Allowlist: `10`, `25`, `50`. Any other value — including unparseable or omitted — is normalized to `10`. Does not affect any other card. |
 
 **Constraints:**
 - Maximum date range: 90 days
 - Maximum owner values: 50 (per `validation.MaxFilterCount`)
+- Maximum model values: 50 (per `validation.MaxFilterCount`)
 
 **Response:**
 ```json
@@ -550,11 +552,30 @@ Returns aggregated analytics across sessions **visible to the authenticated user
           "git_repo": "org/auth-service"
         }
       ]
+    },
+    "cost_by_model": {
+      "rows": [
+        {
+          "model": "opus-4-5",
+          "provider": "claude-code",
+          "cost_usd": "6.40",
+          "pct_of_total": 62.4,
+          "input": 900000,
+          "output": 320000,
+          "cache_read": 250000,
+          "cache_write": 40000,
+          "session_count": 28
+        }
+      ],
+      "covered_session_count": 38,
+      "total_session_count": 42,
+      "timed_out": false
     }
   },
   "filter_options": {
     "owners": ["alice@example.com", "bob@example.com"],
-    "repos": ["org/frontend-app", "org/auth-service"]
+    "repos": ["org/frontend-app", "org/auth-service"],
+    "models": ["gpt-5", "opus-4-5", "opus-4-5 · fast"]
   }
 }
 ```
@@ -594,8 +615,14 @@ Returns aggregated analytics across sessions **visible to the authenticated user
 | `cards.top_sessions.sessions[].title` | string | Best available session title (custom > suggested > summary > first message > fallback) |
 | `cards.top_sessions.sessions[].provider` | string | Canonical provider value (`claude-code` or `codex`). Legacy `Claude Code` is normalized server-side. |
 | `cards.top_sessions.sessions[].estimated_cost_usd` | string | Session cost (decimal as string) |
+| `cards.cost_by_model` | object\|null | Per-(provider, model-family) cost/token breakdown over the filtered, visible sessions that carry `tokens_v2` data (2hh1). `null` only on backends predating this card. **Scope caveat**: rows sum the v2 per-model cost (covers only sessions WITH per-model data — partial during backfill); the `cards.tokens` grand-total sums the flat card (full coverage). They are deliberately different scopes and do NOT reconcile — there is no reconciliation line; `pct_of_total` is each row's share of the v2 model-attributed total. |
+| `cards.cost_by_model.rows[]` | array | One row per `(provider, model)`, sorted by cost descending (stable secondary sort by provider then model). `model` is the normalized family key: `""` → render as "Unknown"; a `"<family> · fast"` key is kept as its own row. `provider` is canonical (`claude-code`/`codex`/`opencode`). Fields: `cost_usd` (decimal string), `pct_of_total` (0–100, share of the v2 model-attributed total incl. the Unknown row), `input`, `output`, `cache_read`, `cache_write` (token counts), `session_count` (distinct sessions contributing). |
+| `cards.cost_by_model.covered_session_count` | int | Sessions with per-model v2 data contributing to the rows. |
+| `cards.cost_by_model.total_session_count` | int | All filtered sessions in range (the caption reads "Covers N of M sessions with per-model data"). |
+| `cards.cost_by_model.timed_out` | bool | `true` when the aggregation exceeded its dedicated budget (4s, under the 5s request budget) and degraded to an empty card — the rest of the response still succeeds, and the server logs a PII-safe WARN with the request shape for upstream debugging. |
 | `filter_options.owners` | string[] | Lowercased owner emails from the caller's visible-session set, alphabetical. **Static across active filters** — mirrors `SessionFilterOptions` shape on `/api/v1/sessions`. Drives the owner dropdown on TrendsPage without a side-call. CF-495. |
 | `filter_options.repos` | string[] | Repo names (`owner/name`) from the caller's visible-session set, alphabetical. Fork→upstream collapsed via `db.RepoRootExpr`, resolved live per session from its own `git_info` (CF-510). Static across active filters. CF-495. |
+| `filter_options.models` | string[] | Distinct normalized model-family keys (family + `"· fast"` variants) across the caller's visible sessions, alphabetical, excluding the empty Unknown key. Static across active filters; sources the model dropdown. May be empty/sparse until the `tokens_v2` backfill (`POST /cards/invalidate` + precompute) completes. 2hh1. |
 | `cards.top_sessions.sessions[].duration_ms` | int\|null | Session duration in milliseconds |
 | `cards.top_sessions.sessions[].git_repo` | string\|null | Extracted repo name (e.g., "org/repo") |
 

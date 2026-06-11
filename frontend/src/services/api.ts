@@ -574,6 +574,10 @@ export interface TrendsParams {
   // h7xe: Costliest Sessions limit, serialized as `?top_n=`. Omitted = backend
   // default (10). The backend normalizes anything off the {10,25,50} allowlist.
   topN?: number;
+  // 2hh1: model-family keys to narrow within the visible set (session-level,
+  // AND-combined with providers). Empty / omitted = all models. Serialized as
+  // comma-separated `?model=a,b`.
+  models?: string[];
 }
 
 // Convert a local YYYY-MM-DD date string to epoch seconds at local midnight
@@ -621,6 +625,10 @@ export const trendsAPI = {
     // h7xe: Costliest Sessions limit. Omitted = backend default.
     if (params.topN !== undefined) {
       searchParams.set('top_n', String(params.topN));
+    }
+    // 2hh1: singular ?model= matches the owner/provider wire format.
+    if (params.models && params.models.length > 0) {
+      searchParams.set('model', params.models.join(','));
     }
 
     const queryString = searchParams.toString();

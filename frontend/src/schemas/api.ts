@@ -510,6 +510,31 @@ const TrendsTopSessionsCardSchema = z.object({
   sessions: z.array(TopSessionItemSchema),
 });
 
+// 2hh1: per-(provider, model-family) cost/token breakdown. `model` is the
+// normalized family key ('' → rendered "Unknown"; '<family> · fast' kept as its
+// own row); `pct_of_total` is the row's share of the v2 model-attributed total
+// (0–100), NOT a share of the grand-total headline (different scopes — see card).
+const TrendsCostByModelRowSchema = z.object({
+  model: z.string(),
+  provider: z.string(),
+  cost_usd: z.string(),
+  pct_of_total: z.number(),
+  input: z.number(),
+  output: z.number(),
+  cache_read: z.number(),
+  cache_write: z.number(),
+  session_count: z.number(),
+});
+
+const TrendsCostByModelCardSchema = z.object({
+  rows: z.array(TrendsCostByModelRowSchema),
+  covered_session_count: z.number(),
+  total_session_count: z.number(),
+  // True when the aggregation exceeded its budget and degraded to empty; the
+  // card renders a "narrow your range" notice instead of an empty state.
+  timed_out: z.boolean(),
+});
+
 const TrendsCardsSchema = z.object({
   overview: TrendsOverviewCardSchema.nullable(),
   tokens: TrendsTokensCardSchema.nullable(),
@@ -518,6 +543,9 @@ const TrendsCardsSchema = z.object({
   utilization: TrendsUtilizationCardSchema.nullable(),
   agents_and_skills: TrendsAgentsAndSkillsCardSchema.nullable(),
   top_sessions: TrendsTopSessionsCardSchema.nullable(),
+  // `.default(null)` keeps older backends (pre-2hh1, no cost_by_model field)
+  // parseable — the card renders nothing when absent.
+  cost_by_model: TrendsCostByModelCardSchema.nullable().default(null),
 });
 
 // CF-495: TrendsFilterOptions surfaces the dropdown source for owners + repos.
@@ -527,6 +555,10 @@ const TrendsCardsSchema = z.object({
 export const TrendsFilterOptionsSchema = z.object({
   owners: z.array(z.string()),
   repos: z.array(z.string()),
+  // 2hh1: distinct normalized model-family keys (family + '· fast' variants)
+  // across visible sessions, alphabetical, excluding the empty Unknown key.
+  // `.default([])` keeps older backends (no models field) parseable.
+  models: z.array(z.string()).default([]),
 });
 
 export const TrendsResponseSchema = z.object({
@@ -590,6 +622,8 @@ export type TrendsToolsCard = z.infer<typeof TrendsToolsCardSchema>;
 export type TrendsUtilizationCard = z.infer<typeof TrendsUtilizationCardSchema>;
 export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCardSchema>;
 export type TrendsTopSessionsCard = z.infer<typeof TrendsTopSessionsCardSchema>;
+export type TrendsCostByModelCard = z.infer<typeof TrendsCostByModelCardSchema>;
+export type TrendsCostByModelRow = z.infer<typeof TrendsCostByModelRowSchema>;
 export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
 export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 

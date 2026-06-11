@@ -202,6 +202,33 @@ export function formatModelDisplayName(model: string): string {
   return model;
 }
 
+// Suffix the backend appends to a fast-mode model key in the tokens_v2 tree
+// (mirrors fastModelKeySuffix in the analytics package). Split off before
+// formatting the base family, then re-appended.
+const FAST_MODEL_SUFFIX = ' · fast';
+
+/**
+ * User-facing label for a tokens_v2 model KEY (as opposed to a raw model id).
+ * Wraps {@link formatModelDisplayName} with the two tree conventions: the empty
+ * key renders as "Unknown", and a "<family> · fast" key formats its base family
+ * and keeps the suffix. Shared by the per-session Tokens (v2) card and the
+ * Trends Cost-by-model card (2hh1).
+ *
+ * Examples:
+ *   ""                 -> Unknown
+ *   opus-4-5           -> Opus 4.5
+ *   opus-4-5 · fast    -> Opus 4.5 · fast
+ *   gpt-5              -> GPT-5
+ */
+export function formatModelKey(key: string): string {
+  if (key === '') return 'Unknown';
+  if (key.endsWith(FAST_MODEL_SUFFIX)) {
+    const base = key.slice(0, -FAST_MODEL_SUFFIX.length);
+    return (base === '' ? 'Unknown' : formatModelDisplayName(base)) + FAST_MODEL_SUFFIX;
+  }
+  return formatModelDisplayName(key);
+}
+
 /**
  * Extract repo name from URL
  * e.g., "https://github.com/user/repo.git" -> "user/repo"

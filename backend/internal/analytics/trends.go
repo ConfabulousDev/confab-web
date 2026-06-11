@@ -46,6 +46,8 @@ func resolveProviderFilter(providers []string) []string {
 //	$6 TZOffset (int minutes; JS getTimezoneOffset convention)
 //	$7 Providers (pq.Array text[])
 //	$8 Owners (pq.Array text[], lowercased) — only present when len(req.Owners) > 0
+//	$N modelSessionIDs (pq.Array uuid[]) — only present when the ?model= filter
+//	   is active; N is the next free index after the optional owner arg.
 //
 // CF-495: every aggregation routes through this prelude so the visibility
 // predicate and owner narrowing live in one place. providers_present
@@ -56,7 +58,12 @@ type trendsQuery struct {
 	args   []interface{}
 }
 
-func buildTrendsQuery(userID int64, req TrendsRequest) trendsQuery {
+// buildTrendsQuery builds the shared CTE prelude. When modelFilterActive is
+// true the result is restricted to modelSessionIDs (the ?model= match set,
+// precomputed in Go because OpenCode keys need family normalization at read
+// time — see sessionsMatchingModels). An active-but-empty set yields zero rows
+// (correct: a model filter matching nothing must not fall back to "no filter").
+func buildTrendsQuery(userID int64, req TrendsRequest, modelSessionIDs []string, modelFilterActive bool) trendsQuery {
 	args := []interface{}{
 		userID,              // $1
 		req.StartTS,         // $2
@@ -70,6 +77,11 @@ func buildTrendsQuery(userID int64, req TrendsRequest) trendsQuery {
 	if len(req.Owners) > 0 {
 		args = append(args, pq.Array(lowercaseAll(req.Owners)))
 		ownerClause = "\n\t\t\t\tAND LOWER(vs.owner_email) = ANY($8::text[])"
+	}
+	modelClause := ""
+	if modelFilterActive {
+		args = append(args, pq.Array(modelSessionIDs))
+		modelClause = fmt.Sprintf("\n\t\t\t\tAND vs.id = ANY($%d::uuid[])", len(args))
 	}
 
 	cte := `WITH ` + db.VisibleSessionsCTE(req.ShareAllSessions) + `,
@@ -88,7 +100,7 @@ func buildTrendsQuery(userID int64, req TrendsRequest) trendsQuery {
 					OR (COALESCE(cardinality($4::text[]), 0) = 0 AND COALESCE(s.git_info->>'repo_url', '') <> '')
 					OR ($5 = true AND COALESCE(s.git_info->>'repo_url', '') = '')
 				)
-				AND s.session_type = ANY($7::text[])` + ownerClause + `
+				AND s.session_type = ANY($7::text[])` + ownerClause + modelClause + `
 		)`
 
 	return trendsQuery{cteSQL: cte, args: args}
@@ -133,18 +145,31 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		IncludeNoRepo:    req.IncludeNoRepo,
 		ProvidersPresent: []string{},
 		Cards:            TrendsCards{},
-		FilterOptions:    TrendsFilterOptions{Owners: []string{}, Repos: []string{}},
+		FilterOptions:    TrendsFilterOptions{Owners: []string{}, Repos: []string{}, Models: []string{}},
 	}
 
 	if req.Repos == nil {
 		response.ReposIncluded = []string{}
 	}
 
-	tq := buildTrendsQuery(userID, req)
+	// ?model= is session-level: resolve the matching session-id set in Go (the
+	// family match needs normalizeV2ModelKey for OpenCode's raw keys) and thread
+	// it through buildTrendsQuery so every card filters uniformly (2hh1).
+	modelFilterActive := len(req.Models) > 0
+	var modelSessionIDs []string
+	if modelFilterActive {
+		var err error
+		modelSessionIDs, err = s.sessionsMatchingModels(ctx, userID, req)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	tq := buildTrendsQuery(userID, req, modelSessionIDs, modelFilterActive)
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	errChan := make(chan error, 7)
+	errChan := make(chan error, 8)
 
 	runAgg := func(_ string, fn func() error) {
 		wg.Add(1)
@@ -210,6 +235,17 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		}
 		mu.Lock()
 		response.Cards.TopSessions = topSessions
+		mu.Unlock()
+		return nil
+	})
+
+	runAgg("cost_by_model", func() error {
+		costByModel, err := s.aggregateCostByModel(ctx, tq, userID, req)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		response.Cards.CostByModel = costByModel
 		mu.Unlock()
 		return nil
 	})
@@ -848,9 +884,18 @@ func (s *Store) aggregateFilterOptions(ctx context.Context, userID int64, shareA
 	if err := s.db.QueryRowContext(ctx, query, userID).Scan(pq.Array(&owners), pq.Array(&repos)); err != nil {
 		return TrendsFilterOptions{}, fmt.Errorf("aggregate filter options: %w", err)
 	}
+
+	// Models need Go-side family normalization (OpenCode raw keys), so they
+	// can't ride the SQL array_agg above — a separate scan + normalize.
+	modelsOpts, err := s.modelFilterOptions(ctx, userID, shareAllSessions)
+	if err != nil {
+		return TrendsFilterOptions{}, err
+	}
+
 	return TrendsFilterOptions{
 		Owners: nonNilSlice(owners),
 		Repos:  nonNilSlice(repos),
+		Models: nonNilSlice(modelsOpts),
 	}, nil
 }
 

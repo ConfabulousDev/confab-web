@@ -14,6 +14,7 @@ import {
   TrendsUtilizationCard,
   TrendsAgentsAndSkillsCard,
   TrendsTopSessionsCard,
+  TrendsCostByModelCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
 import CardGrid from '@/components/CardGrid';
@@ -35,6 +36,9 @@ function TrendsPage() {
     // CF-495: owner narrows within visible set. Empty = "all owners"; same
     // semantics as providers. URL uses singular `owner` key matching Sessions.
     owners: { type: 'string[]', default: [], paramName: 'owner' },
+    // 2hh1: model-family filter (?model=). Empty = "all models"; same semantics
+    // as providers/owners. Session-level, AND-combined with the provider filter.
+    models: { type: 'string[]', default: [], paramName: 'model' },
     // h7xe: Costliest Sessions limit (?topN=). Lives in page state, not the
     // filter-bar value — its control is on the card — but rides the same URL
     // hook so it survives reload/share. Stored as a string; parsed to a number
@@ -57,6 +61,7 @@ function TrendsPage() {
       includeNoRepo: f.includeNoRepo,
       providers: f.providers,
       owners: f.owners,
+      models: f.models,
       topN: Number(f.topN),
     }),
     [],
@@ -68,6 +73,8 @@ function TrendsPage() {
 
   const availableRepos = useMemo(() => data?.filter_options.repos ?? [], [data]);
   const availableOwners = useMemo(() => data?.filter_options.owners ?? [], [data]);
+  const availableModels = useMemo(() => data?.filter_options.models ?? [], [data]);
+  const modelFilterActive = filters.models.length > 0;
 
   // Commit a new page state: persist to the URL and refetch in one step. Both
   // the filter bar and the card's topN selector route through here.
@@ -103,6 +110,7 @@ function TrendsPage() {
               repos={availableRepos}
               owners={availableOwners}
               selfEmail={user?.email}
+              models={availableModels}
               value={filters}
               onChange={handleFilterChange}
             />
@@ -153,12 +161,14 @@ function TrendsPage() {
                     : null
                 }
               />
-              <TrendsTokensCard data={data.cards.tokens} />
+              <TrendsTokensCard data={data.cards.tokens} modelFilterActive={modelFilterActive} />
+              <TrendsCostByModelCard data={data.cards.cost_by_model} />
               <TrendsTopSessionsCard
                 data={data.cards.top_sessions}
                 topN={Number(filters.topN)}
                 onTopNChange={handleTopNChange}
                 loading={loading}
+                modelFilterActive={modelFilterActive}
               />
               <TrendsActivityCard data={data.cards.activity} providersPresent={data.providers_present} />
               <TrendsToolsCard data={data.cards.tools} />

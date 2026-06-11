@@ -11,11 +11,13 @@ function baseProps(overrides: Partial<React.ComponentProps<typeof TrendsFilters>
     includeNoRepo: true,
     providers: [],
     owners: [],
+    models: [],
   };
   const noOwners: string[] = [];
   return {
     repos: ['confab-web', 'other-repo'],
     owners: noOwners,
+    models: [],
     value,
     onChange: vi.fn(),
     ...overrides,
@@ -41,7 +43,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
     render(
       <TrendsFilters
         {...baseProps({
-          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [] },
+          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [], models: [] },
         })}
       />
     );
@@ -58,6 +60,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
             includeNoRepo: true,
             providers: ['claude-code', 'codex'],
             owners: [],
+            models: [],
           },
         })}
       />
@@ -77,7 +80,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
     render(
       <TrendsFilters
         {...baseProps({
-          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [] },
+          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [], models: [] },
         })}
       />
     );
@@ -105,7 +108,7 @@ describe('TrendsFilters Provider filter (CF-424)', () => {
       <TrendsFilters
         {...baseProps({
           onChange,
-          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [] },
+          value: { dateRange: defaultDateRange, repos: [], includeNoRepo: true, providers: ['claude-code'], owners: [], models: [] },
         })}
       />
     );
@@ -150,6 +153,7 @@ describe('TrendsFilters Owner filter (CF-495)', () => {
       <TrendsFilters
         {...baseProps({
           owners: ownersIn,
+          models: [],
           selfEmail,
           value: {
             dateRange: defaultDateRange,
@@ -157,6 +161,7 @@ describe('TrendsFilters Owner filter (CF-495)', () => {
             includeNoRepo: true,
             providers: [],
             owners: ['alice@example.com'],
+            models: [],
           },
         })}
       />
@@ -169,6 +174,7 @@ describe('TrendsFilters Owner filter (CF-495)', () => {
       <TrendsFilters
         {...baseProps({
           owners: ownersIn,
+          models: [],
           selfEmail,
           value: {
             dateRange: defaultDateRange,
@@ -176,6 +182,7 @@ describe('TrendsFilters Owner filter (CF-495)', () => {
             includeNoRepo: true,
             providers: [],
             owners: ['alice@example.com', 'bob@example.com'],
+            models: [],
           },
         })}
       />
@@ -218,6 +225,7 @@ describe('TrendsFilters Owner filter (CF-495)', () => {
       <TrendsFilters
         {...baseProps({
           owners: ownersIn,
+          models: [],
           selfEmail,
           onChange,
           value: {
@@ -226,6 +234,7 @@ describe('TrendsFilters Owner filter (CF-495)', () => {
             includeNoRepo: true,
             providers: [],
             owners: ['alice@example.com'],
+            models: [],
           },
         })}
       />
@@ -259,7 +268,7 @@ describe('TrendsFilters Repo filter label & Clear (CF-233)', () => {
       <TrendsFilters
         {...baseProps({
           repos,
-          value: { dateRange: defaultDateRange, repos, includeNoRepo: true, providers: [], owners: [] },
+          value: { dateRange: defaultDateRange, repos, includeNoRepo: true, providers: [], owners: [], models: [] },
         })}
       />
     );
@@ -277,6 +286,7 @@ describe('TrendsFilters Repo filter label & Clear (CF-233)', () => {
             includeNoRepo: true,
             providers: [],
             owners: [],
+            models: [],
           },
         })}
       />
@@ -307,6 +317,7 @@ describe('TrendsFilters Repo filter label & Clear (CF-233)', () => {
             includeNoRepo: true,
             providers: [],
             owners: [],
+            models: [],
           },
         })}
       />
@@ -328,6 +339,7 @@ describe('TrendsFilters Repo filter label & Clear (CF-233)', () => {
             includeNoRepo: false,
             providers: [],
             owners: [],
+            models: [],
           },
         })}
       />

@@ -41,6 +41,7 @@ function TrendsPagePresentational({
     includeNoRepo: true,
     providers: [],
     owners: [],
+    models: [],
   },
 }: TrendsPagePresentationalProps) {
   const showEmptyState = !loading && data && data.session_count === 0;
@@ -54,6 +55,7 @@ function TrendsPagePresentational({
             <TrendsFilters
               repos={repos}
               owners={data?.filter_options.owners ?? []}
+              models={data?.filter_options.models ?? []}
               value={filters}
               onChange={() => {}}
             />
@@ -144,6 +146,7 @@ const defaultMockData: TrendsResponse = {
   filter_options: {
     owners: ['alice@example.com', 'bob@example.com'],
     repos: ['org/repo-web', 'org/repo-api'],
+    models: ['opus-4-5', 'opus-4-5 · fast', 'gpt-5'],
   },
   cards: {
     overview: {
@@ -215,6 +218,16 @@ const defaultMockData: TrendsResponse = {
         { id: '4', title: 'Add session analytics dashboard', provider: rotateProvider(3), estimated_cost_usd: '22.50', duration_ms: 4800000, git_repo: 'org/repo-web' },
         { id: '5', title: 'Write integration tests', provider: rotateProvider(4), estimated_cost_usd: '18.75', duration_ms: 2700000 },
       ],
+    },
+    cost_by_model: {
+      rows: [
+        { provider: 'claude-code', model: 'opus-4-5', cost_usd: '6.40', pct_of_total: 62.4, input: 900000, output: 320000, cache_read: 250000, cache_write: 40000, session_count: 28 },
+        { provider: 'claude-code', model: 'opus-4-5 · fast', cost_usd: '2.85', pct_of_total: 27.8, input: 250000, output: 110000, cache_read: 80000, cache_write: 8000, session_count: 11 },
+        { provider: 'claude-code', model: '', cost_usd: '1.00', pct_of_total: 9.8, input: 100000, output: 20000, cache_read: 20000, cache_write: 2000, session_count: 3 },
+      ],
+      covered_session_count: 38,
+      total_session_count: 42,
+      timed_out: false,
     },
   },
 };
@@ -312,6 +325,7 @@ export const HighUsage: Story = {
         },
         agents_and_skills: null,
         top_sessions: null,
+        cost_by_model: null,
       },
     },
     repos: ['org/repo-web', 'org/repo-api', 'org/repo-cli'],
@@ -321,6 +335,7 @@ export const HighUsage: Story = {
       includeNoRepo: true,
     providers: [],
     owners: [],
+    models: [],
     },
   },
 };
@@ -384,6 +399,7 @@ export const SingleSession: Story = {
         },
         agents_and_skills: null,
         top_sessions: null,
+        cost_by_model: null,
       },
     },
     repos: ['org/repo-web'],
@@ -393,6 +409,7 @@ export const SingleSession: Story = {
       includeNoRepo: false,
     providers: [],
     owners: [],
+    models: [],
     },
   },
 };
@@ -440,6 +457,7 @@ export const EmptyState: Story = {
         utilization: null,
         agents_and_skills: null,
         top_sessions: null,
+        cost_by_model: null,
       },
     },
     repos: [],
@@ -490,6 +508,7 @@ export const FilteredByRepo: Story = {
       includeNoRepo: false,
     providers: [],
     owners: [],
+    models: [],
     },
   },
 };

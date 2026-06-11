@@ -34,7 +34,13 @@ function providerColor(providerId: string): string {
 
 interface TrendsTokensCardProps {
   data: TrendsTokensCardData | null;
+  // 2hh1: when a model filter is active, flag that it's session-level — these
+  // totals still reflect full-session cost, not just the selected model.
+  modelFilterActive?: boolean;
 }
+
+const MODEL_FILTER_CAVEAT =
+  'A model filter is active. It narrows to sessions that used the selected model(s); these totals still reflect full-session cost, not just that model.';
 
 function formatChartDate(dateStr: string): string {
   const date = new Date(dateStr + 'T00:00:00');
@@ -201,7 +207,7 @@ function TrendsTokensPerProviderList({ entries }: TrendsTokensPerProviderListPro
   );
 }
 
-export function TrendsTokensCard({ data }: TrendsTokensCardProps) {
+export function TrendsTokensCard({ data, modelFilterActive = false }: TrendsTokensCardProps) {
   const perProviderEntries = useMemo(
     () =>
       data
@@ -245,7 +251,11 @@ export function TrendsTokensCard({ data }: TrendsTokensCardProps) {
   const tooltipShowBreakdown = stackProviderIds.length > 1;
 
   return (
-    <TrendsCard title="Tokens & Cost" icon={TokenIcon}>
+    <TrendsCard
+      title="Tokens & Cost"
+      icon={TokenIcon}
+      caveat={modelFilterActive ? MODEL_FILTER_CAVEAT : undefined}
+    >
       {/* h7xe: the grand-total headline renders identically in both modes, so
           it lives above the layout branch rather than inside each one. */}
       <TotalCostRow usd={data.total_cost_usd} />
