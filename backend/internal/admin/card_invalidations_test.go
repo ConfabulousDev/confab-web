@@ -3,12 +3,14 @@ package admin_test
 import (
 	"net/http"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/ConfabulousDev/confab-web/internal/admin"
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -449,4 +451,65 @@ func TestListCardInvalidations_FilterByCorrelationID(t *testing.T) {
 			t.Errorf("row reason = %q, want second", row.Reason)
 		}
 	}
+}
+
+// TestGetCardTypes_ReturnsAllCardTableNames is the vd31 contract: the admin
+// endpoint serves the backend's AllCardTableNames verbatim so the frontend
+// checkbox list can't drift from the source of truth. Pins that the two
+// previously-dropped entries (session_card_tokens_v2, session_card_workflows)
+// are present.
+func TestGetCardTypes_ReturnsAllCardTableNames(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+	testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+	ts := setupTestServer(t, env)
+
+	t.Run("non-admin gets 403", func(t *testing.T) {
+		client := adminClient(t, env, ts, user.ID)
+		resp, err := client.Get("/api/v1/admin/cards/types")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("admin gets AllCardTableNames", func(t *testing.T) {
+		client := adminClient(t, env, ts, adminUser.ID)
+		resp, err := client.Get("/api/v1/admin/cards/types")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var body struct {
+			CardTypes []string `json:"card_types"`
+		}
+		testutil.ParseJSON(t, resp, &body)
+
+		if !reflect.DeepEqual(body.CardTypes, analytics.AllCardTableNames) {
+			t.Errorf("card_types = %v, want %v", body.CardTypes, analytics.AllCardTableNames)
+		}
+		for _, want := range []string{"session_card_tokens_v2", "session_card_workflows"} {
+			found := false
+			for _, ct := range body.CardTypes {
+				if ct == want {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("served list missing %q (the drift this fixes): %v", want, body.CardTypes)
+			}
+		}
+	})
 }

@@ -207,3 +207,9 @@
   gap: var(--spacing-sm);
   justify-content: flex-end;
 }
+
+.cardTypesEmpty {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}

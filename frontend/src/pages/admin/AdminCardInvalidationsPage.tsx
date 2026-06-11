@@ -6,9 +6,7 @@ import Button from '@/components/Button';
 import Alert from '@/components/Alert';
 import Modal from '@/components/Modal';
 import {
-  CARD_TABLE_NAMES,
   InvalidateCardsResponseSchema,
-  type CardTableName,
   type InvalidateCardsResponse,
   type CardInvalidationsListResponse,
 } from '@/schemas/api';
@@ -34,15 +32,17 @@ function partialFailureFrom(err: unknown): InvalidateCardsResponse | null {
 }
 
 export interface AdminCardInvalidationsPageContentProps {
+  /** Card table names served by the backend (GET /admin/cards/types). */
+  cardTypes: string[];
   startDate: string;
   endDate: string;
-  selectedCards: Set<CardTableName>;
+  selectedCards: Set<string>;
   reason: string;
   preview: InvalidateCardsResponse | null;
 
   onStartDateChange: (v: string) => void;
   onEndDateChange: (v: string) => void;
-  onToggleCard: (card: CardTableName) => void;
+  onToggleCard: (card: string) => void;
   onReasonChange: (v: string) => void;
 
   onPreview: () => void;
@@ -62,6 +62,7 @@ export interface AdminCardInvalidationsPageContentProps {
 }
 
 export function AdminCardInvalidationsPageContent({
+  cardTypes,
   startDate,
   endDate,
   selectedCards,
@@ -127,16 +128,22 @@ export function AdminCardInvalidationsPageContent({
           <legend className={styles.legend}>
             Card Types <span className={styles.required}>*</span>
           </legend>
-          {CARD_TABLE_NAMES.map((name) => (
-            <label key={name} className={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={selectedCards.has(name)}
-                onChange={() => onToggleCard(name)}
-              />
-              <code>{name}</code>
-            </label>
-          ))}
+          {cardTypes.length === 0 ? (
+            // Empty while the GET /admin/cards/types fetch is loading or failed;
+            // with no checkboxes nothing is selectable, so the form stays disabled.
+            <p className={styles.cardTypesEmpty}>Card types unavailable.</p>
+          ) : (
+            cardTypes.map((name) => (
+              <label key={name} className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={selectedCards.has(name)}
+                  onChange={() => onToggleCard(name)}
+                />
+                <code>{name}</code>
+              </label>
+            ))
+          )}
         </fieldset>
 
         <label className={styles.label}>
@@ -253,7 +260,7 @@ function AdminCardInvalidationsPage() {
   const queryClient = useQueryClient();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [selectedCards, setSelectedCards] = useState<Set<CardTableName>>(new Set());
+  const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState<InvalidateCardsResponse | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -264,6 +271,15 @@ function AdminCardInvalidationsPage() {
     queryFn: () => adminAPI.listCardInvalidations(),
   });
 
+  // vd31: the card-type checkboxes are sourced from the backend
+  // (analytics.AllCardTableNames) so they can't drift from a hardcoded list.
+  const { data: cardTypesData } = useQuery({
+    queryKey: ['admin', 'card-types'],
+    queryFn: () => adminAPI.getCardTypes(),
+  });
+  // On loading/error this is empty → no checkboxes render → submit stays disabled.
+  const cardTypes = cardTypesData?.card_types ?? [];
+
   // Any edit to the form drops the stale preview so the user can't execute
   // against counts that no longer reflect the current inputs.
   function setAndInvalidatePreview<T>(setter: (v: T) => void) {
@@ -273,7 +289,7 @@ function AdminCardInvalidationsPage() {
     };
   }
 
-  function toggleCard(name: CardTableName) {
+  function toggleCard(name: string) {
     setSelectedCards((prev) => {
       const next = new Set(prev);
       if (next.has(name)) {
@@ -344,6 +360,7 @@ function AdminCardInvalidationsPage() {
 
   return (
     <AdminCardInvalidationsPageContent
+      cardTypes={cardTypes}
       startDate={startDate}
       endDate={endDate}
       selectedCards={selectedCards}

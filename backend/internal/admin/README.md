@@ -11,7 +11,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, delete, system shares, and smart recap prompt settings |
 | `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
-| `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`) |
+| `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`, `/admin/cards/types`) |
 | `card_invalidations_test.go` | Integration tests for the card invalidation handlers |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
 | `middleware.go` | Chi middleware that gates routes to super admins only |
@@ -51,6 +51,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleRegenerateAllSmartRecaps` | `POST /api/v1/admin/settings/smart-recap-prompt/regenerate-all` | Triggers bulk regeneration via timestamp in `admin_settings` |
 | `HandleInvalidateCards` | `POST /api/v1/admin/cards/invalidate` | Dry-run or execute DELETE of `session_card_*` rows for sessions in a date window. Writes audit rows so the smart-recap quota is bypassed on recompute. Defaults to `dry_run: true` |
 | `HandleListCardInvalidations` | `GET /api/v1/admin/cards/invalidations` | Returns up to 500 recent audit rows; `?correlation_id=` filters to one run |
+| `HandleGetCardTypes` | `GET /api/v1/admin/cards/types` | Serves `analytics.AllCardTableNames` — the source of truth for the invalidation UI's card-type checkboxes, so the frontend list can't drift (vd31). The same list backs the inbound `card_types` validation |
 
 ## How to Extend
 

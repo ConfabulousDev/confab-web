@@ -30,6 +30,7 @@ import {
   RegenerateAllResponseSchema,
   InvalidateCardsResponseSchema,
   CardInvalidationsListResponseSchema,
+  CardTypesResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -56,6 +57,7 @@ import {
   type RegenerateCountResponse,
   type RegenerateAllResponse,
   type InvalidateCardsRequest,
+  type CardTypesResponse,
   type InvalidateCardsResponse,
   type CardInvalidationsListResponse,
 } from '@/schemas/api';
@@ -733,6 +735,10 @@ export const adminAPI = {
 
   regenerateAllSmartRecaps: (): Promise<RegenerateAllResponse> =>
     api.postValidated('/admin/settings/smart-recap-prompt/regenerate-all', RegenerateAllResponseSchema),
+
+  // vd31: canonical card table names (source of truth for the invalidation UI).
+  getCardTypes: (): Promise<CardTypesResponse> =>
+    api.getValidated('/admin/cards/types', CardTypesResponseSchema),
 
   // CF-343: invalidate session_card_* rows so the worker recomputes them.
   invalidateCards: (data: InvalidateCardsRequest): Promise<InvalidateCardsResponse> =>
