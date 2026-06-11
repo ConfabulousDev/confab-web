@@ -16,12 +16,13 @@ import (
 // store + a request covering the range. Shared by the cost-by-model tests.
 //
 // Seeded per-model costs (decimal strings):
-//   claude-code:  opus-4-5 = 1.00, "opus-4-5 · fast" = 0.50
-//   codex:        gpt-5    = 2.00
-//   opencode:     anthropic/"claude-opus-4-5-20251101" = 0.30  (raw → opus-4-5)
-//                 openai/"gpt-5-2026-05-01"            = 0.20  (raw → gpt-5)
-//   claude-code:  "" (Unknown) = 0.00
-//   (one more session with no v2 row at all → not covered)
+//
+//	claude-code:  opus-4-5 = 1.00, "opus-4-5 · fast" = 0.50
+//	codex:        gpt-5    = 2.00
+//	opencode:     anthropic/"claude-opus-4-5-20251101" = 0.30  (raw → opus-4-5)
+//	              openai/"gpt-5-2026-05-01"            = 0.20  (raw → gpt-5)
+//	claude-code:  "" (Unknown) = 0.00
+//	(one more session with no v2 row at all → not covered)
 func costByModelFixture(t *testing.T) (*analytics.Store, int64, analytics.TrendsRequest) {
 	t.Helper()
 	if testing.Short() {
@@ -277,6 +278,53 @@ func TestGetTrends_CostByModel_FilterOptions(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("filter_options.models[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+// TestGetTrends_CostByModel_ExcludesSynthetic pins that the "<synthetic>" model
+// sentinel (Claude's no-real-model turns; 0 tokens, $0) is dropped from the
+// breakdown rows AND the model dropdown, while real models on the same session
+// still surface (vtrz).
+func TestGetTrends_CostByModel_ExcludesSynthetic(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	user := testutil.CreateTestUser(t, env, "trends-synthetic@test.com", "Trends Synthetic User")
+	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "cbm-synthetic", models.ProviderClaudeCode)
+	testutil.SeedTokensV2Card(t, env, sessionID, analytics.TokensV2Data{
+		TotalCostUSD: "1.00", TotalInput: 1000, TotalOutput: 500,
+		ByProvider: map[string]analytics.TokensV2Provider{
+			models.ProviderClaudeCode: {CostUSD: "1.00", Models: map[string]analytics.TokensV2Model{
+				"opus-4-5":    {Input: 1000, Output: 500, CostUSD: "1.00"},
+				"<synthetic>": {Input: 0, Output: 0, CostUSD: "0.00"},
+			}},
+		},
+	})
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+	resp, err := analytics.NewStore(env.DB.Conn()).GetTrends(context.Background(), user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends: %v", err)
+	}
+
+	if _, ok := findRow(resp.Cards.CostByModel.Rows, models.ProviderClaudeCode, "<synthetic>"); ok {
+		t.Error("the <synthetic> sentinel must not appear as a cost-by-model row")
+	}
+	if _, ok := findRow(resp.Cards.CostByModel.Rows, models.ProviderClaudeCode, "opus-4-5"); !ok {
+		t.Error("the real opus-4-5 model on the same session should still appear")
+	}
+	for _, m := range resp.FilterOptions.Models {
+		if m == "<synthetic>" {
+			t.Errorf("filter_options.models must not offer <synthetic>; got %v", resp.FilterOptions.Models)
 		}
 	}
 }

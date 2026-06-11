@@ -104,6 +104,9 @@ func (s *Store) aggregateCostByModel(ctx context.Context, tq trendsQuery, userID
 		}
 		provider := models.NormalizeProvider(sessionType)
 		model := normalizeV2ModelKey(provider, rawModel)
+		if model == syntheticModelKey {
+			continue // synthetic turns are not a real model — exclude (vtrz)
+		}
 		cost, err := decimal.NewFromString(costStr)
 		if err != nil {
 			cost = decimal.Zero
@@ -234,6 +237,9 @@ func (s *Store) sessionsMatchingModels(ctx context.Context, userID int64, req Tr
 			return nil, fmt.Errorf("sessions matching models scan: %w", err)
 		}
 		norm := normalizeV2ModelKey(models.NormalizeProvider(sessionType), rawModel)
+		if norm == syntheticModelKey {
+			continue // not a selectable model (vtrz); never match it
+		}
 		if _, ok := selected[strings.ToLower(norm)]; ok {
 			matched[sessionID] = struct{}{}
 		}
@@ -284,7 +290,7 @@ func (s *Store) modelFilterOptions(ctx context.Context, userID int64, shareAllSe
 			return nil, fmt.Errorf("model filter options scan: %w", err)
 		}
 		norm := normalizeV2ModelKey(models.NormalizeProvider(sessionType), rawModel)
-		if norm != "" {
+		if norm != "" && norm != syntheticModelKey {
 			seen[norm] = struct{}{}
 		}
 	}

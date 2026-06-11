@@ -23,6 +23,14 @@ import (
 // aggregation, the model filter, and the filter-options list all group
 // identically (and y1w5 can reuse it).
 
+// syntheticModelKey is the sentinel Claude Code emits for synthetic assistant
+// turns (no real model, no real usage). It carries 0 tokens / $0 cost, so it is
+// noise in the per-model cost surfaces and is excluded from them (vtrz). Mirrors
+// the literal the Claude analyzers already skip when picking the main model
+// (analyzer_tokens_claude.go, analyzer_session_claude.go). getModelFamily passes
+// it through unchanged, so the normalized key equals this literal.
+const syntheticModelKey = "<synthetic>"
+
 // normalizeV2ModelKey maps a raw v2 model key to its display/grouping family,
 // given the (any-form) session provider. Empty keys pass through as "" (the
 // Unknown row). Only OpenCode's raw vendor keys are run through getModelFamily;
