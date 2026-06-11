@@ -27,6 +27,13 @@
   color: var(--color-text-secondary);
 }
 
+.caveat {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  cursor: help;
+}
+
 .icon svg {
   width: 16px;
   height: 16px;

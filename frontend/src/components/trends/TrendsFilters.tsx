@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { useDropdown } from '@/hooks';
 import type { DateRange } from '@/utils/dateRange';
 import { getDatePresets } from '@/utils/dateRange';
-import { CalendarIcon, CheckIcon, UserIcon } from '@/components/icons';
+import { CalendarIcon, CheckIcon, UserIcon, TokenIcon } from '@/components/icons';
 import { PROVIDER_VALUES } from '@/utils/providers';
+import { formatModelKey } from '@/utils/formatting';
 import ProviderFilter from '@/components/filters/ProviderFilter';
 import RepoFilter from '@/components/filters/RepoFilter';
 import styles from '@/styles/filterDropdown.module.css';
@@ -18,6 +19,10 @@ export interface TrendsFiltersValue {
   // CF-495: owner emails (lowercased). Empty array = aggregate across all
   // visible owners (distinct from selecting every owner).
   owners: string[];
+  // 2hh1: model-family keys (e.g. "opus-4-5", "opus-4-5 · fast"). Empty array =
+  // all models. Session-level filter (AND-combined with providers): narrows the
+  // whole view to sessions that used a selected model.
+  models: string[];
 }
 
 interface TrendsFiltersProps {
@@ -28,11 +33,13 @@ interface TrendsFiltersProps {
   // CF-495: viewer's own email (used for self-first ordering in the owner
   // dropdown). Optional — when omitted, owners render in source order.
   selfEmail?: string;
+  // 2hh1: model dropdown source (normalized family keys from filter_options).
+  models: string[];
   value: TrendsFiltersValue;
   onChange: (value: TrendsFiltersValue) => void;
 }
 
-function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFiltersProps) {
+function TrendsFilters({ repos, owners, selfEmail, models, value, onChange }: TrendsFiltersProps) {
   const {
     isOpen: dateIsOpen,
     setIsOpen: setDateIsOpen,
@@ -43,6 +50,11 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
     isOpen: ownerIsOpen,
     toggle: toggleOwner,
     containerRef: ownerContainerRef,
+  } = useDropdown<HTMLDivElement>();
+  const {
+    isOpen: modelIsOpen,
+    toggle: toggleModel,
+    containerRef: modelContainerRef,
   } = useDropdown<HTMLDivElement>();
 
   // CF-495: owner dropdown source with viewer's own email pinned to the
@@ -72,6 +84,19 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
     if (value.owners.length === 0) return 'All Owners';
     if (value.owners.length === 1) return value.owners[0] ?? '';
     return `${value.owners.length} owners`;
+  }
+
+  const handleModelToggle = (model: string) => {
+    const next = value.models.includes(model)
+      ? value.models.filter((m) => m !== model)
+      : [...value.models, model];
+    onChange({ ...value, models: next });
+  };
+
+  function getModelButtonLabel(): string {
+    if (value.models.length === 0) return 'All Models';
+    if (value.models.length === 1) return formatModelKey(value.models[0] ?? '');
+    return `${value.models.length} models`;
   }
 
   return (
@@ -154,6 +179,42 @@ function TrendsFilters({ repos, owners, selfEmail, value, onChange }: TrendsFilt
                         onChange={() => handleOwnerToggle(owner)}
                       />
                       <span className={styles.repoName}>{owner}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Model Filter (2hh1) — family-grain; AND-combined with the provider
+          filter. Hidden until the visible session set has any per-model data. */}
+      {models.length > 0 && (
+        <div className={styles.filterWrapper} ref={modelContainerRef}>
+          <button
+            className={`${styles.filterBtn} ${value.models.length > 0 ? styles.active : ''}`}
+            onClick={toggleModel}
+            title="Model Filter"
+            aria-label="Model Filter"
+            aria-expanded={modelIsOpen}
+          >
+            {TokenIcon}
+            <span className={styles.filterLabel}>{getModelButtonLabel()}</span>
+          </button>
+
+          {modelIsOpen && (
+            <div className={styles.dropdown}>
+              <div className={styles.dropdownContent}>
+                <div className={styles.section}>
+                  {models.map((model) => (
+                    <label key={model} className={styles.checkboxItem}>
+                      <input
+                        type="checkbox"
+                        checked={value.models.includes(model)}
+                        onChange={() => handleModelToggle(model)}
+                      />
+                      <span className={styles.repoName}>{formatModelKey(model)}</span>
                     </label>
                   ))}
                 </div>

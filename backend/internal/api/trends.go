@@ -140,6 +140,18 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			owners[i] = strings.ToLower(v)
 		}
 
+		// 2hh1: parse ?model= (family-grain model filter). Lowercase + 50-value
+		// cap mirroring ?owner=; matched session-level after family normalization
+		// in the analytics layer. AND-combined with ?provider=.
+		modelsFilter := parseCommaSeparated(r.URL.Query().Get("model"))
+		if err := validation.ValidateFilterValues("model", modelsFilter); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		for i, v := range modelsFilter {
+			modelsFilter[i] = strings.ToLower(v)
+		}
+
 		// top_n bounds the Costliest Sessions card. Parse best-effort; the
 		// analytics layer normalizes anything off the {10,25,50} allowlist
 		// (including 0 from an unparseable value) to the default.
@@ -155,6 +167,7 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 			Owners:           owners,
 			ShareAllSessions: database.ShareAllSessions,
 			TopSessionsLimit: topN,
+			Models:           modelsFilter,
 		}
 
 		response, err := analyticsStore.GetTrends(r.Context(), userID, req)

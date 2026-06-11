@@ -5,3 +5,4 @@ export { TrendsToolsCard } from './TrendsToolsCard';
 export { TrendsUtilizationCard } from './TrendsUtilizationCard';
 export { TrendsAgentsAndSkillsCard } from './TrendsAgentsAndSkillsCard';
 export { TrendsTopSessionsCard } from './TrendsTopSessionsCard';
+export { TrendsCostByModelCard } from './TrendsCostByModelCard';

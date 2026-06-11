@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { CardWrapper, StatRow, CardLoading, CardError, SectionHeader } from './Card';
 import { formatTokenCount, formatCost } from '@/utils/tokenStats';
-import { formatModelDisplayName } from '@/utils/formatting';
+import { formatModelKey } from '@/utils/formatting';
 import { providerLabel } from '@/utils/providers';
 import {
   TokenIcon,
@@ -35,23 +35,8 @@ export type TokensV2CardData = {
   by_provider: Record<string, TokensV2Provider>;
 };
 
-// Suffix the backend appends to a fast-mode model key (mirrors fastModelKeySuffix
-// in the analytics package). Split off before formatting, then re-appended.
-const FAST_MODEL_SUFFIX = ' · fast';
-
 const ZERO_COST_TOOLTIP =
   'Cost unavailable — session may use models not yet in the pricing table';
-
-// User-facing label for a tokens_v2 model key: "" → "Unknown"; a "<family> · fast"
-// key formats its base family and keeps the suffix.
-function formatModelKey(key: string): string {
-  if (key === '') return 'Unknown';
-  if (key.endsWith(FAST_MODEL_SUFFIX)) {
-    const base = key.slice(0, -FAST_MODEL_SUFFIX.length);
-    return (base === '' ? 'Unknown' : formatModelDisplayName(base)) + FAST_MODEL_SUFFIX;
-  }
-  return formatModelDisplayName(key);
-}
 
 function ModelSection({ modelKey, model }: { modelKey: string; model: TokensV2Model }) {
   return (

@@ -16,7 +16,7 @@ function makeResponse(overrides: Partial<TrendsResponse> = {}): TrendsResponse {
     repos_included: [],
     include_no_repo: true,
     providers_present: [],
-    filter_options: { owners: [], repos: [] },
+    filter_options: { owners: [], repos: [], models: [] },
     cards: {
       overview: null,
       tokens: null,
@@ -25,6 +25,7 @@ function makeResponse(overrides: Partial<TrendsResponse> = {}): TrendsResponse {
       utilization: null,
       agents_and_skills: null,
       top_sessions: null,
+      cost_by_model: null,
     },
     ...overrides,
   };

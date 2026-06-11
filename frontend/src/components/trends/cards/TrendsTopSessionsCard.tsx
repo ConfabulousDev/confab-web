@@ -17,7 +17,13 @@ interface TrendsTopSessionsCardProps {
   onTopNChange?: (n: number) => void;
   /** Dims the list and disables the selector while a refetch is in flight. */
   loading?: boolean;
+  // 2hh1: when a model filter is active, flag that it's session-level — these
+  // rows rank by full-session cost, not just the selected model's portion.
+  modelFilterActive?: boolean;
 }
+
+const MODEL_FILTER_CAVEAT =
+  'A model filter is active. It narrows to sessions that used the selected model(s); these rows rank by full-session cost, not just that model.';
 
 /** Strip org prefix from "org/repo" → "repo" */
 function formatRepoName(repo: string): string {
@@ -64,6 +70,7 @@ export function TrendsTopSessionsCard({
   topN = 10,
   onTopNChange,
   loading = false,
+  modelFilterActive = false,
 }: TrendsTopSessionsCardProps) {
   if (!data || data.sessions.length === 0) return null;
 
@@ -79,6 +86,7 @@ export function TrendsTopSessionsCard({
         icon={TrendingUpIcon}
         subtitle={subtitle}
         headerAction={headerAction}
+        caveat={modelFilterActive ? MODEL_FILTER_CAVEAT : undefined}
       >
         <div
           className={styles.sessionList}

@@ -33,6 +33,15 @@ type TrendsRequest struct {
 	// caller omits it) are normalized to 10 inside aggregateTopSessions, so the
 	// data layer never emits LIMIT 0.
 	TopSessionsLimit int
+	// Models narrows results to sessions that used at least one of the given
+	// model-family keys (2hh1). Family-grain (e.g. "opus-4-5", "opus-4-5 · fast",
+	// "gpt-5"); matched after provider-aware normalization via normalizeV2ModelKey,
+	// so OpenCode's raw vendor keys collapse to families before comparison.
+	// nil/empty = no model narrowing. Scope is session-level (like Owners): a
+	// session matches if any of its v2 models matches; per-card costs are NOT
+	// re-scoped to the selected model's portion (see c30r/y1w5). AND-combined
+	// with Providers.
+	Models []string
 }
 
 // =============================================================================
@@ -60,12 +69,17 @@ type TrendsResponse struct {
 	FilterOptions TrendsFilterOptions `json:"filter_options"`
 }
 
-// TrendsFilterOptions surfaces the dropdown source for owners + repos on
-// TrendsPage. Owners are lowercased; the frontend pins the viewer's own
+// TrendsFilterOptions surfaces the dropdown source for owners + repos + models
+// on TrendsPage. Owners are lowercased; the frontend pins the viewer's own
 // email to the top in the component.
 type TrendsFilterOptions struct {
 	Owners []string `json:"owners"`
 	Repos  []string `json:"repos"`
+	// Models lists the distinct normalized model-family keys (family + "· fast"
+	// variants) across the caller's visible sessions, alphabetical. Sources the
+	// model dropdown (2hh1). Excludes the empty "" key (rendered as the Unknown
+	// breakdown row, not a filterable option). Always non-nil; [] when empty.
+	Models []string `json:"models"`
 }
 
 // DateRange specifies the start and end dates (inclusive).
@@ -83,6 +97,7 @@ type TrendsCards struct {
 	Utilization     *TrendsUtilizationCard     `json:"utilization"`
 	AgentsAndSkills *TrendsAgentsAndSkillsCard `json:"agents_and_skills"`
 	TopSessions     *TrendsTopSessionsCard     `json:"top_sessions"`
+	CostByModel     *TrendsCostByModelCard     `json:"cost_by_model"`
 }
 
 // =============================================================================
@@ -189,6 +204,46 @@ type TrendsAgentsAndSkillsCard struct {
 // TrendsTopSessionsCard provides the most expensive sessions ranked by cost.
 type TrendsTopSessionsCard struct {
 	Sessions []TopSessionItem `json:"sessions"`
+}
+
+// TrendsCostByModelCard breaks down cost + tokens per (provider, model family)
+// across the filtered, visible sessions that carry tokens_v2 data (2hh1).
+//
+// Scope vs the Tokens headline: rows sum the v2 per-model cost (covers only
+// sessions WITH v2 data — partial during backfill), while the h7xe grand-total
+// headline sums the flat card (full coverage). They are deliberately DIFFERENT
+// scopes and do NOT reconcile; PctOfTotal is each row's share of the v2
+// model-attributed total (rows sum to ~100% among themselves), and the frontend
+// shows a coverage caption — never a reconciliation line.
+//
+// TimedOut signals graceful degradation: when the aggregation exceeds its
+// dedicated budget the card returns empty with TimedOut=true (the whole Trends
+// response still succeeds) and the server emits a PII-safe WARN with the request
+// shape for upstream debugging.
+type TrendsCostByModelCard struct {
+	Rows []CostByModelRow `json:"rows"`
+	// CoveredSessionCount = sessions with per-model v2 data contributing to the
+	// rows; TotalSessionCount = all filtered sessions in range. The caption reads
+	// "Covers N of M sessions with per-model data".
+	CoveredSessionCount int  `json:"covered_session_count"`
+	TotalSessionCount   int  `json:"total_session_count"`
+	TimedOut            bool `json:"timed_out"`
+}
+
+// CostByModelRow is one (provider, model-family) bucket. Provider is the
+// canonical session provider (claude-code/codex/opencode); Model is the
+// normalized family key ("" → rendered "Unknown"; "<family> · fast" kept as its
+// own row). Cost is a decimal string; PctOfTotal is a percentage (0–100).
+type CostByModelRow struct {
+	Model        string  `json:"model"`
+	Provider     string  `json:"provider"`
+	CostUSD      string  `json:"cost_usd"`
+	PctOfTotal   float64 `json:"pct_of_total"`
+	Input        int64   `json:"input"`
+	Output       int64   `json:"output"`
+	CacheRead    int64   `json:"cache_read"`
+	CacheWrite   int64   `json:"cache_write"`
+	SessionCount int     `json:"session_count"`
 }
 
 // TopSessionItem represents a single session in the top sessions ranking.
