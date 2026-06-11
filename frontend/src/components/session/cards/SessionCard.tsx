@@ -1,5 +1,6 @@
 import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { formatResponseTime } from '@/utils/compactionStats';
+import { formatModelDisplayName } from '@/utils/formatting';
 import {
   TerminalIcon,
   ChatIcon,
@@ -73,63 +74,6 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-// Strict trailing `-YYYY-MM-DD` only. Avoids accidentally eating a variant
-// suffix that happens to start with digits.
-const OPENAI_DATE_SUFFIX = /-20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-
-function stripOpenAIDateSuffix(model: string): string {
-  return model.replace(OPENAI_DATE_SUFFIX, '');
-}
-
-/**
- * Format model name for user-friendly display (CF-437 extends this to OpenAI).
- *
- * Examples:
- *   claude-sonnet-4-20241022  -> Sonnet 4
- *   claude-opus-4-5-20251101  -> Opus 4.5
- *   gpt-5                     -> GPT-5
- *   gpt-5-codex               -> GPT-5 Codex
- *   gpt-5-codex-2025-01-01    -> GPT-5 Codex   (date suffix stripped)
- *   gpt-4o                    -> GPT-4o
- *   gpt-4o-mini               -> GPT-4o Mini
- *   o3-mini                   -> o3-mini       (OpenAI brands o-series lowercase)
- *   mistral-7b                -> mistral-7b    (passthrough)
- */
-function formatModelName(model: string): string {
-  // Claude — preserve existing behavior
-  const claude = model.match(/claude-(\w+)-(\d+)(?:-(\d+))?/);
-  if (claude) {
-    const [, family, major, minor] = claude;
-    if (family && major) {
-      const familyName = family.charAt(0).toUpperCase() + family.slice(1);
-      const version = minor ? `${major}.${minor}` : major;
-      return `${familyName} ${version}`;
-    }
-  }
-
-  const stripped = stripOpenAIDateSuffix(model);
-
-  // OpenAI GPT family — Title Case rest, special-case `gpt` → `GPT`.
-  // Family identifier (e.g. `5`, `4o`) stays attached via dash; variant
-  // suffixes (`codex`, `mini`) get space-separated and title-cased.
-  if (stripped.startsWith('gpt-')) {
-    const parts = stripped.split('-');
-    // parts[0] === 'gpt'; parts[1] is the family identifier (5, 4o, …).
-    if (parts.length < 2) return model;
-    const family = `GPT-${parts[1]}`;
-    const variants = parts.slice(2).map((p) => p.charAt(0).toUpperCase() + p.slice(1));
-    return [family, ...variants].join(' ');
-  }
-
-  // OpenAI o-series — preserve lowercase as OpenAI brands them.
-  if (/^o\d/.test(stripped)) {
-    return stripped;
-  }
-
-  // Unknown — passthrough.
-  return model;
-}
-
 interface SessionCardProps extends CardProps<SessionCardData> {
   /** Session provider (CF-437). Drives reasoning bar label, tool-results bar
    *  visibility, and Messages tooltip wording. */
@@ -186,7 +130,7 @@ export function SessionCard({ data, loading, error, provider }: SessionCardProps
       {data.models_used.length > 0 && (
         <StatRow
           label={data.models_used.length === 1 ? 'Model' : 'Models'}
-          value={data.models_used.map(formatModelName).join(', ')}
+          value={data.models_used.map(formatModelDisplayName).join(', ')}
           icon={RobotIcon}
           tooltip={TOOLTIPS.models}
         />

@@ -201,7 +201,10 @@ const TokensCardDataSchema = z.object({
   fast_cost_usd: z.string().optional(),
 });
 
-// tokens_v2: hierarchical per-provider per-model breakdown (OpenCode only for now)
+// tokens_v2: hierarchical per-provider per-model breakdown. Built for all
+// providers (7eje): Claude/Codex key by_provider on the canonical agent id with
+// getModelFamily families (fast under "<family> · fast"); OpenCode keys by vendor.
+// Supersedes the flat tokens card on the session page when present.
 const TokensV2ModelSchema = z.object({
   input: z.number(),
   output: z.number(),

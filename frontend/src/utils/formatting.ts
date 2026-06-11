@@ -156,6 +156,53 @@ export function formatModelName(model: string): string {
 }
 
 /**
+ * User-friendly model label, shared by the Session card and the Tokens (v2)
+ * card (mp4e; generalized from the CF-437 Session-card formatter). Handles both
+ * full model ids (with date suffixes) AND the bare family keys the tokens_v2
+ * tree stores for Claude/Codex (no `claude-` prefix, no date).
+ *
+ * Examples:
+ *   opus-4-1                   -> Opus 4.1     (tokens_v2 family key)
+ *   sonnet-4                   -> Sonnet 4
+ *   claude-opus-4-5-20251101   -> Opus 4.5     (full id, date stripped)
+ *   gpt-5-codex-2025-01-01     -> GPT-5 Codex
+ *   o3-mini                    -> o3-mini      (OpenAI brands o-series lowercase)
+ *   mistral-7b                 -> mistral-7b   (passthrough)
+ */
+export function formatModelDisplayName(model: string): string {
+  // Strip a trailing date suffix in either wire form (-YYYY-MM-DD or -YYYYMMDD)
+  // so it never leaks into the version number.
+  const dated = model.replace(/-\d{4}-\d{2}-\d{2}$/, '').replace(/-\d{8}$/, '');
+
+  // Claude — full ids and bare family keys converge once the optional prefix is
+  // dropped. Anchored so a date-stripped "sonnet-4" maps to "Sonnet 4".
+  const claude = dated.replace(/^claude-/, '').match(/^(opus|sonnet|haiku|fable)-(\d+)(?:-(\d+))?$/);
+  if (claude) {
+    const [, family, major, minor] = claude;
+    const familyName = family!.charAt(0).toUpperCase() + family!.slice(1);
+    const version = minor ? `${major}.${minor}` : major;
+    return `${familyName} ${version}`;
+  }
+
+  // OpenAI GPT family — Title Case the variants, special-case `gpt` -> `GPT`.
+  if (dated.startsWith('gpt-')) {
+    const parts = dated.split('-');
+    if (parts.length < 2) return model;
+    const family = `GPT-${parts[1]}`;
+    const variants = parts.slice(2).map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+    return [family, ...variants].join(' ');
+  }
+
+  // OpenAI o-series — preserve lowercase as OpenAI brands them.
+  if (/^o\d/.test(dated)) {
+    return dated;
+  }
+
+  // Unknown — passthrough the original.
+  return model;
+}
+
+/**
  * Extract repo name from URL
  * e.g., "https://github.com/user/repo.git" -> "user/repo"
  */

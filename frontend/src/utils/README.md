@@ -38,6 +38,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `formatLocalDate` | `(date: Date) => string` | YYYY-MM-DD using local date components |
 | `formatDateTime` | `(date: Date) => string` | "Mar 7, 2026, 02:30 PM" format |
 | `formatModelName` | `(model: string) => string` | Technical format: "claude-sonnet-4.5" |
+| `formatModelDisplayName` | `(model: string) => string` | User-friendly label ("Opus 4.1", "GPT-5"). Handles full ids and bare tokens_v2 family keys; shared by Session + TokensV2 cards (mp4e) |
 | `formatRepoName` | `(repoUrl: string) => string` | Extract "user/repo" from full URL |
 
 ### tokenStats.ts
