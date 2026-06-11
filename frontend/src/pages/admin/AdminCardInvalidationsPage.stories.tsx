@@ -3,14 +3,28 @@ import {
   AdminCardInvalidationsPageContent,
   type AdminCardInvalidationsPageContentProps,
 } from './AdminCardInvalidationsPage';
-import type { CardTableName, InvalidateCardsResponse, CardInvalidationsListResponse } from '@/schemas/api';
+import type { InvalidateCardsResponse, CardInvalidationsListResponse } from '@/schemas/api';
 
 const noop = () => {};
 
+const CARD_TYPES = [
+  'session_card_tokens',
+  'session_card_tokens_v2',
+  'session_card_session',
+  'session_card_tools',
+  'session_card_code_activity',
+  'session_card_conversation',
+  'session_card_agents_and_skills',
+  'session_card_redactions',
+  'session_card_workflows',
+  'session_card_smart_recap',
+];
+
 const baseProps: AdminCardInvalidationsPageContentProps = {
+  cardTypes: CARD_TYPES,
   startDate: '',
   endDate: '',
-  selectedCards: new Set<CardTableName>(),
+  selectedCards: new Set<string>(),
   reason: '',
   preview: null,
   onStartDateChange: noop,
@@ -53,7 +67,7 @@ export const PartiallyFilled: Story = {
     ...baseProps,
     startDate: '2026-04-01T00:00',
     endDate: '2026-04-20T00:00',
-    selectedCards: new Set<CardTableName>(['session_card_tokens']),
+    selectedCards: new Set<string>(['session_card_tokens']),
     reason: 'Opus 4.7 pricing backfill',
   },
 };
@@ -73,7 +87,7 @@ export const PreviewShown: Story = {
     ...baseProps,
     startDate: '2026-04-01T00:00',
     endDate: '2026-04-20T00:00',
-    selectedCards: new Set<CardTableName>(['session_card_tokens', 'session_card_session']),
+    selectedCards: new Set<string>(['session_card_tokens', 'session_card_session']),
     reason: 'Opus 4.7 pricing backfill',
     preview: previewResponse,
   },
@@ -84,7 +98,7 @@ export const ConfirmModalOpen: Story = {
     ...baseProps,
     startDate: '2026-04-01T00:00',
     endDate: '2026-04-20T00:00',
-    selectedCards: new Set<CardTableName>(['session_card_tokens']),
+    selectedCards: new Set<string>(['session_card_tokens']),
     reason: 'Opus 4.7 pricing backfill',
     preview: previewResponse,
     showConfirmModal: true,

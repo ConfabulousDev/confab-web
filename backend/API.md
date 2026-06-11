@@ -1285,6 +1285,35 @@ Returns up to 500 most recent audit rows (ordered by `invalidated_at DESC`). Pas
 
 ---
 
+### List Card Types
+```
+GET /api/v1/admin/cards/types
+```
+
+Returns the canonical list of invalidatable card table names — the single source of truth (`analytics.AllCardTableNames`) that drives the admin invalidation UI's checkboxes. The frontend renders the list verbatim so it can never drift; `POST /api/v1/admin/cards/invalidate` validates inbound `card_types` against this same list and `400`s unknown values.
+
+**Response:**
+```json
+{
+  "card_types": [
+    "session_card_tokens",
+    "session_card_tokens_v2",
+    "session_card_session",
+    "session_card_tools",
+    "session_card_code_activity",
+    "session_card_conversation",
+    "session_card_agents_and_skills",
+    "session_card_redactions",
+    "session_card_workflows",
+    "session_card_smart_recap"
+  ]
+}
+```
+
+**Auth:** super-admin only.
+
+---
+
 ## Public API Endpoints (No Auth)
 
 ### Auth Config

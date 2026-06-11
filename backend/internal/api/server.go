@@ -422,6 +422,9 @@ func (s *Server) SetupRoutes() http.Handler {
 				// so the precompute worker repopulates them with current logic/pricing.
 				r.Post("/cards/invalidate", withMaxBody(MaxBodyS, adminHandlers.HandleInvalidateCards))
 				r.Get("/cards/invalidations", withMaxBody(MaxBodyXS, adminHandlers.HandleListCardInvalidations))
+				// vd31: serve the canonical card table names so the admin UI's
+				// checkboxes can't drift from analytics.AllCardTableNames.
+				r.Get("/cards/types", withMaxBody(MaxBodyXS, adminHandlers.HandleGetCardTypes))
 			})
 		})
 

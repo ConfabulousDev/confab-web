@@ -68,6 +68,20 @@ type CardInvalidationsListResponse struct {
 	Rows []CardInvalidationRow `json:"rows"`
 }
 
+// CardTypesResponse is the GET /admin/cards/types payload — the canonical list of
+// invalidatable card table names.
+type CardTypesResponse struct {
+	CardTypes []string `json:"card_types"`
+}
+
+// HandleGetCardTypes serves analytics.AllCardTableNames so the admin UI's
+// invalidation checkboxes are sourced from the backend source of truth and can't
+// drift from a hand-maintained frontend copy (vd31). Inbound invalidation
+// requests are still validated against the same list in parseInvalidateCardsRequest.
+func (h *Handlers) HandleGetCardTypes(w http.ResponseWriter, _ *http.Request) {
+	httputil.RespondJSON(w, http.StatusOK, CardTypesResponse{CardTypes: analytics.AllCardTableNames})
+}
+
 // parseInvalidateCardsRequest validates the request body and produces the
 // store-level CountRequest + dry_run + reason. Returns a user-facing error message
 // on 400-worthy failures.

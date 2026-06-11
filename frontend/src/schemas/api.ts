@@ -748,27 +748,19 @@ export type RegenerateAllResponse = z.infer<typeof RegenerateAllResponseSchema>;
 // Card Invalidations (CF-343)
 // ============================================================================
 
-/**
- * CARD_TABLE_NAMES mirrors backend `analytics.AllCardTableNames`.
- * Kept in sync manually — the backend validates what the server actually accepts,
- * so drift will be caught by an integration run. Update both when adding a card.
- */
-export const CARD_TABLE_NAMES = [
-  'session_card_tokens',
-  'session_card_session',
-  'session_card_tools',
-  'session_card_code_activity',
-  'session_card_conversation',
-  'session_card_agents_and_skills',
-  'session_card_redactions',
-  'session_card_smart_recap',
-] as const;
-export type CardTableName = (typeof CARD_TABLE_NAMES)[number];
+// Card table names are served by the backend (GET /admin/cards/types) from
+// `analytics.AllCardTableNames` — the single source of truth (vd31). The frontend
+// no longer keeps a copy; `card_types` is a plain string[] and the backend
+// authoritatively rejects unknown values on invalidate.
+export const CardTypesResponseSchema = z.object({
+  card_types: z.array(z.string()),
+});
+export type CardTypesResponse = z.infer<typeof CardTypesResponseSchema>;
 
 export const InvalidateCardsRequestSchema = z.object({
   start_date: z.string(),
   end_date: z.string().optional(),
-  card_types: z.array(z.enum(CARD_TABLE_NAMES)).min(1),
+  card_types: z.array(z.string()).min(1),
   reason: z.string().min(1).max(500),
   dry_run: z.boolean().optional(),
 });
