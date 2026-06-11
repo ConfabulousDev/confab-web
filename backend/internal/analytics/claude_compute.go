@@ -171,6 +171,7 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 		EstimatedCostUSD:    tokens.EstimatedCostUSD,
 		FastTurns:           tokens.FastTurns,
 		FastCostUSD:         tokens.FastCostUSD,
+		TokensV2:            tokens.TokensV2,
 
 		// Session
 		TotalMessages:       session.TotalMessages,

@@ -35,7 +35,7 @@ func IsKnownCardTableName(name string) bool {
 // Card version constants - increment when compute logic changes
 const (
 	TokensCardVersion          = 3 // v3: dedup by message.id (fixes multi-line + replay over-counting)
-	TokensV2CardVersion        = 1 // v1: hierarchical per-provider/per-model breakdown (OpenCode)
+	TokensV2CardVersion        = 2 // v2: per-model tree built for all providers (Claude/Codex, not just OpenCode) — 7eje
 	SessionCardVersion         = 5 // v5: dedup assistant counts by message.id, non-exclusive breakdown
 	ToolsCardVersion           = 3 // v3: Codex spawn_agent/wait_agent excluded — surfaced via AgentsAndSkills (CF-443)
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
@@ -67,6 +67,12 @@ type TokensCardRecord struct {
 	FastTurns   int             `json:"fast_turns"`
 	FastCostUSD decimal.Decimal `json:"fast_cost_usd"`
 }
+
+// fastModelKeySuffix marks a fast-mode model entry in the tokens_v2 tree. Fast
+// turns are split into a synthetic "<family> · fast" model key (billed at the 6×
+// fast rate) alongside the base family key, so the per-model breakdown and the
+// model filter surface fast usage as its own line without a schema change.
+const fastModelKeySuffix = " · fast"
 
 // TokensV2Model is one model's token + cost breakdown within a provider. It is
 // both the JSONB storage shape (nested under TokensV2Data) and the API wire
