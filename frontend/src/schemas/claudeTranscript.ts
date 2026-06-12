@@ -4,6 +4,11 @@
 // IMPORTANT: These schemas validate external data we don't control.
 // Use string() instead of enum() for fields that could have new values added.
 // Use passthrough() to preserve unknown fields for forward compatibility.
+//
+// Reference: the open-source claude-code-log parser
+// (https://github.com/daaain/claude-code-log) maintains an independent catalog
+// of Claude Code JSONL line types and shapes — a useful cross-check when adding
+// or extending schemas here, or when triaging new metadata line types.
 import { z } from 'zod';
 
 // ============================================================================
