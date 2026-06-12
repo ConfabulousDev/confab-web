@@ -321,13 +321,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.statValue.cost,
 .statValue.utilization {
   color: var(--color-cost);
-}
-
-.statValue.costWarning {
-  color: var(--color-warning-text);
 }
 
 .statValue.costFast {

@@ -1,0 +1,9 @@
+.cost {
+  color: var(--color-cost);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Exact $0.00 (unpriced / cost unavailable) — see CostAmount.tsx. */
+.zero {
+  color: var(--color-warning-text);
+}

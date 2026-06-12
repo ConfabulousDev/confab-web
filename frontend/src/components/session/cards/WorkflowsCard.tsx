@@ -2,7 +2,8 @@ import { CardWrapper, CardLoading, CardError } from './Card';
 import { BranchIcon, RobotIcon, TokenIcon, DurationIcon, CheckCircleIcon } from '@/components/icons';
 import type { WorkflowsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
-import { formatCost, formatTokenCount } from '@/utils/tokenStats';
+import { formatTokenCount } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
 import { formatDuration } from '@/utils/formatting';
 import styles from './WorkflowsCard.module.css';
 
@@ -58,7 +59,7 @@ export function WorkflowsCard({ data, loading, error }: CardProps<WorkflowsCardD
                 {formatTokenCount(totalTokens)}
               </span>
               <span className={styles.metaItem} title="Estimated cost for this run">
-                {formatCost(parseFloat(run.estimated_usd))}
+                <CostAmount usd={parseFloat(run.estimated_usd)} />
               </span>
               {run.duration_ms > 0 && (
                 <span className={styles.metaItem} title="Run duration (first to last agent activity)">

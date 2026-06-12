@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { TrendsCard, StatRow } from './TrendsCard';
 import { TokenIcon } from '@/components/icons';
-import { formatTokenCount, formatCost } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
+import { formatTokenCount } from '@/utils/tokenStats';
 import {
   providerLabel,
   getProviderMetadataOrFallback,
@@ -20,14 +21,14 @@ import {
 } from 'recharts';
 import styles from './TrendsTokensCard.module.css';
 
-const COST_GREEN = '#22c55e';
 const UNKNOWN_PROVIDER_COLOR = '#9ca3af';
 // Synthetic stack key used when no per-provider breakdown is available
 // (older wire payloads). Cannot collide with a canonical provider id.
 const FALLBACK_STACK_KEY = '__total__';
 
 function providerColor(providerId: string): string {
-  if (providerId === FALLBACK_STACK_KEY) return COST_GREEN;
+  // The synthetic single-stack bar uses the shared money green (fdp3).
+  if (providerId === FALLBACK_STACK_KEY) return 'var(--color-cost)';
   const meta = getProviderMetadataOrFallback(providerId, 'neutral');
   return meta?.brandColor ?? UNKNOWN_PROVIDER_COLOR;
 }
@@ -83,14 +84,14 @@ function CustomTooltip({ active, payload, showBreakdown }: CustomTooltipProps) {
   return (
     <div className={styles.tooltip}>
       <div className={styles.tooltipDate}>{formattedDate}</div>
-      <div className={styles.tooltipValue}>{formatCost(row.total)}</div>
+      <div className={styles.tooltipValue}><CostAmount usd={row.total} /></div>
       {showBreakdown && nonZero.length > 0 && (
         <div className={styles.tooltipBreakdown}>
           {nonZero.map((p) => (
             <div key={p.name} className={styles.tooltipRow}>
               <span className={styles.tooltipDot} style={{ background: p.color }} />
               <span className={styles.tooltipProviderLabel}>{providerLabel(p.name)}</span>
-              <span className={styles.tooltipProviderValue}>{formatCost(p.value)}</span>
+              <CostAmount usd={p.value} className={styles.tooltipProviderValue} />
             </div>
           ))}
         </div>
@@ -110,28 +111,13 @@ function providerHasCacheWrite(providerId: string): boolean {
   return providerId !== 'codex';
 }
 
-function CostValue({ usd, className }: { usd: string; className?: string }) {
-  const n = parseFloat(usd);
-  return (
-    <span
-      className={className}
-      style={{
-        color: n === 0 ? 'var(--color-warning-text)' : COST_GREEN,
-        fontWeight: 600,
-      }}
-    >
-      {formatCost(n)}
-    </span>
-  );
-}
-
 // Elevated grand-total headline, rendered identically in single- and
 // multi-provider modes so the total cost reads the same regardless of layout.
 function TotalCostRow({ usd }: { usd: string }) {
   return (
     <div className={styles.totalCostRow} data-testid="trends-total-cost">
       <span className={styles.totalCostLabel}>Total Cost</span>
-      <CostValue usd={usd} className={styles.totalCostValue} />
+      <CostAmount usd={parseFloat(usd)} className={styles.totalCostValue} />
     </div>
   );
 }
@@ -198,7 +184,7 @@ function TrendsTokensPerProviderList({ entries }: TrendsTokensPerProviderListPro
         <section key={providerId} className={styles.providerSection}>
           <header className={styles.providerHeader}>{providerLabel(providerId)}</header>
           <div className={styles.providerRows}>
-            <StatRow label="Cost" value={<CostValue usd={e.total_cost_usd} />} />
+            <StatRow label="Cost" value={<CostAmount usd={parseFloat(e.total_cost_usd)} />} />
             <TokensStatRows providerId={providerId} data={e} />
           </div>
         </section>

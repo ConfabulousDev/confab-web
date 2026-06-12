@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { formatCost } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
 import { cx } from '@/utils/utils';
 import { retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import type { OpenCodeRenderItem } from './opencodeCategories';
@@ -67,7 +67,7 @@ function AssistantRow({
         <span className={styles.roleLabel}>Assistant</span>
         {item.model ? <span className={styles.model}>{item.model}</span> : null}
         {isCostMode && typeof item.cost === 'number' ? (
-          <span className={styles.cost}>{formatCost(item.cost)}</span>
+          <CostAmount usd={item.cost} className={styles.cost} />
         ) : null}
       </div>
       {item.reasoning ? (

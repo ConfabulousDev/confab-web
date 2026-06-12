@@ -2,7 +2,7 @@ import { TrendsCard } from './TrendsCard';
 import { ChatIcon, TrendingUpIcon } from '@/components/icons';
 import { getProviderMetadataOrFallback } from '@/utils/providers';
 import { formatDuration } from '@/utils';
-import { formatCost } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
 import type { TrendsTopSessionsCard as TrendsTopSessionsCardData } from '@/schemas/api';
 import styles from './TrendsTopSessionsCard.module.css';
 
@@ -116,7 +116,7 @@ export function TrendsTopSessionsCard({
                   )}
                 </div>
               </div>
-              <span className={styles.cost}>{formatCost(parseFloat(session.estimated_cost_usd))}</span>
+              <CostAmount usd={parseFloat(session.estimated_cost_usd)} className={styles.cost} />
             </a>
           ))}
         </div>

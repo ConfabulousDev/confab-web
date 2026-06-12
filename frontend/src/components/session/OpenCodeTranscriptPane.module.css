@@ -64,11 +64,10 @@
   color: var(--color-text-secondary);
 }
 
+/* Color + tabular-nums owned by CostAmount; keep layout only. */
 .cost {
   margin-left: auto;
   font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-success);
 }
 
 .status {
