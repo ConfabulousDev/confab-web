@@ -1,3 +1,7 @@
+.wrapper {
+  grid-column: span 2;
+}
+
 .tiles {
   display: flex;
   gap: 8px;
@@ -27,53 +31,29 @@
   font-variant-numeric: tabular-nums;
 }
 
-.chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  height: 140px;
+/* Histogram + hover tooltip — shared Trends chart styling (matches Tokens card). */
+.chartContainer {
+  composes: chartContainer from './trendsChart.module.css';
 }
 
-.col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-  min-width: 0;
+.chartLabel {
+  composes: chartLabel from './trendsChart.module.css';
 }
 
-.barTotal {
-  color: var(--color-success-text);
-  font-size: 0.75em;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 4px;
-  white-space: nowrap;
+.tooltip {
+  composes: tooltip from './trendsChart.module.css';
 }
 
-/* Track fills the vertical space so bars grow from a shared baseline. */
-.barTrack {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+.tooltipTitle {
+  composes: tooltipTitle from './trendsChart.module.css';
 }
 
-.bar {
-  width: 70%;
-  min-height: 2px;
-  background: var(--color-accent);
-  border-radius: 3px 3px 0 0;
+.tooltipValue {
+  composes: tooltipValue from './trendsChart.module.css';
 }
 
-.barAxis {
-  color: var(--color-text-muted);
-  font-size: 0.7em;
-  text-align: center;
-  margin-top: 6px;
-  white-space: nowrap;
+.tooltipTotal {
+  composes: tooltipTotal from './trendsChart.module.css';
 }
 
 .caption {

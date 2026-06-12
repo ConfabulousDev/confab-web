@@ -9,8 +9,10 @@ const meta: Meta<typeof TrendsCostDistributionCard> = {
     layout: 'centered',
   },
   decorators: [
+    // The card spans 2 grid columns in situ; widen the isolated frame so the
+    // wider histogram and slanted x-axis labels render at a representative size.
     (Story) => (
-      <div style={{ width: '480px' }}>
+      <div style={{ width: '760px' }}>
         <Story />
       </div>
     ),
