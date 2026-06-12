@@ -1,6 +1,53 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { TokensV2Card, type TokensV2CardData } from './TokensV2Card';
+
+// d3rp: single-provider, single MODEL section → auto-expands (1 section total).
+function makeSingleModel(): TokensV2CardData {
+  return {
+    total_cost_usd: '0.95',
+    total_input: 100000,
+    total_output: 30000,
+    by_provider: {
+      anthropic: {
+        cost_usd: '0.95',
+        models: {
+          'claude-sonnet-4-20250514': {
+            input: 100000, output: 30000, cache_read: 20000,
+            cache_write: 5000, reasoning: 10000, cost_usd: '0.95',
+          },
+        },
+      },
+    },
+  };
+}
+
+// d3rp: single provider, TWO model sections → both collapsed by default. Each
+// model carries a detail row the other lacks so independence is observable:
+// the base model has Cache write (>0, fast has 0); the fast model has Reasoning
+// (>0, base has 0).
+function makeTwoModel(): TokensV2CardData {
+  return {
+    total_cost_usd: '4.90',
+    total_input: 1_200_000,
+    total_output: 340_000,
+    by_provider: {
+      'claude-code': {
+        cost_usd: '4.90',
+        models: {
+          'opus-4-8': {
+            input: 1_000_000, output: 300_000, cache_read: 800_000,
+            cache_write: 50_000, reasoning: 0, cost_usd: '3.50',
+          },
+          'opus-4-8 · fast': {
+            input: 200_000, output: 40_000, cache_read: 0,
+            cache_write: 0, reasoning: 12_000, cost_usd: '1.40',
+          },
+        },
+      },
+    },
+  };
+}
 
 function makeData(overrides: Partial<TokensV2CardData> = {}): TokensV2CardData {
   return {
@@ -162,5 +209,81 @@ describe('TokensV2Card', () => {
     render(<TokensV2Card data={makeData({ total_cost_usd: '0.00' })} loading={false} />);
     const costRow = screen.getByText('Estimated cost').closest('div');
     expect(costRow).toHaveAttribute('title', 'Cost unavailable — session may use models not yet in the pricing table');
+  });
+
+  // ---- d3rp: collapsible model sections ----
+
+  describe('collapsible model sections (d3rp)', () => {
+    it('collapses each model section by default when there is more than one', () => {
+      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      // Per-model detail rows (labels that only ever appear inside a model
+      // section) are hidden until expanded.
+      expect(screen.queryByText('Cache read')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cache write')).not.toBeInTheDocument();
+      expect(screen.queryByText('Reasoning')).not.toBeInTheDocument();
+    });
+
+    it('still shows each model headline (label + cost) when collapsed', () => {
+      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      expect(screen.getByText('Opus 4.8')).toBeInTheDocument();
+      expect(screen.getByText('Opus 4.8 · fast')).toBeInTheDocument();
+      // Cost stays visible in the headline even while collapsed.
+      expect(screen.getByText('$3.50')).toBeInTheDocument();
+      expect(screen.getByText('$1.40')).toBeInTheDocument();
+    });
+
+    it('renders the model headline as a button with aria-expanded=false collapsed', () => {
+      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      const headline = screen.getByRole('button', { name: /· fast/ });
+      expect(headline).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('aria-controls points at the (rendered-on-expand) detail region', () => {
+      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      const headline = screen.getByRole('button', { name: /· fast/ });
+      const controls = headline.getAttribute('aria-controls');
+      if (!controls) throw new Error('headline is missing aria-controls');
+      // Collapsed: region absent. Expanded: region present and carries that id.
+      expect(document.getElementById(controls)).toBeNull();
+      fireEvent.click(headline);
+      expect(headline).toHaveAttribute('aria-expanded', 'true');
+      const region = document.getElementById(controls);
+      expect(region).not.toBeNull();
+      expect(region).toHaveTextContent('Reasoning');
+    });
+
+    it('expands a collapsed section on click to reveal its detail', () => {
+      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      expect(screen.queryByText('Reasoning')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /· fast/ }));
+      expect(screen.getByText('Reasoning')).toBeInTheDocument();
+    });
+
+    it('collapses again on a second click (toggle)', () => {
+      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      const headline = screen.getByRole('button', { name: /· fast/ });
+      fireEvent.click(headline);
+      expect(screen.getByText('Reasoning')).toBeInTheDocument();
+      fireEvent.click(headline);
+      expect(screen.queryByText('Reasoning')).not.toBeInTheDocument();
+    });
+
+    it('toggles each section independently', () => {
+      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      // Expand only the fast section; the base section stays collapsed, so the
+      // base-only "Cache write" detail must NOT appear.
+      fireEvent.click(screen.getByRole('button', { name: /· fast/ }));
+      expect(screen.getByText('Reasoning')).toBeInTheDocument();
+      expect(screen.queryByText('Cache write')).not.toBeInTheDocument();
+    });
+
+    it('auto-expands when there is exactly one model section total', () => {
+      render(<TokensV2Card data={makeSingleModel()} loading={false} />);
+      // No click: detail is already visible.
+      expect(screen.getByText('Cache read')).toBeInTheDocument();
+      expect(screen.getByText('Reasoning')).toBeInTheDocument();
+      const headline = screen.getByRole('button', { name: /Sonnet 4/ });
+      expect(headline).toHaveAttribute('aria-expanded', 'true');
+    });
   });
 });

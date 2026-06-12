@@ -350,6 +350,59 @@
   color: var(--color-text-tertiary);
 }
 
+/* d3rp: collapsible per-model headline. A full-width button that visually echoes
+   .sectionHeader (uppercase label, top border) with the cost + a rotating chevron. */
+.modelHeadline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  margin-top: var(--spacing-xs);
+  border: none;
+  border-top: 1px solid var(--color-border-light);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.modelHeadline:hover {
+  background: var(--color-bg-hover);
+}
+
+.modelHeadline:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.modelHeadlineLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.modelChevron {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  transition: transform var(--transition-base);
+}
+
+.modelChevronExpanded {
+  transform: rotate(90deg);
+}
+
+.modelHeadlineCost {
+  font-size: var(--font-sm);
+}
+
 /* Analytics loading/error/empty states (within a card) */
 .loading {
   display: flex;
