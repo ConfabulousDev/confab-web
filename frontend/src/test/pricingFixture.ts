@@ -27,6 +27,7 @@ export const PRICING_FIXTURE: PricingTable = {
     'gpt-5': { input: 1.25, output: 10.0, cacheWrite: 0, cacheRead: 0.125 },
     'gpt-5-mini': { input: 0.25, output: 2.0, cacheWrite: 0, cacheRead: 0.025 },
     'gpt-5-nano': { input: 0.05, output: 0.4, cacheWrite: 0, cacheRead: 0.005 },
+    'gpt-5.4': { input: 2.5, output: 15.0, cacheWrite: 0, cacheRead: 0.25 },
     'gpt-5.4-mini': { input: 0.75, output: 4.5, cacheWrite: 0, cacheRead: 0.075 },
     'gpt-5.5': { input: 5.0, output: 30.0, cacheWrite: 0, cacheRead: 0.5 },
     'gpt-4o': { input: 2.5, output: 10.0, cacheWrite: 0, cacheRead: 1.25 },
