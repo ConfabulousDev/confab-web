@@ -27,6 +27,16 @@ Each Claude Code session produces these cards:
 
 Confabulous tracks pricing for every published Claude model. New models are added to the pricing table as Anthropic publishes them.
 
+## Multiple backends
+
+You can point separate Claude Code config dirs at separate Confabulous backends from one machine — for example, a personal `CLAUDE_CONFIG_DIR` that syncs to one backend and a work one that syncs to another. Bind a config dir to a backend at setup:
+
+```bash
+confab setup --provider claude-code --config-dir <dir> --backend-url <url>
+```
+
+`--config-dir` requires `--provider`. Your default config dir keeps using the backend from your original `confab setup`, so existing single-dir setups are unaffected.
+
 ## Other supported providers
 
 Confabulous treats every provider as a first-class citizen. [Codex](/providers/codex/) and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.

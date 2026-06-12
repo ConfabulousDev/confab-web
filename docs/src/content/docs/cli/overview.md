@@ -36,6 +36,8 @@ Pass `--provider claude-code`, `--provider codex`, or `--provider opencode` to r
 
 To verify everything landed correctly, run `confab status` — it prints the backend URL, auth state, and per-provider sync/skill state, with remediation hints if anything's off.
 
+To sync separate Claude Code config dirs to separate backends from one machine, see [Multiple backends](/providers/claude-code/#multiple-backends).
+
 ## How sync works
 
 Sync is driven by the **hooks** `confab setup` installs into each provider CLI's configuration. When Claude Code or Codex runs a session, it invokes these hooks at key lifecycle points (session start, user prompt submit, tool use, session end) — and the hooks stream new transcript chunks to your backend in real time, chunk by chunk. You don't have to wait for the session to end before it appears on the dashboard: new messages, tool calls, and analytics surface as they happen.
