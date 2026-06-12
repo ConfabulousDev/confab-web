@@ -178,6 +178,10 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
       ? (b: TrendsCostDistributionBucket) => parseFloat(b.total_usd)
       : 'session_count';
 
+  // Cost mode fills the bars with the canonical money green (matches CostAmount);
+  // count mode keeps the neutral accent.
+  const barFill = metric === 'cost' ? 'var(--color-cost)' : 'var(--color-accent)';
+
   return (
     <div className={styles.wrapper}>
       <TrendsCard
@@ -219,7 +223,7 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
               />
               <Bar
                 dataKey={barDataKey}
-                fill="var(--color-accent)"
+                fill={barFill}
                 radius={[3, 3, 0, 0]}
                 isAnimationActive={false}
               />
