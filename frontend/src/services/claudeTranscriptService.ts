@@ -19,7 +19,22 @@ const MAX_ERRORS_PER_REPORT = 50;
 // `attachment` is parsed via AttachmentMessageSchema (CF-346) — the categorizer
 // hides noisy subtypes (task_reminder, skill_listing, command_permissions) by
 // not routing them to any filter chip.
-const SKIPPED_MESSAGE_TYPES = new Set(['progress', 'permission-mode', 'ai-title', 'last-prompt']);
+//
+// kf2j: newer Claude Code versions emit per-turn metadata lines we also skip —
+// `agent-name` ({agentName}), `mode` ({mode, sessionId}), `agent-color`
+// ({agentColor}), `custom-title` ({customTitle}). Left unhandled they fall to the
+// UnknownMessageSchema catch-all and render as spurious "Unknown" cards (hundreds
+// per session). Shapes cross-checked against the open-source claude-code-log parser.
+const SKIPPED_MESSAGE_TYPES = new Set([
+  'progress',
+  'permission-mode',
+  'ai-title',
+  'last-prompt',
+  'agent-name',
+  'mode',
+  'agent-color',
+  'custom-title',
+]);
 
 // Track which sessions have already had errors reported (dedup across re-parses)
 const reportedSessions = new Set<string>();

@@ -109,6 +109,24 @@ ${createSystemMessage(2)}`;
       typeName: 'last-prompt',
       payload: { type: 'last-prompt', lastPrompt: 'audit the docs', leafUuid: 'leaf-uuid-1', sessionId: 'abc-123' },
     },
+    // Per-turn metadata lines newer Claude Code versions emit (kf2j). Shapes
+    // cross-checked against the open-source claude-code-log parser's skip set.
+    {
+      typeName: 'agent-name',
+      payload: { type: 'agent-name', agentName: 'general-purpose', sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'mode',
+      payload: { type: 'mode', mode: 'normal', sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'agent-color',
+      payload: { type: 'agent-color', agentColor: 'blue', sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'custom-title',
+      payload: { type: 'custom-title', customTitle: 'My session', sessionId: 'abc-123' },
+    },
   ])('skips $typeName messages silently', ({ payload }) => {
     const skippedLine = JSON.stringify(payload);
 
