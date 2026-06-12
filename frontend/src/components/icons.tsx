@@ -403,3 +403,10 @@ export const ClockIcon = (
   </svg>
 );
 
+// Right-pointing chevron (a `>`); rotate the wrapper to point down when expanded.
+export const ChevronIcon = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+
