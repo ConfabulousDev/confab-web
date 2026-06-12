@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TrendsCostDistributionCard } from './TrendsCostDistributionCard';
+import {
+  TrendsCostDistributionCard,
+  CostDistributionTooltip,
+} from './TrendsCostDistributionCard';
 import type {
   TrendsCostDistributionCard as TrendsCostDistributionCardData,
   TrendsCostDistributionBucket,
@@ -32,28 +35,39 @@ function makeData(
   };
 }
 
+// A representative Recharts tooltip payload for one bar (dataKey="session_count").
+// Recharts nests the full chart row under payload[0].payload.
+function payloadFor(bucket: TrendsCostDistributionBucket) {
+  return [
+    {
+      name: 'session_count',
+      value: bucket.session_count,
+      payload: {
+        label: bucket.label,
+        session_count: bucket.session_count,
+        total_usd: bucket.total_usd,
+      },
+    },
+  ];
+}
+
 describe('TrendsCostDistributionCard', () => {
-  it('renders each band label with always-visible total-$ labels (no hover)', () => {
+  it('labels the histogram so bar height reads as session count', () => {
     render(<TrendsCostDistributionCard data={makeData()} />);
-    for (const label of LABELS) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
-    // Per-bar total $ is rendered up front, not hover-gated.
-    expect(screen.getByText('$1.50')).toBeInTheDocument();
-    expect(screen.getByText('$50.00')).toBeInTheDocument();
-    // A tiny non-zero band total floors to "<$0.01".
-    expect(screen.getByText('<$0.01')).toBeInTheDocument();
+    expect(screen.getByText('Sessions per cost band')).toBeInTheDocument();
   });
 
-  it('abbreviates large band totals compactly ($M)', () => {
-    render(
-      <TrendsCostDistributionCard
-        data={makeData({
-          buckets: buckets([1, 0, 0, 0, 1], ['0.005', '0', '0', '0', '2100000.00']),
-        })}
-      />,
-    );
-    expect(screen.getByText('$2.1M')).toBeInTheDocument();
+  it('labels the histogram in session-model-pair terms when a model filter is active', () => {
+    render(<TrendsCostDistributionCard data={makeData()} modelFilterActive />);
+    expect(screen.getByText('Session-model pairs per cost band')).toBeInTheDocument();
+  });
+
+  it('does not render per-bar total-$ labels up front (they moved to hover)', () => {
+    render(<TrendsCostDistributionCard data={makeData()} />);
+    // These band totals are distinct from any percentile value, so their
+    // absence proves the per-bar labels are gone (not hidden by a collision).
+    expect(screen.queryByText('$50.00')).not.toBeInTheDocument();
+    expect(screen.queryByText('$1.50')).not.toBeInTheDocument();
   });
 
   it('renders p50/p90/p99 percentile tiles with formatted costs', () => {
@@ -69,8 +83,8 @@ describe('TrendsCostDistributionCard', () => {
   it('hides the percentile tiles when percentiles is null', () => {
     render(<TrendsCostDistributionCard data={makeData({ percentiles: null })} />);
     expect(screen.queryByText('p50')).not.toBeInTheDocument();
-    // Bars still render.
-    expect(screen.getByText('$10 – $100')).toBeInTheDocument();
+    // The chart still renders (its label is present).
+    expect(screen.getByText('Sessions per cost band')).toBeInTheDocument();
   });
 
   it('renders the coverage + backfill caption', () => {
@@ -92,6 +106,7 @@ describe('TrendsCostDistributionCard', () => {
     );
     expect(screen.getByText(/narrow/i)).toBeInTheDocument();
     expect(screen.queryByText('p50')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sessions per cost band')).not.toBeInTheDocument();
   });
 
   it('renders nothing when no sessions carry cost data (covered = 0)', () => {
@@ -109,5 +124,69 @@ describe('TrendsCostDistributionCard', () => {
 
     rerender(<TrendsCostDistributionCard data={makeData()} modelFilterActive />);
     expect(screen.getByRole('note', { name: /session, model/i })).toBeInTheDocument();
+  });
+});
+
+describe('CostDistributionTooltip', () => {
+  const bucket: TrendsCostDistributionBucket = {
+    label: '$0.10 – $1',
+    lo: 2,
+    hi: 3,
+    session_count: 34,
+    total_usd: '14.80',
+  };
+
+  it('renders nothing when inactive', () => {
+    const { container } = render(
+      <CostDistributionTooltip active={false} payload={payloadFor(bucket)} unit="sessions" />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders nothing when the payload is empty', () => {
+    const { container } = render(
+      <CostDistributionTooltip active payload={[]} unit="sessions" />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows the band label, the session count, and the band total', () => {
+    render(<CostDistributionTooltip active payload={payloadFor(bucket)} unit="sessions" />);
+    expect(screen.getByText('$0.10 – $1')).toBeInTheDocument();
+    expect(screen.getByText(/34 sessions/)).toBeInTheDocument();
+    expect(screen.getByText(/\$14\.80 total/)).toBeInTheDocument();
+  });
+
+  it('uses the session-model-pairs unit when a model filter is active', () => {
+    render(
+      <CostDistributionTooltip
+        active
+        payload={payloadFor(bucket)}
+        unit="session-model pairs"
+      />,
+    );
+    expect(screen.getByText(/34 session-model pairs/)).toBeInTheDocument();
+  });
+
+  it('abbreviates large band totals compactly ($M)', () => {
+    render(
+      <CostDistributionTooltip
+        active
+        payload={payloadFor({ ...bucket, total_usd: '2100000.00' })}
+        unit="sessions"
+      />,
+    );
+    expect(screen.getByText(/\$2\.1M total/)).toBeInTheDocument();
+  });
+
+  it('floors a tiny non-zero band total to <$0.01', () => {
+    render(
+      <CostDistributionTooltip
+        active
+        payload={payloadFor({ ...bucket, total_usd: '0.005' })}
+        unit="sessions"
+      />,
+    );
+    expect(screen.getByText(/<\$0\.01 total/)).toBeInTheDocument();
   });
 });

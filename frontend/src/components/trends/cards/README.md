@@ -15,7 +15,7 @@ Trend analytics cards for the Trends dashboard. Each card visualizes aggregated 
 | `TrendsAgentsAndSkillsCard.tsx` | Aggregated agent and skill invocation counts |
 | `TrendsTopSessionsCard.tsx` | Top sessions by cost with per-row provider icons (Claude / Codex / neutral) and links to session detail. Renders a 10/25/50 segmented top-N selector in the header when an `onTopNChange` handler is supplied (h7xe); `loading` dims the list and disables the control during a refetch. N is URL-synced via `?topN=` on the page and sent to the backend as `?top_n=`. Accepts `modelFilterActive` (2hh1) to show the session-level caveat tooltip. |
 | `TrendsCostByModelCard.tsx` | Per-(provider, model-family) cost breakdown (2hh1). One row per `(provider, model)` with a provider icon, `formatModelKey` label (`""` → "Unknown", `"<family> · fast"` suffix preserved), cost in success-green via theme tokens (`$0`/unpriced in warning color), `pct_of_total`, split cache read/write, and session count; sorted cost-desc. A coverage caption ("Covers N of M sessions with per-model data") — **not** a reconciliation line, since the rows (v2, partial) and the Tokens headline (flat, full) are deliberately different scopes. When `data.timed_out` it renders a "narrow your range" notice instead of the empty state; returns `null` when absent or no rows. |
-| `TrendsCostDistributionCard.tsx` | Per-session cost histogram + p50/p90/p99 percentile tiles (y1w5). **Dynamic log10 bars**: a `"< $0.01"` floor plus one bar per power of 10 up to the band containing the priciest session (the backend supplies the `label`, rendered verbatim). Bar height ∝ data-point count; each bar shows its bucket total `$` up front (always visible, not hover-gated) via `formatCostCompact` (`$2.1M`-style). A single coverage/backfill caption ("Covers N of M sessions with cost data; percentiles reflect this subset"). Accepts `modelFilterActive` to show the per-(session, model) ⓘ caveat (bars then count (session,model) pairs). When `data.timed_out` it renders a "narrow your range" notice; returns `null` when absent or when `covered_session_count === 0`. |
+| `TrendsCostDistributionCard.tsx` | Per-session cost histogram + p50/p90/p99 percentile tiles (y1w5). Spans 2 grid columns (`.wrapper` → `grid-column: span 2`). Renders a Recharts `BarChart` (8ffa, matching `TrendsTokensCard`): **dynamic log10 bands** — a `"< $0.01"` floor plus one bar per power of 10 up to the band containing the priciest session (the backend supplies the `label`, rendered verbatim on a slanted x-axis, `interval={0}` so every band shows). Bar height ∝ data-point count; the band total `$` is surfaced on hover via the exported `CostDistributionTooltip` (band label + count + unit + `formatCostCompact` total, `$2.1M`-style) rather than printed per bar. A `chartLabel` ("Sessions per cost band", or "Session-model pairs per cost band" under a model filter) names what bar height encodes. A single coverage/backfill caption ("Covers N of M sessions with cost data; percentiles reflect this subset"). Accepts `modelFilterActive` to show the per-(session, model) ⓘ caveat and switch the unit wording (bars then count (session,model) pairs). When `data.timed_out` it renders a "narrow your range" notice; returns `null` when absent or when `covered_session_count === 0`. |
 | `trendsChart.module.css` | Shared chart styling for daily data visualizations |
 | `index.ts` | Barrel export for all trend card components |
 
@@ -70,14 +70,13 @@ To add a new trends card:
 ## Invariants / Conventions
 
 - All cards accept `data: T | null` and return `null` when data is absent
-- Daily data arrays (costs, session counts, utilization) are rendered as simple bar/line charts using CSS (no charting library)
-- Chart styles are shared via `trendsChart.module.css`
+- Data arrays (daily costs, session counts, utilization, cost-distribution bands) are rendered as Recharts `BarChart`/line charts; tooltip and container chrome are shared via `trendsChart.module.css`
 - Cards use `@/utils/formatting` for duration/cost formatting, keeping display logic consistent with session cards
 
 ## Design Decisions
 
 - **No registry pattern**: Unlike session cards, trends cards are a fixed set rendered directly in `TrendsPage`. The overhead of a registry isn't warranted since new trend cards are rare and the layout is different (full-width sections, not a responsive grid).
-- **CSS-only charts**: Daily data visualizations use pure CSS (flexbox bars with percentage heights) rather than a charting library, keeping the bundle lean.
+- **Recharts for visualizations**: Data charts (Tokens daily cost, Activity, Cost Distribution) use Recharts `BarChart`/`ResponsiveContainer`, with tooltip/container styling shared via `trendsChart.module.css`. Small inline indicators (e.g. percentile tiles, utilization meters) stay plain CSS.
 - **Epoch-based date parameters**: The `trendsAPI` converts local YYYY-MM-DD dates to epoch seconds with timezone offset, ensuring correct daily grouping regardless of the user's timezone.
 
 ## Testing
