@@ -51,13 +51,8 @@
   flex-shrink: 0;
 }
 
+/* Color is owned by CostAmount (--color-cost); keep weight only. */
 .cost {
-  color: var(--color-success-text);
-  font-weight: 600;
-}
-
-.costZero {
-  color: var(--color-warning-text);
   font-weight: 600;
 }
 

@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useState, useRef } from 'react';
 import { formatCost } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
 import type {
   BlendedSegment,
   BlendedSegmentLayout,
@@ -176,7 +177,7 @@ function CostTooltip({
       {cost > 0 ? (
         <>
           <div className={styles.tooltipTotal}>
-            {formatCost(cost)} ({percent}%)
+            <CostAmount usd={cost} /> ({percent}%)
           </div>
           <div className={styles.tooltipDensity}>
             {formatCost(costPerMsg)}/msg &times; {denom}

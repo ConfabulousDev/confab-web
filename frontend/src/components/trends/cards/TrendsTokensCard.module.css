@@ -17,9 +17,8 @@
 }
 
 .tooltipProviderValue {
+  /* Color is owned by CostAmount (--color-cost); keep layout only. */
   margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-primary);
 }
 
 /* Prominent top-level "Total Cost" row above the per-provider stack.
@@ -41,7 +40,7 @@
 
 .totalCostValue {
   font-size: 16px;
-  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 /* Per-provider sections under the top-level "Total Cost" row. Each section

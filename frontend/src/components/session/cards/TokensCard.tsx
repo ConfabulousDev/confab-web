@@ -1,4 +1,5 @@
 import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
+import { CostAmount } from '@/components/CostAmount';
 import { formatTokenCount, formatCost } from '@/utils/tokenStats';
 import {
   TokenIcon,
@@ -73,10 +74,9 @@ export function TokensCard({ data, loading, error, provider }: TokensCardProps) 
     <CardWrapper title="Tokens" icon={TokenIcon}>
       <StatRow
         label="Estimated cost"
-        value={formatCost(cost)}
+        value={<CostAmount usd={cost} />}
         icon={DollarIcon}
         tooltip={costTooltip}
-        valueClassName={isZeroCost ? styles.costWarning : styles.cost}
       />
       {hasFastMode && (
         <StatRow

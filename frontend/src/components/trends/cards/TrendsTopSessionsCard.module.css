@@ -81,11 +81,10 @@
   color: var(--color-text-secondary);
 }
 
+/* Color + tabular-nums owned by CostAmount; keep layout only. */
 .cost {
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessionsFetch, useAuth, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { formatDuration } from '@/utils';
-import { formatCost } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
 import { getRepoWebURL } from '@/utils/git';
 import { RelativeTime } from '@/components/RelativeTime';
 import PageHeader from '@/components/PageHeader';
@@ -199,7 +199,7 @@ function SessionsPage() {
                           </td>
                           <td className={styles.costCell}>
                             {session.estimated_cost_usd
-                              ? formatCost(parseFloat(session.estimated_cost_usd))
+                              ? <CostAmount usd={parseFloat(session.estimated_cost_usd)} />
                               : '-'}
                           </td>
                           <td className={styles.timestamp}>

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { formatDuration } from '@/utils';
-import { formatCost } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
 import type { OrgUserAnalytics } from '@/schemas/api';
 import type { SortDirection } from '@/utils/sorting';
 import styles from './OrgTable.module.css';
@@ -67,10 +67,8 @@ function getSortValue(row: OrgUserAnalytics, field: SortField): number | string 
   }
 }
 
-function formatCostCompact(value: number | string): string {
-  const num = typeof value === 'number' ? value : parseFloat(value);
-  if (num === 0) return '$0';
-  return formatCost(num);
+function toUsd(value: number | string): number {
+  return typeof value === 'number' ? value : parseFloat(value);
 }
 
 function formatDurationOrDash(ms: number | null | undefined): string {
@@ -166,11 +164,11 @@ function OrgTable({ users }: OrgTableProps) {
           <tr className={styles.summaryRow}>
             <td className={styles.alignLeft}>Everyone</td>
             <td className={styles.alignRight}>{summary.sessionCount}</td>
-            <td className={styles.alignRight}>{formatCostCompact(summary.totalCost)}</td>
+            <td className={styles.alignRight}><CostAmount usd={toUsd(summary.totalCost)} /></td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.totalDuration)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.totalAssistant)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.totalUser)}</td>
-            <td className={styles.alignRight}>{formatCostCompact(summary.avgCost)}</td>
+            <td className={styles.alignRight}><CostAmount usd={toUsd(summary.avgCost)} /></td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.avgDuration)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.avgAssistant)}</td>
             <td className={styles.alignRight}>{formatDurationOrDash(summary.avgUser)}</td>
@@ -189,11 +187,11 @@ function OrgTable({ users }: OrgTableProps) {
                   </div>
                 </td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{row.session_count}</td>
-                <td className={`${styles.alignRight} ${cellClass}`}>{formatCostCompact(row.total_cost_usd)}</td>
+                <td className={`${styles.alignRight} ${cellClass}`}><CostAmount usd={toUsd(row.total_cost_usd)} /></td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.total_duration_ms)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.total_assistant_time_ms)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.total_user_time_ms)}</td>
-                <td className={`${styles.alignRight} ${cellClass}`}>{formatCostCompact(row.avg_cost_usd)}</td>
+                <td className={`${styles.alignRight} ${cellClass}`}><CostAmount usd={toUsd(row.avg_cost_usd)} /></td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.avg_duration_ms)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.avg_assistant_time_ms)}</td>
                 <td className={`${styles.alignRight} ${cellClass}`}>{formatDurationOrDash(row.avg_user_time_ms)}</td>

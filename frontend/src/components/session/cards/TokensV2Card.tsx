@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import { CardWrapper, StatRow, CardLoading, CardError, SectionHeader } from './Card';
-import { formatTokenCount, formatCost } from '@/utils/tokenStats';
+import { CostAmount } from '@/components/CostAmount';
+import { formatTokenCount } from '@/utils/tokenStats';
 import { formatModelKey } from '@/utils/formatting';
 import { providerLabel } from '@/utils/providers';
 import {
@@ -12,7 +13,6 @@ import {
   DiamondFilledIcon,
 } from '@/components/icons';
 import type { CardProps } from './types';
-import styles from '../SessionSummaryPanel.module.css';
 
 export type TokensV2Model = {
   input: number;
@@ -53,7 +53,7 @@ function ModelSection({ modelKey, model }: { modelKey: string; model: TokensV2Mo
       {model.reasoning > 0 && (
         <StatRow label="Reasoning" value={formatTokenCount(model.reasoning)} />
       )}
-      <StatRow label="Cost" value={formatCost(parseFloat(model.cost_usd))} icon={DollarIcon} />
+      <StatRow label="Cost" value={<CostAmount usd={parseFloat(model.cost_usd)} />} icon={DollarIcon} />
     </div>
   );
 }
@@ -85,10 +85,9 @@ export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardDat
     <CardWrapper title="Tokens" icon={TokenIcon}>
       <StatRow
         label="Estimated cost"
-        value={formatCost(totalCost)}
+        value={<CostAmount usd={totalCost} />}
         icon={DollarIcon}
         tooltip={isZeroCost ? ZERO_COST_TOOLTIP : undefined}
-        valueClassName={isZeroCost ? styles.costWarning : styles.cost}
       />
       <StatRow label="Input" value={formatTokenCount(data.total_input)} icon={ArrowRightIcon} />
       <StatRow label="Output" value={formatTokenCount(data.total_output)} icon={ArrowLeftIcon} />
@@ -102,7 +101,7 @@ export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardDat
         return (
           <div key={providerName}>
             <SectionHeader label={providerLabel(providerName)} />
-            <StatRow label="Cost" value={formatCost(parseFloat(provider.cost_usd))} icon={DollarIcon} />
+            <StatRow label="Cost" value={<CostAmount usd={parseFloat(provider.cost_usd)} />} icon={DollarIcon} />
             {modelSections}
           </div>
         );
