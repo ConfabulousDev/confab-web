@@ -90,14 +90,15 @@ type DateRange struct {
 
 // TrendsCards holds all the trend card data.
 type TrendsCards struct {
-	Overview        *TrendsOverviewCard        `json:"overview"`
-	Tokens          *TrendsTokensCard          `json:"tokens"`
-	Activity        *TrendsActivityCard        `json:"activity"`
-	Tools           *TrendsToolsCard           `json:"tools"`
-	Utilization     *TrendsUtilizationCard     `json:"utilization"`
-	AgentsAndSkills *TrendsAgentsAndSkillsCard `json:"agents_and_skills"`
-	TopSessions     *TrendsTopSessionsCard     `json:"top_sessions"`
-	CostByModel     *TrendsCostByModelCard     `json:"cost_by_model"`
+	Overview         *TrendsOverviewCard         `json:"overview"`
+	Tokens           *TrendsTokensCard           `json:"tokens"`
+	Activity         *TrendsActivityCard         `json:"activity"`
+	Tools            *TrendsToolsCard            `json:"tools"`
+	Utilization      *TrendsUtilizationCard      `json:"utilization"`
+	AgentsAndSkills  *TrendsAgentsAndSkillsCard  `json:"agents_and_skills"`
+	TopSessions      *TrendsTopSessionsCard      `json:"top_sessions"`
+	CostByModel      *TrendsCostByModelCard      `json:"cost_by_model"`
+	CostDistribution *TrendsCostDistributionCard `json:"cost_distribution"`
 }
 
 // =============================================================================
@@ -244,6 +245,56 @@ type CostByModelRow struct {
 	CacheRead    int64   `json:"cache_read"`
 	CacheWrite   int64   `json:"cache_write"`
 	SessionCount int     `json:"session_count"`
+}
+
+// TrendsCostDistributionCard is the log-bucket histogram of per-session cost plus
+// p50/p90/p99 percentiles, exposing the long tail of spend (y1w5). It reuses the
+// same filtered+visible tokens_v2 session set as the Cost by Model card.
+//
+// Units: by default each data point is one session's total cost
+// (session_card_tokens_v2.data->>'total_cost_usd'). When a ?model= filter is active
+// the unit becomes per-(session, selected-model): each (session, model) pair is one
+// data point and only the selected model's cost in that session counts. The frontend
+// flags that unit shift with a ⓘ caveat (driven by modelFilterActive); the wire shape
+// is identical either way.
+//
+// Coverage mirrors Cost by Model: CoveredSessionCount = sessions with tokens_v2 data
+// contributing data points; TotalSessionCount = all filtered sessions in range. The
+// caption reads "Covers N of M sessions with cost data; percentiles reflect this subset"
+// — percentiles are biased by the partial v2 subset during backfill.
+//
+// Buckets always carries all five fixed log-scale bands (count 0 where empty) for a
+// stable, comparable histogram. Percentiles is nil when there are no data points.
+// TimedOut signals the same graceful degradation as Cost by Model.
+type TrendsCostDistributionCard struct {
+	Buckets             []CostDistributionBucket `json:"buckets"`
+	Percentiles         *CostPercentiles         `json:"percentiles"`
+	CoveredSessionCount int                      `json:"covered_session_count"`
+	TotalSessionCount   int                      `json:"total_session_count"`
+	TimedOut            bool                     `json:"timed_out"`
+}
+
+// CostDistributionBucket is one fixed log-scale cost band. Lo/Hi are the band's
+// dollar edges (half-open [Lo, Hi)); Hi is nil for the unbounded top band (> $10).
+// Label is the display string the frontend renders verbatim ("$0.10 – $1"). Despite
+// the name, SessionCount is the data-point count — sessions by default, or
+// (session, model) pairs when a model filter is active. TotalUSD is the decimal-string
+// sum of cost across the band's data points.
+type CostDistributionBucket struct {
+	Label        string   `json:"label"`
+	Lo           float64  `json:"lo"`
+	Hi           *float64 `json:"hi"`
+	SessionCount int      `json:"session_count"`
+	TotalUSD     string   `json:"total_usd"`
+}
+
+// CostPercentiles holds the p50/p90/p99 of the per-data-point cost values, computed
+// with percentile_cont (linear interpolation) semantics in Go. Each is a decimal
+// string. Only present (non-nil on the card) when there is at least one data point.
+type CostPercentiles struct {
+	P50 string `json:"p50"`
+	P90 string `json:"p90"`
+	P99 string `json:"p99"`
 }
 
 // TopSessionItem represents a single session in the top sessions ranking.

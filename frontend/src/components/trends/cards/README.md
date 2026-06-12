@@ -15,6 +15,7 @@ Trend analytics cards for the Trends dashboard. Each card visualizes aggregated 
 | `TrendsAgentsAndSkillsCard.tsx` | Aggregated agent and skill invocation counts |
 | `TrendsTopSessionsCard.tsx` | Top sessions by cost with per-row provider icons (Claude / Codex / neutral) and links to session detail. Renders a 10/25/50 segmented top-N selector in the header when an `onTopNChange` handler is supplied (h7xe); `loading` dims the list and disables the control during a refetch. N is URL-synced via `?topN=` on the page and sent to the backend as `?top_n=`. Accepts `modelFilterActive` (2hh1) to show the session-level caveat tooltip. |
 | `TrendsCostByModelCard.tsx` | Per-(provider, model-family) cost breakdown (2hh1). One row per `(provider, model)` with a provider icon, `formatModelKey` label (`""` → "Unknown", `"<family> · fast"` suffix preserved), cost in success-green via theme tokens (`$0`/unpriced in warning color), `pct_of_total`, split cache read/write, and session count; sorted cost-desc. A coverage caption ("Covers N of M sessions with per-model data") — **not** a reconciliation line, since the rows (v2, partial) and the Tokens headline (flat, full) are deliberately different scopes. When `data.timed_out` it renders a "narrow your range" notice instead of the empty state; returns `null` when absent or no rows. |
+| `TrendsCostDistributionCard.tsx` | Per-session cost histogram + p50/p90/p99 percentile tiles (y1w5). **Dynamic log10 bars**: a `"< $0.01"` floor plus one bar per power of 10 up to the band containing the priciest session (the backend supplies the `label`, rendered verbatim). Bar height ∝ data-point count; each bar shows its bucket total `$` up front (always visible, not hover-gated) via `formatCostCompact` (`$2.1M`-style). A single coverage/backfill caption ("Covers N of M sessions with cost data; percentiles reflect this subset"). Accepts `modelFilterActive` to show the per-(session, model) ⓘ caveat (bars then count (session,model) pairs). When `data.timed_out` it renders a "narrow your range" notice; returns `null` when absent or when `covered_session_count === 0`. |
 | `trendsChart.module.css` | Shared chart styling for daily data visualizations |
 | `index.ts` | Barrel export for all trend card components |
 
@@ -54,6 +55,7 @@ All card data types are defined in `@/schemas/api.ts`:
 - `TrendsAgentsAndSkillsCard` -- agent/skill invocation totals and breakdowns
 - `TrendsTopSessionsCard` -- top sessions by cost
 - `TrendsCostByModelCard` -- per-(provider, model) cost/token breakdown with coverage + timed-out states (2hh1)
+- `TrendsCostDistributionCard` -- dynamic log10 per-session cost histogram + p50/p90/p99 percentiles with coverage + timed-out states (y1w5)
 
 ## How to Extend
 

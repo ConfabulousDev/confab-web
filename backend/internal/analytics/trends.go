@@ -169,7 +169,7 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	errChan := make(chan error, 8)
+	errChan := make(chan error, 9)
 
 	runAgg := func(_ string, fn func() error) {
 		wg.Add(1)
@@ -246,6 +246,17 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 		}
 		mu.Lock()
 		response.Cards.CostByModel = costByModel
+		mu.Unlock()
+		return nil
+	})
+
+	runAgg("cost_distribution", func() error {
+		costDistribution, err := s.aggregateCostDistribution(ctx, tq, userID, req)
+		if err != nil {
+			return err
+		}
+		mu.Lock()
+		response.Cards.CostDistribution = costDistribution
 		mu.Unlock()
 		return nil
 	})

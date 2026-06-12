@@ -180,15 +180,24 @@ func (s *Store) aggregateCostByModel(ctx context.Context, tq trendsQuery, userID
 
 // degradedCostByModelCard logs a PII-safe WARN describing the request shape (so
 // a self-hoster can file a useful upstream issue) and returns the empty,
-// TimedOut card. It logs filter SHAPES/COUNTS only — never owner emails or repo
-// names.
+// TimedOut card.
 func degradedCostByModelCard(ctx context.Context, userID int64, req TrendsRequest, started time.Time, err error) *TrendsCostByModelCard {
+	logTrendsCardTimeout(ctx, "cost_by_model", userID, req, started, err)
+	return &TrendsCostByModelCard{Rows: []CostByModelRow{}, TimedOut: true}
+}
+
+// logTrendsCardTimeout emits the shared PII-safe WARN for a timed-out Trends card
+// aggregation (cost_by_model, cost_distribution). It logs filter SHAPES/COUNTS
+// only — never owner emails or repo names — so a self-hoster can file a useful
+// upstream issue without leaking data. One place keeps that PII-safe field list
+// honest across cards (y1w5).
+func logTrendsCardTimeout(ctx context.Context, cardName string, userID int64, req TrendsRequest, started time.Time, err error) {
 	rangeDays := 0
 	if req.EndTS > req.StartTS {
 		rangeDays = int((req.EndTS - req.StartTS) / 86400)
 	}
-	logger.Ctx(ctx).Warn("trends cost-by-model aggregation timed out — report upstream with this metadata",
-		"card", "cost_by_model",
+	logger.Ctx(ctx).Warn("trends card aggregation timed out — report upstream with this metadata",
+		"card", cardName,
 		"user_id", userID,
 		"start_ts", req.StartTS,
 		"end_ts", req.EndTS,
@@ -203,7 +212,6 @@ func degradedCostByModelCard(ctx context.Context, userID int64, req TrendsReques
 		"elapsed_ms", time.Since(started).Milliseconds(),
 		"error", err,
 	)
-	return &TrendsCostByModelCard{Rows: []CostByModelRow{}, TimedOut: true}
 }
 
 // sessionsMatchingModels returns the ids of visible sessions that used at least

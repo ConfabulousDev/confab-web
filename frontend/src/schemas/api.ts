@@ -535,6 +535,40 @@ const TrendsCostByModelCardSchema = z.object({
   timed_out: z.boolean(),
 });
 
+// y1w5: fixed log-scale histogram of per-session cost. `label` is the display
+// string the card renders verbatim ('$0.10 – $1'); `lo`/`hi` are the band's
+// dollar edges (half-open [lo, hi); `hi` is null for the unbounded '> $10' band).
+// `session_count` is the data-point count — sessions by default, or (session,
+// model) pairs when a model filter is active.
+const TrendsCostDistributionBucketSchema = z.object({
+  label: z.string(),
+  lo: z.number(),
+  hi: z.number().nullable(),
+  session_count: z.number(),
+  total_usd: z.string(),
+});
+
+// p50/p90/p99 of the per-data-point cost values (decimal strings). The whole
+// object is null when there are no data points.
+const TrendsCostDistributionPercentilesSchema = z.object({
+  p50: z.string(),
+  p90: z.string(),
+  p99: z.string(),
+});
+
+const TrendsCostDistributionCardSchema = z.object({
+  buckets: z.array(TrendsCostDistributionBucketSchema),
+  percentiles: TrendsCostDistributionPercentilesSchema.nullable(),
+  // covered_session_count = sessions with per-session cost data contributing data
+  // points; total_session_count = all filtered sessions in range. Percentiles are
+  // biased by this partial v2 subset during backfill (surfaced in the caption).
+  covered_session_count: z.number(),
+  total_session_count: z.number(),
+  // True when the aggregation exceeded its budget and degraded to empty; the card
+  // renders a "narrow your range" notice instead of a histogram.
+  timed_out: z.boolean(),
+});
+
 const TrendsCardsSchema = z.object({
   overview: TrendsOverviewCardSchema.nullable(),
   tokens: TrendsTokensCardSchema.nullable(),
@@ -546,6 +580,9 @@ const TrendsCardsSchema = z.object({
   // `.default(null)` keeps older backends (pre-2hh1, no cost_by_model field)
   // parseable — the card renders nothing when absent.
   cost_by_model: TrendsCostByModelCardSchema.nullable().default(null),
+  // y1w5: `.default(null)` keeps older backends (no cost_distribution field)
+  // parseable — the card renders nothing when absent.
+  cost_distribution: TrendsCostDistributionCardSchema.nullable().default(null),
 });
 
 // CF-495: TrendsFilterOptions surfaces the dropdown source for owners + repos.
@@ -624,6 +661,8 @@ export type TrendsAgentsAndSkillsCard = z.infer<typeof TrendsAgentsAndSkillsCard
 export type TrendsTopSessionsCard = z.infer<typeof TrendsTopSessionsCardSchema>;
 export type TrendsCostByModelCard = z.infer<typeof TrendsCostByModelCardSchema>;
 export type TrendsCostByModelRow = z.infer<typeof TrendsCostByModelRowSchema>;
+export type TrendsCostDistributionCard = z.infer<typeof TrendsCostDistributionCardSchema>;
+export type TrendsCostDistributionBucket = z.infer<typeof TrendsCostDistributionBucketSchema>;
 export type SessionFilterOptions = z.infer<typeof SessionFilterOptionsSchema>;
 export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 
