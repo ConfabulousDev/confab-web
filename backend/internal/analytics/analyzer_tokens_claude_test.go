@@ -240,3 +240,64 @@ func TestTokensAnalyzer_V2Tree_NilWhenNoTokens(t *testing.T) {
 		t.Errorf("TokensV2 = %+v, want nil for a token-less session", result.TokensV2)
 	}
 }
+
+// TestTokensAnalyzer_V2Tree_ExcludesSynthetic pins the xz6g compute-time fix: a
+// "<synthetic>" assistant group (Claude's no-real-model sentinel) carrying usage
+// must NOT create a v2 model entry, even though it reaches accumulateV2. The real
+// model still surfaces, and the v2 total reconciles with the flat cost (synthetic
+// is unpriced → $0, so the flat total is unchanged).
+func TestTokensAnalyzer_V2Tree_ExcludesSynthetic(t *testing.T) {
+	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-opus-4-1-20250805", 200, 100, 0, 0,
+		[]map[string]interface{}{makeTextBlock("opus normal")}) + "\n" +
+		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "<synthetic>", 100, 50, 0, 0,
+			[]map[string]interface{}{makeTextBlock("synthetic turn")}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection: %v", err)
+	}
+	result, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if result.TokensV2 == nil {
+		t.Fatal("TokensV2 not populated")
+	}
+	prov := result.TokensV2.ByProvider["claude-code"]
+
+	if _, ok := prov.Models["<synthetic>"]; ok {
+		t.Errorf("synthetic model key present in v2 tree, want excluded: %+v", prov.Models)
+	}
+	if _, ok := prov.Models["opus-4-1"]; !ok {
+		t.Errorf("real model opus-4-1 missing from v2 tree: %+v", prov.Models)
+	}
+	if len(prov.Models) != 1 {
+		t.Errorf("models = %d, want 1 (synthetic excluded): %+v", len(prov.Models), prov.Models)
+	}
+	// Synthetic is unpriced ($0), so the flat total is unchanged and the v2 tree
+	// total still reconciles with it exactly.
+	if result.TokensV2.TotalCostUSD != result.EstimatedCostUSD.String() {
+		t.Errorf("TotalCostUSD = %s, want %s (must reconcile with flat EstimatedCostUSD)",
+			result.TokensV2.TotalCostUSD, result.EstimatedCostUSD.String())
+	}
+}
+
+// TestTokensAnalyzer_V2Tree_SyntheticOnlyYieldsNilTree pins that a session whose
+// only assistant turns are synthetic produces no v2 tree (nil) — empty byModel →
+// buildV2Tree returns nil → the card stays empty and unserved, consistent with the
+// token-less case (xz6g).
+func TestTokensAnalyzer_V2Tree_SyntheticOnlyYieldsNilTree(t *testing.T) {
+	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "<synthetic>", 100, 50, 0, 0,
+		[]map[string]interface{}{makeTextBlock("synthetic turn")}) + "\n"
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection: %v", err)
+	}
+	result, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if result.TokensV2 != nil {
+		t.Errorf("TokensV2 = %+v, want nil for a synthetic-only session", result.TokensV2)
+	}
+}

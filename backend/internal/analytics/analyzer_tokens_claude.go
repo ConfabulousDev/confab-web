@@ -93,6 +93,13 @@ func buildV2Tree(providerID string, byModel map[string]*v2ModelAgg) *TokensV2Dat
 // the same value already added to the flat total, so the v2 tree reconciles with
 // EstimatedCostUSD exactly. Fast turns route to a synthetic "<family> · fast" key.
 func (a *TokensAnalyzer) accumulateV2(model string, fast bool, usage *TokenUsage, cost decimal.Decimal) {
+	// <synthetic> turns carry no real model/usage ($0, 0 tokens); exclude them from
+	// the v2 tree at the source so no recomputed session surfaces a synthetic model
+	// entry on any card (xz6g). A synthetic-only session thus leaves byModel empty,
+	// and buildV2Tree returns nil — an unserved/empty card, matching the flat path.
+	if model == syntheticModelKey {
+		return
+	}
 	key := getModelFamily(model)
 	if fast {
 		key += fastModelKeySuffix
@@ -123,7 +130,7 @@ func (a *TokensAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 	for _, group := range file.AssistantMessageGroups() {
 		// Capture the first concrete main-session model; file-less sub-agents
 		// inherit it for pricing (see Finalize).
-		if isMain && a.mainModel == "" && group.Model != "" && group.Model != "<synthetic>" {
+		if isMain && a.mainModel == "" && group.Model != "" && group.Model != syntheticModelKey {
 			a.mainModel = group.Model
 		}
 
